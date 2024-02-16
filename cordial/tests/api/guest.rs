@@ -7,11 +7,11 @@ use tokio::net::TcpListener;
 use tower::{Service, ServiceExt};
 use tracing::{info, trace};
 
-pub async fn create_guest(wild: &WildGuest) -> Polite<()> {
+pub async fn create_guest(host: &Host) -> Polite<()> {
     let mut improv = Improv::default();
     let mut guest = improv.guest()?;
     trace!("Guest: {:#?}", &guest);
-    let recall = recall(&wild).await;
+    let recall = recall(&host).await;
     let created = recall.create(&guest).await?;
     assert_eq!(&guest, &created);
     guest.name = improv.name()?;
@@ -23,18 +23,18 @@ pub async fn create_guest(wild: &WildGuest) -> Polite<()> {
     Ok(())
 }
 
-pub async fn guest_check(wild: &mut WildGuest) -> Polite<()> {
+pub async fn guest_check(host: &mut Host) -> Polite<()> {
     let mut improv = Improv::default();
     let mut guest = improv.guest()?;
     info!("Guest: {:#?}", &guest);
-    let recall = recall(&wild).await;
+    let recall = recall(&host).await;
     let created = recall.create(&guest).await?;
     assert_eq!(&guest, &created);
-    bearing(wild).await?;
+    bearing(host).await?;
     let uri = format!("/lookup/{}", &guest.id);
     let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let app = wild.bearing.cues.clone();
+    let app = host.bearing.cues.clone();
     // tokio::spawn(async move {
     //         axum::serve(listener, app);
     //     });

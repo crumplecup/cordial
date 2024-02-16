@@ -6,7 +6,7 @@ pub mod polite;
 /// The `prelude` module contains re-exports of the primary structs and functions in the library
 /// for easier use.
 pub mod prelude {
-    pub use crate::host::{Bearing, Counsel, Improv, Posture, Recall};
+    pub use crate::host::{Bearing, Counsel, Host, Improv, Posture, Recall};
     #[cfg(feature = "serde")]
     #[cfg(feature = "uuid")]
     pub use crate::guest::Guest;

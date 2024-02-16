@@ -5,43 +5,47 @@ use secrecy::ExposeSecret;
 use std::sync::Arc;
 use tracing::{info, trace};
 
-pub async fn local_posture(wild: &WildGuest) -> Polite<()> {
+pub async fn local_posture(host: &Host) -> Polite<()> {
     trace!(
         "Connection: {}",
-        wild.posture.introduction().expose_secret()
+        host.posture.introduction().expose_secret()
     );
-    wild.posture.try_delete().await?;
+    host.posture.try_delete().await?;
     trace!(
         "Database deleted at connection {}.",
-        wild.posture.introduction().expose_secret()
+        host.posture.introduction().expose_secret()
     );
-    wild.posture.create().await?;
+    host.posture.create().await?;
     trace!(
         "Database created at connection {}.",
-        wild.posture.introduction().expose_secret()
+        host.posture.introduction().expose_secret()
     );
-    wild.posture.migrate().await?;
+    host.posture.migrate().await?;
     trace!(
         "Database migrated at connection {}.",
-        wild.posture.introduction().expose_secret()
+        host.posture.introduction().expose_secret()
     );
     info!("Local posture test successful.");
     Ok(())
 }
 
-pub async fn bearing(wild: &mut WildGuest) -> Polite<()> {
-    local_posture(&wild).await?;
-    wild.bearing = wild.bearing.clone()
+pub async fn bearing(host: &mut Host) -> Polite<()> {
+    local_posture(&host).await?;
+    host.bearing = host.bearing.clone()
         .adjust("/book", get(Counsel::book))
         .adjust("/lookup/:id", get(Counsel::lookup))
         .adjust("/lookup_all", get(Counsel::lookup_all))
         .adjust("/check", get(Counsel::check_guest));
-    trace!("Bearing: {:#?}", wild.bearing);
+    trace!("Bearing: {:#?}", host.bearing);
     Ok(())
 }
 
-pub async fn recall(wild: &WildGuest) -> Recall {
-    Recall::from(&wild.posture)
+pub async fn recall(host: &Host) -> Recall {
+    Recall::from(&host.posture)
+}
+
+pub async fn host() -> Polite<Host> {
+    Host::from_env().await
 }
 
 
