@@ -2,6 +2,8 @@ use crate::prelude::*;
 use cordial::prelude::*;
 use axum::body::Body;
 use axum::http::{self, Request};
+use axum::Router;
+use axum::routing::get;
 use http_body_util::BodyExt;
 use tokio::net::TcpListener;
 use tower::{Service, ServiceExt};
@@ -34,15 +36,19 @@ pub async fn guest_check(host: &mut Host) -> Polite<()> {
     let uri = format!("/lookup/{}", &guest.id);
     let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let app = host.bearing.cues.clone();
+    let router = host.bearing.cues.clone();
+    let app = Router::new()
+        .route("/book", get(Counsel::book))
+        .with_state(recall.book.clone());
     // tokio::spawn(async move {
     //         axum::serve(listener, app);
     //     });
-    // let response = wild.bearing.cues.oneshot(Request::builder()
-    //                                .uri(&uri)
-    //                                .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-    //                                .body(Body::empty())?)
-    //                                .await?;
+    let response = app.oneshot(Request::builder()
+                                   .uri(&uri)
+                                   .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                                   .body(Body::empty())?)
+                                   .await
+                                   .unwrap();
 
 
     Ok(())

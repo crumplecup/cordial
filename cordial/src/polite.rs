@@ -138,6 +138,9 @@ pub enum FauxPas {
     #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
     #[error("Axum http error: {0}")]
     Axum(#[from] axum::http::Error),
+    /// The `Infallible` variant converts from std::convert::Infallible.
+    #[error("This operation is infallible.")]
+    Infallible(#[from] std::convert::Infallible),
 
     /// The `Unknown` variant is a catch-all error variant for library operations.
     #[error("Unexpected error.")]

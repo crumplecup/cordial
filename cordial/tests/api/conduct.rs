@@ -11,7 +11,7 @@ pub async fn conduct() -> Polite<()> {
     create_guest(&host).await?;
     info!("Guest creation successful.");
 
-    fauxpas()?;
+    fauxpas(&mut host).await?;
     info!("Fauxpas test successful.");
 
     Ok(())

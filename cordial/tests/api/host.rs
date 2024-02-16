@@ -31,11 +31,11 @@ pub async fn local_posture(host: &Host) -> Polite<()> {
 
 pub async fn bearing(host: &mut Host) -> Polite<()> {
     local_posture(&host).await?;
-    host.bearing = host.bearing.clone()
-        .adjust("/book", get(Counsel::book))
-        .adjust("/lookup/:id", get(Counsel::lookup))
-        .adjust("/lookup_all", get(Counsel::lookup_all))
-        .adjust("/check", get(Counsel::check_guest));
+    host.bearing.cues = host.bearing.cues.clone()
+        .route("/book", get(Counsel::book))
+        .route("/lookup/:id", get(Counsel::lookup))
+        .route("/lookup_all", get(Counsel::lookup_all))
+        .route("/check", get(Counsel::check_guest));
     trace!("Bearing: {:#?}", host.bearing);
     Ok(())
 }
