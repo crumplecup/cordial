@@ -1,0 +1,50 @@
+use crate::prelude::*;
+use cordial::prelude::*;
+use axum::body::Body;
+use axum::http::{self, Request};
+use http_body_util::BodyExt;
+use tokio::net::TcpListener;
+use tower::{Service, ServiceExt};
+use tracing::{info, trace};
+
+pub async fn create_guest(wild: &WildGuest) -> Polite<()> {
+    let mut improv = Improv::default();
+    let mut guest = improv.guest()?;
+    trace!("Guest: {:#?}", &guest);
+    let recall = recall(&wild).await;
+    let created = recall.create(&guest).await?;
+    assert_eq!(&guest, &created);
+    guest.name = improv.name()?;
+    guest.hash = improv.pass()?;
+    let updated = recall.update(&guest).await?;
+    assert_eq!(&guest, &updated);
+    recall.delete(&guest).await?;
+
+    Ok(())
+}
+
+pub async fn guest_check(wild: &mut WildGuest) -> Polite<()> {
+    let mut improv = Improv::default();
+    let mut guest = improv.guest()?;
+    info!("Guest: {:#?}", &guest);
+    let recall = recall(&wild).await;
+    let created = recall.create(&guest).await?;
+    assert_eq!(&guest, &created);
+    bearing(wild).await?;
+    let uri = format!("/lookup/{}", &guest.id);
+    let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let app = wild.bearing.cues.clone();
+    // tokio::spawn(async move {
+    //         axum::serve(listener, app);
+    //     });
+    // let response = wild.bearing.cues.oneshot(Request::builder()
+    //                                .uri(&uri)
+    //                                .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+    //                                .body(Body::empty())?)
+    //                                .await?;
+
+
+    Ok(())
+
+}
