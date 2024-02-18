@@ -1,13 +1,21 @@
 //! The `eponym` module contains the [`Host`] struct, with methods for managing [`Guest`] needs.
 use crate::prelude::*;
+#[cfg(feature = "route")]
+use axum::Router;
+#[cfg(feature = "route")]
+use axum::routing::get;
 use tracing::info;
 use secrecy::ExposeSecret;
+#[cfg(feature = "trace")]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+#[cfg(feature = "route")]
+#[cfg_attr(docsrs, doc(cfg(feature = "route")))]
+#[cfg(feature = "trace")]
+#[cfg_attr(docsrs, doc(cfg(feature = "trace")))]
 #[derive(Debug, Clone)]
 pub struct Host {
     pub recall: Recall,
-    pub bearing: Bearing,
     pub posture: Posture,
 }
 
@@ -26,9 +34,17 @@ impl Host {
         );
         posture.try_delete().await?;
         posture.create().await?;
+        posture.migrate().await?;
         let recall = Recall::from(posture.clone());
-        let bearing = Bearing::from(&recall);
-        Ok(Self { recall, bearing, posture })
+        Ok(Self { recall, posture })
+    }
+
+    pub fn bearing(&self) -> Router {
+        Router::new()
+            .route("/book", get(Counsel::book))
+            .route("/guests", get(Counsel::lookup_all).post(Counsel::check_in))
+            .route("/guests/:id", get(Counsel::lookup).put(Counsel::update).delete(Counsel::check_out))
+            .with_state(self.recall.book.clone())
     }
 
 }

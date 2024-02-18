@@ -5,13 +5,16 @@ use tracing::info;
 #[cfg(feature = "full")]
 #[tokio::test]
 pub async fn conduct() -> Polite<()> {
-    let mut host = host().await?;
-    bearing(&mut host).await?;
-    info!("Bearing test successful.");
-    create_guest(&host).await?;
-    info!("Guest creation successful.");
+    let mut host = Host::from_env().await?;
+    info!("Host created.");
+    booking(&host).await?;
+    info!("Booking successful.");
+    guest_check(&mut host).await?;
+    info!("Guest check successful.");
+    guest_lifecycle(&mut host).await?;
+    info!("Guest lifecycle successful.");
 
-    fauxpas(&mut host).await?;
+    fauxpas()?;
     info!("Fauxpas test successful.");
 
     Ok(())

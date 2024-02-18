@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use tracing::info;
+use tracing::trace;
 #[cfg(feature = "route")]
 use axum::extract::{Path, State};
 #[cfg(feature = "route")]
@@ -8,8 +8,6 @@ use axum::http::StatusCode;
 use axum::Json;
 #[cfg(feature = "route")]
 use axum::response::IntoResponse;
-#[cfg(feature = "serial")]
-use serde_json::Value;
 #[cfg(feature = "sql")]
 use sqlx::PgPool;
 
@@ -49,7 +47,7 @@ impl Counsel {
         Path(id): Path<uuid::Uuid>,
         State(data): State<PgPool>,
     ) -> Result<impl IntoResponse, impl IntoResponse> {
-        info!("Getting guest {}", &id);
+        trace!("Getting guest {}", &id);
         let recall = Recall::new(data);
         let guest = recall.get(id).await;
         match guest {
@@ -61,7 +59,7 @@ impl Counsel {
     pub async fn lookup_all(
         State(data): State<PgPool>,
     ) -> Result<impl IntoResponse, impl IntoResponse> {
-        info!("Getting all guests.");
+        trace!("Getting all guests.");
         let recall = Recall::new(data);
         let guests = recall.get_all().await;
         match guests {
@@ -70,57 +68,42 @@ impl Counsel {
         }
     }
 
-    pub async fn check_guest(
+    pub async fn check_in(
         State(data): State<PgPool>,
         Json(guest): Json<Guest>,
-        ) -> impl IntoResponse {
-        let _ = Recall::new(data);
-        info!("Guest info:");
-        info!("{:#?}", &guest);
-        "Guest checked."
+        ) -> Result<impl IntoResponse, impl IntoResponse> {
+        trace!("Checking in guest {}.", &guest.name);
+        let recall = Recall::new(data);
+        let attempt = recall.create(&guest).await;
+        match attempt {
+            Ok(created) => Ok((StatusCode::OK, Json(created))),
+            Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
+        }
     }
 
-    // pub async fn check_in(
-    //     State(data): State<Recall>,
-    //     Json(guest): Json<Value>,
-    // ) -> Result<impl IntoResponse, impl IntoResponse> {
-    //     info!("Receiving request to create {:#?}", &guest);
-    //     match guest.clone() {
-            // Value::Array(guest_vec) => {
-            //     if !guest_vec.is_empty() {
-            //         info!("Creating guest {:#?}.", &guest_vec[0].get("name"));
-            //         let (_, username) = prune_name(&user_vec[0]["username"].to_string()).unwrap();
-            //         let (_, password) = prune_name(&user_vec[0]["password_hash"].to_string()).unwrap();
-            //         let usr = User::new(&username, &password);
-            //         // let usr = User::new(
-            //         //     user_vec[0]["username"].to_string().as_str(),
-            //         //     &user_vec[0]["password"].to_string().as_str(),
-            //         // );
-            //         match data.create(&usr).await {
-            //             Ok(result) => Ok((StatusCode::CREATED, Json(result))),
-            //             Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
-            //         }
-            //     } else {
-            //         Err((StatusCode::BAD_REQUEST, "User not created.".to_string()))
-            //     }
-            // }
-    //         Value::Object(guest_map) => {
-    //             info!("Creating user {:#?}.", &guest_map["username"]);
-    //             let (_, name) = prune_name(&guest_map["name"].to_string()).unwrap();
-    //             let (_, pass) = prune_name(&guest_map["hash"].to_string()).unwrap();
-    //             let guest = Guest::new(&name, &pass);
-    //             let res = data.create(&guest).await;
-    //             match res {
-    //                 Ok(result) => Ok((StatusCode::CREATED, Json(result))),
-    //                 Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
-    //             }
-    //         }
-    //         _ => {
-    //             info!("Not an array or object variant.");
-    //             Err((StatusCode::BAD_REQUEST, "Not an array or object variant.".to_string()))
-    //         }
-    //     }
-    // }
+    pub async fn update(
+        State(data): State<PgPool>,
+        Json(guest): Json<Guest>,
+        ) -> Result<impl IntoResponse, impl IntoResponse> {
+        trace!("Updating guest {}.", &guest.name);
+        let recall = Recall::new(data);
+        let attempt = recall.update(&guest).await;
+        match attempt {
+            Ok(updated) => Ok((StatusCode::OK, Json(updated))),
+            Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
+        }
+    }
 
+    pub async fn check_out(
+        State(data): State<PgPool>,
+        Json(guest): Json<Guest>,
+        ) -> Result<impl IntoResponse, impl IntoResponse> {
+        trace!("Checking out guest {}.", &guest.name);
+        let recall = Recall::new(data);
+        let attempt = recall.delete(&guest).await;
+        match attempt {
+            Ok(()) => Ok(StatusCode::OK),
+            Err(e) => Err((StatusCode::BAD_REQUEST, e.to_string())),
+        }
+    }
 }
-

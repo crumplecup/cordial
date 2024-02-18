@@ -133,11 +133,16 @@ pub enum FauxPas {
     #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     #[error("Password generation error: {0}")]
     Pass(String),
-    /// The `Axum` variant converts and error from the `axum` crate.
+    /// The `Axum` variants converts an *axum::Error* from the `axum` crate.
+    #[cfg(feature = "route")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
+    #[error("Axum error: {0}")]
+    Axum(#[from] axum::Error),
+    /// The `AxumHttp` variant converts an axum::http error from the `axum` crate.
     #[cfg(feature = "route")]
     #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
     #[error("Axum http error: {0}")]
-    Axum(#[from] axum::http::Error),
+    AxumHttp(#[from] axum::http::Error),
     /// The `Infallible` variant converts from std::convert::Infallible.
     #[error("This operation is infallible.")]
     Infallible(#[from] std::convert::Infallible),
