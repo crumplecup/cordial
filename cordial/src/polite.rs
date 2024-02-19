@@ -69,8 +69,13 @@ pub enum FauxPas {
     #[cfg(feature = "oauth")]
     #[cfg_attr(docsrs, doc(cfg(feature = "oauth")))]
     #[error("Oauth2 error: {0}")]
-    Oauth2(#[from] oauth2::RequestTokenError<oauth2::reqwest::Error<reqwest::Error>,
-    oauth2::StandardErrorResponse<oauth2::basic::BasicErrorResponseType>>),
+    Oauth2(
+        #[from]
+        oauth2::RequestTokenError<
+            oauth2::reqwest::Error<reqwest::Error>,
+            oauth2::StandardErrorResponse<oauth2::basic::BasicErrorResponseType>,
+        >,
+    ),
     /// The `Serialize` variant converts errors from the `serde` crate.
     #[cfg(feature = "serial")]
     #[cfg_attr(docsrs, doc(cfg(feature = "serial")))]

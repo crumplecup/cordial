@@ -17,4 +17,3 @@ pub trait Memorable<T>: Send + Sync + 'static {
     async fn update(&self, mem: &T) -> Polite<T>;
     async fn delete(&self, mem: &T) -> Polite<()>;
 }
-

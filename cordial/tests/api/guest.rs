@@ -1,6 +1,6 @@
-use cordial::prelude::*;
 use axum::body::Body;
 use axum::http::{self, Request};
+use cordial::prelude::*;
 use http_body_util::BodyExt;
 // use tokio::net::TcpListener;
 use tower::{Service, ServiceExt};
@@ -31,11 +31,14 @@ pub async fn guest_check(host: &mut Host) -> Polite<()> {
     //         axum::serve(listener, app);
     //     });
     let uri = format!("/guests");
-    let response = app.oneshot(Request::builder()
-                                   .uri(&uri)
-                                   .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                                   .body(Body::empty())?)
-                                   .await?;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(&uri)
+                .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                .body(Body::empty())?,
+        )
+        .await?;
     assert_eq!(response.status(), 200);
     let body = response.into_body().collect().await?.to_bytes();
     let body: Vec<Guest> = serde_json::from_slice(&body).unwrap();
@@ -58,12 +61,16 @@ pub async fn guest_lifecycle(host: &mut Host) -> Polite<()> {
     let uri = format!("/guests");
     let body = serde_json::json!(&guest);
     let body = serde_json::to_vec(&body)?;
-    let response = app.clone().oneshot(Request::builder()
-                                   .uri(&uri)
-                                   .method(http::Method::POST)
-                                   .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                                   .body(Body::from(body))?)
-                                   .await?;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(&uri)
+                .method(http::Method::POST)
+                .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                .body(Body::from(body))?,
+        )
+        .await?;
     assert_eq!(response.status(), 200);
     let body = response.into_body().collect().await?.to_bytes();
     let body: Guest = serde_json::from_slice(&body).unwrap();
@@ -72,11 +79,15 @@ pub async fn guest_lifecycle(host: &mut Host) -> Polite<()> {
 
     info!("Looking up guest {}.", &guest.name);
     let uri = format!("/guests/{}", &guest.id);
-    let response = app.clone().oneshot(Request::builder()
-                                   .uri(&uri)
-                                   .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                                   .body(Body::empty())?)
-                                   .await?;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(&uri)
+                .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                .body(Body::empty())?,
+        )
+        .await?;
     assert_eq!(response.status(), 200);
     let body = response.into_body().collect().await?.to_bytes();
     let body: Guest = serde_json::from_slice(&body).unwrap();
@@ -89,12 +100,16 @@ pub async fn guest_lifecycle(host: &mut Host) -> Polite<()> {
     let uri = format!("/guests/{}", &guest.id);
     let body = serde_json::json!(&guest);
     let body = serde_json::to_vec(&body)?;
-    let response = app.clone().oneshot(Request::builder()
-                                   .uri(&uri)
-                                   .method(http::Method::PUT)
-                                   .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                                   .body(Body::from(body))?)
-                                   .await?;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(&uri)
+                .method(http::Method::PUT)
+                .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                .body(Body::from(body))?,
+        )
+        .await?;
     assert_eq!(response.status(), 200);
     let body = response.into_body().collect().await?.to_bytes();
     let body: Guest = serde_json::from_slice(&body).unwrap();
@@ -105,17 +120,20 @@ pub async fn guest_lifecycle(host: &mut Host) -> Polite<()> {
     let uri = format!("/guests/{}", &guest.id);
     let body = serde_json::json!(&guest);
     let body = serde_json::to_vec(&body)?;
-    let response = app.clone().oneshot(Request::builder()
-                                   .uri(&uri)
-                                   .method(http::Method::DELETE)
-                                   .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
-                                   .body(Body::from(body))?)
-                                   .await?;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(&uri)
+                .method(http::Method::DELETE)
+                .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                .body(Body::from(body))?,
+        )
+        .await?;
     assert_eq!(response.status(), 200);
     let body = response.into_body().collect().await?.to_bytes();
     assert!(body.is_empty());
     info!("Guest {} successfully checked out.", &guest.name);
 
     Ok(())
-
 }

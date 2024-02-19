@@ -10,12 +10,10 @@ pub fn fauxpas() -> Polite<()> {
 fn env() -> Polite<()> {
     match not_there() {
         Ok(not_there) => {
-            warn!("Should not be reachable: {:#?}",  not_there);
+            warn!("Should not be reachable: {:#?}", not_there);
             Err(FauxPas::BadTest)
-        },
-        Err(FauxPas::Env(_)) => {
-            Ok(())
         }
+        Err(FauxPas::Env(_)) => Ok(()),
         Err(e) => {
             warn!("Unexpected error: {:#?}", e.to_string());
             Err(FauxPas::BadTest)

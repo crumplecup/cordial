@@ -96,8 +96,7 @@ impl Posture {
     /// Creates a [`PgConnectOptions`] from the field values in the `Posture`, including the
     /// database name.
     pub fn database(&self) -> PgConnectOptions {
-        self
-            .connect()
+        self.connect()
             .database(&self.database)
             .log_statements(tracing::log::LevelFilter::Trace)
     }
@@ -106,8 +105,7 @@ impl Posture {
     /// Postgres or create the new database.
     pub async fn create(&self) -> Polite<()> {
         trace!("Creating database {}.", &self.database);
-        let mut connection = PgConnection::connect_with(&self.connect())
-            .await?;
+        let mut connection = PgConnection::connect_with(&self.connect()).await?;
         connection
             .execute(&*format!(r#"CREATE DATABASE "{}";"#, self.database))
             .await?;
@@ -115,19 +113,15 @@ impl Posture {
     }
 
     pub async fn migrate(&self) -> Polite<()> {
-        let connection_pool = PgPool::connect_with(self.database())
-            .await?;
+        let connection_pool = PgPool::connect_with(self.database()).await?;
         trace!("Migrating database.");
-        sqlx::migrate!("./migrations")
-            .run(&connection_pool)
-            .await?;
+        sqlx::migrate!("./migrations").run(&connection_pool).await?;
         Ok(())
     }
 
     pub async fn delete(&self) -> Polite<()> {
         trace!("Deleting database {}.", &self.database);
-        let mut connection = PgConnection::connect_with(&self.connect())
-            .await?;
+        let mut connection = PgConnection::connect_with(&self.connect()).await?;
         connection
             .execute(&*format!(r#"DROP DATABASE "{}";"#, self.database))
             .await?;
@@ -136,8 +130,7 @@ impl Posture {
 
     pub async fn try_delete(&self) -> Polite<()> {
         trace!("Attempting to delete database {}.", &self.database);
-        let mut connection = PgConnection::connect_with(&self.connect())
-            .await?;
+        let mut connection = PgConnection::connect_with(&self.connect()).await?;
         match connection
             .execute(&*format!(r#"DROP DATABASE "{}";"#, self.database))
             .await
@@ -145,7 +138,7 @@ impl Posture {
             Ok(res) => {
                 trace!("Database {} deleted.", self.database);
                 trace!("Rows affected: {}", res.rows_affected());
-            },
+            }
             Err(e) => trace!(
                 "Failed to delete {}.  Error: {}.",
                 self.database,

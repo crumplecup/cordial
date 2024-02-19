@@ -3,9 +3,9 @@
 //! implements the [`Memorable`] trait for the type [`Guest`], to enable CRUD access to the
 //! database for managing [`Guest`] data.
 use crate::prelude::*;
-use tracing::trace;
 #[cfg(feature = "sql")]
 use sqlx::PgPool;
+use tracing::trace;
 
 /// The `Recall` struct holds memories of each guest ([`crate::guest::Guest`]) using a handle to a database `book`.
 #[cfg(feature = "sql")]
@@ -28,7 +28,6 @@ impl From<Posture> for Recall {
         let book = posture.book();
         Recall::new(book)
     }
-
 }
 
 impl From<&Posture> for Recall {
@@ -36,12 +35,10 @@ impl From<&Posture> for Recall {
         let book = posture.book();
         Recall::new(book)
     }
-
 }
 
 #[async_trait::async_trait]
 impl Memorable<Guest> for Recall {
-
     async fn get(&self, id: uuid::Uuid) -> Polite<Guest> {
         trace!("Calling get() for id {}", &id);
         Ok(sqlx::query_as::<_, Guest>(
@@ -119,5 +116,4 @@ impl Memorable<Guest> for Recall {
         trace!("{:#?}", &req);
         Ok(())
     }
-
 }

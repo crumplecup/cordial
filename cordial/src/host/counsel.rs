@@ -1,15 +1,15 @@
 use crate::prelude::*;
-use tracing::trace;
 #[cfg(feature = "route")]
 use axum::extract::{Path, State};
 #[cfg(feature = "route")]
 use axum::http::StatusCode;
 #[cfg(feature = "route")]
-use axum::Json;
-#[cfg(feature = "route")]
 use axum::response::IntoResponse;
+#[cfg(feature = "route")]
+use axum::Json;
 #[cfg(feature = "sql")]
 use sqlx::PgPool;
+use tracing::trace;
 
 #[cfg(feature = "route")]
 #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
@@ -71,7 +71,7 @@ impl Counsel {
     pub async fn check_in(
         State(data): State<PgPool>,
         Json(guest): Json<Guest>,
-        ) -> Result<impl IntoResponse, impl IntoResponse> {
+    ) -> Result<impl IntoResponse, impl IntoResponse> {
         trace!("Checking in guest {}.", &guest.name);
         let recall = Recall::new(data);
         let attempt = recall.create(&guest).await;
@@ -84,7 +84,7 @@ impl Counsel {
     pub async fn update(
         State(data): State<PgPool>,
         Json(guest): Json<Guest>,
-        ) -> Result<impl IntoResponse, impl IntoResponse> {
+    ) -> Result<impl IntoResponse, impl IntoResponse> {
         trace!("Updating guest {}.", &guest.name);
         let recall = Recall::new(data);
         let attempt = recall.update(&guest).await;
@@ -97,7 +97,7 @@ impl Counsel {
     pub async fn check_out(
         State(data): State<PgPool>,
         Json(guest): Json<Guest>,
-        ) -> Result<impl IntoResponse, impl IntoResponse> {
+    ) -> Result<impl IntoResponse, impl IntoResponse> {
         trace!("Checking out guest {}.", &guest.name);
         let recall = Recall::new(data);
         let attempt = recall.delete(&guest).await;

@@ -1,10 +1,18 @@
-use cordial::prelude::*;
 use crate::prelude::*;
+use cordial::prelude::*;
 use tracing::info;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[cfg(feature = "full")]
 #[tokio::test]
 pub async fn conduct() -> Polite<()> {
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "cordial=info".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .try_init()?;
     let mut host = Host::from_env().await?;
     info!("Host created.");
     booking(&host).await?;
@@ -19,5 +27,3 @@ pub async fn conduct() -> Polite<()> {
 
     Ok(())
 }
-
-
