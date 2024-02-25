@@ -2,6 +2,7 @@ mod conduct;
 mod guest;
 mod helpers;
 mod host;
+mod improv;
 mod polite;
 
 pub mod prelude {
@@ -9,5 +10,6 @@ pub mod prelude {
     pub use crate::guest::*;
     pub use crate::helpers::*;
     pub use crate::host::*;
+    pub use crate::improv::*;
     pub use crate::polite::*;
 }

@@ -4,7 +4,12 @@ use crate::prelude::*;
 #[cfg(feature = "improv")]
 #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
 use names::{Generator, Name};
+#[cfg(feature = "improv")]
+#[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
 use passwords::PasswordGenerator;
+#[cfg(feature = "serial")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serial")))]
+use serde::{Serialize, Deserialize};
 
 /// The `Improv` struct produces randomized names and passwords.
 #[cfg(feature = "improv")]
@@ -20,11 +25,20 @@ impl<'a> Improv<'a> {
     /// The `new` method creates an `Improv` struct, using the naming pattern [`Name::Numbered`] if
     /// `numbered` is `true`, and [`Name::Plain`] if `false`.
     pub fn new(numbered: bool) -> Self {
-        let mut name = Generator::with_naming(Name::Numbered);
-        if !numbered {
-            name = Generator::with_naming(Name::Plain);
-        }
+        let name = Improv::gen(numbered);
         let pass = PasswordGenerator::new();
+        Self { name, pass }
+    }
+
+    fn gen(numbered: bool) -> Generator<'a> {
+        match numbered {
+            true => Generator::with_naming(Name::Numbered),
+            false => Generator::with_naming(Name::Plain),
+        }
+    }
+
+    pub fn from_pass(pass: PasswordGenerator, numbered: bool) -> Self {
+        let name = Improv::gen(numbered);
         Self { name, pass }
     }
 
@@ -100,5 +114,51 @@ impl<'a> Improv<'a> {
 impl<'a> Default for Improv<'a> {
     fn default() -> Self {
         Self::new(true)
+    }
+}
+
+/// The `Pass` struct holds configuration information for a [`PasswordGenerator`].
+#[cfg(feature = "serial")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serial")))]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct Pass {
+    /// Wrapper for the `length` field in [`PasswordGenerator`].
+    pub length: usize,
+    /// Wrapper for the `numbers` field in [`PasswordGenerator`].
+    pub numbers: bool,
+    /// Wrapper for the `lowercase_letters` field in [`PasswordGenerator`].
+    pub lowercase: bool,
+    /// Wrapper for the `uppercase_letters` field in [`PasswordGenerator`].
+    pub uppercase: bool,
+    /// Wrapper for the `symbols` field in [`PasswordGenerator`].
+    pub symbols: bool,
+    /// Wrapper for the `spaces` field in [`PasswordGenerator`].
+    pub spaces: bool,
+    /// Wrapper for the `exclude_similar_characters` field in [`PasswordGenerator`].
+    pub exclude: bool,
+    /// Wrapper for the `strict` field in [`PasswordGenerator`].
+    pub strict: bool,
+}
+
+impl Pass {
+    /// Creates a new `Pass` struct from the default method.  Modify the fields directly after
+    /// construction to customize.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for Pass {
+    fn default() -> Self {
+        Self {
+            length: 8,
+            numbers: true,
+            lowercase: true,
+            uppercase: false,
+            symbols: false,
+            spaces: false,
+            exclude: false,
+            strict: false,
+        }
     }
 }

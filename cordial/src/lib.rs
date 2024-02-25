@@ -9,7 +9,7 @@ pub mod prelude {
     #[cfg(feature = "serde")]
     #[cfg(feature = "uuid")]
     pub use crate::guest::Guest;
-    pub use crate::host::{Counsel, Host, Improv, Posture, Recall};
+    pub use crate::host::{Counsel, Host, Improv, Pass, Posture, Recall};
     pub use crate::memory::Memorable;
     pub use crate::polite::{FauxPas, Polite};
 }

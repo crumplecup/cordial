@@ -8,6 +8,6 @@ pub mod recall;
 
 pub use counsel::Counsel;
 pub use eponym::Host;
-pub use improv::Improv;
+pub use improv::{Improv, Pass};
 pub use posture::Posture;
 pub use recall::Recall;

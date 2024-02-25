@@ -22,6 +22,10 @@ pub async fn conduct() -> Polite<()> {
     guest_lifecycle(&mut host).await?;
     info!("Guest lifecycle successful.");
 
+    info!("Checking improvisation.");
+    improvise(&host).await?;
+    info!("Improvisation successful.");
+
     fauxpas()?;
     info!("Fauxpas test successful.");
 

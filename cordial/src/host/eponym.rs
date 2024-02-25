@@ -36,6 +36,10 @@ impl Host {
                     .put(Counsel::update)
                     .delete(Counsel::check_out),
             )
+            .route("/improv/name", get(Counsel::guest_name))
+            .route("/improv/name/num", get(Counsel::guest_name_numbered))
+            .route("/improv/pass", get(Counsel::guest_pass).post(Counsel::pass_adv))
+            // .route("/improv/pass/:length/:numbers/:lowercase/:uppercase/:symbols/:spaces/:exclude/:strict", get(Counsel::pass_adv))
             .with_state(self.recall.book.clone())
     }
 }
