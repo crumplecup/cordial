@@ -1,12 +1,17 @@
 //! The `posture` module contains the database configuration "posture" of the host. Currently
 //! supports local postgres hosting.
 use crate::prelude::*;
+#[cfg(feature = "secret")]
 use secrecy::ExposeSecret;
+#[cfg(feature = "secret")]
 use secrecy::Secret;
 #[cfg(feature = "serial")]
 use serde_aux::field_attributes::deserialize_number_from_string;
+#[cfg(feature = "sql")]
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
+#[cfg(feature = "sql")]
 use sqlx::ConnectOptions;
+#[cfg(feature = "sql")]
 use sqlx::{postgres::PgPoolOptions, Connection, Executor, PgConnection, PgPool};
 use std::time::Duration;
 use tracing::trace;
@@ -14,6 +19,8 @@ use tracing::trace;
 /// The `Posture` struct contains fields and methods for managing database configuration.
 #[cfg_attr(feature = "serial", derive(serde::Deserialize))]
 #[cfg_attr(docsrs, doc(cfg(feature = "serial")))]
+#[cfg(feature = "secret")]
+#[cfg_attr(docsrs, doc(cfg(feature = "secret")))]
 #[derive(Debug, Clone)]
 pub struct Posture {
     /// The `name` field represents the username of the postgres database.
@@ -35,6 +42,8 @@ impl Posture {
     /// The `from_env` method politely attempts to create a new `Posture` from the `.env` file in the
     /// working directory.  Commits a [`FauxPas`] if `.env` is not present, or if the variables
     /// `DB_USERNAME`, `DB_PASSWORD`, `DB_HOST` and `DB_NAME` are not present.
+    #[cfg(feature = "secret")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "secret")))]
     pub fn from_env() -> Polite<Self> {
         dotenvy::dotenv().ok();
         let name = std::env::var("DB_USERNAME")?;
@@ -54,6 +63,8 @@ impl Posture {
     }
 
     /// Reveals the connection string for the database.
+    #[cfg(feature = "secret")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "secret")))]
     pub fn introduction(&self) -> Secret<String> {
         Secret::new(format!(
             "postgres://{}:{}@{}:{}/{}",
@@ -66,6 +77,8 @@ impl Posture {
     }
 
     /// Reveals the connection string without the database name.
+    #[cfg(feature = "secret")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "secret")))]
     pub fn intro(&self) -> Secret<String> {
         Secret::new(format!(
             "postgres://{}:{}@{}:{}",
@@ -78,6 +91,10 @@ impl Posture {
 
     /// Creates a [`PgConnectOptions`] from the field values in the `Posture`, excluding the
     /// database name.
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
+    #[cfg(feature = "secret")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "secret")))]
     pub fn connect(&self) -> PgConnectOptions {
         let ssl = if self.ssl {
             PgSslMode::Require
@@ -95,6 +112,8 @@ impl Posture {
 
     /// Creates a [`PgConnectOptions`] from the field values in the `Posture`, including the
     /// database name.
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     pub fn database(&self) -> PgConnectOptions {
         self.connect()
             .database(&self.database)
@@ -103,6 +122,8 @@ impl Posture {
 
     /// Creates a database from a given `Posture`.  Commits a [`FauxPas`] if unable to connect with
     /// Postgres or create the new database.
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     pub async fn create(&self) -> Polite<()> {
         trace!("Creating database {}.", &self.database);
         let mut connection = PgConnection::connect_with(&self.connect()).await?;
@@ -112,6 +133,8 @@ impl Posture {
         Ok(())
     }
 
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     pub async fn migrate(&self) -> Polite<()> {
         let connection_pool = PgPool::connect_with(self.database()).await?;
         trace!("Migrating database.");
@@ -119,6 +142,8 @@ impl Posture {
         Ok(())
     }
 
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     pub async fn delete(&self) -> Polite<()> {
         trace!("Deleting database {}.", &self.database);
         let mut connection = PgConnection::connect_with(&self.connect()).await?;
@@ -128,6 +153,8 @@ impl Posture {
         Ok(())
     }
 
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     pub async fn try_delete(&self) -> Polite<()> {
         trace!("Attempting to delete database {}.", &self.database);
         let mut connection = PgConnection::connect_with(&self.connect()).await?;
@@ -148,6 +175,8 @@ impl Posture {
         Ok(())
     }
 
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     pub fn book(&self) -> PgPool {
         trace!("Creating connection pool.");
         PgPoolOptions::new()

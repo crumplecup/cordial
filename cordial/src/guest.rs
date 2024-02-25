@@ -1,12 +1,12 @@
 //! The `guest` module holds the [`Guest`] struct for managing multiple users in an application.
 
 /// The `Guest` struct provides convenience methods around user management.
-// #[cfg(feature = "serde")]
-#[cfg(feature = "uuid")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
+// #[cfg(feature = "serial")]
+#[cfg(feature = "uuids")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serial")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
-#[cfg_attr(docsrs, doc(cfg(feature = "uuid")))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(docsrs, doc(cfg(feature = "uuids")))]
+#[cfg_attr(feature = "serial", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "sql", derive(sqlx::FromRow))]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Guest {
@@ -18,12 +18,10 @@ pub struct Guest {
     pub hash: String,
 }
 
-#[cfg(feature = "serde")]
-#[cfg(feature = "uuid")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
-#[cfg_attr(docsrs, doc(cfg(feature = "uuid")))]
 impl Guest {
     /// Create a new `Guest` from a given `name` and password `pass`.
+    #[cfg(feature = "uuids")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "uuids")))]
     pub fn new(name: &str, pass: &str) -> Self {
         let id = uuid::Uuid::new_v4();
         Guest {

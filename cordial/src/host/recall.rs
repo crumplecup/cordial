@@ -18,6 +18,8 @@ pub struct Recall {
 
 impl Recall {
     /// Creates a new `Recall` using `book`, a handle to the database.
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     pub fn new(book: PgPool) -> Self {
         Self { book }
     }
@@ -39,6 +41,8 @@ impl From<&Posture> for Recall {
 
 #[async_trait::async_trait]
 impl Memorable<Guest> for Recall {
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     async fn get(&self, id: uuid::Uuid) -> Polite<Guest> {
         trace!("Calling get() for id {}", &id);
         Ok(sqlx::query_as::<_, Guest>(
@@ -54,6 +58,8 @@ impl Memorable<Guest> for Recall {
         .await?)
     }
 
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     async fn get_all(&self) -> Polite<Vec<Guest>> {
         let req = sqlx::query_as::<_, Guest>(
             r#"
@@ -66,6 +72,8 @@ impl Memorable<Guest> for Recall {
         Ok(req)
     }
 
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     async fn create(&self, mem: &Guest) -> Polite<Guest> {
         trace!("Calling create for {}.", &mem.name);
         let req = sqlx::query_as::<_, Guest>(
@@ -83,6 +91,8 @@ impl Memorable<Guest> for Recall {
         Ok(req)
     }
 
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     async fn update(&self, mem: &Guest) -> Polite<Guest> {
         trace!("Calling update for id {}", &mem.id);
         let req = sqlx::query(
@@ -102,6 +112,8 @@ impl Memorable<Guest> for Recall {
         Ok(mem.clone())
     }
 
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     async fn delete(&self, mem: &Guest) -> Polite<()> {
         trace!("Calling delete for id {}", &mem.id);
         let req = sqlx::query::<_>(

@@ -24,11 +24,17 @@ pub struct Counsel;
 impl Counsel {
     /// Creates a new `Counsel` struct, an empty struct that coordinates methods related to route
     /// handling.
+    #[cfg(feature = "route")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
     pub fn new() -> Self {
         Default::default()
     }
 
     /// The `book` method returns the version of the postgres database if available.
+    #[cfg(feature = "route")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     pub async fn book(State(data): State<PgPool>) -> impl IntoResponse {
         tracing::info!("Getting version");
         let recall = Recall::new(data);
@@ -45,12 +51,18 @@ impl Counsel {
     }
 
     /// The `check` method returns a status OK, used to assess if the system is responsive.
+    #[cfg(feature = "route")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
     pub async fn check() -> impl IntoResponse {
         tracing::info!("Bearing check.");
         StatusCode::OK
     }
 
     /// The `lookup` method looks up a [`Guest`] based upon their `id`.
+    #[cfg(feature = "route")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     pub async fn lookup(
         Path(id): Path<uuid::Uuid>,
         State(data): State<PgPool>,
@@ -65,6 +77,10 @@ impl Counsel {
     }
 
     /// The `lookup_all` method returns all [`Guest`] entries.
+    #[cfg(feature = "route")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     pub async fn lookup_all(
         State(data): State<PgPool>,
     ) -> Result<impl IntoResponse, impl IntoResponse> {
@@ -78,6 +94,10 @@ impl Counsel {
     }
 
     /// The `check_in` method enters a new [`Guest`] into the book.
+    #[cfg(feature = "route")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     pub async fn check_in(
         State(data): State<PgPool>,
         Json(guest): Json<Guest>,
@@ -93,6 +113,10 @@ impl Counsel {
 
     /// The `update` method updates the `name` and `hash` fields of a [`Guest`], while maintain the
     /// same `id`.
+    #[cfg(feature = "route")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     pub async fn update(
         State(data): State<PgPool>,
         Json(guest): Json<Guest>,
@@ -107,6 +131,10 @@ impl Counsel {
     }
 
     /// The `check_out` method removes a [`Guest`] from the book.
+    #[cfg(feature = "route")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
+    #[cfg(feature = "sql")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
     pub async fn check_out(
         State(data): State<PgPool>,
         Json(guest): Json<Guest>,
@@ -121,6 +149,8 @@ impl Counsel {
     }
 
     /// The `guest_name` method offers a recommendation for the `name` of a [`Guest`].
+    #[cfg(feature = "route")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
     #[cfg(feature = "improv")]
     #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     pub async fn guest_name() -> Result<impl IntoResponse, impl IntoResponse> {
@@ -134,6 +164,8 @@ impl Counsel {
     }
 
     /// The `guest_name_numbered` method offers a recommendation for a numbered `name` of a [`Guest`].
+    #[cfg(feature = "route")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
     #[cfg(feature = "improv")]
     #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     pub async fn guest_name_numbered() -> Result<impl IntoResponse, impl IntoResponse> {
@@ -147,6 +179,8 @@ impl Counsel {
     }
 
     /// The `guest_pass` method offers a recommendation for the `pass` of a [`Guest`].
+    #[cfg(feature = "route")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
     #[cfg(feature = "improv")]
     #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     pub async fn guest_pass() -> Result<impl IntoResponse, impl IntoResponse> {
@@ -161,6 +195,8 @@ impl Counsel {
 
     /// The `pass_adv` method offers a recommendation for the `pass` of a [`Guest`] using the
     /// configuration provided in the request body.
+    #[cfg(feature = "route")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "route")))]
     #[cfg(feature = "improv")]
     #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     pub async fn pass_adv(
@@ -168,7 +204,9 @@ impl Counsel {
     ) -> Result<impl IntoResponse, impl IntoResponse> {
         trace!("Recommending custom pass.");
         let mut improv = Improv::new(false);
-        improv.pass = improv.pass.clone()
+        improv.pass = improv
+            .pass
+            .clone()
             .length(config.length)
             .numbers(config.numbers)
             .lowercase_letters(config.lowercase)

@@ -19,7 +19,8 @@ pub async fn improvise(host: &Host) -> Polite<()> {
 async fn guest_name(host: &Host) -> Polite<()> {
     let app = host.bearing();
     let uri = format!("/improv/name");
-    let response = app.clone()
+    let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .uri(&uri)
