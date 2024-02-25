@@ -18,6 +18,10 @@ pub struct Host {
     pub posture: Posture,
 }
 
+#[cfg(feature = "route")]
+#[cfg_attr(docsrs, doc(cfg(feature = "route")))]
+#[cfg(feature = "sql")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
 impl Host {
     #[cfg(feature = "route")]
     #[cfg_attr(docsrs, doc(cfg(feature = "route")))]

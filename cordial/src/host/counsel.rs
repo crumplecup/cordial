@@ -21,6 +21,8 @@ use tracing::trace;
 #[derive(Copy, Clone, Debug, Default)]
 pub struct Counsel;
 
+#[cfg(feature = "route")]
+#[cfg_attr(docsrs, doc(cfg(feature = "route")))]
 impl Counsel {
     /// Creates a new `Counsel` struct, an empty struct that coordinates methods related to route
     /// handling.

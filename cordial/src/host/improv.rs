@@ -21,6 +21,8 @@ pub struct Improv<'a> {
     pub pass: PasswordGenerator,
 }
 
+#[cfg(feature = "improv")]
+#[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
 impl<'a> Improv<'a> {
     /// The `new` method creates an `Improv` struct, using the naming pattern [`Name::Numbered`] if
     /// `numbered` is `true`, and [`Name::Plain`] if `false`.
@@ -129,6 +131,8 @@ impl<'a> Improv<'a> {
     }
 }
 
+#[cfg(feature = "improv")]
+#[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
 impl<'a> Default for Improv<'a> {
     #[cfg(feature = "improv")]
     #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
@@ -162,6 +166,8 @@ pub struct Pass {
     pub strict: bool,
 }
 
+#[cfg(feature = "improv")]
+#[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
 impl Pass {
     /// Creates a new `Pass` struct from the default method.  Modify the fields directly after
     /// construction to customize.
@@ -174,6 +180,8 @@ impl Pass {
     }
 }
 
+#[cfg(feature = "improv")]
+#[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
 impl Default for Pass {
     #[cfg(feature = "improv")]
     #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]

@@ -16,6 +16,8 @@ pub struct Recall {
     pub book: PgPool,
 }
 
+#[cfg(feature = "sql")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
 impl Recall {
     /// Creates a new `Recall` using `book`, a handle to the database.
     #[cfg(feature = "sql")]
@@ -25,6 +27,10 @@ impl Recall {
     }
 }
 
+#[cfg(feature = "sql")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
+#[cfg(feature = "secret")]
+#[cfg_attr(docsrs, doc(cfg(feature = "secret")))]
 impl From<Posture> for Recall {
     fn from(posture: Posture) -> Self {
         let book = posture.book();
@@ -32,6 +38,10 @@ impl From<Posture> for Recall {
     }
 }
 
+#[cfg(feature = "sql")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
+#[cfg(feature = "secret")]
+#[cfg_attr(docsrs, doc(cfg(feature = "secret")))]
 impl From<&Posture> for Recall {
     fn from(posture: &Posture) -> Self {
         let book = posture.book();
@@ -39,6 +49,8 @@ impl From<&Posture> for Recall {
     }
 }
 
+#[cfg(feature = "sql")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sql")))]
 #[async_trait::async_trait]
 impl Memorable<Guest> for Recall {
     #[cfg(feature = "sql")]

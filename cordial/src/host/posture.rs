@@ -38,6 +38,8 @@ pub struct Posture {
     pub ssl: bool,
 }
 
+#[cfg(feature = "secret")]
+#[cfg_attr(docsrs, doc(cfg(feature = "secret")))]
 impl Posture {
     /// The `from_env` method politely attempts to create a new `Posture` from the `.env` file in the
     /// working directory.  Commits a [`FauxPas`] if `.env` is not present, or if the variables
