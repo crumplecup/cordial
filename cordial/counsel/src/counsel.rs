@@ -12,7 +12,7 @@ use sqlx::PgPool;
 use tracing::{info, trace};
 use uuid::Uuid;
 
-pub const LOCAL: &str = "http://127.0.0.1:8000";
+pub const LOCAL: &str = "http://127.0.0.1:8080";
 
 /// The `Counsel` struct holds methods related to offering directions and recommendations to a
 /// [`Guest`].
