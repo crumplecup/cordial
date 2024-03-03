@@ -12,7 +12,8 @@ use sqlx::PgPool;
 use tracing::{info, trace};
 use uuid::Uuid;
 
-pub const LOCAL: &str = "http://127.0.0.1:8000";
+pub const SERVER: &str = "http://127.0.0.1:8000";
+pub const CLIENT: &str = "http://127.0.0.1:8080";
 
 /// The `Counsel` struct holds methods related to offering directions and recommendations to a
 /// [`Guest`].
@@ -26,12 +27,18 @@ impl Counsel {
         Default::default()
     }
 
+    pub fn access() -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(SERVER));
+        headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(CLIENT));
+        headers
+    }
+
     /// The `book` method returns the version of the postgres database if available.
     pub async fn book(State(data): State<PgPool>) -> impl IntoResponse {
         info!("Checking book.");
         trace!("Getting version");
-        let mut headers = HeaderMap::new();
-        headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(LOCAL));
+        let headers = Counsel::access();
         let recall = Recall::new(data);
         let result: Result<String, sqlx::Error> = sqlx::query_scalar("SELECT version()")
             .fetch_one(&recall.book)
@@ -48,8 +55,7 @@ impl Counsel {
     /// The `check` method returns a status OK, used to assess if the system is responsive.
     pub async fn check() -> impl IntoResponse {
         info!("Bearing check.");
-        let mut headers = HeaderMap::new();
-        headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(LOCAL));
+        let headers = Counsel::access();
         (StatusCode::OK, headers)
     }
 
