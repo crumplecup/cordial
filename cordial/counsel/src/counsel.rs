@@ -30,6 +30,8 @@ impl Counsel {
     pub async fn book(State(data): State<PgPool>) -> impl IntoResponse {
         info!("Checking book.");
         trace!("Getting version");
+        let mut headers = HeaderMap::new();
+        headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(LOCAL));
         let recall = Recall::new(data);
         let result: Result<String, sqlx::Error> = sqlx::query_scalar("SELECT version()")
             .fetch_one(&recall.book)
@@ -40,16 +42,15 @@ impl Counsel {
             Err(e) => format!("Error: {:?}", e),
         };
 
-        (StatusCode::OK, ver)
+        (StatusCode::OK, headers, ver)
     }
 
     /// The `check` method returns a status OK, used to assess if the system is responsive.
     pub async fn check() -> impl IntoResponse {
         info!("Bearing check.");
         let mut headers = HeaderMap::new();
-        // headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
         headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(LOCAL));
-        (headers, StatusCode::OK)
+        (StatusCode::OK, headers)
     }
 
     /// The `lookup` method looks up a [`Guest`] based upon their `id`.
