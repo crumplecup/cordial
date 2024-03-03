@@ -29,8 +29,7 @@ impl Counsel {
 
     pub fn access() -> HeaderMap {
         let mut headers = HeaderMap::new();
-        headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(SERVER));
-        headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(CLIENT));
+        headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
         headers
     }
 
