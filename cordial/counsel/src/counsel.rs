@@ -12,6 +12,8 @@ use sqlx::PgPool;
 use tracing::{info, trace};
 use uuid::Uuid;
 
+pub const LOCAL: &str = "http://127.0.0.1:8000";
+
 /// The `Counsel` struct holds methods related to offering directions and recommendations to a
 /// [`Guest`].
 #[derive(Copy, Clone, Debug, Default)]
@@ -26,7 +28,7 @@ impl Counsel {
 
     /// The `book` method returns the version of the postgres database if available.
     pub async fn book(State(data): State<PgPool>) -> impl IntoResponse {
-        info!("Getting version");
+        info!("Checking book.");
         trace!("Getting version");
         let recall = Recall::new(data);
         let result: Result<String, sqlx::Error> = sqlx::query_scalar("SELECT version()")
@@ -45,7 +47,8 @@ impl Counsel {
     pub async fn check() -> impl IntoResponse {
         info!("Bearing check.");
         let mut headers = HeaderMap::new();
-        headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+        // headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+        headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(LOCAL));
         (headers, StatusCode::OK)
     }
 
