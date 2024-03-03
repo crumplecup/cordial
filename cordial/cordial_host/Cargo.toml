@@ -1,0 +1,13 @@
+[package]
+name = "cordial_host"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.7.4"
+cordial_posture = { path = "../cordial_posture" }
+cordial_recall = { path = "../cordial_recall" }
+counsel = { path = "../counsel" }
+polite = { path = "../polite", default-features = false }
+secrecy = "0.8.0"
+tracing = "0.1.40"

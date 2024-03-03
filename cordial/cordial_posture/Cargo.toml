@@ -1,0 +1,13 @@
+[package]
+name = "cordial_posture"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dotenvy = "0.15.7"
+polite = { path = "../polite", default-features = false, features = ["sql"] }
+secrecy = { version = "0.8.0", features = ["serde"] }
+serde = { version = "1.0.197", features = ["derive"] }
+serde-aux = "4.5.0"
+sqlx = { version = "0.7.3", features = ["postgres", "runtime-tokio-rustls"] }
+tracing = "0.1.40"

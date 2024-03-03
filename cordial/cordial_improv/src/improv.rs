@@ -1,19 +1,12 @@
-//! The `improv` module provides methods for generating random names and passwords, using the
+//! The `improv` crate provides methods for generating random names and passwords, using the
 //! eponymous [`names`] and [`passwords`] crates.
-use crate::prelude::*;
-#[cfg(feature = "improv")]
-#[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
+use cordial_guest::Guest;
 use names::{Generator, Name};
-#[cfg(feature = "improv")]
-#[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
 use passwords::PasswordGenerator;
-#[cfg(feature = "serial")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serial")))]
+use polite::{FauxPas, Polite};
 use serde::{Deserialize, Serialize};
 
 /// The `Improv` struct produces randomized names and passwords.
-#[cfg(feature = "improv")]
-#[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
 pub struct Improv<'a> {
     /// The `name` field contains a [`Generator`] from the [`names`] crate.
     pub name: Generator<'a>,
@@ -21,21 +14,15 @@ pub struct Improv<'a> {
     pub pass: PasswordGenerator,
 }
 
-#[cfg(feature = "improv")]
-#[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
 impl<'a> Improv<'a> {
     /// The `new` method creates an `Improv` struct, using the naming pattern [`Name::Numbered`] if
     /// `numbered` is `true`, and [`Name::Plain`] if `false`.
-    #[cfg(feature = "improv")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     pub fn new(numbered: bool) -> Self {
         let name = Improv::gen(numbered);
         let pass = PasswordGenerator::new();
         Self { name, pass }
     }
 
-    #[cfg(feature = "improv")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     fn gen(numbered: bool) -> Generator<'a> {
         match numbered {
             true => Generator::with_naming(Name::Numbered),
@@ -43,8 +30,6 @@ impl<'a> Improv<'a> {
         }
     }
 
-    #[cfg(feature = "improv")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     pub fn from_pass(pass: PasswordGenerator, numbered: bool) -> Self {
         let name = Improv::gen(numbered);
         Self { name, pass }
@@ -52,8 +37,6 @@ impl<'a> Improv<'a> {
 
     /// The `name` method calls [`Generator::next`] to produce an [`Option`] where the [`Some`] variant contains a new name.  Commits a [`FauxPas`]
     /// if the [`Option`] is [`None`].
-    #[cfg(feature = "improv")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     pub fn name(&mut self) -> Polite<String> {
         let opt = self.name.next();
         match opt {
@@ -64,8 +47,6 @@ impl<'a> Improv<'a> {
 
     /// The `names` method calls [`Generator::next`] repeatedly to produce an [`Option`] where the [`Some`] variant contains a new name, entering successful names into a `String` vector.  Commits a [`FauxPas`]
     /// if any [`Option`] contains [`None`].
-    #[cfg(feature = "improv")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     pub fn names(&mut self, count: usize) -> Polite<Vec<String>> {
         let mut names = Vec::new();
         while names.len() < count {
@@ -79,8 +60,6 @@ impl<'a> Improv<'a> {
     /// a [`FauxPas`] if the [`passwords`] library returns an error, bubbling the message up.
     /// The `pass` field is public to expose the configuration
     /// methods available in the [`passwords`] crate for the [`PasswordGenerator`].
-    #[cfg(feature = "improv")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     pub fn pass(&self) -> Polite<String> {
         let pass = self.pass.generate_one();
         match pass {
@@ -93,8 +72,6 @@ impl<'a> Improv<'a> {
     /// Commits a [`FauxPas`] if the [`passwords`] library returns an error, bubbling the message up.
     /// The `pass` field is public to expose the configuration
     /// methods available in the [`passwords`] crate for the [`PasswordGenerator`].
-    #[cfg(feature = "improv")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     pub fn passes(&self, count: usize) -> Polite<Vec<String>> {
         let passes = self.pass.generate(count);
         match passes {
@@ -105,8 +82,6 @@ impl<'a> Improv<'a> {
 
     /// The `guest` method creates a new [`Guest`] struct using an improvised name and pass.
     /// Passes any [`FauxPas`] from the [`Improv::name`] and [`Improv::pass`] methods up.
-    #[cfg(feature = "improv")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     pub fn guest(&mut self) -> Polite<Guest> {
         let name = self.name()?;
         let hash = self.pass()?;
@@ -116,8 +91,6 @@ impl<'a> Improv<'a> {
     /// The `guests` method creates a vector of type [`Guest`] and length `count`.  Passes any
     /// [`FauxPas`] from the [`Improv::names`] and [`Improv::passes`] methods up.  Optimized for creating multiple
     /// passwords at once, intended to facilitate development and testing.
-    #[cfg(feature = "improv")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     pub fn guests(&mut self, count: usize) -> Polite<Vec<Guest>> {
         let names = self.names(count)?;
         let passes = self.passes(count)?;
@@ -131,21 +104,13 @@ impl<'a> Improv<'a> {
     }
 }
 
-#[cfg(feature = "improv")]
-#[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
 impl<'a> Default for Improv<'a> {
-    #[cfg(feature = "improv")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
     fn default() -> Self {
         Self::new(true)
     }
 }
 
 /// The `Pass` struct holds configuration information for a [`PasswordGenerator`].
-#[cfg(feature = "improv")]
-#[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
-#[cfg(feature = "serial")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serial")))]
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct Pass {
     /// Wrapper for the `length` field in [`PasswordGenerator`].
@@ -166,27 +131,15 @@ pub struct Pass {
     pub strict: bool,
 }
 
-#[cfg(feature = "improv")]
-#[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
 impl Pass {
     /// Creates a new `Pass` struct from the default method.  Modify the fields directly after
     /// construction to customize.
-    #[cfg(feature = "improv")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
-    #[cfg(feature = "serial")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "serial")))]
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-#[cfg(feature = "improv")]
-#[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
 impl Default for Pass {
-    #[cfg(feature = "improv")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "improv")))]
-    #[cfg(feature = "serial")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "serial")))]
     fn default() -> Self {
         Self {
             length: 8,

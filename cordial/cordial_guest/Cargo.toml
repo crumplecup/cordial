@@ -1,0 +1,17 @@
+[package]
+name = "cordial_guest"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+serial = ["serde"]
+sql = ["sqlx"]
+
+[dependencies]
+serde = { version = "1.0.197", features = ["derive"], optional = true }
+sqlx = { version = "0.7.3", optional = true }
+uuid = { version = "1.7.0", features = ["v4", "serde"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

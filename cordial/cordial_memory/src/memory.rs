@@ -1,14 +1,10 @@
-//! The `memory` module provides the [`Memorable`] trait, which enables methods for persisting data
+//! The `memory` crate provides the [`Memorable`] trait, which enables methods for persisting data
 //! in a database using a standard CRUD API.
-use crate::prelude::*;
-#[cfg(feature = "uuids")]
-#[cfg_attr(docsrs, doc(cfg(feature = "uuids")))]
+use polite::Polite;
 use uuid::Uuid;
 
-#[cfg(feature = "memory")]
-#[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
-#[cfg(feature = "uuids")]
-#[cfg_attr(docsrs, doc(cfg(feature = "uuids")))]
+/// The `Memorable` trait defines a protocol for creating, reading, updating and deleting users
+/// from a database.
 #[async_trait::async_trait]
 pub trait Memorable<T>: Send + Sync + 'static {
     async fn get(&self, id: Uuid) -> Polite<T>;

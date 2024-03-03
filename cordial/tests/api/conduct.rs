@@ -1,9 +1,8 @@
 use crate::prelude::*;
 use cordial::prelude::*;
-use tracing::info;
+use tracing::{info, trace};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-#[cfg(feature = "full")]
 #[tokio::test]
 pub async fn conduct() -> Polite<()> {
     match tracing_subscriber::registry()
@@ -17,6 +16,7 @@ pub async fn conduct() -> Polite<()> {
         Ok(_) => {}
         Err(_) => {}
     };
+    trace!("Subscriber initialized.");
     let mut host = Host::from_env().await?;
     info!("Host created.");
     booking(&host).await?;

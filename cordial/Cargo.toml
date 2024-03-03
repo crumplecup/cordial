@@ -1,59 +1,32 @@
+[workspace]
+members = ["cordial_guest", "cordial_host", "cordial_improv", "cordial_memory", "cordial_posture", "cordial_recall", "counsel", "polite"]
+
 [package]
 name = "cordial"
 version = "0.1.0"
 edition = "2021"
 
-[features]
-default = ["full"]
-bin = ["bincode"]
-byte = ["byte-unit"]
-csvs = ["csv"]
-full = ["bin", "byte", "csvs", "icon", "img", "improv", "memory", "plot", "oauth", "req", "route", "serial", "sql", "test", "trace", "uuids", "urls"]
-icon = ["dioxus-desktop"]
-img = ["image"]
-improv = ["names", "passwords"]
-memory = ["async-trait"]
-plot = ["plotters", "plotters-bitmap"]
-oauth = ["oauth2"]
-req = ["reqwest"]
-route = ["axum", "secret"]
-secret = ["secrecy"]
-serial = ["serde", "serde_json", "serde-aux"]
-sql = ["sqlx"]
-test = ["full", "trace"]
-trace = ["tracing-subscriber"]
-uuids = ["uuid"]
-urls = ["url"]
-
 [dependencies]
-async-trait = { version = "0.1.77", optional = true }
-axum = { version = "0.7.4", optional = true }
-bincode = { version = "1.3.3", optional = true }
-byte-unit = { version = "5.1.3", optional = true }
-csv = { version = "1.3.0", optional = true }
-dioxus-desktop = { version = "0.4.3", optional = true }
-dotenvy = "0.15.7"
+cordial_guest = { path = "./cordial_guest", features = ["serial", "sql"] }
+cordial_host = { path = "./cordial_host" }
+cordial_improv = { path = "./cordial_improv" }
+cordial_memory = { path = "./cordial_memory" }
+cordial_posture = { path = "./cordial_posture" }
+cordial_recall = { path = "./cordial_recall" }
+counsel = { path = "./counsel" }
+polite = { path = "./polite", default-features = false, features = ["route", "serial", "sql", "trace"] }
+
+[dev-dependencies]
+axum = "0.7.4"
 http-body-util = "0.1.0"
-image = { version = "0.24.7", optional = true }
 mime = "0.3.17"
-names = { version = "0.14.0", optional = true }
-oauth2 = { version = "4.4.2", optional = true }
-passwords = { version = "3.1.16", optional = true, features = ["crypto", "common-password"] }
-plotters = { version = "0.3.5", optional = true }
-plotters-bitmap = { version = "0.3.3", optional = true }
-reqwest = { version = "0.11.23", features = ["cookie_store", "cookies", "json", "tokio-rustls"], optional = true }
-secrecy = { version = "0.8.0", optional = true, features = ["serde"] }
-serde = { version = "1.0.195", optional = true, features = ["derive"] }
-serde-aux = { version = "4.4.0", optional = true }
-serde_json = { version = "1.0.111", optional = true }
-sqlx = { version = "0.7.3", features = ["runtime-tokio-rustls", "postgres", "macros", "chrono", "uuid"], optional = true }
-thiserror = "1.0.56"
-tokio = { version = "1.35.1", features = ["tracing", "fs", "macros", "rt-multi-thread"] }
-tower = { version = "0.4.13", features = ["tokio", "tracing"] }
+reqwest = { version = "0.11.24", features = ["cookies"] }
+secrecy = "0.8.0"
+serde_json = "1.0.114"
+tokio = "1.36.0"
+tower = "0.4.13"
 tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"], optional = true }
-url = { version = "2.5.0", optional = true }
-uuid = { version = "1.6.1", optional = true, features = ["serde", "v4"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 
 [package.metadata.docs.rs]
 all-features = true
