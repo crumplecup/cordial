@@ -12,7 +12,7 @@ use sqlx::PgPool;
 use tracing::{info, trace};
 use uuid::Uuid;
 
-pub const LOCAL: &str = "http://127.0.0.1:8080";
+pub const LOCAL: &str = "http://127.0.0.1:8000";
 
 /// The `Counsel` struct holds methods related to offering directions and recommendations to a
 /// [`Guest`].
@@ -39,7 +39,7 @@ impl Counsel {
 
         let ver = match result {
             Ok(version) => version,
-            Err(e) => format!("Error: {:?}", e),
+            Err(e) => format!("{:#?}", e),
         };
 
         (StatusCode::OK, headers, ver)
