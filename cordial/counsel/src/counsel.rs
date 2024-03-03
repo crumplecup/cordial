@@ -1,6 +1,6 @@
 //! The `counsel` crate offers directions and recommendations to a [`Guest`].
 use axum::extract::{Path, State};
-use axum::http::header::{HeaderMap, HeaderValue, ACCESS_CONTROL_ALLOW_ORIGIN};
+use axum::http::header::{HeaderMap, HeaderValue, ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -27,18 +27,26 @@ impl Counsel {
         Default::default()
     }
 
-    pub fn access() -> HeaderMap {
-        let mut headers = HeaderMap::new();
+    pub fn headers() -> HeaderMap {
+        HeaderMap::new()
+    }
+
+    pub fn access(headers: &mut HeaderMap) {
         headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(SERVER));
         headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(CLIENT));
-        headers
+    }
+
+    pub fn plain(headers: &mut HeaderMap) {
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
     }
 
     /// The `book` method returns the version of the postgres database if available.
     pub async fn book(State(data): State<PgPool>) -> impl IntoResponse {
         info!("Checking book.");
         trace!("Getting version");
-        let headers = Counsel::access();
+        let mut headers = Counsel::headers();
+        Counsel::access(&mut headers);
+        Counsel::plain(&mut headers);
         let recall = Recall::new(data);
         let result: Result<String, sqlx::Error> = sqlx::query_scalar("SELECT version()")
             .fetch_one(&recall.book)
@@ -55,7 +63,8 @@ impl Counsel {
     /// The `check` method returns a status OK, used to assess if the system is responsive.
     pub async fn check() -> impl IntoResponse {
         info!("Bearing check.");
-        let headers = Counsel::access();
+        let mut headers = Counsel::headers();
+        Counsel::access(&mut headers);
         (StatusCode::OK, headers)
     }
 
