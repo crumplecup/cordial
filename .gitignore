@@ -1,0 +1,8 @@
+target
+Secrets*.toml
+tags*
+static
+dist
+node_modules
+Cargo.lock
+.env

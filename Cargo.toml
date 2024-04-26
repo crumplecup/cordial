@@ -1,0 +1,33 @@
+[workspace]
+members = ["cordial_guest", "cordial_host", "cordial_improv", "cordial_memory", "cordial_posture", "cordial_recall", "counsel", "polite"]
+
+[package]
+name = "cordial"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cordial_guest = { path = "./cordial_guest", features = ["serial", "sql"] }
+cordial_host = { path = "./cordial_host" }
+cordial_improv = { path = "./cordial_improv" }
+cordial_memory = { path = "./cordial_memory" }
+cordial_posture = { path = "./cordial_posture" }
+cordial_recall = { path = "./cordial_recall" }
+counsel = { path = "./counsel" }
+polite = { path = "./polite", default-features = false, features = ["route", "serial", "sql", "trace"] }
+
+[dev-dependencies]
+axum = "0.7.4"
+http-body-util = "0.1.0"
+mime = "0.3.17"
+reqwest = { version = "0.11.24", features = ["cookies"] }
+secrecy = "0.8.0"
+serde_json = "1.0.114"
+tokio = "1.36.0"
+tower = "0.4.13"
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS guests;
+CREATE TABLE IF NOT EXISTS guests (
+    id uuid PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    hash TEXT NOT NULL
+);

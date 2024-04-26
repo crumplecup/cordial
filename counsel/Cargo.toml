@@ -1,0 +1,14 @@
+[package]
+name = "counsel"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.7.4"
+cordial_guest = { path = "../cordial_guest", features = ["serial"] }
+cordial_improv = { path = "../cordial_improv" }
+cordial_memory = { path = "../cordial_memory" }
+cordial_recall = { path = "../cordial_recall" }
+sqlx = "0.7.3"
+tracing = "0.1.40"
+uuid = "1.7.0"
