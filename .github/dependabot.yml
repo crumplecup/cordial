@@ -1,0 +1,33 @@
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/" # Location of package manifests
+    schedule:
+      interval: "daily"
+    groups:
+      patches:
+        applies-to: version-updates
+        update-types:
+          - "patch"
+      minor:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+      major:
+        applies-to: version-updates
+        update-types:
+          - "major"
+      security-patches:
+        applies-to: security-updates
+        update-types:
+          - "patch"
+      security-minor:
+        applies-to: security-updates
+        update-types:
+          - "minor"
+      security-major:
+        applies-to: security-updates
+        update-types:
+          - "major"
+
+
