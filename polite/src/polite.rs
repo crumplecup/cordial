@@ -197,6 +197,8 @@ pub enum FauxPas {
     Unknown,
 }
 
+#[cfg(feature = "parse")]
+#[cfg_attr(docsrs, doc(cfg(feature = "parse")))]
 impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for NomDescript {
     fn from(nom: nom::Err<nom::error::Error<&'a str>>) -> Self {
         let message = format!("{}", nom);
@@ -205,11 +207,15 @@ impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for NomDescript {
 
 }
 
+#[cfg(feature = "parse")]
+#[cfg_attr(docsrs, doc(cfg(feature = "parse")))]
 #[derive(Debug, Clone)]
 pub struct NomDescript {
     message: String,
 }
 
+#[cfg(feature = "parse")]
+#[cfg_attr(docsrs, doc(cfg(feature = "parse")))]
 impl NomDescript {
     pub fn new(message: String) -> Self {
         Self { message }
@@ -228,6 +234,8 @@ impl NomDescript {
     }
 }
 
+#[cfg(feature = "parse")]
+#[cfg_attr(docsrs, doc(cfg(feature = "parse")))]
 impl fmt::Display for NomDescript {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.value_ref())
