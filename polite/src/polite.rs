@@ -1,7 +1,7 @@
 //! The `polite` crate defines a [`FauxPas`] alias for [`Error`], and an alias for
 //! [`Result`], [`Polite`], using the [`Error`] alias.
-use thiserror::Error;
 use std::fmt;
+use thiserror::Error;
 
 /// The `Polite` type is an alias for `Result` using the library-defined [`FauxPas`].
 pub type Polite<T> = Result<T, FauxPas>;
@@ -190,11 +190,20 @@ pub enum FauxPas {
     #[cfg(feature = "parse")]
     #[cfg_attr(docsrs, doc(cfg(feature = "parse")))]
     #[error("Nom error: {0}")]
-    Nom(NomDescript),
+    Nom(String),
 
     /// The `Unknown` variant is a catch-all error variant for library operations.
     #[error("Unexpected error.")]
     Unknown,
+}
+
+#[cfg(feature = "parse")]
+#[cfg_attr(docsrs, doc(cfg(feature = "parse")))]
+impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for FauxPas {
+    fn from(nom: nom::Err<nom::error::Error<&'a str>>) -> Self {
+        let message = format!("{}", nom);
+        Self::Nom(message)
+    }
 }
 
 #[cfg(feature = "parse")]
@@ -204,7 +213,6 @@ impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for NomDescript {
         let message = format!("{}", nom);
         Self::new(message)
     }
-
 }
 
 #[cfg(feature = "parse")]
@@ -241,4 +249,3 @@ impl fmt::Display for NomDescript {
         write!(f, "{}", self.value_ref())
     }
 }
-

@@ -32,8 +32,14 @@ impl Counsel {
     }
 
     pub fn access(headers: &mut HeaderMap) {
-        headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(SERVER));
-        headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static(CLIENT));
+        headers.insert(
+            ACCESS_CONTROL_ALLOW_ORIGIN,
+            HeaderValue::from_static(SERVER),
+        );
+        headers.insert(
+            ACCESS_CONTROL_ALLOW_ORIGIN,
+            HeaderValue::from_static(CLIENT),
+        );
     }
 
     pub fn plain(headers: &mut HeaderMap) {
