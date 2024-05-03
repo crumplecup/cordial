@@ -165,11 +165,6 @@ pub enum FauxPas {
     #[cfg_attr(docsrs, doc(cfg(feature = "gis")))]
     #[error("Error reading format: {0}")]
     Shapefile(#[from] shapefile::Error),
-    /// The `WinOs` variant converts a `winit::error::OsError` from the `winit` crate.
-    #[cfg(feature = "win")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "win")))]
-    #[error("OS error: {0}")]
-    WinOs(#[from] winit::error::OsError),
     /// The `Surface` variant converts a `wgpu::SurfaceError` from the `wgpu` crate.
     #[cfg(feature = "gpu")]
     #[cfg_attr(docsrs, doc(cfg(feature = "gpu")))]
@@ -196,6 +191,31 @@ pub enum FauxPas {
     #[cfg_attr(docsrs, doc(cfg(feature = "aid")))]
     #[error("Aid error: {0}")]
     Aid(#[from] aid::Bandage),
+    /// The `EventLoop` variant converts a [`winit::error::EventLoopError`] from the `winit` crate.
+    #[cfg(feature = "win")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "win")))]
+    #[error("Winit event loop error: {0}")]
+    WinitEvent(#[from] winit::error::EventLoopError),
+    /// The `WinOs` variant converts a `winit::error::OsError` from the `winit` crate.
+    #[cfg(feature = "win")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "win")))]
+    #[error("OS error: {0}")]
+    WinOs(#[from] winit::error::OsError),
+    /// The `WinitIcon` variant converts a [`winit::window::BadIcon`] from the `winit` crate.
+    #[cfg(feature = "win")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "win")))]
+    #[error("Winit icon error: {0}")]
+    WinitIcon(#[from] winit::window::BadIcon),
+    /// The `WgpuSurface` variant converts a [`wgpu::CreateSurfaceError`] from the `wgpu` crate.
+    #[cfg(feature = "gpu")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "gpu")))]
+    #[error("From wgpu: {0}")]
+    WgpuSurface(#[from] wgpu::CreateSurfaceError),
+    /// The `WgpuDevice` variant converts a [`wgpu::RequestDeviceError`] from the `wgpu` crate.
+    #[cfg(feature = "gpu")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "gpu")))]
+    #[error("From wgpu: {0}")]
+    WgpuDevice(#[from] wgpu::RequestDeviceError),
 
     /// The `Unknown` variant is a catch-all error variant for library operations.
     #[error("Unexpected error.")]
