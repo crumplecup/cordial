@@ -190,7 +190,7 @@ pub enum FauxPas {
     #[cfg(feature = "aid")]
     #[cfg_attr(docsrs, doc(cfg(feature = "aid")))]
     #[error("Aid error: {0}")]
-    Aid(#[from] aid::Bandage),
+    Aid(#[from] aid::error::Bandage),
     /// The `EventLoop` variant converts a [`winit::error::EventLoopError`] from the `winit` crate.
     #[cfg(feature = "win")]
     #[cfg_attr(docsrs, doc(cfg(feature = "win")))]
