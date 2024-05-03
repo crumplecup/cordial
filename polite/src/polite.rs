@@ -1,6 +1,5 @@
 //! The `polite` crate defines a [`FauxPas`] alias for [`Error`], and an alias for
 //! [`Result`], [`Polite`], using the [`Error`] alias.
-use std::fmt;
 use thiserror::Error;
 
 /// The `Polite` type is an alias for `Result` using the library-defined [`FauxPas`].
@@ -187,10 +186,16 @@ pub enum FauxPas {
     // #[cfg_attr(docsrs, doc(cfg(feature = "parse")))]
     // #[error("Nom err: {0}")]
     // NomErr(#[from] nom::Err<nom::error::Error<&'static str>>),
+    /// The `Nom` variant converts errors from the `nom` crate.
     #[cfg(feature = "parse")]
     #[cfg_attr(docsrs, doc(cfg(feature = "parse")))]
     #[error("Nom error: {0}")]
     Nom(String),
+    /// The `Nom` variant converts errors from the `nom` crate.
+    #[cfg(feature = "aid")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "aid")))]
+    #[error("Aid error: {0}")]
+    Aid(#[from] aid::Bandage),
 
     /// The `Unknown` variant is a catch-all error variant for library operations.
     #[error("Unexpected error.")]
