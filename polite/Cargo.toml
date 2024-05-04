@@ -5,7 +5,7 @@ edition = "2021"
 
 [features]
 default = ["full"]
-full = ["auth", "bin", "byte", "csvs", "gis", "gpu", "hype", "icon", "id", "img", "parse", "plot", "req", "route", "serial", "sql", "trace", "urls", "win", "aid"]
+full = ["auth", "bin", "byte", "csvs", "gis", "gpu", "hype", "icon", "id", "img", "parse", "plot", "req", "route", "serial", "sql", "trace", "urls", "win"]
 auth = ["oauth2"]
 bin = ["bincode"]
 byte = ["byte-unit"]
@@ -50,7 +50,6 @@ tracing-subscriber = { version = "0.3.18", optional = true }
 url = { version = "2.5.0", optional = true }
 uuid = { version = "1.7.0", optional = true }
 wgpu = { version = "0.19.4", optional = true }
-# wgpu = { version = "0.20.0", optional = true }
 winit = { version = "0.30.0", optional = true }
 
 [package.metadata.docs.rs]
