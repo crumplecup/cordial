@@ -27,7 +27,6 @@ urls = ["url"]
 win = ["winit"]
 
 [dependencies]
-aid = { git = "https://github.com/grantspassoregon/aid.git", optional = true }
 axum = { version = "0.7.4", optional = true }
 bincode = { version = "1.3.3", optional = true }
 byte-unit = { version = "5.1.4", optional = true }
