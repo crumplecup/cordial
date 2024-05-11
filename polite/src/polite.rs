@@ -1,9 +1,9 @@
 //! The `polite` crate defines a [`FauxPas`] alias for [`Error`], and an alias for
 //! [`Result`], [`Polite`], using the [`Error`] alias.
-use thiserror::Error;
 #[cfg(feature = "parse")]
 #[cfg_attr(docsrs, doc(cfg(feature = "parse")))]
 use std::fmt;
+use thiserror::Error;
 
 /// The `Polite` type is an alias for `Result` using the library-defined [`FauxPas`].
 pub type Polite<T> = Result<T, FauxPas>;
