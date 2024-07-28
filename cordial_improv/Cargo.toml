@@ -8,4 +8,4 @@ cordial_guest = { path = "../cordial_guest" }
 names = "0.14.0"
 passwords = { version = "3.1.16", features = ["common-password", "crypto"] }
 polite = { path = "../polite", default-features = false }
-serde = { version = "1.0.197", features = ["derive"] }
+serde = { version = "1.0.204", features = ["derive"] }

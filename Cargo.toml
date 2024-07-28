@@ -1,5 +1,14 @@
 [workspace]
-members = ["cordial_guest", "cordial_host", "cordial_improv", "cordial_memory", "cordial_posture", "cordial_recall", "counsel", "polite"]
+members = [
+  "cordial_guest",
+  "cordial_host",
+  "cordial_improv",
+  "cordial_memory",
+  "cordial_posture",
+  "cordial_recall",
+  "counsel",
+  "polite",
+]
 
 [package]
 name = "cordial"
@@ -14,16 +23,21 @@ cordial_memory = { path = "./cordial_memory" }
 cordial_posture = { path = "./cordial_posture" }
 cordial_recall = { path = "./cordial_recall" }
 counsel = { path = "./counsel" }
-polite = { path = "./polite", default-features = false, features = ["route", "serial", "sql", "trace"] }
+polite = { path = "./polite", default-features = false, features = [
+  "route",
+  "serial",
+  "sql",
+  "trace",
+] }
 
 [dev-dependencies]
-axum = "0.7.4"
-http-body-util = "0.1.0"
+axum = "0.7.5"
+http-body-util = "0.1.2"
 mime = "0.3.17"
-reqwest = { version = "0.12.4", features = ["cookies"] }
+reqwest = { version = "0.12.5", features = ["cookies"] }
 secrecy = "0.8.0"
-serde_json = "1.0.114"
-tokio = "1.36.0"
+serde_json = "1.0.120"
+tokio = "1.39.0"
 tower = "0.4.13"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }

@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-trait = "0.1.77"
+async-trait = "0.1.81"
 polite = { path = "../polite", default-features = false }
-uuid = "1.7.0"
+uuid = "1.10.0"

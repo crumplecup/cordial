@@ -5,7 +5,27 @@ edition = "2021"
 
 [features]
 default = ["full"]
-full = ["auth", "bin", "byte", "csvs", "gis", "gpu", "hype", "icon", "id", "img", "parse", "plot", "req", "route", "serial", "sql", "trace", "urls", "win"]
+full = [
+  "auth",
+  "bin",
+  "byte",
+  "csvs",
+  "gis",
+  "gpu",
+  "hype",
+  "icon",
+  "id",
+  "img",
+  "parse",
+  "plot",
+  "req",
+  "route",
+  "serial",
+  "sql",
+  "trace",
+  "urls",
+  "win",
+]
 auth = ["oauth2"]
 bin = ["bincode"]
 byte = ["byte-unit"]
@@ -27,29 +47,31 @@ urls = ["url"]
 win = ["winit"]
 
 [dependencies]
-axum = { version = "0.7.4", optional = true }
+axum = { version = "0.7.5", optional = true }
 bincode = { version = "1.3.3", optional = true }
 byte-unit = { version = "5.1.4", optional = true }
 csv = { version = "1.3.0", optional = true }
-dioxus-desktop = { version = "0.5.1", optional = true }
+dioxus-desktop = { version = "0.5.6", optional = true }
 geojson = { version = "0.24.1", optional = true }
-hyper = { version = "1.2.0", optional = true }
-hyper-util = { version = "0.1.3", features = ["client-legacy"], optional = true }
-image = { version = "0.25.1", optional = true }
+hyper = { version = "1.4.1", optional = true }
+hyper-util = { version = "0.1.6", features = [
+  "client-legacy",
+], optional = true }
+image = { version = "0.25.2", optional = true }
 nom = { version = "7.1.3", optional = true }
 oauth2 = { version = "4.4.2", optional = true }
-plotters = { version = "0.3.5", optional = true }
-plotters-bitmap = { version = "0.3.3", optional = true }
-reqwest = { version = "0.12.4", optional = true }
-serde = { version = "1.0.197", optional = true }
-serde_json = { version = "1.0.114", optional = true }
+plotters = { version = "0.3.6", optional = true }
+plotters-bitmap = { version = "0.3.6", optional = true }
+reqwest = { version = "0.12.5", optional = true }
+serde = { version = "1.0.204", optional = true }
+serde_json = { version = "1.0.120", optional = true }
 shapefile = { version = "0.6.0", optional = true }
-sqlx = { version = "0.7.3", optional = true }
-thiserror = "1.0.57"
+sqlx = { version = "0.8.0", optional = true }
+thiserror = "1.0.63"
 tracing-subscriber = { version = "0.3.18", optional = true }
-url = { version = "2.5.0", optional = true }
-uuid = { version = "1.7.0", optional = true }
-wgpu = { version = "0.20.0", optional = true }
+url = { version = "2.5.2", optional = true }
+uuid = { version = "1.10.0", optional = true }
+wgpu = { version = "0.20.1", optional = true }
 winit = { version = "0.29.15", optional = true }
 
 [package.metadata.docs.rs]
