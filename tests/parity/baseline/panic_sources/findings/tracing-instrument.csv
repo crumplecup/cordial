@@ -1,0 +1,6 @@
+crate,qualified_name,kind,visibility,file,line,disposition
+panic_sources,explodes,free,pub,/home/erik/repos/cordial/tests/parity/workspaces/panic_sources/src/lib.rs,1,open
+panic_sources,not_possible,free,pub,/home/erik/repos/cordial/tests/parity/workspaces/panic_sources/src/lib.rs,5,open
+panic_sources,expects,free,pub,/home/erik/repos/cordial/tests/parity/workspaces/panic_sources/src/lib.rs,9,open
+panic_sources,unwraps,free,pub,/home/erik/repos/cordial/tests/parity/workspaces/panic_sources/src/lib.rs,13,open
+panic_sources,compile_fail,free,pub,/home/erik/repos/cordial/tests/parity/workspaces/panic_sources/src/lib.rs,17,open

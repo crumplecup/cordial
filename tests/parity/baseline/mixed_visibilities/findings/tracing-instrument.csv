@@ -1,0 +1,4 @@
+crate,qualified_name,kind,visibility,file,line,disposition
+mixed_visibilities,private_fn,free,pub,/home/erik/repos/cordial/tests/parity/workspaces/mixed_visibilities/src/lib.rs,1,open
+mixed_visibilities,crate_fn,free,pub(crate),/home/erik/repos/cordial/tests/parity/workspaces/mixed_visibilities/src/lib.rs,3,open
+mixed_visibilities,public_fn,free,pub,/home/erik/repos/cordial/tests/parity/workspaces/mixed_visibilities/src/lib.rs,5,open

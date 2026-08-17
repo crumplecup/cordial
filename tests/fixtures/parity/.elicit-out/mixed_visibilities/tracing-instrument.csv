@@ -1,0 +1,5 @@
+crate,qualified_name,kind,visibility,file,line,instrumented
+mixed_visibilities,private_fn,free,pub,src/lib.rs,1,no
+mixed_visibilities,crate_fn,free,pub(crate),src/lib.rs,3,no
+mixed_visibilities,public_fn,free,pub,src/lib.rs,5,no
+mixed_visibilities,already_done,free,pub,src/lib.rs,7,yes

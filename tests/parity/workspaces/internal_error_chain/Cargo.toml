@@ -1,0 +1,13 @@
+[package]
+name = "internal_error_chain"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+cordial = { path = "../../../../", default-features = false, features = ["internal_error_chain"] }
+
+[lib]
+path = "src/lib.rs"

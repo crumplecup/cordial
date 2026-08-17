@@ -1,0 +1,20 @@
+source_crate,type_path,type_kind,status,missing_layers,action
+std,core::alloc::LayoutErr,TypeAlias,Partial,verus_witness,Add Verus witness for `amenable_std::rust_std::RustStdStandard<LayoutError>`
+std,core::num::NonZeroI128,TypeAlias,Partial,verus_witness,Add Verus witness for `amenable_std::rust_std::RustStdStandard<NonZero<i16>>`
+std,core::num::NonZeroI16,TypeAlias,Partial,verus_witness,Add Verus witness for `amenable_std::rust_std::RustStdStandard<NonZero<i16>>`
+std,core::num::NonZeroI32,TypeAlias,Partial,verus_witness,Add Verus witness for `amenable_std::rust_std::RustStdStandard<NonZero<i16>>`
+std,core::num::NonZeroI64,TypeAlias,Partial,verus_witness,Add Verus witness for `amenable_std::rust_std::RustStdStandard<NonZero<i16>>`
+std,core::num::NonZeroI8,TypeAlias,Partial,verus_witness,Add Verus witness for `amenable_std::rust_std::RustStdStandard<NonZero<i16>>`
+std,core::num::NonZeroIsize,TypeAlias,Partial,verus_witness,Add Verus witness for `amenable_std::rust_std::RustStdStandard<NonZero<i16>>`
+std,core::num::NonZeroU128,TypeAlias,Partial,verus_witness,Add Verus witness for `amenable_std::rust_std::RustStdStandard<NonZero<i16>>`
+std,core::num::NonZeroU16,TypeAlias,Partial,verus_witness,Add Verus witness for `amenable_std::rust_std::RustStdStandard<NonZero<i16>>`
+std,core::num::NonZeroU32,TypeAlias,Partial,verus_witness,Add Verus witness for `amenable_std::rust_std::RustStdStandard<NonZero<i16>>`
+std,core::num::NonZeroU64,TypeAlias,Partial,verus_witness,Add Verus witness for `amenable_std::rust_std::RustStdStandard<NonZero<i16>>`
+std,core::num::NonZeroU8,TypeAlias,Partial,verus_witness,Add Verus witness for `amenable_std::rust_std::RustStdStandard<NonZero<i16>>`
+std,core::num::NonZeroUsize,TypeAlias,Partial,verus_witness,Add Verus witness for `amenable_std::rust_std::RustStdStandard<NonZero<i16>>`
+std,std::os::windows::ffi::EncodeWide,Struct,Partial,"verus_witness, proof_test",Add Verus witness + proof_chain test in proof_chain_test.rs for `amenable_std::rust_std::RustStdStandard<EncodeWide<'static>>`
+std,std::os::windows::prelude::BorrowedHandle,Struct,Partial,"verus_witness, proof_test",Add Verus witness + proof_chain test in proof_chain_test.rs for `amenable_std::rust_std::RustStdStandard<BorrowedHandle<'static>>`
+std,std::os::windows::prelude::BorrowedSocket,Struct,Partial,"verus_witness, proof_test",Add Verus witness + proof_chain test in proof_chain_test.rs for `amenable_std::rust_std::RustStdStandard<BorrowedSocket<'static>>`
+std,std::os::windows::prelude::HandleOrInvalid,Struct,Partial,"verus_witness, proof_test",Add Verus witness + proof_chain test in proof_chain_test.rs for `amenable_std::rust_std::RustStdStandard<HandleOrInvalid>`
+std,std::os::windows::prelude::OwnedHandle,Struct,Partial,"verus_witness, proof_test",Add Verus witness + proof_chain test in proof_chain_test.rs for `amenable_std::rust_std::RustStdStandard<OwnedHandle>`
+std,std::os::windows::prelude::OwnedSocket,Struct,Partial,"verus_witness, proof_test",Add Verus witness + proof_chain test in proof_chain_test.rs for `amenable_std::rust_std::RustStdStandard<OwnedSocket>`

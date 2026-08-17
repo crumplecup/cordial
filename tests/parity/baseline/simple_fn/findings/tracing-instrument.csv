@@ -1,0 +1,2 @@
+crate,qualified_name,kind,visibility,file,line,disposition
+simple_fn,missing,free,pub,/home/erik/repos/cordial/tests/parity/workspaces/simple_fn/src/lib.rs,1,open

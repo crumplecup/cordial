@@ -1,0 +1,45 @@
+{
+  "crate_name": "mixed_visibilities",
+  "records": [
+    {
+      "crate_name": "mixed_visibilities",
+      "qualified_name": "private_fn",
+      "kind": "Free",
+      "visibility": "Public",
+      "file": "src/lib.rs",
+      "line": 1,
+      "instrumented": false,
+      "instrument_args": null
+    },
+    {
+      "crate_name": "mixed_visibilities",
+      "qualified_name": "crate_fn",
+      "kind": "Free",
+      "visibility": "PubCrate",
+      "file": "src/lib.rs",
+      "line": 3,
+      "instrumented": false,
+      "instrument_args": null
+    },
+    {
+      "crate_name": "mixed_visibilities",
+      "qualified_name": "public_fn",
+      "kind": "Free",
+      "visibility": "Public",
+      "file": "src/lib.rs",
+      "line": 5,
+      "instrumented": false,
+      "instrument_args": null
+    },
+    {
+      "crate_name": "mixed_visibilities",
+      "qualified_name": "already_done",
+      "kind": "Free",
+      "visibility": "Public",
+      "file": "src/lib.rs",
+      "line": 7,
+      "instrumented": true,
+      "instrument_args": "instrument"
+    }
+  ]
+}

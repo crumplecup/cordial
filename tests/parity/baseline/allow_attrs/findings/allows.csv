@@ -1,0 +1,5 @@
+crate,rule_id,context,file,line,snippet
+allow_attrs,ALLOW-ATTR-001,<crate>,/home/erik/repos/cordial/tests/parity/workspaces/allow_attrs/src/lib.rs,1,allow(dead_code)
+allow_attrs,ALLOW-ATTR-001,many_args,/home/erik/repos/cordial/tests/parity/workspaces/allow_attrs/src/lib.rs,3,allow(clippy::too_many_arguments)
+allow_attrs,ALLOW-ATTR-001,<crate>,/home/erik/repos/cordial/tests/parity/workspaces/allow_attrs/src/lib.rs,9,allow(unused)
+allow_attrs,ALLOW-ATTR-001,inner::unused_binding,/home/erik/repos/cordial/tests/parity/workspaces/allow_attrs/src/lib.rs,14,allow(unused_variables)

@@ -1,0 +1,6 @@
+crate,qualified_name,kind,visibility,file,line,instrumented
+panic_sources,explodes,free,pub,src/lib.rs,1,no
+panic_sources,not_possible,free,pub,src/lib.rs,5,no
+panic_sources,expects,free,pub,src/lib.rs,9,no
+panic_sources,unwraps,free,pub,src/lib.rs,13,no
+panic_sources,compile_fail,free,pub,src/lib.rs,17,no

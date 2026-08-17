@@ -1,0 +1,3 @@
+crate,rule_id,struct_name,method_name,qualified_name,recommendation,file,line,evidence
+trivial_getter,DERIVE-GETTER-001,Widget,name,Widget::name,Use #[derive(derive_getters::Getters)] and delete manual getter,/home/erik/repos/cordial/tests/parity/workspaces/trivial_getter/src/lib.rs,7,`fn name(&self)` returns private field `name`
+trivial_getter,DERIVE-GETTER-001,Widget,count,Widget::count,Use #[derive(derive_getters::Getters)] and delete manual getter,/home/erik/repos/cordial/tests/parity/workspaces/trivial_getter/src/lib.rs,11,`fn count(&self)` returns private field `count`

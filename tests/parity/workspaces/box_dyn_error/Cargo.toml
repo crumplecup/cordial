@@ -1,0 +1,15 @@
+[workspace]
+members = ["."]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[package]
+name = "box_dyn_error"
+version = { workspace = true }
+edition = { workspace = true }
+publish = false
+
+[lib]
+path = "src/lib.rs"

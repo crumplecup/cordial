@@ -1,0 +1,6 @@
+crate,kind,context,file,line,snippet
+panic_sources,PANIC-SOURCE-PANIC,explodes,/home/erik/repos/cordial/tests/parity/workspaces/panic_sources/src/lib.rs,2,"panic!(""boom"")"
+panic_sources,PANIC-SOURCE-UNREACHABLE,not_possible,/home/erik/repos/cordial/tests/parity/workspaces/panic_sources/src/lib.rs,6,"unreachable!(""not possible"")"
+panic_sources,PANIC-SOURCE-EXPECT,expects,/home/erik/repos/cordial/tests/parity/workspaces/panic_sources/src/lib.rs,10,".expect(""missing value"")"
+panic_sources,PANIC-SOURCE-UNWRAP,unwraps,/home/erik/repos/cordial/tests/parity/workspaces/panic_sources/src/lib.rs,14,.unwrap()
+panic_sources,PANIC-SOURCE-COMPILE-ERROR,compile_fail,/home/erik/repos/cordial/tests/parity/workspaces/panic_sources/src/lib.rs,18,"compile_error!(""intentional fixture"")"

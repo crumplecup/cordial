@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/elicitation", "crates/url", "crates/elicit_url"]
+resolver = "2"

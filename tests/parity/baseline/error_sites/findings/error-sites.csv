@@ -1,0 +1,10 @@
+crate,site_kind,context,file,line,source_snippet,site_snippet
+error_sites,ERROR-SITE-MAP-ERR,foreign_map_err,/home/erik/repos/cordial/tests/parity/workspaces/error_sites/src/lib.rs,6,std::fs::read_to_string(…),std::fs::read_to_string(…).map_err(…)
+error_sites,ERROR-SITE-QUESTION-MARK,foreign_map_err,/home/erik/repos/cordial/tests/parity/workspaces/error_sites/src/lib.rs,6,std::fs::read_to_string(…).map_err(…),std::fs::read_to_string(…).map_err(…)?
+error_sites,ERROR-SITE-QUESTION-MARK,propagate_internal,/home/erik/repos/cordial/tests/parity/workspaces/error_sites/src/lib.rs,11,x,x?
+error_sites,ERROR-SITE-RETURN-ERR,return_internal,/home/erik/repos/cordial/tests/parity/workspaces/error_sites/src/lib.rs,16,CordialError::invariant(…),return Err(…)
+error_sites,ERROR-SITE-IF-LET-ERR,if_let_foreign,/home/erik/repos/cordial/tests/parity/workspaces/error_sites/src/lib.rs,20,r,if let Err(…) = r
+error_sites,ERROR-SITE-RETURN-ERR,if_let_foreign,/home/erik/repos/cordial/tests/parity/workspaces/error_sites/src/lib.rs,21,CordialError::from(…),return Err(…)
+error_sites,ERROR-SITE-MATCH-ERR,match_foreign,/home/erik/repos/cordial/tests/parity/workspaces/error_sites/src/lib.rs,27,r,match r { Err(…) => … }
+error_sites,ERROR-SITE-RETURN-ERR,match_foreign,/home/erik/repos/cordial/tests/parity/workspaces/error_sites/src/lib.rs,28,CordialError::invariant(…),return Err(…)
+error_sites,ERROR-SITE-OK-OR,option_to_err,/home/erik/repos/cordial/tests/parity/workspaces/error_sites/src/lib.rs,34,x,x.ok_or_else(…)

@@ -1,0 +1,15 @@
+{
+  "crate_name": "simple_fn",
+  "records": [
+    {
+      "crate_name": "simple_fn",
+      "qualified_name": "missing",
+      "kind": "Free",
+      "visibility": "Public",
+      "file": "src/lib.rs",
+      "line": 1,
+      "instrumented": false,
+      "instrument_args": null
+    }
+  ]
+}

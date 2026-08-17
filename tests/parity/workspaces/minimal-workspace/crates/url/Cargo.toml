@@ -1,0 +1,8 @@
+[package]
+name = "url"
+version = "2.5.4"
+edition = "2024"
+
+[features]
+default = []
+serde = []
