@@ -1,5 +1,0 @@
-crate,kind,context,file,line,snippet
-panic_sources,PANIC-SOURCE-PANIC,explodes,src/lib.rs,2,"panic!(""boom"")"
-panic_sources,PANIC-SOURCE-UNREACHABLE,not_possible,src/lib.rs,6,"unreachable!(""not possible"")"
-panic_sources,PANIC-SOURCE-EXPECT,expects,src/lib.rs,10,".expect(""missing value"")"
-panic_sources,PANIC-SOURCE-COMPILE-ERROR,compile_fail,src/lib.rs,18,"compile_error!(""intentional fixture"")"

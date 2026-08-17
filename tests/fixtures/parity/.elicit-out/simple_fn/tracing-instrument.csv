@@ -1,2 +1,0 @@
-crate,qualified_name,kind,visibility,file,line,instrumented
-simple_fn,missing,free,pub,src/lib.rs,1,no
