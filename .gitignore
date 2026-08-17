@@ -1,0 +1,5 @@
+/target
+/.env
+/tests/parity/.elicit-out/
+/tests/parity/.elicit-store/
+/target-parity/
