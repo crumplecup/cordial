@@ -1,0 +1,53 @@
+mod assessor;
+mod gap_classify;
+mod node_context;
+mod probe;
+mod reporter;
+mod types;
+
+pub use assessor::ImplGapAssessor;
+pub use gap_classify::{ImplGapAssessment, assess_impl_gap};
+pub use probe::MissingPrereqProbe;
+pub use reporter::{ImplChecklistReporter, ImplCoverageCsvReporter, ImplGapsCsvReporter};
+pub use types::ImplGapKind;
+
+use crate::RustdocLoader;
+use crate::enricher::{
+    FeatureProbeEnricher, ProofHarnessEnricher, TraitImplEnricher, WrapperCoverageEnricher,
+};
+use crate::etiquette::StaticEtiquette;
+
+static RUSTDOC_LOADER: RustdocLoader = RustdocLoader;
+static TRAIT_IMPL: TraitImplEnricher = TraitImplEnricher;
+static FEATURE_PROBE: FeatureProbeEnricher = FeatureProbeEnricher;
+static WRAPPER_COVERAGE: WrapperCoverageEnricher = WrapperCoverageEnricher;
+static PROOF_HARNESS: ProofHarnessEnricher = ProofHarnessEnricher;
+static MISSING_PROBE: MissingPrereqProbe = MissingPrereqProbe;
+static IMPL_ASSESSOR: ImplGapAssessor = ImplGapAssessor;
+static IMPL_CSV: ImplCoverageCsvReporter = ImplCoverageCsvReporter;
+static IMPL_GAPS_CSV: ImplGapsCsvReporter = ImplGapsCsvReporter;
+static IMPL_CHECKLIST: ImplChecklistReporter = ImplChecklistReporter;
+
+static LOADERS: &[&'static dyn crate::Loader] = &[&RUSTDOC_LOADER];
+static ENRICHERS: &[&'static dyn crate::IrEnricher] = &[
+    &TRAIT_IMPL,
+    &FEATURE_PROBE,
+    &WRAPPER_COVERAGE,
+    &PROOF_HARNESS,
+];
+static PROBES: &[&'static dyn crate::Probe] = &[&MISSING_PROBE];
+static ASSESSORS: &[&'static dyn crate::Assessor] = &[&IMPL_ASSESSOR];
+static REPORTERS: &[&'static dyn crate::Reporter] = &[&IMPL_CSV, &IMPL_GAPS_CSV, &IMPL_CHECKLIST];
+
+/// Built-in trait impl coverage etiquette bundle.
+pub static IMPL_COVERAGE_ETIQUETTE: StaticEtiquette = StaticEtiquette {
+    id: "impl-coverage",
+    name: "Impl coverage",
+    loaders: LOADERS,
+    enrichers: ENRICHERS,
+    probes: PROBES,
+    assessors: ASSESSORS,
+    workspace_assessors: None,
+    reporters: REPORTERS,
+    is_coverage: true,
+};

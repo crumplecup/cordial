@@ -1,0 +1,181 @@
+//! Error-handling plugin semantics — shared supertrait for the error analysis family.
+
+use std::path::Path;
+
+use crate::error::CordialResult;
+use crate::loader::CrateTarget;
+use crate::plugin::{Plugin, PluginCategory};
+use crate::session::{RunFilter, SessionView};
+use crate::targets::discover_crate_targets;
+
+/// One crate in scope for error-flow analysis.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ErrorScope {
+    pub crate_name: String,
+}
+
+impl ErrorScope {
+    pub fn workspace_member(crate_name: impl Into<String>) -> Self {
+        Self {
+            crate_name: crate_name.into(),
+        }
+    }
+}
+
+/// Which error-analysis layers a profile enables.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ErrorHandlingLayers {
+    /// Abort sites (`panic!`, `unwrap`, `expect`, `unreachable!`).
+    pub panics: bool,
+    pub sites: bool,
+    pub chain: bool,
+    pub internal: bool,
+    pub foreign_types: bool,
+    pub attenuation: bool,
+}
+
+impl ErrorHandlingLayers {
+    pub const FULL: Self = Self {
+        panics: true,
+        sites: true,
+        chain: true,
+        internal: true,
+        foreign_types: true,
+        attenuation: true,
+    };
+
+    pub fn any_enabled(self) -> bool {
+        self.panics
+            || self.sites
+            || self.chain
+            || self.internal
+            || self.foreign_types
+            || self.attenuation
+    }
+}
+
+/// Where a failure site lives — replacement stack differs by surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ErrorSurface {
+    /// `src/**` library code (not `main.rs` / `src/bin`).
+    Library,
+    /// Binary entrypoints (`src/main.rs`, `src/bin/**`, `examples/**`).
+    Binary,
+    /// Test and bench code (`tests/**`, `benches/**`, `src/tests/**`).
+    Test,
+}
+
+impl ErrorSurface {
+    pub fn from_path(path: &Path) -> Self {
+        let components: Vec<&str> = path
+            .iter()
+            .filter_map(|component| component.to_str())
+            .collect();
+        // Classify from Cargo layout (`src/`, package-level `tests/` / `examples/`),
+        // not from incidental directory names earlier in the absolute path.
+        if let Some(src_idx) = components.iter().rposition(|component| *component == "src") {
+            return match components.get(src_idx + 1).copied() {
+                Some("main.rs") | Some("bin") => Self::Binary,
+                Some("tests") => Self::Test,
+                _ => Self::Library,
+            };
+        }
+        if components.contains(&"tests") || components.contains(&"benches") {
+            return Self::Test;
+        }
+        if components.contains(&"examples") {
+            return Self::Binary;
+        }
+        Self::Library
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Library => "library",
+            Self::Binary => "binary",
+            Self::Test => "test",
+        }
+    }
+
+    /// Expected error stack for this surface.
+    pub fn expected_stack(self) -> &'static str {
+        match self {
+            Self::Library => "internal error types",
+            Self::Binary | Self::Test => "miette",
+        }
+    }
+
+    /// Checklist action for an abort site on this surface.
+    pub fn abort_action(self) -> &'static str {
+        match self {
+            Self::Library => "return the crate's internal error type instead of aborting",
+            Self::Binary | Self::Test => "surface this with miette instead of aborting",
+        }
+    }
+}
+
+impl std::fmt::Display for ErrorSurface {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Profile policy: which layers run and how findings are classified.
+pub trait ErrorHandlingPolicy: Send + Sync {
+    fn layers(&self) -> ErrorHandlingLayers;
+}
+
+/// Discovers crate scopes for an error-handling run (default: workspace members).
+pub trait ErrorScopeProvider: Send + Sync {
+    fn error_scopes(
+        &self,
+        session: &dyn SessionView,
+        filter: &dyn RunFilter,
+    ) -> CordialResult<Vec<ErrorScope>>;
+}
+
+/// Default provider: one scope per workspace member from `cargo metadata`.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct WorkspaceMembersErrorScopeProvider;
+
+impl ErrorScopeProvider for WorkspaceMembersErrorScopeProvider {
+    fn error_scopes(
+        &self,
+        session: &dyn SessionView,
+        filter: &dyn RunFilter,
+    ) -> CordialResult<Vec<ErrorScope>> {
+        let members = discover_crate_targets(session.project_root(), filter)?;
+        Ok(members
+            .into_iter()
+            .map(|target: CrateTarget| ErrorScope::workspace_member(target.crate_name))
+            .collect())
+    }
+}
+
+/// Standard workspace policy: panics plus the Result/chain stack.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct StandardErrorHandlingPolicy;
+
+impl ErrorHandlingPolicy for StandardErrorHandlingPolicy {
+    fn layers(&self) -> ErrorHandlingLayers {
+        ErrorHandlingLayers::FULL
+    }
+}
+
+/// Semantic supertrait: error flow analysis over workspace source IR.
+pub trait ErrorHandling: Plugin {
+    fn scope_provider(&self) -> &dyn ErrorScopeProvider;
+    fn policy(&self) -> &dyn ErrorHandlingPolicy;
+
+    fn scopes(
+        &self,
+        session: &dyn SessionView,
+        filter: &dyn RunFilter,
+    ) -> CordialResult<Vec<ErrorScope>> {
+        self.scope_provider().error_scopes(session, filter)
+    }
+
+    fn category(&self) -> PluginCategory {
+        PluginCategory::ErrorHandling
+    }
+}

@@ -1,0 +1,234 @@
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+use crate::enricher::resolve_source_path;
+use crate::error::CordialResult;
+use crate::hooks::Assessor;
+use crate::ir::IrView;
+use crate::objects::{Disposition, FileSpan, Finding, Marker};
+use crate::session::SessionView;
+
+use super::hierarchy::{
+    ModuleSizeInput, build_module_hierarchy, child_mass_list, format_mass_list, lopsided_siblings,
+    top_heavy_parents,
+};
+use super::types::{ModularityFinding, ModularityKind, ModularityRule, ModuleSizeStats};
+
+/// Converts modularity-site markers into open findings.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ModularityAssessor;
+
+impl ModularityAssessor {
+    pub const ID: &'static str = "modularity-assessor";
+}
+
+struct PendingSite {
+    node_id: crate::ir::NodeId,
+    kind: ModularityKind,
+    context: String,
+    file: PathBuf,
+    line: u32,
+    lines: u32,
+    inline: bool,
+}
+
+impl Assessor for ModularityAssessor {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn consumes(&self) -> &[&str] {
+        &["modularity-site"]
+    }
+
+    fn assess(
+        &self,
+        markers: &[&dyn Marker],
+        ir: &dyn IrView,
+        session: &dyn SessionView,
+    ) -> CordialResult<Vec<Box<dyn Finding>>> {
+        let thresholds = crate::config::load_session_config(session).modularity;
+        let mut pending = Vec::new();
+        for marker in markers {
+            let node_id = marker.anchor().node_id();
+            let Some(node) = ir.node(node_id) else {
+                continue;
+            };
+            let Some(kind_value) = node.attr("modularity_kind").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let Some(kind) = ModularityKind::from_attr(kind_value) else {
+                continue;
+            };
+            let context = node
+                .attr("context")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let line = node.attr("line").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            let lines = node.attr("lines").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            let inline = node
+                .attr("inline")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let file = node
+                .attr("file")
+                .and_then(|v| v.as_str())
+                .map(|path| resolve_source_path(session, path))
+                .unwrap_or_else(|| session.project_root().to_path_buf());
+            pending.push(PendingSite {
+                node_id,
+                kind,
+                context,
+                file,
+                line,
+                lines,
+                inline,
+            });
+        }
+
+        let module_lines: Vec<u32> = pending
+            .iter()
+            .filter(|site| {
+                site.kind == ModularityKind::ModuleSize && site.lines >= thresholds.min_module_lines
+            })
+            .map(|site| site.lines)
+            .collect();
+        let stats = ModuleSizeStats::from_lines(&module_lines);
+        let crate_name = ir.crate_name().to_string();
+
+        let mut findings = Vec::new();
+        for site in &pending {
+            let (checklist, zscore) = if site.kind == ModularityKind::ModuleSize {
+                let in_sample = site.lines >= thresholds.min_module_lines;
+                if in_sample {
+                    (
+                        stats.is_outlier(site.lines, thresholds.module_size_sigma),
+                        stats.zscore(site.lines),
+                    )
+                } else {
+                    (false, None)
+                }
+            } else {
+                (thresholds.is_checklist_item(site.kind, site.lines), None)
+            };
+            findings.push(finding_from_site(
+                site,
+                site.kind,
+                &crate_name,
+                site.context.clone(),
+                site.lines,
+                checklist,
+                zscore,
+                None,
+                String::new(),
+            ));
+        }
+        findings.extend(hierarchy_findings(&pending, &crate_name, thresholds));
+        Ok(findings)
+    }
+}
+
+fn hierarchy_findings(
+    pending: &[PendingSite],
+    crate_name: &str,
+    thresholds: crate::config::ModularityThresholds,
+) -> Vec<Box<dyn Finding>> {
+    let inputs: Vec<ModuleSizeInput> = pending
+        .iter()
+        .filter(|site| site.kind == ModularityKind::ModuleSize && !site.inline)
+        .map(|site| ModuleSizeInput {
+            path: site.context.clone(),
+            file: site.file.display().to_string(),
+            lines: site.lines,
+        })
+        .collect();
+    if inputs.is_empty() {
+        return Vec::new();
+    }
+    let tree = build_module_hierarchy(&inputs);
+    let by_path: HashMap<&str, &PendingSite> = pending
+        .iter()
+        .filter(|site| site.kind == ModularityKind::ModuleSize && !site.inline)
+        .map(|site| (site.context.as_str(), site))
+        .collect();
+
+    let mut findings = Vec::new();
+    for node in top_heavy_parents(&tree) {
+        if !thresholds.is_top_heavy_hit(node.own_lines, node.subtree_lines) {
+            continue;
+        }
+        let Some(site) = by_path.get(node.path.as_str()).copied() else {
+            continue;
+        };
+        let children = child_mass_list(node, &tree);
+        let detail = if children.is_empty() {
+            format!("subtree {}", node.subtree_lines)
+        } else {
+            format!("subtree {}; {}", node.subtree_lines, children)
+        };
+        findings.push(finding_from_site(
+            site,
+            ModularityKind::TopHeavy,
+            crate_name,
+            node.path.clone(),
+            node.own_lines,
+            true,
+            None,
+            Some(node.top_heavy()),
+            detail,
+        ));
+    }
+    for imbalance in lopsided_siblings(&tree, thresholds.hierarchy_min_lines) {
+        if !thresholds.is_lopsided_hit(imbalance.largest_subtree, imbalance.sibling_total) {
+            continue;
+        }
+        let Some(site) = by_path.get(imbalance.largest.as_str()).copied() else {
+            continue;
+        };
+        let detail = format!(
+            "under {}; {}",
+            imbalance.parent,
+            format_mass_list(&imbalance.siblings)
+        );
+        findings.push(finding_from_site(
+            site,
+            ModularityKind::Lopsided,
+            crate_name,
+            imbalance.largest.clone(),
+            imbalance.largest_subtree,
+            true,
+            None,
+            Some(imbalance.share),
+            detail,
+        ));
+    }
+    findings
+}
+
+fn finding_from_site(
+    site: &PendingSite,
+    kind: ModularityKind,
+    crate_name: &str,
+    context: String,
+    lines: u32,
+    checklist: bool,
+    zscore: Option<f64>,
+    share: Option<f64>,
+    detail: String,
+) -> Box<dyn Finding> {
+    Box::new(ModularityFinding {
+        rule: ModularityRule::new(kind),
+        disposition: Disposition::Open,
+        anchor: crate::objects::NodeAnchor(site.node_id),
+        crate_name: crate_name.to_string(),
+        context,
+        span: FileSpan::new(site.file.clone(), site.line, 1),
+        lines,
+        checklist,
+        zscore,
+        inline: site.inline,
+        share,
+        detail,
+    })
+}

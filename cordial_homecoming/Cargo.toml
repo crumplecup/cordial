@@ -1,0 +1,15 @@
+[package]
+name = "cordial_homecoming"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/crumplecup/cordial"
+description = "Homecoming std coverage profile for cordial"
+publish = false
+
+[features]
+default = ["homecoming_std"]
+homecoming_std = ["cordial/homecoming_std"]
+
+[dependencies]
+cordial = { path = "..", default-features = false, features = ["homecoming_std"] }

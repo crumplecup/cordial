@@ -1,0 +1,28 @@
+# Canonical etiquette thresholds.
+#
+# Load order (later wins): CordialConfig::default, then
+# `{store_home}/cordial.toml` (`~/.cordial` unless `CORDIAL_HOME` /
+# `--store-home` says otherwise), then `{workspace}/cordial.toml`.
+# Missing files fall back to Default; the run does not fail.
+
+[visibility]
+max_crate_names_for_flat = 50
+min_module_names = 10
+prefer_root = true
+
+[modularity]
+file_inventory_min_lines = 500
+function_inventory_min_lines = 150
+function_hotspot_min_lines = 80
+file_checklist_min_lines = 1000
+function_checklist_min_lines = 200
+max_types_per_file = 10
+module_size_sigma = 2
+min_module_lines = 0
+top_heavy_min_percent = 50
+lopsided_min_percent = 75
+hierarchy_min_lines = 150
+
+[cfg_scatter]
+min_distinct_kinds = 2
+min_occurrences = 5

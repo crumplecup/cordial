@@ -1,0 +1,148 @@
+use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+
+use crate::objects::{
+    Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
+};
+
+/// Rule identifier for a manual pattern that should use a derive crate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DeriveRuleId {
+    Builder001,
+    Getter001,
+    Setter001,
+    New001,
+    PubField001,
+}
+
+impl DeriveRuleId {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Builder001 => "DERIVE-BUILDER-001",
+            Self::Getter001 => "DERIVE-GETTER-001",
+            Self::Setter001 => "DERIVE-SETTER-001",
+            Self::New001 => "DERIVE-NEW-001",
+            Self::PubField001 => "DERIVE-PUB-FIELD-001",
+        }
+    }
+
+    pub fn from_attr(value: &str) -> Option<Self> {
+        match value {
+            "DERIVE-BUILDER-001" => Some(Self::Builder001),
+            "DERIVE-GETTER-001" => Some(Self::Getter001),
+            "DERIVE-SETTER-001" => Some(Self::Setter001),
+            "DERIVE-NEW-001" => Some(Self::New001),
+            "DERIVE-PUB-FIELD-001" => Some(Self::PubField001),
+            _ => None,
+        }
+    }
+}
+
+impl Display for DeriveRuleId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeriveRule {
+    pub rule_id: DeriveRuleId,
+}
+
+impl DeriveRule {
+    pub fn new(rule_id: DeriveRuleId) -> Self {
+        Self { rule_id }
+    }
+}
+
+impl Rule for DeriveRule {
+    fn id(&self) -> &str {
+        self.rule_id.as_str()
+    }
+
+    fn category(&self) -> &str {
+        "derives"
+    }
+
+    fn description(&self) -> &str {
+        "Manual builder, getter, setter, new(), or public struct field"
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeriveMarker {
+    pub anchor: crate::objects::NodeAnchor,
+}
+
+impl Marker for DeriveMarker {
+    fn probe(&self) -> &str {
+        "derive-site"
+    }
+
+    fn label(&self) -> &str {
+        "derive-site"
+    }
+
+    fn anchor(&self) -> &dyn IrAnchor {
+        &self.anchor
+    }
+
+    fn span(&self) -> Option<&dyn SourceSpan> {
+        None
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeriveFinding {
+    pub rule: DeriveRule,
+    pub disposition: Disposition,
+    pub anchor: crate::objects::NodeAnchor,
+    pub crate_name: String,
+    pub struct_name: String,
+    pub method_name: Option<String>,
+    pub qualified_name: String,
+    pub recommendation: String,
+    pub span: FileSpan,
+    pub evidence: String,
+}
+
+impl Finding for DeriveFinding {
+    fn rule(&self) -> &dyn Rule {
+        &self.rule
+    }
+
+    fn disposition(&self) -> Disposition {
+        self.disposition
+    }
+
+    fn anchor(&self) -> &dyn IrAnchor {
+        &self.anchor
+    }
+
+    fn emit(&self, sink: &mut dyn FindingSink) {
+        sink.field("crate", &self.crate_name);
+        sink.field("rule_id", &self.rule.rule_id);
+        sink.field("struct_name", &self.struct_name);
+        sink.field("method_name", &self.method_name.clone().unwrap_or_default());
+        sink.field("qualified_name", &self.qualified_name);
+        sink.field("recommendation", &self.recommendation);
+        sink.field("file", &self.span.file.display().to_string());
+        sink.field("line", &self.span.line.to_string());
+        sink.field("evidence", &self.evidence);
+    }
+}
+
+/// Raw scan row used while building IR nodes.
+#[derive(Debug, Clone)]
+pub struct DeriveSiteRecord {
+    pub rule_id: DeriveRuleId,
+    pub struct_name: String,
+    pub method_name: Option<String>,
+    pub qualified_name: String,
+    pub recommendation: String,
+    pub file: PathBuf,
+    pub line: u32,
+    pub evidence: String,
+}

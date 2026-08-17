@@ -1,0 +1,69 @@
+use crate::error::CordialResult;
+use crate::hooks::Probe;
+use crate::ir::{IrView, NodeKind, Query};
+use crate::objects::Marker;
+use crate::session::SessionView;
+
+use super::types::{InternalErrorChainMarker, InternalErrorRecordKind};
+
+/// Matches internal error-chain nodes in the IR.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct InternalErrorChainQuery;
+
+impl Query for InternalErrorChainQuery {
+    fn node_kinds(&self) -> &[NodeKind] {
+        &[NodeKind::Expr]
+    }
+
+    fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
+        &[]
+    }
+
+    fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
+        node.attr("internal_error_record_kind").is_some()
+    }
+}
+
+static INTERNAL_ERROR_CHAIN_QUERY: InternalErrorChainQuery = InternalErrorChainQuery;
+
+/// Emits markers for internal error-chain nodes.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct InternalErrorChainProbe;
+
+impl InternalErrorChainProbe {
+    pub const ID: &'static str = "internal-error-chain";
+}
+
+impl Probe for InternalErrorChainProbe {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn interests(&self) -> &dyn Query {
+        &INTERNAL_ERROR_CHAIN_QUERY
+    }
+
+    fn probe(
+        &self,
+        ir: &dyn IrView,
+        _session: &dyn SessionView,
+    ) -> CordialResult<Vec<Box<dyn Marker>>> {
+        let mut markers = Vec::new();
+        for node in ir.nodes_matching(&INTERNAL_ERROR_CHAIN_QUERY) {
+            let Some(kind_value) = node
+                .attr("internal_error_record_kind")
+                .and_then(|value| value.as_str())
+            else {
+                continue;
+            };
+            if InternalErrorRecordKind::from_attr(kind_value).is_none() {
+                continue;
+            }
+
+            markers.push(Box::new(InternalErrorChainMarker {
+                anchor: crate::objects::NodeAnchor(node.id),
+            }) as Box<dyn Marker>);
+        }
+        Ok(markers)
+    }
+}

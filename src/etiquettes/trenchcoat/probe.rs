@@ -1,0 +1,80 @@
+use crate::error::CordialResult;
+use crate::hooks::Probe;
+use crate::ir::{EdgeKind, IrView, ItemKind, NodeKind, Query};
+use crate::objects::Marker;
+use crate::session::SessionView;
+
+use super::types::UnwrappedMarker;
+
+#[derive(Debug, Default, Clone, Copy)]
+struct ForeignTypeQuery;
+
+impl Query for ForeignTypeQuery {
+    fn node_kinds(&self) -> &[NodeKind] {
+        &[
+            NodeKind::Item(ItemKind::Struct),
+            NodeKind::Item(ItemKind::Enum),
+        ]
+    }
+
+    fn edge_kinds(&self) -> &[EdgeKind] {
+        &[]
+    }
+
+    fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
+        node.attr("qualified_path")
+            .and_then(|v| v.as_str())
+            .is_some_and(|path| !is_wrapper_path(path))
+    }
+}
+
+static FOREIGN_TYPE_QUERY: ForeignTypeQuery = ForeignTypeQuery;
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct UnwrappedForeignProbe;
+
+impl UnwrappedForeignProbe {
+    pub const ID: &'static str = "unwrapped-foreign";
+}
+
+impl Probe for UnwrappedForeignProbe {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn interests(&self) -> &dyn Query {
+        &FOREIGN_TYPE_QUERY
+    }
+
+    fn probe(
+        &self,
+        ir: &dyn IrView,
+        _session: &dyn SessionView,
+    ) -> CordialResult<Vec<Box<dyn Marker>>> {
+        let mut markers = Vec::new();
+        for node in ir.nodes_matching(&FOREIGN_TYPE_QUERY) {
+            let incoming_wraps = ir.parents(node.id, EdgeKind::Wraps);
+            if !incoming_wraps.is_empty() {
+                continue;
+            }
+            if node
+                .attr("qualified_path")
+                .and_then(|v| v.as_str())
+                .is_none()
+            {
+                continue;
+            }
+            markers.push(Box::new(UnwrappedMarker {
+                anchor: crate::objects::NodeAnchor(node.id),
+            }) as Box<dyn Marker>);
+        }
+        Ok(markers)
+    }
+}
+
+fn is_wrapper_path(path: &str) -> bool {
+    path.contains("Wrapper")
+        || path.ends_with("Coat")
+        || path.contains("Trenchcoat")
+        || path.contains("Elicit")
+}

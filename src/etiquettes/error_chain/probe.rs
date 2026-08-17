@@ -1,0 +1,66 @@
+use crate::error::CordialResult;
+use crate::hooks::Probe;
+use crate::ir::{IrView, NodeKind, Query};
+use crate::objects::Marker;
+use crate::session::SessionView;
+
+use super::types::{ErrorChainMarker, ErrorChainProbeId};
+
+/// Matches error-chain expression nodes in the IR.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ErrorChainQuery;
+
+impl Query for ErrorChainQuery {
+    fn node_kinds(&self) -> &[NodeKind] {
+        &[NodeKind::Expr]
+    }
+
+    fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
+        &[]
+    }
+
+    fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
+        node.attr("error_chain_rule_id").is_some()
+    }
+}
+
+static ERROR_CHAIN_QUERY: ErrorChainQuery = ErrorChainQuery;
+
+/// Emits markers for error-chain expression nodes.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ErrorChainProbe;
+
+impl ErrorChainProbe {
+    pub const ID: &'static str = "error-chain";
+}
+
+impl Probe for ErrorChainProbe {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn interests(&self) -> &dyn Query {
+        &ERROR_CHAIN_QUERY
+    }
+
+    fn probe(
+        &self,
+        ir: &dyn IrView,
+        _session: &dyn SessionView,
+    ) -> CordialResult<Vec<Box<dyn Marker>>> {
+        let mut markers = Vec::new();
+        for node in ir.nodes_matching(&ERROR_CHAIN_QUERY) {
+            let Some(rule_value) = node.attr("error_chain_rule_id").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            if ErrorChainProbeId::from_attr(rule_value).is_none() {
+                continue;
+            }
+
+            markers.push(Box::new(ErrorChainMarker {
+                anchor: crate::objects::NodeAnchor(node.id),
+            }) as Box<dyn Marker>);
+        }
+        Ok(markers)
+    }
+}

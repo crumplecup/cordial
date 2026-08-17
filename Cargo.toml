@@ -1,0 +1,273 @@
+[workspace]
+members = [".", "cordial_elicitation", "cordial_homecoming", "cordial_amenable", "cordial_cli", "examples/custom_plugins"]
+resolver = "2"
+
+[package]
+name = "cordial"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/crumplecup/cordial"
+authors = ["Erik Rose <erik.w.rose@gmail.com>"]
+homepage = "https://github.com/crumplecup/cordial"
+documentation = "https://docs.rs/cordial"
+readme = "README.md"
+description = "Polite standards for code development — a plugin framework for local, regeneratable lint and coverage reports"
+keywords = ["lint", "static-analysis", "rustdoc", "syn", "development-tools"]
+categories = ["development-tools"]
+
+[lib]
+name = "cordial"
+path = "src/lib.rs"
+
+[dependencies]
+config = { version = "0.15", default-features = false, features = ["toml"] }
+derive_more = { version = "2", features = ["display", "error", "from"] }
+petgraph = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+syn = { version = "2", features = ["full", "visit", "extra-traits"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+tracing = "0.1"
+rustdoc-types = { version = "0.57", optional = true }
+nom = { version = "7", optional = true }
+walkdir = "2"
+cargo_metadata = "0.23"
+toml = { version = "0.8", optional = true }
+quote = { version = "1", optional = true }
+
+[features]
+default = ["panics", "tracing"]
+# Quality plugins (syn scans of source).
+panics = []
+tracing = []
+allows = []
+modularity = []
+derives = []
+error_sites = []
+error_chain = ["error_sites"]
+internal_error_chain = ["error_chain"]
+foreign_error_types = ["error_sites"]
+foreign_error_attenuation = ["foreign_error_types", "error_chain"]
+antipatterns = ["dep:toml", "dep:quote"]
+cfg_scatter = []
+visibility = []
+quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility"]
+# Shared rustdoc JSON support for coverage plugins.
+rustdoc = ["dep:rustdoc-types", "dep:nom"]
+# Elicitation coverage plugins (each requires rustdoc).
+impl_coverage = ["rustdoc"]
+trenchcoat = ["rustdoc"]
+shadow = ["rustdoc"]
+# Framework std coverage (homecoming Code, amenable registry).
+homecoming_std = ["rustdoc"]
+amenable_std = ["homecoming_std"]
+# Umbrella: all elicitation coverage plugins.
+elicitation = ["impl_coverage", "trenchcoat", "shadow"]
+# Every built-in plugin (integration tests, full builds).
+full = ["quality", "elicitation", "homecoming_std", "amenable_std"]
+
+[[test]]
+name = "stability"
+required-features = ["rustdoc"]
+
+[[test]]
+name = "framework_std"
+required-features = ["homecoming_std"]
+
+[[test]]
+name = "sysroot_cache"
+required-features = ["homecoming_std"]
+
+[[test]]
+name = "amenable_registry"
+required-features = ["amenable_std"]
+
+[[test]]
+name = "coverage_parity"
+required-features = ["full"]
+
+[[test]]
+name = "coverage_parity_refresh"
+required-features = ["full"]
+
+[[test]]
+name = "coverage_etiquette"
+required-features = ["elicitation"]
+
+[[test]]
+name = "build_stage"
+required-features = ["elicitation"]
+
+[[test]]
+name = "panics_etiquette"
+required-features = ["panics"]
+
+[[test]]
+name = "tracing_etiquette"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing_apply"
+required-features = ["tracing"]
+
+[[test]]
+name = "allows_etiquette"
+required-features = ["allows"]
+
+[[test]]
+name = "modularity_etiquette"
+required-features = ["modularity"]
+
+[[test]]
+name = "cfg_scatter_etiquette"
+required-features = ["cfg_scatter"]
+
+[[test]]
+name = "visibility_etiquette"
+required-features = ["visibility"]
+
+[[test]]
+name = "derives_etiquette"
+required-features = ["derives"]
+
+[[test]]
+name = "error_sites_etiquette"
+required-features = ["error_sites"]
+
+[[test]]
+name = "error_flow"
+required-features = ["error_sites"]
+
+[[test]]
+name = "error_chain_etiquette"
+required-features = ["error_chain"]
+
+[[test]]
+name = "internal_error_chain_etiquette"
+required-features = ["internal_error_chain"]
+
+[[test]]
+name = "foreign_error_types_etiquette"
+required-features = ["foreign_error_types"]
+
+[[test]]
+name = "foreign_error_attenuation_etiquette"
+required-features = ["foreign_error_attenuation"]
+
+[[test]]
+name = "antipatterns_etiquette"
+required-features = ["antipatterns"]
+
+[[test]]
+name = "contract_bounds"
+required-features = ["antipatterns"]
+
+[[test]]
+name = "multi_etiquette"
+required-features = ["quality"]
+
+[[test]]
+name = "exceptions"
+required-features = ["panics"]
+
+[[test]]
+name = "quality_report"
+required-features = ["quality"]
+
+[[test]]
+name = "rollup"
+required-features = ["quality"]
+
+[[test]]
+name = "workspace"
+required-features = ["panics"]
+
+[[test]]
+name = "parity"
+required-features = ["quality"]
+
+[[test]]
+name = "coverage_summary"
+required-features = ["homecoming_std"]
+
+[[test]]
+name = "elicitation_coverage_summary"
+required-features = ["elicitation"]
+
+[[test]]
+name = "shadow_ir_compare"
+required-features = ["shadow"]
+
+[[test]]
+name = "shadow_pair_gaps"
+required-features = ["elicitation"]
+
+[[test]]
+name = "architecture"
+required-features = ["rustdoc"]
+
+[[test]]
+name = "wrapper_ir"
+required-features = ["impl_coverage"]
+
+[[test]]
+name = "wrapper_coverage_gaps"
+required-features = ["impl_coverage"]
+
+[[test]]
+name = "feature_probe_gaps"
+required-features = ["impl_coverage"]
+
+[[test]]
+name = "proof_harness_collect"
+required-features = ["impl_coverage"]
+
+[[test]]
+name = "path_index"
+required-features = ["impl_coverage"]
+
+[[test]]
+name = "rustdoc_structure_enricher"
+required-features = ["rustdoc"]
+
+[[test]]
+name = "impl_graph_enrichers"
+required-features = ["impl_coverage"]
+
+[[test]]
+name = "syn_doc_link"
+required-features = ["rustdoc"]
+
+[[test]]
+name = "elicitation_parity"
+required-features = ["elicitation"]
+
+[[test]]
+name = "elicitation_parity_refresh"
+required-features = ["elicitation"]
+
+[[test]]
+name = "quality_parity"
+required-features = ["antipatterns"]
+
+[[test]]
+name = "parity_refresh"
+required-features = ["quality"]
+
+[dev-dependencies]
+tempfile = "3"
+csv = "1"
+rustdoc-types = "0.57"
+elicit_doc = { path = "../elicit_doc" }
+miette = { version = "7", features = ["fancy"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(kani)',
+  'cfg(creusot)',
+  'cfg(prusti)',
+  'cfg(verus)',
+  'cfg(feature, values("panics", "tracing", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
+] }
