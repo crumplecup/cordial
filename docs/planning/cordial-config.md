@@ -38,13 +38,19 @@ hierarchy_min_lines = 150
 [cfg_scatter]
 min_distinct_kinds = 2
 min_occurrences = 5
+
+[tracing]
+include_pub_super = false
+# extra_skip = ["inventory"]
 ```
 
-Add a table per etiquette as new knobs appear.
+Add a table per etiquette as new knobs appear. Tracing role→level maps stay
+in code until dogfood needs a project override.
 
 ## Status
 
 Implemented (`tests/cordial_config.rs`). Visibility, modularity (including
 types-per-file, module-size σ with an upper-tail file floor and optional
-lower-tail ignore, hotspot diagnosis, and hierarchy lints), and
-cfg_scatter read through `load_session_config`.
+lower-tail ignore, hotspot diagnosis, and hierarchy lints), cfg_scatter, and
+tracing (`include_pub_super`, `extra_skip`) read through `load_session_config`.
+Role→level maps stay in code.

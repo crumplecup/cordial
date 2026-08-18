@@ -36,12 +36,19 @@ impl IrEnricher for FunctionInventoryEnricher {
         };
 
         let crate_root = member_crate_root(source, session);
-        let records = scan_source_tree(&source.src_root, &crate_root, &source.crate_name)?;
+        let extra_skip = crate::config::load_session_config(session)
+            .tracing
+            .extra_skip;
+        let records = scan_source_tree(
+            &source.src_root,
+            &crate_root,
+            &source.crate_name,
+            &extra_skip,
+        )?;
 
         for record in records {
             let parent = resolve_parent(ir, &module_context(&record.qualified_name))?;
-            let file = crate_root.join(&record.file);
-            let span = FileSpan::new(file.clone(), record.line, 1);
+            let span = FileSpan::new(crate_root.join(&record.file), record.line, 1);
 
             let node = if let Some(existing) = ir.node_by_path(&record.qualified_name) {
                 existing
@@ -56,7 +63,7 @@ impl IrEnricher for FunctionInventoryEnricher {
                                 .unwrap_or("fn")
                                 .to_string(),
                         )
-                        .with_span(span.clone()),
+                        .with_span(span),
                 )?;
                 ir.insert_edge(parent, node, crate::ir::EdgeKind::Contains)?;
                 node
@@ -74,19 +81,66 @@ impl IrEnricher for FunctionInventoryEnricher {
             )?;
             ir.set_attr(
                 node,
-                "visibility",
-                serde_json::Value::String(record.visibility.to_string()),
+                "function_role",
+                serde_json::Value::String(record.role.to_string()),
             )?;
             ir.set_attr(
                 node,
-                "file",
-                serde_json::Value::String(file.display().to_string()),
+                "function_complexity",
+                serde_json::Value::String(record.complexity.to_string()),
             )?;
+            ir.set_attr(
+                node,
+                "recipe_level",
+                serde_json::Value::String(record.recipe.level.to_string()),
+            )?;
+            ir.set_attr(
+                node,
+                "recipe_skip",
+                serde_json::Value::String(record.recipe.skip.join(",")),
+            )?;
+            ir.set_attr(
+                node,
+                "recipe_fields",
+                serde_json::Value::String(record.recipe.fields.join(",")),
+            )?;
+            ir.set_attr(
+                node,
+                "recipe_err",
+                serde_json::Value::String(
+                    record
+                        .recipe
+                        .err
+                        .map(|level| level.to_string())
+                        .unwrap_or_default(),
+                ),
+            )?;
+            ir.set_attr(
+                node,
+                "recipe_ret",
+                serde_json::Value::Bool(record.recipe.ret),
+            )?;
+            ir.set_attr(
+                node,
+                "visibility",
+                serde_json::Value::String(record.visibility.to_string()),
+            )?;
+            ir.set_attr(node, "file", serde_json::Value::String(record.file.clone()))?;
             ir.set_attr(node, "line", serde_json::Value::Number(record.line.into()))?;
             ir.set_attr(
                 node,
                 "instrumented",
                 serde_json::Value::Bool(record.instrumented),
+            )?;
+            ir.set_attr(
+                node,
+                "has_error_path_event",
+                serde_json::Value::Bool(record.has_error_path_event),
+            )?;
+            ir.set_attr(
+                node,
+                "param_names",
+                serde_json::Value::String(record.param_names.join(",")),
             )?;
         }
         Ok(())

@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::session::SessionView;
 
 /// All etiquette knobs loaded from `cordial.toml`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CordialConfig {
     #[serde(default)]
     pub visibility: VisibilityThresholds,
@@ -21,6 +21,8 @@ pub struct CordialConfig {
     pub modularity: ModularityThresholds,
     #[serde(default)]
     pub cfg_scatter: CfgScatterThresholds,
+    #[serde(default)]
+    pub tracing: TracingThresholds,
 }
 
 impl Default for CordialConfig {
@@ -29,6 +31,7 @@ impl Default for CordialConfig {
             visibility: VisibilityThresholds::default(),
             modularity: ModularityThresholds::default(),
             cfg_scatter: CfgScatterThresholds::default(),
+            tracing: TracingThresholds::default(),
         }
     }
 }
@@ -272,6 +275,27 @@ impl Default for CfgScatterThresholds {
         Self {
             min_distinct_kinds: default_min_distinct_kinds(),
             min_occurrences: default_min_occurrences(),
+        }
+    }
+}
+
+/// Tracing etiquette knobs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TracingThresholds {
+    /// When true, `pub(super)` functions appear on the checklist.
+    /// Default is pub + pub(crate) only.
+    #[serde(default)]
+    pub include_pub_super: bool,
+    /// Extra parameter names unioned with the built-in skip list.
+    #[serde(default)]
+    pub extra_skip: Vec<String>,
+}
+
+impl Default for TracingThresholds {
+    fn default() -> Self {
+        Self {
+            include_pub_super: false,
+            extra_skip: Vec::new(),
         }
     }
 }

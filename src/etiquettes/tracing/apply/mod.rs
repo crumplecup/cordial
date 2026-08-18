@@ -11,7 +11,8 @@ use crate::targets::discover_crate_targets;
 mod instrument;
 mod parse;
 
-use instrument::{GapApplyOutcome, apply_gap, ensure_use_instrument};
+use super::scan::scan_rust_source;
+use instrument::{GapApplyOutcome, apply_gap, ensure_use_instrument, recipe_for_gap};
 
 pub use parse::{parse_tracing_instrument_checklist, parse_tracing_instrument_checklist_text};
 
@@ -95,15 +96,55 @@ pub fn run_tracing_instrument_apply(
             continue;
         }
 
-        let mut lines: Vec<String> = std::fs::read_to_string(&path)?
-            .lines()
-            .map(str::to_string)
-            .collect();
+        let source = std::fs::read_to_string(&path)?;
+        let src_root = {
+            let src = crate_root.join("src");
+            if src.is_dir() {
+                src
+            } else {
+                crate_root.clone()
+            }
+        };
+        let extra_skip = crate::config::load_cordial_config(project_root, project_root)
+            .tracing
+            .extra_skip;
+        let records = match scan_rust_source(
+            &source,
+            &path,
+            &src_root,
+            crate_root,
+            &crate_name,
+            &extra_skip,
+        ) {
+            Ok(records) => records,
+            Err(error) => {
+                tracing::warn!(
+                    path = %path.display(),
+                    crate_name = %crate_name,
+                    error = %error,
+                    "failed to classify functions for apply"
+                );
+                summary.unresolved += file_gaps.len();
+                continue;
+            }
+        };
+        let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
+        dedupe_gaps(&mut file_gaps);
         file_gaps.sort_by_key(|right| std::cmp::Reverse(right.line));
 
         let mut file_changed = false;
         for gap in file_gaps {
-            match apply_gap(&mut lines, &gap) {
+            let Some(recipe) = recipe_for_gap(&records, &gap) else {
+                tracing::warn!(
+                    path = %gap.rel_path.display(),
+                    line = gap.line,
+                    qualified_name = %gap.qualified_name,
+                    "no classified recipe for checklist item"
+                );
+                summary.unresolved += 1;
+                continue;
+            };
+            match apply_gap(&mut lines, &gap, recipe) {
                 GapApplyOutcome::Applied => {
                     summary.changed_functions += 1;
                     file_changed = true;
@@ -137,4 +178,18 @@ pub fn run_tracing_instrument_apply(
         "tracing instrument apply complete"
     );
     Ok(summary)
+}
+
+fn dedupe_gaps(gaps: &mut Vec<InstrumentGap>) {
+    gaps.sort_by(|left, right| {
+        left.qualified_name
+            .cmp(&right.qualified_name)
+            .then(left.rel_path.cmp(&right.rel_path))
+            .then(left.line.cmp(&right.line))
+    });
+    gaps.dedup_by(|later, earlier| {
+        later.qualified_name == earlier.qualified_name
+            && later.rel_path == earlier.rel_path
+            && later.line == earlier.line
+    });
 }

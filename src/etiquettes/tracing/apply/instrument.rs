@@ -1,39 +1,9 @@
-//! Insert `#[instrument]` on a function near a checklist line.
+//! Insert or rewrite `#[instrument]` from a classified recipe.
 
 use tracing::instrument;
 
+use super::super::types::{FunctionRecord, InstrumentRecipe};
 use super::InstrumentGap;
-
-/// Parameter names that should appear in `#[instrument(skip(...))]`.
-const SKIP_PARAM_NAMES: &[&str] = &[
-    "binary_entry_files",
-    "build",
-    "cache",
-    "conn",
-    "connection",
-    "ctx",
-    "data",
-    "err",
-    "error",
-    "file",
-    "findings",
-    "formatter",
-    "inventory",
-    "items",
-    "key",
-    "kind",
-    "manifest",
-    "msg",
-    "options",
-    "path",
-    "report",
-    "self",
-    "snapshots",
-    "source",
-    "syntax",
-    "ui",
-    "workspace",
-];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum GapApplyOutcome {
@@ -42,8 +12,12 @@ pub(super) enum GapApplyOutcome {
     Unresolved,
 }
 
-#[instrument(skip(lines, gap))]
-pub(super) fn apply_gap(lines: &mut Vec<String>, gap: &InstrumentGap) -> GapApplyOutcome {
+#[instrument(skip(lines, gap, recipe))]
+pub(super) fn apply_gap(
+    lines: &mut Vec<String>,
+    gap: &InstrumentGap,
+    recipe: &InstrumentRecipe,
+) -> GapApplyOutcome {
     let Some(fn_idx) = find_fn_line(lines, gap.line, &gap.qualified_name) else {
         tracing::warn!(
             path = %gap.rel_path.display(),
@@ -53,8 +27,16 @@ pub(super) fn apply_gap(lines: &mut Vec<String>, gap: &InstrumentGap) -> GapAppl
         );
         return GapApplyOutcome::Unresolved;
     };
-    if has_instrument(lines, fn_idx) {
-        return GapApplyOutcome::AlreadyInstrumented;
+
+    let attr = recipe.as_attribute();
+    if let Some((start, end)) = instrument_attr_range(lines, fn_idx) {
+        if attrs_match_recipe(&lines[start..=end], &attr) {
+            return GapApplyOutcome::AlreadyInstrumented;
+        }
+        let indent = leading_indent(&lines[start]);
+        lines.drain(start..=end);
+        lines.insert(start, format!("{indent}{attr}"));
+        return GapApplyOutcome::Applied;
     }
 
     let attr_indices = collect_attr_indices(lines, fn_idx);
@@ -63,13 +45,37 @@ pub(super) fn apply_gap(lines: &mut Vec<String>, gap: &InstrumentGap) -> GapAppl
         .first()
         .map(|idx| leading_indent(&lines[*idx]))
         .unwrap_or(indent);
-
-    let param_names = parse_param_names(&signature_text(lines, fn_idx));
-    let instrument_line = build_instrument_line(&param_names, &indent);
-
     let insert_at = insert_after_track_caller(lines, &attr_indices).unwrap_or(fn_idx);
-    lines.insert(insert_at, instrument_line);
+    lines.insert(insert_at, format!("{indent}{attr}"));
     GapApplyOutcome::Applied
+}
+
+#[instrument(skip(records, gap))]
+pub(super) fn recipe_for_gap<'a>(
+    records: &'a [FunctionRecord],
+    gap: &InstrumentGap,
+) -> Option<&'a InstrumentRecipe> {
+    if let Some(record) = records
+        .iter()
+        .find(|record| record.qualified_name == gap.qualified_name)
+    {
+        return Some(&record.recipe);
+    }
+
+    let local = local_fn_name(&gap.qualified_name);
+    let rel = gap.rel_path.to_string_lossy().replace('\\', "/");
+    records
+        .iter()
+        .filter(|record| {
+            local_fn_name(&record.qualified_name) == local && file_matches(&record.file, &rel)
+        })
+        .min_by_key(|record| record.line.abs_diff(gap.line))
+        .filter(|record| record.line.abs_diff(gap.line) <= 24)
+        .map(|record| &record.recipe)
+}
+
+fn file_matches(record_file: &str, gap_file: &str) -> bool {
+    record_file == gap_file || record_file.ends_with(gap_file) || gap_file.ends_with(record_file)
 }
 
 #[instrument(skip(lines, qualified_name))]
@@ -137,125 +143,32 @@ fn collect_attr_indices(lines: &[String], fn_idx: usize) -> Vec<usize> {
 }
 
 #[instrument(skip(lines))]
-fn has_instrument(lines: &[String], fn_idx: usize) -> bool {
-    collect_attr_indices(lines, fn_idx)
-        .iter()
-        .any(|idx| lines[*idx].contains("instrument"))
-}
-
-#[instrument(skip(lines))]
-fn signature_text(lines: &[String], fn_idx: usize) -> String {
-    let mut chunks = Vec::new();
-    for line in lines
-        .iter()
-        .take(fn_idx.saturating_add(24).min(lines.len()))
-        .skip(fn_idx)
-    {
-        chunks.push(line.as_str());
-        let joined = chunks.join(" ");
-        if line.contains('{')
-            || (joined.matches('(').count() <= joined.matches(')').count()
-                && joined.contains('(')
-                && joined.contains(')'))
-        {
-            return joined;
-        }
-    }
-    chunks.join(" ")
-}
-
-#[instrument(skip(signature))]
-fn parse_param_names(signature: &str) -> Vec<String> {
-    let Some(blob) = extract_fn_param_blob(signature) else {
-        return Vec::new();
-    };
-    let mut names = Vec::new();
-    for raw_param in split_params(blob) {
-        let param = raw_param.split_whitespace().collect::<Vec<_>>().join(" ");
-        if param.is_empty() {
+fn instrument_attr_range(lines: &[String], fn_idx: usize) -> Option<(usize, usize)> {
+    let attrs = collect_attr_indices(lines, fn_idx);
+    for &start in &attrs {
+        if !lines[start].contains("instrument") {
             continue;
         }
-        if param == "&self" || param == "&mut self" || param == "self" || param.ends_with(" self") {
-            names.push("self".to_string());
-            continue;
+        let mut end = start;
+        while end < fn_idx && !lines[end].contains(']') {
+            end += 1;
         }
-        if let Some(name) = param_name_from_typed_param(&param) {
-            names.push(name);
+        if end >= fn_idx {
+            return None;
         }
+        return Some((start, end));
     }
-    names
+    None
 }
 
-#[instrument(skip(param))]
-fn param_name_from_typed_param(param: &str) -> Option<String> {
-    let trimmed = param.trim();
-    let trimmed = trimmed.strip_prefix("mut ").unwrap_or(trimmed);
-    let (name, _) = trimmed.split_once(':')?;
-    Some(name.trim().to_string())
+fn attrs_match_recipe(attr_lines: &[String], recipe_attr: &str) -> bool {
+    normalize_attr(&attr_lines.join(" ")) == normalize_attr(recipe_attr)
 }
 
-#[instrument(skip(signature))]
-fn extract_fn_param_blob(signature: &str) -> Option<&str> {
-    let fn_idx = signature.find("fn ")?;
-    let after_fn = &signature[fn_idx + 3..];
-    let paren_start = after_fn.find('(')?;
-    let params_start = fn_idx + 3 + paren_start + 1;
-    let mut depth = 1usize;
-    let mut i = params_start;
-    let bytes = signature.as_bytes();
-    while i < bytes.len() && depth > 0 {
-        match bytes[i] as char {
-            '(' => depth += 1,
-            ')' => depth -= 1,
-            _ => {}
-        }
-        i += 1;
-    }
-    if depth != 0 {
-        return None;
-    }
-    Some(&signature[params_start..i - 1])
-}
-
-#[instrument(skip(blob))]
-fn split_params(blob: &str) -> Vec<String> {
-    let mut parts = Vec::new();
-    let mut current = String::new();
-    let mut depth_angle = 0usize;
-    let mut depth_paren = 0usize;
-
-    for ch in blob.chars() {
-        match ch {
-            '<' => depth_angle += 1,
-            '>' => depth_angle = depth_angle.saturating_sub(1),
-            '(' => depth_paren += 1,
-            ')' => depth_paren = depth_paren.saturating_sub(1),
-            ',' if depth_angle == 0 && depth_paren == 0 => {
-                parts.push(std::mem::take(&mut current));
-                continue;
-            }
-            _ => {}
-        }
-        current.push(ch);
-    }
-    if !current.is_empty() {
-        parts.push(current);
-    }
-    parts
-}
-
-#[instrument(skip(param_names, indent))]
-fn build_instrument_line(param_names: &[String], indent: &str) -> String {
-    let skip_names: Vec<&str> = param_names
-        .iter()
-        .map(String::as_str)
-        .filter(|name| SKIP_PARAM_NAMES.contains(name))
-        .collect();
-    if skip_names.is_empty() {
-        format!("{indent}#[instrument]")
-    } else {
-        format!("{indent}#[instrument(skip({}))]", skip_names.join(", "))
-    }
+fn normalize_attr(text: &str) -> String {
+    text.split_whitespace()
+        .collect::<String>()
+        .replace("#[tracing::instrument", "#[instrument")
 }
 
 #[instrument(skip(lines, attr_indices))]

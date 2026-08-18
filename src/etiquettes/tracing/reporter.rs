@@ -6,12 +6,18 @@ use crate::ir::IrView;
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
 use crate::session::SessionView;
 
+use super::types::FunctionRole;
+
 #[derive(Debug, Default, Clone)]
 struct TracingRow {
     crate_name: String,
     qualified_name: String,
     function_kind: String,
+    role: String,
+    complexity: String,
+    rule: String,
     visibility: String,
+    recipe: String,
     file: String,
     line: String,
     disposition: String,
@@ -33,7 +39,11 @@ impl TracingRow {
             crate_name: field("crate"),
             qualified_name: field("qualified_name"),
             function_kind: field("function_kind"),
+            role: field("role"),
+            complexity: field("complexity"),
+            rule: field("rule"),
             visibility: field("visibility"),
+            recipe: field("recipe"),
             file: field("file"),
             line: field("line"),
             disposition: finding.disposition().to_string(),
@@ -52,6 +62,21 @@ fn tracing_rows(findings: &[&dyn Finding]) -> Vec<TracingRow> {
 
 fn open_rows(rows: &[TracingRow]) -> impl Iterator<Item = &TracingRow> {
     rows.iter().filter(|row| row.disposition == "open")
+}
+
+fn crate_names(rows: &[&TracingRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
+fn escape_csv(value: &str) -> String {
+    if value.contains(',') || value.contains('"') || value.contains('\n') {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
 }
 
 /// Writes `tracing-instrument.csv`.
@@ -73,15 +98,21 @@ impl Reporter for TracingCsvReporter {
         _ir: &dyn IrView,
         _session: &dyn SessionView,
     ) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let mut body = String::from("crate,qualified_name,kind,visibility,file,line,disposition\n");
+        let mut body = String::from(
+            "crate,qualified_name,role,complexity,rule,function_kind,visibility,recipe,file,line,disposition\n",
+        );
         for row in tracing_rows(findings) {
             body.push_str(&format!(
-                "{},{},{},{},{},{},{}\n",
+                "{},{},{},{},{},{},{},{},{},{},{}\n",
                 row.crate_name,
-                row.qualified_name,
+                escape_csv(&row.qualified_name),
+                row.role,
+                row.complexity,
+                row.rule,
                 row.function_kind,
                 row.visibility,
-                row.file,
+                escape_csv(&row.recipe),
+                escape_csv(&row.file),
                 row.line,
                 row.disposition,
             ));
@@ -110,7 +141,7 @@ impl Reporter for TracingChecklistReporter {
     fn render(
         &self,
         findings: &[&dyn Finding],
-        ir: &dyn IrView,
+        _ir: &dyn IrView,
         _session: &dyn SessionView,
     ) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let rows = tracing_rows(findings);
@@ -123,28 +154,55 @@ impl Reporter for TracingChecklistReporter {
         let mut body = String::new();
         body.push_str("# Tracing instrument checklist\n\n");
         body.push_str(&format!("**Open gaps:** {}\n\n", open.len()));
-        body.push_str("Add `#[instrument]` (or `#[tracing::instrument]`) to each item below.\n\n");
-        body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
+        body.push_str(
+            "Add the listed `#[instrument]` recipe to each item. Level is the volume knob; \
+             do not skip getters — filter at the subscriber.\n\n",
+        );
 
-        let mut by_module: BTreeMap<String, Vec<&TracingRow>> = BTreeMap::new();
-        for row in open {
-            let module = module_key(&row.qualified_name);
-            by_module.entry(module).or_default().push(row);
-        }
-
-        for (module, entries) in by_module {
-            if module.is_empty() {
-                body.push_str("### crate root\n\n");
-            } else {
-                body.push_str(&format!("### `{module}`\n\n"));
+        for crate_name in crate_names(&open) {
+            body.push_str(&format!("## `{crate_name}`\n\n"));
+            let crate_rows: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            for role in FunctionRole::ALL {
+                let role_rows: Vec<_> = crate_rows
+                    .iter()
+                    .copied()
+                    .filter(|row| row.role == role.as_str())
+                    .collect();
+                if role_rows.is_empty() {
+                    continue;
+                }
+                body.push_str(&format!("### `{}`\n\n", role.as_str()));
+                let mut by_module: BTreeMap<String, Vec<&TracingRow>> = BTreeMap::new();
+                for row in role_rows {
+                    by_module
+                        .entry(module_key(&row.qualified_name))
+                        .or_default()
+                        .push(row);
+                }
+                for (module, entries) in by_module {
+                    if module.is_empty() {
+                        body.push_str("#### crate root\n\n");
+                    } else {
+                        body.push_str(&format!("#### `{module}`\n\n"));
+                    }
+                    for entry in entries {
+                        body.push_str(&format!(
+                            "- [ ] `{}` — `{}:{}` ({}) — `{}` — `{}`\n",
+                            entry.qualified_name,
+                            entry.file,
+                            entry.line,
+                            entry.visibility,
+                            entry.rule,
+                            entry.recipe,
+                        ));
+                    }
+                    body.push('\n');
+                }
             }
-            for entry in entries {
-                body.push_str(&format!(
-                    "- [ ] `{}` — `{}:{}` ({})\n",
-                    entry.qualified_name, entry.file, entry.line, entry.visibility
-                ));
-            }
-            body.push('\n');
         }
 
         if !suppressed.is_empty() {
@@ -182,11 +240,11 @@ impl Reporter for TracingSummaryReporter {
     fn render(
         &self,
         findings: &[&dyn Finding],
-        ir: &dyn IrView,
+        _ir: &dyn IrView,
         _session: &dyn SessionView,
     ) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let rows = tracing_rows(findings);
-        let open = open_rows(&rows).count();
+        let open: Vec<_> = open_rows(&rows).collect();
         let suppressed = rows
             .iter()
             .filter(|row| row.disposition == "suppressed")
@@ -195,14 +253,41 @@ impl Reporter for TracingSummaryReporter {
         let mut body = String::new();
         body.push_str("# Tracing instrument summary\n\n");
         body.push_str(&format!(
-            "Workspace totals: **{open}** open gaps, **{suppressed}** documented exceptions.\n\n"
+            "Workspace totals: **{}** open gaps, **{suppressed}** documented exceptions.\n\n",
+            open.len()
         ));
-        body.push_str("| Crate | Open gaps | Documented exceptions |\n");
-        body.push_str("| --- | ---: | ---: |\n");
-        body.push_str(&format!(
-            "| `{}` | {open} | {suppressed} |\n",
-            ir.crate_name()
-        ));
+
+        body.push_str("| Crate | Open |");
+        for role in FunctionRole::ALL {
+            body.push_str(&format!(" {} |", role.as_str()));
+        }
+        body.push_str(" Exceptions |\n");
+        body.push_str("| --- | ---: |");
+        for _ in FunctionRole::ALL {
+            body.push_str(" ---: |");
+        }
+        body.push_str(" ---: |\n");
+
+        for crate_name in crate_names(&open) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            let crate_suppressed = rows
+                .iter()
+                .filter(|row| row.crate_name == crate_name && row.disposition == "suppressed")
+                .count();
+            body.push_str(&format!("| `{crate_name}` | {} |", crate_open.len()));
+            for role in FunctionRole::ALL {
+                let count = crate_open
+                    .iter()
+                    .filter(|row| row.role == role.as_str())
+                    .count();
+                body.push_str(&format!(" {count} |"));
+            }
+            body.push_str(&format!(" {crate_suppressed} |\n"));
+        }
 
         Ok(vec![Box::new(TextArtifact {
             name: "tracing-summary.md".to_string(),

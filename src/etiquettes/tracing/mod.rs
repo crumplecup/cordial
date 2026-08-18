@@ -1,7 +1,11 @@
 mod apply;
 mod assessor;
+mod classify;
+mod delta;
 mod enricher;
+mod present;
 mod probe;
+mod recipe;
 mod reporter;
 mod scan;
 mod types;
@@ -13,7 +17,7 @@ pub use apply::{
 
 pub use assessor::TracingAssessor;
 pub use enricher::FunctionInventoryEnricher;
-pub use probe::MissingInstrumentProbe;
+pub use probe::{MissingInstrumentProbe, RecipeDeltaProbe};
 pub use reporter::{TracingChecklistReporter, TracingCsvReporter, TracingSummaryReporter};
 pub use scan::scan_rust_source;
 
@@ -25,6 +29,7 @@ static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
 static FUNCTION_INVENTORY: FunctionInventoryEnricher = FunctionInventoryEnricher;
 static ATTRIBUTE_ENRICHER: AttributeEnricher = AttributeEnricher;
 static MISSING_INSTRUMENT_PROBE: MissingInstrumentProbe = MissingInstrumentProbe;
+static RECIPE_DELTA_PROBE: RecipeDeltaProbe = RecipeDeltaProbe;
 static TRACING_ASSESSOR: TracingAssessor = TracingAssessor;
 static TRACING_CSV: TracingCsvReporter = TracingCsvReporter;
 static TRACING_CHECKLIST: TracingChecklistReporter = TracingChecklistReporter;
@@ -33,7 +38,7 @@ static TRACING_SUMMARY: TracingSummaryReporter = TracingSummaryReporter;
 static LOADERS: &[&'static dyn crate::Loader] = &[&SOURCE_LOADER];
 static ENRICHERS: &[&'static dyn crate::IrEnricher] =
     &[&SCOPE_ENRICHER, &FUNCTION_INVENTORY, &ATTRIBUTE_ENRICHER];
-static PROBES: &[&'static dyn crate::Probe] = &[&MISSING_INSTRUMENT_PROBE];
+static PROBES: &[&'static dyn crate::Probe] = &[&MISSING_INSTRUMENT_PROBE, &RECIPE_DELTA_PROBE];
 static ASSESSORS: &[&'static dyn crate::Assessor] = &[&TRACING_ASSESSOR];
 static REPORTERS: &[&'static dyn crate::Reporter] =
     &[&TRACING_CSV, &TRACING_CHECKLIST, &TRACING_SUMMARY];

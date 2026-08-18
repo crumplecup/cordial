@@ -95,3 +95,31 @@ prefer_root = false
     );
     Ok(())
 }
+
+#[test]
+fn tracing_toml_overrides_default() -> miette::Result<()> {
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store home")?;
+    fs::write(
+        workspace.path().join("cordial.toml"),
+        r#"
+[tracing]
+include_pub_super = true
+extra_skip = ["payload", "blob"]
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("workspace config")?;
+
+    let loaded = load_cordial_config(workspace.path(), store_home.path());
+    assert!(loaded.tracing.include_pub_super);
+    assert_eq!(
+        loaded.tracing.extra_skip,
+        vec!["payload".to_string(), "blob".to_string()]
+    );
+    Ok(())
+}

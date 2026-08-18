@@ -4,7 +4,7 @@ use crate::ir::{IrView, ItemKind, NodeKind, Query};
 use crate::objects::Marker;
 use crate::session::SessionView;
 
-use super::types::TracingMarker;
+use super::types::{MISSING_INSTRUMENT_LABEL, RECIPE_DELTA_LABEL, TracingMarker};
 
 /// Matches traced function inventory nodes missing `#[instrument]`.
 #[derive(Debug, Default, Clone, Copy)]
@@ -32,12 +32,36 @@ impl Query for MissingInstrumentQuery {
 
 static MISSING_INSTRUMENT_QUERY: MissingInstrumentQuery = MissingInstrumentQuery;
 
+/// Matches inventory functions that already have `#[instrument]`.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct InstrumentedQuery;
+
+impl Query for InstrumentedQuery {
+    fn node_kinds(&self) -> &[NodeKind] {
+        &[NodeKind::Item(ItemKind::Fn)]
+    }
+
+    fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
+        &[]
+    }
+
+    fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
+        node.attr("function_kind").is_some()
+            && node
+                .attr("instrumented")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false)
+    }
+}
+
+static INSTRUMENTED_QUERY: InstrumentedQuery = InstrumentedQuery;
+
 /// Emits markers for functions missing `#[instrument]`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct MissingInstrumentProbe;
 
 impl MissingInstrumentProbe {
-    pub const ID: &'static str = "missing-instrument";
+    pub const ID: &'static str = MISSING_INSTRUMENT_LABEL;
 }
 
 impl Probe for MissingInstrumentProbe {
@@ -58,6 +82,40 @@ impl Probe for MissingInstrumentProbe {
         for node in ir.nodes_matching(&MISSING_INSTRUMENT_QUERY) {
             markers.push(Box::new(TracingMarker {
                 anchor: crate::objects::NodeAnchor(node.id),
+                label: MISSING_INSTRUMENT_LABEL,
+            }) as Box<dyn Marker>);
+        }
+        Ok(markers)
+    }
+}
+
+/// Emits markers for instrumented functions to compare against the recipe.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct RecipeDeltaProbe;
+
+impl RecipeDeltaProbe {
+    pub const ID: &'static str = RECIPE_DELTA_LABEL;
+}
+
+impl Probe for RecipeDeltaProbe {
+    fn id(&self) -> &str {
+        Self::ID
+    }
+
+    fn interests(&self) -> &dyn Query {
+        &INSTRUMENTED_QUERY
+    }
+
+    fn probe(
+        &self,
+        ir: &dyn IrView,
+        _session: &dyn SessionView,
+    ) -> CordialResult<Vec<Box<dyn Marker>>> {
+        let mut markers = Vec::new();
+        for node in ir.nodes_matching(&INSTRUMENTED_QUERY) {
+            markers.push(Box::new(TracingMarker {
+                anchor: crate::objects::NodeAnchor(node.id),
+                label: RECIPE_DELTA_LABEL,
             }) as Box<dyn Marker>);
         }
         Ok(markers)

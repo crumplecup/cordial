@@ -70,7 +70,7 @@ similar — not the framework itself.
 | Feature | Plugin |
 | --- | --- |
 | `panics` (default) | Panic sources — error-handling layer (library → internal errors, binary/tests → miette) |
-| `tracing` (default) | `#[instrument]` coverage |
+| `tracing` (default) | `#[instrument]` coverage → classified recipes ([tracing-etiquette.md](docs/planning/tracing-etiquette.md)) |
 | `derives` | Manual builder/getter/setter/new patterns |
 | `allows` | `#[allow(...)]` inventory |
 | `modularity` | File/function size, types-per-file, module-size σ, hierarchy lints |

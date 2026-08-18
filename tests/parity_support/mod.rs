@@ -220,7 +220,13 @@ pub fn tracing_baseline_open(row: &HashMap<String, String>) -> bool {
 }
 
 pub fn tracing_cordial_open(row: &HashMap<String, String>) -> bool {
-    row.get("disposition").map(String::as_str) == Some("open")
+    if row.get("disposition").map(String::as_str) != Some("open") {
+        return false;
+    }
+    match row.get("rule").map(String::as_str) {
+        None | Some("") | Some("TRACING-MISSING-INSTRUMENT") => true,
+        Some(_) => false,
+    }
 }
 
 pub const PANICS_KEY_COLUMNS: &[&str] = &["kind", "context", "file", "line"];

@@ -27,3 +27,6 @@ hierarchy_min_lines = 150
 [cfg_scatter]
 min_distinct_kinds = 2
 min_occurrences = 5
+
+[tracing]
+include_pub_super = false

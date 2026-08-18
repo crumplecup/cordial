@@ -98,10 +98,7 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
             open_items: tracing.gaps,
             checklist: "tracing-instrument.checklist.md",
             summary: "tracing-summary.md",
-            detail: format!(
-                "**{}** open instrument gaps, **{}** documented exceptions",
-                tracing.gaps, tracing.suppressed,
-            ),
+            detail: format_tracing_detail(&tracing),
         },
         QualityAreaSummary {
             priority: 5,
@@ -368,11 +365,25 @@ fn derive_metrics(findings: &[&dyn Finding]) -> DeriveMetrics {
     metrics
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 struct TracingMetrics {
     gaps: usize,
     suppressed: usize,
+    by_role: [usize; TRACING_ROLE_ORDER.len()],
 }
+
+const TRACING_ROLE_ORDER: [&str; 10] = [
+    "constructor",
+    "getter",
+    "setter",
+    "predicate",
+    "scan",
+    "io",
+    "render",
+    "trait_surface",
+    "entry",
+    "other",
+];
 
 fn tracing_metrics(findings: &[&dyn Finding]) -> TracingMetrics {
     let mut metrics = TracingMetrics::default();
@@ -381,12 +392,42 @@ fn tracing_metrics(findings: &[&dyn Finding]) -> TracingMetrics {
             continue;
         }
         match finding.disposition() {
-            Disposition::Open => metrics.gaps += 1,
+            Disposition::Open => {
+                metrics.gaps += 1;
+                let role = field(*finding, "role").unwrap_or_else(|| "other".to_string());
+                let index = TRACING_ROLE_ORDER
+                    .iter()
+                    .position(|name| *name == role)
+                    .unwrap_or(TRACING_ROLE_ORDER.len() - 1);
+                metrics.by_role[index] += 1;
+            }
             Disposition::Suppressed => metrics.suppressed += 1,
             Disposition::Exemplar => {}
         }
     }
     metrics
+}
+
+fn format_tracing_detail(metrics: &TracingMetrics) -> String {
+    let roles = TRACING_ROLE_ORDER
+        .iter()
+        .zip(metrics.by_role)
+        .filter(|(_, count)| *count > 0)
+        .map(|(role, count)| format!("{role} **{count}**"))
+        .collect::<Vec<_>>();
+    if roles.is_empty() {
+        format!(
+            "**{}** open gaps, **{}** documented exceptions",
+            metrics.gaps, metrics.suppressed
+        )
+    } else {
+        format!(
+            "**{}** open gaps ({}), **{}** documented exceptions",
+            metrics.gaps,
+            roles.join(", "),
+            metrics.suppressed
+        )
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]

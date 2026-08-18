@@ -15,6 +15,7 @@ Active implementation plans for `cordial`.
 | [Visibility etiquette](docs/planning/visibility-etiquette.md) | **Active** | `pub mod` paths must earn their existence; `prefer_root` vs branching peel |
 | [cordial.toml config](docs/planning/cordial-config.md) | **Active** | Layered `cordial.toml` via the `config` crate; canonical etiquette thresholds |
 | [Modularity etiquette](docs/planning/modularity-etiquette.md) | **Active** | Combined modularity plugin: size, packing, hierarchy lints |
+| [Tracing etiquette](docs/planning/tracing-etiquette.md) | **Active** | Classify by role; recipe deltas; apply writes the recipe; `[tracing]` config |
 
 ## Completed / archived
 

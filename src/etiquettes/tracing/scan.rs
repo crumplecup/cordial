@@ -7,6 +7,8 @@ use syn::{Attribute, ImplItem, Item, ItemFn, ItemImpl, ItemMod, Type, Visibility
 use crate::error::CordialResult;
 use crate::loader::module_path_from_src_file;
 
+use super::classify::classify;
+use super::recipe::recipe as instrument_recipe;
 use super::types::{FunctionKind, FunctionRecord, VisibilityLabel};
 
 /// Scan every `src/**/*.rs` file under `src_root`.
@@ -14,6 +16,7 @@ pub fn scan_source_tree(
     src_root: &Path,
     project_root: &Path,
     crate_name: &str,
+    extra_skip: &[String],
 ) -> CordialResult<Vec<FunctionRecord>> {
     if !src_root.is_dir() {
         return Ok(Vec::new());
@@ -30,7 +33,14 @@ pub fn scan_source_tree(
             continue;
         }
         let source = std::fs::read_to_string(path)?;
-        let mut file_records = scan_rust_source(&source, path, src_root, project_root, crate_name)?;
+        let mut file_records = scan_rust_source(
+            &source,
+            path,
+            src_root,
+            project_root,
+            crate_name,
+            extra_skip,
+        )?;
         records.append(&mut file_records);
     }
 
@@ -50,6 +60,7 @@ pub fn scan_rust_source(
     src_root: &Path,
     project_root: &Path,
     crate_name: &str,
+    extra_skip: &[String],
 ) -> CordialResult<Vec<FunctionRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
@@ -63,20 +74,22 @@ pub fn scan_rust_source(
         crate_name: crate_name.to_string(),
         rel_file,
         module_prefix,
+        extra_skip,
         records: Vec::new(),
     };
     visitor.visit_file(&syntax);
     Ok(visitor.records)
 }
 
-struct FileScanVisitor {
+struct FileScanVisitor<'a> {
     crate_name: String,
     rel_file: String,
     module_prefix: Vec<String>,
+    extra_skip: &'a [String],
     records: Vec<FunctionRecord>,
 }
 
-impl FileScanVisitor {
+impl FileScanVisitor<'_> {
     fn qualify(&self, local: &str) -> String {
         if self.module_prefix.is_empty() {
             local.to_string()
@@ -93,8 +106,11 @@ impl FileScanVisitor {
         span: proc_macro2::Span,
         kind: FunctionKind,
         local_name: &str,
+        body: Option<&syn::Block>,
     ) {
         let line = span.start().line as u32;
+        let ctx = classify(&sig.ident.to_string(), sig, kind, body);
+        let recipe = instrument_recipe(&ctx, self.extra_skip);
         self.records.push(FunctionRecord {
             crate_name: self.crate_name.clone(),
             qualified_name: self.qualify(local_name),
@@ -102,9 +118,13 @@ impl FileScanVisitor {
             visibility: visibility_label(visibility),
             file: self.rel_file.clone(),
             line,
-            instrumented: false,
+            instrumented: is_instrumented(attrs),
+            has_error_path_event: ctx.has_error_path_event,
+            param_names: ctx.param_names.clone(),
+            role: ctx.role,
+            complexity: ctx.complexity,
+            recipe,
         });
-        let _ = (sig, attrs);
     }
 
     fn visit_module_items(&mut self, items: &[Item], module_prefix: &[String]) {
@@ -126,6 +146,7 @@ impl FileScanVisitor {
                     item_fn.span(),
                     FunctionKind::Free,
                     &item_fn.sig.ident.to_string(),
+                    Some(&item_fn.block),
                 );
             }
             Item::Mod(item_mod) => self.visit_mod(item_mod),
@@ -173,12 +194,13 @@ impl FileScanVisitor {
                 method.span(),
                 kind,
                 &local,
+                Some(&method.block),
             );
         }
     }
 }
 
-impl<'ast> Visit<'ast> for FileScanVisitor {
+impl<'ast> Visit<'ast> for FileScanVisitor<'_> {
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         self.record_fn(
             &node.sig,
@@ -187,6 +209,7 @@ impl<'ast> Visit<'ast> for FileScanVisitor {
             node.span(),
             FunctionKind::Free,
             &node.sig.ident.to_string(),
+            Some(&node.block),
         );
     }
 
@@ -197,6 +220,16 @@ impl<'ast> Visit<'ast> for FileScanVisitor {
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
         self.visit_impl(node);
     }
+}
+
+fn is_instrumented(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        let path = attr.path();
+        path.is_ident("instrument")
+            || (path.segments.len() == 2
+                && path.segments[0].ident == "tracing"
+                && path.segments[1].ident == "instrument")
+    })
 }
 
 fn visibility_label(vis: &Visibility) -> VisibilityLabel {

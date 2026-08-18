@@ -216,8 +216,8 @@ pub use build::{
     resolve_shadow_dep_build_config,
 };
 pub use config::{
-    CfgScatterThresholds, CordialConfig, ModularityThresholds, VisibilityThresholds,
-    load_cordial_config, load_session_config, load_visibility_thresholds,
+    CfgScatterThresholds, CordialConfig, ModularityThresholds, TracingThresholds,
+    VisibilityThresholds, load_cordial_config, load_session_config, load_visibility_thresholds,
 };
 pub use exceptions::{ExceptionEntry, ExceptionSet, apply_exception_sets, load_exceptions};
 pub use export::{SurrealEdge, SurrealGraphExport, SurrealNode, surreal_statements};

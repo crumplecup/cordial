@@ -72,6 +72,7 @@ edition = { workspace = true }
         .wrap_err("quality-report.md")?;
     assert!(report.contains("# Code quality report"));
     assert!(report.contains("abort-site action items"));
+    assert!(report.contains("open gaps (other **1**)"));
 
     let summary = std::fs::read_to_string(findings_dir.join("summary.md"))
         .into_diagnostic()
