@@ -13,6 +13,8 @@ use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_t
 
 use super::types::{AllowRuleId, AllowSiteRecord};
 
+use tracing::instrument;
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_allows(crate_root: &Path) -> CordialResult<Vec<AllowSiteRecord>> {
     let mut findings = Vec::new();
     for tree_root in quality_scan_trees(crate_root) {
@@ -30,6 +32,7 @@ pub fn scan_crate_allows(crate_root: &Path) -> CordialResult<Vec<AllowSiteRecord
     Ok(findings)
 }
 
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_source_tree(
     tree_root: &Path,
     crate_root: &Path,
@@ -58,6 +61,7 @@ pub fn scan_source_tree(
     Ok(findings)
 }
 
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,

@@ -7,6 +7,8 @@ use crate::framework_std::{
     FrameworkGapEntry, FrameworkTraitReport, FrameworkTraitStatus, SkipMap,
 };
 
+use tracing::instrument;
+#[instrument(level = "debug", skip(report), err(level = "warn"))]
 pub fn render_framework_coverage_csv(report: &FrameworkTraitReport) -> CordialResult<String> {
     let mut body = String::from("type_path,type_kind,is_generic,trait_status,skip_reason\n");
     let mut rows: Vec<_> = report.entries.iter().collect();
@@ -25,6 +27,7 @@ pub fn render_framework_coverage_csv(report: &FrameworkTraitReport) -> CordialRe
     Ok(body)
 }
 
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn render_framework_gaps_csv(gaps: &[FrameworkGapEntry]) -> CordialResult<String> {
     let mut body = String::from("source_crate,type_path,type_kind,trait_name,impl_crate,action\n");
     for gap in gaps {
@@ -42,6 +45,7 @@ pub fn render_framework_gaps_csv(gaps: &[FrameworkGapEntry]) -> CordialResult<St
     Ok(body)
 }
 
+#[instrument(level = "debug", skip(report), err(level = "warn"))]
 pub fn render_framework_checklist_md(
     report: &FrameworkTraitReport,
     skip_map: &SkipMap,
@@ -125,6 +129,7 @@ pub fn render_framework_checklist_md(
     Ok(out)
 }
 
+#[instrument(level = "debug", skip(report))]
 pub fn render_framework_summary_md(report: &FrameworkTraitReport) -> String {
     let accountable = report.entries.len().saturating_sub(report.skipped_count);
     format!(

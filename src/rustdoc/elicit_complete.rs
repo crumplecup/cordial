@@ -10,6 +10,7 @@ use crate::error::CordialResult;
 use super::ELICIT_COMPLETE_TRAIT;
 use super::inventory::RustdocInventory;
 
+use tracing::instrument;
 /// Types with `impl ElicitComplete for T` in a hub crate rustdoc snapshot.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ElicitCompleteSet {
@@ -18,12 +19,14 @@ pub struct ElicitCompleteSet {
 }
 
 impl ElicitCompleteSet {
+    #[instrument(level = "trace", skip(self, path))]
     pub fn contains_path(&self, path: &str) -> bool {
         self.concrete.contains(path) || self.factory.contains(path)
     }
 }
 
 /// Scan rustdoc JSON on disk for concrete and factory `ElicitComplete` impls.
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn collect_elicit_complete_paths(
     json_path: &Path,
     local_crate_name: &str,
@@ -32,6 +35,7 @@ pub fn collect_elicit_complete_paths(
     Ok(collect_elicit_complete_from_inventory(&inventory))
 }
 
+#[instrument(level = "debug", skip(inventory))]
 pub fn collect_elicit_complete_from_inventory(inventory: &RustdocInventory) -> ElicitCompleteSet {
     let local_crate_name = inventory.crate_name.replace('-', "_");
     let mut concrete = HashSet::new();

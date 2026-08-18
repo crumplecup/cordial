@@ -7,6 +7,7 @@ use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
 
+use tracing::instrument;
 /// Which modularity metric fired.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModularityKind {
@@ -19,6 +20,7 @@ pub enum ModularityKind {
 }
 
 impl ModularityKind {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::File => "MODULARITY-FILE",
@@ -30,6 +32,7 @@ impl ModularityKind {
         }
     }
 
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "MODULARITY-FILE" => Some(Self::File),
@@ -55,6 +58,7 @@ impl Display for ModularityKind {
 pub use crate::config::ModularityThresholds;
 
 impl ModularityThresholds {
+    #[instrument(level = "trace", skip(self, kind))]
     pub fn is_checklist_item(&self, kind: ModularityKind, lines: u32) -> bool {
         match kind {
             ModularityKind::File => lines >= self.file_checklist_min_lines,
@@ -74,6 +78,7 @@ pub struct ModularityRule {
 }
 
 impl ModularityRule {
+    #[instrument(level = "debug", skip(kind), ret)]
     pub fn new(kind: ModularityKind) -> Self {
         Self { kind }
     }
@@ -190,6 +195,7 @@ pub struct ModuleSizeStats {
 }
 
 impl ModuleSizeStats {
+    #[instrument(level = "debug", ret)]
     pub fn from_lines(lines: &[u32]) -> Self {
         let n = lines.len();
         if n == 0 {
@@ -222,6 +228,7 @@ impl ModuleSizeStats {
         }
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub fn zscore(self, lines: u32) -> Option<f64> {
         if self.n < 2 || self.stddev <= 0.0 {
             None
@@ -230,15 +237,18 @@ impl ModuleSizeStats {
         }
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     pub fn is_outlier(self, lines: u32, sigma: u32) -> bool {
         self.is_upper_outlier(lines, sigma) || self.is_lower_outlier(lines, sigma)
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     pub fn is_upper_outlier(self, lines: u32, sigma: u32) -> bool {
         self.zscore(lines)
             .is_some_and(|zscore| zscore > f64::from(sigma))
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     pub fn is_lower_outlier(self, lines: u32, sigma: u32) -> bool {
         self.zscore(lines)
             .is_some_and(|zscore| zscore < -f64::from(sigma))

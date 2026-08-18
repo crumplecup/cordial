@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
+use tracing::instrument;
 /// Source trees scanned by quality etiquettes (`src/` and `tests/` when present).
+#[instrument(level = "debug")]
 pub fn quality_scan_trees(crate_root: &Path) -> Vec<PathBuf> {
     ["src", "tests"]
         .into_iter()
@@ -16,6 +18,7 @@ pub fn quality_scan_trees(crate_root: &Path) -> Vec<PathBuf> {
 /// The check is relative to `crate_root`. An absolute `tests/parity` segment
 /// anywhere in the path would skip a parity fixture when that fixture *is*
 /// the project being scanned.
+#[instrument(level = "debug", skip(path))]
 pub fn path_has_fixtures(path: &Path, crate_root: &Path) -> bool {
     let relative = path.strip_prefix(crate_root).unwrap_or(path);
     let components: Vec<_> = relative
@@ -28,6 +31,7 @@ pub fn path_has_fixtures(path: &Path, crate_root: &Path) -> bool {
 }
 
 /// Crate error types live in `src/error.rs` and/or `src/error/**`.
+#[instrument(level = "trace", skip(path))]
 pub fn is_error_module_path(path: &Path, src_root: &Path) -> bool {
     path == src_root.join("error.rs") || path.starts_with(src_root.join("error"))
 }

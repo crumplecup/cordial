@@ -6,7 +6,9 @@ use walkdir::WalkDir;
 use crate::error::CordialResult;
 use crate::etiquettes::error_chain::ErrorChainRecord;
 
+use tracing::instrument;
 /// Scan every `src/**/*.rs` file under `crate_root`.
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_error_chain(crate_root: &Path) -> CordialResult<Vec<ErrorChainRecord>> {
     let src_root = crate_root.join("src");
     if !src_root.is_dir() {
@@ -37,6 +39,7 @@ pub fn scan_crate_error_chain(crate_root: &Path) -> CordialResult<Vec<ErrorChain
 }
 
 /// Parse one source file (used by tests).
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,
@@ -49,6 +52,7 @@ pub fn scan_rust_source(
 }
 
 /// Scan a pre-parsed file for error-chain probes (via unified error IR visitor).
+#[instrument(level = "debug", skip(syntax, file))]
 pub(crate) fn scan_rust_syntax(
     syntax: &syn::File,
     file: &Path,

@@ -1,15 +1,21 @@
 //! Classify a function into [`FunctionRole`] and [`FunctionComplexity`].
 
+use std::collections::HashSet;
+
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Block, ExprIf, ExprMatch, FnArg, Pat, ReturnType, Signature, Stmt, Type, TypePath};
+use syn::{
+    Block, ExprIf, ExprMatch, FnArg, GenericArgument, Pat, PathArguments, ReturnType, Signature,
+    Stmt, Type, TypePath,
+};
 
 use crate::config::ModularityThresholds;
 
 use super::types::{FnContext, FunctionComplexity, FunctionKind, FunctionRole};
 
+use tracing::instrument;
 /// Classify `ident` (unqualified) from its signature, kind, and optional body.
-#[tracing::instrument(skip(sig, body), fields(ident, ?kind))]
+#[instrument(level = "debug", skip(kind))]
 pub fn classify(
     ident: &str,
     sig: &Signature,
@@ -18,17 +24,27 @@ pub fn classify(
 ) -> FnContext {
     let peek = body.map(peek_body).unwrap_or_default();
     let body_lines = body.map(block_lines).unwrap_or(1);
-    let returns_result = returns_named(sig, "Result");
+    let returns_result = returns_result_ty(sig);
     let returns_self = returns_self_ty(sig);
     let returns_bool = returns_named(sig, "bool");
-    let role = classify_role(ident, sig, kind, &peek, returns_self, returns_bool);
+    let role = classify_role(
+        ident,
+        sig,
+        kind,
+        &peek,
+        returns_self,
+        returns_bool,
+        returns_result,
+    );
     let complexity = classify_complexity(body_lines, returns_result, &peek);
     FnContext {
         role,
         complexity,
         param_names: param_names(sig),
+        unrecordable_params: unrecordable_params(sig),
         returns_result,
         returns_self,
+        return_unrecordable: return_type_unrecordable(sig),
         body_lines,
         has_error_path_event: peek.has_error_path_event,
     }
@@ -41,11 +57,12 @@ fn classify_role(
     peek: &BodyPeek,
     returns_self: bool,
     returns_bool: bool,
+    returns_result: bool,
 ) -> FunctionRole {
     if is_constructor(ident, returns_self) {
         return FunctionRole::Constructor;
     }
-    if is_getter(ident, sig, peek) {
+    if is_getter(ident, sig, peek, returns_result) {
         return FunctionRole::Getter;
     }
     if is_setter(ident, sig) {
@@ -60,13 +77,13 @@ fn classify_role(
     if ident == "ensure_dirs" || has_prefix(ident, &["load_", "read_", "write_", "fetch_"]) {
         return FunctionRole::Io;
     }
-    if ident.starts_with("render_") {
+    if is_render(ident) {
         return FunctionRole::Render;
     }
     if kind == FunctionKind::TraitImplMethod {
         return FunctionRole::TraitSurface;
     }
-    if matches!(ident, "run" | "run_session" | "main") {
+    if is_entry(ident) {
         return FunctionRole::Entry;
     }
     FunctionRole::Other
@@ -77,20 +94,40 @@ fn is_constructor(ident: &str, returns_self: bool) -> bool {
         || ((ident == "from" || ident.starts_with("from_")) && returns_self)
 }
 
-fn is_getter(ident: &str, sig: &Signature, peek: &BodyPeek) -> bool {
-    if ident.starts_with("as_")
+fn is_getter(ident: &str, sig: &Signature, peek: &BodyPeek, returns_result: bool) -> bool {
+    if returns_result {
+        return false;
+    }
+    let Some(recv) = sig.receiver() else {
+        return false;
+    };
+    if recv.reference.is_none() || recv.mutability.is_some() {
+        return false;
+    }
+    if getter_name(ident) {
+        return true;
+    }
+    peek.stmts <= 2 && !peek.has_branch
+}
+
+fn getter_name(ident: &str) -> bool {
+    ident.starts_with("as_")
         || ident.starts_with("to_")
         || ident == "id"
         || ident.ends_with("_dir")
         || ident.ends_with("_path")
         || ident.ends_with("_name")
-    {
-        return true;
-    }
-    let Some(recv) = sig.receiver() else {
-        return false;
-    };
-    recv.reference.is_some() && recv.mutability.is_none() && peek.stmts <= 2 && !peek.has_branch
+}
+
+fn is_render(ident: &str) -> bool {
+    ident.starts_with("render_")
+        || ident.ends_with("_summary")
+        || ident.ends_with("_checklist")
+        || ident.ends_with("_csv")
+}
+
+fn is_entry(ident: &str) -> bool {
+    ident == "main" || ident == "run" || ident.starts_with("run_")
 }
 
 fn is_setter(ident: &str, sig: &Signature) -> bool {
@@ -121,7 +158,7 @@ fn classify_complexity(
     if body_lines >= hotspot_floor {
         return FunctionComplexity::Hotspot;
     }
-    if returns_result || peek.has_try {
+    if returns_result {
         return FunctionComplexity::Fallible;
     }
     if peek.has_branch {
@@ -146,10 +183,121 @@ fn param_names(sig: &Signature) -> Vec<String> {
         .collect()
 }
 
+fn unrecordable_params(sig: &Signature) -> Vec<String> {
+    let generics = type_param_names(sig);
+    sig.inputs
+        .iter()
+        .filter_map(|arg| match arg {
+            FnArg::Typed(pat) => {
+                let Pat::Ident(ident) = &*pat.pat else {
+                    return None;
+                };
+                if type_is_unrecordable(&pat.ty) || type_is_generic_param(&pat.ty, &generics) {
+                    Some(ident.ident.to_string())
+                } else {
+                    None
+                }
+            }
+            FnArg::Receiver(_) => None,
+        })
+        .collect()
+}
+
+fn type_param_names(sig: &Signature) -> HashSet<String> {
+    sig.generics
+        .type_params()
+        .map(|param| param.ident.to_string())
+        .collect()
+}
+
+fn return_type_unrecordable(sig: &Signature) -> bool {
+    match &sig.output {
+        ReturnType::Type(_, ty) => type_is_unrecordable(ty),
+        ReturnType::Default => false,
+    }
+}
+
+fn type_is_unrecordable(ty: &Type) -> bool {
+    match ty {
+        Type::ImplTrait(_) | Type::TraitObject(_) | Type::BareFn(_) | Type::Infer(_) => true,
+        Type::Never(_) | Type::Macro(_) | Type::Verbatim(_) => true,
+        Type::Reference(reference) => type_is_unrecordable(&reference.elem),
+        Type::Ptr(ptr) => type_is_unrecordable(&ptr.elem),
+        Type::Paren(paren) => type_is_unrecordable(&paren.elem),
+        Type::Group(group) => type_is_unrecordable(&group.elem),
+        Type::Slice(slice) => type_is_unrecordable(&slice.elem),
+        Type::Array(array) => type_is_unrecordable(&array.elem),
+        Type::Tuple(tuple) => tuple.elems.iter().any(type_is_unrecordable),
+        Type::Path(path) => path_is_unrecordable(path),
+        _ => false,
+    }
+}
+
+fn path_is_unrecordable(path: &TypePath) -> bool {
+    path.path
+        .segments
+        .iter()
+        .any(|segment| match &segment.arguments {
+            PathArguments::None => false,
+            PathArguments::Parenthesized(_) => true,
+            PathArguments::AngleBracketed(args) => args.args.iter().any(|arg| match arg {
+                GenericArgument::Type(inner) => type_is_unrecordable(inner),
+                GenericArgument::AssocType(assoc) => type_is_unrecordable(&assoc.ty),
+                _ => false,
+            }),
+        })
+}
+
+fn type_is_generic_param(ty: &Type, generics: &HashSet<String>) -> bool {
+    match ty {
+        Type::Path(TypePath { qself: None, path }) => path.segments.iter().any(|segment| {
+            generics.contains(&segment.ident.to_string())
+                || match &segment.arguments {
+                    PathArguments::AngleBracketed(args) => args.args.iter().any(|arg| match arg {
+                        GenericArgument::Type(inner) => type_is_generic_param(inner, generics),
+                        _ => false,
+                    }),
+                    _ => false,
+                }
+        }),
+        Type::Reference(reference) => type_is_generic_param(&reference.elem, generics),
+        Type::Ptr(ptr) => type_is_generic_param(&ptr.elem, generics),
+        Type::Paren(paren) => type_is_generic_param(&paren.elem, generics),
+        Type::Group(group) => type_is_generic_param(&group.elem, generics),
+        Type::Slice(slice) => type_is_generic_param(&slice.elem, generics),
+        Type::Array(array) => type_is_generic_param(&array.elem, generics),
+        Type::Tuple(tuple) => tuple
+            .elems
+            .iter()
+            .any(|inner| type_is_generic_param(inner, generics)),
+        _ => false,
+    }
+}
+
 fn returns_named(sig: &Signature, name: &str) -> bool {
     match &sig.output {
         ReturnType::Type(_, ty) => type_path_contains(ty, name),
         ReturnType::Default => false,
+    }
+}
+
+fn returns_result_ty(sig: &Signature) -> bool {
+    match &sig.output {
+        ReturnType::Type(_, ty) => type_is_result(ty),
+        ReturnType::Default => false,
+    }
+}
+
+fn type_is_result(ty: &Type) -> bool {
+    match ty {
+        Type::Path(TypePath { path, .. }) => path.segments.last().is_some_and(|segment| {
+            let ident = segment.ident.to_string();
+            ident == "Result" || ident.ends_with("Result")
+        }),
+        Type::Reference(reference) => type_is_result(&reference.elem),
+        Type::Paren(paren) => type_is_result(&paren.elem),
+        Type::Group(group) => type_is_result(&group.elem),
+        _ => false,
     }
 }
 
@@ -206,7 +354,6 @@ fn block_lines(block: &Block) -> u32 {
 #[derive(Debug, Default)]
 struct BodyPeek {
     stmts: usize,
-    has_try: bool,
     has_branch: bool,
     has_error_path_event: bool,
 }
@@ -219,7 +366,6 @@ fn peek_body(block: &Block) -> BodyPeek {
         .count();
     let mut peek = BodyPeek {
         stmts,
-        has_try: false,
         has_branch: false,
         has_error_path_event: false,
     };
@@ -230,11 +376,6 @@ fn peek_body(block: &Block) -> BodyPeek {
 struct BodyPeekVisitor<'a>(&'a mut BodyPeek);
 
 impl<'ast> Visit<'ast> for BodyPeekVisitor<'_> {
-    fn visit_expr_try(&mut self, node: &'ast syn::ExprTry) {
-        self.0.has_try = true;
-        syn::visit::visit_expr_try(self, node);
-    }
-
     fn visit_expr_match(&mut self, node: &'ast ExprMatch) {
         self.0.has_branch = true;
         syn::visit::visit_expr_match(self, node);

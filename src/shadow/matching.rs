@@ -4,18 +4,23 @@ use std::collections::HashMap;
 
 use crate::rustdoc::{InventoryItemKind, RustdocItem};
 
+use tracing::instrument;
+#[instrument(level = "debug")]
 pub fn counts_toward_shadow_coverage(item: &RustdocItem) -> bool {
     counts_toward_shadow_kind(item.kind)
 }
 
+#[instrument(level = "debug", skip(kind))]
 pub fn counts_toward_shadow_kind(kind: InventoryItemKind) -> bool {
     !matches!(kind, InventoryItemKind::Other) && kind != InventoryItemKind::Trait
 }
 
+#[instrument(level = "trace")]
 pub fn normalize_name(name: &str) -> String {
     to_snake_case(name).to_lowercase()
 }
 
+#[instrument(level = "debug")]
 pub fn find_drift_match<'a>(
     target_item: &RustdocItem,
     shadow_names: &HashMap<String, Vec<&'a RustdocItem>>,
@@ -82,6 +87,7 @@ fn edit_distance(a: &str, b: &str) -> usize {
 }
 
 /// Look up the method set for a type path, with bare-name suffix fallback.
+#[instrument(level = "trace")]
 pub fn methods_for_path(
     item_path: &str,
     methods: &std::collections::HashMap<String, std::collections::BTreeSet<String>>,
@@ -90,6 +96,7 @@ pub fn methods_for_path(
 }
 
 /// Look up trait impl bare names, falling back to bare trait name suffix match.
+#[instrument(level = "trace", skip(key))]
 pub fn trait_impls_for_path<'a>(
     key: &str,
     map: &'a std::collections::HashMap<String, std::collections::BTreeSet<String>>,

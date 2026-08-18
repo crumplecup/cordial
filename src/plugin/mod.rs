@@ -3,6 +3,7 @@
 //! An [`Etiquette`] is a hook bundle; a [`Plugin`] is a runnable product that
 //! contributes one or more etiquettes. See [coverage-as-plugin.md](https://github.com/crumplecup/cordial/blob/main/docs/planning/coverage-as-plugin.md).
 
+use tracing::instrument;
 #[cfg(feature = "rustdoc")]
 mod coverage;
 mod error_handling;
@@ -114,6 +115,7 @@ impl Plugin for StaticPlugin {
 }
 
 /// Flatten plugins into a deduplicated etiquette list (stable registration order).
+#[instrument(level = "debug", skip(plugins))]
 pub fn etiquettes_from_plugins(plugins: &[&'static dyn Plugin]) -> Vec<&'static dyn Etiquette> {
     let mut seen = std::collections::HashSet::new();
     let mut out = Vec::new();
@@ -128,6 +130,7 @@ pub fn etiquettes_from_plugins(plugins: &[&'static dyn Plugin]) -> Vec<&'static 
 }
 
 /// Select plugins whose ids match `filter`, or all when `filter` is empty.
+#[instrument(level = "debug", skip(registered))]
 pub fn selected_plugins(
     registered: &[&'static dyn Plugin],
     filter: Option<&[&str]>,
@@ -143,6 +146,7 @@ pub fn selected_plugins(
 }
 
 /// Select plugins by category.
+#[instrument(level = "debug", skip(plugins))]
 pub fn plugins_in_category(
     plugins: &[&'static dyn Plugin],
     category: PluginCategory,

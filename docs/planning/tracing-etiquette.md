@@ -66,14 +66,14 @@ structure. Role is **use**:
 | Variant | Heuristic (first match wins) |
 | --- | --- |
 | `Constructor` | `new`, `try_new`, `default`, `from_*` that returns `Self` |
-| `Getter` | `&self`, not mut; name is a field, `as_*`, `to_*`, `id`, or a path helper (`*_dir`, `*_path`) with a trivial body |
+| `Getter` | `&self`, not mut, not `Result`; name is `as_*` / `to_*` / `id` / `*_dir` / `*_path` / `*_name`, or a trivial field accessor. Free functions are never getters. |
 | `Setter` | `&mut self` or fluent `Self`; `set_*` / `with_*` |
 | `Predicate` | `is_*`, `has_*`, `can_*`, `contains_*`; returns `bool` |
 | `Scan` | `scan_*`, `walk_*`, `visit_*`, `collect_*` over syntax/IR |
 | `Io` | `load_*`, `read_*`, `write_*`, `fetch_*`, `ensure_dirs` |
-| `Render` | `render_*`, checklist/summary/csv reporters |
+| `Render` | `render_*`, or name ends `_summary` / `_checklist` / `_csv` |
 | `TraitSurface` | `function_kind = trait_impl` (e.g. `Rule::id`) |
-| `Entry` | crate-visible pipeline: `run`, `run_session`, `main`-adjacent |
+| `Entry` | crate-visible pipeline: `run`, `run_*`, `main` |
 | `Other` | remainder |
 
 Role classification must not require rustdoc. Signature + name + a cheap
@@ -86,9 +86,9 @@ forking a second grammar.
 | Variant | When |
 | --- | --- |
 | `Trivial` | handful of statements, field access / `join` / `to_string` |
-| `Linear` | no `?`, no `match`/`if let` on `Result` |
+| `Linear` | no `Result` return, no `match`/`if` beyond a single path |
 | `Branchy` | control-flow beyond a single happy path |
-| `Fallible` | returns `Result` **or** the fn’s body has error-site markers |
+| `Fallible` | returns `Result` or a `*Result` alias (`CordialResult`, …). `?` on `Option` is not Fallible. |
 | `Hotspot` | body lines ≥ modularity `function_inventory_min_lines` (150) |
 
 A function can be `Getter` + `Trivial`, or `Scan` + `Fallible` + `Hotspot`.
@@ -143,19 +143,19 @@ or `Fallible`):
 | Role | level | err | ret | notes |
 | --- | --- | --- | --- | --- |
 | `Constructor` | debug | if `Result` | yes | `fields` for the distinguishing arg |
-| `Getter` | trace | no | no | still a span for the call graph |
-| `Setter` | trace | no | no | |
+| `Getter` | trace | if `Result` | no | name prefixes require `&self`; `Result` `to_*` is not a getter |
+| `Setter` | trace | if `Result` | no | |
 | `Predicate` | trace | no | optional | |
-| `Scan` | debug | if fallible | no | skip syntax/IR blobs |
+| `Scan` | debug | if `Result` | no | skip syntax/IR blobs |
 | `Io` | info | warn on `Err` | no | skip handles, paths optional as fields |
-| `Render` | debug | no | no | skip `findings`, `body` |
+| `Render` | debug | if `Result` | no | skip `findings`, `body` |
 | `TraitSurface` | trace | no | no | `id` / `category` / `fmt` |
 | `Entry` | info | warn on `Err` | no | `fields` for crate/project |
-| `Other` | debug | if fallible | no | |
+| `Other` | debug | if `Result` | no | |
 
-`Fallible` always asks for `err` at **warn** unless the strategy sets
-otherwise. `#[instrument(err)]` only emits on `Err` — that is not log
-spam; it is the silent-error lint.
+`Fallible` (Result return) asks for `err` at **warn** unless the strategy sets
+otherwise. `#[instrument(err)]` only emits on `Err`. `Option` + `?` is
+absence, not a silent error.
 
 Do not omit getters from the inventory. Filter at the subscriber
 (`RUST_LOG=info` vs `trace`).
@@ -172,7 +172,7 @@ Findings are **recipe deltas**, not a second census of every function.
 | `TRACING-LEVEL-MISMATCH` | Span present, recorded `level` (default **info**) is higher-volume than the recipe (e.g. getter at info). |
 | `TRACING-SKIP-MISSING` | Recipe `skip` names are live params and absent from `skip(...)`. |
 | `TRACING-ERR-MISSING` | Recipe wants `err` (fallible / `Result`) and the attribute has neither `err` nor `err(level = ...)`. |
-| `TRACING-ERROR-PATH-SILENT` | Fallible body (error-site join or `Result` return), no `err` **and** no `warn!`/`error!` on the failure path. |
+| `TRACING-ERROR-PATH-SILENT` | Recipe wants `err`, the attr has no `err`, and the body has no `warn!`/`error!`. Not fired for `Option` lookups or non-Result error-site joins. |
 | `TRACING-FIELDS-MISSING` | Recipe `fields` empty on an `Entry`/`Constructor` that has a clear identity param. |
 
 Private / `pub(super)` stay out of the checklist (same as today).
@@ -190,7 +190,7 @@ policy, not for “this getter would be noisy.”
 | Source | Use |
 | --- | --- |
 | Derives scan predicates | Constructor / getter / setter shape — same grammar, different finding |
-| Error-sites / error-ir | `Fallible`, `TRACING-ERROR-PATH-SILENT`, `err` recipe |
+| Error-sites / error-ir | consumed for body `warn!`/`error!` events; does not mark non-Result fns silent |
 | Modularity body lines | `Hotspot` complexity |
 | Attribute enricher | Current `#[instrument]` args (parse `level`, `skip`, `err`, `ret`, `fields`) |
 

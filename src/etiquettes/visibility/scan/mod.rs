@@ -8,6 +8,7 @@ use crate::error::CordialResult;
 
 use super::types::{VisibilityRecord, VisibilityThresholds};
 
+use tracing::instrument;
 mod eval;
 mod findings;
 mod tree;
@@ -27,11 +28,13 @@ pub struct BranchingCache {
 }
 
 impl BranchingCache {
+    #[instrument(level = "debug", skip(path))]
     pub fn load(path: &Path) -> Option<Self> {
         let bytes = std::fs::read(path).ok()?;
         serde_json::from_slice(&bytes).ok()
     }
 
+    #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
     pub fn write(&self, path: &Path) -> CordialResult<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -43,7 +46,7 @@ impl BranchingCache {
 
 /// Walk the crate's root module tree (`src/lib.rs` or `src/main.rs`) and
 /// apply `thresholds`. The scanner never picks thresholds itself.
-#[tracing::instrument]
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_visibility(
     crate_root: &Path,
     thresholds: VisibilityThresholds,
@@ -55,7 +58,7 @@ pub fn scan_crate_visibility(
 /// crate-file digest still matches. On mismatch (or first run) this peels,
 /// writes a new cache payload, then applies the lowered floor — a two-pass
 /// analysis so undersized peeled modules do not fire `VIS-MOD-THIN-001`.
-#[tracing::instrument(skip(cached))]
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_visibility_with_cache(
     crate_root: &Path,
     thresholds: VisibilityThresholds,

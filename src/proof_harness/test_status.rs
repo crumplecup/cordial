@@ -2,6 +2,7 @@
 
 use super::ProofHarness;
 
+use tracing::instrument;
 /// Whether a type has a proof harness test entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TestStatus {
@@ -14,6 +15,7 @@ pub enum TestStatus {
 }
 
 impl TestStatus {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Covered => "Covered",
@@ -28,6 +30,7 @@ impl TestStatus {
         }
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub fn display(&self) -> String {
         match self {
             Self::Covered => "Covered".to_string(),
@@ -40,6 +43,7 @@ impl TestStatus {
 }
 
 /// Determine proof and composition harness status for a type path.
+#[instrument(level = "trace")]
 pub fn test_status_for_type_path(
     type_path: &str,
     has_factory_impl: bool,

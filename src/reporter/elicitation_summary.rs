@@ -8,6 +8,7 @@ use crate::ir::WorkspaceIr;
 use crate::objects::{Artifact, Disposition, Finding, MapFindingSink, TextArtifact};
 use crate::session::{RunFilter, SessionView};
 
+use tracing::instrument;
 /// Rollup body plus optional coverage-plugin artifacts.
 pub struct ElicitationCoverageRollup {
     pub body: String,
@@ -15,6 +16,7 @@ pub struct ElicitationCoverageRollup {
 }
 
 /// Build the elicitation plugin body and shadow-core-support artifact for the workspace rollup.
+#[instrument(level = "debug", skip(session, filter, findings, workspace), err(level = "warn"))]
 pub fn build_elicitation_coverage_rollup(
     session: &dyn SessionView,
     filter: &dyn RunFilter,

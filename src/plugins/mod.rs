@@ -1,5 +1,6 @@
 //! Built-in plugin registrations.
 
+use tracing::instrument;
 #[cfg(feature = "elicitation")]
 mod elicitation;
 
@@ -29,11 +30,13 @@ mod error_handling_plugin_wiring {
     use super::*;
 
     /// Built-in error-handling plugins.
+    #[instrument(level = "debug")]
     pub fn error_handling_plugins() -> Vec<&'static dyn Plugin> {
         vec![&STANDARD_ERROR_HANDLING as &dyn Plugin]
     }
 
     /// Error-handling plugins only.
+    #[instrument(level = "debug")]
     pub fn error_handling_only_plugins() -> Vec<&'static dyn Plugin> {
         error_handling_plugins()
     }
@@ -57,6 +60,7 @@ mod coverage_targets {
     use crate::plugin::{Coverage, CoverageTarget};
 
     /// Union [`CoverageTarget`] rows from active coverage plugins in this run.
+    #[instrument(level = "debug", skip(plugins, session, filter), err(level = "warn"))]
     pub fn coverage_targets_for_plugins(
         plugins: &[&'static dyn Plugin],
         session: &dyn SessionView,
@@ -72,6 +76,7 @@ mod coverage_targets {
     }
 
     /// Crate names that need per-crate IR for active coverage plugins.
+    #[instrument(level = "debug", skip(plugins, session, filter), err(level = "warn"))]
     pub fn ir_crate_names_for_coverage_plugins(
         plugins: &[&'static dyn Plugin],
         session: &dyn SessionView,
@@ -135,6 +140,7 @@ pub use coverage_targets::ir_crate_names_for_coverage_plugins;
 
 /// Built-in quality plugins (source scanners). Includes the error-handling
 /// family so panicking APIs and Result-chain analysis run together.
+#[instrument(level = "debug")]
 pub fn quality_plugins() -> Vec<&'static dyn Plugin> {
     let mut out: Vec<&'static dyn Plugin> = quality_etiquette_plugins()
         .into_iter()
@@ -146,6 +152,7 @@ pub fn quality_plugins() -> Vec<&'static dyn Plugin> {
 }
 
 /// Built-in coverage plugins.
+#[instrument(level = "debug")]
 pub fn coverage_plugins() -> Vec<&'static dyn Plugin> {
     [
         #[cfg(feature = "elicitation")]
@@ -167,6 +174,7 @@ pub fn coverage_plugins() -> Vec<&'static dyn Plugin> {
 }
 
 /// Coverage plugins appropriate for a detected workspace hub.
+#[instrument(level = "debug")]
 #[cfg(feature = "homecoming_std")]
 pub fn coverage_plugins_for_hub(hub: crate::plugin::WorkspaceHub) -> Vec<&'static dyn Plugin> {
     match hub {
@@ -190,6 +198,7 @@ pub fn coverage_plugins_for_hub(hub: crate::plugin::WorkspaceHub) -> Vec<&'stati
 }
 
 /// All built-in plugins for the current feature set.
+#[instrument(level = "debug")]
 pub fn all_plugins() -> Vec<&'static dyn Plugin> {
     let mut out = quality_plugins();
     out.extend(coverage_plugins());
@@ -197,11 +206,13 @@ pub fn all_plugins() -> Vec<&'static dyn Plugin> {
 }
 
 /// Quality plugins only.
+#[instrument(level = "debug")]
 pub fn quality_only_plugins() -> Vec<&'static dyn Plugin> {
     plugins_in_category(&all_plugins(), PluginCategory::Quality)
 }
 
 /// Coverage plugins only.
+#[instrument(level = "debug")]
 pub fn coverage_only_plugins() -> Vec<&'static dyn Plugin> {
     plugins_in_category(&all_plugins(), PluginCategory::Coverage)
 }
@@ -284,6 +295,7 @@ etiquette_plugin_fn!(
 );
 
 /// Legacy etiquette list — flatten of all registered quality + coverage plugins.
+#[instrument(level = "debug")]
 pub fn all_etiquettes_from_plugins() -> Vec<&'static dyn Etiquette> {
     crate::plugin::etiquettes_from_plugins(&all_plugins())
 }

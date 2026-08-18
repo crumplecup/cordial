@@ -54,7 +54,7 @@ pub struct ContractRecordDump {
 }
 
 /// Run `cargo run -p amenable -- dump-registry` in the workspace.
-#[instrument(skip(workspace, out_path), fields(out = %out_path.display()))]
+#[instrument(level = "debug", skip(workspace), err(level = "warn"))]
 pub fn run_amenable_dump_registry(workspace: &Path, out_path: &Path) -> CordialResult<()> {
     if let Some(parent) = out_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -89,12 +89,14 @@ pub fn run_amenable_dump_registry(workspace: &Path, out_path: &Path) -> CordialR
 }
 
 /// Load a registry dump from disk.
+#[instrument(level = "info", skip(path), err(level = "warn"))]
 pub fn load_registry_dump(path: &Path) -> CordialResult<RegistryDump> {
     let content = std::fs::read_to_string(path)?;
     Ok(serde_json::from_str(&content)?)
 }
 
 /// Extract the inventory-matching base type from a `RustStdStandard<…>` evidence name.
+#[instrument(level = "debug")]
 pub fn parse_rust_std_standard_inner(evidence: &str) -> Option<String> {
     let rest = evidence
         .strip_prefix(RUST_STD_STANDARD_PREFIX)
@@ -103,6 +105,7 @@ pub fn parse_rust_std_standard_inner(evidence: &str) -> Option<String> {
     Some(type_path_without_generics(typed))
 }
 
+#[instrument(level = "debug")]
 pub fn evidence_for_std_type(registry: &RegistryDump, type_path: &str) -> Option<String> {
     for link in &registry.evidence_links {
         let Some(inner) = parse_rust_std_standard_inner(&link.name) else {
@@ -116,12 +119,14 @@ pub fn evidence_for_std_type(registry: &RegistryDump, type_path: &str) -> Option
     None
 }
 
+#[instrument(level = "debug")]
 pub fn std_type_has_proof_test(proof_chain_subjects: &HashSet<String>, type_path: &str) -> bool {
     proof_chain_subjects
         .iter()
         .any(|subject| proof_chain_subject_matches_type(subject, type_path))
 }
 
+#[instrument(level = "debug")]
 pub fn proof_chain_subject_matches_type(subject: &str, type_path: &str) -> bool {
     if let Some(inner) = parse_rust_std_standard_inner(subject) {
         let singleton: HashSet<String> = HashSet::from([inner]);
@@ -131,6 +136,7 @@ pub fn proof_chain_subject_matches_type(subject: &str, type_path: &str) -> bool 
     type_has_trait_impl(&singleton, type_path)
 }
 
+#[instrument(level = "debug")]
 pub fn witness_verifiers_for_std_type(registry: &RegistryDump, type_path: &str) -> HashSet<String> {
     let mut verifiers = HashSet::new();
     for record in &registry.proof_records {

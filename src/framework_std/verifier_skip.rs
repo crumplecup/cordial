@@ -17,6 +17,7 @@ pub struct VerifierSkipEntry {
 }
 
 impl VerifierSkipEntry {
+    #[instrument(level = "debug", skip(self))]
     pub fn covers(&self, verifier: &str) -> bool {
         match &self.verifiers {
             None => true,

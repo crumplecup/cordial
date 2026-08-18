@@ -5,6 +5,7 @@ use rustdoc_types::{Crate, ItemKind as RustdocKind};
 
 use crate::error::CordialResult;
 
+use tracing::instrument;
 /// Kind of item extracted from rustdoc JSON.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InventoryItemKind {
@@ -28,10 +29,12 @@ impl InventoryItemKind {
         }
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     pub fn is_type(self) -> bool {
         matches!(self, Self::Struct | Self::Enum | Self::TypeAlias)
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Struct => "Struct",
@@ -63,12 +66,14 @@ pub struct RustdocInventory {
 }
 
 impl RustdocInventory {
+    #[instrument(level = "trace", skip(self))]
     pub fn type_items(&self) -> impl Iterator<Item = &RustdocItem> {
         self.items.iter().filter(|item| item.kind.is_type())
     }
 }
 
 /// Parse rustdoc JSON into a flat inventory of public crate items.
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn parse_rustdoc_json(json_path: &Path, crate_name: &str) -> CordialResult<RustdocInventory> {
     let content = std::fs::read_to_string(json_path)?;
     let krate: Crate = serde_json::from_str(&content)?;
@@ -125,6 +130,7 @@ fn path_in_crate(path: &[String], own_key: &str) -> bool {
 }
 
 /// Map rustdoc item kind to IR item kind.
+#[instrument(level = "debug", skip(kind))]
 pub fn ir_item_kind(kind: InventoryItemKind) -> crate::ir::ItemKind {
     match kind {
         InventoryItemKind::Struct => crate::ir::ItemKind::Struct,
@@ -137,6 +143,7 @@ pub fn ir_item_kind(kind: InventoryItemKind) -> crate::ir::ItemKind {
 }
 
 /// Build path normalisation map from private module paths to public inventory paths.
+#[instrument(level = "debug", skip(inventory))]
 pub fn canonical_to_public_map(inventory: &RustdocInventory) -> HashMap<String, String> {
     let mut by_name: HashMap<&str, Vec<&RustdocItem>> = HashMap::new();
     for item in &inventory.items {

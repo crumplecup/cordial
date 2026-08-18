@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::TraitPrereqs;
 use super::elicit_complete::ElicitCompleteSet;
 
+use tracing::instrument;
 /// Coverage provided by one elicitation-owned wrapper for a foreign type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WrapperCoverage {
@@ -17,6 +18,7 @@ pub struct WrapperCoverage {
 
 pub type WrapperCoverageMap = HashMap<String, Vec<WrapperCoverage>>;
 
+#[instrument(level = "debug")]
 pub fn lookup_wrapper_coverage<'a>(
     map: &'a WrapperCoverageMap,
     type_path: &str,
@@ -35,6 +37,7 @@ pub fn lookup_wrapper_coverage<'a>(
         .map(|(_, wrappers)| wrappers)
 }
 
+#[instrument(level = "debug")]
 pub fn build_wrapper_coverage_map(
     pairs: &[(String, String)],
     complete_paths: &ElicitCompleteSet,
@@ -61,6 +64,7 @@ pub fn build_wrapper_coverage_map(
     map
 }
 
+#[instrument(level = "debug")]
 pub fn join_wrapper_paths(wrappers: Option<&[WrapperCoverage]>) -> String {
     wrappers
         .unwrap_or(&[])
@@ -78,6 +82,7 @@ fn merge_wrapper_prereqs(wrappers: Option<&[WrapperCoverage]>) -> TraitPrereqs {
     merged
 }
 
+#[instrument(level = "debug")]
 pub fn effective_missing_our_traits(
     direct_missing: &[&'static str],
     wrappers: Option<&[WrapperCoverage]>,
@@ -97,6 +102,7 @@ pub fn effective_missing_our_traits(
         .collect()
 }
 
+#[instrument(level = "debug")]
 pub fn covered_indirectly(wrappers: Option<&[WrapperCoverage]>) -> bool {
     wrappers.is_some_and(|known| {
         known.iter().any(|wrapper| {
@@ -105,6 +111,7 @@ pub fn covered_indirectly(wrappers: Option<&[WrapperCoverage]>) -> bool {
     })
 }
 
+#[instrument(level = "debug")]
 pub fn indirect_elicit_complete(wrappers: Option<&[WrapperCoverage]>) -> bool {
     wrappers
         .unwrap_or(&[])
@@ -112,6 +119,7 @@ pub fn indirect_elicit_complete(wrappers: Option<&[WrapperCoverage]>) -> bool {
         .any(|wrapper| wrapper.wrapper_elicit_complete)
 }
 
+#[instrument(level = "debug")]
 pub fn coverage_provider_label(
     direct_our_traits_complete: bool,
     indirect_elicit_complete: bool,

@@ -172,6 +172,97 @@ pub fn load_session_config() -> Result<(), String> {
 }
 
 #[test]
+fn apply_writes_entry_recipe_for_run_prefix() -> miette::Result<()> {
+    let fixture = write_apply_fixture(
+        r#"
+pub fn run_apply_patches() {}
+"#,
+        &checklist_for(&[("run_apply_patches", 2)]),
+    )?;
+
+    run_tracing_instrument_apply(
+        &fixture.workspace,
+        &fixture.checklist,
+        Some("fixture_crate"),
+        false,
+    )
+    .into_diagnostic()
+    .wrap_err("apply tracing")?;
+
+    let updated = fs::read_to_string(&fixture.src)
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert!(
+        updated.contains("#[instrument(level = \"info\")]"),
+        "{updated}"
+    );
+    Ok(())
+}
+
+#[test]
+fn apply_does_not_treat_free_path_fn_as_getter() -> miette::Result<()> {
+    let fixture = write_apply_fixture(
+        r#"
+pub fn trait_impls_for_path(key: &str) -> Option<u8> {
+    None
+}
+"#,
+        &checklist_for(&[("trait_impls_for_path", 2)]),
+    )?;
+
+    run_tracing_instrument_apply(
+        &fixture.workspace,
+        &fixture.checklist,
+        Some("fixture_crate"),
+        false,
+    )
+    .into_diagnostic()
+    .wrap_err("apply tracing")?;
+
+    let updated = fs::read_to_string(&fixture.src)
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert!(
+        updated.contains("#[instrument(level = \"debug\")]"),
+        "free *_path is Other at debug, not a trace getter: {updated}"
+    );
+    assert!(!updated.contains("level = \"trace\""), "{updated}");
+    Ok(())
+}
+
+#[test]
+fn apply_writes_err_for_result_alias() -> miette::Result<()> {
+    let fixture = write_apply_fixture(
+        r#"
+pub type CordialResult<T> = Result<T, String>;
+
+pub fn load_session_config() -> CordialResult<()> {
+    Ok(())
+}
+"#,
+        &checklist_for(&[("load_session_config", 4)]),
+    )?;
+
+    run_tracing_instrument_apply(
+        &fixture.workspace,
+        &fixture.checklist,
+        Some("fixture_crate"),
+        false,
+    )
+    .into_diagnostic()
+    .wrap_err("apply tracing")?;
+
+    let updated = fs::read_to_string(&fixture.src)
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert!(
+        updated.contains("#[instrument(level = \"info\", err(level = \"warn\"))]"),
+        "{updated}"
+    );
+    Ok(())
+}
+
+#[test]
 fn apply_rewrites_existing_instrument_to_recipe() -> miette::Result<()> {
     let fixture = write_apply_fixture(
         r#"
@@ -270,5 +361,276 @@ pub fn load_session_config() -> Result<(), String> {
         .wrap_err("read updated source")?;
     let count = updated.matches("#[instrument(").count();
     assert_eq!(count, 1, "{updated}");
+    Ok(())
+}
+
+#[test]
+fn apply_does_not_split_doc_from_item() -> miette::Result<()> {
+    let fixture = write_apply_fixture(
+        r#"
+/// A documented helper.
+pub fn scan_tree() {}
+"#,
+        &checklist_for(&[("scan_tree", 3)]),
+    )?;
+
+    run_tracing_instrument_apply(
+        &fixture.workspace,
+        &fixture.checklist,
+        Some("fixture_crate"),
+        false,
+    )
+    .into_diagnostic()
+    .wrap_err("apply tracing")?;
+
+    let updated = fs::read_to_string(&fixture.src)
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert!(
+        !updated.contains("/// A documented helper.\nuse tracing::instrument;"),
+        "use must not land between docs and the item:\n{updated}"
+    );
+    let use_idx = updated.find("use tracing::instrument;").expect("use");
+    let doc_idx = updated.find("/// A documented helper.").expect("doc");
+    assert!(use_idx < doc_idx, "{updated}");
+    Ok(())
+}
+
+#[test]
+fn apply_does_not_put_err_on_option() -> miette::Result<()> {
+    let fixture = write_apply_fixture(
+        r#"
+pub fn scan_first() -> Option<u8> {
+    let value = std::fs::read_to_string("x").ok()?;
+    value.bytes().next()
+}
+"#,
+        &checklist_for(&[("scan_first", 2)]),
+    )?;
+
+    run_tracing_instrument_apply(
+        &fixture.workspace,
+        &fixture.checklist,
+        Some("fixture_crate"),
+        false,
+    )
+    .into_diagnostic()
+    .wrap_err("apply tracing")?;
+
+    let updated = fs::read_to_string(&fixture.src)
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert!(
+        updated.contains("#[instrument(level = \"debug\")]"),
+        "{updated}"
+    );
+    assert!(!updated.contains("err("), "{updated}");
+    Ok(())
+}
+
+#[test]
+fn apply_matches_fn_name_not_nearest_fn() -> miette::Result<()> {
+    let fixture = write_apply_fixture(
+        r#"
+pub fn fmt() {}
+
+pub fn scan_tree() {}
+"#,
+        &checklist_for(&[("scan_tree", 2)]),
+    )?;
+
+    run_tracing_instrument_apply(
+        &fixture.workspace,
+        &fixture.checklist,
+        Some("fixture_crate"),
+        false,
+    )
+    .into_diagnostic()
+    .wrap_err("apply tracing")?;
+
+    let updated = fs::read_to_string(&fixture.src)
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert!(
+        updated.contains("pub fn fmt() {}"),
+        "stale checklist line must not stamp the nearer fn:\n{updated}"
+    );
+    assert!(
+        updated.contains("#[instrument(level = \"debug\")]\npub fn scan_tree()"),
+        "{updated}"
+    );
+    Ok(())
+}
+
+#[test]
+fn apply_uses_crate_path_when_tracing_is_a_module() -> miette::Result<()> {
+    let fixture = write_apply_fixture(
+        r#"
+mod tracing;
+
+pub fn scan_tree() {}
+"#,
+        &checklist_for(&[("scan_tree", 4)]),
+    )?;
+
+    run_tracing_instrument_apply(
+        &fixture.workspace,
+        &fixture.checklist,
+        Some("fixture_crate"),
+        false,
+    )
+    .into_diagnostic()
+    .wrap_err("apply tracing")?;
+
+    let updated = fs::read_to_string(&fixture.src)
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert!(
+        updated.contains("#[::tracing::instrument(level = \"debug\")]"),
+        "{updated}"
+    );
+    assert!(!updated.contains("use tracing::instrument;"), "{updated}");
+    Ok(())
+}
+
+#[test]
+fn apply_does_not_split_derive_from_item() -> miette::Result<()> {
+    let fixture = write_apply_fixture(
+        r#"
+#[derive(Debug)]
+pub enum Boom {
+    A,
+}
+
+pub fn load_config() -> Result<(), Boom> {
+    Ok(())
+}
+"#,
+        &checklist_for(&[("load_config", 7)]),
+    )?;
+
+    run_tracing_instrument_apply(
+        &fixture.workspace,
+        &fixture.checklist,
+        Some("fixture_crate"),
+        false,
+    )
+    .into_diagnostic()
+    .wrap_err("apply tracing")?;
+
+    let updated = fs::read_to_string(&fixture.src)
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert!(updated.contains("use tracing::instrument;"), "{updated}");
+    assert!(
+        !updated.contains("#[derive(Debug)]\nuse tracing::instrument;"),
+        "use must not land between derive and the item:\n{updated}"
+    );
+    let use_idx = updated.find("use tracing::instrument;").expect("use");
+    let derive_idx = updated.find("#[derive(Debug)]").expect("derive");
+    assert!(use_idx < derive_idx, "{updated}");
+    Ok(())
+}
+
+#[test]
+fn apply_skips_impl_trait_params() -> miette::Result<()> {
+    let fixture = write_apply_fixture(
+        r#"
+pub struct Artifact;
+
+impl Artifact {
+    pub fn new(crate_name: impl Into<String>) -> Self {
+        let _ = crate_name.into();
+        Self
+    }
+}
+"#,
+        &checklist_for(&[("Artifact::new", 6)]),
+    )?;
+
+    run_tracing_instrument_apply(
+        &fixture.workspace,
+        &fixture.checklist,
+        Some("fixture_crate"),
+        false,
+    )
+    .into_diagnostic()
+    .wrap_err("apply tracing")?;
+
+    let updated = fs::read_to_string(&fixture.src)
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert!(
+        updated.contains("#[instrument(level = \"debug\", skip(crate_name), ret)]"),
+        "{updated}"
+    );
+    assert!(
+        !updated.contains("fields(crate_name"),
+        "impl Trait identity args are unrecordable: {updated}"
+    );
+    Ok(())
+}
+
+#[test]
+fn apply_does_not_duplicate_grouped_tracing_import() -> miette::Result<()> {
+    let fixture = write_apply_fixture(
+        r#"
+use tracing::{debug, instrument};
+
+pub fn scan_tree() {
+    debug!("scan");
+}
+"#,
+        &checklist_for(&[("scan_tree", 4)]),
+    )?;
+
+    run_tracing_instrument_apply(
+        &fixture.workspace,
+        &fixture.checklist,
+        Some("fixture_crate"),
+        false,
+    )
+    .into_diagnostic()
+    .wrap_err("apply tracing")?;
+
+    let updated = fs::read_to_string(&fixture.src)
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert_eq!(updated.matches("use tracing::").count(), 1, "{updated}");
+    assert!(
+        updated.contains("#[instrument(level = \"debug\")]"),
+        "{updated}"
+    );
+    Ok(())
+}
+
+#[test]
+fn apply_uses_path_form_when_instrument_is_a_module() -> miette::Result<()> {
+    let fixture = write_apply_fixture(
+        r#"
+mod instrument;
+
+pub fn scan_tree() {}
+"#,
+        &checklist_for(&[("scan_tree", 4)]),
+    )?;
+
+    run_tracing_instrument_apply(
+        &fixture.workspace,
+        &fixture.checklist,
+        Some("fixture_crate"),
+        false,
+    )
+    .into_diagnostic()
+    .wrap_err("apply tracing")?;
+
+    let updated = fs::read_to_string(&fixture.src)
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert!(
+        updated.contains("#[tracing::instrument(level = \"debug\")]"),
+        "{updated}"
+    );
+    assert!(!updated.contains("use tracing::instrument;"), "{updated}");
     Ok(())
 }

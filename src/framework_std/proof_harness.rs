@@ -14,7 +14,7 @@ pub const AMENABLE_PROOF_HARNESS_PATHS: &[&str] = &[
 ];
 
 /// Scan proof harness files and collect `proof_chain` / `proof_chain_for_verifiers` subjects.
-#[instrument(skip(project_root))]
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn collect_proof_chain_subjects(project_root: &Path) -> CordialResult<HashSet<String>> {
     let mut subjects = HashSet::new();
     for relative in AMENABLE_PROOF_HARNESS_PATHS {

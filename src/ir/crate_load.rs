@@ -11,7 +11,9 @@ use crate::rustdoc::parse_rustdoc_json;
 use crate::session::SessionView;
 use crate::{RustdocLoadView, RustdocLoader};
 
+use tracing::instrument;
 /// Load and enrich one crate into `workspace` when missing.
+#[instrument(level = "info", skip(workspace, session, loaders, enrichers), fields(crate_name = crate_name), err(level = "warn"))]
 pub fn load_crate_ir_if_missing(
     workspace: &mut WorkspaceIr,
     session: &dyn SessionView,
@@ -76,6 +78,7 @@ pub fn load_crate_ir_if_missing(
     Ok(())
 }
 
+#[instrument(level = "info", skip(session), err(level = "warn"))]
 pub fn load_rustdoc_view(
     session: &dyn SessionView,
     target: &CrateTarget,
@@ -98,6 +101,7 @@ pub fn load_rustdoc_view(
     Ok(Box::new(RustdocLoadView::from_inventory(inventory)))
 }
 
+#[instrument(level = "trace")]
 pub fn shadow_dep_rustdoc_path(
     store_root: &Path,
     shadow_crate: &str,
@@ -110,6 +114,7 @@ pub fn shadow_dep_rustdoc_path(
     path.is_file().then_some(path)
 }
 
+#[instrument(level = "debug")]
 pub fn resolve_crate_root(project_root: &Path, crate_name: &str) -> PathBuf {
     let member = project_root.join("crates").join(crate_name);
     if member.join("Cargo.toml").is_file() {
@@ -119,6 +124,7 @@ pub fn resolve_crate_root(project_root: &Path, crate_name: &str) -> PathBuf {
     }
 }
 
+#[instrument(level = "debug")]
 pub fn resolve_crate_target(project_root: &Path, crate_name: &str) -> CrateTarget {
     CrateTarget::new(crate_name, resolve_crate_root(project_root, crate_name))
 }

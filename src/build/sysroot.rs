@@ -15,12 +15,13 @@ use crate::framework_std::FRAMEWORK_STD_SOURCES;
 use crate::store::SysrootCache;
 
 /// Whether `crate_name` is a std-family library documented from the sysroot.
+#[instrument(level = "trace", ret)]
 pub fn is_std_family_crate(crate_name: &str) -> bool {
     FRAMEWORK_STD_SOURCES.contains(&crate_name)
 }
 
 /// Path to `{toolchain}/lib/rustlib/src/rust/library/{crate}/Cargo.toml`.
-#[instrument]
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn resolve_sysroot_library_manifest(crate_name: &str) -> CordialResult<PathBuf> {
     let cargo = resolve_nightly_cargo_binary().ok_or_else(|| {
         CordialError::invariant(
@@ -49,7 +50,7 @@ pub fn resolve_sysroot_library_manifest(crate_name: &str) -> CordialResult<PathB
 }
 
 /// Build rustdoc JSON for std-family sysroot libraries and cache under [`SysrootCache`].
-#[instrument(skip(sysroot, options))]
+#[instrument(level = "debug", skip(options), err(level = "warn"))]
 pub fn build_sysroot_libraries(
     sysroot: &SysrootCache,
     only_crate: Option<&str>,

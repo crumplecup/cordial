@@ -7,6 +7,7 @@ use crate::etiquettes::error_sites::ErrorSiteRecord;
 use crate::etiquettes::{ErrorIrScanLayers, scan_rust_file_syntax};
 use crate::loader::{is_error_module_path, path_has_fixtures, quality_scan_trees};
 
+use tracing::instrument;
 #[cfg(feature = "error_chain")]
 use crate::etiquettes::error_chain::ErrorChainRecord;
 
@@ -29,6 +30,7 @@ pub struct ErrorIrScanReport {
 }
 
 impl ErrorIrScanReport {
+    #[instrument(level = "trace", skip(self))]
     #[cfg(feature = "internal_error_chain")]
     pub fn internal_report(&self, crate_name: &str) -> InternalErrorChainScanReport {
         InternalErrorChainScanReport {
@@ -43,6 +45,7 @@ impl ErrorIrScanReport {
 }
 
 /// Scan all quality source trees once per file for error-handling IR facts.
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_error_ir(
     crate_root: &Path,
     crate_name: &str,

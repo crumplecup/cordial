@@ -9,11 +9,13 @@ use crate::store::StoreLayout;
 
 use super::index::{ContractRecordDump, RegistryDump};
 
+use tracing::instrument;
 const AMENABLE_DUMP_REGISTRY_FEATURES: &str = "creusot,verus";
 
 static CONTRACT_RECORDS_CACHE: Mutex<Option<(PathBuf, Vec<ContractRecordDump>)>> = Mutex::new(None);
 
 /// Load contract records for the unnamed-contract-bound rule.
+#[instrument(level = "info")]
 pub fn fetch_contract_records(workspace_root: &Path, store_root: &Path) -> Vec<ContractRecordDump> {
     let cache_key = workspace_root
         .canonicalize()

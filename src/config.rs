@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// All etiquette knobs loaded from `cordial.toml`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CordialConfig {
@@ -64,6 +65,7 @@ fn default_prefer_root() -> bool {
 }
 
 impl VisibilityThresholds {
+    #[instrument(level = "debug", ret)]
     pub fn new(max_crate_names_for_flat: usize, min_module_names: usize) -> Self {
         Self {
             max_crate_names_for_flat,
@@ -72,6 +74,7 @@ impl VisibilityThresholds {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn with_prefer_root(mut self, prefer_root: bool) -> Self {
         self.prefer_root = prefer_root;
         self
@@ -203,15 +206,18 @@ impl Default for ModularityThresholds {
 }
 
 impl ModularityThresholds {
+    #[instrument(level = "debug")]
     pub fn ratio_meets(numerator: u32, denominator: u32, percent: u32) -> bool {
         denominator > 0 && u64::from(numerator) * 100 >= u64::from(denominator) * u64::from(percent)
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn is_top_heavy_hit(&self, own_lines: u32, subtree_lines: u32) -> bool {
         own_lines >= self.hierarchy_min_lines
             && Self::ratio_meets(own_lines, subtree_lines, self.top_heavy_min_percent)
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn is_lopsided_hit(&self, largest_subtree: u32, sibling_total: u32) -> bool {
         largest_subtree >= self.hierarchy_min_lines
             && Self::ratio_meets(largest_subtree, sibling_total, self.lopsided_min_percent)
@@ -224,6 +230,7 @@ impl ModularityThresholds {
     /// to the lower tail.
     /// Lower tail (`z < -σ`): checklist unless
     /// [`Self::module_size_ignore_lower_tail`] is set.
+    #[instrument(level = "trace", skip(self))]
     pub fn is_module_size_checklist(&self, lines: u32, zscore: Option<f64>) -> bool {
         let Some(zscore) = zscore else {
             return false;
@@ -243,6 +250,7 @@ impl ModularityThresholds {
     /// Inventory-sized files also record shorter bodies so too-long hotspots
     /// can name extract-helper candidates. CSV inventory stays at
     /// [`Self::function_inventory_min_lines`].
+    #[instrument(level = "debug", skip(self))]
     pub fn function_scan_min_lines(&self, file_lines: u32) -> u32 {
         if file_lines >= self.file_inventory_min_lines {
             self.function_hotspot_min_lines
@@ -318,6 +326,7 @@ pub fn load_cordial_config(workspace_root: &Path, store_home: &Path) -> CordialC
 }
 
 /// Same as [`load_cordial_config`] using the session's project root and store home.
+#[instrument(level = "info", skip(session))]
 pub fn load_session_config(session: &dyn SessionView) -> CordialConfig {
     load_cordial_config(session.project_root(), session.store_home())
 }

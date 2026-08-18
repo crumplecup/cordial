@@ -25,6 +25,7 @@ enum ShadowCoverageKind {
     InfrastructureExtra,
 }
 
+#[instrument(level = "trace")]
 pub fn is_shadow_infrastructure_name(bare_name: &str) -> bool {
     INFRA_SUFFIXES
         .iter()
@@ -32,6 +33,7 @@ pub fn is_shadow_infrastructure_name(bare_name: &str) -> bool {
 }
 
 /// Build the consolidated shadow gaps list from multiple per-pair reports.
+#[instrument(level = "debug")]
 pub fn build_shadow_gaps(pairs: &[(&str, &str, &ShadowReport)]) -> Vec<ShadowGapEntry> {
     let mut entries = Vec::new();
 
@@ -223,6 +225,7 @@ pub struct ShadowRowRender {
     pub action: String,
 }
 
+#[instrument(level = "debug")]
 pub fn render_shadow_row(row: &ShadowRow) -> ShadowRowRender {
     let assessment = assess_shadow_row(row);
     let coverage_kind = match classify_shadow_coverage_kind(row) {
@@ -247,7 +250,7 @@ pub fn render_shadow_row(row: &ShadowRow) -> ShadowRowRender {
     }
 }
 
-#[instrument]
+#[instrument(level = "debug", skip(path))]
 pub fn api_family(path: &str) -> String {
     let mut parts = path.split("::");
     let mut family = Vec::with_capacity(3);

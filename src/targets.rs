@@ -13,7 +13,7 @@ use crate::store::project_slug_from_path;
 ///
 /// Uses `cargo metadata` when the project root contains a manifest; otherwise
 /// falls back to a single synthetic target named after the directory.
-#[instrument(skip(filter), fields(project_root = %project_root.display()))]
+#[instrument(level = "debug", skip(filter), err(level = "warn"))]
 pub fn discover_crate_targets(
     project_root: &Path,
     filter: &dyn RunFilter,
@@ -38,7 +38,7 @@ pub fn discover_crate_targets(
 /// each plugin's [`Coverage::targets`](crate::plugin::Coverage::targets) union. Quality-only
 /// runs continue to use workspace members from `cargo metadata`. Combined quality + coverage
 /// runs union coverage IR crate names with all filtered workspace members.
-#[instrument(skip(session, filter, registered_plugins), fields(project_root = %project_root.display()))]
+#[instrument(level = "debug", skip(registered_plugins, session, filter), err(level = "warn"))]
 pub fn discover_run_crate_targets(
     registered_plugins: &[&'static dyn crate::plugin::Plugin],
     project_root: &Path,

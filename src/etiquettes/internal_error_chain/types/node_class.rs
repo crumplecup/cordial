@@ -2,6 +2,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use serde::{Deserialize, Serialize};
 
+use tracing::instrument;
 /// Classification of one node in the crate error type graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum InternalErrorNodeClass {
@@ -12,6 +13,7 @@ pub enum InternalErrorNodeClass {
 }
 
 impl InternalErrorNodeClass {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::InternalLeaf => "ERROR-CHAIN-INTERNAL-LEAF",
@@ -21,6 +23,7 @@ impl InternalErrorNodeClass {
         }
     }
 
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "ERROR-CHAIN-INTERNAL-LEAF" => Some(Self::InternalLeaf),

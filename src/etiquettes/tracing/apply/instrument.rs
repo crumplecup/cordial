@@ -12,11 +12,30 @@ pub(super) enum GapApplyOutcome {
     Unresolved,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum InstrumentAttrStyle {
+    Short,
+    Path,
+    CratePath,
+}
+
+#[instrument(skip(lines))]
+pub(super) fn attr_style(lines: &[String]) -> InstrumentAttrStyle {
+    if file_declares_mod(lines, "tracing") {
+        InstrumentAttrStyle::CratePath
+    } else if file_declares_mod(lines, "instrument") {
+        InstrumentAttrStyle::Path
+    } else {
+        InstrumentAttrStyle::Short
+    }
+}
+
 #[instrument(skip(lines, gap, recipe))]
 pub(super) fn apply_gap(
     lines: &mut Vec<String>,
     gap: &InstrumentGap,
     recipe: &InstrumentRecipe,
+    style: InstrumentAttrStyle,
 ) -> GapApplyOutcome {
     let Some(fn_idx) = find_fn_line(lines, gap.line, &gap.qualified_name) else {
         tracing::warn!(
@@ -28,7 +47,7 @@ pub(super) fn apply_gap(
         return GapApplyOutcome::Unresolved;
     };
 
-    let attr = recipe.as_attribute();
+    let attr = recipe_attr(recipe, style);
     if let Some((start, end)) = instrument_attr_range(lines, fn_idx) {
         if attrs_match_recipe(&lines[start..=end], &attr) {
             return GapApplyOutcome::AlreadyInstrumented;
@@ -48,6 +67,14 @@ pub(super) fn apply_gap(
     let insert_at = insert_after_track_caller(lines, &attr_indices).unwrap_or(fn_idx);
     lines.insert(insert_at, format!("{indent}{attr}"));
     GapApplyOutcome::Applied
+}
+
+fn recipe_attr(recipe: &InstrumentRecipe, style: InstrumentAttrStyle) -> String {
+    match style {
+        InstrumentAttrStyle::Short => recipe.as_attribute(),
+        InstrumentAttrStyle::Path => recipe.as_path_attribute(),
+        InstrumentAttrStyle::CratePath => recipe.as_crate_path_attribute(),
+    }
 }
 
 #[instrument(skip(records, gap))]
@@ -81,24 +108,23 @@ fn file_matches(record_file: &str, gap_file: &str) -> bool {
 #[instrument(skip(lines, qualified_name))]
 fn find_fn_line(lines: &[String], target_line: u32, qualified_name: &str) -> Option<usize> {
     let idx = target_line.saturating_sub(1) as usize;
-    let start = idx.saturating_sub(12);
-    let end = (idx + 12).min(lines.len());
     let expected_name = local_fn_name(qualified_name);
 
-    let mut candidates: Vec<(usize, bool, usize)> = Vec::new();
-    for (i, line) in lines.iter().enumerate().skip(start).take(end - start) {
+    let mut named: Vec<(usize, usize)> = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
         if line.trim().starts_with("//") {
             continue;
         }
         let Some(name) = extract_fn_name(line) else {
             continue;
         };
-        let name_mismatch = name != expected_name;
-        candidates.push((i.abs_diff(idx), name_mismatch, i));
+        if name != expected_name {
+            continue;
+        }
+        named.push((i.abs_diff(idx), i));
     }
-
-    candidates.sort_by(|left, right| left.0.cmp(&right.0).then(left.1.cmp(&right.1)));
-    candidates.first().map(|candidate| candidate.2)
+    named.sort_by_key(|candidate| candidate.0);
+    named.first().map(|candidate| candidate.1)
 }
 
 #[instrument(skip(qualified_name))]
@@ -168,6 +194,7 @@ fn attrs_match_recipe(attr_lines: &[String], recipe_attr: &str) -> bool {
 fn normalize_attr(text: &str) -> String {
     text.split_whitespace()
         .collect::<String>()
+        .replace("#[::tracing::instrument", "#[instrument")
         .replace("#[tracing::instrument", "#[instrument")
 }
 
@@ -188,10 +215,22 @@ fn leading_indent(line: &str) -> String {
         .collect()
 }
 
+fn file_declares_mod(lines: &[String], name: &str) -> bool {
+    lines.iter().any(|line| is_mod_decl(line.trim(), name))
+}
+
+fn is_mod_decl(stripped: &str, name: &str) -> bool {
+    let rest = stripped
+        .strip_prefix("pub(crate) ")
+        .or_else(|| stripped.strip_prefix("pub(super) "))
+        .or_else(|| stripped.strip_prefix("pub "))
+        .unwrap_or(stripped);
+    rest == format!("mod {name};") || rest.starts_with(&format!("mod {name} {{"))
+}
+
 #[instrument(skip(lines))]
 pub(super) fn ensure_use_instrument(lines: Vec<String>) -> Vec<String> {
-    let joined = lines.join("\n");
-    if joined.contains("use tracing::instrument;") || joined.contains("#[tracing::instrument") {
+    if attr_style(&lines) != InstrumentAttrStyle::Short || tracing_use_includes_instrument(&lines) {
         return lines;
     }
 
@@ -199,12 +238,14 @@ pub(super) fn ensure_use_instrument(lines: Vec<String>) -> Vec<String> {
     let mut i = 0usize;
     while i < lines.len() {
         let stripped = lines[i].trim();
-        if stripped.starts_with("#!") || stripped.starts_with("//!") || stripped.is_empty() {
-            insert_at = i + 1;
-            i += 1;
-            continue;
+        if stripped.starts_with("///") || stripped.starts_with("#[") {
+            break;
         }
-        if stripped.starts_with("#[") {
+        if stripped.starts_with("#!")
+            || stripped.starts_with("//!")
+            || stripped.starts_with("//")
+            || stripped.is_empty()
+        {
             insert_at = i + 1;
             i += 1;
             continue;
@@ -223,4 +264,41 @@ pub(super) fn ensure_use_instrument(lines: Vec<String>) -> Vec<String> {
     let mut out = lines;
     out.insert(insert_at, "use tracing::instrument;".to_string());
     out
+}
+
+fn tracing_use_includes_instrument(lines: &[String]) -> bool {
+    let mut i = 0usize;
+    while i < lines.len() {
+        let stripped = lines[i].trim();
+        if stripped.starts_with("use tracing::") {
+            let mut block = stripped.to_string();
+            while i < lines.len() && !lines[i].contains(';') {
+                i += 1;
+                if i < lines.len() {
+                    block.push(' ');
+                    block.push_str(lines[i].trim());
+                }
+            }
+            if import_names_include_instrument(&block) {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+fn import_names_include_instrument(block: &str) -> bool {
+    if block.contains("use tracing::instrument;") || block.contains("use tracing::instrument as ") {
+        return true;
+    }
+    let Some(start) = block.find('{') else {
+        return false;
+    };
+    let Some(end) = block[start + 1..].find('}') else {
+        return false;
+    };
+    block[start + 1..start + 1 + end]
+        .split(',')
+        .any(|name| name.trim() == "instrument")
 }

@@ -7,6 +7,7 @@ use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
 
+use tracing::instrument;
 /// Stable rule identifier for an allow-attribute probe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AllowRuleId {
@@ -15,12 +16,14 @@ pub enum AllowRuleId {
 }
 
 impl AllowRuleId {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Attr001 => "ALLOW-ATTR-001",
         }
     }
 
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "ALLOW-ATTR-001" => Some(Self::Attr001),
@@ -41,6 +44,7 @@ pub struct AllowRule {
 }
 
 impl AllowRule {
+    #[instrument(level = "debug", ret)]
     pub fn new(rule_id: AllowRuleId) -> Self {
         Self { rule_id }
     }

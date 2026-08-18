@@ -12,7 +12,10 @@ mod instrument;
 mod parse;
 
 use super::scan::scan_rust_source;
-use instrument::{GapApplyOutcome, apply_gap, ensure_use_instrument, recipe_for_gap};
+use instrument::{
+    GapApplyOutcome, InstrumentAttrStyle, apply_gap, attr_style, ensure_use_instrument,
+    recipe_for_gap,
+};
 
 pub use parse::{parse_tracing_instrument_checklist, parse_tracing_instrument_checklist_text};
 
@@ -35,7 +38,7 @@ pub struct InstrumentApplySummary {
 }
 
 /// Patch source files listed in the tracing instrument checklist.
-#[tracing::instrument(skip(project_root, checklist_path, only_crate))]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
 pub fn run_tracing_instrument_apply(
     project_root: &Path,
     checklist_path: &Path,
@@ -131,6 +134,7 @@ pub fn run_tracing_instrument_apply(
         let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
         dedupe_gaps(&mut file_gaps);
         file_gaps.sort_by_key(|right| std::cmp::Reverse(right.line));
+        let style = attr_style(&lines);
 
         let mut file_changed = false;
         for gap in file_gaps {
@@ -144,7 +148,7 @@ pub fn run_tracing_instrument_apply(
                 summary.unresolved += 1;
                 continue;
             };
-            match apply_gap(&mut lines, &gap, recipe) {
+            match apply_gap(&mut lines, &gap, recipe, style) {
                 GapApplyOutcome::Applied => {
                     summary.changed_functions += 1;
                     file_changed = true;
@@ -159,7 +163,9 @@ pub fn run_tracing_instrument_apply(
         }
 
         if file_changed {
-            lines = ensure_use_instrument(lines);
+            if style == InstrumentAttrStyle::Short {
+                lines = ensure_use_instrument(lines);
+            }
             if dry_run {
                 tracing::info!(path = %path.display(), "dry run: would update file");
             } else {

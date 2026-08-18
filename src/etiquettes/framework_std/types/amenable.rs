@@ -5,6 +5,7 @@ use crate::objects::{Disposition, Finding, FindingSink, IrAnchor, NodeAnchor, Ru
 
 use super::AMENABLE_STD_CATEGORY;
 
+use tracing::instrument;
 #[derive(Debug, Clone, Copy)]
 pub struct AmenableStdRule;
 
@@ -136,6 +137,7 @@ impl Finding for AmenableStdRowFinding {
     }
 }
 
+#[instrument(level = "debug")]
 pub fn amenable_row_disposition(status: AmenableStdStatus) -> Disposition {
     match status {
         AmenableStdStatus::Missing | AmenableStdStatus::Partial => Disposition::Open,
@@ -144,6 +146,7 @@ pub fn amenable_row_disposition(status: AmenableStdStatus) -> Disposition {
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 pub fn amenable_report_from_findings(
     findings: &[&dyn Finding],
     include_nightly: bool,
@@ -232,6 +235,7 @@ pub fn amenable_report_from_findings(
     })
 }
 
+#[instrument(level = "debug", skip(findings))]
 pub fn amenable_gaps_from_findings(findings: &[&dyn Finding]) -> Vec<AmenableStdGapEntry> {
     findings
         .iter()

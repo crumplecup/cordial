@@ -55,7 +55,6 @@ impl Assessor for TracingAssessor {
                 RECIPE_DELTA_LABEL => {
                     let present = present_instrument(ir, parsed.anchor.0).unwrap_or_default();
                     let kinds = recipe_deltas(
-                        ir,
                         &parsed.recipe,
                         &present,
                         &DeltaContext {

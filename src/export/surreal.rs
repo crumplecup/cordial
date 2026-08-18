@@ -3,6 +3,7 @@ use serde_json::Value;
 use crate::error::CordialResult;
 use crate::ir::{CrateIr, CrateIrSnapshot, EdgeKind, NodeKind};
 
+use tracing::instrument;
 /// Agent-friendly graph export shaped for SurrealDB ingestion.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SurrealGraphExport {
@@ -29,6 +30,7 @@ pub struct SurrealEdge {
 }
 
 impl SurrealGraphExport {
+    #[instrument(level = "debug", ret)]
     pub fn from_snapshot(snapshot: &CrateIrSnapshot) -> Self {
         let nodes = snapshot
             .nodes
@@ -59,10 +61,12 @@ impl SurrealGraphExport {
         }
     }
 
+    #[instrument(level = "debug", err(level = "warn"))]
     pub fn from_crate_ir(ir: &CrateIr) -> CordialResult<Self> {
         Ok(Self::from_snapshot(&ir.snapshot()?))
     }
 
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
     pub fn to_json_pretty(&self) -> CordialResult<String> {
         Ok(serde_json::to_string_pretty(self)?)
     }
@@ -97,6 +101,7 @@ fn attrs_to_json(attrs: &[(String, Value)]) -> Value {
 }
 
 /// Build SurrealDB-oriented CREATE statements for scripted import.
+#[instrument(level = "debug")]
 pub fn surreal_statements(export: &SurrealGraphExport) -> Vec<String> {
     let mut statements = Vec::new();
     for node in &export.nodes {

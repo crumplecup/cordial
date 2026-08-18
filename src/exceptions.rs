@@ -33,14 +33,17 @@ pub struct ExceptionSet {
 }
 
 impl ExceptionSet {
+    #[instrument(level = "debug", ret)]
     pub fn from_entries(entries: Vec<ExceptionEntry>) -> Self {
         Self { entries }
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
+    #[instrument(level = "trace", skip(self, finding))]
     pub fn match_reason(&self, finding: &dyn Finding) -> Option<&str> {
         self.entries
             .iter()
@@ -96,6 +99,7 @@ pub struct FilteredFinding {
 }
 
 impl FilteredFinding {
+    #[instrument(level = "debug", skip(inner, reason))]
     pub fn suppressed(inner: Box<dyn Finding>, reason: impl Into<String>) -> Self {
         Self {
             inner,
@@ -130,7 +134,7 @@ impl Finding for FilteredFinding {
 ///
 /// Reads `{store}/exceptions/{etiquette}/{crate}.json` and, when present,
 /// merges entries from the elicit_doc alias `{store}/quality/patches/{etiquette}/{crate}.json`.
-#[instrument(skip(store))]
+#[instrument(level = "info", fields(crate_name = crate_name), err(level = "warn"))]
 pub fn load_exceptions(
     store: &StoreLayout,
     etiquette_id: &str,
@@ -160,7 +164,7 @@ fn parse_exception_file(path: &Path) -> CordialResult<Vec<ExceptionEntry>> {
 }
 
 /// Load exception sets for all selected etiquettes.
-#[instrument(skip(store, etiquette_ids))]
+#[instrument(level = "info", fields(crate_name = crate_name), err(level = "warn"))]
 pub fn load_exception_sets(
     store: &StoreLayout,
     etiquette_ids: &[&str],
@@ -177,7 +181,7 @@ pub fn load_exception_sets(
 }
 
 /// Apply loaded exception sets, wrapping matching findings as suppressed.
-#[instrument(skip(findings, sets))]
+#[instrument(level = "debug", skip(findings))]
 pub fn apply_exception_sets(
     findings: Vec<Box<dyn Finding>>,
     sets: &HashMap<String, ExceptionSet>,

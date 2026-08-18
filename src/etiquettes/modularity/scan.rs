@@ -12,6 +12,8 @@ use crate::loader::module_path_from_src_file;
 
 use super::types::{ModularityKind, ModularitySiteRecord, ModularityThresholds};
 
+use tracing::instrument;
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_source_tree(
     src_root: &Path,
     crate_root: &Path,
@@ -49,6 +51,7 @@ pub fn scan_source_tree(
     Ok(findings)
 }
 
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,

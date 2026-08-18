@@ -7,7 +7,9 @@ use crate::error::CordialResult;
 
 use super::types::{InternalErrorComplianceFinding, InternalErrorComplianceReport};
 
+use tracing::instrument;
 /// Scan all `src/**/*.rs` for non-compliant error handling patterns.
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_internal_error_compliance(
     crate_root: &Path,
     crate_name: &str,
@@ -54,6 +56,7 @@ pub fn scan_crate_internal_error_compliance(
 }
 
 /// Parse one source file (used by tests).
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_compliance_rust_source(
     source: &str,
     file: &Path,
@@ -68,6 +71,7 @@ pub fn scan_compliance_rust_source(
 }
 
 /// Scan a pre-parsed file for internal error compliance (via unified error IR visitor).
+#[instrument(level = "debug", skip(syntax, file))]
 pub fn scan_compliance_rust_syntax(
     syntax: &syn::File,
     file: &Path,

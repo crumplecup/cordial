@@ -1,3 +1,4 @@
+use tracing::instrument;
 mod populate;
 mod scan_roots;
 mod source;
@@ -22,6 +23,7 @@ pub struct CrateTarget {
 }
 
 impl CrateTarget {
+    #[instrument(level = "debug", skip(crate_name, crate_root), ret)]
     pub fn new(crate_name: impl Into<String>, crate_root: impl Into<PathBuf>) -> Self {
         Self {
             crate_name: crate_name.into(),
@@ -30,6 +32,7 @@ impl CrateTarget {
     }
 }
 
+#[instrument(level = "debug", skip(file))]
 pub fn module_path_from_src_file(src_root: &Path, file: &Path) -> Vec<String> {
     let Ok(rel) = file.strip_prefix(src_root) else {
         return Vec::new();

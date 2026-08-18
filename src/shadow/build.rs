@@ -26,6 +26,7 @@ use super::verification::{
     skip(target, shadow, shadow_complete, shadow_prereqs, maps),
     fields(target = %target.crate_name, shadow = %shadow.crate_name)
 )]
+#[instrument(level = "debug")]
 pub fn build_shadow_report(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
@@ -329,6 +330,7 @@ fn diff_type_methods(
 }
 
 /// Convenience wrapper that derives shadow complete/prereqs from the shadow inventory.
+#[instrument(level = "debug")]
 pub fn build_shadow_report_from_inventories(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
@@ -336,6 +338,7 @@ pub fn build_shadow_report_from_inventories(
     build_shadow_report_from_inventories_with_maps(target, shadow, &ShadowBuildMaps::empty())
 }
 
+#[instrument(level = "debug")]
 pub fn build_shadow_report_from_inventories_with_maps(
     target: &RustdocInventory,
     shadow: &RustdocInventory,

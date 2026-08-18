@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::EdgeWeight;
 use super::node::{NodeId, NodeWeight};
 
+use tracing::instrument;
 pub type AttrKey = String;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,10 +17,12 @@ pub struct AttrValue(pub serde_json::Value);
 pub struct QualifiedPath(pub Vec<String>);
 
 impl QualifiedPath {
+    #[instrument(level = "debug", skip(segments), ret)]
     pub fn from_segments(segments: impl IntoIterator<Item = impl Into<String>>) -> Self {
         Self(segments.into_iter().map(Into::into).collect())
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(&self) -> String {
         self.0.join("::")
     }
@@ -39,6 +42,7 @@ pub struct IrIndexes {
 }
 
 impl IrIndexes {
+    #[instrument(level = "debug", skip(self))]
     pub fn index_node(&mut self, node: NodeId, weight: &NodeWeight) {
         let kind_key = format!("{:?}", weight.kind);
         self.by_kind.entry(kind_key).or_default().push(node);
@@ -51,6 +55,7 @@ impl IrIndexes {
     /// Rebuild the qualified-path index from all nodes in the graph.
     ///
     /// When multiple nodes share a path, prefer rustdoc inventory nodes over source nodes.
+    #[instrument(level = "trace", skip(self))]
     pub fn rebuild_by_path(
         &mut self,
         graph: &petgraph::stable_graph::StableDiGraph<NodeWeight, EdgeWeight>,

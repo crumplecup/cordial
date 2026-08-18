@@ -1,6 +1,7 @@
 use std::fmt;
 use std::path::Path;
 
+use tracing::instrument;
 /// Source location for findings and markers.
 pub trait SourceSpan: Send + Sync {
     fn file(&self) -> &Path;
@@ -31,6 +32,7 @@ pub struct FileSpan {
 }
 
 impl FileSpan {
+    #[instrument(level = "debug", skip(file), ret)]
     pub fn new(file: impl Into<std::path::PathBuf>, line: u32, column: u32) -> Self {
         Self {
             file: file.into(),

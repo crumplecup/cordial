@@ -31,6 +31,7 @@ pub struct ShadowIrItem {
 }
 
 impl ShadowIrItem {
+    #[instrument(level = "trace", skip(self))]
     pub fn to_rustdoc_item(&self) -> RustdocItem {
         RustdocItem {
             path: self.path.clone(),
@@ -42,6 +43,7 @@ impl ShadowIrItem {
 }
 
 /// Collect shadow-relevant items from one crate's graph IR.
+#[instrument(level = "debug", skip(workspace), err(level = "warn"))]
 pub fn collect_shadow_items_from_workspace(
     workspace: &WorkspaceIr,
     crate_name: &str,
@@ -52,6 +54,7 @@ pub fn collect_shadow_items_from_workspace(
     Ok(collect_shadow_items_from_ir(ir))
 }
 
+#[instrument(level = "debug")]
 pub fn collect_shadow_items_from_ir(ir: &crate::ir::CrateIr) -> Vec<ShadowIrItem> {
     static ALL_NODES: BasicQuery = BasicQuery {
         node_kinds: Vec::new(),
@@ -109,6 +112,7 @@ pub fn collect_shadow_items_from_ir(ir: &crate::ir::CrateIr) -> Vec<ShadowIrItem
 }
 
 /// Match upstream ↔ shadow items and record [`EdgeKind::Mirrors`] cross-crate edges.
+#[instrument(level = "debug", skip(workspace), err(level = "warn"))]
 pub fn materialize_cross_crate_shadow_mirrors(
     workspace: &mut WorkspaceIr,
     upstream: &str,
@@ -182,7 +186,7 @@ pub fn materialize_cross_crate_shadow_mirrors(
 }
 
 /// Build one upstream ↔ shadow mirror report from workspace graph IR.
-#[instrument(skip(workspace), fields(upstream, shadow))]
+#[instrument(level = "debug", skip(workspace), err(level = "warn"))]
 pub fn build_shadow_pair_report_from_workspace_ir(
     workspace: &WorkspaceIr,
     upstream: &str,

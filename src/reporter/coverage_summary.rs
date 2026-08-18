@@ -6,6 +6,7 @@ use crate::objects::{Artifact, Finding};
 use crate::plugin::{Plugin, PluginCategory, plugins_in_category, selected_plugins};
 use crate::session::{RunFilter, SessionView};
 
+use tracing::instrument;
 /// One registered coverage plugin section in the workspace rollup.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoveragePluginSummary {
@@ -20,7 +21,17 @@ pub struct CoverageSummary {
     pub extra_artifacts: Vec<Box<dyn Artifact>>,
 }
 
+impl std::fmt::Debug for CoverageSummary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CoverageSummary")
+            .field("plugins", &self.plugins)
+            .field("extra_artifacts_len", &self.extra_artifacts.len())
+            .finish()
+    }
+}
+
 /// Build a coverage rollup for the selected coverage plugins in this run.
+#[instrument(level = "debug", skip(registered_plugins, filter, session, findings, workspace), err(level = "warn"))]
 pub fn build_coverage_summary(
     registered_plugins: &[&'static dyn Plugin],
     resolved_etiquette_ids: &[&str],
@@ -119,6 +130,7 @@ fn section_for_plugin(
     }
 }
 
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn render_coverage_summary_markdown(summary: &CoverageSummary) -> CordialResult<String> {
     let mut out = String::new();
     writeln!(out, "# Coverage summary")?;
@@ -146,6 +158,7 @@ pub fn render_coverage_summary_markdown(summary: &CoverageSummary) -> CordialRes
     Ok(out)
 }
 
+#[instrument(level = "debug", skip(registered_plugins, filter))]
 pub fn coverage_plugins_for_run(
     registered_plugins: &[&'static dyn Plugin],
     filter: &dyn RunFilter,

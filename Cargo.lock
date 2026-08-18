@@ -318,6 +318,7 @@ dependencies = [
  "derive_more",
  "miette",
  "tempfile",
+ "tracing",
 ]
 
 [[package]]

@@ -16,7 +16,9 @@ use super::types::{
     InternalErrorTypeProbeId,
 };
 
+use tracing::instrument;
 /// Scan `src/error.rs` and `src/error/**` for the internal error type graph.
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_internal_error_type_graph(
     crate_root: &Path,
     crate_name: &str,
@@ -57,6 +59,7 @@ pub fn scan_crate_internal_error_type_graph(
 }
 
 /// Scan one error-module source file (used by tests).
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_error_rust_source(
     source: &str,
     file: &Path,
@@ -72,6 +75,7 @@ pub fn scan_error_rust_source(
 }
 
 /// Collect raw type-graph nodes from a pre-parsed error-module file.
+#[instrument(level = "debug", skip(syntax, file))]
 pub(crate) fn scan_error_rust_syntax_raw(
     syntax: &syn::File,
     file: &Path,
@@ -295,6 +299,7 @@ impl<'ast> Visit<'ast> for TypeGraphScanVisitor {
     }
 }
 
+#[instrument(level = "debug")]
 pub(crate) fn finalize_type_graph(
     raw_nodes: Vec<RawTypeNode>,
     crate_name: &str,
@@ -398,6 +403,7 @@ fn extract_source_return_type(item_impl: &ItemImpl) -> Option<String> {
     None
 }
 
+#[instrument(level = "debug", skip(file))]
 pub(crate) fn module_path_from_error_file(error_root: &Path, file: &Path) -> Vec<String> {
     let Ok(rel) = file.strip_prefix(error_root) else {
         return Vec::new();

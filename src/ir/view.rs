@@ -1,5 +1,6 @@
 use crate::error::CordialResult;
 use crate::ir::{CrateIr, EdgeKind, NodeId, NodeKind, NodeWeight};
+use tracing::instrument;
 #[cfg(feature = "impl_coverage")]
 use crate::rustdoc::WrapperCoverageMap;
 
@@ -37,10 +38,12 @@ pub struct NodeRef<'a> {
 }
 
 impl<'a> NodeRef<'a> {
+    #[instrument(level = "trace", skip(self))]
     pub fn kind(&self) -> &NodeKind {
         &self.weight.kind
     }
 
+    #[instrument(level = "trace", skip(self, key))]
     pub fn attr(&self, key: &str) -> Option<&serde_json::Value> {
         self.weight.attr(key)
     }

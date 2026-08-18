@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use tracing::instrument;
 /// Metadata for one `cargo rustdoc` invocation (elicit_doc-compatible shape).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildArtifact {
@@ -35,6 +36,7 @@ pub struct DocFingerprint {
 }
 
 impl BuildArtifact {
+    #[instrument(level = "debug", skip(crate_name))]
     pub fn workspace_member(crate_name: impl Into<String>, rustdoc_json: PathBuf) -> Self {
         let crate_name = crate_name.into();
         Self {
@@ -50,6 +52,7 @@ impl BuildArtifact {
         }
     }
 
+    #[instrument(level = "debug", skip(crate_name))]
     pub fn sysroot_library(crate_name: impl Into<String>, rustdoc_json: PathBuf) -> Self {
         let crate_name = crate_name.into();
         Self {
@@ -65,6 +68,7 @@ impl BuildArtifact {
         }
     }
 
+    #[instrument(level = "debug", skip(shadow_crate, upstream_crate))]
     pub fn shadow_dep(
         shadow_crate: impl Into<String>,
         upstream_crate: impl Into<String>,

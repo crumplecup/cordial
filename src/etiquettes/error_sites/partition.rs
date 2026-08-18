@@ -2,6 +2,7 @@
 
 use super::types::{ErrorOriginClass, ErrorSiteKind, ErrorSiteScanRow};
 
+use tracing::instrument;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PartitionedErrorSiteRow {
     pub crate_name: String,
@@ -16,6 +17,7 @@ pub struct PartitionedErrorSiteRow {
     pub rationale: String,
 }
 
+#[instrument(level = "debug")]
 pub fn partition_error_site_records(
     records: &[ErrorSiteScanRow],
     crate_name: &str,
@@ -26,6 +28,7 @@ pub fn partition_error_site_records(
         .collect()
 }
 
+#[instrument(level = "debug")]
 pub fn partition_error_site_row(
     finding: &ErrorSiteScanRow,
     crate_name: &str,

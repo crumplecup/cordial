@@ -69,6 +69,7 @@ impl TargetProvider for ElicitationTargetProvider {
 }
 
 /// Tracked shadow targets whose mirror crate exists in this workspace.
+#[instrument(level = "debug")]
 pub fn active_tracked_targets(
     workspace_members: &HashSet<String>,
 ) -> Vec<&'static ElicitationTrackedTarget> {
@@ -79,7 +80,7 @@ pub fn active_tracked_targets(
 }
 
 /// Active upstream ↔ shadow pairs for the workspace at `project_root`.
-#[instrument(skip(filter), fields(project_root = %project_root.display()))]
+#[instrument(level = "debug", skip(filter), err(level = "warn"))]
 pub fn discover_active_shadow_pairs(
     project_root: &std::path::Path,
     filter: &dyn RunFilter,
@@ -115,6 +116,7 @@ fn filter_shadow_pairs(pairs: Vec<ShadowPair>, filter: &dyn RunFilter) -> Vec<Sh
 }
 
 /// Look up a tracked target by upstream crate name.
+#[instrument(level = "debug")]
 pub fn tracked_target_for_upstream(upstream: &str) -> Option<&'static ElicitationTrackedTarget> {
     ELICITATION_TRACKED_TARGETS
         .iter()
@@ -122,6 +124,7 @@ pub fn tracked_target_for_upstream(upstream: &str) -> Option<&'static Elicitatio
 }
 
 /// Look up a tracked target by shadow member crate name.
+#[instrument(level = "debug")]
 pub fn tracked_target_for_shadow(shadow: &str) -> Option<&'static ElicitationTrackedTarget> {
     ELICITATION_TRACKED_TARGETS
         .iter()
@@ -129,11 +132,13 @@ pub fn tracked_target_for_shadow(shadow: &str) -> Option<&'static ElicitationTra
 }
 
 /// Returns `true` when `crate_name` is an interface crate rather than an upstream mirror.
+#[instrument(level = "trace", ret)]
 pub fn is_interface_shadow_crate(crate_name: &str) -> bool {
     ELICITATION_INTERFACE_SHADOW_CRATES.contains(&crate_name)
 }
 
 /// Compare workspace members against the single tracked-target list.
+#[instrument(level = "debug")]
 pub fn compare_tracked_target_roster(workspace_members: &[String]) -> TrackedTargetRosterGap {
     let configured_shadows: HashSet<&str> = ELICITATION_TRACKED_TARGETS
         .iter()

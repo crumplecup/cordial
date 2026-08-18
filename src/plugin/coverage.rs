@@ -1,6 +1,7 @@
 //! Coverage plugin semantics — shared supertrait for trait-impl coverage profiles.
 
 use crate::error::CordialResult;
+use tracing::instrument;
 #[cfg(feature = "impl_coverage")]
 use crate::etiquettes::impl_coverage::ImplGapKind;
 use crate::loader::CrateTarget;
@@ -27,6 +28,7 @@ pub struct CoverageTarget {
 }
 
 impl CoverageTarget {
+    #[instrument(level = "debug", skip(crate_name))]
     pub fn workspace_member(crate_name: impl Into<String>) -> Self {
         Self {
             kind: CoverageTargetKind::WorkspaceMember,
@@ -35,6 +37,7 @@ impl CoverageTarget {
         }
     }
 
+    #[instrument(level = "debug", skip(crate_name))]
     pub fn upstream_dep(crate_name: impl Into<String>) -> Self {
         Self {
             kind: CoverageTargetKind::UpstreamDep,
@@ -43,6 +46,7 @@ impl CoverageTarget {
         }
     }
 
+    #[instrument(level = "debug", skip(upstream, shadow))]
     pub fn shadow_pair(upstream: impl Into<String>, shadow: impl Into<String>) -> Self {
         Self {
             kind: CoverageTargetKind::ShadowPair,
@@ -51,11 +55,13 @@ impl CoverageTarget {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn matches_crate_filter(&self, crate_name: &str) -> bool {
         self.crate_name == crate_name || self.shadow_crate.as_deref() == Some(crate_name)
     }
 
     /// Crate names that need per-crate IR built for this coverage target.
+    #[instrument(level = "debug", skip(self))]
     pub fn ir_crate_names(&self) -> Vec<String> {
         match self.kind {
             CoverageTargetKind::StdInventory => Vec::new(),
@@ -101,6 +107,7 @@ pub struct GapContext {
 }
 
 impl GapContext {
+    #[instrument(level = "trace", skip(self))]
     #[cfg(feature = "impl_coverage")]
     pub fn gap_kind(&self) -> Option<ImplGapKind> {
         classify_elicit_complete_gap(&self.prereqs)
@@ -156,6 +163,7 @@ pub trait Coverage: Plugin {
     }
 }
 
+#[instrument(level = "debug")]
 #[cfg(feature = "impl_coverage")]
 pub fn classify_elicit_complete_gap(prereqs: &TraitPrereqs) -> Option<ImplGapKind> {
     if prereqs.elicit_complete {

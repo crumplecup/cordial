@@ -1,5 +1,6 @@
 use crate::objects::{Disposition, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan};
 
+use tracing::instrument;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImplGapKind {
     MissingOurTraits,
@@ -9,6 +10,7 @@ pub enum ImplGapKind {
 }
 
 impl ImplGapKind {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::MissingOurTraits => "MissingOurTraits",

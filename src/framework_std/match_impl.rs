@@ -10,7 +10,7 @@ use crate::error::CordialResult;
 use crate::rustdoc::{RustdocInventory, parse_rustdoc_json};
 
 /// Collect canonical type paths that have `impl {trait_name} for T` in a crate's rustdoc JSON.
-#[instrument(skip(json_path), fields(path = %json_path.display(), trait_name))]
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn collect_trait_impl_paths_from_json(
     json_path: &Path,
     crate_name: &str,
@@ -21,6 +21,7 @@ pub fn collect_trait_impl_paths_from_json(
 }
 
 /// Collect trait impl type paths from parsed rustdoc inventory.
+#[instrument(level = "debug", skip(inventory))]
 pub fn collect_trait_impl_paths(inventory: &RustdocInventory, trait_name: &str) -> HashSet<String> {
     let mut paths = HashSet::new();
     for item in inventory.krate.index.values() {
@@ -52,6 +53,7 @@ fn impl_type_path(krate: &Crate, ty: &Type) -> Option<String> {
 }
 
 /// Strip generic/lifetime arguments from a type path string for inventory matching.
+#[instrument(level = "debug")]
 pub fn type_path_without_generics(type_str: &str) -> String {
     let mut depth = 0i32;
     for (index, ch) in type_str.char_indices() {
@@ -66,7 +68,7 @@ pub fn type_path_without_generics(type_str: &str) -> String {
 }
 
 /// Whether `type_path` from a std inventory row has a matching trait impl path.
-#[instrument(skip(impl_paths))]
+#[instrument(level = "debug")]
 pub fn type_has_trait_impl(impl_paths: &HashSet<String>, type_path: &str) -> bool {
     if impl_paths.contains(type_path) {
         return true;

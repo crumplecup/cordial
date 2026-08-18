@@ -6,6 +6,7 @@ use crate::rustdoc::{ElicitCompleteSet, RustdocItem, TraitPrereqs};
 
 use super::types::{ShadowRow, ShadowStatus};
 
+use tracing::instrument;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShadowImplStatus {
     Complete,
@@ -14,6 +15,7 @@ pub enum ShadowImplStatus {
 }
 
 impl ShadowImplStatus {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Complete => "Complete",
@@ -23,6 +25,7 @@ impl ShadowImplStatus {
     }
 }
 
+#[instrument(level = "debug")]
 pub fn shadow_impl_status(item: &RustdocItem, complete: &ElicitCompleteSet) -> ShadowImplStatus {
     if !item.kind.is_type() {
         return ShadowImplStatus::Missing;
@@ -38,6 +41,7 @@ pub fn shadow_impl_status(item: &RustdocItem, complete: &ElicitCompleteSet) -> S
     }
 }
 
+#[instrument(level = "debug")]
 pub fn shadow_can_be_direct(item: &RustdocItem, prereqs: &HashMap<String, TraitPrereqs>) -> String {
     if !item.kind.is_type() {
         return String::new();
@@ -48,6 +52,7 @@ pub fn shadow_can_be_direct(item: &RustdocItem, prereqs: &HashMap<String, TraitP
         .unwrap_or_else(|| "false".to_string())
 }
 
+#[instrument(level = "debug")]
 pub fn shadow_missing_external_traits(
     item: &RustdocItem,
     prereqs: &HashMap<String, TraitPrereqs>,
@@ -61,6 +66,7 @@ pub fn shadow_missing_external_traits(
         .unwrap_or_else(|| "Serialize(absent);Deserialize(absent);JsonSchema(absent)".to_string())
 }
 
+#[instrument(level = "debug")]
 pub fn shadow_missing_our_traits(
     item: &RustdocItem,
     prereqs: &HashMap<String, TraitPrereqs>,
@@ -83,6 +89,7 @@ pub fn shadow_missing_our_traits(
         })
 }
 
+#[instrument(level = "debug")]
 pub fn shadow_verification_gap(row: &ShadowRow) -> bool {
     if !matches!(row.status, ShadowStatus::Covered | ShadowStatus::Drifted)
         || !row.item_kind.is_type()

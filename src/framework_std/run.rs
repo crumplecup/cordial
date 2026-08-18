@@ -23,7 +23,7 @@ pub struct FrameworkStdOptions {
 }
 
 /// Assess homecoming std `Code` coverage using cached rustdoc inventories.
-#[instrument(skip(session, store, sysroot), fields(project_root = %project_root.display()))]
+#[instrument(level = "debug", skip(session, options), err(level = "warn"))]
 pub fn assess_homecoming_std_coverage(
     session: &dyn SessionView,
     store: &StoreLayout,

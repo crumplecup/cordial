@@ -11,6 +11,7 @@ use crate::loader::{LoadView, SourceLoadView};
 use crate::objects::FileSpan;
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Materializes `Attribute` nodes linked to items via [`EdgeKind::HasAttr`].
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AttributeEnricher;
@@ -227,6 +228,7 @@ impl<'ast> Visit<'ast> for AttributeVisitor<'_> {
     }
 }
 
+#[instrument(level = "debug", skip(ir), err(level = "warn"))]
 pub(crate) fn resolve_parent(ir: &dyn IrMut, context: &str) -> CordialResult<crate::ir::NodeId> {
     if context == "<crate>" {
         return ir.root();
@@ -246,6 +248,7 @@ pub(crate) fn resolve_parent(ir: &dyn IrMut, context: &str) -> CordialResult<cra
 }
 
 /// Crate root directory for a source-loaded member, given its `src/` root.
+#[instrument(level = "debug", skip(source, session))]
 pub(crate) fn member_crate_root(source: &SourceLoadView, session: &dyn SessionView) -> PathBuf {
     source
         .src_root
@@ -256,6 +259,7 @@ pub(crate) fn member_crate_root(source: &SourceLoadView, session: &dyn SessionVi
 
 /// Resolves a scan-recorded (possibly relative) source path against the
 /// project root, for findings whose scan step ran outside session context.
+#[instrument(level = "trace", skip(session, path))]
 pub(crate) fn resolve_source_path(session: &dyn SessionView, path: &str) -> PathBuf {
     let path = Path::new(path);
     if path.is_absolute() {
@@ -281,6 +285,7 @@ fn attr_meta_string(attr: &Attribute) -> String {
     }
 }
 
+#[instrument(level = "trace")]
 pub(crate) fn is_instrument_attr(attr: &Attribute) -> bool {
     match &attr.meta {
         Meta::Path(path) => path_is_instrument(path),
@@ -298,6 +303,7 @@ fn path_is_instrument(path: &SynPath) -> bool {
         && path.segments[1].ident == "instrument"
 }
 
+#[instrument(level = "trace")]
 pub(crate) fn is_cfg_test(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {
         let Meta::List(list) = &attr.meta else {

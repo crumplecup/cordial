@@ -5,6 +5,7 @@ use rustdoc_types::{GenericArg, GenericArgs, ItemEnum, Type};
 use super::impls::impl_target_path;
 use super::inventory::RustdocInventory;
 
+use tracing::instrument;
 /// Wrapper type paired with the foreign type it wraps via `From<T>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrenchcoatPair {
@@ -13,6 +14,7 @@ pub struct TrenchcoatPair {
 }
 
 /// Collect `(wrapper, foreign)` pairs from `From` impls on elicitation-style wrappers.
+#[instrument(level = "debug", skip(inventory))]
 pub fn collect_trenchcoat_pairs(inventory: &RustdocInventory) -> Vec<TrenchcoatPair> {
     let mut pairs = Vec::new();
     let mut seen = HashSet::new();

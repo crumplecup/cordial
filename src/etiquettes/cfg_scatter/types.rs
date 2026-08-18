@@ -8,6 +8,7 @@ use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
 
+use tracing::instrument;
 /// Stable rule identifier for a scattered-`cfg` finding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CfgScatterRuleId {
@@ -18,6 +19,7 @@ pub enum CfgScatterRuleId {
 }
 
 impl CfgScatterRuleId {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Scatter001 => "CFG-SCATTER-001",
@@ -61,6 +63,7 @@ pub enum CfgSiteKind {
 }
 
 impl CfgSiteKind {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Field => "field",
@@ -80,6 +83,7 @@ impl CfgSiteKind {
         }
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     pub fn is_field_like(self) -> bool {
         matches!(self, Self::Field | Self::Variant)
     }
@@ -121,15 +125,18 @@ impl CfgScatterGroup {
         self.occurrences.iter().filter(|o| !o.kind.is_field_like())
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn distinct_non_field_kinds(&self) -> BTreeSet<CfgSiteKind> {
         self.non_field_occurrences().map(|o| o.kind).collect()
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn non_field_count(&self) -> usize {
         self.non_field_occurrences().count()
     }
 
     /// Fields-only gating (any count) never flags — see [`CfgSiteKind`] docs.
+    #[instrument(level = "trace", skip(self))]
     pub fn is_scatter(&self, thresholds: &CfgScatterThresholds) -> bool {
         let distinct = self.distinct_non_field_kinds();
         !distinct.is_empty()
@@ -144,6 +151,7 @@ pub struct CfgScatterRule {
 }
 
 impl CfgScatterRule {
+    #[instrument(level = "debug", ret)]
     pub fn new(rule_id: CfgScatterRuleId) -> Self {
         Self { rule_id }
     }

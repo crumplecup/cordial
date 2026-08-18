@@ -2,6 +2,7 @@
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
+use tracing::instrument;
 /// Confidence tier for inferred foreign error types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ForeignTypeConfidence {
@@ -19,6 +20,7 @@ impl Display for ForeignTypeConfidence {
 }
 
 /// Infer a foreign error type from a source-expression snippet.
+#[instrument(level = "debug", skip(source))]
 pub fn infer_foreign_error_type(source: &str) -> Option<(String, String, ForeignTypeConfidence)> {
     for rule in FOREIGN_TYPE_RULES {
         if (rule.matches)(source) {

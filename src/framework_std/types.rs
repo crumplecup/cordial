@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::rustdoc::InventoryItemKind;
 
+use tracing::instrument;
 /// Whether a std type has the tracked framework trait impl.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FrameworkTraitStatus {
@@ -59,6 +60,7 @@ pub struct FrameworkTraitReport {
 }
 
 impl FrameworkTraitReport {
+    #[instrument(level = "debug", skip(self))]
     pub fn coverage_pct(&self) -> f32 {
         let accountable = self.entries.len().saturating_sub(self.skipped_count);
         if accountable == 0 {
@@ -68,6 +70,7 @@ impl FrameworkTraitReport {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn summary(&self) -> String {
         format!(
             "{} {} trait {} ({} complete, {} missing, {} skipped, {:.1}% of accountable)",
@@ -96,6 +99,7 @@ pub struct FrameworkGapEntry {
 pub type SkipMap = std::collections::HashMap<String, String>;
 
 /// Classify one std inventory row for framework trait coverage.
+#[instrument(level = "debug")]
 pub fn classify_framework_std_row(
     type_path: &str,
     impl_paths: &HashSet<String>,
@@ -112,6 +116,7 @@ pub fn classify_framework_std_row(
 }
 
 /// Build a framework trait coverage report from std inventory and impl-crate trait paths.
+#[instrument(level = "debug", skip(items))]
 pub fn build_framework_trait_report(
     source_crate: &str,
     items: &[StdInventoryItem],
@@ -157,6 +162,7 @@ pub fn build_framework_trait_report(
 }
 
 /// Build consolidated gap rows from a framework trait report.
+#[instrument(level = "debug", skip(report))]
 pub fn build_framework_gaps(report: &FrameworkTraitReport) -> Vec<FrameworkGapEntry> {
     report
         .entries
@@ -177,6 +183,7 @@ pub fn build_framework_gaps(report: &FrameworkTraitReport) -> Vec<FrameworkGapEn
 }
 
 /// Std-family inventory rows that count toward framework trait coverage.
+#[instrument(level = "debug", skip(items))]
 pub fn framework_std_type_items(
     items: &[StdInventoryItem],
     include_nightly: bool,
@@ -196,6 +203,7 @@ fn is_rustdoc_primitive(item: &StdInventoryItem) -> bool {
 }
 
 /// Merge concrete type items from multiple std-family inventories, deduped by path.
+#[instrument(level = "debug")]
 pub fn merge_std_inventory_items(inventories: &[Vec<StdInventoryItem>]) -> Vec<StdInventoryItem> {
     let mut items = Vec::new();
     let mut seen = HashSet::new();

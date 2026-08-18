@@ -3,6 +3,8 @@ use crate::feature_probe::TypeFeatureProbe;
 use crate::ir::NodeView;
 use crate::rustdoc::WrapperCoverage;
 
+use tracing::instrument;
+#[instrument(level = "debug", skip(node))]
 pub fn feature_probe_from_node(node: &dyn NodeView) -> Option<TypeFeatureProbe> {
     let feature_crate = node
         .attr(FeatureProbeEnricher::ATTR_CRATE)
@@ -22,17 +24,20 @@ pub fn feature_probe_from_node(node: &dyn NodeView) -> Option<TypeFeatureProbe> 
     })
 }
 
+#[instrument(level = "debug", skip(node))]
 pub fn wrapper_coverage_from_node(node: &dyn NodeView) -> Option<Vec<WrapperCoverage>> {
     node.attr(WrapperCoverageEnricher::ATTR_WRAPPER_COVERAGE)
         .and_then(|value| serde_json::from_value(value.clone()).ok())
 }
 
+#[instrument(level = "debug", skip(node))]
 pub fn proof_test_from_node(node: &dyn NodeView) -> Option<String> {
     node.attr(ProofHarnessEnricher::ATTR_PROOF_TEST)
         .and_then(|value| value.as_str())
         .map(str::to_string)
 }
 
+#[instrument(level = "debug", skip(node))]
 pub fn composition_test_from_node(node: &dyn NodeView) -> Option<String> {
     node.attr(ProofHarnessEnricher::ATTR_COMPOSITION_TEST)
         .and_then(|value| value.as_str())

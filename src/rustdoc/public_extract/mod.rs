@@ -27,6 +27,7 @@ pub struct ExtractedItem {
 }
 
 impl ExtractedItem {
+    #[instrument(level = "trace", skip(self))]
     pub fn path_str(&self) -> String {
         self.path.join("::")
     }
@@ -58,6 +59,7 @@ impl ExtractedItemKind {
     }
 }
 
+#[instrument(level = "debug")]
 pub fn extract_public_items(
     krate: &Crate,
     own_crate: &str,
@@ -76,7 +78,7 @@ pub fn extract_public_items(
 /// `prefix_match`: when `true`, items are accepted if their first path segment
 /// **starts with** `own_crate` (e.g. `"bevy"` accepts `bevy_ecs::*`, `bevy_math::*`).
 /// When `false`, the first segment must equal `own_crate` exactly.
-#[instrument(skip(krate), fields(own_crate, prefix_match))]
+#[instrument(level = "debug")]
 #[doc(hidden)]
 pub fn extract_items(
     krate: &rustdoc_types::Crate,

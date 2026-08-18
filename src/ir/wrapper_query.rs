@@ -13,7 +13,9 @@ use crate::rustdoc::{
     ElicitCompleteSet, TraitPrereqs, WrapperCoverageMap, build_wrapper_coverage_map,
 };
 
+use tracing::instrument;
 /// Build wrapper coverage for foreign types from hub crate IR attrs and edges.
+#[instrument(level = "debug", skip(workspace))]
 pub fn build_wrapper_coverage_from_hub_ir(
     workspace: &WorkspaceIr,
     hub_name: &str,
@@ -28,6 +30,7 @@ pub fn build_wrapper_coverage_from_hub_ir(
 }
 
 /// `(foreign_path, wrapper_path)` pairs from materialized `wraps_foreign` attrs.
+#[instrument(level = "debug")]
 pub fn collect_trenchcoat_pairs_from_ir(ir: &CrateIr) -> Vec<(String, String)> {
     static ALL_NODES: BasicQuery = BasicQuery {
         node_kinds: Vec::new(),
@@ -112,6 +115,7 @@ fn trait_prereqs_map_from_ir(ir: &CrateIr) -> HashMap<String, TraitPrereqs> {
 }
 
 /// Compare IR-built map with inventory oracle for parity tests.
+#[instrument(level = "debug")]
 pub fn wrapper_maps_equivalent(left: &WrapperCoverageMap, right: &WrapperCoverageMap) -> bool {
     if left.len() != right.len() {
         return false;

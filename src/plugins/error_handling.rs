@@ -8,6 +8,7 @@ use crate::plugin::{
     StandardErrorHandlingPolicy, WorkspaceMembersErrorScopeProvider,
 };
 
+use tracing::instrument;
 static WORKSPACE_SCOPES: WorkspaceMembersErrorScopeProvider = WorkspaceMembersErrorScopeProvider;
 static STANDARD_POLICY: StandardErrorHandlingPolicy = StandardErrorHandlingPolicy;
 
@@ -86,6 +87,7 @@ impl ErrorHandling for StandardErrorHandling {
 pub static STANDARD_ERROR_HANDLING: StandardErrorHandling = StandardErrorHandling;
 
 /// Etiquette bundles contributed by [`STANDARD_ERROR_HANDLING`] for the current feature set.
+#[instrument(level = "debug")]
 pub fn standard_error_handling_etiquettes() -> Vec<&'static dyn Etiquette> {
     collect_error_handling_etiquettes()
 }

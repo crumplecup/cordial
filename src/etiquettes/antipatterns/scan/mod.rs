@@ -9,6 +9,7 @@ use crate::loader::{module_path_from_src_file, path_has_fixtures};
 
 use super::types::AntipatternSiteRecord;
 
+use tracing::instrument;
 mod preds;
 mod visitor;
 
@@ -16,6 +17,7 @@ use visitor::AntipatternScanVisitor;
 
 pub(crate) use preds::truncate_snippet;
 
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_source_tree(
     tree_root: &Path,
     crate_root: &Path,
@@ -41,6 +43,7 @@ pub fn scan_source_tree(
     Ok(findings)
 }
 
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,

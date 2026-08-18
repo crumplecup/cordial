@@ -30,6 +30,7 @@ pub struct CrateIr {
 }
 
 impl CrateIr {
+    #[instrument(level = "debug", skip(crate_name), ret)]
     pub fn new(crate_name: impl Into<String>) -> Self {
         let crate_name = crate_name.into();
         let mut graph = StableDiGraph::new();
@@ -44,18 +45,22 @@ impl CrateIr {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn graph(&self) -> &StableDiGraph<NodeWeight, EdgeWeight> {
         &self.graph
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn indexes(&self) -> &IrIndexes {
         &self.indexes
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn node_weight(&self, id: NodeId) -> Option<&NodeWeight> {
         self.graph.node_weight(id.to_index())
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub fn insert_node(&mut self, weight: NodeWeight) -> NodeId {
         let index = self.graph.add_node(weight);
         let id = NodeId::from_index(index);
@@ -65,6 +70,7 @@ impl CrateIr {
         id
     }
 
+    #[instrument(level = "debug", skip(self, kind), err(level = "warn"))]
     pub fn insert_edge(&mut self, from: NodeId, to: NodeId, kind: EdgeKind) -> CordialResult<()> {
         if self.graph.node_weight(from.to_index()).is_none()
             || self.graph.node_weight(to.to_index()).is_none()
@@ -76,6 +82,7 @@ impl CrateIr {
         Ok(())
     }
 
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
     pub fn set_attr(
         &mut self,
         node: NodeId,
@@ -93,10 +100,12 @@ impl CrateIr {
         Ok(())
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub fn rebuild_path_index(&mut self) {
         self.indexes.rebuild_by_path(&self.graph);
     }
 
+    #[instrument(level = "debug", skip(self, kind))]
     pub fn neighbors(
         &self,
         node: NodeId,
@@ -117,6 +126,7 @@ impl CrateIr {
             .collect()
     }
 
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
     pub fn snapshot(&self) -> CordialResult<CrateIrSnapshot> {
         Ok(CrateIrSnapshot {
             crate_name: self.crate_name.clone(),
@@ -140,6 +150,7 @@ impl CrateIr {
         })
     }
 
+    #[instrument(level = "debug", err(level = "warn"))]
     pub fn from_snapshot(snapshot: CrateIrSnapshot) -> CordialResult<Self> {
         let mut graph = StableDiGraph::new();
         let mut index_map = Vec::with_capacity(snapshot.nodes.len());
@@ -169,7 +180,7 @@ impl CrateIr {
         })
     }
 
-    #[instrument(skip(self), fields(crate_name = %self.crate_name, path = %path.display()))]
+    #[instrument(level = "info", skip(self, path), err(level = "warn"))]
     pub fn write_cache(&self, path: &Path) -> CordialResult<()> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -180,13 +191,14 @@ impl CrateIr {
         Ok(())
     }
 
-    #[instrument(fields(crate_name, path = %path.display()))]
+    #[instrument(level = "info", skip(path), err(level = "warn"))]
     pub fn read_cache(path: &Path) -> CordialResult<Self> {
         let json = fs::read_to_string(path)?;
         let snapshot: CrateIrSnapshot = serde_json::from_str(&json)?;
         Self::from_snapshot(snapshot)
     }
 
+    #[instrument(level = "trace")]
     pub fn cache_path(cache_dir: &Path, crate_name: &str) -> PathBuf {
         cache_dir.join(format!("{crate_name}.ir.json"))
     }

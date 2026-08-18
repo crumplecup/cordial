@@ -10,6 +10,7 @@ use super::types::{
     ForeignErrorHandlingClass,
 };
 
+use tracing::instrument;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct SiteKey {
     file: PathBuf,
@@ -17,6 +18,7 @@ struct SiteKey {
 }
 
 /// Merge typed foreign sites with positive/negative chain probe results.
+#[instrument(level = "debug")]
 pub fn build_foreign_error_attenuation_report(
     foreign_report: &crate::etiquettes::foreign_error_types::ForeignErrorTypeReport,
     chain_records: &[ErrorChainRecord],
@@ -31,6 +33,7 @@ pub(crate) struct ErrorBridgeHint {
     pub constructor: String,
 }
 
+#[instrument(level = "debug")]
 pub(crate) fn build_foreign_error_attenuation_report_with_bridges(
     foreign_report: &crate::etiquettes::foreign_error_types::ForeignErrorTypeReport,
     chain_records: &[ErrorChainRecord],

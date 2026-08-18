@@ -5,7 +5,9 @@ use std::fmt::Write as _;
 use crate::error::CordialResult;
 use crate::shadow::{ShadowReport, TraitImplCoverage, TypeMethodCoverage};
 
+use tracing::instrument;
 /// Render a per-pair method checklist (elicit_doc `shadow-{upstream}.checklist.md` parity).
+#[instrument(level = "debug", skip(report), err(level = "warn"))]
 pub fn render_shadow_method_checklist(report: &ShadowReport) -> CordialResult<String> {
     let total_methods: usize = report
         .method_coverage

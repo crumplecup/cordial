@@ -12,6 +12,7 @@ use std::path::Path;
 
 use syn::visit::Visit;
 
+use tracing::instrument;
 #[cfg(feature = "internal_error_chain")]
 use super::compliance_layer::ComplianceLayer;
 use crate::etiquettes::error_sites::ErrorSiteRecord;
@@ -72,6 +73,7 @@ impl ErrorIrScanLayers {
         type_graph: false,
     };
 
+    #[instrument(level = "debug")]
     pub fn for_unified_file(under_src: bool, under_error_module: bool) -> Self {
         Self {
             sites: true,
@@ -95,6 +97,7 @@ pub struct ErrorIrFileScan {
 }
 
 /// Scan a pre-parsed file for error-handling IR facts (one AST walk for sites/chain/compliance).
+#[instrument(level = "debug", skip(syntax, file))]
 pub fn scan_rust_file_syntax(
     syntax: &syn::File,
     file: &Path,

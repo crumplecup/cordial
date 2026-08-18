@@ -20,6 +20,7 @@ pub struct TypeFeatureProbe {
 }
 
 /// Hub crate name for feature-probe dependency resolution.
+#[instrument(level = "trace")]
 pub fn hub_crate_name(hub: WorkspaceHub) -> Option<&'static str> {
     match hub {
         WorkspaceHub::Elicitation => Some("elicitation"),
@@ -30,7 +31,7 @@ pub fn hub_crate_name(hub: WorkspaceHub) -> Option<&'static str> {
 }
 
 /// Load per-type feature probes for a report crate, using cached or live probe rustdoc when available.
-#[instrument(skip(project_root, store_root, filter, type_paths))]
+#[instrument(level = "info", skip(filter), err(level = "warn"))]
 pub fn load_crate_feature_probes(
     project_root: &Path,
     store_root: &Path,
@@ -74,7 +75,7 @@ pub fn load_crate_feature_probes(
     )
 }
 
-#[instrument(skip(project_root, store_root))]
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn build_type_feature_probes(
     project_root: &Path,
     store_root: &Path,

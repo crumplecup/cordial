@@ -9,14 +9,14 @@ use crate::error::CordialResult;
 use super::InstrumentGap;
 
 /// Parse open items from `tracing-instrument.checklist.md`.
-#[instrument(skip(path))]
+#[instrument(level = "debug", skip(path), err(level = "warn"))]
 pub fn parse_tracing_instrument_checklist(path: &Path) -> CordialResult<Vec<InstrumentGap>> {
     let body = std::fs::read_to_string(path)?;
     Ok(parse_tracing_instrument_checklist_text(&body))
 }
 
 /// Parse checklist markdown already loaded into memory.
-#[instrument(skip(body))]
+#[instrument(level = "debug")]
 pub fn parse_tracing_instrument_checklist_text(body: &str) -> Vec<InstrumentGap> {
     let mut gaps = Vec::new();
     let mut current_crate = String::new();

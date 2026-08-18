@@ -103,6 +103,10 @@ impl Store {
     pub fn cache_dir(&self) -> String {
         format!("{}/cache", self.root)
     }
+
+    pub fn to_json_pretty(&self) -> Result<String, String> {
+        Ok(self.root.clone())
+    }
 }
 
 pub fn scan_source_tree() {}
@@ -111,7 +115,11 @@ pub fn load_session_config() -> Result<(), String> {
     Ok(())
 }
 
+pub fn build_report_summary() {}
+
 pub fn run() {}
+
+pub fn run_apply_patches() {}
 "#,
     )
     .into_diagnostic()
@@ -137,8 +145,32 @@ pub fn run() {}
     assert!(csv.contains("scan"));
     assert!(csv.contains("io"));
     assert!(csv.contains("entry"));
+    assert!(csv.contains("render"));
     assert!(csv.contains(",src/lib.rs,"));
     assert!(!csv.contains("/src/lib.rs,"));
+    let pretty: Vec<_> = csv
+        .lines()
+        .filter(|line| line.contains("to_json_pretty"))
+        .collect();
+    assert_eq!(pretty.len(), 1, "{pretty:?}");
+    assert!(
+        pretty[0].contains(",other,"),
+        "Result to_* is encoding, not a getter: {}",
+        pretty[0]
+    );
+    assert!(pretty[0].contains("err(level"), "{}", pretty[0]);
+    let run_apply: Vec<_> = csv
+        .lines()
+        .filter(|line| line.contains("run_apply_patches"))
+        .collect();
+    assert_eq!(run_apply.len(), 1, "{run_apply:?}");
+    assert!(run_apply[0].contains(",entry,"), "{}", run_apply[0]);
+    let summary: Vec<_> = csv
+        .lines()
+        .filter(|line| line.contains("build_report_summary"))
+        .collect();
+    assert_eq!(summary.len(), 1, "{summary:?}");
+    assert!(summary[0].contains(",render,"), "{}", summary[0]);
 
     let checklist = fs::read_to_string(
         store
@@ -151,6 +183,7 @@ pub fn run() {}
     assert!(checklist.contains("### `constructor`"));
     assert!(checklist.contains("### `getter`"));
     assert!(checklist.contains("### `entry`"));
+    assert!(checklist.contains("### `render`"));
     assert!(checklist.contains("src/lib.rs:"));
     assert!(checklist.contains("level = \"trace\""));
     assert!(checklist.contains("level = \"debug\""));
@@ -301,7 +334,7 @@ pub fn run(crate_name: &str) {}
 
 #[cfg(feature = "error_sites")]
 #[test]
-fn tracing_joins_error_sites_for_silent_path() -> miette::Result<()> {
+fn tracing_non_result_error_site_is_not_silent() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -335,10 +368,54 @@ pub fn scan_source_tree() {
         .into_diagnostic()
         .wrap_err("csv")?;
     assert!(
-        csv.contains("TRACING-ERROR-PATH-SILENT"),
-        "error-site join should mark a non-Result scan as silent: {csv}"
+        !csv.contains("TRACING-ERROR-PATH-SILENT"),
+        "Option/non-Result bodies are not silent-error: {csv}"
     );
-    assert!(csv.contains("scan_source_tree"));
+    Ok(())
+}
+
+#[test]
+fn tracing_option_try_is_not_silent() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        r#"
+#[tracing::instrument(level = "debug")]
+pub fn lookup_first() -> Option<u8> {
+    let value = std::fs::read_to_string("x").ok()?;
+    value.bytes().next()
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+
+    let csv = fs::read_to_string(store.path().join("findings").join("tracing-instrument.csv"))
+        .into_diagnostic()
+        .wrap_err("csv")?;
+    assert!(
+        !csv.contains("TRACING-ERROR-PATH-SILENT"),
+        "Option ? is absence, not a silent error: {csv}"
+    );
+    assert!(
+        !csv.contains("TRACING-ERR-MISSING"),
+        "Option lookup recipe has no err: {csv}"
+    );
     Ok(())
 }
 

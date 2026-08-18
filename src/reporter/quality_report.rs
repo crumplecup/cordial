@@ -7,6 +7,7 @@ use crate::ir::IrView;
 use crate::objects::{Artifact, Disposition, Finding, MapFindingSink, TextArtifact};
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// One resolution-priority area in the code quality report.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QualityAreaSummary {
@@ -26,6 +27,7 @@ pub struct QualityReport {
 }
 
 /// Build the unified report from session findings (open items only).
+#[instrument(level = "debug", skip(findings), err(level = "warn"))]
 pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityReport> {
     let error = error_handling_metrics(findings);
     let box_dyn_error = count_open_rule(findings, "ANTIPATTERN-BOX-DYN-ERROR-001");
@@ -129,6 +131,7 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
     })
 }
 
+#[instrument(level = "debug", skip(report), err(level = "warn"))]
 pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<String> {
     let mut out = String::new();
     writeln!(out, "# Code quality report")?;
@@ -180,6 +183,7 @@ pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<S
     Ok(out)
 }
 
+#[instrument(level = "debug", skip(report), err(level = "warn"))]
 pub fn render_quality_workspace_summary_markdown(report: &QualityReport) -> CordialResult<String> {
     let mut out = String::new();
     writeln!(out, "# Quality workspace summary")?;

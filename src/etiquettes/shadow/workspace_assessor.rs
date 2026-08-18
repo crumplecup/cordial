@@ -13,6 +13,7 @@ use super::types::{
     CrossCrateShadowFinding, ShadowMethodChecklistFinding, ShadowPairChecklistRule, ShadowPairRule,
 };
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CrossCrateShadowWorkspaceAssessor;
 
@@ -52,6 +53,7 @@ impl WorkspaceAssessor for CrossCrateShadowWorkspaceAssessor {
     }
 }
 
+#[instrument(level = "debug", skip(report), err(level = "warn"))]
 pub fn findings_from_shadow_pair_report(
     report: &crate::shadow::ShadowReport,
     upstream: &str,

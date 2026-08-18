@@ -7,13 +7,16 @@ use std::process;
 use cordial_cli::CliError;
 use miette::{Diagnostic, Report};
 
+use tracing::instrument;
 /// Run the CLI and render failures with miette.
+#[instrument(level = "info", err(level = "warn"))]
 pub fn run() -> Result<(), Report> {
     install_hook();
     cordial_cli::run().map_err(|err| Report::from(BinaryError(err)))
 }
 
 /// Print a diagnostic report to stderr and exit with status 1.
+#[instrument(level = "debug", skip(report))]
 pub fn exit_on_error(report: Report) {
     eprintln!("{report:?}");
     process::exit(1);

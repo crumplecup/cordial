@@ -18,6 +18,7 @@ use super::{
 };
 
 /// Resolve how to build upstream rustdoc for one shadow mirror pair.
+#[instrument(level = "debug")]
 pub fn resolve_shadow_dep_build_config(
     project_root: &Path,
     shadow_crate: &str,
@@ -42,7 +43,7 @@ pub fn resolve_shadow_dep_build_config(
 }
 
 /// Build and cache upstream rustdoc for one shadow ↔ upstream pair.
-#[instrument(skip(project_root, store, options))]
+#[instrument(level = "debug", skip(options), err(level = "warn"))]
 pub fn build_shadow_dep_rustdoc(
     project_root: &Path,
     store: &StoreLayout,
@@ -96,6 +97,7 @@ pub fn build_shadow_dep_rustdoc(
 }
 
 /// Build shadow-dep rustdoc for every active tracked pair in the workspace.
+#[instrument(level = "debug", skip(filter, options), err(level = "warn"))]
 pub fn build_active_shadow_deps(
     project_root: &Path,
     store: &StoreLayout,
@@ -119,6 +121,7 @@ pub fn build_active_shadow_deps(
 }
 
 /// Build shadow-dep rustdoc for all active pairs (no crate filter).
+#[instrument(level = "debug", skip(options), err(level = "warn"))]
 pub fn build_all_active_shadow_deps(
     project_root: &Path,
     store: &StoreLayout,

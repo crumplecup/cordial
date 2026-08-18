@@ -19,6 +19,7 @@ type VersionFindingsCache = Mutex<Option<(PathBuf, VersionFindingsByCrate)>>;
 static VERSION_FINDINGS_CACHE: VersionFindingsCache = Mutex::new(None);
 
 /// Cached workspace scan grouped by crate name.
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_workspace_version_in_member(
     workspace_root: &Path,
 ) -> CordialResult<HashMap<String, Vec<AntipatternSiteRecord>>> {
@@ -81,7 +82,7 @@ pub fn scan_workspace_version_in_member(
 }
 
 /// Scan one member `Cargo.toml` for inline version declarations.
-#[instrument(skip(manifest_path, crate_root, workspace_dep_names))]
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_member_manifest(
     manifest_path: &Path,
     crate_root: &Path,

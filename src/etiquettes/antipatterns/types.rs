@@ -7,6 +7,7 @@ use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
 
+use tracing::instrument;
 /// Stable rule identifier for an antipattern probe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AntipatternRuleId {
@@ -19,6 +20,7 @@ pub enum AntipatternRuleId {
 }
 
 impl AntipatternRuleId {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::BoxDynError001 => "ANTIPATTERN-BOX-DYN-ERROR-001",
@@ -30,6 +32,7 @@ impl AntipatternRuleId {
         }
     }
 
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "ANTIPATTERN-BOX-DYN-ERROR-001" => Some(Self::BoxDynError001),
@@ -55,6 +58,7 @@ pub struct AntipatternRule {
 }
 
 impl AntipatternRule {
+    #[instrument(level = "debug", ret)]
     pub fn new(rule_id: AntipatternRuleId) -> Self {
         Self { rule_id }
     }
@@ -173,6 +177,7 @@ pub struct AntipatternRuleCounts {
 }
 
 impl AntipatternRuleCounts {
+    #[instrument(level = "debug", skip(self))]
     pub fn accumulate(&mut self, rule_id: AntipatternRuleId) {
         match rule_id {
             AntipatternRuleId::BoxDynError001 => self.box_dyn_error += 1,
@@ -226,6 +231,7 @@ pub struct WorkspaceVersionInMemberSummary {
     pub crates: Vec<VersionInMemberCrateSummary>,
 }
 
+#[instrument(level = "debug", skip(findings))]
 pub fn build_workspace_antipatterns_summary(
     findings: &[&dyn Finding],
 ) -> WorkspaceAntipatternsSummary {
@@ -302,6 +308,7 @@ pub fn build_workspace_antipatterns_summary(
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 pub fn build_workspace_version_in_member_summary(
     findings: &[&dyn Finding],
 ) -> WorkspaceVersionInMemberSummary {

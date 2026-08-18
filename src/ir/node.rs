@@ -3,15 +3,18 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use petgraph::stable_graph::NodeIndex;
 use serde::{Deserialize, Serialize};
 
+use tracing::instrument;
 /// Opaque stable node identifier wrapping a petgraph index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NodeId(pub u32);
 
 impl NodeId {
+    #[instrument(level = "debug", ret)]
     pub(crate) fn from_index(index: NodeIndex) -> Self {
         Self(index.index() as u32)
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub(crate) fn to_index(self) -> NodeIndex {
         NodeIndex::new(self.0 as usize)
     }
@@ -58,6 +61,7 @@ pub enum ItemKind {
 }
 
 impl NodeKind {
+    #[instrument(level = "trace", skip(self), ret)]
     pub fn is_item(self) -> bool {
         matches!(self, Self::Item(_))
     }
@@ -73,6 +77,7 @@ pub struct NodeWeight {
 }
 
 impl NodeWeight {
+    #[instrument(level = "debug", skip(kind), ret)]
     pub fn new(kind: NodeKind) -> Self {
         Self {
             kind,
@@ -82,20 +87,24 @@ impl NodeWeight {
         }
     }
 
+    #[instrument(level = "trace", skip(self, name))]
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn with_span(mut self, span: crate::objects::FileSpan) -> Self {
         self.span = Some(span);
         self
     }
 
+    #[instrument(level = "trace", skip(self, key))]
     pub fn set_attr(&mut self, key: &str, value: serde_json::Value) {
         self.attrs.push((key.to_string(), value));
     }
 
+    #[instrument(level = "trace", skip(self, key))]
     pub fn attr(&self, key: &str) -> Option<&serde_json::Value> {
         self.attrs
             .iter()

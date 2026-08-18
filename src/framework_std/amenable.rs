@@ -68,6 +68,7 @@ pub struct AmenableStdReport {
 }
 
 impl AmenableStdReport {
+    #[instrument(level = "debug", skip(self))]
     pub fn coverage_pct(&self) -> f32 {
         let accountable = self.entries.len().saturating_sub(self.skipped_count);
         if accountable == 0 {
@@ -90,7 +91,7 @@ pub struct AmenableStdGapEntry {
 }
 
 /// Build an amenable std registry coverage report.
-#[instrument(skip(items, registry, skip_map, proof_chain_subjects))]
+#[instrument(level = "debug", skip(items))]
 pub fn build_amenable_std_report(
     source_crate: &str,
     items: &[StdInventoryItem],
@@ -139,6 +140,7 @@ pub fn build_amenable_std_report(
 }
 
 /// Classify one std inventory row for amenable registry coverage.
+#[instrument(level = "debug", skip(items))]
 pub fn classify_amenable_std_row(
     type_path: &str,
     type_kind: &str,
@@ -222,6 +224,7 @@ pub fn classify_amenable_std_row(
 }
 
 /// Gap metadata for one amenable std row.
+#[instrument(level = "debug")]
 pub fn amenable_gap_fields(entry: &AmenableStdEntry, impl_crate: &str) -> (String, String) {
     (
         missing_layer_labels(entry).join(", "),
@@ -249,6 +252,7 @@ fn resolve_alias_chain(items: &[StdInventoryItem], start: &str, max_hops: usize)
 }
 
 /// Build consolidated gap rows from an amenable std report.
+#[instrument(level = "debug", skip(report))]
 pub fn build_amenable_std_gaps(report: &AmenableStdReport) -> Vec<AmenableStdGapEntry> {
     report
         .entries

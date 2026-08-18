@@ -93,7 +93,7 @@ fn is_gallery_dir(entry: &walkdir::DirEntry) -> bool {
 /// Scan one crate's `src/**/*.rs` tree for the backend it's written for.
 /// Returns no findings for any other crate — this rule only applies to
 /// the three verifier crates.
-#[instrument(skip(registry), fields(crate_name, crate_root = %crate_root.display()))]
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_contract_bounds(
     crate_root: &Path,
     crate_name: &str,
@@ -175,7 +175,7 @@ pub(super) fn make_finding(
 
 /// Scan one Creusot source string (used by tests, mirroring
 /// `scan_antipatterns_rust_source`'s shape for the other three rules).
-#[instrument(skip(source, registry), fields(file = %file.display()))]
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_creusot_contract_bounds_source(
     source: &str,
     file: &Path,
@@ -193,7 +193,7 @@ pub fn scan_creusot_contract_bounds_source(
 }
 
 /// Scan one Verus source string (used by tests).
-#[instrument(skip(source, registry), fields(file = %file.display()))]
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_verus_contract_bounds_source(
     source: &str,
     file: &Path,
@@ -211,7 +211,7 @@ pub fn scan_verus_contract_bounds_source(
 }
 
 /// Scan one Kani source string (used by tests).
-#[instrument(skip(source, registry), fields(file = %file.display()))]
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_kani_contract_bounds_source(
     source: &str,
     file: &Path,

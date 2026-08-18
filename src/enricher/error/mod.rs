@@ -4,6 +4,7 @@
 //! builds one graph foundation (unified scan → partition/foreign → attenuation)
 //! instead of each etiquette declaring overlapping enrichers.
 
+use tracing::instrument;
 mod inventory;
 mod scan;
 
@@ -45,6 +46,7 @@ pub static ERROR_IR_ENRICHERS: &[&'static dyn IrEnricher] = &[
 ];
 
 /// Enricher ids in the shared stack for the given policy layers and enabled features.
+#[instrument(level = "debug")]
 pub fn error_ir_enricher_ids(layers: ErrorHandlingLayers) -> Vec<&'static str> {
     let mut ids = vec![ScopeEnricher::ID];
     if layers.sites || layers.chain || layers.internal {

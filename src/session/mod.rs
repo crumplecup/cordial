@@ -5,6 +5,7 @@ use crate::etiquette::Etiquette;
 use crate::objects::{Artifact, Finding};
 use crate::plugin::Plugin;
 
+use tracing::instrument;
 mod resolve;
 mod run;
 
@@ -53,7 +54,20 @@ pub struct SessionBuilder {
     etiquettes: Vec<&'static dyn Etiquette>,
 }
 
+impl std::fmt::Debug for SessionBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionBuilder")
+            .field("project_root", &self.project_root)
+            .field("store_home", &self.store_home)
+            .field("store_root", &self.store_root)
+            .field("plugins", &self.plugins.len())
+            .field("etiquettes", &self.etiquettes.len())
+            .finish()
+    }
+}
+
 impl SessionBuilder {
+    #[instrument(level = "debug", skip(project_root), ret)]
     pub fn new(project_root: impl Into<PathBuf>) -> Self {
         let project_root = project_root.into();
         let slug = crate::store::project_slug_from_path(&project_root);
@@ -68,11 +82,13 @@ impl SessionBuilder {
         }
     }
 
+    #[instrument(level = "trace", skip(self, store_home))]
     pub fn with_store_home(mut self, store_home: impl Into<PathBuf>) -> Self {
         self.store_home = store_home.into();
         self
     }
 
+    #[instrument(level = "trace", skip(self, store_root))]
     pub fn with_store_root(mut self, store_root: impl Into<PathBuf>) -> Self {
         let store_root = store_root.into();
         self.store_home = store_root.clone();
@@ -80,16 +96,19 @@ impl SessionBuilder {
         self
     }
 
+    #[instrument(level = "trace", skip(self, etiquette))]
     pub fn register(mut self, etiquette: &'static dyn Etiquette) -> Self {
         self.etiquettes.push(etiquette);
         self
     }
 
+    #[instrument(level = "trace", skip(self, plugin))]
     pub fn register_plugin(mut self, plugin: &'static dyn Plugin) -> Self {
         self.plugins.push(plugin);
         self
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub fn build(self) -> RuntimeSession {
         RuntimeSession {
             project_root: self.project_root,

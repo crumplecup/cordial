@@ -9,6 +9,7 @@ use crate::ir::{
 use crate::rustdoc::{RustdocInventory, ir_item_kind};
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Loads parsed rustdoc JSON into a [`RustdocLoadView`].
 #[derive(Debug, Default, Clone, Copy)]
 pub struct RustdocLoader;
@@ -47,6 +48,7 @@ pub struct RustdocLoadView {
 }
 
 impl RustdocLoadView {
+    #[instrument(level = "debug", skip(inventory), ret)]
     pub(crate) fn from_inventory(inventory: RustdocInventory) -> Self {
         Self { inventory }
     }
@@ -67,6 +69,7 @@ impl crate::loader::LoadView for RustdocLoadView {
 }
 
 impl RustdocLoadView {
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
         let root = ir.root;
         ir.set_attr(
@@ -113,6 +116,7 @@ impl RustdocLoadView {
     }
 }
 
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn resolve_rustdoc_json(
     crate_root: &Path,
     crate_name: &str,

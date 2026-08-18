@@ -3,6 +3,7 @@
 use syn::spanned::Spanned;
 use syn::{Pat, PathArguments, Type, TypeParamBound, TypePath, TypeTraitObject};
 
+use tracing::instrument;
 pub(super) struct UnusedArgBinding {
     pub(super) line: u32,
     pub(super) snippet: String,
@@ -268,6 +269,7 @@ fn trait_bound_label(bound: &TypeParamBound) -> String {
     }
 }
 
+#[instrument(level = "debug")]
 pub(crate) fn truncate_snippet(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_string();

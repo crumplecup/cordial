@@ -17,12 +17,13 @@ use crate::rustdoc_loader::resolve_rustdoc_json;
 use crate::session::RunFilter;
 
 /// Cache path for the serialized wrapper coverage map.
+#[instrument(level = "trace")]
 pub fn wrapper_coverage_cache_path(store_root: &Path) -> PathBuf {
     store_root.join("cache/wrapper-coverage.json")
 }
 
 /// Build wrapper coverage from hub trenchcoat pairs by re-parsing rustdoc JSON (oracle).
-#[instrument(skip(project_root, store_root, filter))]
+#[instrument(level = "info", skip(filter), err(level = "warn"))]
 pub fn load_workspace_wrapper_coverage(
     project_root: &Path,
     store_root: &Path,

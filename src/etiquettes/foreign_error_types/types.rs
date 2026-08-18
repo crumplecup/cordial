@@ -9,6 +9,7 @@ use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
 
+use tracing::instrument;
 /// Partitioned findings for one crate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ErrorSitePartitionReport {
@@ -55,6 +56,7 @@ pub struct WorkspaceForeignErrorTypeSummary {
     pub types: Vec<ForeignErrorTypeSummaryRow>,
 }
 
+#[instrument(level = "debug")]
 pub fn build_workspace_foreign_error_type_summary(
     reports: &[ForeignErrorTypeReport],
 ) -> WorkspaceForeignErrorTypeSummary {
@@ -113,6 +115,7 @@ pub struct ForeignErrorTypeRule {
 }
 
 impl ForeignErrorTypeRule {
+    #[instrument(level = "debug", skip(rule_id), ret)]
     pub fn new(rule_id: impl Into<String>) -> Self {
         Self {
             rule_id: rule_id.into(),

@@ -7,6 +7,7 @@ use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
 
+use tracing::instrument;
 /// Which visibility rule fired.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum VisibilityRuleId {
@@ -22,6 +23,7 @@ pub enum VisibilityRuleId {
 }
 
 impl VisibilityRuleId {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::CrateFlat001 => "VIS-CRATE-FLAT-001",
@@ -30,6 +32,7 @@ impl VisibilityRuleId {
         }
     }
 
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "VIS-CRATE-FLAT-001" => Some(Self::CrateFlat001),
@@ -55,6 +58,7 @@ pub struct VisibilityRule {
 }
 
 impl VisibilityRule {
+    #[instrument(level = "debug", ret)]
     pub fn new(rule_id: VisibilityRuleId) -> Self {
         Self { rule_id }
     }

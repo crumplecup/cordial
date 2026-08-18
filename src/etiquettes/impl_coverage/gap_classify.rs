@@ -8,6 +8,7 @@ use crate::rustdoc::{
 
 use super::types::ImplGapKind;
 
+use tracing::instrument;
 /// Full assessment for one inventoried type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImplGapAssessment {
@@ -25,6 +26,7 @@ pub struct ImplGapAssessment {
 }
 
 /// Classify a type's impl gap, mirroring elicit_doc's `assess_impl_entry` gap kinds.
+#[instrument(level = "debug")]
 pub fn assess_impl_gap(
     source_crate: &str,
     prereqs: &TraitPrereqs,

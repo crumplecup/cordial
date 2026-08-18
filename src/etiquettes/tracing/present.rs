@@ -4,6 +4,7 @@ use crate::ir::{EdgeKind, IrView, NodeId};
 
 use super::types::InstrumentLevel;
 
+use tracing::instrument;
 /// Arguments recorded on an existing `#[instrument]` attribute.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PresentInstrument {
@@ -29,7 +30,7 @@ impl Default for PresentInstrument {
 }
 
 /// Load present instrument args from `HasAttr` children, if any.
-#[tracing::instrument(skip(ir))]
+#[instrument(level = "debug", skip(ir))]
 pub fn present_instrument(ir: &dyn IrView, node_id: NodeId) -> Option<PresentInstrument> {
     for child_id in ir.children(node_id, EdgeKind::HasAttr) {
         let Some(child) = ir.node(child_id) else {
@@ -56,6 +57,7 @@ fn is_instrument_path(path: &str) -> bool {
 }
 
 /// Parse `instrument` or `instrument(...)` meta rendered by the attribute enricher.
+#[instrument(level = "debug")]
 pub fn parse_instrument_meta(meta: &str) -> PresentInstrument {
     let mut present = PresentInstrument::default();
     let trimmed = meta.trim();

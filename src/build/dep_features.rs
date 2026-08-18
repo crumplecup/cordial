@@ -14,7 +14,7 @@ pub struct DepBuildConfig {
 }
 
 /// Resolve dependency features from a workspace member's `Cargo.toml`.
-#[instrument(skip(reference_workspace), fields(member_crate_name, crate_name))]
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn collect_member_dep_build_config(
     reference_workspace: &std::path::Path,
     member_crate_name: &str,
@@ -67,6 +67,7 @@ pub fn collect_member_dep_build_config(
     skip(reference_workspace, activated),
     fields(crate_name, uses_default_features)
 )]
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn collect_dep_serde_features(
     reference_workspace: &std::path::Path,
     crate_name: &str,

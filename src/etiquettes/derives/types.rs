@@ -7,6 +7,7 @@ use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
 
+use tracing::instrument;
 /// Rule identifier for a manual pattern that should use a derive crate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DeriveRuleId {
@@ -18,6 +19,7 @@ pub enum DeriveRuleId {
 }
 
 impl DeriveRuleId {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Builder001 => "DERIVE-BUILDER-001",
@@ -28,6 +30,7 @@ impl DeriveRuleId {
         }
     }
 
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "DERIVE-BUILDER-001" => Some(Self::Builder001),
@@ -52,6 +55,7 @@ pub struct DeriveRule {
 }
 
 impl DeriveRule {
+    #[instrument(level = "debug", ret)]
     pub fn new(rule_id: DeriveRuleId) -> Self {
         Self { rule_id }
     }

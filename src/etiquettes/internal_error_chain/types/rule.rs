@@ -2,18 +2,21 @@ use crate::objects::Rule;
 
 use super::{InternalErrorComplianceId, InternalErrorTypeProbeId};
 
+use tracing::instrument;
 #[derive(Debug, Clone)]
 pub struct InternalErrorChainRule {
     pub rule_id: String,
 }
 
 impl InternalErrorChainRule {
+    #[instrument(level = "debug", ret)]
     pub fn from_probe(probe_id: InternalErrorTypeProbeId) -> Self {
         Self {
             rule_id: probe_id.as_str().to_string(),
         }
     }
 
+    #[instrument(level = "debug", ret)]
     pub fn from_compliance(compliance_id: InternalErrorComplianceId) -> Self {
         Self {
             rule_id: compliance_id.as_str().to_string(),

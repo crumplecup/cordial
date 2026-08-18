@@ -11,7 +11,9 @@ use super::classify::classify;
 use super::recipe::recipe as instrument_recipe;
 use super::types::{FunctionKind, FunctionRecord, VisibilityLabel};
 
+use tracing::instrument;
 /// Scan every `src/**/*.rs` file under `src_root`.
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_source_tree(
     src_root: &Path,
     project_root: &Path,
@@ -54,6 +56,7 @@ pub fn scan_source_tree(
 }
 
 /// Parse one source file and return discovered functions (used by tests).
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,

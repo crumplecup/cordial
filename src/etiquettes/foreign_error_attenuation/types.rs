@@ -7,6 +7,7 @@ use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
 
+use tracing::instrument;
 /// How a typed foreign error site aligns with chain-preservation probes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ForeignErrorHandlingClass {
@@ -88,6 +89,7 @@ pub struct ForeignErrorHandlingCounts {
 }
 
 impl ForeignErrorAttenuationReport {
+    #[instrument(level = "debug", skip(self))]
     pub fn handling_counts(&self) -> ForeignErrorHandlingCounts {
         let mut counts = ForeignErrorHandlingCounts::default();
         for finding in &self.findings {
@@ -103,6 +105,7 @@ impl ForeignErrorAttenuationReport {
         counts
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub fn preservation_rate(&self) -> Option<f64> {
         let counts = self.handling_counts();
         let denominator = counts.chain_preserved + counts.chain_break;
@@ -139,6 +142,7 @@ pub struct WorkspaceForeignErrorAttenuationSummary {
     pub resolutions: BTreeMap<String, usize>,
 }
 
+#[instrument(level = "debug")]
 pub fn build_workspace_foreign_error_attenuation_summary(
     reports: &[ForeignErrorAttenuationReport],
 ) -> WorkspaceForeignErrorAttenuationSummary {
@@ -245,6 +249,7 @@ pub struct ForeignErrorAttenuationRule {
 }
 
 impl ForeignErrorAttenuationRule {
+    #[instrument(level = "debug", ret)]
     pub fn new(handling_class: ForeignErrorHandlingClass) -> Self {
         Self { handling_class }
     }

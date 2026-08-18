@@ -16,8 +16,10 @@ use super::syntax::{
 };
 use super::types::{DeriveRuleId, DeriveSiteRecord};
 
+use tracing::instrument;
 const MAX_NEW_PARAMS: usize = 4;
 
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_source_tree(
     src_root: &Path,
     crate_root: &Path,
@@ -50,6 +52,7 @@ pub fn scan_source_tree(
     Ok(findings)
 }
 
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,

@@ -6,6 +6,8 @@ use crate::error::CordialResult;
 use crate::etiquettes::error_sites::ErrorSiteRecord;
 use crate::loader::{path_has_fixtures, quality_scan_trees};
 
+use tracing::instrument;
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_error_sites(crate_root: &Path) -> CordialResult<Vec<ErrorSiteRecord>> {
     let mut findings = Vec::new();
     for tree_root in quality_scan_trees(crate_root) {
@@ -23,6 +25,7 @@ pub fn scan_crate_error_sites(crate_root: &Path) -> CordialResult<Vec<ErrorSiteR
     Ok(findings)
 }
 
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_source_tree(
     tree_root: &Path,
     crate_root: &Path,
@@ -51,6 +54,7 @@ pub fn scan_source_tree(
     Ok(findings)
 }
 
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,
@@ -63,6 +67,7 @@ pub fn scan_rust_source(
 }
 
 /// Scan a pre-parsed file for error sites (via unified error IR visitor).
+#[instrument(level = "debug", skip(syntax, file))]
 pub(crate) fn scan_rust_syntax(
     syntax: &syn::File,
     file: &Path,

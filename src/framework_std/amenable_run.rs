@@ -44,6 +44,7 @@ fn ensure_registry_dump(
 }
 
 /// Load or refresh the cached amenable registry dump for assessors.
+#[instrument(level = "debug", skip(options), err(level = "warn"))]
 pub fn ensure_registry_dump_for_assessor(
     store: &StoreLayout,
     project_root: &Path,
@@ -53,7 +54,7 @@ pub fn ensure_registry_dump_for_assessor(
 }
 
 /// Assess amenable std registry coverage using sysroot inventory and registry dump.
-#[instrument(skip(session, store, sysroot), fields(project_root = %project_root.display()))]
+#[instrument(level = "debug", skip(session, options), err(level = "warn"))]
 pub fn assess_amenable_std_coverage(
     session: &dyn SessionView,
     store: &StoreLayout,

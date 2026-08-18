@@ -6,7 +6,7 @@ use tracing::instrument;
 use crate::error::{CordialError, CordialResult};
 
 /// True when a nightly toolchain with `cargo` is available for rustdoc JSON output.
-#[instrument]
+#[instrument(level = "debug")]
 pub fn nightly_available() -> bool {
     resolve_nightly_cargo_binary().is_some_and(|cargo| {
         std::process::Command::new(&cargo)
@@ -20,7 +20,7 @@ pub fn nightly_available() -> bool {
 }
 
 /// Run `cargo rustdoc -p <crate> --output-format json` and return the JSON path.
-#[instrument(skip(workspace_root), fields(crate_name))]
+#[instrument(level = "info", fields(crate_name = crate_name), err(level = "warn"))]
 pub fn run_cargo_rustdoc(
     workspace_root: &Path,
     crate_name: &str,
@@ -74,6 +74,7 @@ pub fn run_cargo_rustdoc(
     Ok(json_path)
 }
 
+#[instrument(level = "debug")]
 pub(crate) fn nightly_cargo() -> Command {
     if let Some(cargo) = resolve_nightly_cargo_binary() {
         let mut cmd = Command::new(&cargo);
@@ -106,7 +107,7 @@ pub(crate) fn nightly_cargo() -> Command {
 }
 
 /// Host target triple for the active nightly toolchain (`rustc -vV`).
-#[instrument]
+#[instrument(level = "debug", err(level = "warn"))]
 pub(crate) fn nightly_host_target() -> CordialResult<String> {
     let mut cmd = Command::new(resolve_nightly_rustc_binary()?);
     if resolve_nightly_cargo_binary().is_none() {
@@ -148,6 +149,7 @@ fn resolve_nightly_rustc_binary() -> CordialResult<PathBuf> {
     Ok(PathBuf::from("rustc"))
 }
 
+#[instrument(level = "debug")]
 pub(crate) fn resolve_nightly_cargo_binary() -> Option<PathBuf> {
     let rustup_home = std::env::var_os("RUSTUP_HOME")
         .map(PathBuf::from)

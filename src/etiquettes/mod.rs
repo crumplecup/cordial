@@ -38,6 +38,7 @@ pub(crate) mod tracing;
 pub(crate) mod trenchcoat;
 
 /// Built-in source-quality etiquettes enabled in the current feature set.
+#[::tracing::instrument(level = "debug")]
 pub fn quality_etiquettes() -> Vec<&'static dyn crate::Etiquette> {
     let items: [Option<&'static dyn crate::Etiquette>; 13] = [
         #[cfg(feature = "panics")]
@@ -100,6 +101,7 @@ pub fn quality_etiquettes() -> Vec<&'static dyn crate::Etiquette> {
 }
 
 /// Built-in elicitation coverage etiquettes enabled in the current feature set.
+#[::tracing::instrument(level = "debug")]
 #[cfg(feature = "elicitation")]
 pub fn coverage_etiquettes() -> Vec<&'static dyn crate::Etiquette> {
     let items: [Option<&'static dyn crate::Etiquette>; 3] = [

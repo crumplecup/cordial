@@ -14,7 +14,7 @@ use crate::shadow::{
 };
 
 /// Build one upstream ↔ shadow mirror report by re-parsing rustdoc JSON (oracle).
-#[instrument(skip(session), fields(upstream, shadow))]
+#[instrument(level = "debug", skip(session), err(level = "warn"))]
 pub fn build_shadow_pair_report(
     session: &dyn SessionView,
     upstream: &str,
@@ -28,6 +28,7 @@ pub fn build_shadow_pair_report(
     ))
 }
 
+#[instrument(level = "debug")]
 pub fn build_shadow_pair_report_from_inventories(
     target: &RustdocInventory,
     shadow: &RustdocInventory,

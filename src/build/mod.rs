@@ -40,7 +40,7 @@ pub struct BuildOptions {
 }
 
 /// Build rustdoc JSON for workspace members and write elicit_doc-compatible cache artifacts.
-#[instrument(skip(project_root, store, options))]
+#[instrument(level = "debug", skip(options), err(level = "warn"))]
 pub fn build_workspace_members(
     project_root: &Path,
     store: &StoreLayout,
@@ -100,6 +100,7 @@ pub fn build_workspace_members(
     Ok(artifacts)
 }
 
+#[instrument(level = "debug", err(level = "warn"))]
 pub(crate) fn copy_rustdoc_json(from: &Path, to: &Path) -> CordialResult<()> {
     if let Some(parent) = to.parent() {
         std::fs::create_dir_all(parent)?;
@@ -108,6 +109,7 @@ pub(crate) fn copy_rustdoc_json(from: &Path, to: &Path) -> CordialResult<()> {
     Ok(())
 }
 
+#[instrument(level = "debug", skip(path), err(level = "warn"))]
 pub(crate) fn hash_file(path: &Path) -> CordialResult<String> {
     let bytes = std::fs::read(path)?;
     let mut hasher = Sha256::new();
@@ -115,17 +117,20 @@ pub(crate) fn hash_file(path: &Path) -> CordialResult<String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+#[instrument(level = "info")]
 pub(crate) fn read_crate_version(json_path: &Path) -> Option<String> {
     let content = std::fs::read_to_string(json_path).ok()?;
     let krate: rustdoc_types::Crate = serde_json::from_str(&content).ok()?;
     krate.crate_version
 }
 
+#[instrument(level = "info", skip(path), err(level = "warn"))]
 pub(crate) fn read_build_artifact(path: &Path) -> CordialResult<BuildArtifact> {
     let bytes = std::fs::read(path)?;
     Ok(serde_json::from_slice(&bytes)?)
 }
 
+#[instrument(level = "info", skip(path), err(level = "warn"))]
 pub(crate) fn write_build_artifact(path: &Path, artifact: &BuildArtifact) -> CordialResult<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{CliError, CliResult};
 use clap::{Parser, Subcommand};
+use tracing::instrument;
 #[cfg(feature = "elicitation")]
 use cordial::build_all_active_shadow_deps;
 #[cfg(all(feature = "elicitation", not(feature = "homecoming_std")))]
@@ -130,6 +131,7 @@ pub enum BuildCommands {
     },
 }
 
+#[instrument(level = "info", err(level = "warn"))]
 pub fn run() -> CliResult<()> {
     let cli = Cli::parse();
     let project_root = match &cli.project {

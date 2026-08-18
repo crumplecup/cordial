@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::error::{CordialError, CordialResult};
 use crate::ir::{CrateIr, EdgeKind, EdgeWeight, IrMut, IrView, NodeId};
 
+use tracing::instrument;
 /// Workspace-level IR: one graph per crate plus cross-crate edges.
 #[derive(Debug, Default)]
 pub struct WorkspaceIr {
@@ -14,17 +15,20 @@ pub struct WorkspaceIr {
 }
 
 impl WorkspaceIr {
+    #[instrument(level = "trace", skip(self))]
     #[cfg(feature = "impl_coverage")]
     pub fn set_wrapper_coverage_map(&mut self, map: crate::rustdoc::WrapperCoverageMap) {
         self.wrapper_coverage_map = Some(map);
     }
 
+    #[instrument(level = "trace", skip(self))]
     #[cfg(feature = "impl_coverage")]
     pub fn wrapper_coverage_map(&self) -> Option<&crate::rustdoc::WrapperCoverageMap> {
         self.wrapper_coverage_map.as_ref()
     }
 
     /// Type-node count from graph IR (replaces session inventory cache).
+    #[instrument(level = "trace", skip(self))]
     #[cfg(feature = "rustdoc")]
     pub fn rustdoc_inventory_type_count(&self, crate_name: &str) -> usize {
         self.crate_ir(crate_name)
@@ -32,6 +36,7 @@ impl WorkspaceIr {
             .unwrap_or(0)
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn crate_version(&self, crate_name: &str) -> Option<String> {
         self.crate_ir(crate_name)
             .and_then(|ir| ir.node_weight(ir.root))
@@ -40,16 +45,19 @@ impl WorkspaceIr {
             .map(str::to_string)
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub fn insert_crate(&mut self, crate_ir: CrateIr) -> NodeId {
         let root = crate_ir.root;
         self.crates.insert(crate_ir.crate_name.clone(), crate_ir);
         root
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn crate_ir(&self, crate_name: &str) -> Option<&CrateIr> {
         self.crates.get(crate_name)
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub fn crate_ir_mut(&mut self, crate_name: &str) -> Option<&mut CrateIr> {
         self.crates.get_mut(crate_name)
     }
@@ -64,6 +72,7 @@ impl WorkspaceIr {
             .ok_or_else(|| CordialError::invariant(format!("crate `{crate_name}` must exist")))
     }
 
+    #[instrument(level = "debug", skip(self, from_crate, to_crate, kind))]
     pub fn insert_cross_crate_edge(
         &mut self,
         from_crate: impl Into<String>,

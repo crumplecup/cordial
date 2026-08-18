@@ -18,7 +18,7 @@ fn wrapper_coverage_cache_path(store_root: &Path) -> std::path::PathBuf {
 }
 
 /// Ensure hub crate IR is loaded, build wrapper coverage from graph attrs, cache on workspace.
-#[instrument(skip(workspace, session, filter, loaders, enrichers))]
+#[instrument(level = "debug", skip(workspace, session, filter, loaders, enrichers), err(level = "warn"))]
 pub fn ensure_workspace_wrapper_coverage(
     workspace: &mut WorkspaceIr,
     session: &dyn SessionView,

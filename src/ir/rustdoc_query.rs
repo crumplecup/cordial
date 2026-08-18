@@ -9,6 +9,7 @@ use crate::ir::{
 };
 use crate::rustdoc::{InventoryItemKind, TraitPrereqs};
 
+use tracing::instrument;
 fn node_for_path<'a>(ir: &'a dyn IrView, type_path: &str) -> Option<NodeRef<'a>> {
     ir.node_by_path(type_path).and_then(|id| ir.node(id))
 }
@@ -26,6 +27,7 @@ fn string_list_attr(node: &NodeRef<'_>, key: &str) -> Vec<String> {
 }
 
 /// Public method names recorded on a type node.
+#[instrument(level = "debug", skip(ir))]
 pub fn type_public_methods(ir: &dyn IrView, type_path: &str) -> Vec<String> {
     node_for_path(ir, type_path)
         .map(|node| string_list_attr(&node, ATTR_PUBLIC_METHODS))
@@ -33,6 +35,7 @@ pub fn type_public_methods(ir: &dyn IrView, type_path: &str) -> Vec<String> {
 }
 
 /// Trait short names implemented by a type (`Serialize`, `Deserialize`, …).
+#[instrument(level = "debug", skip(ir))]
 pub fn type_trait_impls(ir: &dyn IrView, type_path: &str) -> Vec<String> {
     node_for_path(ir, type_path)
         .map(|node| string_list_attr(&node, ATTR_TRAIT_IMPLS))
@@ -40,6 +43,7 @@ pub fn type_trait_impls(ir: &dyn IrView, type_path: &str) -> Vec<String> {
 }
 
 /// ElicitComplete supertrait prereqs materialized on a type node.
+#[instrument(level = "debug", skip(ir))]
 pub fn type_trait_prereqs(ir: &dyn IrView, type_path: &str) -> Option<TraitPrereqs> {
     let node = node_for_path(ir, type_path)?;
     let value = node.attr(ATTR_TRAIT_PREREQS)?;
@@ -47,6 +51,7 @@ pub fn type_trait_prereqs(ir: &dyn IrView, type_path: &str) -> Option<TraitPrere
 }
 
 /// Whether the type has a concrete or factory `ElicitComplete` impl in this crate.
+#[instrument(level = "debug", skip(ir))]
 pub fn type_elicit_complete(ir: &dyn IrView, type_path: &str) -> bool {
     node_for_path(ir, type_path)
         .and_then(|node| {
@@ -57,6 +62,7 @@ pub fn type_elicit_complete(ir: &dyn IrView, type_path: &str) -> bool {
 }
 
 /// Foreign type path wrapped via trenchcoat `From<T>` when present on the wrapper node.
+#[instrument(level = "debug", skip(ir))]
 pub fn type_wraps_foreign(ir: &dyn IrView, wrapper_path: &str) -> Option<String> {
     node_for_path(ir, wrapper_path).and_then(|node| {
         node.attr(ATTR_WRAPS_FOREIGN)
@@ -66,6 +72,7 @@ pub fn type_wraps_foreign(ir: &dyn IrView, wrapper_path: &str) -> Option<String>
 }
 
 /// Paired node linked by [`EdgeKind::Mirrors`] (upstream → shadow or reverse).
+#[instrument(level = "debug", skip(ir))]
 pub fn mirror_target(ir: &dyn IrView, node: NodeId) -> Option<NodeId> {
     ir.children(node, EdgeKind::Mirrors)
         .into_iter()
@@ -74,6 +81,7 @@ pub fn mirror_target(ir: &dyn IrView, node: NodeId) -> Option<NodeId> {
 }
 
 /// All rustdoc-origin item nodes with a `qualified_path` attr.
+#[instrument(level = "debug", skip(ir))]
 pub fn rustdoc_item_nodes(ir: &dyn IrView) -> Vec<NodeRef<'_>> {
     static ALL_NODES: BasicQuery = BasicQuery {
         node_kinds: Vec::new(),
@@ -105,6 +113,7 @@ fn inventory_kind_from_attr(raw: &str) -> Option<InventoryItemKind> {
 }
 
 /// Count public type nodes materialized from rustdoc on one crate graph.
+#[instrument(level = "debug")]
 pub fn count_type_nodes(ir: &CrateIr) -> usize {
     rustdoc_item_nodes(ir)
         .into_iter()

@@ -8,6 +8,7 @@ use crate::rustdoc::InventoryItemKind;
 
 use super::HOMECOMING_STD_CATEGORY;
 
+use tracing::instrument;
 #[derive(Debug, Clone, Copy)]
 pub struct FrameworkStdRule;
 
@@ -121,6 +122,7 @@ impl Finding for FrameworkStdRowFinding {
     }
 }
 
+#[instrument(level = "debug")]
 pub fn homecoming_row_disposition(status: FrameworkTraitStatus) -> Disposition {
     match status {
         FrameworkTraitStatus::Missing => Disposition::Open,
@@ -129,6 +131,7 @@ pub fn homecoming_row_disposition(status: FrameworkTraitStatus) -> Disposition {
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 pub fn framework_report_from_findings(
     findings: &[&dyn Finding],
     include_nightly: bool,
@@ -203,6 +206,7 @@ pub fn framework_report_from_findings(
     })
 }
 
+#[instrument(level = "debug", skip(findings))]
 pub fn framework_gaps_from_findings(findings: &[&dyn Finding]) -> Vec<FrameworkGapEntry> {
     findings
         .iter()

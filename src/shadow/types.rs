@@ -2,6 +2,7 @@
 
 use crate::rustdoc::InventoryItemKind;
 
+use tracing::instrument;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShadowStatus {
     Covered,
@@ -11,6 +12,7 @@ pub enum ShadowStatus {
 }
 
 impl ShadowStatus {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Covered => "Covered",
@@ -62,6 +64,7 @@ pub struct TypeMethodCoverage {
 }
 
 impl TypeMethodCoverage {
+    #[instrument(level = "trace", skip(self))]
     pub fn upstream_method_count(&self) -> usize {
         self.covered.len() + self.missing.len()
     }
@@ -76,6 +79,7 @@ pub struct TraitImplCoverage {
 }
 
 /// Optional method/trait maps passed into [`super::build::build_shadow_report`].
+#[derive(Debug)]
 pub struct ShadowBuildMaps<'a> {
     pub target_methods: &'a std::collections::HashMap<String, std::collections::BTreeSet<String>>,
     pub shadow_methods: &'a std::collections::HashMap<String, std::collections::BTreeSet<String>>,
@@ -86,6 +90,7 @@ pub struct ShadowBuildMaps<'a> {
 }
 
 impl ShadowBuildMaps<'static> {
+    #[instrument(level = "debug")]
     pub fn empty() -> Self {
         static EMPTY: std::sync::OnceLock<
             std::collections::HashMap<String, std::collections::BTreeSet<String>>,
@@ -110,6 +115,7 @@ pub enum ShadowGapKind {
 }
 
 impl ShadowGapKind {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Missing => "Missing",

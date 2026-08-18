@@ -9,6 +9,7 @@ use crate::ir::{BasicQuery, EdgeKind, IrMut, IrView};
 use crate::loader::LoadView;
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// One upstream → shadow item mapping.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct ShadowMapEntry {
@@ -59,6 +60,7 @@ impl IrEnricher for ShadowLinkEnricher {
 }
 
 /// Resolve shadow item pairs: optional `shadow-map.json`, then same-crate `{name}Shadow` discovery.
+#[instrument(level = "debug", skip(session, ir), err(level = "warn"))]
 pub fn resolve_shadow_entries(
     session: &dyn SessionView,
     ir: &dyn IrView,
@@ -71,6 +73,7 @@ pub fn resolve_shadow_entries(
 }
 
 /// Pair public items with a sibling whose last path segment adds the `Shadow` suffix.
+#[instrument(level = "debug", skip(ir))]
 pub fn discover_same_crate_shadow_pairs(ir: &dyn IrView) -> Vec<ShadowMapEntry> {
     static ALL_NODES: BasicQuery = BasicQuery {
         node_kinds: Vec::new(),
@@ -112,6 +115,7 @@ fn shadow_path_for(target_path: &str) -> Option<String> {
     Some(format!("{prefix}::{name}Shadow"))
 }
 
+#[instrument(level = "info", skip(path), err(level = "warn"))]
 pub fn load_shadow_map(path: &Path) -> CordialResult<Vec<ShadowMapEntry>> {
     let bytes = std::fs::read(path)?;
     Ok(serde_json::from_slice(&bytes)?)

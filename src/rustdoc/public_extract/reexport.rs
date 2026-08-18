@@ -32,7 +32,7 @@ fn build_parent_module_paths(
     parent_paths
 }
 
-#[instrument(skip(krate), fields(own_crate_key, prefix_match))]
+#[instrument(level = "debug")]
 pub(in crate::rustdoc) fn collect_public_same_crate_reexport_aliases(
     krate: &rustdoc_types::Crate,
     own_crate_key: &str,

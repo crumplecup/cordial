@@ -53,6 +53,7 @@ pub enum ShadowCoreSupportStatus {
 }
 
 impl ShadowCoreSupportStatus {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::CoreTracked => "CoreTracked",
@@ -84,7 +85,7 @@ struct ImplCrateRollup {
 }
 
 /// Build the combined core + shadow support digest for the current workspace run.
-#[instrument(skip(session, _filter, findings, workspace))]
+#[instrument(level = "debug", skip(session, _filter, findings, workspace), err(level = "warn"))]
 pub fn build_shadow_core_support_digest(
     session: &dyn SessionView,
     _filter: &dyn RunFilter,
@@ -196,6 +197,7 @@ fn build_shadow_core_support_summary(
     })
 }
 
+#[instrument(level = "debug")]
 pub fn build_tracked_target_roster_digest(
     workspace_members: &[String],
 ) -> TrackedTargetRosterDigest {
@@ -254,6 +256,7 @@ fn rollup_impl_findings(findings: &[&dyn Finding]) -> BTreeMap<String, ImplCrate
 }
 
 /// Summary section appended to elicitation `summary.md` (elicit_doc parity).
+#[instrument(level = "debug")]
 pub fn render_shadow_core_support_summary_section(digest: &ShadowCoreSupportDigest) -> String {
     let mut out = String::new();
     out.push_str("## Target Support (core + shadow)\n\n");
@@ -334,6 +337,7 @@ pub fn render_shadow_core_support_summary_section(digest: &ShadowCoreSupportDige
     out
 }
 
+#[instrument(level = "debug")]
 pub fn render_tracked_target_roster_markdown(roster: &TrackedTargetRosterDigest) -> String {
     let mut out = String::new();
     out.push_str("# Tracked target roster\n\n");

@@ -11,6 +11,7 @@ use crate::ir::{
 use crate::loader::LoadView;
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Links syn and rustdoc item nodes that share a `qualified_path`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SynDocLinkEnricher;
@@ -88,6 +89,7 @@ fn link_peers(
 }
 
 /// Resolve the linked peer node id when syn and rustdoc inventories were both loaded.
+#[instrument(level = "debug", skip(node))]
 pub fn syn_doc_peer(node: &dyn NodeView) -> Option<crate::ir::NodeId> {
     let id = node
         .attr(ATTR_SYN_DOC_PEER)

@@ -1,7 +1,5 @@
 //! Compare a classified recipe to the attribute (and events) already present.
 
-use crate::ir::{IrView, NodeKind, Query};
-
 use super::present::PresentInstrument;
 use super::types::{FunctionComplexity, FunctionRole, InstrumentRecipe, TracingRuleKind};
 
@@ -9,16 +7,17 @@ use super::types::{FunctionComplexity, FunctionRole, InstrumentRecipe, TracingRu
 #[derive(Debug, Clone)]
 pub struct DeltaContext<'a> {
     pub role: FunctionRole,
+    #[allow(dead_code)] // kept for later strategy reads
     pub complexity: FunctionComplexity,
+    #[allow(dead_code)] // was used for error-site join; recipe.err is the silent-path gate
     pub qualified_path: &'a str,
     pub param_names: &'a [String],
     pub has_error_path_event: bool,
 }
 
 /// Recipe-vs-present findings for an already-instrumented function.
-#[tracing::instrument(skip(ir, recipe, present, ctx), fields(path = ctx.qualified_path, role = %ctx.role))]
+#[tracing::instrument(level = "debug", skip(recipe, present, ctx))]
 pub fn recipe_deltas(
-    ir: &dyn IrView,
     recipe: &InstrumentRecipe,
     present: &PresentInstrument,
     ctx: &DeltaContext<'_>,
@@ -33,7 +32,7 @@ pub fn recipe_deltas(
     if recipe.err.is_some() && !present.err {
         kinds.push(TracingRuleKind::ErrMissing);
     }
-    if error_path_silent(ir, recipe, present, ctx) {
+    if error_path_silent(recipe, present, ctx) {
         kinds.push(TracingRuleKind::ErrorPathSilent);
     }
     if matches!(ctx.role, FunctionRole::Entry | FunctionRole::Constructor)
@@ -65,7 +64,6 @@ fn fields_missing(recipe: &InstrumentRecipe, present: &PresentInstrument) -> boo
 }
 
 fn error_path_silent(
-    ir: &dyn IrView,
     recipe: &InstrumentRecipe,
     present: &PresentInstrument,
     ctx: &DeltaContext<'_>,
@@ -74,43 +72,4 @@ fn error_path_silent(
         return false;
     }
     recipe.err.is_some()
-        || ctx.complexity == FunctionComplexity::Fallible
-        || fn_has_error_site(ir, ctx.qualified_path)
 }
-
-/// True when error-sites (if loaded) attached a site under this function path.
-fn fn_has_error_site(ir: &dyn IrView, qualified_path: &str) -> bool {
-    for node in ir.nodes_matching(&ERROR_SITE_QUERY) {
-        let Some(context) = node.attr("context").and_then(|value| value.as_str()) else {
-            continue;
-        };
-        if context_matches_fn(context, qualified_path) {
-            return true;
-        }
-    }
-    false
-}
-
-fn context_matches_fn(context: &str, qualified_path: &str) -> bool {
-    context == qualified_path
-        || context.ends_with(&format!("::{qualified_path}"))
-        || qualified_path.ends_with(&format!("::{context}"))
-}
-
-struct ErrorSiteQuery;
-
-impl Query for ErrorSiteQuery {
-    fn node_kinds(&self) -> &[NodeKind] {
-        &[NodeKind::Expr]
-    }
-
-    fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
-        &[]
-    }
-
-    fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
-        node.attr("error_site_kind").is_some()
-    }
-}
-
-static ERROR_SITE_QUERY: ErrorSiteQuery = ErrorSiteQuery;

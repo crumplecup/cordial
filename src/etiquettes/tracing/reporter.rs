@@ -155,8 +155,10 @@ impl Reporter for TracingChecklistReporter {
         body.push_str("# Tracing instrument checklist\n\n");
         body.push_str(&format!("**Open gaps:** {}\n\n", open.len()));
         body.push_str(
-            "Add the listed `#[instrument]` recipe to each item. Level is the volume knob; \
-             do not skip getters — filter at the subscriber.\n\n",
+            "Apply writes the listed recipe (`level`, `skip`, `err`, `ret`, `fields`). \
+             Do not skip getters — filter at the subscriber. \
+             `TRACING-ERROR-PATH-SILENT` only fires when the recipe wants `err` and the body \
+             has neither `err` nor `warn!`/`error!`.\n\n",
         );
 
         for crate_name in crate_names(&open) {

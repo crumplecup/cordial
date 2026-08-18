@@ -24,11 +24,12 @@ pub struct SourceFileDigest {
 }
 
 impl IrCacheDigest {
+    #[instrument(level = "trace")]
     pub fn cache_path(cache_dir: &Path, crate_name: &str) -> PathBuf {
         cache_dir.join(format!("{crate_name}.ir.digests.json"))
     }
 
-    #[instrument(skip(enricher_ids, load_views, target))]
+    #[instrument(level = "debug", skip(load_views), err(level = "warn"))]
     pub fn compute(
         target: &CrateTarget,
         enricher_ids: &[&str],
@@ -66,6 +67,7 @@ impl IrCacheDigest {
         })
     }
 
+    #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
     pub fn write(&self, path: &Path) -> CordialResult<()> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;

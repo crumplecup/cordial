@@ -4,6 +4,7 @@ use super::types::{
     FnContext, FunctionComplexity, FunctionRole, InstrumentLevel, InstrumentRecipe,
 };
 
+use tracing::instrument;
 /// Parameter names skipped by default (bulky or unhelpful in a span).
 pub(super) const DEFAULT_SKIP_PARAMS: &[&str] = &[
     "binary_entry_files",
@@ -20,8 +21,6 @@ pub(super) const DEFAULT_SKIP_PARAMS: &[&str] = &[
     "formatter",
     "inventory",
     "items",
-    "key",
-    "kind",
     "manifest",
     "msg",
     "options",
@@ -38,7 +37,7 @@ pub(super) const DEFAULT_SKIP_PARAMS: &[&str] = &[
 const IDENTITY_PARAMS: &[&str] = &["crate_name", "crate", "name", "id"];
 
 /// Target recipe for a classified function.
-#[tracing::instrument(skip(ctx, extra_skip), fields(role = %ctx.role, complexity = %ctx.complexity))]
+#[instrument(level = "debug", skip(ctx))]
 pub fn recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     match ctx.role {
         FunctionRole::Constructor => constructor_recipe(ctx, extra_skip),
@@ -60,7 +59,7 @@ fn constructor_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecip
         skip: skip_params(ctx, extra_skip),
         fields: identity_fields(ctx, extra_skip),
         err: fallible_err(ctx),
-        ret: true,
+        ret: !ctx.return_unrecordable,
     }
 }
 
@@ -69,7 +68,7 @@ fn getter_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
         level: InstrumentLevel::Trace,
         skip: skip_params(ctx, extra_skip),
         fields: Vec::new(),
-        err: None,
+        err: fallible_err(ctx),
         ret: false,
     }
 }
@@ -79,7 +78,7 @@ fn setter_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
         level: InstrumentLevel::Trace,
         skip: skip_params(ctx, extra_skip),
         fields: Vec::new(),
-        err: None,
+        err: fallible_err(ctx),
         ret: false,
     }
 }
@@ -90,7 +89,7 @@ fn predicate_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe 
         skip: skip_params(ctx, extra_skip),
         fields: Vec::new(),
         err: None,
-        ret: ctx.complexity == FunctionComplexity::Trivial,
+        ret: ctx.complexity == FunctionComplexity::Trivial && !ctx.return_unrecordable,
     }
 }
 
@@ -162,7 +161,7 @@ fn other_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
 fn skip_params(ctx: &FnContext, extra_skip: &[String]) -> Vec<String> {
     ctx.param_names
         .iter()
-        .filter(|name| is_skip_param(name, extra_skip))
+        .filter(|name| is_skip_param(name, extra_skip, &ctx.unrecordable_params))
         .cloned()
         .collect()
 }
@@ -170,17 +169,22 @@ fn skip_params(ctx: &FnContext, extra_skip: &[String]) -> Vec<String> {
 fn identity_fields(ctx: &FnContext, extra_skip: &[String]) -> Vec<String> {
     ctx.param_names
         .iter()
-        .filter(|name| IDENTITY_PARAMS.contains(&name.as_str()) && !is_skip_param(name, extra_skip))
+        .filter(|name| {
+            IDENTITY_PARAMS.contains(&name.as_str())
+                && !is_skip_param(name, extra_skip, &ctx.unrecordable_params)
+        })
         .cloned()
         .collect()
 }
 
-fn is_skip_param(name: &str, extra_skip: &[String]) -> bool {
-    DEFAULT_SKIP_PARAMS.contains(&name) || extra_skip.iter().any(|skip| skip == name)
+fn is_skip_param(name: &str, extra_skip: &[String], unrecordable: &[String]) -> bool {
+    DEFAULT_SKIP_PARAMS.contains(&name)
+        || extra_skip.iter().any(|skip| skip == name)
+        || unrecordable.iter().any(|skip| skip == name)
 }
 
 fn fallible_err(ctx: &FnContext) -> Option<InstrumentLevel> {
-    if ctx.returns_result || ctx.complexity == FunctionComplexity::Fallible {
+    if ctx.returns_result {
         Some(InstrumentLevel::Warn)
     } else {
         None

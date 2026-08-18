@@ -14,7 +14,7 @@ use super::ir::{
 };
 
 /// Ensure IR for active shadow pairs is loaded and cross-crate mirrors materialized.
-#[instrument(skip(workspace, session, filter, loaders, enrichers))]
+#[instrument(level = "debug", skip(workspace, session, filter, loaders, enrichers), err(level = "warn"))]
 pub fn preload_shadow_pair_crates(
     workspace: &mut WorkspaceIr,
     session: &dyn SessionView,
@@ -38,7 +38,7 @@ pub fn preload_shadow_pair_crates(
 }
 
 /// Build shadow mirror reports for every active tracked pair in the workspace.
-#[instrument(skip(workspace, session, filter))]
+#[instrument(level = "info", skip(workspace, session, filter), err(level = "warn"))]
 pub fn load_workspace_shadow_reports(
     workspace: &WorkspaceIr,
     session: &dyn SessionView,
@@ -55,7 +55,7 @@ pub fn load_workspace_shadow_reports(
 }
 
 /// Build one upstream ↔ shadow mirror report from workspace graph IR.
-#[instrument(skip(workspace), fields(upstream, shadow))]
+#[instrument(level = "debug", skip(workspace), err(level = "warn"))]
 pub fn build_shadow_pair_report_from_workspace(
     workspace: &WorkspaceIr,
     upstream: &str,

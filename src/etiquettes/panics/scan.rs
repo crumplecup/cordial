@@ -12,7 +12,9 @@ use super::types::{PanicKind, PanicSiteRecord};
 use crate::error::CordialResult;
 use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
 
+use tracing::instrument;
 /// Scan `src/` and `tests/` under `crate_root`, excluding `fixtures/` paths.
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_panics(crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord>> {
     let mut findings = Vec::new();
     for tree_root in quality_scan_trees(crate_root) {
@@ -28,6 +30,7 @@ pub fn scan_crate_panics(crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord
     Ok(findings)
 }
 
+#[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_source_tree(src_root: &Path, crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord>> {
     let mut findings = Vec::new();
     if !src_root.is_dir() {
@@ -50,6 +53,7 @@ pub fn scan_source_tree(src_root: &Path, crate_root: &Path) -> CordialResult<Vec
     Ok(findings)
 }
 
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,

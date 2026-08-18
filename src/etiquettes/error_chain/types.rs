@@ -7,6 +7,7 @@ use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
 
+use tracing::instrument;
 /// Probe rule for preserved foreign error chains.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ErrorChainProbeId {
@@ -25,6 +26,7 @@ pub enum ErrorChainProbeId {
 }
 
 impl ErrorChainProbeId {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::WrapperSourceField001 => "ERROR-CHAIN-WRAPPER-SOURCE-001",
@@ -35,6 +37,7 @@ impl ErrorChainProbeId {
         }
     }
 
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "ERROR-CHAIN-WRAPPER-SOURCE-001" => Some(Self::WrapperSourceField001),
@@ -59,6 +62,7 @@ pub struct ErrorChainRule {
 }
 
 impl ErrorChainRule {
+    #[instrument(level = "debug", ret)]
     pub fn new(rule_id: ErrorChainProbeId) -> Self {
         Self { rule_id }
     }
@@ -163,6 +167,7 @@ pub struct ErrorChainProbeCounts {
 }
 
 impl ErrorChainProbeCounts {
+    #[instrument(level = "trace", skip(self))]
     pub fn total(&self) -> usize {
         self.wrapper_source
             + self.kind_wrapper_payload
@@ -171,15 +176,18 @@ impl ErrorChainProbeCounts {
             + self.preserved_map_err
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn preserved_propagation(&self) -> usize {
         self.preserved_question_mark + self.preserved_map_err
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn infrastructure(&self) -> usize {
         self.wrapper_source + self.kind_wrapper_payload + self.from_bridge
     }
 }
 
+#[instrument(level = "debug")]
 pub fn probe_counts(records: &[ErrorChainRecord]) -> ErrorChainProbeCounts {
     let mut counts = ErrorChainProbeCounts::default();
     for record in records {

@@ -8,6 +8,7 @@ use crate::plugin::{Plugin, PluginCategory};
 use crate::session::{RunFilter, SessionView};
 use crate::targets::discover_crate_targets;
 
+use tracing::instrument;
 /// One crate in scope for error-flow analysis.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ErrorScope {
@@ -15,6 +16,7 @@ pub struct ErrorScope {
 }
 
 impl ErrorScope {
+    #[instrument(level = "debug", skip(crate_name))]
     pub fn workspace_member(crate_name: impl Into<String>) -> Self {
         Self {
             crate_name: crate_name.into(),
@@ -44,6 +46,7 @@ impl ErrorHandlingLayers {
         attenuation: true,
     };
 
+    #[instrument(level = "debug", skip(self))]
     pub fn any_enabled(self) -> bool {
         self.panics
             || self.sites
@@ -66,6 +69,7 @@ pub enum ErrorSurface {
 }
 
 impl ErrorSurface {
+    #[instrument(level = "debug", skip(path), ret)]
     pub fn from_path(path: &Path) -> Self {
         let components: Vec<&str> = path
             .iter()
@@ -89,6 +93,7 @@ impl ErrorSurface {
         Self::Library
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Library => "library",
@@ -98,6 +103,7 @@ impl ErrorSurface {
     }
 
     /// Expected error stack for this surface.
+    #[instrument(level = "debug", skip(self))]
     pub fn expected_stack(self) -> &'static str {
         match self {
             Self::Library => "internal error types",
@@ -106,6 +112,7 @@ impl ErrorSurface {
     }
 
     /// Checklist action for an abort site on this surface.
+    #[instrument(level = "debug", skip(self))]
     pub fn abort_action(self) -> &'static str {
         match self {
             Self::Library => "return the crate's internal error type instead of aborting",

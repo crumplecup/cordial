@@ -1,5 +1,6 @@
 use super::{InternalErrorNodeClass, InternalErrorNodeClassCounts, InternalErrorTypeNode};
 
+use tracing::instrument;
 /// Type graph scan output for one crate.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct InternalErrorTypeGraphReport {
@@ -8,6 +9,7 @@ pub struct InternalErrorTypeGraphReport {
 }
 
 impl InternalErrorTypeGraphReport {
+    #[instrument(level = "debug", skip(self))]
     pub fn class_counts(&self) -> InternalErrorNodeClassCounts {
         let mut counts = InternalErrorNodeClassCounts::default();
         for node in &self.nodes {

@@ -4,6 +4,7 @@ use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
 
+use tracing::instrument;
 /// How a discovered function is categorized.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FunctionKind {
@@ -41,6 +42,7 @@ impl FunctionRole {
         Self::Other,
     ];
 
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Constructor => "constructor",
@@ -56,6 +58,7 @@ impl FunctionRole {
         }
     }
 
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "constructor" => Some(Self::Constructor),
@@ -90,6 +93,7 @@ pub enum FunctionComplexity {
 }
 
 impl FunctionComplexity {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Trivial => "trivial",
@@ -100,6 +104,7 @@ impl FunctionComplexity {
         }
     }
 
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "trivial" => Some(Self::Trivial),
@@ -128,6 +133,7 @@ pub enum InstrumentLevel {
 }
 
 impl InstrumentLevel {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Trace => "trace",
@@ -137,6 +143,7 @@ impl InstrumentLevel {
         }
     }
 
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "trace" => Some(Self::Trace),
@@ -161,8 +168,11 @@ pub struct FnContext {
     pub role: FunctionRole,
     pub complexity: FunctionComplexity,
     pub param_names: Vec<String>,
+    /// Params whose types cannot be recorded (`impl Trait`, `dyn Trait`, fn generics).
+    pub unrecordable_params: Vec<String>,
     pub returns_result: bool,
     pub returns_self: bool,
+    pub return_unrecordable: bool,
     pub body_lines: u32,
     pub has_error_path_event: bool,
 }
@@ -179,7 +189,24 @@ pub struct InstrumentRecipe {
 
 impl InstrumentRecipe {
     /// Render the target attribute apply should write.
+    #[instrument(level = "trace", skip(self))]
     pub fn as_attribute(&self) -> String {
+        self.render_attribute("instrument")
+    }
+
+    /// Fully qualified form used when `instrument` is already a module name.
+    #[instrument(level = "trace", skip(self))]
+    pub fn as_path_attribute(&self) -> String {
+        self.render_attribute("tracing::instrument")
+    }
+
+    /// Crate-rooted form used when `tracing` is already a module name.
+    #[instrument(level = "trace", skip(self))]
+    pub fn as_crate_path_attribute(&self) -> String {
+        self.render_attribute("::tracing::instrument")
+    }
+
+    fn render_attribute(&self, name: &str) -> String {
         let mut parts = vec![format!("level = \"{}\"", self.level.as_str())];
         if !self.skip.is_empty() {
             parts.push(format!("skip({})", self.skip.join(", ")));
@@ -188,7 +215,7 @@ impl InstrumentRecipe {
             let fields = self
                 .fields
                 .iter()
-                .map(|name| format!("{name} = {name}"))
+                .map(|field_name| format!("{field_name} = {field_name}"))
                 .collect::<Vec<_>>()
                 .join(", ");
             parts.push(format!("fields({fields})"));
@@ -199,7 +226,7 @@ impl InstrumentRecipe {
         if self.ret {
             parts.push("ret".to_string());
         }
-        format!("#[instrument({})]", parts.join(", "))
+        format!("#[{name}({})]", parts.join(", "))
     }
 }
 
@@ -263,6 +290,7 @@ pub enum TracingRuleKind {
 }
 
 impl TracingRuleKind {
+    #[instrument(level = "debug", skip(self))]
     pub fn rule_id(self) -> &'static str {
         match self {
             Self::MissingInstrument => "TRACING-MISSING-INSTRUMENT",
@@ -274,6 +302,7 @@ impl TracingRuleKind {
         }
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub fn description(self) -> &'static str {
         match self {
             Self::MissingInstrument => {
@@ -287,7 +316,7 @@ impl TracingRuleKind {
                 "Recipe wants `err` and the attribute has neither `err` nor `err(level = ...)`"
             }
             Self::ErrorPathSilent => {
-                "Fallible body has no `err` and no `warn!`/`error!` on the failure path"
+                "Recipe wants `err` and the body has neither `err` nor `warn!`/`error!`"
             }
             Self::FieldsMissing => "Recipe identity `fields` are missing from `fields(...)`",
         }
@@ -300,6 +329,7 @@ pub struct TracingRule {
 }
 
 impl TracingRule {
+    #[instrument(level = "debug", skip(kind), ret)]
     pub fn new(kind: TracingRuleKind) -> Self {
         Self { kind }
     }

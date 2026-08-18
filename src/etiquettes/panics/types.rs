@@ -7,6 +7,7 @@ use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
 
+use tracing::instrument;
 /// Category of panic or hard-fail site detected in source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PanicKind {
@@ -18,6 +19,7 @@ pub enum PanicKind {
 }
 
 impl PanicKind {
+    #[instrument(level = "debug", skip(self))]
     pub fn rule_id(self) -> &'static str {
         match self {
             Self::Panic => "PANIC-SOURCE-PANIC",
@@ -28,6 +30,7 @@ impl PanicKind {
         }
     }
 
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "panic" => Some(Self::Panic),
@@ -39,6 +42,7 @@ impl PanicKind {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn as_attr(self) -> &'static str {
         match self {
             Self::Panic => "panic",
@@ -62,6 +66,7 @@ pub struct PanicRule {
 }
 
 impl PanicRule {
+    #[instrument(level = "debug", skip(kind), ret)]
     pub fn new(kind: PanicKind) -> Self {
         Self { kind }
     }

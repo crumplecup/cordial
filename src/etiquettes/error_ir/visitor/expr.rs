@@ -4,6 +4,7 @@ use syn::{Expr, ExprCall, Pat, Type};
 
 // --- sites helpers (shared: also used by chain/compliance snippet rendering) ---
 
+use tracing::instrument;
 pub(super) fn sites_err_payload(expr: &Expr) -> Option<&Expr> {
     let Expr::Call(ExprCall { func, args, .. }) = expr else {
         return None;
@@ -31,6 +32,7 @@ pub(super) fn if_let_err_source(expr: &Expr) -> Option<&Expr> {
     Some(&let_expr.expr)
 }
 
+#[instrument(level = "debug")]
 pub fn pat_is_err(pat: &Pat) -> bool {
     match pat {
         Pat::TupleStruct(tuple) => tuple.path.is_ident("Err"),
@@ -49,6 +51,7 @@ pub(super) fn sites_expr_snippet(expr: &Expr) -> String {
 
 // --- shared helpers (used across sites/chain/compliance) ---
 
+#[instrument(level = "debug")]
 pub fn raw_expr_snippet(expr: &Expr) -> String {
     match expr {
         Expr::Macro(mac) => format!("{}!(…)", macro_path_label(&mac.mac.path)),
@@ -108,6 +111,7 @@ fn member_label(member: &syn::Member) -> String {
     }
 }
 
+#[instrument(level = "debug")]
 pub fn truncate_snippet(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_string();

@@ -11,12 +11,15 @@ use rustdoc_types::{
 
 use crate::error::CordialResult;
 
+use tracing::instrument;
+#[instrument(level = "info", skip(path), err(level = "warn"))]
 pub fn write_rustdoc_crate_json(path: &Path, krate: &Crate) -> CordialResult<()> {
     std::fs::write(path, serde_json::to_string_pretty(krate)?)?;
     Ok(())
 }
 
 /// Minimal crate with one struct missing `Deserialize`.
+#[instrument(level = "debug")]
 pub fn demo_impl_coverage_crate() -> Crate {
     let root = Id(0);
     let widget = Id(1);
@@ -124,6 +127,7 @@ pub fn demo_impl_coverage_crate() -> Crate {
     base_crate(root, paths, index)
 }
 
+#[instrument(level = "debug")]
 pub fn demo_trenchcoat_crate() -> Crate {
     let root = Id(0);
     let foreign = Id(1);
@@ -220,6 +224,7 @@ pub fn demo_trenchcoat_crate() -> Crate {
     base_crate(root, paths, index)
 }
 
+#[instrument(level = "debug")]
 pub fn demo_shadow_crate() -> Crate {
     let root = Id(0);
     let widget = Id(1);

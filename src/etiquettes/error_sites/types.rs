@@ -7,6 +7,7 @@ use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
 
+use tracing::instrument;
 /// Whether a foreign error boundary was resolved to a concrete type or is
 /// only a heuristic candidate. Lives here (not in `foreign_error_types`)
 /// because [`crate::enricher::ErrorFlowEnricher`] — part of the always-on
@@ -19,6 +20,7 @@ pub enum ForeignErrorRecordKind {
 }
 
 impl ForeignErrorRecordKind {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_attr(self) -> &'static str {
         match self {
             Self::Typed => "typed",
@@ -26,6 +28,7 @@ impl ForeignErrorRecordKind {
         }
     }
 
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "typed" => Some(Self::Typed),
@@ -47,6 +50,7 @@ pub enum ErrorSiteKind {
 }
 
 impl ErrorSiteKind {
+    #[instrument(level = "trace", skip(self))]
     pub fn as_attr(self) -> &'static str {
         match self {
             Self::QuestionMark => "question_mark",
@@ -58,6 +62,7 @@ impl ErrorSiteKind {
         }
     }
 
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "question_mark" => Some(Self::QuestionMark),
@@ -73,6 +78,7 @@ impl ErrorSiteKind {
     /// Preferred wrap is `.map_err` into a typed constructor that keeps the
     /// foreign error (and optional caller context: path, span). That site
     /// kind is not itself a chain break — only an un-preserved converter is.
+    #[instrument(level = "debug", skip(self))]
     pub fn map_err_is_chain_break(self, chain_preserved: bool) -> bool {
         matches!(self, Self::MapErr) && !chain_preserved
     }
@@ -115,6 +121,7 @@ pub struct ErrorSiteRule {
 }
 
 impl ErrorSiteRule {
+    #[instrument(level = "debug", skip(kind), ret)]
     pub fn new(kind: ErrorSiteKind) -> Self {
         Self { kind }
     }
@@ -243,6 +250,7 @@ pub struct ErrorSiteKindCounts {
 }
 
 impl ErrorSiteKindCounts {
+    #[instrument(level = "trace", skip(self))]
     pub fn total(&self) -> usize {
         self.question_mark
             + self.map_err

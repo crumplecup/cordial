@@ -9,7 +9,9 @@ use crate::objects::FileSpan;
 use super::module_path_from_src_file;
 use super::source::{SourceFile, SourceLoadView, SourceLoader};
 
+use tracing::instrument;
 impl SourceLoadView {
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
         let root = ir.root;
         for file in &self.files {

@@ -1,5 +1,6 @@
 use derive_more::Display;
 
+use tracing::instrument;
 #[derive(Debug, Display)]
 pub enum CordialError {
     #[display("I/O error: {_0}")]
@@ -89,12 +90,14 @@ impl From<proc_macro2::LexError> for CordialError {
 }
 
 impl CordialError {
+    #[instrument(level = "debug", skip(message))]
     pub fn invariant(message: impl Into<String>) -> Self {
         Self::Invariant {
             message: message.into(),
         }
     }
 
+    #[instrument(level = "debug", skip(path, err))]
     pub fn syn_parse(path: impl Into<String>, err: syn::Error) -> Self {
         Self::SynParse {
             path: path.into(),
@@ -102,6 +105,7 @@ impl CordialError {
         }
     }
 
+    #[instrument(level = "debug", skip(path, err))]
     pub fn json_parse(path: impl Into<String>, err: serde_json::Error) -> Self {
         Self::JsonParse {
             path: path.into(),
@@ -109,6 +113,7 @@ impl CordialError {
         }
     }
 
+    #[instrument(level = "debug", skip(err))]
     pub fn cargo_metadata(err: cargo_metadata::Error) -> Self {
         Self::from(err)
     }

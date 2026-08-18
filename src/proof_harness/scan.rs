@@ -21,6 +21,7 @@ pub struct ProofHarness {
 }
 
 impl ProofHarness {
+    #[instrument(level = "debug", skip(self))]
     pub fn merge(&mut self, other: ProofHarness) {
         self.non_empty_types.extend(other.non_empty_types);
         self.composition_pairs.extend(other.composition_pairs);
@@ -29,6 +30,7 @@ impl ProofHarness {
 }
 
 /// Proof harness paths for a workspace hub (ported from elicit_doc).
+#[instrument(level = "debug", skip(workspace))]
 pub fn proof_harness_paths(hub: WorkspaceHub, workspace: &Path) -> Vec<PathBuf> {
     match hub {
         WorkspaceHub::Elicitation => vec![
@@ -49,7 +51,7 @@ pub fn proof_harness_paths(hub: WorkspaceHub, workspace: &Path) -> Vec<PathBuf> 
 }
 
 /// Load and merge proof harness scans for the workspace at `project_root`.
-#[instrument(skip(project_root, filter), fields(project_root = %project_root.display()))]
+#[instrument(level = "info", skip(filter), err(level = "warn"))]
 pub fn load_workspace_proof_harness(
     project_root: &Path,
     filter: &dyn crate::session::RunFilter,
@@ -65,7 +67,7 @@ pub fn load_workspace_proof_harness(
 }
 
 /// Scan a proof harness test file.
-#[instrument(skip(path), fields(path = %path.display()))]
+#[instrument(level = "debug", skip(path), err(level = "warn"))]
 pub fn collect_proof_harness(path: &Path) -> CordialResult<ProofHarness> {
     let source = std::fs::read_to_string(path)?;
 

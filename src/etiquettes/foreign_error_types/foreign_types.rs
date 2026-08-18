@@ -3,7 +3,9 @@ use crate::etiquettes::error_sites::{ErrorOriginClass, infer_foreign_error_type}
 
 use super::types::{ErrorSitePartitionReport, ForeignErrorTypeRecord, ForeignErrorTypeReport};
 
+use tracing::instrument;
 /// Infer foreign error types from partitioned Phase 2 rows.
+#[instrument(level = "debug", skip(report))]
 pub fn build_foreign_error_type_report(
     report: &ErrorSitePartitionReport,
 ) -> ForeignErrorTypeReport {
@@ -45,6 +47,7 @@ fn infer_foreign_error_type_finding(
 }
 
 /// Build a partition report from partitioned rows.
+#[instrument(level = "debug", skip(findings))]
 pub fn build_error_site_partition_report(
     crate_name: &str,
     findings: Vec<PartitionedErrorSiteRow>,

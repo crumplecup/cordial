@@ -1,5 +1,6 @@
 use super::{InternalErrorComplianceFinding, InternalErrorComplianceId};
 
+use tracing::instrument;
 /// Compliance scan output for one crate.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct InternalErrorComplianceReport {
@@ -8,6 +9,7 @@ pub struct InternalErrorComplianceReport {
 }
 
 impl InternalErrorComplianceReport {
+    #[instrument(level = "trace", skip(self))]
     pub fn stringify_count(&self) -> usize {
         self.findings
             .iter()
@@ -15,6 +17,7 @@ impl InternalErrorComplianceReport {
             .count()
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub fn discard_count(&self) -> usize {
         self.findings
             .iter()

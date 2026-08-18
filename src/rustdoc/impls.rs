@@ -2,6 +2,7 @@ use rustdoc_types::{ItemEnum, Type};
 
 use super::inventory::{RustdocInventory, canonical_to_public_map};
 
+use tracing::instrument;
 /// One `impl Trait for Type` edge from rustdoc.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TraitImplRecord {
@@ -11,6 +12,7 @@ pub struct TraitImplRecord {
 }
 
 /// Collect trait impl edges for types in `inventory`.
+#[instrument(level = "debug", skip(inventory))]
 pub fn collect_trait_impls(inventory: &RustdocInventory) -> Vec<TraitImplRecord> {
     let tracked: std::collections::HashSet<String> = inventory
         .type_items()
@@ -59,6 +61,7 @@ pub fn collect_trait_impls(inventory: &RustdocInventory) -> Vec<TraitImplRecord>
 }
 
 /// Resolve the canonical path for an impl target type.
+#[instrument(level = "trace")]
 pub fn impl_target_path(krate: &rustdoc_types::Crate, ty: &Type) -> Option<String> {
     let Type::ResolvedPath(path) = ty else {
         return None;
