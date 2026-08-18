@@ -102,9 +102,10 @@ impl Assessor for ModularityAssessor {
             let (checklist, zscore) = if site.kind == ModularityKind::ModuleSize {
                 let in_sample = site.lines >= thresholds.min_module_lines;
                 if in_sample {
+                    let zscore = stats.zscore(site.lines);
                     (
-                        stats.is_outlier(site.lines, thresholds.module_size_sigma),
-                        stats.zscore(site.lines),
+                        thresholds.is_module_size_checklist(site.lines, zscore),
+                        zscore,
                     )
                 } else {
                     (false, None)

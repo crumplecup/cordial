@@ -50,7 +50,8 @@ impl Reporter for ModularityChecklistReporter {
              above the floor (files >= {}, functions/methods >= {}) plus every \
              module's size. Too-long files also name bodies >= {} lines as \
              extract-helpers. File checklist >= {}, module size |z| > {} \
-             (modules below {} lines ignored in the sample).\n\n",
+             (upper tail also lines >= {}; {}; modules below {} lines \
+             ignored in the sample).\n\n",
             thresholds.function_checklist_min_lines,
             thresholds.max_types_per_file,
             thresholds.top_heavy_min_percent,
@@ -61,6 +62,12 @@ impl Reporter for ModularityChecklistReporter {
             thresholds.function_hotspot_min_lines,
             thresholds.file_checklist_min_lines,
             thresholds.module_size_sigma,
+            thresholds.file_inventory_min_lines,
+            if thresholds.module_size_ignore_lower_tail {
+                "lower tail ignored"
+            } else {
+                "two-tailed"
+            },
             thresholds.min_module_lines,
         ));
 

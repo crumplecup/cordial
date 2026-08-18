@@ -17,6 +17,7 @@ fn test_thresholds() -> ModularityThresholds {
         function_checklist_min_lines: 15,
         max_types_per_file: 1,
         module_size_sigma: 2,
+        module_size_ignore_lower_tail: false,
         min_module_lines: 0,
         top_heavy_min_percent: 50,
         lopsided_min_percent: 60,
@@ -243,6 +244,7 @@ fn modularity_default_thresholds() {
     assert_eq!(thresholds.function_checklist_min_lines, 200);
     assert_eq!(thresholds.max_types_per_file, 10);
     assert_eq!(thresholds.module_size_sigma, 2);
+    assert!(!thresholds.module_size_ignore_lower_tail);
     assert_eq!(thresholds.min_module_lines, 0);
     assert_eq!(thresholds.top_heavy_min_percent, 50);
     assert_eq!(thresholds.lopsided_min_percent, 75);
@@ -400,6 +402,43 @@ fn module_size_stats_need_spread() {
 }
 
 #[test]
+fn module_size_stats_split_upper_and_lower_tails() {
+    let sizes = [10, 10, 10, 10, 10, 10, 10, 200];
+    let stats = ModuleSizeStats::from_lines(&sizes);
+    assert!(stats.is_upper_outlier(200, 2));
+    assert!(!stats.is_lower_outlier(200, 2));
+    assert!(!stats.is_upper_outlier(10, 2));
+    let small = [200, 200, 200, 200, 200, 200, 200, 5];
+    let low = ModuleSizeStats::from_lines(&small);
+    assert!(low.is_lower_outlier(5, 2));
+    assert!(!low.is_upper_outlier(5, 2));
+}
+
+#[test]
+fn module_size_checklist_floor_is_upper_tail_only() {
+    let thresholds = ModularityThresholds::default();
+    assert!(thresholds.is_module_size_checklist(500, Some(2.1)));
+    assert!(
+        !thresholds.is_module_size_checklist(250, Some(2.1)),
+        "upper tail below the file floor must not checklist"
+    );
+    assert!(
+        thresholds.is_module_size_checklist(5, Some(-2.1)),
+        "lower tail must still checklist when the ignore flag is off"
+    );
+    let mut ignore_lower = thresholds;
+    ignore_lower.module_size_ignore_lower_tail = true;
+    assert!(
+        !ignore_lower.is_module_size_checklist(5, Some(-2.1)),
+        "lower tail must be silent when the ignore flag is on"
+    );
+    assert!(
+        ignore_lower.is_module_size_checklist(500, Some(2.1)),
+        "ignoring the lower tail must not affect the upper tail"
+    );
+}
+
+#[test]
 fn module_size_inventory_includes_file_and_inline_mod() -> miette::Result<()> {
     let source = "mod inner {\n    pub fn x() {}\n}\n";
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
@@ -470,7 +509,7 @@ fn module_size_session_flags_two_sigma_outlier() -> miette::Result<()> {
     fs::write(fixture.path().join("src/lib.rs"), lib)
         .into_diagnostic()
         .wrap_err("lib")?;
-    fs::write(fixture.path().join("src/huge.rs"), padded_module(250))
+    fs::write(fixture.path().join("src/huge.rs"), padded_module(500))
         .into_diagnostic()
         .wrap_err("huge")?;
 
@@ -493,7 +532,7 @@ fn module_size_session_flags_two_sigma_outlier() -> miette::Result<()> {
         outliers
             .iter()
             .any(|finding| field(*finding, "context").as_deref() == Some("huge")),
-        "huge should be a 2σ outlier: {:?}",
+        "huge at the file floor should be a 2σ upper-tail checklist item: {:?}",
         outliers
             .iter()
             .map(|finding| field(*finding, "context"))
@@ -505,6 +544,151 @@ fn module_size_session_flags_two_sigma_outlier() -> miette::Result<()> {
         .wrap_err("summary")?;
     assert!(summary.contains("## Module sizes"));
     assert!(summary.contains("`huge`"));
+    Ok(())
+}
+
+#[test]
+fn module_size_upper_tail_below_file_floor_is_not_checklist() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src")?;
+    let mut lib = String::new();
+    for index in 0..7 {
+        lib.push_str(&format!("mod m{index};\n"));
+        fs::write(
+            fixture.path().join(format!("src/m{index}.rs")),
+            padded_module(8),
+        )
+        .into_diagnostic()
+        .wrap_err("small module")?;
+    }
+    lib.push_str("mod huge;\n");
+    fs::write(fixture.path().join("src/lib.rs"), lib)
+        .into_diagnostic()
+        .wrap_err("lib")?;
+    fs::write(fixture.path().join("src/huge.rs"), padded_module(250))
+        .into_diagnostic()
+        .wrap_err("huge")?;
+
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&MODULARITY_ETIQUETTE)
+        .build();
+    let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
+    let flagged = outcome.findings().any(|finding| {
+        finding.rule().id() == "MODULARITY-MODULE-SIZE"
+            && field(finding, "checklist").as_deref() == Some("true")
+            && field(finding, "context").as_deref() == Some("huge")
+    });
+    assert!(
+        !flagged,
+        "a 2σ-large module below the file inventory floor must stay inventory-only"
+    );
+    let summary = fs::read_to_string(store.path().join("findings/modularity-summary.md"))
+        .into_diagnostic()
+        .wrap_err("summary")?;
+    assert!(
+        summary.contains("`huge`"),
+        "the module must still appear in the ranked inventory: {summary}"
+    );
+    Ok(())
+}
+
+#[test]
+fn module_size_lower_tail_checklists_when_not_ignored() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src")?;
+    let mut lib = String::new();
+    for index in 0..7 {
+        lib.push_str(&format!("mod m{index};\n"));
+        fs::write(
+            fixture.path().join(format!("src/m{index}.rs")),
+            padded_module(200),
+        )
+        .into_diagnostic()
+        .wrap_err("large sibling")?;
+    }
+    lib.push_str("mod tiny;\n");
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        pad_source_to_lines(lib, 200),
+    )
+    .into_diagnostic()
+    .wrap_err("lib")?;
+    fs::write(fixture.path().join("src/tiny.rs"), padded_module(5))
+        .into_diagnostic()
+        .wrap_err("tiny")?;
+
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&MODULARITY_ETIQUETTE)
+        .build();
+    let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
+    let flagged = outcome.findings().any(|finding| {
+        finding.rule().id() == "MODULARITY-MODULE-SIZE"
+            && field(finding, "checklist").as_deref() == Some("true")
+            && field(finding, "context").as_deref() == Some("tiny")
+    });
+    assert!(
+        flagged,
+        "a 2σ-small module must checklist when the lower tail is not ignored"
+    );
+    Ok(())
+}
+
+#[test]
+fn module_size_lower_tail_can_be_ignored() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src")?;
+    let mut lib = String::new();
+    for index in 0..7 {
+        lib.push_str(&format!("mod m{index};\n"));
+        fs::write(
+            fixture.path().join(format!("src/m{index}.rs")),
+            padded_module(200),
+        )
+        .into_diagnostic()
+        .wrap_err("large sibling")?;
+    }
+    lib.push_str("mod tiny;\n");
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        pad_source_to_lines(lib, 200),
+    )
+    .into_diagnostic()
+    .wrap_err("lib")?;
+    fs::write(fixture.path().join("src/tiny.rs"), padded_module(5))
+        .into_diagnostic()
+        .wrap_err("tiny")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[modularity]\nmodule_size_ignore_lower_tail = true\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&MODULARITY_ETIQUETTE)
+        .build();
+    let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
+    let flagged = outcome.findings().any(|finding| {
+        finding.rule().id() == "MODULARITY-MODULE-SIZE"
+            && field(finding, "checklist").as_deref() == Some("true")
+            && field(finding, "context").as_deref() == Some("tiny")
+    });
+    assert!(
+        !flagged,
+        "module_size_ignore_lower_tail must drop the small-side checklist item"
+    );
     Ok(())
 }
 
@@ -811,9 +995,12 @@ fn checklist_names_longest_methods_on_too_long_files() -> miette::Result<()> {
     fs::write(fixture.path().join("src/lib.rs"), lib)
         .into_diagnostic()
         .wrap_err("lib")?;
-    fs::write(fixture.path().join("src/huge.rs"), large_function_fixture())
-        .into_diagnostic()
-        .wrap_err("huge")?;
+    fs::write(
+        fixture.path().join("src/huge.rs"),
+        pad_source_to_lines(large_function_fixture(), 500),
+    )
+    .into_diagnostic()
+    .wrap_err("huge")?;
 
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())

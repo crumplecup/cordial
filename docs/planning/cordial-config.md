@@ -29,6 +29,7 @@ file_checklist_min_lines = 1000
 function_checklist_min_lines = 200
 max_types_per_file = 10
 module_size_sigma = 2
+module_size_ignore_lower_tail = false
 min_module_lines = 0
 top_heavy_min_percent = 50
 lopsided_min_percent = 75
@@ -44,5 +45,6 @@ Add a table per etiquette as new knobs appear.
 ## Status
 
 Implemented (`tests/cordial_config.rs`). Visibility, modularity (including
-types-per-file, module-size σ, hotspot diagnosis, and hierarchy lints),
-and cfg_scatter read through `load_session_config`.
+types-per-file, module-size σ with an upper-tail file floor and optional
+lower-tail ignore, hotspot diagnosis, and hierarchy lints), and
+cfg_scatter read through `load_session_config`.

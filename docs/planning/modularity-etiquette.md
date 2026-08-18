@@ -18,6 +18,7 @@ file_checklist_min_lines = 1000
 function_checklist_min_lines = 200
 max_types_per_file = 10
 module_size_sigma = 2
+module_size_ignore_lower_tail = false
 min_module_lines = 0
 top_heavy_min_percent = 50
 lopsided_min_percent = 75
@@ -31,7 +32,7 @@ hierarchy_min_lines = 150
 | `MODULARITY-FILE` | File line count ≥ `file_inventory_min_lines` (checklist at `file_checklist_min_lines`). |
 | `MODULARITY-FUNCTION` | Function or method **body** line count ≥ `function_inventory_min_lines` (checklist at `function_checklist_min_lines`: split this body). On files already at `file_inventory_min_lines`, bodies ≥ `function_hotspot_min_lines` are also recorded so too-long hotspots can name extract-helpers; they are not CSV inventory. Free functions, inherent/trait impl methods, and trait default methods. Not signature-only trait items, not `#[cfg(test)]`. |
 | `MODULARITY-TYPES-PER-FILE` | File-level type definitions exceed `max_types_per_file`. Always a checklist item. |
-| `MODULARITY-MODULE-SIZE` | Every module is inventoried. Checklist iff its size is more than `module_size_sigma` sample standard deviations from the crate mean (`|z| > σ`, default 2). Two-tailed: unusually large *and* unusually small. Modules below `min_module_lines` are omitted from the sample (and never flagged). |
+| `MODULARITY-MODULE-SIZE` | Every module is inventoried. Checklist from a signed z-score vs the crate mean (`|z| > σ`, default 2). **Upper tail** (`z > σ`) also requires `lines >= file_inventory_min_lines` (default 500) so a moving σ does not checklist files below the file inventory floor. **Lower tail** (`z < -σ`) is not gated by that floor; set `module_size_ignore_lower_tail` to drop it from the checklist. `min_module_lines` only omits modules from the σ *sample* — it is not a checklist floor and must not be used to silence the lower tail. |
 | `MODULARITY-TOP-HEAVY` | A parent (not the crate root) kept ≥ `top_heavy_min_percent` of its subtree in its own file, and own lines ≥ `hierarchy_min_lines`. Action: peel the leftover mass into children. |
 | `MODULARITY-LOPSIDED` | One child holds ≥ `lopsided_min_percent` of its siblings' combined subtree after dropping siblings below `hierarchy_min_lines`, and at least two siblings remain. Action: split the dominant sibling. |
 
@@ -55,6 +56,9 @@ plus each inline `mod { ... }` (span lines). `mod foo;` without a body is
 not counted; `foo.rs` / `foo/mod.rs` is. `#[cfg(test)]` inline mods are
 skipped. Stats are per crate (sample mean / stddev). n < 2 or σ = 0 means
 no outliers, but the ranked list still appears in `modularity-summary.md`.
+The file inventory floor applies only to the upper tail; unusually small
+modules remain checklist items unless `module_size_ignore_lower_tail` is
+set.
 
 ## Checklist composition
 
@@ -106,8 +110,10 @@ top-heavy, dominant subtree for lopsided. Hierarchy rows also emit
 
 ## Status
 
-Size rules, types-per-file (default 10), module-size 2σ, hotspot diagnosis
-(including extract-helpers down to 80 body lines on too-long files), and
-hierarchy lints (top-heavy peel, lopsided split at 75% after dropping stub
-siblings) are in place. Modularize means extract helpers as well as split
-into a directory.
+Size rules, types-per-file (default 10), module-size 2σ (upper tail gated
+on the file inventory floor; lower tail optional via
+`module_size_ignore_lower_tail`), hotspot diagnosis (including
+extract-helpers down to 80 body lines on too-long files), and hierarchy
+lints (top-heavy peel, lopsided split at 75% after dropping stub siblings)
+are in place. Modularize means extract helpers as well as split into a
+directory.

@@ -7,6 +7,7 @@ mod scan;
 mod scan_crate;
 mod types;
 mod version_in_member;
+mod version_reporter;
 
 pub use assessor::AntipatternAssessor;
 pub use contract_bounds::{
@@ -17,11 +18,13 @@ pub use enricher::AntipatternInventoryEnricher;
 pub use probe::AntipatternSiteProbe;
 pub use reporter::{
     AntipatternChecklistReporter, AntipatternCsvReporter, AntipatternSummaryReporter,
-    VersionInMemberChecklistReporter, VersionInMemberCsvReporter, VersionInMemberSummaryReporter,
 };
 pub use scan::scan_rust_source;
 pub use scan_crate::scan_crate_antipatterns;
 pub use types::{AntipatternRuleId, AntipatternSiteRecord};
+pub use version_reporter::{
+    VersionInMemberChecklistReporter, VersionInMemberCsvReporter, VersionInMemberSummaryReporter,
+};
 
 use crate::etiquette::StaticEtiquette;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};

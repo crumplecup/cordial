@@ -88,6 +88,9 @@ impl Default for VisibilityThresholds {
 /// Modularity etiquette knobs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModularityThresholds {
+    /// File inventory floor, and the *upper-tail* MODULE-SIZE checklist
+    /// floor. A large-side 2σ module below this many lines stays
+    /// inventory-only. The lower tail is not gated by this number.
     #[serde(default = "default_file_inventory_min_lines")]
     pub file_inventory_min_lines: u32,
     /// Track function and method bodies at least this long (CSV inventory).
@@ -109,7 +112,14 @@ pub struct ModularityThresholds {
     /// deviations from the crate's mean module size.
     #[serde(default = "default_module_size_sigma")]
     pub module_size_sigma: u32,
+    /// When true, only the upper tail (`z > σ`) is a MODULE-SIZE checklist
+    /// item. The lower tail stays in the sample and the summary; it does
+    /// not become an action item. Default is two-tailed.
+    #[serde(default)]
+    pub module_size_ignore_lower_tail: bool,
     /// Exclude modules smaller than this from the 2σ sample. `0` includes all.
+    /// This is a sample filter, not a checklist floor — do not use it to
+    /// silence the lower tail.
     #[serde(default = "default_min_module_lines")]
     pub min_module_lines: u32,
     /// Checklist a parent that kept at least this percent of its subtree
@@ -180,6 +190,7 @@ impl Default for ModularityThresholds {
             function_checklist_min_lines: default_function_checklist_min_lines(),
             max_types_per_file: default_max_types_per_file(),
             module_size_sigma: default_module_size_sigma(),
+            module_size_ignore_lower_tail: false,
             min_module_lines: default_min_module_lines(),
             top_heavy_min_percent: default_top_heavy_min_percent(),
             lopsided_min_percent: default_lopsided_min_percent(),
@@ -201,6 +212,27 @@ impl ModularityThresholds {
     pub fn is_lopsided_hit(&self, largest_subtree: u32, sibling_total: u32) -> bool {
         largest_subtree >= self.hierarchy_min_lines
             && Self::ratio_meets(largest_subtree, sibling_total, self.lopsided_min_percent)
+    }
+
+    /// MODULE-SIZE checklist from a signed z-score.
+    ///
+    /// Upper tail (`z > σ`): checklist only when `lines` is at least
+    /// [`Self::file_inventory_min_lines`]. The file floor does not apply
+    /// to the lower tail.
+    /// Lower tail (`z < -σ`): checklist unless
+    /// [`Self::module_size_ignore_lower_tail`] is set.
+    pub fn is_module_size_checklist(&self, lines: u32, zscore: Option<f64>) -> bool {
+        let Some(zscore) = zscore else {
+            return false;
+        };
+        let sigma = f64::from(self.module_size_sigma);
+        if zscore > sigma {
+            return lines >= self.file_inventory_min_lines;
+        }
+        if zscore < -sigma {
+            return !self.module_size_ignore_lower_tail;
+        }
+        false
     }
 
     /// Function-body floor used while scanning one file.

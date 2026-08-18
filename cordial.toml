@@ -18,6 +18,7 @@ file_checklist_min_lines = 1000
 function_checklist_min_lines = 200
 max_types_per_file = 10
 module_size_sigma = 2
+module_size_ignore_lower_tail = false
 min_module_lines = 0
 top_heavy_min_percent = 50
 lopsided_min_percent = 75

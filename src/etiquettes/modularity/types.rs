@@ -61,7 +61,8 @@ impl ModularityThresholds {
             ModularityKind::Function => lines >= self.function_checklist_min_lines,
             ModularityKind::TypesPerFile => true,
             ModularityKind::TopHeavy | ModularityKind::Lopsided => true,
-            // Outliers are decided from the crate-wide distribution in the assessor.
+            // Signed z-score in the assessor: upper tail also needs the
+            // file inventory floor; lower tail has its own ignore flag.
             ModularityKind::ModuleSize => false,
         }
     }
@@ -230,7 +231,16 @@ impl ModuleSizeStats {
     }
 
     pub fn is_outlier(self, lines: u32, sigma: u32) -> bool {
+        self.is_upper_outlier(lines, sigma) || self.is_lower_outlier(lines, sigma)
+    }
+
+    pub fn is_upper_outlier(self, lines: u32, sigma: u32) -> bool {
         self.zscore(lines)
-            .is_some_and(|zscore| zscore.abs() > f64::from(sigma))
+            .is_some_and(|zscore| zscore > f64::from(sigma))
+    }
+
+    pub fn is_lower_outlier(self, lines: u32, sigma: u32) -> bool {
+        self.zscore(lines)
+            .is_some_and(|zscore| zscore < -f64::from(sigma))
     }
 }
