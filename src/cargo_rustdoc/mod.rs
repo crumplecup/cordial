@@ -40,7 +40,7 @@ pub struct BuildOptions {
 }
 
 /// Build rustdoc JSON for workspace members and write elicit_doc-compatible cache artifacts.
-#[instrument(level = "debug", skip(options), err(level = "warn"))]
+#[instrument(level = "debug", skip(store, options), err(level = "warn"))]
 pub fn build_workspace_members(
     project_root: &Path,
     store: &StoreLayout,
@@ -130,7 +130,7 @@ pub(crate) fn read_build_artifact(path: &Path) -> CordialResult<BuildArtifact> {
     Ok(serde_json::from_slice(&bytes)?)
 }
 
-#[instrument(level = "info", skip(path), err(level = "warn"))]
+#[instrument(level = "info", skip(path, artifact), err(level = "warn"))]
 pub(crate) fn write_build_artifact(path: &Path, artifact: &BuildArtifact) -> CordialResult<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;

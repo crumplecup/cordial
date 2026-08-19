@@ -228,7 +228,7 @@ These stay in `cordial` core — **not** duplicated per profile:
 
 | Component | Status | Path / notes |
 | --- | --- | --- |
-| `cordial build rustdoc` | Done | `src/build/` |
+| `cordial build rustdoc` | Done | `src/cargo_rustdoc/` |
 | Rustdoc loader + inventory | Done | `src/rustdoc_loader.rs`, `src/rustdoc/` |
 | `TraitPrereqs` + gap kinds | Done | `src/rustdoc/prereqs.rs`, impl_coverage assessor |
 | `Implements` / `Wraps` / `Mirrors` edges | Partial | enrichers in `src/enricher/` |

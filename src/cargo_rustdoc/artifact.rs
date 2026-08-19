@@ -94,6 +94,7 @@ impl BuildArtifact {
     }
 }
 
+#[instrument(level = "debug")]
 fn chrono_like_timestamp() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()

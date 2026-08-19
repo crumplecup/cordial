@@ -15,7 +15,7 @@
 //! - `full` — every built-in plugin
 
 #[cfg(feature = "rustdoc")]
-mod build;
+mod cargo_rustdoc;
 mod cache_digest;
 mod config;
 #[cfg(feature = "elicitation")]
@@ -211,7 +211,7 @@ pub use plugins::{
 // `homecoming_std` re-exports live in one block (see docs/planning/cfg-scatter-etiquette.md)
 // even though they source from several internal modules.
 #[cfg(all(feature = "rustdoc", feature = "shadow"))]
-pub use build::{
+pub use cargo_rustdoc::{
     build_active_shadow_deps, build_all_active_shadow_deps, build_shadow_dep_rustdoc,
     resolve_shadow_dep_build_config,
 };
@@ -262,7 +262,7 @@ pub use session::{
 pub use store::{StoreLayout, SysrootCache, default_store_home, project_slug_from_path};
 #[cfg(feature = "homecoming_std")]
 pub use {
-    build::build_sysroot_libraries,
+    cargo_rustdoc::build_sysroot_libraries,
     etiquettes::framework_std::HOMECOMING_STD_ETIQUETTE,
     plugin::{WorkspaceHub, detect_workspace_hub, discover_workspace_hub},
     plugins::{HOMECOMING_STD_COVERAGE, HomecomingStdCoverage, coverage_plugins_for_hub},

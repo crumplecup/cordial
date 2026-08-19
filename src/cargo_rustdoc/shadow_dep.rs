@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use tracing::instrument;
 
-use crate::build::{DepBuildConfig, collect_member_dep_build_config};
+use crate::cargo_rustdoc::{DepBuildConfig, collect_member_dep_build_config};
 use crate::error::CordialResult;
 use crate::plugin::{discover_active_shadow_pairs, tracked_target_for_shadow};
 use crate::session::{RunAll, RunFilter};
@@ -43,7 +43,7 @@ pub fn resolve_shadow_dep_build_config(
 }
 
 /// Build and cache upstream rustdoc for one shadow ↔ upstream pair.
-#[instrument(level = "debug", skip(options), err(level = "warn"))]
+#[instrument(level = "debug", skip(store, options), err(level = "warn"))]
 pub fn build_shadow_dep_rustdoc(
     project_root: &Path,
     store: &StoreLayout,
@@ -97,7 +97,7 @@ pub fn build_shadow_dep_rustdoc(
 }
 
 /// Build shadow-dep rustdoc for every active tracked pair in the workspace.
-#[instrument(level = "debug", skip(filter, options), err(level = "warn"))]
+#[instrument(level = "debug", skip(store, filter, options), err(level = "warn"))]
 pub fn build_active_shadow_deps(
     project_root: &Path,
     store: &StoreLayout,
@@ -121,7 +121,7 @@ pub fn build_active_shadow_deps(
 }
 
 /// Build shadow-dep rustdoc for all active pairs (no crate filter).
-#[instrument(level = "debug", skip(options), err(level = "warn"))]
+#[instrument(level = "debug", skip(store, options), err(level = "warn"))]
 pub fn build_all_active_shadow_deps(
     project_root: &Path,
     store: &StoreLayout,

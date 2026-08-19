@@ -290,7 +290,7 @@ trait impl data always present before FeatureProbeEnricher.
 | --- | --- |
 | **I1** | Typed attr registry; consolidate enricher priorities; framework std probe reads item attrs not full inventory scan |
 | **I2** | Feature probe uses IR prereqs; delete duplicate `collect_trait_prereqs` in assessor path |
-| **I3** | ShadowMethodChecklist as assessor findings from IR diff; delete `shadow/build.rs` hot-path exports |
+| **I3** | ShadowMethodChecklist as assessor findings from IR diff; delete `shadow/report.rs` hot-path exports |
 | **I4** | Digest fully findings + IR; delete wrapper side loader |
 | **I5** | Plugin author docs with stable query helpers; `cordial-plugin` crate exposing `IrView` extensions only |
 

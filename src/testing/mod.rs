@@ -27,7 +27,7 @@ pub use load_view::rustdoc_load_view;
 #[cfg(feature = "impl_coverage")]
 pub use {
     self::wrapper_oracle::load_workspace_wrapper_coverage,
-    crate::build::{DepBuildConfig, collect_dep_serde_features, collect_member_dep_build_config},
+    crate::cargo_rustdoc::{DepBuildConfig, collect_dep_serde_features, collect_member_dep_build_config},
     crate::etiquettes::impl_coverage::{ImplGapAssessment, ImplGapKind, assess_impl_gap},
     crate::feature_probe::{
         TypeFeatureProbe, build_type_feature_probes, hub_crate_name, load_crate_feature_probes,

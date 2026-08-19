@@ -67,7 +67,7 @@ mechanical; plugins supply semantics.
 
 | elicit_doc stage / module | Cordial target |
 | --- | --- |
-| Build rustdoc + cache keys | `src/build/` (unchanged infrastructure) |
+| Build rustdoc + cache keys | `src/cargo_rustdoc/` (unchanged infrastructure) |
 | Inventory extract | `RustdocLoader` + `IrEnricher` (`TraitImpl`, `Trenchcoat`, `ShadowLink`) |
 | Feature-probe rustdoc builds | `FeatureProbeEnricher` (attrs on type nodes) |
 | Wrapper coverage map | `WrapperCoverageEnricher` or query over `Wraps` + `Implements` |
@@ -115,7 +115,7 @@ but much **work** still follows elicit_doc's side-pipeline shape.
 | **`src/collect/` module** | Whole tree | Parallel “inventory helpers” pipeline |
 | **Assessor re-loads rustdoc** | `impl_coverage/assessor.rs` | Assessor calls `parse_rustdoc_json`, `collect::*` |
 | **Reporter orchestrates** | `framework_std/*_reporter.rs` | Full `assess_*_std_coverage` in `render()` |
-| **Cross-crate shadow bypasses IR** | `collect/shadow_pipeline.rs`, `shadow/build.rs` | Load two JSON inventories, diff in library code |
+| **Cross-crate shadow bypasses IR** | `collect/shadow_pipeline.rs`, `shadow/report.rs` | Load two JSON inventories, diff in library code |
 | **Session hardcodes coverage** | `session.rs` `COVERAGE_ETIQUETTE_IDS` | Monolithic pipeline family split by string ids |
 | **Targets ignore `Coverage`** | `session.rs` `discover_crate_targets` only | `TRACKED_TARGETS` / roster not wired to session loop |
 | **Digest side pipeline** | `digest/shadow_core_support.rs`, session L349+ | Post-run re-parse + rollup outside reporters |
@@ -168,7 +168,7 @@ edges; assessor reads `IrView` only.
 | Library today | Probe | Assessor | IR query |
 | --- | --- | --- | --- |
 | `MissingPrereqProbe` (done) | ✅ | `ImplGapAssessor` (partial) | `Implements` edges |
-| `shadow/build.rs` same-crate | `MissingShadowMirrorProbe` (done) | `ShadowAssessor` | `Mirrors` |
+| `shadow/report.rs` same-crate | `MissingShadowMirrorProbe` (done) | `ShadowAssessor` | `Mirrors` |
 | `collect/shadow_pipeline.rs` cross-crate | `ShadowPairScopeProbe` (scope only) | `CrossCrateShadowAssessor` ⚠️ still calls collect | needs **WorkspaceAssessor** |
 
 **Exit check:** no `build_shadow_report_from_inventories` on the hot path; library kept
@@ -264,7 +264,7 @@ Priority key:
 | 10 | `src/etiquettes/impl_coverage/assessor.rs` | `ImplGapAssessor::assess`, `load_crate_inventory` | Assessor loads JSON | Assessor reads IR | Remove all direct loads; use enrichers | elicitation parity, impl gaps | **C** |
 | 11 | `src/collect/dep_features.rs` | `collect_member_dep_build_config` | Cargo metadata stage | Loader / enricher | Dep features on graph | `build/shadow_dep` tests | **C** |
 | 12 | `src/collect/shadow_pipeline.rs` | `build_shadow_pair_report` | Two-inventory diff | WorkspaceAssessor | IR subgraph compare | `shadow_pair_gaps`, elicitation parity | **D** |
-| 13 | `src/shadow/build.rs` | `build_shadow_report*` | Inventory diff library | Probe + Assessor (via IR) | Keep as test oracle; retire hot path | shadow parity | **D** |
+| 13 | `src/shadow/report.rs` | `build_shadow_report*` | Inventory diff library | Probe + Assessor (via IR) | Keep as test oracle; retire hot path | shadow parity | **D** |
 | 14 | `src/etiquettes/shadow/pair_assessor.rs` | `CrossCrateShadowAssessor` | Assessor runs collect | WorkspaceAssessor | Workspace pass after per-crate IR | shadow CSV/gaps | **D** |
 | 15 | `src/etiquettes/shadow/reporter.rs` | `ShadowMethodChecklistReporter` | Reporter runs collect | Reporter only | Method/trait diff → findings | shadow checklist | **D** |
 | 16 | `src/digest/shadow_core_support.rs` | `build_shadow_core_support_digest` | Post-run re-parse | Reporter / plugin hook | Build from findings + roster | `elicitation_coverage_summary` | **E** |
@@ -293,7 +293,7 @@ but must sit **below** the seams:
 | Module | Role after alignment |
 | --- | --- |
 | `src/rustdoc/` | Parse/normalize rustdoc JSON; called from `RustdocLoader` and build stage only |
-| `src/build/` | Cache orchestration; not part of the analyze loop |
+| `src/cargo_rustdoc/` | Cache orchestration; not part of the analyze loop |
 | `src/shadow/matching.rs`, `verification.rs` | Pure functions invoked from assessors |
 | `src/etiquettes/impl_coverage/gap_classify.rs` | Gap taxonomy; invoked from assessor via `Coverage::classify_gap` |
 | `src/plugin/coverage.rs` | Shared coverage vocabulary |
@@ -392,7 +392,7 @@ Hardest elicitation slice; do after R3 proves enricher + assessor split.
 
 **Status:** COMPLETED (core) — `CrossCrateShadowWorkspaceAssessor` runs once per session;
 per-crate `CrossCrateShadowAssessor` / `ShadowPairScopeProbe` removed. Pair diff still uses
-`shadow/build.rs` inventory engine (IR subgraph compare deferred). `discover_active_shadow_pairs`
+`shadow/report.rs` inventory engine (IR subgraph compare deferred). `discover_active_shadow_pairs`
 resolves roster from full workspace before crate filter.
 
 ---

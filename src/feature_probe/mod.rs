@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use tracing::instrument;
 
-use crate::build::{collect_dep_serde_features, collect_member_dep_build_config};
+use crate::cargo_rustdoc::{collect_dep_serde_features, collect_member_dep_build_config};
 use crate::error::CordialResult;
 use crate::plugin::{WorkspaceHub, discover_workspace_hub};
 use crate::rustdoc::{TraitPrereqs, collect_trait_prereqs_for_inventory, parse_rustdoc_json};
@@ -161,7 +161,7 @@ fn resolve_probe_prereqs(
     }
     let feature_refs: Vec<&str> = features.iter().map(String::as_str).collect();
     let json_path =
-        crate::build::run_cargo_rustdoc(project_root, report_crate_name, &feature_refs)?;
+        crate::cargo_rustdoc::run_cargo_rustdoc(project_root, report_crate_name, &feature_refs)?;
     let cache_path = probe_rustdoc_cache_path(store_root, report_crate_name);
     if let Some(parent) = cache_path.parent() {
         std::fs::create_dir_all(parent)?;

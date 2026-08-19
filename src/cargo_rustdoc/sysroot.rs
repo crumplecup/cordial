@@ -50,7 +50,7 @@ pub fn resolve_sysroot_library_manifest(crate_name: &str) -> CordialResult<PathB
 }
 
 /// Build rustdoc JSON for std-family sysroot libraries and cache under [`SysrootCache`].
-#[instrument(level = "debug", skip(options), err(level = "warn"))]
+#[instrument(level = "debug", skip(sysroot, options), err(level = "warn"))]
 pub fn build_sysroot_libraries(
     sysroot: &SysrootCache,
     only_crate: Option<&str>,
@@ -104,7 +104,7 @@ pub fn build_sysroot_libraries(
     Ok(artifacts)
 }
 
-#[instrument(skip(sysroot), fields(crate_name))]
+#[instrument(level = "info", skip(sysroot), fields(crate_name = crate_name), err(level = "warn"))]
 fn run_sysroot_rustdoc(sysroot: &SysrootCache, crate_name: &str) -> CordialResult<PathBuf> {
     let manifest = resolve_sysroot_library_manifest(crate_name)?;
     let host_target = nightly_host_target()?;

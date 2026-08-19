@@ -63,10 +63,6 @@ pub fn collect_member_dep_build_config(
 }
 
 /// Returns `(available_serde_features, expanded_activated_features)`.
-#[instrument(
-    skip(reference_workspace, activated),
-    fields(crate_name, uses_default_features)
-)]
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn collect_dep_serde_features(
     reference_workspace: &std::path::Path,
@@ -103,6 +99,7 @@ pub fn collect_dep_serde_features(
     Ok((available, expanded_activated))
 }
 
+#[instrument(level = "debug", skip(features))]
 fn collect_available_serde_features(features: &BTreeMap<String, Vec<String>>) -> Vec<String> {
     const KEYWORDS: &[&str] = &["serde", "schemars", "schema", "json"];
     let mut available: Vec<String> = features
@@ -116,6 +113,7 @@ fn collect_available_serde_features(features: &BTreeMap<String, Vec<String>>) ->
     available
 }
 
+#[instrument(level = "debug", skip(features))]
 fn expand_same_package_features(
     features: &BTreeMap<String, Vec<String>>,
     activated: &[String],
@@ -139,6 +137,7 @@ fn expand_same_package_features(
     expanded_features
 }
 
+#[instrument(level = "debug", skip(features))]
 fn feature_reaches_external_support(
     root: &str,
     features: &BTreeMap<String, Vec<String>>,

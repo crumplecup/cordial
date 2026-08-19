@@ -23,10 +23,9 @@ use super::verification::{
 
 /// Build a [`ShadowReport`] by diffing `target` against `shadow`.
 #[instrument(
-    skip(target, shadow, shadow_complete, shadow_prereqs, maps),
-    fields(target = %target.crate_name, shadow = %shadow.crate_name)
+    level = "debug",
+    skip(target, shadow, shadow_complete, shadow_prereqs, maps)
 )]
-#[instrument(level = "debug")]
 pub fn build_shadow_report(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
@@ -70,6 +69,7 @@ struct ShadowItemIndex<'a> {
     normalized: HashMap<String, Vec<&'a RustdocItem>>,
 }
 
+#[instrument(level = "debug", skip(shadow))]
 fn index_shadow_items(shadow: &RustdocInventory) -> ShadowItemIndex<'_> {
     let mut by_name: HashMap<&str, Vec<&RustdocItem>> = HashMap::new();
     let mut normalized: HashMap<String, Vec<&RustdocItem>> = HashMap::new();
@@ -89,6 +89,7 @@ fn index_shadow_items(shadow: &RustdocInventory) -> ShadowItemIndex<'_> {
     }
 }
 
+#[instrument(level = "debug", skip(target, shadow, shadow_complete, shadow_prereqs))]
 fn match_target_rows(
     target: &RustdocInventory,
     shadow: &ShadowItemIndex<'_>,
@@ -139,6 +140,7 @@ fn match_target_rows(
     rows
 }
 
+#[instrument(level = "debug", skip(target_item))]
 fn missing_row(target_item: &crate::rustdoc::RustdocItem) -> ShadowRow {
     ShadowRow {
         item_path: target_item.path.clone(),
@@ -154,6 +156,7 @@ fn missing_row(target_item: &crate::rustdoc::RustdocItem) -> ShadowRow {
     }
 }
 
+#[instrument(level = "debug", skip(shadow, rows))]
 fn append_extra_shadow_rows(shadow: &RustdocInventory, rows: &mut Vec<ShadowRow>) {
     let matched: HashSet<String> = rows
         .iter()
@@ -179,6 +182,7 @@ fn append_extra_shadow_rows(shadow: &RustdocInventory, rows: &mut Vec<ShadowRow>
     }
 }
 
+#[instrument(level = "debug", skip(rows, target))]
 fn tally_coverage(
     rows: &[ShadowRow],
     target: &RustdocInventory,
@@ -218,6 +222,7 @@ fn tally_coverage(
     )
 }
 
+#[instrument(level = "debug", skip(rows, maps))]
 fn collect_method_coverage(
     rows: &[ShadowRow],
     maps: &ShadowBuildMaps<'_>,
@@ -234,6 +239,7 @@ fn collect_method_coverage(
         .collect()
 }
 
+#[instrument(level = "debug", skip(rows, maps))]
 fn collect_missing_type_methods(
     rows: &[ShadowRow],
     maps: &ShadowBuildMaps<'_>,
@@ -261,6 +267,7 @@ fn collect_missing_type_methods(
         .collect()
 }
 
+#[instrument(level = "debug", skip(rows, maps))]
 fn collect_trait_coverage(
     rows: &[ShadowRow],
     maps: &ShadowBuildMaps<'_>,
@@ -307,6 +314,7 @@ fn collect_trait_coverage(
         .collect()
 }
 
+#[instrument(level = "debug", skip(maps))]
 fn diff_type_methods(
     upstream_type: &str,
     shadow_type: &str,
@@ -330,7 +338,7 @@ fn diff_type_methods(
 }
 
 /// Convenience wrapper that derives shadow complete/prereqs from the shadow inventory.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(target, shadow))]
 pub fn build_shadow_report_from_inventories(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
@@ -338,7 +346,7 @@ pub fn build_shadow_report_from_inventories(
     build_shadow_report_from_inventories_with_maps(target, shadow, &ShadowBuildMaps::empty())
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(target, shadow, maps))]
 pub fn build_shadow_report_from_inventories_with_maps(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
@@ -349,6 +357,10 @@ pub fn build_shadow_report_from_inventories_with_maps(
     build_shadow_report(target, shadow, &shadow_complete, &shadow_prereqs, maps)
 }
 
+#[instrument(
+    level = "debug",
+    skip(target_item, shadow_item, status, shadow_complete, shadow_prereqs)
+)]
 fn row_for_match(
     target_item: &crate::rustdoc::RustdocItem,
     shadow_item: &crate::rustdoc::RustdocItem,
@@ -380,110 +392,5 @@ fn row_for_match(
         shadow_missing_external_traits: shadow_missing_external_traits(shadow_item, shadow_prereqs),
         shadow_missing_our_traits: shadow_missing_our_traits(shadow_item, shadow_prereqs),
         notes,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::{BTreeSet, HashMap};
-
-    use super::*;
-    use crate::rustdoc::InventoryItemKind;
-    use crate::shadow::ShadowBuildMaps;
-
-    fn item(crate_name: &str, kind: InventoryItemKind, name: &str) -> crate::rustdoc::RustdocItem {
-        crate::rustdoc::RustdocItem {
-            path: format!("{crate_name}::{name}"),
-            name: name.to_string(),
-            kind,
-            is_public: true,
-        }
-    }
-
-    fn inventory(crate_name: &str, items: Vec<crate::rustdoc::RustdocItem>) -> RustdocInventory {
-        RustdocInventory {
-            crate_name: crate_name.to_string(),
-            crate_version: "1".to_string(),
-            items,
-            krate: rustdoc_types::Crate {
-                root: rustdoc_types::Id(0),
-                crate_version: None,
-                includes_private: false,
-                index: Default::default(),
-                paths: Default::default(),
-                external_crates: Default::default(),
-                target: rustdoc_types::Target {
-                    triple: String::new(),
-                    target_features: Vec::new(),
-                },
-                format_version: rustdoc_types::FORMAT_VERSION,
-            },
-        }
-    }
-
-    #[test]
-    fn exact_bare_name_match_covers() {
-        let target = inventory(
-            "url",
-            vec![item("url", InventoryItemKind::Struct, "Widget")],
-        );
-        let shadow = inventory(
-            "elicit_url",
-            vec![item("elicit_url", InventoryItemKind::Struct, "Widget")],
-        );
-        let report = build_shadow_report_from_inventories(&target, &shadow);
-        assert_eq!(report.covered_count, 1);
-        assert_eq!(report.missing_count, 0);
-        assert_eq!(report.coverage_pct, 100.0);
-    }
-
-    #[test]
-    fn prefix_rename_is_missing_not_drift() {
-        let target = inventory("url", vec![item("url", InventoryItemKind::Struct, "Vec2")]);
-        let shadow = inventory(
-            "elicit_url",
-            vec![item("elicit_url", InventoryItemKind::Struct, "EguiVec2")],
-        );
-        let report = build_shadow_report_from_inventories(&target, &shadow);
-        assert_eq!(report.missing_count, 1);
-        assert_eq!(report.extra_count, 1);
-        assert_eq!(report.drifted_count, 0);
-    }
-
-    #[test]
-    fn method_coverage_diffs_matched_types() {
-        let target = inventory(
-            "upstream",
-            vec![item("upstream", InventoryItemKind::Struct, "Widget")],
-        );
-        let shadow = inventory(
-            "elicit_upstream",
-            vec![item("elicit_upstream", InventoryItemKind::Struct, "Widget")],
-        );
-
-        let mut target_methods = HashMap::new();
-        target_methods.insert(
-            "upstream::Widget".to_string(),
-            BTreeSet::from(["draw".to_string(), "resize".to_string()]),
-        );
-        let mut shadow_methods = HashMap::new();
-        shadow_methods.insert(
-            "elicit_upstream::Widget".to_string(),
-            BTreeSet::from(["draw".to_string(), "extra_fn".to_string()]),
-        );
-        let empty_traits: HashMap<String, BTreeSet<String>> = HashMap::new();
-        let maps = ShadowBuildMaps {
-            target_methods: &target_methods,
-            shadow_methods: &shadow_methods,
-            target_trait_impls: &empty_traits,
-            shadow_trait_impls: &empty_traits,
-        };
-
-        let report = build_shadow_report_from_inventories_with_maps(&target, &shadow, &maps);
-        assert_eq!(report.method_coverage.len(), 1);
-        let coverage = &report.method_coverage[0];
-        assert_eq!(coverage.covered, vec!["draw"]);
-        assert_eq!(coverage.missing, vec!["resize"]);
-        assert_eq!(coverage.extra, vec!["extra_fn"]);
     }
 }

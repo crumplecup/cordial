@@ -132,6 +132,7 @@ pub(crate) fn nightly_host_target() -> CordialResult<String> {
         })
 }
 
+#[instrument(level = "debug", err(level = "warn"))]
 fn resolve_nightly_rustc_binary() -> CordialResult<PathBuf> {
     if let Some(cargo) = resolve_nightly_cargo_binary() {
         let rustc = cargo
