@@ -3,10 +3,9 @@
 use std::path::Path;
 
 use crate::error::CordialResult;
-use crate::loader::quality_scan_trees;
 
 use super::contract_bounds::{fetch_contract_records, scan_crate_contract_bounds};
-use super::scan::scan_source_tree;
+use super::scan::scan_crate_trees;
 use super::types::AntipatternSiteRecord;
 use super::version_in_member::scan_workspace_version_in_member;
 
@@ -18,11 +17,7 @@ pub fn scan_crate_antipatterns(
     workspace_root: &Path,
     store_root: &Path,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    let mut findings = Vec::new();
-
-    for tree_root in quality_scan_trees(crate_root) {
-        findings.extend(scan_source_tree(&tree_root, crate_root)?);
-    }
+    let mut findings = scan_crate_trees(crate_root)?;
 
     let registry = fetch_contract_records(workspace_root, store_root);
     findings.extend(scan_crate_contract_bounds(

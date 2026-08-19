@@ -18,7 +18,6 @@ pub(super) fn scan_verus_source(
     source: &str,
     file: &Path,
     src_root: &Path,
-    crate_name: &str,
     index: &ContractIndex,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let syntax = syn::parse_file(source)
@@ -57,7 +56,7 @@ pub(super) fn scan_verus_source(
                 format!("verus!::{harness}")
             };
             let context = site_context(&module_prefix, &leaf);
-            findings.push(make_finding(crate_name, context, file, line, &normalized));
+            findings.push(make_finding(context, file, line, &normalized));
         }
     }
 

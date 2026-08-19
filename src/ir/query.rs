@@ -119,13 +119,16 @@ impl BasicQuery {
             .build()
     }
 
+    /// Matches every node (no kind or attribute filter).
+    pub const ALL_NODES: Self = Self {
+        node_kinds: Vec::new(),
+        edge_kinds: Vec::new(),
+        attr_key: None,
+        attr_value: None,
+    };
+
     #[instrument(level = "debug")]
     pub fn all_nodes() -> Self {
-        Self {
-            node_kinds: Vec::new(),
-            edge_kinds: Vec::new(),
-            attr_key: None,
-            attr_value: None,
-        }
+        Self::ALL_NODES
     }
 }

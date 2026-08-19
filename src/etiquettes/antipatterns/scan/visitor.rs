@@ -1,5 +1,6 @@
 //! Walk a parsed file and emit antipattern site records.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
@@ -19,17 +20,19 @@ use super::preds::{
 use crate::etiquettes::antipatterns::types::{AntipatternRuleId, AntipatternSiteRecord};
 
 use tracing::instrument;
-pub(super) struct AntipatternScanVisitor {
+pub(super) struct AntipatternScanVisitor<'a> {
     pub(super) file: PathBuf,
     pub(super) crate_root: PathBuf,
     pub(super) module_prefix: Vec<String>,
     pub(super) impl_type: Option<String>,
     pub(super) fn_stack: Vec<String>,
     pub(super) in_trait_definition: bool,
+    pub(super) in_foreign_trait_impl: bool,
+    pub(super) local_trait_names: &'a HashSet<String>,
     pub(super) findings: Vec<AntipatternSiteRecord>,
 }
 
-impl AntipatternScanVisitor {
+impl AntipatternScanVisitor<'_> {
     #[instrument(level = "debug", skip(self))]
     fn site_context(&self) -> String {
         let mut parts = self.module_prefix.clone();
@@ -136,7 +139,7 @@ impl AntipatternScanVisitor {
 
     #[instrument(level = "debug", skip(self, sig))]
     fn check_fn_sig(&mut self, sig: &Signature) {
-        if self.in_trait_definition {
+        if self.in_trait_definition || self.in_foreign_trait_impl {
             return;
         }
         for arg in &sig.inputs {
@@ -179,7 +182,7 @@ impl AntipatternScanVisitor {
     }
 }
 
-impl<'ast> Visit<'ast> for AntipatternScanVisitor {
+impl<'ast> Visit<'ast> for AntipatternScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         self.visit_mod(node);
@@ -235,10 +238,13 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor {
 
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
-        let prev = self.impl_type.clone();
+        let prev_type = self.impl_type.clone();
+        let prev_foreign = self.in_foreign_trait_impl;
         self.impl_type = Some(type_label(&node.self_ty));
+        self.in_foreign_trait_impl = is_foreign_trait_impl(node, self.local_trait_names);
         syn::visit::visit_item_impl(self, node);
-        self.impl_type = prev;
+        self.impl_type = prev_type;
+        self.in_foreign_trait_impl = prev_foreign;
     }
 
     #[instrument(level = "debug", skip(self, node))]
@@ -258,4 +264,45 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor {
         self.check_string_error_type(node);
         syn::visit::visit_type(self, node);
     }
+}
+
+/// Trait identifiers defined in this crate's scanned sources.
+#[instrument(level = "debug", skip(file))]
+pub(super) fn collect_local_trait_names(file: &syn::File) -> HashSet<String> {
+    let mut collector = TraitNameCollector {
+        names: HashSet::new(),
+    };
+    collector.visit_file(file);
+    collector.names
+}
+
+struct TraitNameCollector {
+    names: HashSet<String>,
+}
+
+impl<'ast> Visit<'ast> for TraitNameCollector {
+    #[instrument(level = "trace", skip(self, node))]
+    fn visit_item_trait(&mut self, node: &'ast ItemTrait) {
+        self.names.insert(node.ident.to_string());
+        syn::visit::visit_item_trait(self, node);
+    }
+
+    #[instrument(level = "trace", skip(self, node))]
+    fn visit_item_mod(&mut self, node: &'ast ItemMod) {
+        if is_cfg_test(&node.attrs) {
+            return;
+        }
+        syn::visit::visit_item_mod(self, node);
+    }
+}
+
+#[instrument(level = "trace", skip(node, local_trait_names), ret)]
+fn is_foreign_trait_impl(node: &ItemImpl, local_trait_names: &HashSet<String>) -> bool {
+    let Some((_, path, _)) = node.trait_.as_ref() else {
+        return false;
+    };
+    let Some(segment) = path.segments.last() else {
+        return false;
+    };
+    !local_trait_names.contains(&segment.ident.to_string())
 }

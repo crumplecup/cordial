@@ -21,14 +21,12 @@ pub(super) fn scan_kani_source(
     source: &str,
     file: &Path,
     src_root: &Path,
-    crate_name: &str,
     index: &ContractIndex,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| CordialError::syn_parse(file.display().to_string(), err))?;
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut visitor = KaniVisitor {
-        crate_name: crate_name.to_string(),
         file: file.to_path_buf(),
         module_prefix,
         fn_stack: Vec::new(),
@@ -45,7 +43,6 @@ pub(super) fn scan_kani_source(
 }
 
 struct KaniVisitor<'a> {
-    crate_name: String,
     file: PathBuf,
     module_prefix: Vec<String>,
     fn_stack: Vec<String>,
@@ -77,13 +74,8 @@ impl KaniVisitor<'_> {
             return;
         }
         let context = site_context(&self.module_prefix, &self.fn_stack.join("::"));
-        self.findings.push(make_finding(
-            &self.crate_name,
-            context,
-            &self.file,
-            line,
-            &normalized,
-        ));
+        self.findings
+            .push(make_finding(context, &self.file, line, &normalized));
     }
 
     /// `assert!(EXPR, ..)`/`assert_eq!(A, B, ..)` — both ensures-shaped.

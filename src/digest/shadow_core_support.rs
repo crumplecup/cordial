@@ -9,7 +9,7 @@ use crate::error::CordialResult;
 use crate::ir::WorkspaceIr;
 use crate::objects::{Disposition, Finding, MapFindingSink};
 use crate::plugin::{
-    ELICITATION_INTERFACE_SHADOW_CRATES, active_tracked_targets, compare_tracked_target_roster,
+    ELICITATION_INTERFACE_SHADOW_CRATES, compare_tracked_target_roster,
     discover_active_shadow_pairs, is_interface_shadow_crate, tracked_target_for_upstream,
 };
 use crate::session::{RunAll, RunFilter, SessionView};
@@ -86,14 +86,17 @@ pub struct ImplCrateRollup {
 }
 
 /// Build the combined core + shadow support digest for the current workspace run.
+///
+/// Roster comparison stays workspace-wide. Summaries honor `filter` so a
+/// crate-restricted coverage run only reports that upstream.
 #[instrument(
     level = "debug",
-    skip(session, _filter, findings, workspace),
+    skip(session, filter, findings, workspace),
     err(level = "warn")
 )]
 pub fn build_shadow_core_support_digest(
     session: &dyn SessionView,
-    _filter: &dyn RunFilter,
+    filter: &dyn RunFilter,
     findings: &[&dyn Finding],
     workspace: &WorkspaceIr,
 ) -> CordialResult<ShadowCoreSupportDigest> {
@@ -101,41 +104,21 @@ pub fn build_shadow_core_support_digest(
         .into_iter()
         .map(|target| target.crate_name)
         .collect();
-    let member_set: HashSet<String> = members.iter().cloned().collect();
     let impl_rollups = rollup_impl_findings(findings);
 
     let mut summaries = Vec::new();
-    for target in active_tracked_targets(&member_set) {
+    for pair in discover_active_shadow_pairs(session.project_root(), filter)? {
+        let elicitation_impl = tracked_target_for_upstream(&pair.upstream)
+            .map(|entry| entry.elicitation_impl)
+            .unwrap_or(false);
         summaries.push(build_shadow_core_support_summary(
-            target.upstream,
-            target.shadow,
-            target.elicitation_impl,
-            workspace.rustdoc_inventory_type_count(target.upstream),
-            workspace.crate_ir(target.upstream).is_some(),
-            impl_rollups.get(target.upstream),
+            &pair.upstream,
+            &pair.shadow,
+            elicitation_impl,
+            workspace.rustdoc_inventory_type_count(&pair.upstream),
+            workspace.crate_ir(&pair.upstream).is_some(),
+            impl_rollups.get(pair.upstream.as_str()),
         )?);
-    }
-
-    if summaries.is_empty() {
-        for pair in discover_active_shadow_pairs(session.project_root(), &RunAll)? {
-            if active_tracked_targets(&member_set)
-                .into_iter()
-                .any(|entry| entry.upstream == pair.upstream)
-            {
-                continue;
-            }
-            let elicitation_impl = tracked_target_for_upstream(&pair.upstream)
-                .map(|entry| entry.elicitation_impl)
-                .unwrap_or(false);
-            summaries.push(build_shadow_core_support_summary(
-                &pair.upstream,
-                &pair.shadow,
-                elicitation_impl,
-                workspace.rustdoc_inventory_type_count(&pair.upstream),
-                workspace.crate_ir(&pair.upstream).is_some(),
-                impl_rollups.get(pair.upstream.as_str()),
-            )?);
-        }
     }
 
     summaries.sort_by(|left, right| left.target_crate.cmp(&right.target_crate));

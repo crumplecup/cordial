@@ -3,34 +3,13 @@ use crate::framework_std::{
     FrameworkStdOptions, HOMECOMING_IMPL_CRATE, framework_std_type_items, load_merged_std_inventory,
 };
 use crate::hooks::{Probe, ProbeView};
-use crate::ir::Query;
+use crate::ir::{BasicQuery, Query};
 use crate::objects::Marker;
 use crate::store::SysrootCache;
 
 use super::homecoming::FrameworkStdScopeMarker;
 
 use tracing::instrument;
-#[derive(Debug, Default, Clone, Copy)]
-struct HubCrateQuery;
-
-impl Query for HubCrateQuery {
-    #[instrument(level = "trace", skip(self))]
-    fn node_kinds(&self) -> &[crate::ir::NodeKind] {
-        &[]
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
-        &[]
-    }
-
-    #[instrument(level = "trace", skip(self, _node))]
-    fn matches_node(&self, _node: &dyn crate::ir::NodeView) -> bool {
-        true
-    }
-}
-
-static HUB_CRATE_QUERY: HubCrateQuery = HubCrateQuery;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct HomecomingStdScopeProbe;
@@ -47,7 +26,8 @@ impl Probe for HomecomingStdScopeProbe {
 
     #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
-        &HUB_CRATE_QUERY
+        static QUERY: BasicQuery = BasicQuery::ALL_NODES;
+        &QUERY
     }
 
     #[instrument(level = "trace", skip(self, view))]
@@ -87,14 +67,13 @@ mod amenable {
         load_merged_std_inventory,
     };
     use crate::hooks::{Probe, ProbeView};
-    use crate::ir::Query;
+    use crate::ir::{BasicQuery, Query};
     use crate::objects::Marker;
 
     use crate::store::SysrootCache;
     use tracing::instrument;
 
     use super::FrameworkStdScopeMarker;
-    use super::HUB_CRATE_QUERY;
 
     #[derive(Debug, Default, Clone, Copy)]
     pub struct AmenableStdScopeProbe;
@@ -111,7 +90,8 @@ mod amenable {
 
         #[instrument(level = "trace", skip(self))]
         fn interests(&self) -> &dyn Query {
-            &HUB_CRATE_QUERY
+            static QUERY: BasicQuery = BasicQuery::ALL_NODES;
+            &QUERY
         }
 
         #[instrument(level = "trace", skip(self, view))]

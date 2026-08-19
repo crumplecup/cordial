@@ -11,7 +11,6 @@ use crate::etiquettes::foreign_error_types::{
 use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{BasicQuery, IrMut, IrView, NodeKind};
 use crate::loader::SourceLoadView;
-use crate::session::SessionView;
 
 use super::assess::{ErrorBridgeHint, build_foreign_error_attenuation_report_with_bridges};
 
@@ -47,14 +46,14 @@ impl IrEnricher for ForeignErrorAttenuationInventoryEnricher {
 
         let crate_root = member_crate_root(source, session);
         let foreign_report = foreign_report_from_ir(ir.as_view(), &crate_root);
-        let chain_records = chain_records_from_ir(ir.as_view(), session, &crate_root);
+        let chain_records = chain_records_from_ir(ir.as_view(), &crate_root);
         let bridges = error_bridges_from_ir(ir.as_view());
         let attenuation_report = build_foreign_error_attenuation_report_with_bridges(
             &foreign_report,
             &chain_records,
             &bridges,
         );
-        let sites_by_key = index_typed_error_sites(ir.as_view(), session, &crate_root);
+        let sites_by_key = index_typed_error_sites(ir.as_view(), &crate_root);
 
         for record in attenuation_report.findings {
             let key = SiteKey {
@@ -240,12 +239,8 @@ fn typed_foreign_record(
     })
 }
 
-#[instrument(level = "debug", skip(ir, _session))]
-fn chain_records_from_ir(
-    ir: &dyn IrView,
-    _session: &dyn SessionView,
-    crate_root: &Path,
-) -> Vec<ErrorChainRecord> {
+#[instrument(level = "debug", skip(ir))]
+fn chain_records_from_ir(ir: &dyn IrView, crate_root: &Path) -> Vec<ErrorChainRecord> {
     ir.nodes_matching(&BasicQuery::all_nodes())
         .into_iter()
         .filter(|node| matches!(node.kind(), NodeKind::Expr))
@@ -318,10 +313,9 @@ fn error_bridges_from_ir(ir: &dyn IrView) -> Vec<ErrorBridgeHint> {
         .collect()
 }
 
-#[instrument(level = "debug", skip(ir, _session))]
+#[instrument(level = "debug", skip(ir))]
 fn index_typed_error_sites(
     ir: &dyn IrView,
-    _session: &dyn SessionView,
     crate_root: &Path,
 ) -> HashMap<SiteKey, crate::ir::NodeId> {
     let mut map = HashMap::new();

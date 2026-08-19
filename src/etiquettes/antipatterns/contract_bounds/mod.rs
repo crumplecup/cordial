@@ -123,11 +123,9 @@ pub fn scan_crate_contract_bounds(
         }
         let source = std::fs::read_to_string(path)?;
         let mut file_findings = match verifier {
-            "creusot" => {
-                creusot::scan_creusot_source(&source, path, &src_root, crate_name, &index)?
-            }
-            "verus" => verus::scan_verus_source(&source, path, &src_root, crate_name, &index)?,
-            "kani" => kani::scan_kani_source(&source, path, &src_root, crate_name, &index)?,
+            "creusot" => creusot::scan_creusot_source(&source, path, &src_root, &index)?,
+            "verus" => verus::scan_verus_source(&source, path, &src_root, &index)?,
+            "kani" => kani::scan_kani_source(&source, path, &src_root, &index)?,
             _ => Vec::new(),
         };
         findings.append(&mut file_findings);
@@ -158,7 +156,6 @@ pub(super) fn site_context(module_prefix: &[String], leaf: &str) -> String {
 
 #[instrument(level = "debug", skip(file))]
 pub(super) fn make_finding(
-    _crate_name: &str,
     context: String,
     file: &Path,
     line: u32,
@@ -180,14 +177,12 @@ pub fn scan_creusot_contract_bounds_source(
     source: &str,
     file: &Path,
     src_root: &Path,
-    crate_name: &str,
     registry: &[ContractRecordDump],
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     creusot::scan_creusot_source(
         source,
         file,
         src_root,
-        crate_name,
         &index::ContractIndex::build(registry),
     )
 }
@@ -198,14 +193,12 @@ pub fn scan_verus_contract_bounds_source(
     source: &str,
     file: &Path,
     src_root: &Path,
-    crate_name: &str,
     registry: &[ContractRecordDump],
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     verus::scan_verus_source(
         source,
         file,
         src_root,
-        crate_name,
         &index::ContractIndex::build(registry),
     )
 }
@@ -216,14 +209,12 @@ pub fn scan_kani_contract_bounds_source(
     source: &str,
     file: &Path,
     src_root: &Path,
-    crate_name: &str,
     registry: &[ContractRecordDump],
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     kani::scan_kani_source(
         source,
         file,
         src_root,
-        crate_name,
         &index::ContractIndex::build(registry),
     )
 }

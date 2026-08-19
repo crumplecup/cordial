@@ -142,7 +142,8 @@ impl Reporter for AntipatternChecklistReporter {
             "Probe-based inventory of known antipatterns in crate `src/` trees. \
              Struct and enum variant fields should own their data instead of storing `&'static` \
              references in the ADT payload. Underscore-prefixed function parameters often indicate \
-             trait impls that ignore required inputs. `Result<T, String>` (or `&str`) is an untyped \
+             ignored inputs; impls of traits defined outside this crate are skipped because the \
+             signature is not ours to shrink. `Result<T, String>` (or `&str`) is an untyped \
              error carrier — wrap the payload in a newtype that implements `std::error::Error`. \
              A requires/ensures clause that matches no \
              registered `amenable_core::Ensures`/`Requires` contract fragment for its verifier is a \

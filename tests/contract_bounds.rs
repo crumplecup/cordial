@@ -48,7 +48,6 @@ fn creusot_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::
         &fixture(name)?,
         &src_root.join(name),
         &src_root,
-        "fixture",
         &registry,
     )
     .into_diagnostic()
@@ -79,15 +78,10 @@ fn creusot_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::
 fn creusot_named_call_to_an_unregistered_fn_name_is_flagged() -> miette::Result<()> {
     let name = "contract_bounds_creusot.rs";
     let src_root = fixtures_root();
-    let findings = scan_creusot_contract_bounds_source(
-        &fixture(name)?,
-        &src_root.join(name),
-        &src_root,
-        "fixture",
-        &[],
-    )
-    .into_diagnostic()
-    .wrap_err("scan creusot fixture")?;
+    let findings =
+        scan_creusot_contract_bounds_source(&fixture(name)?, &src_root.join(name), &src_root, &[])
+            .into_diagnostic()
+            .wrap_err("scan creusot fixture")?;
 
     assert_eq!(findings.len(), 3);
     assert!(findings.iter().any(|finding| {
@@ -101,15 +95,10 @@ fn creusot_named_call_to_an_unregistered_fn_name_is_flagged() -> miette::Result<
 fn creusot_trivial_requires_true_is_never_flagged() -> miette::Result<()> {
     let name = "contract_bounds_creusot.rs";
     let src_root = fixtures_root();
-    let findings = scan_creusot_contract_bounds_source(
-        &fixture(name)?,
-        &src_root.join(name),
-        &src_root,
-        "fixture",
-        &[],
-    )
-    .into_diagnostic()
-    .wrap_err("scan creusot fixture")?;
+    let findings =
+        scan_creusot_contract_bounds_source(&fixture(name)?, &src_root.join(name), &src_root, &[])
+            .into_diagnostic()
+            .wrap_err("scan creusot fixture")?;
 
     assert!(!findings.iter().any(|finding| finding.snippet == "true"));
     Ok(())
@@ -136,7 +125,6 @@ amenable_derive::harness! {
         source,
         &path,
         path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        "fixture",
         &[],
     )
     .into_diagnostic()
@@ -168,7 +156,6 @@ pub fn verify_something() -> (result: bool)
         source,
         &path,
         path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        "fixture",
         &[],
     )
     .into_diagnostic()
@@ -187,7 +174,6 @@ fn verus_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::Re
         &fixture(name)?,
         &src_root.join(name),
         &src_root,
-        "fixture",
         &registry,
     )
     .into_diagnostic()
@@ -211,7 +197,6 @@ fn kani_named_call_matching_a_registered_type_is_not_flagged() -> miette::Result
         &fixture(name)?,
         &src_root.join(name),
         &src_root,
-        "fixture",
         &registry,
     )
     .into_diagnostic()
@@ -231,15 +216,10 @@ fn kani_named_call_matching_a_registered_type_is_not_flagged() -> miette::Result
 fn kani_named_call_to_an_unregistered_type_is_flagged() -> miette::Result<()> {
     let name = "contract_bounds_kani.rs";
     let src_root = fixtures_root();
-    let findings = scan_kani_contract_bounds_source(
-        &fixture(name)?,
-        &src_root.join(name),
-        &src_root,
-        "fixture",
-        &[],
-    )
-    .into_diagnostic()
-    .wrap_err("scan kani fixture")?;
+    let findings =
+        scan_kani_contract_bounds_source(&fixture(name)?, &src_root.join(name), &src_root, &[])
+            .into_diagnostic()
+            .wrap_err("scan kani fixture")?;
 
     assert_eq!(findings.len(), 3);
     assert!(
@@ -279,7 +259,6 @@ amenable_derive::harness! {
         source,
         &path,
         path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        "fixture",
         &registry,
     )
     .into_diagnostic()
@@ -313,7 +292,6 @@ amenable_derive::harness! {
         source,
         &path,
         path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        "fixture",
         &registry,
     )
     .into_diagnostic()
@@ -342,7 +320,6 @@ amenable_derive::harness! {
         source,
         &path,
         path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        "fixture",
         &registry,
     )
     .into_diagnostic()
@@ -371,7 +348,6 @@ amenable_derive::harness! {
         source,
         &path,
         path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        "fixture",
         &registry,
     )
     .into_diagnostic()
@@ -400,7 +376,6 @@ amenable_derive::harness! {
         source,
         &path,
         path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        "fixture",
         &registry,
     )
     .into_diagnostic()
@@ -432,7 +407,6 @@ pub fn verify_something() -> (result: bool)
         source,
         &path,
         path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        "fixture",
         &[],
     )
     .into_diagnostic()
@@ -466,7 +440,6 @@ pub fn verify_something() -> (result: (Option<i32>, Option<i32>, Option<i32>))
         source,
         &path,
         path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        "fixture",
         &[],
     )
     .into_diagnostic()
@@ -516,7 +489,6 @@ pub fn verify_something(initial: i32, updated: i32) -> (result: (bool, bool, i32
         source,
         &path,
         path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        "fixture",
         &[],
     )
     .into_diagnostic()
@@ -545,7 +517,6 @@ amenable_derive::harness! {
         source,
         &path,
         path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        "fixture",
         &[],
     )
     .into_diagnostic()
@@ -579,7 +550,6 @@ amenable_derive::harness! {
         source,
         &path,
         path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        "fixture",
         &[],
     )
     .into_diagnostic()

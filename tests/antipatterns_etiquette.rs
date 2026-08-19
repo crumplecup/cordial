@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use cordial::{
     ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, RunAll, Session, SessionBuilder,
-    scan_antipatterns_rust_source,
+    scan_antipatterns_rust_source, scan_crate_antipatterns,
 };
 
 use miette::{IntoDiagnostic, WrapErr};
@@ -125,6 +125,84 @@ fn unused_underscore_arguments_are_detected() -> miette::Result<()> {
         !unused
             .iter()
             .any(|f| f.context.contains("test_fn") || f.snippet == "y" || f.snippet == "b")
+    );
+    Ok(())
+}
+
+#[test]
+fn foreign_trait_impl_unused_args_are_skipped() -> miette::Result<()> {
+    let findings = scan_fixture("foreign_trait_unused_args.rs")?;
+    let unused = findings
+        .iter()
+        .filter(|f| f.rule_id == AntipatternRuleId::UnusedUnderscoreArg001)
+        .collect::<Vec<_>>();
+    assert_eq!(unused.len(), 2, "{unused:?}");
+    assert!(
+        unused
+            .iter()
+            .any(|f| f.context.contains("Mine") && f.snippet == "_arg")
+    );
+    assert!(unused.iter().any(|f| f.snippet == "_z"));
+    assert!(
+        !unused
+            .iter()
+            .any(|f| f.context.contains("visit_expr_closure") || f.snippet == "_node")
+    );
+    Ok(())
+}
+
+#[test]
+fn crate_local_traits_apply_across_files() -> miette::Result<()> {
+    let tmp = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let src = tmp.path().join("src");
+    fs::create_dir_all(&src)
+        .into_diagnostic()
+        .wrap_err("mkdir src")?;
+    fs::write(
+        tmp.path().join("Cargo.toml"),
+        "[package]\nname = \"split_traits\"\nversion = \"0.0.0\"\nedition = \"2024\"\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write manifest")?;
+    fs::write(
+        src.join("lib.rs"),
+        "mod query;\n\
+         struct Hub;\n\
+         impl query::Query for Hub {\n\
+             fn matches_node(&self, _node: u8) {}\n\
+         }\n\
+         struct Walker;\n\
+         impl Visit for Walker {\n\
+             fn visit_expr_closure(&mut self, _node: u8) {}\n\
+         }\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write lib")?;
+    fs::write(
+        src.join("query.rs"),
+        "pub trait Query { fn matches_node(&self, node: u8); }\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write query")?;
+
+    let findings = scan_crate_antipatterns(tmp.path(), "split_traits", tmp.path(), tmp.path())
+        .into_diagnostic()
+        .wrap_err("scan crate")?;
+    let unused: Vec<_> = findings
+        .iter()
+        .filter(|f| f.rule_id == AntipatternRuleId::UnusedUnderscoreArg001)
+        .collect();
+    assert!(
+        unused
+            .iter()
+            .any(|f| f.snippet == "_node" && f.context.contains("matches_node")),
+        "{unused:?}"
+    );
+    assert!(
+        !unused
+            .iter()
+            .any(|f| f.context.contains("visit_expr_closure")),
+        "{unused:?}"
     );
     Ok(())
 }
