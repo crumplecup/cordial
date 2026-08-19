@@ -22,7 +22,9 @@ pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<S
          `foreign-error-types.checklist.md`, and \
          `foreign-error-attenuation.checklist.md`. `Box<dyn Error>` and \
          `Result<_, String>` from `antipatterns.checklist.md` roll into this \
-         area's open count.\n"
+         area's open count. Unused `_arg`, `&'static` fields, unnamed contract \
+         bounds, and version-in-member are the Antipatterns area \
+         (`version-in-member.checklist.md` is the version subset).\n"
     )?;
 
     writeln!(out, "## Resolution order\n")?;

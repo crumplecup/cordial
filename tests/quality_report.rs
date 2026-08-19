@@ -4,16 +4,28 @@ use miette::{IntoDiagnostic, WrapErr};
 #[test]
 fn quality_report_lists_resolution_order() -> miette::Result<()> {
     let report = build_quality_report(&[]).into_diagnostic()?;
-    assert_eq!(report.areas.len(), 5);
+    assert_eq!(report.areas.len(), 11);
     assert_eq!(report.areas[0].title, "Error handling");
-    assert_eq!(report.areas[3].title, "Tracing instrumentation");
-    assert_eq!(report.areas[4].title, "Modularity");
+    assert_eq!(report.areas[1].title, "Antipatterns");
+    assert_eq!(report.areas[2].title, "Derive patterns");
+    assert_eq!(report.areas[4].title, "Tracing instrumentation");
+    assert_eq!(report.areas[5].title, "Modularity");
+    assert_eq!(report.areas[6].title, "Module visibility");
+    assert_eq!(report.areas[7].title, "Cfg scatter");
+    assert_eq!(report.areas[8].title, "CLI layout");
+    assert_eq!(report.areas[9].title, "Glob imports");
+    assert_eq!(report.areas[10].title, "Inline tests");
 
     let body = cordial::render_quality_report_markdown(&report).into_diagnostic()?;
     assert!(body.contains("## Resolution order"));
     assert!(body.contains("foreign-error-attenuation.checklist.md"));
+    assert!(body.contains("antipatterns.checklist.md"));
+    assert!(body.contains("version-in-member.checklist.md"));
     assert!(body.contains("tracing-summary.md"));
     assert!(body.contains("modularity-summary.md"));
+    assert!(body.contains("visibility.checklist.md"));
+    assert!(body.contains("cfg-scatter-summary.md"));
+    assert!(body.contains("cli-layout.checklist.md"));
 
     let summary = cordial::render_quality_workspace_summary_markdown(&report).into_diagnostic()?;
     assert!(summary.contains("# Quality workspace summary"));
@@ -72,6 +84,7 @@ edition = { workspace = true }
         .wrap_err("quality-report.md")?;
     assert!(report.contains("# Code quality report"));
     assert!(report.contains("abort-site action items"));
+    assert!(report.contains("| 2 | Antipatterns |"));
     assert!(report.contains("open gaps (other **1**)"));
 
     let summary = std::fs::read_to_string(findings_dir.join("summary.md"))

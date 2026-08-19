@@ -75,9 +75,27 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
         derives.builder, derives.getter, derives.setter, derives.new, derives.pub_field,
     );
 
+    let unused_arg = count_open_rule(findings, "ANTIPATTERN-UNUSED-UNDERSCORE-ARG-001");
+    let static_ref = count_open_rule(findings, "ANTIPATTERN-STRUCT-STATIC-REF-001");
+    let version_in_member = count_open_rule(findings, "ANTIPATTERN-VERSION-IN-MEMBER-001");
+    let unnamed_contract = count_open_rule(findings, "ANTIPATTERN-UNNAMED-CONTRACT-BOUND-001");
+    let antipatterns = unused_arg + static_ref + version_in_member + unnamed_contract;
+
     let allows = count_open_category(findings, "allows");
     let tracing = tracing_metrics(findings);
     let modularity = modularity_metrics(findings);
+
+    let glob_imports = count_open_category(findings, "glob_imports");
+    let inline_tests = count_open_category(findings, "inline_tests");
+    let visibility_flat = count_open_rule(findings, "VIS-CRATE-FLAT-001");
+    let visibility_thin = count_open_rule(findings, "VIS-MOD-THIN-001");
+    let visibility_mismatch = count_open_rule(findings, "VIS-MOD-MISMATCH-001");
+    let visibility = visibility_flat + visibility_thin + visibility_mismatch;
+    let cfg_scatter = count_open_category(findings, "cfg_scatter");
+    let cli_island = count_open_rule(findings, "CLI-ISLAND-001");
+    let cli_act = count_open_rule(findings, "CLI-ACT-001");
+    let cli_main = count_open_rule(findings, "CLI-MAIN-001");
+    let cli_layout = cli_island + cli_act + cli_main;
 
     let areas = vec![
         QualityAreaSummary {
@@ -90,6 +108,17 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
         },
         QualityAreaSummary {
             priority: 2,
+            title: "Antipatterns",
+            open_items: antipatterns,
+            checklist: "antipatterns.checklist.md",
+            summary: "antipatterns-summary.md",
+            detail: format!(
+                "unused `_arg` **{unused_arg}**, static refs **{static_ref}**, \
+                 version-in-member **{version_in_member}**, unnamed contract **{unnamed_contract}**"
+            ),
+        },
+        QualityAreaSummary {
+            priority: 3,
             title: "Derive patterns",
             open_items: derives.total,
             checklist: "derives.checklist.md",
@@ -97,7 +126,7 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
             detail: derive_detail,
         },
         QualityAreaSummary {
-            priority: 3,
+            priority: 4,
             title: "Allow attributes",
             open_items: allows,
             checklist: "allows.checklist.md",
@@ -105,7 +134,7 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
             detail: format!("allow attributes **{allows}**"),
         },
         QualityAreaSummary {
-            priority: 4,
+            priority: 5,
             title: "Tracing instrumentation",
             open_items: tracing.gaps,
             checklist: "tracing-instrument.checklist.md",
@@ -113,7 +142,7 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
             detail: format_tracing_detail(&tracing),
         },
         QualityAreaSummary {
-            priority: 5,
+            priority: 6,
             title: "Modularity",
             open_items: modularity.checklist_total,
             checklist: "modularity.checklist.md",
@@ -131,6 +160,49 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
                 modularity.collapse,
                 modularity.inventory_total,
             ),
+        },
+        QualityAreaSummary {
+            priority: 7,
+            title: "Module visibility",
+            open_items: visibility,
+            checklist: "visibility.checklist.md",
+            summary: "visibility-summary.md",
+            detail: format!(
+                "crate-flat **{visibility_flat}**, thin-mod **{visibility_thin}**, \
+                 vis-mismatch **{visibility_mismatch}**"
+            ),
+        },
+        QualityAreaSummary {
+            priority: 8,
+            title: "Cfg scatter",
+            open_items: cfg_scatter,
+            checklist: "cfg-scatter.checklist.md",
+            summary: "cfg-scatter-summary.md",
+            detail: format!("scattered `#[cfg]` groups **{cfg_scatter}**"),
+        },
+        QualityAreaSummary {
+            priority: 9,
+            title: "CLI layout",
+            open_items: cli_layout,
+            checklist: "cli-layout.checklist.md",
+            summary: "cli-layout-summary.md",
+            detail: format!("island **{cli_island}**, act **{cli_act}**, main **{cli_main}**"),
+        },
+        QualityAreaSummary {
+            priority: 10,
+            title: "Glob imports",
+            open_items: glob_imports,
+            checklist: "glob-imports.checklist.md",
+            summary: "glob-imports-summary.md",
+            detail: format!("glob `use` sites **{glob_imports}**"),
+        },
+        QualityAreaSummary {
+            priority: 11,
+            title: "Inline tests",
+            open_items: inline_tests,
+            checklist: "inline-tests.checklist.md",
+            summary: "inline-tests-summary.md",
+            detail: format!("tests under `src/` **{inline_tests}**"),
         },
     ];
 
