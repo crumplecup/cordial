@@ -30,7 +30,9 @@ pub use elicitation_targets::{
     tracked_target_for_shadow, tracked_target_for_upstream,
 };
 #[cfg(any(feature = "elicitation", feature = "shadow"))]
-pub use elicitation_tracked_targets::ELICITATION_INTERFACE_SHADOW_CRATES;
+pub use elicitation_tracked_targets::{
+    ELICITATION_INTERFACE_SHADOW_CRATES, ELICITATION_TRACKED_TARGETS, ElicitationTrackedTarget,
+};
 pub use error_handling::{
     ErrorHandling, ErrorHandlingLayers, ErrorHandlingPolicy, ErrorScope, ErrorScopeProvider,
     ErrorSurface, StandardErrorHandlingPolicy, WorkspaceMembersErrorScopeProvider,
@@ -97,18 +99,22 @@ pub struct StaticPlugin {
 }
 
 impl Plugin for StaticPlugin {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.id
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn name(&self) -> &str {
         self.name
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn etiquettes(&self) -> &[&'static dyn Etiquette] {
         self.etiquettes
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> PluginCategory {
         self.category
     }
@@ -146,7 +152,7 @@ pub fn selected_plugins(
 }
 
 /// Select plugins by category.
-#[instrument(level = "debug", skip(plugins))]
+#[instrument(level = "debug", skip(plugins, category))]
 pub fn plugins_in_category(
     plugins: &[&'static dyn Plugin],
     category: PluginCategory,

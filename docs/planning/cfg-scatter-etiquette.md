@@ -102,7 +102,7 @@ the natural home for that behavior), `src/enricher/error/scan.rs`
 (`ErrorIrScanReport::internal_report` — a single conversion method whose
 return type only exists under the feature), `src/ir/view.rs`
 (`IrMut::workspace_wrapper_coverage` — a single trait default method plus the
-`use` needed to name its return type), and `cordial_cli/src/cli.rs`
+`use` needed to name its return type), and `src/cli.rs`
 (subcommand variants/arms for `Build`/`Sysroot`).
 
 These don't reduce further without either (a) forcing an artificial module

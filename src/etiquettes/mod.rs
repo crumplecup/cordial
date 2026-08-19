@@ -1,9 +1,57 @@
+//! Built-in etiquettes: quality scanners and coverage inventories.
+//!
+//! An etiquette is one polite standard: a named bundle of loaders, enrichers,
+//! probes, assessors, and reporters. Quality etiquettes walk source into the
+//! graph IR. Coverage etiquettes need rustdoc JSON (`cordial build rustdoc`).
+//!
+//! Run `cordial quality` or `cordial coverage`, or register a bundle on a
+//! [`crate::Session`]. Thresholds load from `cordial.toml` (workspace, then
+//! store home). Exceptions are JSON patches under the project store
+//! (`cordial exceptions`).
+//!
+//! Each child module’s docs cover what it checks, why, and how to use it.
+//! Policy tables live in `docs/planning/`.
+//!
+//! # Quality
+//!
+//! | Id | Module | Question |
+//! | --- | --- | --- |
+//! | `panics` | `panics` | Where does this crate abort? |
+//! | `tracing` | `tracing` | Are functions instrumented with the recipe for their role? |
+//! | `allows` | `allows` | Which `#[allow]` attributes are in force? |
+//! | `modularity` | `modularity` | Which files, functions, and modules are too large, overpacked, top-heavy, lopsided, or a unary nest? |
+//! | `derives` | `derives` | Which manual builders/getters/setters/`new`/pub fields could be derives? |
+//! | `error_sites` | `error_sites` | Where are `?`, `map_err`, and related error sites? |
+//! | `error_chain` | `error_chain` | Which sites drop the source error instead of chaining it? |
+//! | `internal_error_chain` | `internal_error_chain` | Parent / Kind / native-source architecture? |
+//! | `foreign_error_types` | `foreign_error_types` | Which foreign error types leak into this crate? |
+//! | `foreign_error_attenuation` | `foreign_error_attenuation` | How should those foreign errors be wrapped? |
+//! | `antipatterns` | `antipatterns` | Untyped error carriers and related smells |
+//! | `cfg_scatter` | `cfg_scatter` | Is the same `#[cfg]` copied across item kinds? |
+//! | `visibility` | `visibility` | Do `pub mod` paths earn their existence? |
+//! | `cli_layout` | `cli_layout` | Do clap types dispatch in the library with `act`? |
+//!
+//! # Coverage
+//!
+//! | Id | Module | Question |
+//! | --- | --- | --- |
+//! | `impl-coverage` | `impl_coverage` | Do types implement the required elicitation traits? |
+//! | `trenchcoat` | `trenchcoat` | Are foreign types wrapped before they reach our traits? |
+//! | `shadow` | `shadow` | Do shadow crates mirror upstream items? |
+//! | `homecoming-std` | `framework_std` | How much of Rust `std` implements homecoming `Code`? |
+//! | `amenable-std` | `framework_std` | How much of `std` is in the amenable registry? |
+//!
+//! Error-handling etiquettes share `error_ir`. Coverage etiquettes need
+//! rustdoc JSON.
+
 #[cfg(feature = "allows")]
 pub(crate) mod allows;
 #[cfg(feature = "antipatterns")]
 pub(crate) mod antipatterns;
 #[cfg(feature = "cfg_scatter")]
 pub(crate) mod cfg_scatter;
+#[cfg(feature = "cli_layout")]
+pub(crate) mod cli_layout;
 #[cfg(feature = "derives")]
 pub(crate) mod derives;
 #[cfg(feature = "error_sites")]
@@ -40,7 +88,7 @@ pub(crate) mod trenchcoat;
 /// Built-in source-quality etiquettes enabled in the current feature set.
 #[::tracing::instrument(level = "debug")]
 pub fn quality_etiquettes() -> Vec<&'static dyn crate::Etiquette> {
-    let items: [Option<&'static dyn crate::Etiquette>; 13] = [
+    let items: [Option<&'static dyn crate::Etiquette>; 14] = [
         #[cfg(feature = "panics")]
         Some(&panics::PANICS_ETIQUETTE as &dyn crate::Etiquette),
         #[cfg(not(feature = "panics"))]
@@ -95,6 +143,10 @@ pub fn quality_etiquettes() -> Vec<&'static dyn crate::Etiquette> {
         #[cfg(feature = "visibility")]
         Some(&visibility::VISIBILITY_ETIQUETTE as &dyn crate::Etiquette),
         #[cfg(not(feature = "visibility"))]
+        None,
+        #[cfg(feature = "cli_layout")]
+        Some(&cli_layout::CLI_LAYOUT_ETIQUETTE as &dyn crate::Etiquette),
+        #[cfg(not(feature = "cli_layout"))]
         None,
     ];
     items.into_iter().flatten().collect()

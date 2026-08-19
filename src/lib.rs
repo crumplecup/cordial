@@ -1,22 +1,32 @@
 //! `cordial` — polite standards for code development.
 //!
 //! A plugin framework for local, regeneratable lint and coverage reports.
-//! See [CORDIAL_PLAN.md](https://github.com/crumplecup/cordial/blob/main/CORDIAL_PLAN.md)
-//! for architecture.
+//! Each **etiquette** is a named bundle of loaders, enrichers, probes,
+//! assessors, and reporters. Quality etiquettes scan source; coverage
+//! etiquettes need rustdoc JSON. The `cordial` CLI writes artifacts under
+//! `~/.cordial/{project}/`.
+//!
+//! What each etiquette checks, why, and how to run it: the README, then
+//! module docs under `src/etiquettes/`. Architecture:
+//! [CORDIAL_PLAN.md](https://github.com/crumplecup/cordial/blob/main/CORDIAL_PLAN.md).
 //!
 //! # Features
 //!
 //! Built-in plugins are feature-gated:
 //!
-//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility` — source-quality scanners
+//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout` — source-quality scanners
 //!   (`panics` and `tracing` enabled by default)
+//! - `cli` — clap binary (`cordial`); enabled by default
 //! - `impl_coverage`, `trenchcoat`, `shadow` — rustdoc coverage scanners
 //! - `elicitation` — umbrella for all coverage plugins
+//! - `homecoming_std`, `amenable_std` — std-family coverage
 //! - `full` — every built-in plugin
 
+mod cache_digest;
 #[cfg(feature = "rustdoc")]
 mod cargo_rustdoc;
-mod cache_digest;
+#[cfg(feature = "cli")]
+mod cli;
 mod config;
 #[cfg(feature = "elicitation")]
 mod digest;
@@ -64,6 +74,10 @@ pub use etiquettes::antipatterns::{
 #[cfg(feature = "cfg_scatter")]
 pub use etiquettes::cfg_scatter::{
     CFG_SCATTER_ETIQUETTE, CfgSiteKind, scan_rust_source as scan_cfg_scatter_rust_source,
+};
+#[cfg(feature = "cli_layout")]
+pub use etiquettes::cli_layout::{
+    CLI_LAYOUT_ETIQUETTE, CliLayoutId, CliLayoutRecord, scan_crate_cli_layout,
 };
 #[cfg(feature = "derives")]
 pub use etiquettes::derives::{
@@ -130,6 +144,8 @@ pub use etiquettes::visibility::{
 #[cfg(feature = "shadow")]
 mod shadow;
 pub use cache_digest::{IrCacheDigest, SourceFileDigest};
+#[cfg(feature = "cli")]
+pub use cli::{Cli, Commands};
 #[cfg(feature = "elicitation")]
 pub use digest::{
     ShadowCoreSupportDigest, ShadowCoreSupportStatus, ShadowCoreSupportSummary,
@@ -149,7 +165,8 @@ pub use digest::{
     feature = "foreign_error_attenuation",
     feature = "antipatterns",
     feature = "cfg_scatter",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "cli_layout"
 ))]
 pub use enricher::AttributeEnricher;
 pub use enricher::ScopeEnricher;
@@ -170,7 +187,7 @@ pub use enricher::{
     ShadowLinkEnricher, ShadowMapEntry, discover_same_crate_shadow_pairs, load_shadow_map,
     resolve_shadow_entries,
 };
-pub use error::{CordialError, CordialResult, TokenStreamParseError};
+pub use error::{CordialError, CordialErrorKind, CordialResult, TokenStreamParseError};
 pub use etiquette::{Etiquette, StaticEtiquette};
 #[cfg(feature = "elicitation")]
 pub use etiquettes::coverage_etiquettes;
@@ -183,7 +200,8 @@ pub use etiquettes::shadow::SHADOW_ETIQUETTE;
 pub use plugin::classify_elicit_complete_gap;
 #[cfg(feature = "elicitation")]
 pub use plugin::{
-    ElicitationTargetProvider, ShadowPair, TrackedTargetRosterGap, active_tracked_targets,
+    ELICITATION_INTERFACE_SHADOW_CRATES, ELICITATION_TRACKED_TARGETS, ElicitationTargetProvider,
+    ElicitationTrackedTarget, ShadowPair, TrackedTargetRosterGap, active_tracked_targets,
     compare_tracked_target_roster, discover_active_shadow_pairs, is_interface_shadow_crate,
     tracked_target_for_shadow, tracked_target_for_upstream,
 };
@@ -272,7 +290,7 @@ pub use {
 pub use targets::{discover_crate_targets, discover_run_crate_targets};
 #[cfg(feature = "rustdoc")]
 pub use {
-    build::{
+    cargo_rustdoc::{
         BuildArtifact, BuildKind, BuildOptions, DocFingerprint, build_workspace_members,
         nightly_available, run_cargo_rustdoc,
     },

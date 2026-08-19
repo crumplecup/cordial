@@ -95,6 +95,7 @@ mod coverage_targets {
         Ok(sorted)
     }
 
+    #[instrument(level = "debug", skip(plugin, session, filter), err(level = "warn"))]
     fn coverage_targets_for_plugin(
         plugin: &dyn Plugin,
         session: &dyn SessionView,
@@ -115,6 +116,7 @@ mod coverage_targets {
         }
     }
 
+    #[instrument(level = "debug", skip(targets))]
     fn dedupe_coverage_targets(targets: Vec<CoverageTarget>) -> Vec<CoverageTarget> {
         use std::collections::HashSet;
 
@@ -174,7 +176,7 @@ pub fn coverage_plugins() -> Vec<&'static dyn Plugin> {
 }
 
 /// Coverage plugins appropriate for a detected workspace hub.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(hub))]
 #[cfg(feature = "homecoming_std")]
 pub fn coverage_plugins_for_hub(hub: crate::plugin::WorkspaceHub) -> Vec<&'static dyn Plugin> {
     match hub {
@@ -218,8 +220,9 @@ pub fn coverage_only_plugins() -> Vec<&'static dyn Plugin> {
 }
 
 /// Static quality plugins wrapping each enabled etiquette.
+#[instrument(level = "debug")]
 fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
-    let items: [Option<&'static EtiquettePlugin>; 7] = [
+    let items: [Option<&'static EtiquettePlugin>; 8] = [
         #[cfg(feature = "tracing")]
         Some(tracing_plugin()),
         #[cfg(not(feature = "tracing"))]
@@ -247,6 +250,10 @@ fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
         #[cfg(feature = "visibility")]
         Some(visibility_plugin()),
         #[cfg(not(feature = "visibility"))]
+        None,
+        #[cfg(feature = "cli_layout")]
+        Some(cli_layout_plugin()),
+        #[cfg(not(feature = "cli_layout"))]
         None,
     ];
     items.into_iter().flatten().collect()
@@ -292,6 +299,11 @@ etiquette_plugin_fn!(
 etiquette_plugin_fn!(
     visibility_plugin,
     &crate::etiquettes::visibility::VISIBILITY_ETIQUETTE
+);
+#[cfg(feature = "cli_layout")]
+etiquette_plugin_fn!(
+    cli_layout_plugin,
+    &crate::etiquettes::cli_layout::CLI_LAYOUT_ETIQUETTE
 );
 
 /// Legacy etiquette list — flatten of all registered quality + coverage plugins.

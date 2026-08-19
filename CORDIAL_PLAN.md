@@ -26,8 +26,8 @@ The motivating use case is twofold:
 ## Status
 
 Phases 0–6 implemented on `main`. Built-in etiquettes cover panics, tracing,
-and elicitation coverage (impl / trenchcoat / shadow). The `cordial_cli`
-binary drives session runs against local and workspace projects.
+and elicitation coverage (impl / trenchcoat / shadow). The `cordial` binary
+drives session runs against local and workspace projects.
 
 Output parity with `elicit_doc` is tracked in
 [docs/planning/elicit-doc-parity.md](docs/planning/elicit-doc-parity.md).
@@ -52,8 +52,8 @@ requires a code change and release.
 checklists, JSON patch exceptions, stage-level caching) while replacing
 the *structure* with composable hooks around a shared graph IR.
 
-`elicit_doc` becomes a consumer — eventually `cordial_elicitation` or
-similar — not the framework itself.
+`elicit_doc` becomes a consumer of `cordial` coverage plugins — not the
+framework itself.
 
 ## Naming
 
@@ -81,7 +81,8 @@ similar — not the framework itself.
 | `elicitation` | All coverage plugins (`impl_coverage`, `trenchcoat`, `shadow`) |
 | `full` | Every built-in plugin |
 
-Downstream: `cordial_elicitation` enables `cordial/elicitation`; `cordial_cli` defaults to `quality` + `elicitation`.
+Downstream: enable `cordial/elicitation` (and `cli` for the binary). Default features
+include `cli` plus `panics` and `tracing`.
 
 Usage: *"run the panics etiquette"*, *"register a custom etiquette"*.
 
@@ -594,7 +595,7 @@ changes, re-enrich from raw loader output without re-parsing.
 | **elicitation / elicit_surrealdb** | Optional SurrealDB export for agent-facing graph queries |
 
 Dependency direction: `cordial` is standalone. Domain-specific etiquette
-crates (`cordial_elicitation`, user crates) depend on `cordial`, not the
+crates (`cordial` first-party etiquettes, user crates) depend on `cordial`, not the
 reverse.
 
 ---
@@ -602,12 +603,14 @@ reverse.
 ## Proposed crate layout
 
 ```
-cordial/                  # core: traits, session, IR, query, default loaders/enrichers
-cordial_cli/              # binary (feature flag or separate crate)
-cordial_elicitation/      # elicit_doc domain logic as etiquettes (future)
+cordial/                  # one package: library + `cordial` binary
+examples/custom_plugins/  # downstream plugin template
 ```
 
-Users depend on `cordial` and optionally publish `cordial-*` plugin crates.
+Users depend on `cordial` and may publish their own plugin crates. First-party
+`cordial_*` satellites are not used. CLI types and dispatch live in the
+library; `src/main.rs` parses, calls `Cli::act`, and surfaces with miette.
+See [one-crate-cli-layout.md](docs/planning/one-crate-cli-layout.md).
 
 ---
 

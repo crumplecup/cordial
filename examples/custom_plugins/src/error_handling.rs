@@ -8,6 +8,7 @@ use cordial::{
     WorkspaceMembersErrorScopeProvider,
 };
 
+use tracing::instrument;
 static WORKSPACE_SCOPES: WorkspaceMembersErrorScopeProvider = WorkspaceMembersErrorScopeProvider;
 static ACME_POLICY: AcmeErrorPolicy = AcmeErrorPolicy;
 
@@ -18,6 +19,7 @@ static ACME_ERROR_ETIQUETTES: &[&dyn Etiquette] = &[&ERROR_SITES_ETIQUETTE, &ERR
 pub struct AcmeErrorPolicy;
 
 impl ErrorHandlingPolicy for AcmeErrorPolicy {
+    #[instrument(level = "trace", skip(self))]
     fn layers(&self) -> ErrorHandlingLayers {
         ErrorHandlingLayers {
             panics: false,
@@ -35,28 +37,34 @@ impl ErrorHandlingPolicy for AcmeErrorPolicy {
 pub struct AcmeErrorHandling;
 
 impl Plugin for AcmeErrorHandling {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "acme-error-handling"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn name(&self) -> &str {
         "Acme error handling"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn etiquettes(&self) -> &[&'static dyn Etiquette] {
         ACME_ERROR_ETIQUETTES
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> PluginCategory {
         PluginCategory::ErrorHandling
     }
 }
 
 impl ErrorHandling for AcmeErrorHandling {
+    #[instrument(level = "trace", skip(self))]
     fn scope_provider(&self) -> &dyn ErrorScopeProvider {
         &WORKSPACE_SCOPES
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn policy(&self) -> &dyn ErrorHandlingPolicy {
         &ACME_POLICY
     }

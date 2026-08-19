@@ -281,6 +281,7 @@ name = "cordial"
 version = "0.1.0"
 dependencies = [
  "cargo_metadata",
+ "clap",
  "config",
  "csv",
  "derive_more",
@@ -302,26 +303,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cordial_amenable"
-version = "0.1.0"
-dependencies = [
- "cordial",
-]
-
-[[package]]
-name = "cordial_cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "cordial",
- "cordial_elicitation",
- "derive_more",
- "miette",
- "tempfile",
- "tracing",
-]
-
-[[package]]
 name = "cordial_custom_plugins"
 version = "0.1.0"
 dependencies = [
@@ -331,22 +312,6 @@ dependencies = [
  "serde_json",
  "syn 2.0.119",
  "tempfile",
-]
-
-[[package]]
-name = "cordial_elicitation"
-version = "0.1.0"
-dependencies = [
- "cordial",
- "miette",
- "tempfile",
-]
-
-[[package]]
-name = "cordial_homecoming"
-version = "0.1.0"
-dependencies = [
- "cordial",
 ]
 
 [[package]]

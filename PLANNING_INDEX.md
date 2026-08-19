@@ -9,13 +9,14 @@ Active implementation plans for `cordial`.
 | [Coverage as plugin](docs/planning/coverage-as-plugin.md) | **Active** | Plugin / Coverage supertrait model; elicitation, homecoming, amenable profiles |
 | [Post-parity alignment](docs/planning/post-parity-alignment.md) | **Complete** | Strangler map: elicit_doc straight ports extracted onto hook seams + IR (R0–R8) |
 | [IR enrichment](docs/planning/ir-enrichment.md) | **Complete** | Graph IR one-stop shop; inventory side caches retired (I1–I5) |
-| [Error handling as plugin](docs/planning/error-handling-as-plugin.md) | **Active** | Unified `ErrorHandling` plugin: panics + Result/chain stack; library vs miette surfaces |
+| [Error handling as plugin](docs/planning/error-handling-as-plugin.md) | **Active** | Unified `ErrorHandling` plugin; parent / Kind / native-source architecture lints |
+| [One crate, CLI in the library](docs/planning/one-crate-cli-layout.md) | **Active** | One `CordialError`; `cli_layout` etiquette; clap dispatch in the library |
 | [cfg_scatter etiquette](docs/planning/cfg-scatter-etiquette.md) | **Active** | Static lint for `#[cfg(feature = "...")]` scattered across item kinds vs. mod-gated |
 | [Custom plugin example](docs/planning/custom-plugin-example.md) | **Active** | Downstream templates: `StaticPlugin`, `Coverage`, `ErrorHandling` |
 | [Visibility etiquette](docs/planning/visibility-etiquette.md) | **Active** | `pub mod` paths must earn their existence; `prefer_root` vs branching peel |
 | [cordial.toml config](docs/planning/cordial-config.md) | **Active** | Layered `cordial.toml` via the `config` crate; canonical etiquette thresholds |
 | [Modularity etiquette](docs/planning/modularity-etiquette.md) | **Active** | Combined modularity plugin: size, packing, hierarchy lints |
-| [Tracing etiquette](docs/planning/tracing-etiquette.md) | **Active** | Classify by role; recipe deltas; apply writes the recipe; `[tracing]` config |
+| [Tracing etiquette](docs/planning/tracing-etiquette.md) | **Active** | Classify by role; every function; recipe deltas; apply writes the recipe |
 
 ## Completed / archived
 

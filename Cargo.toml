@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "cordial_elicitation", "cordial_homecoming", "cordial_amenable", "cordial_cli", "examples/custom_plugins"]
+members = [".", "examples/custom_plugins"]
 resolver = "2"
 
 [package]
@@ -20,6 +20,11 @@ categories = ["development-tools"]
 name = "cordial"
 path = "src/lib.rs"
 
+[[bin]]
+name = "cordial"
+path = "src/main.rs"
+required-features = ["cli"]
+
 [dependencies]
 config = { version = "0.15", default-features = false, features = ["toml"] }
 derive_more = { version = "2", features = ["display", "error", "from"] }
@@ -36,12 +41,15 @@ walkdir = "2"
 cargo_metadata = "0.23"
 toml = { version = "0.8", optional = true }
 quote = { version = "1", optional = true }
+clap = { version = "4", features = ["derive", "env"], optional = true }
+miette = { version = "7", features = ["fancy"], optional = true }
 
 [features]
-default = ["panics", "tracing"]
+default = ["panics", "tracing", "cli"]
 # Quality plugins (syn scans of source).
 panics = []
 tracing = []
+cli = ["dep:clap", "dep:miette", "tracing"]
 allows = []
 modularity = []
 derives = []
@@ -53,7 +61,8 @@ foreign_error_attenuation = ["foreign_error_types", "error_chain"]
 antipatterns = ["dep:toml", "dep:quote"]
 cfg_scatter = []
 visibility = []
-quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility"]
+cli_layout = []
+quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout"]
 # Shared rustdoc JSON support for coverage plugins.
 rustdoc = ["dep:rustdoc-types", "dep:nom"]
 # Elicitation coverage plugins (each requires rustdoc).
@@ -66,7 +75,11 @@ amenable_std = ["homecoming_std"]
 # Umbrella: all elicitation coverage plugins.
 elicitation = ["impl_coverage", "trenchcoat", "shadow"]
 # Every built-in plugin (integration tests, full builds).
-full = ["quality", "elicitation", "homecoming_std", "amenable_std"]
+full = ["quality", "elicitation", "homecoming_std", "amenable_std", "cli"]
+
+[[test]]
+name = "cli"
+required-features = ["cli", "quality"]
 
 [[test]]
 name = "stability"
@@ -127,6 +140,10 @@ required-features = ["cfg_scatter"]
 [[test]]
 name = "visibility_etiquette"
 required-features = ["visibility"]
+
+[[test]]
+name = "cli_layout_etiquette"
+required-features = ["cli_layout"]
 
 [[test]]
 name = "derives_etiquette"
@@ -269,5 +286,5 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(creusot)',
   'cfg(prusti)',
   'cfg(verus)',
-  'cfg(feature, values("panics", "tracing", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
+  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
 ] }

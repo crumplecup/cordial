@@ -13,6 +13,7 @@ use cordial::{
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 
+use tracing::instrument;
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
 static ATTRIBUTE_ENRICHER: AttributeEnricher = AttributeEnricher;
@@ -57,14 +58,17 @@ const TODO_LABEL: &str = "acme-todo-site";
 struct TodoRule;
 
 impl Rule for TodoRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "ACME-TODO-001"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "acme_style"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Leftover `todo!()` macro — finish or delete before merge"
     }
@@ -76,18 +80,22 @@ struct TodoMarker {
 }
 
 impl Marker for TodoMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         TODO_LABEL
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         TODO_LABEL
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -105,18 +113,22 @@ struct TodoFinding {
 }
 
 impl Finding for TodoFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("context", &self.context);
@@ -139,10 +151,12 @@ struct TodoRecord {
 struct TodoInventoryEnricher;
 
 impl IrEnricher for TodoInventoryEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "acme-todo-inventory"
     }
 
+    #[instrument(level = "trace", skip(self, ir, load, session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,
@@ -202,6 +216,7 @@ struct TodoVisitor {
 }
 
 impl TodoVisitor {
+    #[instrument(level = "debug", skip(self))]
     fn context(&self) -> String {
         let mut parts = self.module_prefix.clone();
         parts.extend(self.fn_stack.iter().cloned());
@@ -214,12 +229,14 @@ impl TodoVisitor {
 }
 
 impl<'ast> Visit<'ast> for TodoVisitor {
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
         self.fn_stack.push(node.sig.ident.to_string());
         syn::visit::visit_item_fn(self, node);
         self.fn_stack.pop();
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_macro(&mut self, node: &'ast syn::ExprMacro) {
         if node.mac.path.is_ident("todo") {
             self.records.push(TodoRecord {
@@ -242,14 +259,17 @@ impl<'ast> Visit<'ast> for TodoVisitor {
 struct TodoSitesQuery;
 
 impl Query for TodoSitesQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &[NodeKind::Expr]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[cordial::EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn NodeView) -> bool {
         node.attr(TODO_ATTR).is_some()
     }
@@ -261,14 +281,17 @@ static TODO_SITES_QUERY: TodoSitesQuery = TodoSitesQuery;
 struct TodoSiteProbe;
 
 impl Probe for TodoSiteProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "acme-todo-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &TODO_SITES_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, _session))]
     fn probe(
         &self,
         ir: &dyn IrView,
@@ -290,14 +313,17 @@ impl Probe for TodoSiteProbe {
 struct TodoAssessor;
 
 impl Assessor for TodoAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "acme-todo-assessor"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &[TODO_LABEL]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],
@@ -344,10 +370,12 @@ impl Assessor for TodoAssessor {
 struct TodoCsvReporter;
 
 impl Reporter for TodoCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "acme-todo-csv"
     }
 
+    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
     fn render(
         &self,
         findings: &[&dyn Finding],
