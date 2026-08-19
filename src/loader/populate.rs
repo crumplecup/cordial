@@ -11,7 +11,7 @@ use super::source::{SourceFile, SourceLoadView, SourceLoader};
 
 use tracing::instrument;
 impl SourceLoadView {
-    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[instrument(level = "debug", skip(self, ir), err(level = "warn"))]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
         let root = ir.root;
         for file in &self.files {
@@ -20,6 +20,7 @@ impl SourceLoadView {
         Ok(())
     }
 
+    #[instrument(level = "info", skip(self, ir, parent, file), err(level = "warn"))]
     fn load_file(
         &self,
         ir: &mut CrateIr,
@@ -55,6 +56,11 @@ impl SourceLoadView {
         Ok(())
     }
 
+    #[instrument(
+        level = "info",
+        skip(self, ir, parent, file, item),
+        err(level = "warn")
+    )]
     fn load_item(
         &self,
         ir: &mut CrateIr,
@@ -110,6 +116,7 @@ impl SourceLoadView {
     }
 }
 
+#[instrument(level = "debug", skip(file))]
 fn line_span(file: &Path, line: u32) -> FileSpan {
     FileSpan::new(file, line, 1)
 }

@@ -22,6 +22,7 @@ pub struct CoverageSummary {
 }
 
 impl std::fmt::Debug for CoverageSummary {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CoverageSummary")
             .field("plugins", &self.plugins)
@@ -31,7 +32,11 @@ impl std::fmt::Debug for CoverageSummary {
 }
 
 /// Build a coverage rollup for the selected coverage plugins in this run.
-#[instrument(level = "debug", skip(registered_plugins, filter, session, findings, workspace), err(level = "warn"))]
+#[instrument(
+    level = "debug",
+    skip(registered_plugins, filter, session, findings, workspace),
+    err(level = "warn")
+)]
 pub fn build_coverage_summary(
     registered_plugins: &[&'static dyn Plugin],
     resolved_etiquette_ids: &[&str],
@@ -89,6 +94,11 @@ struct CoverageSection {
     extra_artifacts: Vec<Box<dyn Artifact>>,
 }
 
+#[instrument(
+    level = "debug",
+    skip(plugin, session, filter, findings, workspace),
+    err(level = "warn")
+)]
 fn section_for_plugin(
     plugin: &dyn Plugin,
     session: &dyn SessionView,
@@ -130,7 +140,7 @@ fn section_for_plugin(
     }
 }
 
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(summary), err(level = "warn"))]
 pub fn render_coverage_summary_markdown(summary: &CoverageSummary) -> CordialResult<String> {
     let mut out = String::new();
     writeln!(out, "# Coverage summary")?;
@@ -187,6 +197,7 @@ pub fn coverage_plugins_for_run(
 mod homecoming_section {
     use super::*;
 
+    #[instrument(level = "debug", skip(findings), err(level = "warn"))]
     pub(super) fn homecoming_std_section(findings: &[&dyn Finding]) -> CordialResult<String> {
         use crate::etiquettes::framework_std::framework_report_from_findings;
         use crate::framework_std::{FrameworkStdOptions, render_framework_summary_md};
@@ -203,6 +214,7 @@ mod homecoming_section {
 mod amenable_section {
     use super::*;
 
+    #[instrument(level = "debug", skip(findings), err(level = "warn"))]
     pub(super) fn amenable_std_section(findings: &[&dyn Finding]) -> CordialResult<String> {
         use crate::etiquettes::framework_std::amenable_report_from_findings;
         use crate::framework_std::{AmenableStdOptions, render_amenable_std_summary_md};
@@ -219,6 +231,11 @@ mod amenable_section {
 mod elicitation_section_impl {
     use super::*;
 
+    #[instrument(
+        level = "debug",
+        skip(session, filter, findings, workspace),
+        err(level = "warn")
+    )]
     pub(super) fn elicitation_section(
         session: &dyn SessionView,
         filter: &dyn RunFilter,

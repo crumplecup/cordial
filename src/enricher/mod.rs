@@ -1,3 +1,4 @@
+use tracing::instrument;
 #[cfg(any(
     feature = "panics",
     feature = "tracing",
@@ -11,7 +12,8 @@
     feature = "foreign_error_attenuation",
     feature = "antipatterns",
     feature = "cfg_scatter",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "cli_layout"
 ))]
 mod attribute;
 #[cfg(feature = "error_sites")]
@@ -48,7 +50,8 @@ mod wrapper_coverage;
     feature = "foreign_error_attenuation",
     feature = "antipatterns",
     feature = "cfg_scatter",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "cli_layout"
 ))]
 pub use attribute::AttributeEnricher;
 #[cfg(any(
@@ -64,7 +67,8 @@ pub use attribute::AttributeEnricher;
     feature = "foreign_error_attenuation",
     feature = "antipatterns",
     feature = "cfg_scatter",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "cli_layout"
 ))]
 pub(crate) use attribute::{is_cfg_test, member_crate_root, resolve_parent, resolve_source_path};
 #[cfg(feature = "error_sites")]
@@ -109,14 +113,17 @@ impl ScopeEnricher {
 }
 
 impl IrEnricher for ScopeEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         0
     }
 
+    #[instrument(level = "trace", skip(self, ir, _load, _session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,
@@ -140,6 +147,7 @@ impl IrEnricher for ScopeEnricher {
     }
 }
 
+#[instrument(level = "debug", skip(ir, item))]
 fn find_enclosing_module(ir: &dyn IrView, item: crate::ir::NodeId) -> Option<crate::ir::NodeId> {
     let mut current = item;
     loop {

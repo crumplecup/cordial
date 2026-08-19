@@ -5,7 +5,7 @@ use cordial::rustdoc::{
     demo_impl_coverage_crate, demo_shadow_crate, demo_trenchcoat_crate, write_rustdoc_crate_json,
 };
 use cordial::{
-    IMPL_COVERAGE_ETIQUETTE, RunAll, SHADOW_ETIQUETTE, Session, SessionBuilder,
+    IMPL_COVERAGE_ETIQUETTE, Plugin, RunAll, SHADOW_ETIQUETTE, Session, SessionBuilder,
     TRENCHCOAT_ETIQUETTE,
 };
 
@@ -104,4 +104,21 @@ fn shadow_etiquette_links_mapped_items() -> miette::Result<()> {
     .wrap_err("cache")?;
     assert!(cache.contains("Mirrors"));
     Ok(())
+}
+
+#[test]
+fn elicitation_tracked_targets_roster_is_non_empty() {
+    assert!(!cordial::ELICITATION_TRACKED_TARGETS.is_empty());
+    assert!(
+        cordial::ELICITATION_TRACKED_TARGETS
+            .iter()
+            .any(|target| target.upstream == "url")
+    );
+}
+
+#[test]
+fn elicitation_coverage_plugin_wires_three_etiquettes() {
+    let plugin = &cordial::ELICITATION_COVERAGE;
+    assert_eq!(plugin.id(), "elicitation-coverage");
+    assert_eq!(plugin.etiquettes().len(), 3);
 }

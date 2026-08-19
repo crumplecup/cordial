@@ -11,10 +11,7 @@ use super::generics::{
 use super::item::build_inventory_item;
 use super::{ExtractedItem, path_matches_scope};
 
-#[instrument(
-    skip(krate, ty, seen, discovered),
-    fields(type_kind = type_kind_name(ty))
-)]
+#[instrument(level = "debug", skip(krate, ty, seen, discovered))]
 pub(super) fn collect_items_from_type(
     krate: &rustdoc_types::Crate,
     ty: &rustdoc_types::Type,
@@ -169,6 +166,7 @@ pub(super) fn collect_items_from_type(
         _ => {}
     }
 }
+#[instrument(level = "debug", skip(krate, path, seen, discovered))]
 pub(super) fn collect_items_from_path(
     krate: &rustdoc_types::Crate,
     path: &rustdoc_types::Path,

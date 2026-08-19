@@ -12,7 +12,7 @@ pub enum ShadowStatus {
 }
 
 impl ShadowStatus {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Covered => "Covered",
@@ -78,7 +78,7 @@ pub struct TraitImplCoverage {
     pub covered_on_shadow: Vec<String>,
 }
 
-/// Optional method/trait maps passed into [`super::build::build_shadow_report`].
+/// Optional method/trait maps passed into [`super::report::build_shadow_report`].
 #[derive(Debug)]
 pub struct ShadowBuildMaps<'a> {
     pub target_methods: &'a std::collections::HashMap<String, std::collections::BTreeSet<String>>,
@@ -115,7 +115,7 @@ pub enum ShadowGapKind {
 }
 
 impl ShadowGapKind {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Missing => "Missing",

@@ -46,6 +46,13 @@
     }
   },
   "paths": {
+    "1": {
+      "crate_id": 0,
+      "path": [
+        "elicit_url"
+      ],
+      "kind": "module"
+    },
     "2": {
       "crate_id": 0,
       "path": [
@@ -53,13 +60,6 @@
         "Widget"
       ],
       "kind": "struct"
-    },
-    "1": {
-      "crate_id": 0,
-      "path": [
-        "elicit_url"
-      ],
-      "kind": "module"
     }
   },
   "external_crates": {},

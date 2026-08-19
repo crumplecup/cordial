@@ -6,10 +6,7 @@ use tracing::{debug, instrument};
 
 use super::{ExtractedItem, item_is_public, path_matches_scope};
 
-#[instrument(
-    skip(krate, existing_paths),
-    fields(own_crate_key, prefix_match, existing_count = existing_paths.len())
-)]
+#[instrument(level = "debug", skip(krate, existing_paths))]
 pub(super) fn collect_public_signature_dependency_items(
     krate: &rustdoc_types::Crate,
     own_crate_key: &str,
@@ -101,7 +98,7 @@ pub(super) fn collect_public_signature_dependency_items(
     discovered
 }
 
-#[instrument(skip(krate, impl_item), fields(own_crate_key, prefix_match))]
+#[instrument(level = "debug", skip(krate, impl_item))]
 fn inherent_impl_targets_scope(
     krate: &rustdoc_types::Crate,
     impl_item: &rustdoc_types::Impl,
@@ -117,10 +114,7 @@ fn inherent_impl_targets_scope(
         .is_some_and(|summary| path_matches_scope(&summary.path, own_crate_key, prefix_match))
 }
 
-#[instrument(
-    skip(krate, function, seen, discovered),
-    fields(input_count = function.sig.inputs.len(), has_output = function.sig.output.is_some())
-)]
+#[instrument(level = "debug", skip(krate, function, seen, discovered))]
 fn collect_items_from_function_signature(
     krate: &rustdoc_types::Crate,
     function: &rustdoc_types::Function,

@@ -14,7 +14,11 @@ use super::ir::{
 };
 
 /// Ensure IR for active shadow pairs is loaded and cross-crate mirrors materialized.
-#[instrument(level = "debug", skip(workspace, session, filter, loaders, enrichers), err(level = "warn"))]
+#[instrument(
+    level = "debug",
+    skip(workspace, session, filter, loaders, enrichers),
+    err(level = "warn")
+)]
 pub fn preload_shadow_pair_crates(
     workspace: &mut WorkspaceIr,
     session: &dyn SessionView,

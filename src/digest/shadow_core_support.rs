@@ -53,7 +53,7 @@ pub enum ShadowCoreSupportStatus {
 }
 
 impl ShadowCoreSupportStatus {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::CoreTracked => "CoreTracked",
@@ -65,6 +65,7 @@ impl ShadowCoreSupportStatus {
 }
 
 impl std::fmt::Display for ShadowCoreSupportStatus {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
     }
@@ -85,7 +86,11 @@ struct ImplCrateRollup {
 }
 
 /// Build the combined core + shadow support digest for the current workspace run.
-#[instrument(level = "debug", skip(session, _filter, findings, workspace), err(level = "warn"))]
+#[instrument(
+    level = "debug",
+    skip(session, _filter, findings, workspace),
+    err(level = "warn")
+)]
 pub fn build_shadow_core_support_digest(
     session: &dyn SessionView,
     _filter: &dyn RunFilter,
@@ -141,6 +146,7 @@ pub fn build_shadow_core_support_digest(
     })
 }
 
+#[instrument(level = "debug", skip(impl_rollup), err(level = "warn"))]
 fn build_shadow_core_support_summary(
     upstream: &str,
     shadow: &str,
@@ -219,6 +225,7 @@ pub fn build_tracked_target_roster_digest(
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 fn rollup_impl_findings(findings: &[&dyn Finding]) -> BTreeMap<String, ImplCrateRollup> {
     let mut by_crate: BTreeMap<String, ImplCrateRollup> = BTreeMap::new();
     for finding in findings {
@@ -256,7 +263,7 @@ fn rollup_impl_findings(findings: &[&dyn Finding]) -> BTreeMap<String, ImplCrate
 }
 
 /// Summary section appended to elicitation `summary.md` (elicit_doc parity).
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(digest))]
 pub fn render_shadow_core_support_summary_section(digest: &ShadowCoreSupportDigest) -> String {
     let mut out = String::new();
     out.push_str("## Target Support (core + shadow)\n\n");
@@ -337,7 +344,7 @@ pub fn render_shadow_core_support_summary_section(digest: &ShadowCoreSupportDige
     out
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(roster))]
 pub fn render_tracked_target_roster_markdown(roster: &TrackedTargetRosterDigest) -> String {
     let mut out = String::new();
     out.push_str("# Tracked target roster\n\n");
@@ -386,6 +393,7 @@ pub fn render_tracked_target_roster_markdown(roster: &TrackedTargetRosterDigest)
     out
 }
 
+#[instrument(level = "info", skip(items))]
 fn write_gap_list(out: &mut String, heading: &str, items: &[String], action: &str) {
     out.push_str(heading);
     out.push_str("\n\n");
@@ -399,6 +407,7 @@ fn write_gap_list(out: &mut String, heading: &str, items: &[String], action: &st
     out.push_str(&format!("\n_{action}_\n\n"));
 }
 
+#[instrument(level = "debug")]
 fn format_crate_list(crates: &[String]) -> String {
     if crates.is_empty() {
         "—".to_string()
@@ -411,16 +420,19 @@ fn format_crate_list(crates: &[String]) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(finding))]
 fn finding_row(finding: &dyn Finding) -> BTreeMap<String, String> {
     let mut sink = MapFindingSink::default();
     finding.emit(&mut sink);
     sink.fields.into_iter().collect()
 }
 
+#[instrument(level = "debug")]
 fn truthy(value: Option<&String>) -> bool {
     matches!(value.map(String::as_str), Some("true" | "1" | "yes"))
 }
 
+#[instrument(level = "debug")]
 fn percent(numerator: usize, denominator: usize) -> f64 {
     if denominator == 0 {
         0.0
@@ -429,6 +441,7 @@ fn percent(numerator: usize, denominator: usize) -> f64 {
     }
 }
 
+#[instrument(level = "debug")]
 fn yes_no(value: bool) -> &'static str {
     if value { "yes" } else { "no" }
 }

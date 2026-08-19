@@ -108,7 +108,6 @@ fn tracing_toml_overrides_default() -> miette::Result<()> {
         workspace.path().join("cordial.toml"),
         r#"
 [tracing]
-include_pub_super = true
 extra_skip = ["payload", "blob"]
 "#,
     )
@@ -116,7 +115,6 @@ extra_skip = ["payload", "blob"]
     .wrap_err("workspace config")?;
 
     let loaded = load_cordial_config(workspace.path(), store_home.path());
-    assert!(loaded.tracing.include_pub_super);
     assert_eq!(
         loaded.tracing.extra_skip,
         vec!["payload".to_string(), "blob".to_string()]

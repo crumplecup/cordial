@@ -1,3 +1,4 @@
+#[cfg(feature = "rustdoc")]
 mod attrs;
 #[cfg(feature = "rustdoc")]
 mod crate_load;
@@ -15,6 +16,7 @@ mod workspace;
 #[cfg(feature = "impl_coverage")]
 mod wrapper_query;
 
+#[cfg(feature = "rustdoc")]
 pub use attrs::*;
 
 #[cfg(feature = "rustdoc")]

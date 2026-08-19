@@ -41,6 +41,7 @@ use super::{RunFilter, RunOutcome, RuntimeSession};
     feature = "amenable_std",
     feature = "elicitation"
 ))]
+#[instrument(level = "info", skip(plugins, filter, etiquettes))]
 fn run_includes_coverage(
     plugins: &[&'static dyn Plugin],
     filter: &dyn RunFilter,
@@ -54,6 +55,7 @@ fn run_includes_coverage(
         || etiquettes.iter().any(|etiquette| etiquette.is_coverage())
 }
 
+#[instrument(level = "info", skip(plugins, filter, etiquettes))]
 #[cfg(feature = "quality")]
 fn run_includes_quality(
     plugins: &[&'static dyn Plugin],
@@ -72,6 +74,7 @@ struct ConcreteRunOutcome {
 }
 
 impl RunOutcome for ConcreteRunOutcome {
+    #[instrument(level = "trace", skip(self))]
     fn findings(&self) -> Box<dyn Iterator<Item = &dyn Finding> + '_> {
         Box::new(
             self.findings
@@ -80,6 +83,7 @@ impl RunOutcome for ConcreteRunOutcome {
         )
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn artifacts(&self) -> Box<dyn Iterator<Item = &dyn Artifact> + '_> {
         Box::new(
             self.artifacts
@@ -89,6 +93,7 @@ impl RunOutcome for ConcreteRunOutcome {
     }
 }
 
+#[instrument(level = "debug")]
 fn empty_outcome() -> Box<dyn RunOutcome> {
     Box::new(ConcreteRunOutcome {
         findings: Vec::new(),
@@ -96,7 +101,7 @@ fn empty_outcome() -> Box<dyn RunOutcome> {
     })
 }
 
-#[instrument(skip(session, filter), fields(project_root = %session.project_root.display()))]
+#[instrument(level = "info", skip(session, filter), err(level = "warn"))]
 pub(super) fn run_session(
     session: &RuntimeSession,
     filter: &dyn RunFilter,
@@ -185,7 +190,11 @@ struct LoadedWorkspace {
     markers_by_crate: HashMap<String, Vec<Box<dyn Marker>>>,
 }
 
-#[instrument(skip(session, filter, store, targets, loaders, enrichers, probes))]
+#[instrument(
+    level = "info",
+    skip(session, filter, store, targets, loaders, enrichers, probes),
+    err(level = "warn")
+)]
 fn load_and_probe(
     session: &RuntimeSession,
     filter: &dyn RunFilter,
@@ -284,7 +293,11 @@ fn load_and_probe(
     })
 }
 
-#[instrument(skip(session, store, targets, workspace, markers_by_crate, assessors))]
+#[instrument(
+    level = "debug",
+    skip(session, store, targets, workspace, markers_by_crate, assessors),
+    err(level = "warn")
+)]
 fn assess_targets(
     session: &RuntimeSession,
     store: &StoreLayout,
@@ -340,7 +353,7 @@ struct RenderPass<'a> {
     findings: &'a [Box<dyn Finding>],
 }
 
-#[instrument(skip(session, filter, pass))]
+#[instrument(level = "debug", skip(session, filter, pass), err(level = "warn"))]
 fn render_and_write(
     session: &RuntimeSession,
     filter: &dyn RunFilter,

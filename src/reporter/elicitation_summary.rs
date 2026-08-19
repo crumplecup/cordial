@@ -16,7 +16,11 @@ pub struct ElicitationCoverageRollup {
 }
 
 /// Build the elicitation plugin body and shadow-core-support artifact for the workspace rollup.
-#[instrument(level = "debug", skip(session, filter, findings, workspace), err(level = "warn"))]
+#[instrument(
+    level = "debug",
+    skip(session, filter, findings, workspace),
+    err(level = "warn")
+)]
 pub fn build_elicitation_coverage_rollup(
     session: &dyn SessionView,
     filter: &dyn RunFilter,
@@ -43,6 +47,7 @@ pub fn build_elicitation_coverage_rollup(
     })
 }
 
+#[instrument(level = "info", skip(workspace, findings), err(level = "warn"))]
 fn write_impl_coverage_section(
     workspace: &WorkspaceIr,
     findings: &[&dyn Finding],
@@ -131,6 +136,7 @@ fn write_impl_coverage_section(
     Ok(())
 }
 
+#[instrument(level = "info", skip(findings), err(level = "warn"))]
 fn write_impl_gaps_section(findings: &[&dyn Finding], out: &mut String) -> CordialResult<()> {
     let mut missing_our = 0usize;
     let mut ready = 0usize;
@@ -175,6 +181,7 @@ fn write_impl_gaps_section(findings: &[&dyn Finding], out: &mut String) -> Cordi
     Ok(())
 }
 
+#[instrument(level = "info", skip(workspace, findings), err(level = "warn"))]
 fn write_shadow_coverage_section(
     workspace: &WorkspaceIr,
     findings: &[&dyn Finding],
@@ -314,6 +321,7 @@ struct ImplCrateMetrics {
 }
 
 impl ImplCrateMetrics {
+    #[instrument(level = "debug", skip(self, other))]
     fn merge(&mut self, other: &Self) {
         self.types += other.types;
         self.our_traits_done += other.our_traits_done;
@@ -338,26 +346,31 @@ struct ShadowPairMetrics {
     gap_verification: usize,
 }
 
+#[instrument(level = "debug", skip(workspace))]
 fn lookup_crate_version(workspace: &WorkspaceIr, crate_name: &str) -> String {
     workspace
         .crate_version(crate_name)
         .unwrap_or_else(|| "unknown".to_string())
 }
 
+#[instrument(level = "debug", skip(finding))]
 fn finding_row(finding: &dyn Finding) -> BTreeMap<String, String> {
     let mut sink = MapFindingSink::default();
     finding.emit(&mut sink);
     sink.fields.into_iter().collect()
 }
 
+#[instrument(level = "debug")]
 fn truthy(value: Option<&String>) -> bool {
     matches!(value.map(String::as_str), Some("true" | "1" | "yes"))
 }
 
+#[instrument(level = "debug")]
 fn percent(numerator: usize, denominator: usize) -> f64 {
     percent_f64(numerator, denominator)
 }
 
+#[instrument(level = "debug")]
 fn percent_f64(numerator: usize, denominator: usize) -> f64 {
     if denominator == 0 {
         0.0

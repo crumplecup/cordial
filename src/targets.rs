@@ -38,7 +38,11 @@ pub fn discover_crate_targets(
 /// each plugin's [`Coverage::targets`](crate::plugin::Coverage::targets) union. Quality-only
 /// runs continue to use workspace members from `cargo metadata`. Combined quality + coverage
 /// runs union coverage IR crate names with all filtered workspace members.
-#[instrument(level = "debug", skip(registered_plugins, session, filter), err(level = "warn"))]
+#[instrument(
+    level = "debug",
+    skip(registered_plugins, session, filter),
+    err(level = "warn")
+)]
 pub fn discover_run_crate_targets(
     registered_plugins: &[&'static dyn crate::plugin::Plugin],
     project_root: &Path,
@@ -83,6 +87,7 @@ pub fn discover_run_crate_targets(
     Ok(targets)
 }
 
+#[instrument(level = "debug", err(level = "warn"))]
 fn workspace_targets(project_root: &Path) -> CordialResult<Vec<CrateTarget>> {
     let metadata = cargo_metadata::MetadataCommand::new()
         .current_dir(project_root)
@@ -119,6 +124,7 @@ fn workspace_targets(project_root: &Path) -> CordialResult<Vec<CrateTarget>> {
     Ok(targets)
 }
 
+#[instrument(level = "debug", skip(targets, filter))]
 fn apply_target_filter(targets: Vec<CrateTarget>, filter: &dyn RunFilter) -> Vec<CrateTarget> {
     if let Some(name) = filter.crate_name() {
         return targets

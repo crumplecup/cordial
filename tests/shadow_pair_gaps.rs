@@ -112,6 +112,82 @@ fn build_shadow_report_unit_exact_match() -> miette::Result<()> {
 }
 
 #[test]
+fn prefix_rename_is_missing_not_drift() -> miette::Result<()> {
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    write_minimal_rustdoc(workspace.path(), "url", "Vec2")?;
+    write_minimal_rustdoc(workspace.path(), "elicit_url", "EguiVec2")?;
+
+    let target = parse_rustdoc_json(&workspace.path().join("target/doc/url.json"), "url")
+        .into_diagnostic()
+        .wrap_err("target")?;
+    let shadow = parse_rustdoc_json(
+        &workspace.path().join("target/doc/elicit_url.json"),
+        "elicit_url",
+    )
+    .into_diagnostic()
+    .wrap_err("shadow")?;
+    let report = build_shadow_report_from_inventories(&target, &shadow);
+    assert_eq!(report.missing_count, 1);
+    assert_eq!(report.extra_count, 1);
+    assert_eq!(report.drifted_count, 0);
+    Ok(())
+}
+
+#[test]
+fn method_coverage_diffs_matched_types() -> miette::Result<()> {
+    use std::collections::{BTreeSet, HashMap};
+
+    use cordial::testing::{ShadowBuildMaps, build_shadow_report_from_inventories_with_maps};
+
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    write_minimal_rustdoc(workspace.path(), "upstream", "Widget")?;
+    write_minimal_rustdoc(workspace.path(), "elicit_upstream", "Widget")?;
+
+    let target = parse_rustdoc_json(
+        &workspace.path().join("target/doc/upstream.json"),
+        "upstream",
+    )
+    .into_diagnostic()
+    .wrap_err("target")?;
+    let shadow = parse_rustdoc_json(
+        &workspace.path().join("target/doc/elicit_upstream.json"),
+        "elicit_upstream",
+    )
+    .into_diagnostic()
+    .wrap_err("shadow")?;
+
+    let mut target_methods = HashMap::new();
+    target_methods.insert(
+        "upstream::Widget".to_string(),
+        BTreeSet::from(["draw".to_string(), "resize".to_string()]),
+    );
+    let mut shadow_methods = HashMap::new();
+    shadow_methods.insert(
+        "elicit_upstream::Widget".to_string(),
+        BTreeSet::from(["draw".to_string(), "extra_fn".to_string()]),
+    );
+    let empty_traits: HashMap<String, BTreeSet<String>> = HashMap::new();
+    let maps = ShadowBuildMaps {
+        target_methods: &target_methods,
+        shadow_methods: &shadow_methods,
+        target_trait_impls: &empty_traits,
+        shadow_trait_impls: &empty_traits,
+    };
+
+    let report = build_shadow_report_from_inventories_with_maps(&target, &shadow, &maps);
+    assert_eq!(report.method_coverage.len(), 1);
+    let coverage = &report.method_coverage[0];
+    assert_eq!(coverage.covered, vec!["draw"]);
+    assert_eq!(coverage.missing, vec!["resize"]);
+    assert_eq!(coverage.extra, vec!["extra_fn"]);
+    Ok(())
+}
+
+#[test]
 fn upstream_inventory_prefers_shadow_dep_cache() -> miette::Result<()> {
     use cordial::SessionBuilder;
     use cordial::testing::build_shadow_pair_report;

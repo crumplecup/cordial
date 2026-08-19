@@ -12,8 +12,8 @@ use crate::ir::{
 };
 use crate::rustdoc::{ElicitCompleteSet, InventoryItemKind, RustdocItem, TraitPrereqs};
 
-use super::build::build_shadow_report;
 use super::matching::{counts_toward_shadow_kind, normalize_name};
+use super::report::build_shadow_report;
 use super::types::{ShadowBuildMaps, ShadowReport};
 
 /// One public inventory row materialized from graph IR.
@@ -54,7 +54,7 @@ pub fn collect_shadow_items_from_workspace(
     Ok(collect_shadow_items_from_ir(ir))
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(ir))]
 pub fn collect_shadow_items_from_ir(ir: &crate::ir::CrateIr) -> Vec<ShadowIrItem> {
     static ALL_NODES: BasicQuery = BasicQuery {
         node_kinds: Vec::new(),
@@ -220,6 +220,7 @@ pub fn build_shadow_pair_report_from_workspace_ir(
     ))
 }
 
+#[instrument(level = "debug", skip(items))]
 fn rustdoc_inventory_from_items(
     crate_name: &str,
     items: &[ShadowIrItem],
@@ -232,6 +233,7 @@ fn rustdoc_inventory_from_items(
     }
 }
 
+#[instrument(level = "debug")]
 fn empty_krate() -> rustdoc_types::Crate {
     rustdoc_types::Crate {
         root: rustdoc_types::Id(0),
@@ -248,6 +250,7 @@ fn empty_krate() -> rustdoc_types::Crate {
     }
 }
 
+#[instrument(level = "debug", skip(items))]
 fn methods_map_from_items(items: &[ShadowIrItem]) -> HashMap<String, BTreeSet<String>> {
     items
         .iter()
@@ -256,6 +259,7 @@ fn methods_map_from_items(items: &[ShadowIrItem]) -> HashMap<String, BTreeSet<St
         .collect()
 }
 
+#[instrument(level = "debug", skip(items))]
 fn trait_impl_map_from_items(
     crate_name: &str,
     items: &[ShadowIrItem],
@@ -283,6 +287,7 @@ fn trait_impl_map_from_items(
     map
 }
 
+#[instrument(level = "debug", skip(items))]
 fn elicit_complete_set_from_items(items: &[ShadowIrItem]) -> ElicitCompleteSet {
     let mut concrete = HashSet::new();
     let mut factory = HashSet::new();
@@ -299,6 +304,7 @@ fn elicit_complete_set_from_items(items: &[ShadowIrItem]) -> ElicitCompleteSet {
     ElicitCompleteSet { concrete, factory }
 }
 
+#[instrument(level = "debug", skip(items))]
 fn prereqs_map_from_items(items: &[ShadowIrItem]) -> HashMap<String, TraitPrereqs> {
     items
         .iter()
@@ -310,6 +316,7 @@ fn prereqs_map_from_items(items: &[ShadowIrItem]) -> HashMap<String, TraitPrereq
         .collect()
 }
 
+#[instrument(level = "debug")]
 fn inventory_kind_from_attr(value: &str) -> Option<InventoryItemKind> {
     match value {
         "Struct" => Some(InventoryItemKind::Struct),
@@ -322,6 +329,7 @@ fn inventory_kind_from_attr(value: &str) -> Option<InventoryItemKind> {
     }
 }
 
+#[instrument(level = "debug", skip(node))]
 fn string_set_attr(node: &crate::ir::NodeRef<'_>, key: &str) -> BTreeSet<String> {
     node.attr(key)
         .and_then(|value| value.as_array())
@@ -334,6 +342,7 @@ fn string_set_attr(node: &crate::ir::NodeRef<'_>, key: &str) -> BTreeSet<String>
         .unwrap_or_default()
 }
 
+#[instrument(level = "debug", skip(target_item, shadow_names))]
 fn find_drift_shadow_item<'a>(
     target_item: &ShadowIrItem,
     shadow_names: &HashMap<String, Vec<&'a ShadowIrItem>>,
@@ -364,6 +373,7 @@ fn find_drift_shadow_item<'a>(
     best.map(|(item, _)| item)
 }
 
+#[instrument(level = "debug")]
 fn edit_distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
@@ -388,6 +398,7 @@ fn edit_distance(a: &str, b: &str) -> usize {
     dp[m][n]
 }
 
+#[instrument(level = "trace", skip(workspace, target_node, shadow_node), ret)]
 fn has_cross_crate_mirror(
     workspace: &WorkspaceIr,
     upstream: &str,
@@ -407,6 +418,7 @@ fn has_cross_crate_mirror(
         })
 }
 
+#[instrument(level = "debug")]
 fn missing_crate_ir(crate_name: &str) -> CordialError {
     CordialError::invariant(format!(
         "crate `{crate_name}` IR not loaded in workspace for shadow compare"

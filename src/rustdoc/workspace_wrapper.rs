@@ -13,12 +13,17 @@ use crate::plugin::{WorkspaceHub, discover_workspace_hub};
 use crate::rustdoc::WrapperCoverageMap;
 use crate::session::{RunFilter, SessionView};
 
+#[instrument(level = "debug")]
 fn wrapper_coverage_cache_path(store_root: &Path) -> std::path::PathBuf {
     store_root.join("cache/wrapper-coverage.json")
 }
 
 /// Ensure hub crate IR is loaded, build wrapper coverage from graph attrs, cache on workspace.
-#[instrument(level = "debug", skip(workspace, session, filter, loaders, enrichers), err(level = "warn"))]
+#[instrument(
+    level = "debug",
+    skip(workspace, session, filter, loaders, enrichers),
+    err(level = "warn")
+)]
 pub fn ensure_workspace_wrapper_coverage(
     workspace: &mut WorkspaceIr,
     session: &dyn SessionView,

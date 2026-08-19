@@ -29,9 +29,3 @@ pub fn path_has_fixtures(path: &Path, crate_root: &Path) -> bool {
         .windows(2)
         .any(|window| window[0] == "tests" && (window[1] == "fixtures" || window[1] == "parity"))
 }
-
-/// Crate error types live in `src/error.rs` and/or `src/error/**`.
-#[instrument(level = "trace", skip(path))]
-pub fn is_error_module_path(path: &Path, src_root: &Path) -> bool {
-    path == src_root.join("error.rs") || path.starts_with(src_root.join("error"))
-}

@@ -5,7 +5,7 @@ mod source;
 
 use std::path::{Path, PathBuf};
 
-pub use scan_roots::{is_error_module_path, path_has_fixtures, quality_scan_trees};
+pub use scan_roots::{path_has_fixtures, quality_scan_trees};
 pub use source::{SourceFile, SourceLoadView, SourceLoader};
 
 /// Opaque bundle produced by a loader.
