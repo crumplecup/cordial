@@ -3,13 +3,11 @@
 use std::collections::BTreeMap;
 
 use crate::error::CordialResult;
-use crate::hooks::IrEnricher;
+use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{
     ATTR_IR_ORIGIN, ATTR_SYN_DOC_PEER, BasicQuery, EdgeKind, IrMut, NodeKind, NodeView,
     ORIGIN_RUSTDOC, ORIGIN_SOURCE,
 };
-use crate::loader::LoadView;
-use crate::session::SessionView;
 
 use tracing::instrument;
 /// Links syn and rustdoc item nodes that share a `qualified_path`.
@@ -31,13 +29,10 @@ impl IrEnricher for SynDocLinkEnricher {
         2
     }
 
-    #[instrument(level = "trace", skip(self, ir, _load, _session))]
-    fn enrich(
-        &self,
-        ir: &mut dyn IrMut,
-        _load: &dyn LoadView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<()> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir;
+
         let crate_name = ir.crate_name();
         let mut by_path: BTreeMap<String, (Option<crate::ir::NodeId>, Option<crate::ir::NodeId>)> =
             BTreeMap::new();

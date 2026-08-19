@@ -163,12 +163,22 @@ all probes, routes markers to assessors, and renders through reporters.
 
 ## Hook seams
 
+Hook methods take a **view** — a struct of shared inputs (`LoadContext`,
+`EnrichView`, `ProbeView`, `AssessView`, `RenderView`, `WorkspaceAssessView`).
+Implementations read the fields they need; unused neighbors are not unused
+arguments.
+
 ### 1. Loader — read raw material
 
 ```rust
+pub struct LoadContext<'a> {
+    pub session: &'a dyn SessionView,
+    pub target: &'a CrateTarget,
+}
+
 pub trait Loader: Send + Sync {
     fn id(&self) -> &str;
-    fn load(&self, session: &dyn Session, target: &dyn CrateTarget) -> Result<Box<dyn LoadView>>;
+    fn load(&self, view: LoadContext<'_>) -> Result<Box<dyn LoadView>>;
 }
 ```
 
@@ -185,9 +195,15 @@ Loaders produce opaque bundles. They do not emit findings.
 ### 2. IrEnricher — extend the IR
 
 ```rust
+pub struct EnrichView<'a> {
+    pub ir: &'a mut dyn IrMut,
+    pub load: &'a dyn LoadView,
+    pub session: &'a dyn SessionView,
+}
+
 pub trait IrEnricher: Send + Sync {
     fn id(&self) -> &str;
-    fn enrich(&self, ir: &mut dyn IrMut, load: &dyn LoadView, session: &dyn Session) -> Result<()>;
+    fn enrich(&self, view: EnrichView<'_>) -> Result<()>;
 }
 ```
 
@@ -207,10 +223,15 @@ not judgments. Examples:
 ### 3. Probe — flag what you care about
 
 ```rust
+pub struct ProbeView<'a> {
+    pub ir: &'a dyn IrView,
+    pub session: &'a dyn SessionView,
+}
+
 pub trait Probe: Send + Sync {
     fn id(&self) -> &str;
     fn interests(&self) -> &dyn Query;
-    fn probe(&self, ir: &dyn IrView, session: &dyn Session) -> Result<Vec<Box<dyn Marker>>>;
+    fn probe(&self, view: ProbeView<'_>) -> Result<Vec<Box<dyn Marker>>>;
 }
 ```
 
@@ -232,16 +253,17 @@ Assessors select markers by label.
 ### 4. Assessor — turn markers into findings
 
 ```rust
+pub struct AssessView<'a> {
+    pub markers: &'a [&'a dyn Marker],
+    pub ir: &'a dyn IrView,
+    pub session: &'a dyn SessionView,
+}
+
 pub trait Assessor: Send + Sync {
     fn id(&self) -> &str;
     fn consumes(&self) -> &[&str];   // marker labels
 
-    fn assess(
-        &self,
-        markers: &[&dyn Marker],
-        ir: &dyn IrView,
-        session: &dyn Session,
-    ) -> Result<Vec<Box<dyn Finding>>>;
+    fn assess(&self, view: AssessView<'_>) -> Result<Vec<Box<dyn Finding>>>;
 }
 ```
 
@@ -255,14 +277,15 @@ single etiquette; the session type-erases at the composition boundary.
 ### 5. Reporter — render findings
 
 ```rust
+pub struct RenderView<'a> {
+    pub findings: &'a [&'a dyn Finding],
+    pub ir: &'a dyn IrView,
+    pub session: &'a dyn SessionView,
+}
+
 pub trait Reporter: Send + Sync {
     fn id(&self) -> &str;
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        session: &dyn Session,
-    ) -> Result<Vec<Box<dyn Artifact>>>;
+    fn render(&self, view: RenderView<'_>) -> Result<Vec<Box<dyn Artifact>>>;
 }
 ```
 

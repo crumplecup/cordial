@@ -4,9 +4,8 @@ use std::path::Path;
 use serde::Deserialize;
 
 use crate::error::CordialResult;
-use crate::hooks::IrEnricher;
-use crate::ir::{BasicQuery, EdgeKind, IrMut, IrView};
-use crate::loader::LoadView;
+use crate::hooks::{EnrichView, IrEnricher};
+use crate::ir::{BasicQuery, EdgeKind, IrView};
 use crate::session::SessionView;
 
 use tracing::instrument;
@@ -36,13 +35,11 @@ impl IrEnricher for ShadowLinkEnricher {
         5
     }
 
-    #[instrument(level = "trace", skip(self, ir, _load, session))]
-    fn enrich(
-        &self,
-        ir: &mut dyn IrMut,
-        _load: &dyn LoadView,
-        session: &dyn SessionView,
-    ) -> CordialResult<()> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir;
+        let session = view.session;
+
         let entries = resolve_shadow_entries(session, ir)?;
         for entry in entries {
             let Some(target) = ir.node_by_path(&entry.target) else {

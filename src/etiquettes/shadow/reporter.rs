@@ -1,10 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::error::CordialResult;
-use crate::hooks::Reporter;
-use crate::ir::IrView;
+use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
-use crate::session::SessionView;
 use crate::shadow::api_family;
 
 use tracing::instrument;
@@ -42,12 +40,9 @@ impl Reporter for ShadowPairCsvReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let rows = pair_rows(findings);
         let mut by_target: BTreeMap<String, Vec<&MapFindingSink>> = BTreeMap::new();
         for row in &rows {
@@ -107,12 +102,9 @@ impl Reporter for ShadowGapsCsvReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let mut body = String::from(
             "target_crate,shadow_crate,item_path,item_kind,gap_kind,matched_shadow_item,drift_confidence,shadow_elicit_impl,shadow_can_be_direct,shadow_missing_external_traits,shadow_missing_our_traits,action,notes\n",
         );
@@ -183,12 +175,9 @@ impl Reporter for ShadowCsvReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let mut body = String::from("crate,target_path,shadow_path,disposition\n");
         for finding in findings
             .iter()
@@ -232,13 +221,10 @@ impl Reporter for ShadowMethodChecklistReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let mut artifacts = Vec::new();
         for finding in findings
             .iter()

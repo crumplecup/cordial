@@ -1,9 +1,7 @@
 use crate::error::CordialResult;
-use crate::hooks::WorkspaceAssessor;
-use crate::ir::WorkspaceIr;
+use crate::hooks::{WorkspaceAssessView, WorkspaceAssessor};
 use crate::objects::{Disposition, Finding, NodeAnchor};
 use crate::plugin::discover_active_shadow_pairs;
-use crate::session::{RunFilter, SessionView};
 use crate::shadow::{
     ShadowStatus, build_shadow_gaps, build_shadow_pair_report_from_workspace,
     render_shadow_method_checklist,
@@ -27,13 +25,12 @@ impl WorkspaceAssessor for CrossCrateShadowWorkspaceAssessor {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, workspace, session, filter))]
-    fn assess(
-        &self,
-        workspace: &WorkspaceIr,
-        session: &dyn SessionView,
-        filter: &dyn RunFilter,
-    ) -> CordialResult<Vec<Box<dyn Finding>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn assess(&self, view: WorkspaceAssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
+        let workspace = view.workspace;
+        let session = view.session;
+        let filter = view.filter;
+
         let pairs = discover_active_shadow_pairs(session.project_root(), filter)?;
         let mut findings = Vec::new();
 

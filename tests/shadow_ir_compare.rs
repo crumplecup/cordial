@@ -4,7 +4,8 @@ use cordial::testing::{
     build_shadow_pair_report_from_workspace_ir, parse_rustdoc_json, rustdoc_load_view,
 };
 use cordial::{
-    CrateIr, IrEnricher, IrMut, LoadView, RustdocStructureEnricher, SessionBuilder, WorkspaceIr,
+    CrateIr, EnrichView, IrEnricher, LoadView, RustdocStructureEnricher, SessionBuilder,
+    WorkspaceIr,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -28,7 +29,11 @@ fn workspace_ir_shadow_report_matches_inventory_oracle() -> miette::Result<()> {
         .wrap_err("populate")?;
     let session = SessionBuilder::new(temp.path()).build();
     RustdocStructureEnricher
-        .enrich(&mut ir, &load as &dyn LoadView, &session)
+        .enrich(EnrichView {
+            ir: &mut ir,
+            load: &load as &dyn LoadView,
+            session: &session,
+        })
         .into_diagnostic()
         .wrap_err("structure")?;
     workspace.insert_crate(ir);

@@ -1,8 +1,6 @@
 use crate::error::CordialResult;
-use crate::hooks::Reporter;
-use crate::ir::IrView;
+use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
-use crate::session::SessionView;
 
 use tracing::instrument;
 #[derive(Debug, Default, Clone)]
@@ -80,12 +78,9 @@ impl Reporter for CfgScatterCsvReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let all_rows = cfg_scatter_rows(findings);
         let mut rows: Vec<_> = open_rows(&all_rows).collect();
         sort_by_occurrences_desc(&mut rows);
@@ -123,12 +118,10 @@ impl Reporter for CfgScatterChecklistReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let rows = cfg_scatter_rows(findings);
         let mut open: Vec<_> = open_rows(&rows).collect();
         sort_by_occurrences_desc(&mut open);
@@ -178,13 +171,11 @@ impl Reporter for CfgScatterSummaryReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let rows = cfg_scatter_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
         let total_occurrences: u32 = open

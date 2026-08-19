@@ -3,10 +3,8 @@ use std::collections::BTreeMap;
 use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 
 use crate::error::CordialResult;
-use crate::hooks::Reporter;
-use crate::ir::IrView;
+use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
-use crate::session::SessionView;
 
 use super::types::{AntipatternRuleId, build_workspace_antipatterns_summary};
 
@@ -84,12 +82,9 @@ impl Reporter for AntipatternCsvReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let mut body = String::from("crate,rule_id,context,file,line,snippet\n");
         for row in open_rows(&antipattern_rows(findings)) {
             body.push_str(&format!(
@@ -123,12 +118,10 @@ impl Reporter for AntipatternChecklistReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let rows = antipattern_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
         let suppressed: Vec<_> = rows
@@ -317,13 +310,10 @@ impl Reporter for AntipatternSummaryReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let summary = build_workspace_antipatterns_summary(findings);
         let mut body = String::new();
         body.push_str("# Antipatterns summary\n\n");

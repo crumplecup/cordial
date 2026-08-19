@@ -1,10 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::error::CordialResult;
-use crate::hooks::Reporter;
-use crate::ir::IrView;
+use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
-use crate::session::SessionView;
 
 use super::types::{ForeignErrorRecordKind, build_workspace_foreign_error_type_summary};
 
@@ -148,12 +146,9 @@ impl Reporter for ForeignErrorTypesCsvReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let mut body = String::from(
             "crate,foreign_error_type,rule_id,confidence,chain_break,site_kind,context,file,line,source_snippet,site_snippet\n",
         );
@@ -194,12 +189,9 @@ impl Reporter for ForeignErrorTypesChecklistReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let rows = foreign_error_type_rows(findings);
         let chain_breaks: Vec<_> = typed_rows(&rows)
             .filter(|row| row.chain_break == "true")
@@ -261,12 +253,10 @@ impl Reporter for ForeignErrorTypesSummaryReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let rows = foreign_error_type_rows(findings);
         let typed: Vec<_> = typed_rows(&rows).cloned().collect();
         let report = typed_report_from_rows(&typed);
@@ -317,13 +307,11 @@ impl Reporter for ForeignErrorsChecklistReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let rows = foreign_error_type_rows(findings);
         let candidates: Vec<_> = open_rows(&rows)
             .filter(|row| row.record_kind == ForeignErrorRecordKind::Candidate.as_attr())

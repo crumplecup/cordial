@@ -34,7 +34,7 @@ pub use hierarchy::{
 pub use probe::ModularitySiteProbe;
 pub use reporter::{ModularityChecklistReporter, ModularityCsvReporter, ModularitySummaryReporter};
 pub use scan::scan_rust_source;
-pub use types::{ModularityKind, ModularityThresholds, ModuleSizeStats};
+pub use types::{ModularityKind, ModuleSizeStats};
 
 use crate::etiquette::StaticEtiquette;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};

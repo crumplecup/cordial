@@ -3,10 +3,8 @@ use std::path::PathBuf;
 
 use crate::enricher::resolve_source_path;
 use crate::error::CordialResult;
-use crate::hooks::Assessor;
-use crate::ir::IrView;
-use crate::objects::{Disposition, FileSpan, Finding, Marker};
-use crate::session::SessionView;
+use crate::hooks::{AssessView, Assessor};
+use crate::objects::{Disposition, FileSpan, Finding};
 
 use super::hierarchy::{
     ModuleSizeInput, build_module_hierarchy, child_mass_list, format_mass_list, lopsided_siblings,
@@ -44,13 +42,12 @@ impl Assessor for ModularityAssessor {
         &["modularity-site"]
     }
 
-    #[instrument(level = "trace", skip(self, markers, ir, session))]
-    fn assess(
-        &self,
-        markers: &[&dyn Marker],
-        ir: &dyn IrView,
-        session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Finding>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
+        let markers = view.markers;
+        let ir = view.ir;
+        let session = view.session;
+
         let thresholds = crate::config::load_session_config(session).modularity;
         let mut pending = Vec::new();
         for marker in markers {

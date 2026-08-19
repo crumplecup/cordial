@@ -1,8 +1,6 @@
 use crate::error::CordialResult;
-use crate::hooks::Assessor;
-use crate::ir::IrView;
-use crate::objects::{Disposition, Finding, Marker};
-use crate::session::SessionView;
+use crate::hooks::{AssessView, Assessor};
+use crate::objects::{Disposition, Finding};
 
 use super::types::{MissingMirrorFinding, ShadowRule};
 
@@ -25,13 +23,11 @@ impl Assessor for ShadowAssessor {
         &["missing-shadow-mirror"]
     }
 
-    #[instrument(level = "trace", skip(self, markers, ir, _session))]
-    fn assess(
-        &self,
-        markers: &[&dyn Marker],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Finding>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
+        let markers = view.markers;
+        let ir = view.ir;
+
         let mut findings = Vec::new();
         for marker in markers {
             let node_id = marker.anchor().node_id();

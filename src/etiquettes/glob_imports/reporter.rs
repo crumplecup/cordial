@@ -1,10 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::error::CordialResult;
-use crate::hooks::Reporter;
-use crate::ir::IrView;
+use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
-use crate::session::SessionView;
 
 use tracing::instrument;
 
@@ -71,13 +69,10 @@ impl Reporter for GlobImportCsvReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let mut body = String::from("crate,rule_id,context,file,line,snippet\n");
         for row in glob_import_rows(findings) {
             body.push_str(&format!(
@@ -112,13 +107,11 @@ impl Reporter for GlobImportChecklistReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let rows = glob_import_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
         let mut body = String::new();
@@ -168,13 +161,11 @@ impl Reporter for GlobImportSummaryReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let rows = glob_import_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
         let total = open.len();

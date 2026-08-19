@@ -1,10 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::error::CordialResult;
-use crate::hooks::Reporter;
-use crate::ir::IrView;
+use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
-use crate::session::SessionView;
 
 use super::types::{ErrorChainProbeCounts, ErrorChainProbeId};
 
@@ -106,12 +104,9 @@ impl Reporter for ErrorChainCsvReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let mut body = String::from("crate,rule_id,foreign_error_type,context,file,line,snippet\n");
         for row in error_chain_rows(findings) {
             body.push_str(&format!(
@@ -146,12 +141,10 @@ impl Reporter for ErrorChainChecklistReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let rows = error_chain_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
         let counts = probe_counts_from_rows(&rows);
@@ -214,13 +207,11 @@ impl Reporter for ErrorChainSummaryReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let rows = error_chain_rows(findings);
         let counts = probe_counts_from_rows(&rows);
         let total = counts.total();

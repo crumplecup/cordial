@@ -1,8 +1,7 @@
 use crate::error::CordialResult;
-use crate::hooks::Probe;
+use crate::hooks::{Probe, ProbeView};
 use crate::ir::{ItemKind, NodeKind, Query};
 use crate::objects::Marker;
-use crate::session::SessionView;
 
 use super::types::ImplGapMarker;
 
@@ -50,12 +49,10 @@ impl Probe for MissingPrereqProbe {
         &TYPE_NODES_QUERY
     }
 
-    #[instrument(level = "trace", skip(self, ir, _session))]
-    fn probe(
-        &self,
-        ir: &dyn crate::ir::IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Marker>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
+        let ir = view.ir;
+
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&TYPE_NODES_QUERY) {
             if node

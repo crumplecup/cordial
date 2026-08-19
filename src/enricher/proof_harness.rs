@@ -1,10 +1,8 @@
 use crate::NamedRunFilter;
 use crate::error::CordialResult;
-use crate::hooks::IrEnricher;
-use crate::ir::{BasicQuery, IrMut, NodeKind};
-use crate::loader::LoadView;
+use crate::hooks::{EnrichView, IrEnricher};
+use crate::ir::{BasicQuery, NodeKind};
 use crate::proof_harness::{load_workspace_proof_harness, test_status_for_type_path};
-use crate::session::SessionView;
 
 use tracing::instrument;
 /// Attaches proof harness test status attrs on type nodes.
@@ -34,13 +32,11 @@ impl IrEnricher for ProofHarnessEnricher {
         crate::RustdocLoader::ID
     }
 
-    #[instrument(level = "trace", skip(self, ir, _load, session))]
-    fn enrich(
-        &self,
-        ir: &mut dyn IrMut,
-        _load: &dyn LoadView,
-        session: &dyn SessionView,
-    ) -> CordialResult<()> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir;
+        let session = view.session;
+
         let filter = NamedRunFilter::all_etiquettes();
         let harness = load_workspace_proof_harness(session.project_root(), &filter)?;
 

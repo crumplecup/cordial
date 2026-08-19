@@ -1,8 +1,7 @@
 use crate::error::CordialResult;
-use crate::hooks::Probe;
-use crate::ir::{IrView, NodeKind, Query};
+use crate::hooks::{Probe, ProbeView};
+use crate::ir::{NodeKind, Query};
 use crate::objects::Marker;
-use crate::session::SessionView;
 
 use super::types::VisibilityMarker;
 
@@ -49,12 +48,10 @@ impl Probe for VisibilitySiteProbe {
         &VISIBILITY_SITES_QUERY
     }
 
-    #[instrument(level = "trace", skip(self, ir, _session))]
-    fn probe(
-        &self,
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Marker>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
+        let ir = view.ir;
+
         Ok(ir
             .nodes_matching(&VISIBILITY_SITES_QUERY)
             .into_iter()

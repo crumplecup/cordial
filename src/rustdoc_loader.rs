@@ -1,13 +1,12 @@
 use std::path::{Path, PathBuf};
 
 use crate::error::{CordialError, CordialResult};
-use crate::hooks::Loader;
+use crate::hooks::{LoadContext, Loader};
 use crate::ir::{
     ATTR_IS_PUBLIC, ATTR_ITEM_NAME, ATTR_QUALIFIED_PATH, ATTR_RUSTDOC_KIND, CrateIr, EdgeKind,
     NodeKind, NodeWeight,
 };
 use crate::rustdoc::{RustdocInventory, ir_item_kind};
-use crate::session::SessionView;
 
 use tracing::instrument;
 /// Loads parsed rustdoc JSON into a [`RustdocLoadView`].
@@ -27,12 +26,11 @@ impl Loader for RustdocLoader {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, session, target))]
-    fn load(
-        &self,
-        session: &dyn SessionView,
-        target: &crate::loader::CrateTarget,
-    ) -> CordialResult<Box<dyn crate::loader::LoadView>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn load(&self, view: LoadContext<'_>) -> CordialResult<Box<dyn crate::loader::LoadView>> {
+        let session = view.session;
+        let target = view.target;
+
         let json_path = resolve_rustdoc_json(
             &target.crate_root,
             &target.crate_name,

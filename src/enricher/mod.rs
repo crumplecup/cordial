@@ -105,10 +105,8 @@ pub use trenchcoat::TrenchcoatEnricher;
 pub use wrapper_coverage::WrapperCoverageEnricher;
 
 use crate::error::CordialResult;
-use crate::hooks::IrEnricher;
-use crate::ir::{BasicQuery, EdgeKind, IrMut, IrView, NodeKind};
-use crate::loader::LoadView;
-use crate::session::SessionView;
+use crate::hooks::{EnrichView, IrEnricher};
+use crate::ir::{BasicQuery, EdgeKind, IrView, NodeKind};
 
 /// Adds scope edges from items to their enclosing module.
 #[derive(Debug, Default, Clone, Copy)]
@@ -129,13 +127,10 @@ impl IrEnricher for ScopeEnricher {
         0
     }
 
-    #[instrument(level = "trace", skip(self, ir, _load, _session))]
-    fn enrich(
-        &self,
-        ir: &mut dyn IrMut,
-        _load: &dyn LoadView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<()> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir;
+
         let all_nodes = BasicQuery::all_nodes();
         let items: Vec<_> = ir
             .nodes_matching(&all_nodes)

@@ -1,8 +1,6 @@
 use crate::error::CordialResult;
-use crate::hooks::Assessor;
-use crate::ir::IrView;
+use crate::hooks::{AssessView, Assessor};
 use crate::objects::{Disposition, FileSpan, Finding};
-use crate::session::SessionView;
 
 use super::types::{VisibilityFinding, VisibilityRule, VisibilityRuleId};
 
@@ -26,13 +24,12 @@ impl Assessor for VisibilityAssessor {
         &["visibility-site"]
     }
 
-    #[instrument(level = "trace", skip(self, markers, ir, session))]
-    fn assess(
-        &self,
-        markers: &[&dyn crate::objects::Marker],
-        ir: &dyn IrView,
-        session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Finding>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
+        let markers = view.markers;
+        let ir = view.ir;
+        let session = view.session;
+
         let mut findings = Vec::new();
         for marker in markers {
             let node_id = marker.anchor().node_id();

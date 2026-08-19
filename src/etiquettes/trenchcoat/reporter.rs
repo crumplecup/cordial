@@ -1,8 +1,6 @@
 use crate::error::CordialResult;
-use crate::hooks::Reporter;
-use crate::ir::IrView;
-use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
-use crate::session::SessionView;
+use crate::hooks::{RenderView, Reporter};
+use crate::objects::{Artifact, MapFindingSink, TextArtifact};
 
 use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
@@ -18,13 +16,10 @@ impl Reporter for TrenchcoatCsvReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let mut body = String::from("crate,type_path,disposition\n");
         for finding in findings
             .iter()

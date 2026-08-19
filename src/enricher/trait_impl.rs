@@ -1,10 +1,8 @@
 use crate::error::CordialResult;
-use crate::hooks::IrEnricher;
+use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{
     ATTR_QUALIFIED_PATH, ATTR_TRAIT_IMPLS, BasicQuery, EdgeKind, IrMut, NodeKind, NodeWeight,
 };
-use crate::loader::LoadView;
-use crate::session::SessionView;
 
 use tracing::instrument;
 /// Adds [`EdgeKind::Implements`] edges from materialized `trait_impls` attrs.
@@ -31,13 +29,10 @@ impl IrEnricher for TraitImplEnricher {
         crate::RustdocLoader::ID
     }
 
-    #[instrument(level = "trace", skip(self, ir, _load, _session))]
-    fn enrich(
-        &self,
-        ir: &mut dyn IrMut,
-        _load: &dyn LoadView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<()> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir;
+
         static ALL_NODES: BasicQuery = BasicQuery {
             node_kinds: Vec::new(),
             edge_kinds: Vec::new(),

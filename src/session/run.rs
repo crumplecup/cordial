@@ -6,7 +6,10 @@ use tracing::instrument;
 
 use crate::error::{CordialError, CordialResult};
 use crate::etiquette::Etiquette;
-use crate::hooks::{Assessor, IrEnricher, Loader, Probe, Reporter};
+use crate::hooks::{
+    AssessView, Assessor, EnrichView, IrEnricher, LoadContext, Loader, Probe, ProbeView,
+    RenderView, Reporter, WorkspaceAssessView,
+};
 use crate::ir::{CrateIr, CrateView, CrateViewMut, WorkspaceIr};
 use crate::loader::{CrateTarget, LoadView, SourceLoadView, SourceLoader};
 #[cfg(any(
@@ -162,7 +165,11 @@ pub(super) fn run_session(
     }
 
     for assessor in &workspace_assessors {
-        all_findings.extend(assessor.assess(&workspace, session, filter)?);
+        all_findings.extend(assessor.assess(WorkspaceAssessView {
+            workspace: &workspace,
+            session,
+            filter,
+        })?);
     }
 
     let all_artifacts = render_and_write(
@@ -233,7 +240,7 @@ fn load_and_probe(
         let mut crate_ir = CrateIr::new(&target.crate_name);
 
         for loader in loaders {
-            let view = loader.load(session, target)?;
+            let view = loader.load(LoadContext { session, target })?;
             if view.loader_id() == SourceLoader::ID
                 && let Some(source) = view.as_any().downcast_ref::<SourceLoadView>()
             {
@@ -260,7 +267,11 @@ fn load_and_probe(
                 workspace: &mut workspace,
                 crate_name: target.crate_name.clone(),
             };
-            enricher.enrich(&mut view, load, session)?;
+            enricher.enrich(EnrichView {
+                ir: &mut view,
+                load,
+                session,
+            })?;
         }
 
         let cached = workspace
@@ -279,7 +290,10 @@ fn load_and_probe(
             crate_name: target.crate_name.clone(),
         };
         for probe in probes {
-            let mut found = probe.probe(&crate_view, session)?;
+            let mut found = probe.probe(ProbeView {
+                ir: &crate_view,
+                session,
+            })?;
             markers_by_crate
                 .entry(target.crate_name.clone())
                 .or_default()
@@ -330,7 +344,11 @@ fn assess_targets(
                 .copied()
                 .filter(|marker| assessor.consumes().contains(&marker.label()))
                 .collect();
-            let mut findings = assessor.assess(&relevant, &crate_view, session)?;
+            let mut findings = assessor.assess(AssessView {
+                markers: &relevant,
+                ir: &crate_view,
+                session,
+            })?;
             crate_findings.append(&mut findings);
         }
 
@@ -384,12 +402,20 @@ fn render_and_write(
 
     let mut all_artifacts: Vec<Box<dyn Artifact>> = Vec::new();
     for reporter in reporters {
-        let mut artifacts = reporter.render(&finding_refs, &crate_view, session)?;
+        let mut artifacts = reporter.render(RenderView {
+            findings: &finding_refs,
+            ir: &crate_view,
+            session,
+        })?;
         all_artifacts.append(&mut artifacts);
     }
 
     let rollup = RollupReporter;
-    let mut rollup_artifacts = rollup.render(&finding_refs, &crate_view, session)?;
+    let mut rollup_artifacts = rollup.render(RenderView {
+        findings: &finding_refs,
+        ir: &crate_view,
+        session,
+    })?;
     all_artifacts.append(&mut rollup_artifacts);
 
     #[cfg(feature = "quality")]
@@ -400,7 +426,11 @@ fn render_and_write(
     #[cfg(feature = "quality")]
     if includes_quality {
         let quality_report = QualityReportReporter;
-        let mut quality_artifacts = quality_report.render(&finding_refs, &crate_view, session)?;
+        let mut quality_artifacts = quality_report.render(RenderView {
+            findings: &finding_refs,
+            ir: &crate_view,
+            session,
+        })?;
         all_artifacts.append(&mut quality_artifacts);
     }
 

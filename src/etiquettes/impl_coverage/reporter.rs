@@ -1,8 +1,6 @@
 use crate::error::CordialResult;
-use crate::hooks::Reporter;
-use crate::ir::IrView;
+use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
-use crate::session::SessionView;
 
 use tracing::instrument;
 #[derive(Debug, Default, Clone)]
@@ -72,12 +70,9 @@ impl Reporter for ImplCoverageCsvReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let mut body = String::from(
             "crate,type_path,gap_kind,missing_our_traits,missing_external_traits,elicit_complete_gap,proof_test,composition_test,disposition\n",
         );
@@ -115,12 +110,9 @@ impl Reporter for ImplGapsCsvReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let mut body = String::from(
             "crate,type_path,gap_kind,missing_our_traits,missing_external_traits,elicit_complete_gap,feature_gated_external,feature_owner_crate,candidate_unlock_features,coverage_provider,wrapper_paths,covered_indirectly\n",
         );
@@ -165,13 +157,11 @@ impl Reporter for ImplChecklistReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let rows: Vec<_> = coverage_rows(findings)
             .into_iter()
             .filter(|row| row.disposition == "open")

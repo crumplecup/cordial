@@ -1,9 +1,8 @@
 use crate::enricher::resolve_shadow_entries;
 use crate::error::CordialResult;
-use crate::hooks::Probe;
-use crate::ir::{EdgeKind, IrView, Query};
+use crate::hooks::{Probe, ProbeView};
+use crate::ir::{EdgeKind, Query};
 use crate::objects::Marker;
-use crate::session::SessionView;
 
 use super::types::MissingMirrorMarker;
 
@@ -48,12 +47,11 @@ impl Probe for MissingShadowMirrorProbe {
         &SHADOW_TARGET_QUERY
     }
 
-    #[instrument(level = "trace", skip(self, ir, session))]
-    fn probe(
-        &self,
-        ir: &dyn IrView,
-        session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Marker>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
+        let ir = view.ir;
+        let session = view.session;
+
         let entries = resolve_shadow_entries(session, ir)?;
         let mut markers = Vec::new();
 

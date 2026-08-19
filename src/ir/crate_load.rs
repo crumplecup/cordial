@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::error::{CordialError, CordialResult};
-use crate::hooks::{IrEnricher, Loader};
+use crate::hooks::{EnrichView, IrEnricher, LoadContext, Loader};
 use crate::ir::{CrateIr, CrateViewMut, WorkspaceIr};
 use crate::loader::{CrateTarget, LoadView, SourceLoadView, SourceLoader};
 use crate::rustdoc::parse_rustdoc_json;
@@ -34,7 +34,10 @@ pub fn load_crate_ir_if_missing(
         let view = if loader.id() == RustdocLoader::ID {
             load_rustdoc_view(session, &target, shadow_for_upstream)?
         } else {
-            loader.load(session, &target)?
+            loader.load(LoadContext {
+                session,
+                target: &target,
+            })?
         };
 
         if view.loader_id() == SourceLoader::ID
@@ -72,7 +75,11 @@ pub fn load_crate_ir_if_missing(
             workspace,
             crate_name: crate_name.to_string(),
         };
-        enricher.enrich(&mut view, load, session)?;
+        enricher.enrich(EnrichView {
+            ir: &mut view,
+            load,
+            session,
+        })?;
     }
 
     Ok(())

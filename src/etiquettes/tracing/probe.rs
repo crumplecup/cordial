@@ -1,8 +1,7 @@
 use crate::error::CordialResult;
-use crate::hooks::Probe;
-use crate::ir::{IrView, ItemKind, NodeKind, Query};
+use crate::hooks::{Probe, ProbeView};
+use crate::ir::{ItemKind, NodeKind, Query};
 use crate::objects::Marker;
-use crate::session::SessionView;
 
 use super::types::{MISSING_INSTRUMENT_LABEL, RECIPE_DELTA_LABEL, TracingMarker};
 
@@ -77,11 +76,9 @@ impl Probe for MissingInstrumentProbe {
         &MISSING_INSTRUMENT_QUERY
     }
 
-    fn probe(
-        &self,
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Marker>>> {
+    fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
+        let ir = view.ir;
+
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&MISSING_INSTRUMENT_QUERY) {
             markers.push(Box::new(TracingMarker {
@@ -112,12 +109,10 @@ impl Probe for RecipeDeltaProbe {
         &INSTRUMENTED_QUERY
     }
 
-    #[instrument(level = "trace", skip(self, ir, _session))]
-    fn probe(
-        &self,
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Marker>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
+        let ir = view.ir;
+
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&INSTRUMENTED_QUERY) {
             markers.push(Box::new(TracingMarker {

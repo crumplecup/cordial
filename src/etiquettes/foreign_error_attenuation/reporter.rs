@@ -1,10 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::error::CordialResult;
-use crate::hooks::Reporter;
-use crate::ir::IrView;
+use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
-use crate::session::SessionView;
 
 use super::types::{
     ForeignErrorAttenuationRecord, ForeignErrorAttenuationReport, ForeignErrorHandlingClass,
@@ -180,12 +178,9 @@ impl Reporter for ForeignErrorAttenuationCsvReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let mut body = String::from(
             "crate,handling_class,resolution_id,foreign_error_type,inference_rule_id,confidence,context,file,line,site_kind,source_snippet,site_snippet,resolution,good_pattern,bad_pattern\n",
         );
@@ -230,12 +225,10 @@ impl Reporter for ForeignErrorAttenuationChecklistReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let rows = attenuation_rows(findings);
         let report = report_from_rows(&rows);
 
@@ -352,13 +345,10 @@ impl Reporter for ForeignErrorAttenuationSummaryReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let rows = attenuation_rows(findings);
         let report = report_from_rows(&rows);
         let summary = build_workspace_foreign_error_attenuation_summary(&[report]);

@@ -1,8 +1,5 @@
 use crate::error::CordialResult;
-use crate::hooks::IrEnricher;
-use crate::ir::IrMut;
-use crate::loader::LoadView;
-use crate::session::SessionView;
+use crate::hooks::{EnrichView, IrEnricher};
 
 use tracing::instrument;
 /// Rebuilds the crate `by_path` index from all `qualified_path` attrs.
@@ -24,13 +21,10 @@ impl IrEnricher for PathIndexEnricher {
         1
     }
 
-    #[instrument(level = "trace", skip(self, ir, _load, _session))]
-    fn enrich(
-        &self,
-        ir: &mut dyn IrMut,
-        _load: &dyn LoadView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<()> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir;
+
         ir.rebuild_path_index()?;
         Ok(())
     }

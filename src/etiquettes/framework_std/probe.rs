@@ -2,10 +2,9 @@ use crate::error::CordialResult;
 use crate::framework_std::{
     FrameworkStdOptions, HOMECOMING_IMPL_CRATE, framework_std_type_items, load_merged_std_inventory,
 };
-use crate::hooks::Probe;
-use crate::ir::{IrView, Query};
+use crate::hooks::{Probe, ProbeView};
+use crate::ir::Query;
 use crate::objects::Marker;
-use crate::session::SessionView;
 use crate::store::SysrootCache;
 
 use super::homecoming::FrameworkStdScopeMarker;
@@ -51,12 +50,10 @@ impl Probe for HomecomingStdScopeProbe {
         &HUB_CRATE_QUERY
     }
 
-    #[instrument(level = "trace", skip(self, ir, _session))]
-    fn probe(
-        &self,
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Marker>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
+        let ir = view.ir;
+
         if ir.crate_name() != HOMECOMING_IMPL_CRATE {
             return Ok(Vec::new());
         }
@@ -89,10 +86,10 @@ mod amenable {
         AMENABLE_IMPL_CRATE, AmenableStdOptions, framework_std_type_items,
         load_merged_std_inventory,
     };
-    use crate::hooks::Probe;
-    use crate::ir::{IrView, Query};
+    use crate::hooks::{Probe, ProbeView};
+    use crate::ir::Query;
     use crate::objects::Marker;
-    use crate::session::SessionView;
+
     use crate::store::SysrootCache;
     use tracing::instrument;
 
@@ -117,12 +114,10 @@ mod amenable {
             &HUB_CRATE_QUERY
         }
 
-        #[instrument(level = "trace", skip(self, ir, _session))]
-        fn probe(
-            &self,
-            ir: &dyn IrView,
-            _session: &dyn SessionView,
-        ) -> CordialResult<Vec<Box<dyn Marker>>> {
+        #[instrument(level = "trace", skip(self, view))]
+        fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
+            let ir = view.ir;
+
             if ir.crate_name() != AMENABLE_IMPL_CRATE {
                 return Ok(Vec::new());
             }

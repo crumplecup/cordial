@@ -5,8 +5,8 @@ use cordial::rustdoc::{
 use cordial::rustdoc::{demo_trenchcoat_crate, write_rustdoc_crate_json};
 use cordial::testing::{parse_rustdoc_json, rustdoc_load_view, wrapper_maps_equivalent};
 use cordial::{
-    CrateIr, IrEnricher, LoadView, RustdocStructureEnricher, SessionBuilder, WorkspaceIr,
-    build_wrapper_coverage_from_hub_ir,
+    CrateIr, EnrichView, IrEnricher, LoadView, RustdocStructureEnricher, SessionBuilder,
+    WorkspaceIr, build_wrapper_coverage_from_hub_ir,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -30,7 +30,11 @@ fn hub_ir_wrapper_map_matches_inventory_oracle() -> miette::Result<()> {
         .wrap_err("populate")?;
     let session = SessionBuilder::new(temp.path()).build();
     RustdocStructureEnricher
-        .enrich(&mut ir, &load as &dyn LoadView, &session)
+        .enrich(EnrichView {
+            ir: &mut ir,
+            load: &load as &dyn LoadView,
+            session: &session,
+        })
         .into_diagnostic()
         .wrap_err("structure")?;
     workspace.insert_crate(ir);

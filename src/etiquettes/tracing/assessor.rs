@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::error::CordialResult;
-use crate::hooks::Assessor;
+use crate::hooks::{AssessView, Assessor};
 use crate::ir::IrView;
 use crate::objects::{Disposition, FileSpan, Finding, Marker};
 use crate::session::SessionView;
@@ -34,13 +34,12 @@ impl Assessor for TracingAssessor {
         &[MISSING_INSTRUMENT_LABEL, RECIPE_DELTA_LABEL]
     }
 
-    #[instrument(level = "trace", skip(self, markers, ir, session))]
-    fn assess(
-        &self,
-        markers: &[&dyn Marker],
-        ir: &dyn IrView,
-        session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Finding>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
+        let markers = view.markers;
+        let ir = view.ir;
+        let session = view.session;
+
         let mut findings = Vec::new();
         for marker in markers {
             let Some(parsed) = ParsedFn::from_marker(*marker, ir, session) else {

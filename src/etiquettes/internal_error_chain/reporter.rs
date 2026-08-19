@@ -1,10 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::error::CordialResult;
-use crate::hooks::Reporter;
-use crate::ir::IrView;
+use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
-use crate::session::SessionView;
 
 use super::types::{InternalErrorComplianceId, InternalErrorNodeClass, InternalErrorRecordKind};
 
@@ -145,12 +143,9 @@ impl Reporter for InternalErrorTypeGraphCsvReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let rows = internal_error_chain_rows(findings);
         let mut body = String::from(
             "crate,type_path,node_class,probe_id,source_target,reaches_foreign,chain_depth,file,line,snippet\n",
@@ -191,12 +186,9 @@ impl Reporter for InternalErrorComplianceCsvReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let rows = internal_error_chain_rows(findings);
         let mut body = String::from(
             "crate,rule_id,foreign_error_type,internal_constructor,context,file,line,snippet\n",
@@ -235,12 +227,10 @@ impl Reporter for InternalErrorChainChecklistReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let rows = internal_error_chain_rows(findings);
         let type_nodes: Vec<_> = type_graph_rows(&rows).collect();
         let compliance: Vec<_> = compliance_rows(&rows).collect();
@@ -348,13 +338,11 @@ impl Reporter for InternalErrorChainSummaryReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let rows = internal_error_chain_rows(findings);
         let counts = class_counts(&rows);
         let type_nodes = type_graph_rows(&rows).count();

@@ -1,10 +1,9 @@
 use crate::enricher::{member_crate_root, resolve_parent};
 use crate::error::CordialResult;
-use crate::hooks::IrEnricher;
-use crate::ir::{IrMut, ItemKind, NodeKind, NodeWeight};
-use crate::loader::{LoadView, SourceLoadView};
+use crate::hooks::{EnrichView, IrEnricher};
+use crate::ir::{ItemKind, NodeKind, NodeWeight};
+use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
-use crate::session::SessionView;
 
 use super::scan::scan_source_tree;
 
@@ -28,13 +27,12 @@ impl IrEnricher for FunctionInventoryEnricher {
         1
     }
 
-    #[instrument(level = "trace", skip(self, ir, load, session))]
-    fn enrich(
-        &self,
-        ir: &mut dyn IrMut,
-        load: &dyn LoadView,
-        session: &dyn SessionView,
-    ) -> CordialResult<()> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir;
+        let load = view.load;
+        let session = view.session;
+
         let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
             return Ok(());
         };

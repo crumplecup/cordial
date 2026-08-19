@@ -1,10 +1,8 @@
 use crate::NamedRunFilter;
 use crate::error::CordialResult;
 use crate::feature_probe::load_crate_feature_probes;
-use crate::hooks::IrEnricher;
-use crate::ir::{ATTR_QUALIFIED_PATH, BasicQuery, IrMut, NodeKind};
-use crate::loader::LoadView;
-use crate::session::SessionView;
+use crate::hooks::{EnrichView, IrEnricher};
+use crate::ir::{ATTR_QUALIFIED_PATH, BasicQuery, NodeKind};
 
 use tracing::instrument;
 /// Attaches per-type feature probe attrs from cached or live probe rustdoc.
@@ -35,13 +33,11 @@ impl IrEnricher for FeatureProbeEnricher {
         crate::RustdocLoader::ID
     }
 
-    #[instrument(level = "trace", skip(self, ir, _load, session))]
-    fn enrich(
-        &self,
-        ir: &mut dyn IrMut,
-        _load: &dyn LoadView,
-        session: &dyn SessionView,
-    ) -> CordialResult<()> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir;
+        let session = view.session;
+
         let filter = NamedRunFilter::all_etiquettes();
         let type_paths: Vec<String> = ir
             .nodes_matching(&BasicQuery::all_nodes())

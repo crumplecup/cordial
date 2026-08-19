@@ -1,10 +1,8 @@
 use crate::error::CordialResult;
-use crate::hooks::IrEnricher;
+use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{
     ATTR_QUALIFIED_PATH, ATTR_WRAPS_FOREIGN, BasicQuery, EdgeKind, IrMut, NodeKind, NodeWeight,
 };
-use crate::loader::LoadView;
-use crate::session::SessionView;
 
 use tracing::instrument;
 /// Adds [`EdgeKind::Wraps`] edges from materialized `wraps_foreign` attrs.
@@ -31,13 +29,10 @@ impl IrEnricher for TrenchcoatEnricher {
         crate::RustdocLoader::ID
     }
 
-    #[instrument(level = "trace", skip(self, ir, _load, _session))]
-    fn enrich(
-        &self,
-        ir: &mut dyn IrMut,
-        _load: &dyn LoadView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<()> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir;
+
         static ALL_NODES: BasicQuery = BasicQuery {
             node_kinds: Vec::new(),
             edge_kinds: Vec::new(),

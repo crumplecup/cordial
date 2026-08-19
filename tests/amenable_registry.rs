@@ -1,6 +1,5 @@
 #![cfg(feature = "amenable_std")]
 
-use miette::{IntoDiagnostic, WrapErr};
 use std::collections::HashSet;
 
 use cordial::testing::{

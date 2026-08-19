@@ -2,19 +2,17 @@ use std::collections::{BTreeSet, HashMap};
 
 use crate::RustdocLoadView;
 use crate::error::CordialResult;
-use crate::hooks::IrEnricher;
+use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{
     ATTR_ALIAS_TARGET, ATTR_ELICIT_COMPLETE, ATTR_ELICIT_COMPLETE_FACTORY, ATTR_IS_GENERIC,
     ATTR_IS_PUBLIC, ATTR_IS_UNSTABLE, ATTR_ITEM_NAME, ATTR_PUBLIC_METHODS, ATTR_QUALIFIED_PATH,
-    ATTR_TRAIT_IMPLS, ATTR_TRAIT_PREREQS, ATTR_WRAPS_FOREIGN, BasicQuery, IrMut, NodeKind,
+    ATTR_TRAIT_IMPLS, ATTR_TRAIT_PREREQS, ATTR_WRAPS_FOREIGN, BasicQuery, NodeKind,
 };
-use crate::loader::LoadView;
 use crate::rustdoc::{
     collect_elicit_complete_from_inventory, collect_trait_impls,
     collect_trait_prereqs_for_inventory, collect_trenchcoat_pairs,
     collect_type_methods_from_inventory, extract_public_items, methods_for_type_path,
 };
-use crate::session::SessionView;
 
 use tracing::instrument;
 /// Materializes rustdoc JSON facts onto type/trait item nodes as attrs.
@@ -41,13 +39,11 @@ impl IrEnricher for RustdocStructureEnricher {
         crate::RustdocLoader::ID
     }
 
-    #[instrument(level = "trace", skip(self, ir, load, _session))]
-    fn enrich(
-        &self,
-        ir: &mut dyn IrMut,
-        load: &dyn LoadView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<()> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir;
+        let load = view.load;
+
         let Some(rustdoc) = load.as_any().downcast_ref::<RustdocLoadView>() else {
             return Ok(());
         };

@@ -1,10 +1,9 @@
 use std::path::PathBuf;
 
 use crate::error::CordialResult;
-use crate::hooks::Loader;
-use crate::session::SessionView;
+use crate::hooks::{LoadContext, Loader};
 
-use super::{CrateTarget, LoadView};
+use super::LoadView;
 
 use tracing::instrument;
 /// Loads Rust source files into a [`SourceLoadView`].
@@ -23,12 +22,10 @@ impl Loader for SourceLoader {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, _session, target))]
-    fn load(
-        &self,
-        _session: &dyn SessionView,
-        target: &CrateTarget,
-    ) -> CordialResult<Box<dyn LoadView>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn load(&self, view: LoadContext<'_>) -> CordialResult<Box<dyn LoadView>> {
+        let target = view.target;
+
         let mut files = Vec::new();
         let src_root = target.crate_root.join("src");
         if src_root.is_dir() {

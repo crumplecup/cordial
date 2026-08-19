@@ -252,7 +252,10 @@ pub use config::{
 pub use exceptions::{ExceptionEntry, ExceptionSet, apply_exception_sets, load_exceptions};
 pub use export::{SurrealEdge, SurrealGraphExport, SurrealNode, surreal_statements};
 pub use filter::NamedRunFilter;
-pub use hooks::{Assessor, IrEnricher, Loader, Probe, Reporter, WorkspaceAssessor};
+pub use hooks::{
+    AssessView, Assessor, EnrichView, IrEnricher, LoadContext, Loader, Probe, ProbeView,
+    RenderView, Reporter, WorkspaceAssessView, WorkspaceAssessor,
+};
 pub use ir::{
     ATTR_IR_ORIGIN, ATTR_SYN_DOC_PEER, AttrKey, AttrValue, BasicQuery, CrateIr, CrateIrSnapshot,
     CrateView, CrateViewMut, EdgeKind, EdgeWeight, IrIndexes, IrMut, IrView, ItemKind, NodeId,

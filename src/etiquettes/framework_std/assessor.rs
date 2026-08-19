@@ -3,10 +3,9 @@ use crate::framework_std::{
     FrameworkStdOptions, HOMECOMING_IMPL_CRATE, HOMECOMING_PATCH_SET, HOMECOMING_TRAIT,
     classify_framework_std_row, load_framework_skip_map,
 };
-use crate::hooks::Assessor;
-use crate::ir::{IrView, collect_trait_impl_type_paths_from_ir};
-use crate::objects::{Finding, Marker, NodeAnchor};
-use crate::session::SessionView;
+use crate::hooks::{AssessView, Assessor};
+use crate::ir::collect_trait_impl_type_paths_from_ir;
+use crate::objects::{Finding, NodeAnchor};
 use crate::store::StoreLayout;
 
 use super::homecoming::{FrameworkStdRowFinding, FrameworkStdRule, homecoming_row_disposition};
@@ -30,13 +29,12 @@ impl Assessor for HomecomingStdAssessor {
         &[super::probe::HomecomingStdScopeProbe::ID]
     }
 
-    #[instrument(level = "trace", skip(self, markers, ir, session))]
-    fn assess(
-        &self,
-        markers: &[&dyn Marker],
-        ir: &dyn IrView,
-        session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Finding>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
+        let markers = view.markers;
+        let ir = view.ir;
+        let session = view.session;
+
         if markers.is_empty() || ir.crate_name() != HOMECOMING_IMPL_CRATE {
             return Ok(Vec::new());
         }
@@ -83,10 +81,8 @@ mod amenable {
         classify_amenable_std_row, collect_proof_chain_subjects, ensure_registry_dump_for_assessor,
         load_merged_std_inventory, load_verifier_skip_map,
     };
-    use crate::hooks::Assessor;
-    use crate::ir::IrView;
-    use crate::objects::{Finding, Marker, NodeAnchor};
-    use crate::session::SessionView;
+    use crate::hooks::{AssessView, Assessor};
+    use crate::objects::{Finding, NodeAnchor};
     use crate::store::{StoreLayout, SysrootCache};
 
     use super::super::amenable::{
@@ -112,13 +108,12 @@ mod amenable {
             &[super::super::probe::AmenableStdScopeProbe::ID]
         }
 
-        #[instrument(level = "trace", skip(self, markers, ir, session))]
-        fn assess(
-            &self,
-            markers: &[&dyn Marker],
-            ir: &dyn IrView,
-            session: &dyn SessionView,
-        ) -> CordialResult<Vec<Box<dyn Finding>>> {
+        #[instrument(level = "trace", skip(self, view))]
+        fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
+            let markers = view.markers;
+            let ir = view.ir;
+            let session = view.session;
+
             if markers.is_empty() || ir.crate_name() != AMENABLE_IMPL_CRATE {
                 return Ok(Vec::new());
             }

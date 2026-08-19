@@ -8,9 +8,9 @@ use crate::etiquettes::error_sites::ErrorSiteKind;
 use crate::etiquettes::foreign_error_types::{
     ForeignErrorRecordKind, ForeignErrorTypeRecord, ForeignErrorTypeReport,
 };
-use crate::hooks::IrEnricher;
+use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{BasicQuery, IrMut, IrView, NodeKind};
-use crate::loader::{LoadView, SourceLoadView};
+use crate::loader::SourceLoadView;
 use crate::session::SessionView;
 
 use super::assess::{ErrorBridgeHint, build_foreign_error_attenuation_report_with_bridges};
@@ -35,13 +35,12 @@ impl IrEnricher for ForeignErrorAttenuationInventoryEnricher {
         52
     }
 
-    #[instrument(level = "trace", skip(self, ir, load, session))]
-    fn enrich(
-        &self,
-        ir: &mut dyn IrMut,
-        load: &dyn LoadView,
-        session: &dyn SessionView,
-    ) -> CordialResult<()> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir;
+        let load = view.load;
+        let session = view.session;
+
         let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
             return Ok(());
         };

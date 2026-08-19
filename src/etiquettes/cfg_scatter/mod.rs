@@ -29,7 +29,7 @@ pub use enricher::CfgScatterInventoryEnricher;
 pub use probe::CfgScatterSiteProbe;
 pub use reporter::{CfgScatterChecklistReporter, CfgScatterCsvReporter, CfgScatterSummaryReporter};
 pub use scan::scan_rust_source;
-pub use types::{CfgScatterThresholds, CfgSiteKind};
+pub use types::CfgSiteKind;
 
 use crate::etiquette::StaticEtiquette;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};

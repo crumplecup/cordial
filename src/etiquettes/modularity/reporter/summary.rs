@@ -1,8 +1,6 @@
 use crate::error::CordialResult;
-use crate::hooks::Reporter;
-use crate::ir::IrView;
-use crate::objects::{Artifact, Finding, TextArtifact};
-use crate::session::SessionView;
+use crate::hooks::{RenderView, Reporter};
+use crate::objects::{Artifact, TextArtifact};
 
 use super::super::types::ModuleSizeStats;
 use super::rows::{
@@ -26,13 +24,11 @@ impl Reporter for ModularitySummaryReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, _ir, session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let session = view.session;
+
         let rows = modularity_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
         let thresholds = crate::config::load_session_config(session).modularity;

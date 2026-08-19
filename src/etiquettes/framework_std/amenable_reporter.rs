@@ -6,10 +6,8 @@ use crate::framework_std::{
     render_amenable_std_checklist_md, render_amenable_std_coverage_csv,
     render_amenable_std_gaps_csv,
 };
-use crate::hooks::Reporter;
-use crate::ir::IrView;
-use crate::objects::{Artifact, Finding, TextArtifact};
-use crate::session::SessionView;
+use crate::hooks::{RenderView, Reporter};
+use crate::objects::{Artifact, TextArtifact};
 use crate::store::StoreLayout;
 
 use super::amenable::{amenable_gaps_from_findings, amenable_report_from_findings};
@@ -28,13 +26,11 @@ impl Reporter for AmenableStdReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, _ir, session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let session = view.session;
+
         let options = AmenableStdOptions::default();
         let report =
             amenable_report_from_findings(findings, options.include_nightly).ok_or_else(|| {

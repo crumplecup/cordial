@@ -6,7 +6,7 @@ use tracing::{debug, instrument};
 
 use super::generics::{
     collect_items_from_generic_args, collect_items_from_generic_bound,
-    collect_items_from_generic_param_defs, collect_items_from_poly_trait, type_kind_name,
+    collect_items_from_generic_param_defs, collect_items_from_poly_trait,
 };
 use super::item::build_inventory_item;
 use super::{ExtractedItem, path_matches_scope};

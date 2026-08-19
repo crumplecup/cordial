@@ -5,9 +5,9 @@ mod probe;
 mod reporter;
 mod workspace_assessor;
 
-pub use assessor::Assessor;
-pub use enricher::IrEnricher;
-pub use loader::Loader;
-pub use probe::Probe;
-pub use reporter::Reporter;
-pub use workspace_assessor::WorkspaceAssessor;
+pub use assessor::{AssessView, Assessor};
+pub use enricher::{EnrichView, IrEnricher};
+pub use loader::{LoadContext, Loader};
+pub use probe::{Probe, ProbeView};
+pub use reporter::{RenderView, Reporter};
+pub use workspace_assessor::{WorkspaceAssessView, WorkspaceAssessor};

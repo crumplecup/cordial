@@ -3,10 +3,8 @@
 use std::collections::BTreeMap;
 
 use crate::error::CordialResult;
-use crate::hooks::Reporter;
-use crate::ir::IrView;
+use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, TextArtifact};
-use crate::session::SessionView;
 
 use super::reporter::{AntipatternRow, antipattern_rows, escape_csv};
 use super::types::{AntipatternRuleId, build_workspace_version_in_member_summary};
@@ -33,12 +31,9 @@ impl Reporter for VersionInMemberCsvReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let mut body = String::from("crate,rule_id,context,file,line,snippet\n");
         for row in version_rows(findings)
             .iter()
@@ -75,12 +70,10 @@ impl Reporter for VersionInMemberChecklistReporter {
         Self::ID
     }
 
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+
         let version = version_rows(findings);
         let rows: Vec<_> = version
             .iter()
@@ -138,13 +131,10 @@ impl Reporter for VersionInMemberSummaryReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+
         let summary = build_workspace_version_in_member_summary(findings);
         let mut body = String::new();
         body.push_str("# Version in member summary\n\n");

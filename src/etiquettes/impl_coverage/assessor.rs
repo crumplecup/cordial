@@ -1,11 +1,10 @@
 use std::collections::HashSet;
 
 use crate::error::CordialResult;
-use crate::hooks::Assessor;
-use crate::ir::{IrView, type_trait_impls, type_trait_prereqs};
-use crate::objects::{Disposition, Finding, Marker};
+use crate::hooks::{AssessView, Assessor};
+use crate::ir::{type_trait_impls, type_trait_prereqs};
+use crate::objects::{Disposition, Finding};
 use crate::rustdoc::prereqs_from_trait_shorts;
-use crate::session::SessionView;
 
 use super::gap_classify::assess_impl_gap;
 use super::node_context::{
@@ -33,14 +32,11 @@ impl Assessor for ImplGapAssessor {
         &["impl-coverage-gap"]
     }
 
-    #[instrument(level = "trace", skip(self, markers, ir, session))]
-    fn assess(
-        &self,
-        markers: &[&dyn Marker],
-        ir: &dyn IrView,
-        session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Finding>>> {
-        let _ = session;
+    #[instrument(level = "trace", skip(self, view))]
+    fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
+        let markers = view.markers;
+        let ir = view.ir;
+
         let mut findings = Vec::new();
         let mut seen = HashSet::new();
 

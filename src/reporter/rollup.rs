@@ -1,10 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::error::CordialResult;
-use crate::hooks::Reporter;
-use crate::ir::IrView;
-use crate::objects::{Artifact, Disposition, Finding, MapFindingSink, TextArtifact};
-use crate::session::SessionView;
+use crate::hooks::{RenderView, Reporter};
+use crate::objects::{Artifact, Disposition, MapFindingSink, TextArtifact};
 
 use tracing::instrument;
 /// Executive summary across all etiquettes in one run.
@@ -21,13 +19,12 @@ impl Reporter for RollupReporter {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self, findings, ir, session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        ir: &dyn IrView,
-        session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let findings = view.findings;
+        let ir = view.ir;
+        let session = view.session;
+
         let mut by_category: BTreeMap<String, CategoryCounts> = BTreeMap::new();
         let mut by_rule: BTreeMap<String, usize> = BTreeMap::new();
 

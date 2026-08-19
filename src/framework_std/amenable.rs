@@ -234,11 +234,7 @@ pub fn amenable_gap_fields(entry: &AmenableStdEntry, impl_crate: &str) -> (Strin
 }
 
 #[instrument(level = "debug", skip(items))]
-pub fn resolve_alias_chain(
-    items: &[StdInventoryItem],
-    start: &str,
-    max_hops: usize,
-) -> String {
+pub fn resolve_alias_chain(items: &[StdInventoryItem], start: &str, max_hops: usize) -> String {
     let mut current = start.to_string();
     for _ in 0..max_hops {
         let Some(next_item) = items.iter().find(|candidate| {

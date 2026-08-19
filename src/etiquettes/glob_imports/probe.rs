@@ -1,8 +1,7 @@
 use crate::error::CordialResult;
-use crate::hooks::Probe;
-use crate::ir::{IrView, NodeKind, Query};
+use crate::hooks::{Probe, ProbeView};
+use crate::ir::{NodeKind, Query};
 use crate::objects::Marker;
-use crate::session::SessionView;
 
 use super::types::{GlobImportMarker, GlobImportRuleId};
 
@@ -50,12 +49,10 @@ impl Probe for GlobImportSiteProbe {
         &GLOB_IMPORT_SITES_QUERY
     }
 
-    #[instrument(level = "trace", skip(self, ir, _session))]
-    fn probe(
-        &self,
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Marker>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
+        let ir = view.ir;
+
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&GLOB_IMPORT_SITES_QUERY) {
             let Some(rule_value) = node.attr("glob_import_rule_id").and_then(|v| v.as_str()) else {

@@ -4,11 +4,11 @@
 //! plugin is just an id, a category, and the etiquettes it contributes.
 
 use cordial::{
-    Assessor, AttributeEnricher, CordialResult, Disposition, EdgeKind, Etiquette, FileSpan,
-    Finding, FindingSink, IrAnchor, IrEnricher, IrMut, IrView, LoadView, Loader, Marker,
-    NodeAnchor, NodeKind, NodeView, NodeWeight, PluginCategory, Probe, Query, Reporter, Rule,
-    ScopeEnricher, SessionView, SourceLoadView, SourceLoader, SourceSpan, StaticEtiquette,
-    StaticPlugin, TextArtifact,
+    AssessView, Assessor, AttributeEnricher, CordialResult, Disposition, EdgeKind, EnrichView,
+    Etiquette, FileSpan, Finding, FindingSink, IrAnchor, IrEnricher, Loader, Marker, NodeAnchor,
+    NodeKind, NodeView, NodeWeight, PluginCategory, Probe, ProbeView, Query, RenderView, Reporter,
+    Rule, ScopeEnricher, SourceLoadView, SourceLoader, SourceSpan, StaticEtiquette, StaticPlugin,
+    TextArtifact,
 };
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -156,13 +156,12 @@ impl IrEnricher for TodoInventoryEnricher {
         "acme-todo-inventory"
     }
 
-    #[instrument(level = "trace", skip(self, ir, load, session))]
-    fn enrich(
-        &self,
-        ir: &mut dyn IrMut,
-        load: &dyn LoadView,
-        session: &dyn SessionView,
-    ) -> CordialResult<()> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir;
+        let load = view.load;
+        let session = view.session;
+
         let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
             return Ok(());
         };
@@ -291,12 +290,10 @@ impl Probe for TodoSiteProbe {
         &TODO_SITES_QUERY
     }
 
-    #[instrument(level = "trace", skip(self, ir, _session))]
-    fn probe(
-        &self,
-        ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Marker>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
+        let ir = view.ir;
+
         Ok(ir
             .nodes_matching(&TODO_SITES_QUERY)
             .into_iter()
@@ -323,13 +320,12 @@ impl Assessor for TodoAssessor {
         &[TODO_LABEL]
     }
 
-    #[instrument(level = "trace", skip(self, markers, ir, session))]
-    fn assess(
-        &self,
-        markers: &[&dyn Marker],
-        ir: &dyn IrView,
-        session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn Finding>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
+        let markers = view.markers;
+        let ir = view.ir;
+        let session = view.session;
+
         let mut findings = Vec::new();
         for marker in markers {
             let node_id = marker.anchor().node_id();
@@ -375,13 +371,10 @@ impl Reporter for TodoCsvReporter {
         "acme-todo-csv"
     }
 
-    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
-    fn render(
-        &self,
-        findings: &[&dyn Finding],
-        _ir: &dyn IrView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<Vec<Box<dyn cordial::Artifact>>> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn cordial::Artifact>>> {
+        let findings = view.findings;
+
         let mut body = String::from("crate,context,file,line,snippet\n");
         for finding in findings {
             if finding.rule().id() != "ACME-TODO-001" {

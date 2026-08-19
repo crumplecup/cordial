@@ -1,8 +1,8 @@
 use cordial::rustdoc::{demo_impl_coverage_crate, demo_trenchcoat_crate, write_rustdoc_crate_json};
 use cordial::testing::{parse_rustdoc_json, rustdoc_load_view};
 use cordial::{
-    CrateIr, EdgeKind, IrEnricher, IrView, LoadView, RustdocStructureEnricher, SessionBuilder,
-    TraitImplEnricher, TrenchcoatEnricher, type_trait_impls, type_wraps_foreign,
+    CrateIr, EdgeKind, EnrichView, IrEnricher, IrView, LoadView, RustdocStructureEnricher,
+    SessionBuilder, TraitImplEnricher, TrenchcoatEnricher, type_trait_impls, type_wraps_foreign,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -26,11 +26,19 @@ fn trait_impl_enricher_builds_edges_from_graph_attrs() -> miette::Result<()> {
 
     let session = SessionBuilder::new(temp.path()).build();
     RustdocStructureEnricher
-        .enrich(&mut ir, &load as &dyn LoadView, &session)
+        .enrich(EnrichView {
+            ir: &mut ir,
+            load: &load as &dyn LoadView,
+            session: &session,
+        })
         .into_diagnostic()
         .wrap_err("structure")?;
     TraitImplEnricher
-        .enrich(&mut ir, &load as &dyn LoadView, &session)
+        .enrich(EnrichView {
+            ir: &mut ir,
+            load: &load as &dyn LoadView,
+            session: &session,
+        })
         .into_diagnostic()
         .wrap_err("trait impl")?;
 
@@ -72,11 +80,19 @@ fn trenchcoat_enricher_builds_wraps_edges_from_graph_attrs() -> miette::Result<(
 
     let session = SessionBuilder::new(temp.path()).build();
     RustdocStructureEnricher
-        .enrich(&mut ir, &load as &dyn LoadView, &session)
+        .enrich(EnrichView {
+            ir: &mut ir,
+            load: &load as &dyn LoadView,
+            session: &session,
+        })
         .into_diagnostic()
         .wrap_err("structure")?;
     TrenchcoatEnricher
-        .enrich(&mut ir, &load as &dyn LoadView, &session)
+        .enrich(EnrichView {
+            ir: &mut ir,
+            load: &load as &dyn LoadView,
+            session: &session,
+        })
         .into_diagnostic()
         .wrap_err("trenchcoat")?;
 

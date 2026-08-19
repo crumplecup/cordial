@@ -1,7 +1,7 @@
 use cordial::rustdoc::{demo_impl_coverage_crate, write_rustdoc_crate_json};
 use cordial::testing::{parse_rustdoc_json, rustdoc_load_view};
 use cordial::{
-    CrateIr, IrEnricher, IrMut, IrView, LoadView, RustdocStructureEnricher, SessionBuilder,
+    CrateIr, EnrichView, IrEnricher, IrView, LoadView, RustdocStructureEnricher, SessionBuilder,
     type_elicit_complete, type_public_methods, type_trait_impls, type_trait_prereqs,
 };
 use miette::{IntoDiagnostic, WrapErr};
@@ -26,7 +26,11 @@ fn rustdoc_structure_enricher_materializes_type_attrs() -> miette::Result<()> {
 
     let session = SessionBuilder::new(temp.path()).build();
     RustdocStructureEnricher
-        .enrich(&mut ir, &load as &dyn LoadView, &session)
+        .enrich(EnrichView {
+            ir: &mut ir,
+            load: &load as &dyn LoadView,
+            session: &session,
+        })
         .into_diagnostic()
         .wrap_err("enrich")?;
 

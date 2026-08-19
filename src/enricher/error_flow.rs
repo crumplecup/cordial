@@ -8,10 +8,8 @@ use crate::etiquettes::error_sites::{
     ErrorOriginClass, ErrorSiteKind, ErrorSiteScanRow, ForeignErrorRecordKind,
     infer_foreign_error_type, partition_error_site_row,
 };
-use crate::hooks::IrEnricher;
+use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{BasicQuery, EdgeKind, IrMut, NodeKind, NodeWeight};
-use crate::loader::LoadView;
-use crate::session::SessionView;
 
 use tracing::instrument;
 /// Partitions error-site expression nodes and materializes `ErrorFlow` origin links.
@@ -34,13 +32,10 @@ impl IrEnricher for ErrorFlowEnricher {
         51
     }
 
-    #[instrument(level = "trace", skip(self, ir, _load, _session))]
-    fn enrich(
-        &self,
-        ir: &mut dyn IrMut,
-        _load: &dyn LoadView,
-        _session: &dyn SessionView,
-    ) -> CordialResult<()> {
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir;
+
         let crate_name = ir.crate_name().to_string();
         let crate_root = ir.root()?;
         let mut origin_nodes: BTreeMap<String, crate::ir::NodeId> = BTreeMap::new();
