@@ -33,7 +33,7 @@ pub struct ExceptionSet {
 }
 
 impl ExceptionSet {
-    #[instrument(level = "debug", ret)]
+    #[instrument(level = "debug", skip(entries), ret)]
     pub fn from_entries(entries: Vec<ExceptionEntry>) -> Self {
         Self { entries }
     }
@@ -53,6 +53,7 @@ impl ExceptionSet {
 }
 
 impl ExceptionEntry {
+    #[instrument(level = "debug", skip(self, finding))]
     fn matches(&self, finding: &dyn Finding) -> bool {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -110,18 +111,22 @@ impl FilteredFinding {
 }
 
 impl Finding for FilteredFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         self.inner.rule()
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn crate::objects::IrAnchor {
         self.inner.anchor()
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn crate::objects::FindingSink) {
         self.inner.emit(sink);
         if let Some(reason) = &self.suppression_reason {
@@ -134,7 +139,7 @@ impl Finding for FilteredFinding {
 ///
 /// Reads `{store}/exceptions/{etiquette}/{crate}.json` and, when present,
 /// merges entries from the elicit_doc alias `{store}/quality/patches/{etiquette}/{crate}.json`.
-#[instrument(level = "info", fields(crate_name = crate_name), err(level = "warn"))]
+#[instrument(level = "info", skip(store), fields(crate_name = crate_name), err(level = "warn"))]
 pub fn load_exceptions(
     store: &StoreLayout,
     etiquette_id: &str,
@@ -157,6 +162,7 @@ pub fn load_exceptions(
     Ok(ExceptionSet { entries })
 }
 
+#[instrument(level = "debug", skip(path), err(level = "warn"))]
 fn parse_exception_file(path: &Path) -> CordialResult<Vec<ExceptionEntry>> {
     let bytes = std::fs::read(path)?;
     serde_json::from_slice::<Vec<ExceptionEntry>>(&bytes)
@@ -164,7 +170,7 @@ fn parse_exception_file(path: &Path) -> CordialResult<Vec<ExceptionEntry>> {
 }
 
 /// Load exception sets for all selected etiquettes.
-#[instrument(level = "info", fields(crate_name = crate_name), err(level = "warn"))]
+#[instrument(level = "info", skip(store), fields(crate_name = crate_name), err(level = "warn"))]
 pub fn load_exception_sets(
     store: &StoreLayout,
     etiquette_ids: &[&str],
@@ -181,7 +187,7 @@ pub fn load_exception_sets(
 }
 
 /// Apply loaded exception sets, wrapping matching findings as suppressed.
-#[instrument(level = "debug", skip(findings))]
+#[instrument(level = "debug", skip(findings, sets))]
 pub fn apply_exception_sets(
     findings: Vec<Box<dyn Finding>>,
     sets: &HashMap<String, ExceptionSet>,
@@ -201,12 +207,14 @@ pub fn apply_exception_sets(
         .collect()
 }
 
+#[instrument(level = "debug")]
 fn paths_match(patch_path: &str, finding_path: &str) -> bool {
     let patch = normalize_rel_path(Path::new(patch_path));
     let finding = normalize_rel_path(Path::new(finding_path));
     patch == finding || finding.ends_with(&patch) || finding.ends_with(&format!("/{patch}"))
 }
 
+#[instrument(level = "debug", skip(path))]
 fn normalize_rel_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }

@@ -50,7 +50,7 @@ impl WorkspaceHub {
 }
 
 /// Detect hub crate from workspace member names.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(members))]
 pub fn detect_workspace_hub(members: &HashSet<String>) -> WorkspaceHub {
     for candidate in ["elicitation", "amenable", "homecoming"] {
         if members.contains(candidate) {

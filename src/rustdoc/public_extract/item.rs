@@ -5,7 +5,7 @@ use tracing::instrument;
 use super::stability::rustdoc_item_is_unstable;
 use super::{ExtractedItem, ExtractedItemKind};
 
-#[instrument(skip(krate, summary), fields(id = ?id))]
+#[instrument(level = "debug", skip(krate, id, summary))]
 pub(super) fn build_inventory_item(
     krate: &rustdoc_types::Crate,
     id: &rustdoc_types::Id,
@@ -13,7 +13,7 @@ pub(super) fn build_inventory_item(
 ) -> Option<ExtractedItem> {
     build_inventory_item_with_path(krate, id, summary.kind, summary.path.clone())
 }
-#[instrument(skip(krate), fields(id = ?id, kind = ?kind))]
+#[instrument(level = "debug", skip(krate, id, kind, path))]
 pub(super) fn build_inventory_item_with_path(
     krate: &rustdoc_types::Crate,
     id: &rustdoc_types::Id,
@@ -77,7 +77,7 @@ pub(super) fn build_inventory_item_with_path(
 /// by `type_has_trait_impl`'s `compound_primitive_shape` fallback even though
 /// the pointee itself is a `ResolvedPath`, not a bare primitive). Returns
 /// `None` for function pointers, tuples, and other complex types.
-#[instrument(skip(ty))]
+#[instrument(level = "debug", skip(ty))]
 fn alias_target_path(ty: &rustdoc_types::Type) -> Option<String> {
     match ty {
         rustdoc_types::Type::ResolvedPath(p) => Some(p.path.clone()),
@@ -91,7 +91,7 @@ fn alias_target_path(ty: &rustdoc_types::Type) -> Option<String> {
     }
 }
 /// Map a rustdoc item to our [`ExtractedItemKind`], and extract generics info.
-#[instrument(skip(item))]
+#[instrument(level = "debug", skip(item))]
 fn classify_item(
     item: &rustdoc_types::Item,
 ) -> (ExtractedItemKind, bool, Vec<String>, Vec<String>) {
@@ -148,7 +148,7 @@ fn classify_item(
     }
 }
 /// Extract lifetime and type parameter names from a [`Generics`] block.
-#[instrument(skip(generics))]
+#[instrument(level = "debug", skip(generics))]
 fn extract_generic_params(generics: &rustdoc_types::Generics) -> (Vec<String>, Vec<String>) {
     let mut lifetime_params = Vec::new();
     let mut type_params = Vec::new();

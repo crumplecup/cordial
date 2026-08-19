@@ -4,6 +4,7 @@ use crate::ir::IrView;
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
 use crate::session::SessionView;
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrenchcoatCsvReporter;
 
@@ -12,10 +13,12 @@ impl TrenchcoatCsvReporter {
 }
 
 impl Reporter for TrenchcoatCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
     fn render(
         &self,
         findings: &[&dyn Finding],

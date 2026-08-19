@@ -10,6 +10,7 @@ use super::types::{
     InternalErrorNodeClass, InternalErrorRecordKind, InternalErrorTypeProbeId,
 };
 
+use tracing::instrument;
 /// Converts internal error-chain markers into findings.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct InternalErrorChainAssessor;
@@ -19,14 +20,17 @@ impl InternalErrorChainAssessor {
 }
 
 impl Assessor for InternalErrorChainAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["internal-error-chain"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],

@@ -8,6 +8,7 @@ use crate::session::SessionView;
 
 use super::scan::scan_crate_panics;
 
+use tracing::instrument;
 /// Materializes panic-site expression nodes in the IR graph.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PanicInventoryEnricher;
@@ -17,14 +18,17 @@ impl PanicInventoryEnricher {
 }
 
 impl IrEnricher for PanicInventoryEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         2
     }
 
+    #[instrument(level = "trace", skip(self, ir, load, session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,

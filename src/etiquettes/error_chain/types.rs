@@ -26,7 +26,7 @@ pub enum ErrorChainProbeId {
 }
 
 impl ErrorChainProbeId {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::WrapperSourceField001 => "ERROR-CHAIN-WRAPPER-SOURCE-001",
@@ -51,6 +51,7 @@ impl ErrorChainProbeId {
 }
 
 impl Display for ErrorChainProbeId {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}", self.as_str())
     }
@@ -62,21 +63,24 @@ pub struct ErrorChainRule {
 }
 
 impl ErrorChainRule {
-    #[instrument(level = "debug", ret)]
+    #[instrument(level = "debug", skip(rule_id), ret)]
     pub fn new(rule_id: ErrorChainProbeId) -> Self {
         Self { rule_id }
     }
 }
 
 impl Rule for ErrorChainRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "error_chain"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Positive pattern preserving a foreign error chain through wrapping or propagation"
     }
@@ -88,18 +92,22 @@ pub struct ErrorChainMarker {
 }
 
 impl Marker for ErrorChainMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         "error-chain"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         "error-chain"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -118,18 +126,22 @@ pub struct ErrorChainFinding {
 }
 
 impl Finding for ErrorChainFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);
@@ -187,7 +199,7 @@ impl ErrorChainProbeCounts {
     }
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(records))]
 pub fn probe_counts(records: &[ErrorChainRecord]) -> ErrorChainProbeCounts {
     let mut counts = ErrorChainProbeCounts::default();
     for record in records {

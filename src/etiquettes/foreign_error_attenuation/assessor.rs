@@ -11,6 +11,7 @@ use super::types::{
     ForeignErrorHandlingClass,
 };
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ForeignErrorAttenuationAssessor;
 
@@ -19,14 +20,17 @@ impl ForeignErrorAttenuationAssessor {
 }
 
 impl Assessor for ForeignErrorAttenuationAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["foreign-error-attenuation"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],
@@ -135,6 +139,7 @@ impl Assessor for ForeignErrorAttenuationAssessor {
     }
 }
 
+#[instrument(level = "debug")]
 fn parse_handling_class(value: &str) -> ForeignErrorHandlingClass {
     if value.contains("CHAIN-PRESERVED") {
         ForeignErrorHandlingClass::ChainPreserved
@@ -147,6 +152,7 @@ fn parse_handling_class(value: &str) -> ForeignErrorHandlingClass {
     }
 }
 
+#[instrument(level = "debug")]
 fn parse_resolution_id(value: &str) -> ErrorHandlingResolutionId {
     if value.contains("MAINTAIN-EXEMPLAR") {
         ErrorHandlingResolutionId::MaintainExemplar
@@ -159,6 +165,7 @@ fn parse_resolution_id(value: &str) -> ErrorHandlingResolutionId {
     }
 }
 
+#[instrument(level = "debug")]
 fn parse_confidence(value: &str) -> ForeignTypeConfidence {
     if value.contains("MEDIUM") {
         ForeignTypeConfidence::Medium

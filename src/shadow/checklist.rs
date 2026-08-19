@@ -117,6 +117,7 @@ pub fn render_shadow_method_checklist(report: &ShadowReport) -> CordialResult<St
     Ok(out)
 }
 
+#[instrument(level = "info", skip(entry), err(level = "warn"))]
 fn write_type_method_section(out: &mut String, entry: &TypeMethodCoverage) -> CordialResult<()> {
     let total = entry.upstream_method_count();
     writeln!(
@@ -144,6 +145,7 @@ fn write_type_method_section(out: &mut String, entry: &TypeMethodCoverage) -> Co
     Ok(())
 }
 
+#[instrument(level = "info", skip(entry), err(level = "warn"))]
 fn write_trait_section(out: &mut String, entry: &TraitImplCoverage) -> CordialResult<()> {
     writeln!(out, "### `{}`", entry.trait_path)?;
     writeln!(out)?;

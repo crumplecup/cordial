@@ -6,10 +6,12 @@ use crate::session::SessionView;
 
 use super::types::UnwrappedMarker;
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 struct ForeignTypeQuery;
 
 impl Query for ForeignTypeQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &[
             NodeKind::Item(ItemKind::Struct),
@@ -17,10 +19,12 @@ impl Query for ForeignTypeQuery {
         ]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
         node.attr("qualified_path")
             .and_then(|v| v.as_str())
@@ -38,14 +42,17 @@ impl UnwrappedForeignProbe {
 }
 
 impl Probe for UnwrappedForeignProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &FOREIGN_TYPE_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, _session))]
     fn probe(
         &self,
         ir: &dyn IrView,
@@ -72,6 +79,7 @@ impl Probe for UnwrappedForeignProbe {
     }
 }
 
+#[instrument(level = "trace", skip(path), ret)]
 fn is_wrapper_path(path: &str) -> bool {
     path.contains("Wrapper")
         || path.ends_with("Coat")

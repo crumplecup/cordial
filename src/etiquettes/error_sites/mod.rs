@@ -1,3 +1,20 @@
+//! Inventory of `Result` control-flow sites.
+//!
+//! **What.** Records `?`, `map_err`, `return Err`, `if let Err`, `match` on
+//! `Err`, and `ok_or` ([`ErrorSiteKind`]). Downstream etiquettes partition
+//! those rows by origin (internal vs foreign).
+//!
+//! **Why.** You cannot judge chain preservation or foreign attenuation until
+//! every error site is named. This is the census layer of the error-handling
+//! plugin; later layers consume the same IR.
+//!
+//! **How to use.** Run `cordial quality` (feature `error_sites`). Artifacts:
+//! `{store}/findings/error-sites.checklist.md`, `error-sites-summary.md`,
+//! partition CSV/summary. Register [`ERROR_SITES_ETIQUETTE`] on a
+//! [`crate::Session`]. Shares the `error_ir` scan.
+//!
+//! Policy: `docs/planning/error-handling-as-plugin.md`.
+
 mod assessor;
 mod foreign_infer;
 mod partition;

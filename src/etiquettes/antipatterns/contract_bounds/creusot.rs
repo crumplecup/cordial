@@ -14,7 +14,7 @@ use crate::loader::module_path_from_src_file;
 use super::index::{ContractIndex, is_trivial, normalize_tokens};
 use super::{harness_macro_item_fn, make_finding, site_context};
 
-#[instrument(skip(source, index), fields(file = %file.display()))]
+#[instrument(level = "debug", skip(source, file, index), err(level = "warn"))]
 pub(super) fn scan_creusot_source(
     source: &str,
     file: &Path,
@@ -47,7 +47,7 @@ struct CreusotVisitor<'a> {
 }
 
 impl CreusotVisitor<'_> {
-    #[instrument(skip(self, attrs))]
+    #[instrument(level = "debug", skip(self, attrs))]
     fn check_attrs(&mut self, attrs: &[Attribute]) {
         for attr in attrs {
             let kind = if attr.path().is_ident("requires") {
@@ -81,7 +81,7 @@ impl CreusotVisitor<'_> {
 }
 
 impl<'ast> Visit<'ast> for CreusotVisitor<'_> {
-    #[instrument(skip(self, node))]
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         self.fn_stack.push(node.sig.ident.to_string());
         self.check_attrs(&node.attrs);
@@ -89,7 +89,7 @@ impl<'ast> Visit<'ast> for CreusotVisitor<'_> {
         self.fn_stack.pop();
     }
 
-    #[instrument(skip(self, node))]
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_impl_item_fn(&mut self, node: &'ast ImplItemFn) {
         self.fn_stack.push(node.sig.ident.to_string());
         self.check_attrs(&node.attrs);
@@ -97,7 +97,7 @@ impl<'ast> Visit<'ast> for CreusotVisitor<'_> {
         self.fn_stack.pop();
     }
 
-    #[instrument(skip(self, node))]
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_macro(&mut self, node: &'ast ItemMacro) {
         if let Some(item_fn) = harness_macro_item_fn(node) {
             self.visit_item_fn(&item_fn);

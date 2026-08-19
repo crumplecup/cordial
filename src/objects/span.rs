@@ -43,20 +43,24 @@ impl FileSpan {
 }
 
 impl SourceSpan for FileSpan {
+    #[instrument(level = "trace", skip(self))]
     fn file(&self) -> &Path {
         &self.file
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn line(&self) -> u32 {
         self.line
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn column(&self) -> u32 {
         self.column
     }
 }
 
 impl fmt::Display for FileSpan {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}:{}", self.file.display(), self.line, self.column)
     }

@@ -7,6 +7,7 @@ use crate::session::SessionView;
 
 use super::types::{AntipatternFinding, AntipatternRule, AntipatternRuleId};
 
+use tracing::instrument;
 /// Converts antipattern-site markers into open findings.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AntipatternAssessor;
@@ -16,14 +17,17 @@ impl AntipatternAssessor {
 }
 
 impl Assessor for AntipatternAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["antipattern-site"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],

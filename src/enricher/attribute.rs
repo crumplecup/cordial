@@ -21,14 +21,17 @@ impl AttributeEnricher {
 }
 
 impl IrEnricher for AttributeEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         6
     }
 
+    #[instrument(level = "trace", skip(self, ir, load, session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,
@@ -77,6 +80,7 @@ struct AttributeVisitor<'a> {
 }
 
 impl AttributeVisitor<'_> {
+    #[instrument(level = "debug", skip(self))]
     fn qualify(&self, local: &str) -> String {
         if self.module_prefix.is_empty() {
             local.to_string()
@@ -85,6 +89,7 @@ impl AttributeVisitor<'_> {
         }
     }
 
+    #[instrument(level = "debug", skip(self, path, attrs))]
     fn attach_attrs(&mut self, path: &str, attrs: &[Attribute], line: u32) {
         if self.error.is_some() {
             return;
@@ -141,6 +146,7 @@ impl AttributeVisitor<'_> {
         }
     }
 
+    #[instrument(level = "debug", skip(self, items))]
     fn visit_module_items(&mut self, items: &[Item], module_prefix: &[String]) {
         let prev = self.module_prefix.clone();
         self.module_prefix = module_prefix.to_vec();
@@ -150,6 +156,7 @@ impl AttributeVisitor<'_> {
         self.module_prefix = prev;
     }
 
+    #[instrument(level = "debug", skip(self, item))]
     fn visit_item(&mut self, item: &Item) {
         match item {
             Item::Fn(item_fn) => {
@@ -173,6 +180,7 @@ impl AttributeVisitor<'_> {
         }
     }
 
+    #[instrument(level = "debug", skip(self, item_mod))]
     fn visit_mod(&mut self, item_mod: &ItemMod) {
         if is_cfg_test(&item_mod.attrs) {
             return;
@@ -191,6 +199,7 @@ impl AttributeVisitor<'_> {
         self.visit_module_items(items, &nested);
     }
 
+    #[instrument(level = "debug", skip(self, item_impl))]
     fn visit_impl(&mut self, item_impl: &ItemImpl) {
         let self_ty = type_label(&item_impl.self_ty);
         let trait_name = item_impl
@@ -213,16 +222,19 @@ impl AttributeVisitor<'_> {
 }
 
 impl<'ast> Visit<'ast> for AttributeVisitor<'_> {
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         let name = node.sig.ident.to_string();
         let line = node.span().start().line as u32;
         self.attach_attrs(&self.qualify(&name), &node.attrs, line);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         self.visit_mod(node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
         self.visit_impl(node);
     }
@@ -259,7 +271,7 @@ pub(crate) fn member_crate_root(source: &SourceLoadView, session: &dyn SessionVi
 
 /// Resolves a scan-recorded (possibly relative) source path against the
 /// project root, for findings whose scan step ran outside session context.
-#[instrument(level = "trace", skip(session, path))]
+#[instrument(level = "debug", skip(session, path))]
 pub(crate) fn resolve_source_path(session: &dyn SessionView, path: &str) -> PathBuf {
     let path = Path::new(path);
     if path.is_absolute() {
@@ -269,6 +281,7 @@ pub(crate) fn resolve_source_path(session: &dyn SessionView, path: &str) -> Path
     }
 }
 
+#[instrument(level = "debug", skip(attr))]
 fn attr_path_label(attr: &Attribute) -> String {
     match &attr.meta {
         Meta::Path(path) => syn_path_to_string(path),
@@ -277,6 +290,7 @@ fn attr_path_label(attr: &Attribute) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(attr))]
 fn attr_meta_string(attr: &Attribute) -> String {
     match &attr.meta {
         Meta::Path(path) => syn_path_label(path),
@@ -285,7 +299,7 @@ fn attr_meta_string(attr: &Attribute) -> String {
     }
 }
 
-#[instrument(level = "trace")]
+#[instrument(level = "trace", skip(attr))]
 pub(crate) fn is_instrument_attr(attr: &Attribute) -> bool {
     match &attr.meta {
         Meta::Path(path) => path_is_instrument(path),
@@ -294,6 +308,7 @@ pub(crate) fn is_instrument_attr(attr: &Attribute) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(path))]
 fn path_is_instrument(path: &SynPath) -> bool {
     if path.is_ident("instrument") {
         return true;
@@ -303,7 +318,7 @@ fn path_is_instrument(path: &SynPath) -> bool {
         && path.segments[1].ident == "instrument"
 }
 
-#[instrument(level = "trace")]
+#[instrument(level = "trace", skip(attrs))]
 pub(crate) fn is_cfg_test(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {
         let Meta::List(list) = &attr.meta else {
@@ -316,6 +331,7 @@ pub(crate) fn is_cfg_test(attrs: &[Attribute]) -> bool {
     })
 }
 
+#[instrument(level = "debug", skip(ty))]
 fn type_label(ty: &Type) -> String {
     match ty {
         Type::Path(type_path) => syn_path_label(&type_path.path),
@@ -326,6 +342,7 @@ fn type_label(ty: &Type) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(path))]
 fn syn_path_label(path: &SynPath) -> String {
     path.segments
         .last()
@@ -333,6 +350,7 @@ fn syn_path_label(path: &SynPath) -> String {
         .unwrap_or_else(|| "?".to_string())
 }
 
+#[instrument(level = "debug", skip(path))]
 fn syn_path_to_string(path: &SynPath) -> String {
     path.segments
         .iter()

@@ -17,7 +17,7 @@ pub struct PartitionedErrorSiteRow {
     pub rationale: String,
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(records))]
 pub fn partition_error_site_records(
     records: &[ErrorSiteScanRow],
     crate_name: &str,
@@ -28,7 +28,7 @@ pub fn partition_error_site_records(
         .collect()
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(finding))]
 pub fn partition_error_site_row(
     finding: &ErrorSiteScanRow,
     crate_name: &str,
@@ -48,6 +48,7 @@ pub fn partition_error_site_row(
     }
 }
 
+#[instrument(level = "debug", skip(finding))]
 fn classify_origin(
     finding: &ErrorSiteScanRow,
     crate_name: &str,
@@ -114,6 +115,7 @@ fn classify_origin(
     }
 }
 
+#[instrument(level = "debug", skip(source))]
 fn classify_call_source(
     source: &str,
     crate_name: &str,
@@ -186,6 +188,7 @@ fn classify_call_source(
     )
 }
 
+#[instrument(level = "debug", skip(source))]
 fn mentions_crate_error(source: &str, site: &str) -> bool {
     for snippet in [source, site] {
         if snippet.contains("CordialError") {
@@ -205,6 +208,7 @@ fn mentions_crate_error(source: &str, site: &str) -> bool {
     false
 }
 
+#[instrument(level = "trace", skip(source))]
 fn is_internal_propagation(source: &str, site: &str, crate_name: &str) -> bool {
     if site.contains("ok_or(") || site.contains("ok_or_else(") {
         return true;
@@ -218,10 +222,12 @@ fn is_internal_propagation(source: &str, site: &str, crate_name: &str) -> bool {
     false
 }
 
+#[instrument(level = "trace", skip(source), ret)]
 fn is_opaque_snippet(source: &str) -> bool {
     source == "…" || source.starts_with("…")
 }
 
+#[instrument(level = "trace", skip(source))]
 fn is_bare_local_call(source: &str) -> bool {
     let Some(head) = source.split('(').next() else {
         return false;
@@ -235,6 +241,7 @@ fn is_bare_local_call(source: &str) -> bool {
         .is_some_and(|ch| ch.is_ascii_lowercase() || ch == '_')
 }
 
+#[instrument(level = "debug", skip(source))]
 fn extract_path_root(source: &str) -> Option<String> {
     let before_paren = source.split('(').next()?.trim();
     let path_prefix = before_paren.split('.').next()?.trim();

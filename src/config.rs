@@ -52,14 +52,17 @@ pub struct VisibilityThresholds {
     pub prefer_root: bool,
 }
 
+#[instrument(level = "debug")]
 fn default_max_crate_names_for_flat() -> usize {
     50
 }
 
+#[instrument(level = "debug")]
 fn default_min_module_names() -> usize {
     10
 }
 
+#[instrument(level = "debug")]
 fn default_prefer_root() -> bool {
     true
 }
@@ -136,52 +139,64 @@ pub struct ModularityThresholds {
     /// combined subtree (siblings below `hierarchy_min_lines` are ignored).
     #[serde(default = "default_lopsided_min_percent")]
     pub lopsided_min_percent: u32,
-    /// Ignore hierarchy hits whose parent own-lines (top-heavy) or dominant
-    /// subtree (lopsided) is smaller than this.
+    /// Ignore hierarchy hits whose parent own-lines (top-heavy), dominant
+    /// subtree (lopsided), or passthrough subtree (collapse) is smaller than
+    /// this.
     #[serde(default = "default_hierarchy_min_lines")]
     pub hierarchy_min_lines: u32,
 }
 
+#[instrument(level = "debug")]
 fn default_file_inventory_min_lines() -> u32 {
     500
 }
 
+#[instrument(level = "debug")]
 fn default_function_inventory_min_lines() -> u32 {
     150
 }
 
+#[instrument(level = "debug")]
 fn default_function_hotspot_min_lines() -> u32 {
     80
 }
 
+#[instrument(level = "debug")]
 fn default_file_checklist_min_lines() -> u32 {
     1000
 }
 
+#[instrument(level = "debug")]
 fn default_function_checklist_min_lines() -> u32 {
     200
 }
 
+#[instrument(level = "debug")]
 fn default_max_types_per_file() -> u32 {
     10
 }
 
+#[instrument(level = "debug")]
 fn default_module_size_sigma() -> u32 {
     2
 }
 
+#[instrument(level = "debug")]
 fn default_min_module_lines() -> u32 {
     0
 }
 
+#[instrument(level = "debug")]
 fn default_top_heavy_min_percent() -> u32 {
     50
 }
 
+#[instrument(level = "debug")]
 fn default_lopsided_min_percent() -> u32 {
     75
 }
 
+#[instrument(level = "debug")]
 fn default_hierarchy_min_lines() -> u32 {
     150
 }
@@ -221,6 +236,13 @@ impl ModularityThresholds {
     pub fn is_lopsided_hit(&self, largest_subtree: u32, sibling_total: u32) -> bool {
         largest_subtree >= self.hierarchy_min_lines
             && Self::ratio_meets(largest_subtree, sibling_total, self.lopsided_min_percent)
+    }
+
+    /// Checklist a unary child directory whose subtree is large enough to
+    /// bother collapsing (the extra hop is the bug; there is no percent knob).
+    #[instrument(level = "trace", skip(self))]
+    pub fn is_collapse_hit(&self, passthrough_subtree: u32) -> bool {
+        passthrough_subtree >= self.hierarchy_min_lines
     }
 
     /// MODULE-SIZE checklist from a signed z-score.
@@ -270,10 +292,12 @@ pub struct CfgScatterThresholds {
     pub min_occurrences: usize,
 }
 
+#[instrument(level = "debug")]
 fn default_min_distinct_kinds() -> usize {
     2
 }
 
+#[instrument(level = "debug")]
 fn default_min_occurrences() -> usize {
     5
 }
@@ -290,19 +314,15 @@ impl Default for CfgScatterThresholds {
 /// Tracing etiquette knobs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TracingThresholds {
-    /// When true, `pub(super)` functions appear on the checklist.
-    /// Default is pub + pub(crate) only.
-    #[serde(default)]
-    pub include_pub_super: bool,
     /// Extra parameter names unioned with the built-in skip list.
     #[serde(default)]
     pub extra_skip: Vec<String>,
 }
 
 impl Default for TracingThresholds {
+    #[instrument(level = "debug", ret)]
     fn default() -> Self {
         Self {
-            include_pub_super: false,
             extra_skip: Vec::new(),
         }
     }
@@ -311,7 +331,7 @@ impl Default for TracingThresholds {
 /// Load `cordial.toml` from the workspace and `{store_home}/cordial.toml`,
 /// layered over [`CordialConfig::default`]. Workspace wins. Missing or
 /// unreadable files fall back to `Default` instead of failing the run.
-#[tracing::instrument]
+#[instrument(level = "info")]
 pub fn load_cordial_config(workspace_root: &Path, store_home: &Path) -> CordialConfig {
     let mut builder = Config::builder();
     if let Ok(defaults) = Config::try_from(&CordialConfig::default()) {
@@ -332,7 +352,7 @@ pub fn load_session_config(session: &dyn SessionView) -> CordialConfig {
 }
 
 /// Convenience for the visibility etiquette.
-#[tracing::instrument]
+#[instrument(level = "info")]
 pub fn load_visibility_thresholds(
     workspace_root: &Path,
     store_home: &Path,
@@ -340,6 +360,7 @@ pub fn load_visibility_thresholds(
     load_cordial_config(workspace_root, store_home).visibility
 }
 
+#[instrument(level = "debug", skip(builder, path))]
 fn add_optional_toml(
     builder: config::ConfigBuilder<config::builder::DefaultState>,
     path: &Path,

@@ -1,3 +1,29 @@
+//! Classified `tracing::instrument` coverage.
+//!
+//! **What.** Every function gets a use-class (`FunctionRole`), a complexity,
+//! and a target `InstrumentRecipe`. Probes flag a missing attribute or a
+//! recipe delta (`level`, `err`, `ret`, `fields`, `skip`). Apply writes the
+//! recipe onto source. Visibility does not exempt a function.
+//!
+//! **Why.** A missing-span census treats constructors, getters, scanners, and
+//! entry points the same. Skipping private helpers creates blind spots in the
+//! internals. The etiquette’s job is to instrument each function properly for
+//! its class. Volume is a subscriber `level` problem, not a reason to skip
+//! spans. `Fallible` means the function returns `Result` or a `*Result` alias;
+//! `?` on `Option` is not fallible.
+//!
+//! **How to use.**
+//! 1. `cordial quality` writes `{store}/findings/tracing-instrument.checklist.md`
+//!    and `tracing-summary.md`.
+//! 2. `cordial quality --apply` (or `--dry-run`) patches open checklist rows.
+//!    Re-run quality after apply.
+//!
+//! Knobs live under `[tracing]` in `cordial.toml` (`extra_skip`). Role→level
+//! maps stay in code. Feature `tracing` is on by default. Register
+//! [`TRACING_ETIQUETTE`] on a [`crate::Session`].
+//!
+//! Policy: `docs/planning/tracing-etiquette.md`.
+
 mod apply;
 mod assessor;
 mod classify;
@@ -6,6 +32,7 @@ mod enricher;
 mod present;
 mod probe;
 mod recipe;
+mod recordable;
 mod reporter;
 mod scan;
 mod types;

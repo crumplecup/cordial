@@ -19,7 +19,7 @@ pub enum DeriveRuleId {
 }
 
 impl DeriveRuleId {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Builder001 => "DERIVE-BUILDER-001",
@@ -44,6 +44,7 @@ impl DeriveRuleId {
 }
 
 impl Display for DeriveRuleId {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}", self.as_str())
     }
@@ -55,21 +56,24 @@ pub struct DeriveRule {
 }
 
 impl DeriveRule {
-    #[instrument(level = "debug", ret)]
+    #[instrument(level = "debug", skip(rule_id), ret)]
     pub fn new(rule_id: DeriveRuleId) -> Self {
         Self { rule_id }
     }
 }
 
 impl Rule for DeriveRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "derives"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Manual builder, getter, setter, new(), or public struct field"
     }
@@ -81,18 +85,22 @@ pub struct DeriveMarker {
 }
 
 impl Marker for DeriveMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         "derive-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         "derive-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -113,18 +121,22 @@ pub struct DeriveFinding {
 }
 
 impl Finding for DeriveFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);

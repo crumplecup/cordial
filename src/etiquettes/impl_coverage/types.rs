@@ -10,7 +10,7 @@ pub enum ImplGapKind {
 }
 
 impl ImplGapKind {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::MissingOurTraits => "MissingOurTraits",
@@ -25,14 +25,17 @@ impl ImplGapKind {
 pub struct CoverageRule;
 
 impl Rule for CoverageRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "IMPL-COVERAGE-GAP"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "impl-coverage"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Type lacks ElicitComplete coverage"
     }
@@ -44,18 +47,22 @@ pub struct ImplGapMarker {
 }
 
 impl Marker for ImplGapMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         "impl-coverage-gap"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         "impl-coverage-gap"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -83,18 +90,22 @@ pub struct ImplGapFinding {
 }
 
 impl Finding for ImplGapFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("kind", &self.gap_kind_label());
@@ -137,6 +148,7 @@ impl Finding for ImplGapFinding {
 }
 
 impl ImplGapFinding {
+    #[instrument(level = "trace", skip(self))]
     fn gap_kind_label(&self) -> String {
         self.gap_kind
             .map(ImplGapKind::as_str)

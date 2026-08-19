@@ -29,6 +29,7 @@ impl QualifiedPath {
 }
 
 impl From<&str> for QualifiedPath {
+    #[instrument(level = "debug", ret)]
     fn from(value: &str) -> Self {
         Self::from_segments(value.split("::"))
     }
@@ -42,7 +43,7 @@ pub struct IrIndexes {
 }
 
 impl IrIndexes {
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "debug", skip(self, node, weight))]
     pub fn index_node(&mut self, node: NodeId, weight: &NodeWeight) {
         let kind_key = format!("{:?}", weight.kind);
         self.by_kind.entry(kind_key).or_default().push(node);
@@ -55,7 +56,7 @@ impl IrIndexes {
     /// Rebuild the qualified-path index from all nodes in the graph.
     ///
     /// When multiple nodes share a path, prefer rustdoc inventory nodes over source nodes.
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self, graph))]
     pub fn rebuild_by_path(
         &mut self,
         graph: &petgraph::stable_graph::StableDiGraph<NodeWeight, EdgeWeight>,

@@ -1,3 +1,20 @@
+//! Untyped error carriers and related source smells.
+//!
+//! **What.** Flags `Box<dyn Error>`, `Result<_, String>`, unused `_arg`
+//! parameters, struct fields that are `&'static` references where an owned
+//! type would do, unnamed contract bounds (Kani / Creusot / Verus), and
+//! workspace members that pin a version in `[workspace.members]`-adjacent
+//! tables ([`AntipatternRuleId`]).
+//!
+//! **Why.** These are quality problems adjacent to error handling that are
+//! not site/chain/foreign layers: they erase types, hide unused work, or
+//! fight workspace versioning. The error-handling plugin consumes typed
+//! `E`; this etiquette catches the untyped leftovers.
+//!
+//! **How to use.** Run `cordial quality` (feature `antipatterns`). Artifacts:
+//! `{store}/findings/antipatterns.checklist.md`, `antipatterns-summary.md`,
+//! plus `version-in-member.*`. Register [`ANTIPATTERNS_ETIQUETTE`].
+
 mod assessor;
 mod contract_bounds;
 mod enricher;

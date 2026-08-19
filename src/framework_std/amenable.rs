@@ -22,6 +22,7 @@ pub enum AmenableStdStatus {
 }
 
 impl std::fmt::Display for AmenableStdStatus {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Complete => write!(f, "Complete"),
@@ -91,7 +92,7 @@ pub struct AmenableStdGapEntry {
 }
 
 /// Build an amenable std registry coverage report.
-#[instrument(level = "debug", skip(items))]
+#[instrument(level = "debug", skip(items, registry, skip_map, proof_chain_subjects))]
 pub fn build_amenable_std_report(
     source_crate: &str,
     items: &[StdInventoryItem],
@@ -140,7 +141,7 @@ pub fn build_amenable_std_report(
 }
 
 /// Classify one std inventory row for amenable registry coverage.
-#[instrument(level = "debug", skip(items))]
+#[instrument(level = "debug", skip(items, registry, skip_map, proof_chain_subjects))]
 pub fn classify_amenable_std_row(
     type_path: &str,
     type_kind: &str,
@@ -224,7 +225,7 @@ pub fn classify_amenable_std_row(
 }
 
 /// Gap metadata for one amenable std row.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(entry))]
 pub fn amenable_gap_fields(entry: &AmenableStdEntry, impl_crate: &str) -> (String, String) {
     (
         missing_layer_labels(entry).join(", "),
@@ -232,6 +233,7 @@ pub fn amenable_gap_fields(entry: &AmenableStdEntry, impl_crate: &str) -> (Strin
     )
 }
 
+#[instrument(level = "debug", skip(items))]
 fn resolve_alias_chain(items: &[StdInventoryItem], start: &str, max_hops: usize) -> String {
     let mut current = start.to_string();
     for _ in 0..max_hops {
@@ -277,6 +279,7 @@ pub fn build_amenable_std_gaps(report: &AmenableStdReport) -> Vec<AmenableStdGap
         .collect()
 }
 
+#[instrument(level = "debug", skip(entry))]
 fn missing_layer_labels(entry: &AmenableStdEntry) -> Vec<&'static str> {
     let mut missing = Vec::new();
     if !entry.evidence_link {
@@ -297,6 +300,7 @@ fn missing_layer_labels(entry: &AmenableStdEntry) -> Vec<&'static str> {
     missing
 }
 
+#[instrument(level = "debug", skip(entry))]
 fn gap_action(entry: &AmenableStdEntry, impl_crate: &str) -> String {
     if !entry.evidence_link {
         return format!(

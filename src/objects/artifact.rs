@@ -4,6 +4,7 @@ use std::io::Write;
 use crate::error::CordialResult;
 use crate::objects::IrAnchor;
 
+use tracing::instrument;
 /// Structured field sink for format-evolvable findings.
 pub trait FindingSink {
     fn field(&mut self, name: &str, value: &dyn Display);
@@ -27,14 +28,17 @@ pub struct MapFindingSink {
 }
 
 impl FindingSink for MapFindingSink {
+    #[instrument(level = "trace", skip(self, value))]
     fn field(&mut self, name: &str, value: &dyn Display) {
         self.fields.push((name.to_string(), value.to_string()));
     }
 
+    #[instrument(level = "trace", skip(self, source))]
     fn snippet(&mut self, source: &str) {
         self.snippets.push(source.to_string());
     }
 
+    #[instrument(level = "trace", skip(self, anchor))]
     fn related(&mut self, anchor: &dyn IrAnchor) {
         self.related.push(anchor.node_id().to_string());
     }
@@ -49,14 +53,17 @@ pub struct TextArtifact {
 }
 
 impl Artifact for TextArtifact {
+    #[instrument(level = "trace", skip(self))]
     fn name(&self) -> &str {
         &self.name
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn media_type(&self) -> &str {
         &self.media_type
     }
 
+    #[instrument(level = "info", skip(self, dest), err(level = "warn"))]
     fn write_to(&self, dest: &mut dyn Write) -> CordialResult<()> {
         dest.write_all(self.body.as_bytes())?;
         Ok(())

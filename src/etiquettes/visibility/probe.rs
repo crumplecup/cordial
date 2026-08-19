@@ -6,19 +6,23 @@ use crate::session::SessionView;
 
 use super::types::VisibilityMarker;
 
+use tracing::instrument;
 /// Matches visibility-path nodes in the IR.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct VisibilitySitesQuery;
 
 impl Query for VisibilitySitesQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &[NodeKind::Expr]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
         node.attr("visibility_rule_id").is_some()
     }
@@ -35,14 +39,17 @@ impl VisibilitySiteProbe {
 }
 
 impl Probe for VisibilitySiteProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &VISIBILITY_SITES_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, _session))]
     fn probe(
         &self,
         ir: &dyn IrView,

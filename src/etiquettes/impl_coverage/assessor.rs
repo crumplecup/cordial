@@ -14,6 +14,7 @@ use super::node_context::{
 };
 use super::types::{CoverageRule, ImplGapFinding};
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ImplGapAssessor;
 
@@ -22,14 +23,17 @@ impl ImplGapAssessor {
 }
 
 impl Assessor for ImplGapAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["impl-coverage-gap"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],
@@ -109,6 +113,7 @@ impl Assessor for ImplGapAssessor {
     }
 }
 
+#[instrument(level = "debug", skip(node_id, gap_kind, assessment, disposition))]
 fn coverage_finding(
     node_id: crate::ir::NodeId,
     crate_name: &str,

@@ -1,3 +1,19 @@
+//! Manual patterns that a derive crate would write.
+//!
+//! **What.** Flags hand-rolled builders, getters, setters, `new`, and public
+//! fields ([`DeriveRuleId`]) that usually belong to `derive_builder`,
+//! `getset`, `bon`, or a similar crate.
+//!
+//! **Why.** Repeated accessors and builders are noise. Derives keep the type
+//! definition as the source of truth and shrink the surface tracing and
+//! visibility have to classify. This etiquette asks *could this be a
+//! derive?*; tracing asks *is this function instrumented for its role?*
+//!
+//! **How to use.** Run `cordial quality` (feature `derives`). Artifacts:
+//! `{store}/findings/derives.checklist.md`, `derives-summary.md`, and CSV.
+//! Exceptions: `cordial exceptions show derives`. Register
+//! [`DERIVES_ETIQUETTE`] on a [`crate::Session`].
+
 mod assessor;
 mod enricher;
 mod probe;

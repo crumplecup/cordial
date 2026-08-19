@@ -18,6 +18,7 @@ pub enum InventoryItemKind {
 }
 
 impl InventoryItemKind {
+    #[instrument(level = "debug", skip(kind), ret)]
     fn from_rustdoc(kind: RustdocKind) -> Self {
         match kind {
             RustdocKind::Struct => Self::Struct,
@@ -34,7 +35,7 @@ impl InventoryItemKind {
         matches!(self, Self::Struct | Self::Enum | Self::TypeAlias)
     }
 
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Struct => "Struct",
@@ -90,6 +91,7 @@ pub fn parse_rustdoc_json(json_path: &Path, crate_name: &str) -> CordialResult<R
     })
 }
 
+#[instrument(level = "debug", skip(krate))]
 fn extract_items(krate: &Crate, own_crate: &str) -> Vec<RustdocItem> {
     let own_key = own_crate.replace('-', "_");
     let mut seen = HashSet::new();
@@ -125,6 +127,7 @@ fn extract_items(krate: &Crate, own_crate: &str) -> Vec<RustdocItem> {
     items
 }
 
+#[instrument(level = "debug", skip(path))]
 fn path_in_crate(path: &[String], own_key: &str) -> bool {
     path.first().is_some_and(|first| first == own_key)
 }

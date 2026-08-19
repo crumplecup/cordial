@@ -30,7 +30,7 @@ pub struct SurrealEdge {
 }
 
 impl SurrealGraphExport {
-    #[instrument(level = "debug", ret)]
+    #[instrument(level = "debug", skip(snapshot), ret)]
     pub fn from_snapshot(snapshot: &CrateIrSnapshot) -> Self {
         let nodes = snapshot
             .nodes
@@ -61,7 +61,7 @@ impl SurrealGraphExport {
         }
     }
 
-    #[instrument(level = "debug", err(level = "warn"))]
+    #[instrument(level = "debug", skip(ir), err(level = "warn"))]
     pub fn from_crate_ir(ir: &CrateIr) -> CordialResult<Self> {
         Ok(Self::from_snapshot(&ir.snapshot()?))
     }
@@ -72,10 +72,12 @@ impl SurrealGraphExport {
     }
 }
 
+#[instrument(level = "debug")]
 fn node_id(crate_name: &str, index: usize) -> String {
     format!("{crate_name}:node:{index}")
 }
 
+#[instrument(level = "debug", skip(kind))]
 fn format_node_kind(kind: &NodeKind) -> String {
     match kind {
         NodeKind::Item(item) => format!("Item::{item:?}"),
@@ -84,10 +86,12 @@ fn format_node_kind(kind: &NodeKind) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(kind))]
 fn format_edge_kind(kind: EdgeKind) -> String {
     format!("{kind:?}")
 }
 
+#[instrument(level = "debug", skip(attrs))]
 fn attrs_to_json(attrs: &[(String, Value)]) -> Value {
     if attrs.is_empty() {
         Value::Null
@@ -101,7 +105,7 @@ fn attrs_to_json(attrs: &[(String, Value)]) -> Value {
 }
 
 /// Build SurrealDB-oriented CREATE statements for scripted import.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(export))]
 pub fn surreal_statements(export: &SurrealGraphExport) -> Vec<String> {
     let mut statements = Vec::new();
     for node in &export.nodes {
@@ -132,6 +136,7 @@ pub fn surreal_statements(export: &SurrealGraphExport) -> Vec<String> {
     statements
 }
 
+#[instrument(level = "debug")]
 fn escape_surreal(value: &str) -> String {
     value.replace('\'', "\\'")
 }

@@ -6,19 +6,23 @@ use crate::session::SessionView;
 
 use super::types::{DeriveMarker, DeriveRuleId};
 
+use tracing::instrument;
 /// Matches derive-pattern expression nodes in the IR.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct DeriveSitesQuery;
 
 impl Query for DeriveSitesQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &[NodeKind::Expr]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
         node.attr("derive_rule_id").is_some()
     }
@@ -35,14 +39,17 @@ impl DeriveSiteProbe {
 }
 
 impl Probe for DeriveSiteProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &DERIVE_SITES_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, _session))]
     fn probe(
         &self,
         ir: &dyn IrView,

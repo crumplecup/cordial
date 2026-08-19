@@ -7,18 +7,22 @@ use crate::session::SessionView;
 
 use super::types::MissingMirrorMarker;
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 struct ShadowTargetQuery;
 
 impl Query for ShadowTargetQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[crate::ir::NodeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
         node.attr("shadow_path").is_some()
     }
@@ -34,14 +38,17 @@ impl MissingShadowMirrorProbe {
 }
 
 impl Probe for MissingShadowMirrorProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &SHADOW_TARGET_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, session))]
     fn probe(
         &self,
         ir: &dyn IrView,

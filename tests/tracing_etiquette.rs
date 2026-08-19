@@ -51,8 +51,8 @@ fn private_fn() {
         .collect();
     assert_eq!(
         open.len(),
-        2,
-        "traced + untraced are pub without instrument"
+        3,
+        "traced + untraced + private_fn all lack instrument"
     );
 
     let findings_dir = store.path().join("findings");
@@ -61,19 +61,21 @@ fn private_fn() {
         .wrap_err("csv")?;
     assert!(csv.contains("untraced"));
     assert!(csv.contains("traced"));
+    assert!(csv.contains("private_fn"));
 
     let checklist = fs::read_to_string(findings_dir.join("tracing-instrument.checklist.md"))
         .into_diagnostic()
         .wrap_err("checklist")?;
-    assert!(checklist.contains("**Open gaps:** 2"));
+    assert!(checklist.contains("**Open gaps:** 3"));
     assert!(checklist.contains("untraced"));
+    assert!(checklist.contains("private_fn"));
     assert!(checklist.contains("TRACING-MISSING-INSTRUMENT"));
     assert!(checklist.contains("### `other`"));
 
     let summary = fs::read_to_string(findings_dir.join("tracing-summary.md"))
         .into_diagnostic()
         .wrap_err("summary")?;
-    assert!(summary.contains("**2** open gaps"));
+    assert!(summary.contains("**3** open gaps"));
     assert!(summary.contains("| Crate | Open |"));
     Ok(())
 }
@@ -420,17 +422,11 @@ pub fn lookup_first() -> Option<u8> {
 }
 
 #[test]
-fn tracing_include_pub_super_from_config() -> miette::Result<()> {
+fn tracing_reports_private_and_pub_super() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
-    fs::write(
-        fixture.path().join("cordial.toml"),
-        "[tracing]\ninclude_pub_super = true\n",
-    )
-    .into_diagnostic()
-    .wrap_err("config")?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         r#"
@@ -439,6 +435,8 @@ mod inner {
 }
 
 pub fn visible() {}
+
+fn private_helper() {}
 "#,
     )
     .into_diagnostic()
@@ -462,6 +460,7 @@ pub fn visible() {}
         .wrap_err("csv")?;
     assert!(csv.contains("hidden"), "{csv}");
     assert!(csv.contains("visible"), "{csv}");
+    assert!(csv.contains("private_helper"), "{csv}");
     Ok(())
 }
 

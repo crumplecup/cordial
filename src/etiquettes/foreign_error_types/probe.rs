@@ -6,18 +6,22 @@ use crate::session::SessionView;
 
 use super::types::{ForeignErrorRecordKind, ForeignErrorTypeMarker};
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 struct ForeignErrorTypeQuery;
 
 impl Query for ForeignErrorTypeQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &[NodeKind::Expr]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
         node.attr("foreign_error_record_kind").is_some()
     }
@@ -33,14 +37,17 @@ impl ForeignErrorTypeProbe {
 }
 
 impl Probe for ForeignErrorTypeProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &FOREIGN_ERROR_TYPE_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, _session))]
     fn probe(
         &self,
         ir: &dyn IrView,

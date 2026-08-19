@@ -8,6 +8,7 @@ use crate::session::SessionView;
 
 use super::types::{ForeignErrorRecordKind, build_workspace_foreign_error_type_summary};
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone)]
 struct ForeignErrorTypeRow {
     crate_name: String,
@@ -28,6 +29,7 @@ struct ForeignErrorTypeRow {
 }
 
 impl ForeignErrorTypeRow {
+    #[instrument(level = "debug", skip(finding), ret)]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -58,6 +60,7 @@ impl ForeignErrorTypeRow {
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 fn foreign_error_type_rows(findings: &[&dyn Finding]) -> Vec<ForeignErrorTypeRow> {
     findings
         .iter()
@@ -66,15 +69,18 @@ fn foreign_error_type_rows(findings: &[&dyn Finding]) -> Vec<ForeignErrorTypeRow
         .collect()
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn typed_rows(rows: &[ForeignErrorTypeRow]) -> impl Iterator<Item = &ForeignErrorTypeRow> {
     rows.iter()
         .filter(|row| row.record_kind == ForeignErrorRecordKind::Typed.as_attr())
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn open_rows(rows: &[ForeignErrorTypeRow]) -> impl Iterator<Item = &ForeignErrorTypeRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+#[instrument(level = "debug")]
 fn escape_csv(value: &str) -> String {
     if value.contains(',') || value.contains('"') || value.contains('\n') {
         format!("\"{}\"", value.replace('"', "\"\""))
@@ -83,6 +89,7 @@ fn escape_csv(value: &str) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn typed_report_from_rows(rows: &[ForeignErrorTypeRow]) -> super::types::ForeignErrorTypeReport {
     let crate_name = rows
         .first()
@@ -114,6 +121,7 @@ fn typed_report_from_rows(rows: &[ForeignErrorTypeRow]) -> super::types::Foreign
     }
 }
 
+#[instrument(level = "debug")]
 fn parse_site_kind(value: &str) -> crate::etiquettes::error_sites::ErrorSiteKind {
     use crate::etiquettes::error_sites::ErrorSiteKind;
     match value {
@@ -304,10 +312,12 @@ impl ForeignErrorsChecklistReporter {
 }
 
 impl Reporter for ForeignErrorsChecklistReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, ir, _session))]
     fn render(
         &self,
         findings: &[&dyn Finding],

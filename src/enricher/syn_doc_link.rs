@@ -21,14 +21,17 @@ impl SynDocLinkEnricher {
 }
 
 impl IrEnricher for SynDocLinkEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         2
     }
 
+    #[instrument(level = "trace", skip(self, ir, _load, _session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,
@@ -68,6 +71,7 @@ impl IrEnricher for SynDocLinkEnricher {
     }
 }
 
+#[instrument(level = "debug", skip(ir, source, rustdoc), err(level = "warn"))]
 fn link_peers(
     ir: &mut dyn IrMut,
     source: crate::ir::NodeId,
@@ -98,6 +102,7 @@ pub fn syn_doc_peer(node: &dyn NodeView) -> Option<crate::ir::NodeId> {
     Some(id)
 }
 
+#[instrument(level = "debug", skip(path))]
 fn inventory_link_key(path: &str, crate_name: &str) -> String {
     let normalized = crate_name.replace('-', "_");
     if path.split("::").next() == Some(normalized.as_str()) {

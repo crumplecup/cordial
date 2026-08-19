@@ -8,6 +8,7 @@ use crate::session::SessionView;
 
 use super::scan::{BranchingCache, scan_crate_visibility_with_cache};
 
+use tracing::instrument;
 /// Materializes visibility-path nodes in the IR graph.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct VisibilityInventoryEnricher;
@@ -17,10 +18,12 @@ impl VisibilityInventoryEnricher {
 }
 
 impl IrEnricher for VisibilityInventoryEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, ir, load, session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,

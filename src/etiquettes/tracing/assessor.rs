@@ -14,6 +14,7 @@ use super::types::{
     VisibilityLabel,
 };
 
+use tracing::instrument;
 /// Converts missing-instrument and recipe-delta markers into open findings.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TracingAssessor;
@@ -23,31 +24,28 @@ impl TracingAssessor {
 }
 
 impl Assessor for TracingAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &[MISSING_INSTRUMENT_LABEL, RECIPE_DELTA_LABEL]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],
         ir: &dyn IrView,
         session: &dyn SessionView,
     ) -> CordialResult<Vec<Box<dyn Finding>>> {
-        let include_pub_super = crate::config::load_session_config(session)
-            .tracing
-            .include_pub_super;
         let mut findings = Vec::new();
         for marker in markers {
             let Some(parsed) = ParsedFn::from_marker(*marker, ir, session) else {
                 continue;
             };
-            if !should_report(&parsed.visibility, include_pub_super) {
-                continue;
-            }
             match marker.label() {
                 MISSING_INSTRUMENT_LABEL => {
                     findings.push(parsed.into_finding(TracingRuleKind::MissingInstrument));
@@ -59,8 +57,6 @@ impl Assessor for TracingAssessor {
                         &present,
                         &DeltaContext {
                             role: parsed.role,
-                            complexity: parsed.complexity,
-                            qualified_path: &parsed.qualified_name,
                             param_names: &parsed.param_names,
                             has_error_path_event: parsed.has_error_path_event,
                         },
@@ -92,6 +88,7 @@ struct ParsedFn {
 }
 
 impl ParsedFn {
+    #[instrument(level = "debug", skip(marker, ir, session))]
     fn from_marker(
         marker: &dyn Marker,
         ir: &dyn IrView,
@@ -151,6 +148,7 @@ impl ParsedFn {
         })
     }
 
+    #[instrument(level = "debug", skip(self, kind))]
     fn into_finding(self, kind: TracingRuleKind) -> Box<dyn Finding> {
         Box::new(TracingFinding {
             rule: TracingRule::new(kind),
@@ -168,6 +166,7 @@ impl ParsedFn {
     }
 }
 
+#[instrument(level = "debug")]
 fn csv_list(value: &str) -> Vec<String> {
     if value.is_empty() {
         return Vec::new();
@@ -180,13 +179,7 @@ fn csv_list(value: &str) -> Vec<String> {
         .collect()
 }
 
-fn should_report(visibility: &VisibilityLabel, include_pub_super: bool) -> bool {
-    matches!(
-        visibility,
-        VisibilityLabel::Public | VisibilityLabel::PubCrate
-    ) || (include_pub_super && matches!(visibility, VisibilityLabel::PubSuper))
-}
-
+#[instrument(level = "debug")]
 fn parse_function_kind(value: &str) -> FunctionKind {
     match value {
         "inherent" => FunctionKind::InherentMethod,
@@ -195,6 +188,7 @@ fn parse_function_kind(value: &str) -> FunctionKind {
     }
 }
 
+#[instrument(level = "debug")]
 fn parse_visibility(value: &str) -> VisibilityLabel {
     match value {
         "pub" => VisibilityLabel::Public,

@@ -7,6 +7,7 @@ use crate::session::SessionView;
 
 use super::types::{AllowFinding, AllowRule, AllowRuleId};
 
+use tracing::instrument;
 /// Converts allow-site markers into open findings.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AllowAssessor;
@@ -16,14 +17,17 @@ impl AllowAssessor {
 }
 
 impl Assessor for AllowAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["allow-site"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],

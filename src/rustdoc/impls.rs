@@ -61,7 +61,7 @@ pub fn collect_trait_impls(inventory: &RustdocInventory) -> Vec<TraitImplRecord>
 }
 
 /// Resolve the canonical path for an impl target type.
-#[instrument(level = "trace")]
+#[instrument(level = "debug", skip(krate, ty))]
 pub fn impl_target_path(krate: &rustdoc_types::Crate, ty: &Type) -> Option<String> {
     let Type::ResolvedPath(path) = ty else {
         return None;

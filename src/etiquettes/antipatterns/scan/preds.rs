@@ -9,6 +9,7 @@ pub(super) struct UnusedArgBinding {
     pub(super) snippet: String,
 }
 
+#[instrument(level = "debug", skip(ty))]
 pub(super) fn type_contains_static_lifetime_ref(ty: &Type) -> bool {
     match ty {
         Type::Reference(reference) => {
@@ -61,10 +62,12 @@ pub(super) fn type_contains_static_lifetime_ref(ty: &Type) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(ty))]
 pub(super) fn static_ref_snippet(ty: &Type) -> String {
     truncate_snippet(&type_label_with_lifetime(ty), 96)
 }
 
+#[instrument(level = "debug", skip(ty))]
 fn type_label_with_lifetime(ty: &Type) -> String {
     match ty {
         Type::Reference(reference) => {
@@ -123,12 +126,14 @@ fn type_label_with_lifetime(ty: &Type) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(pat))]
 pub(super) fn unused_argument_bindings(pat: &Pat) -> Vec<UnusedArgBinding> {
     let mut bindings = Vec::new();
     collect_unused_argument_bindings(pat, &mut bindings);
     bindings
 }
 
+#[instrument(level = "debug", skip(pat, bindings))]
 fn collect_unused_argument_bindings(pat: &Pat, bindings: &mut Vec<UnusedArgBinding>) {
     match pat {
         Pat::Wild(wild) => bindings.push(UnusedArgBinding {
@@ -163,10 +168,12 @@ fn collect_unused_argument_bindings(pat: &Pat, bindings: &mut Vec<UnusedArgBindi
     }
 }
 
+#[instrument(level = "trace", skip(ident), ret)]
 fn is_unused_argument_ident(ident: &syn::Ident) -> bool {
     ident.to_string().starts_with('_')
 }
 
+#[instrument(level = "debug", skip(ty))]
 pub(super) fn result_error_type(ty: &Type) -> Option<&Type> {
     let Type::Path(TypePath { path, .. }) = ty else {
         return None;
@@ -189,6 +196,7 @@ pub(super) fn result_error_type(ty: &Type) -> Option<&Type> {
     type_args.get(1).copied()
 }
 
+#[instrument(level = "trace", skip(ty))]
 pub(super) fn is_stringish_error_type(ty: &Type) -> bool {
     match ty {
         Type::Path(TypePath { path, .. }) => {
@@ -205,6 +213,7 @@ pub(super) fn is_stringish_error_type(ty: &Type) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(ty))]
 pub(super) fn result_string_error_snippet(ty: &Type) -> String {
     match ty {
         Type::Path(_) => format!(
@@ -217,6 +226,7 @@ pub(super) fn result_string_error_snippet(ty: &Type) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(ty))]
 pub(super) fn box_dyn_error_trait_object(ty: &Type) -> Option<&TypeTraitObject> {
     let Type::Path(TypePath { path, .. }) = ty else {
         return None;
@@ -243,6 +253,7 @@ pub(super) fn box_dyn_error_trait_object(ty: &Type) -> Option<&TypeTraitObject> 
     Some(trait_obj)
 }
 
+#[instrument(level = "debug", skip(trait_obj))]
 fn trait_object_has_error_bound(trait_obj: &TypeTraitObject) -> bool {
     trait_obj.bounds.iter().any(|bound| match bound {
         TypeParamBound::Trait(trait_bound) => trait_bound
@@ -254,12 +265,14 @@ fn trait_object_has_error_bound(trait_obj: &TypeTraitObject) -> bool {
     })
 }
 
+#[instrument(level = "debug", skip(trait_obj))]
 pub(super) fn box_dyn_error_snippet(trait_obj: &TypeTraitObject) -> String {
     let bounds: Vec<String> = trait_obj.bounds.iter().map(trait_bound_label).collect();
     let snippet = format!("Box<dyn {}>", bounds.join(" + "));
     truncate_snippet(&snippet, 96)
 }
 
+#[instrument(level = "debug", skip(bound))]
 fn trait_bound_label(bound: &TypeParamBound) -> String {
     match bound {
         TypeParamBound::Trait(trait_bound) => path_label(&trait_bound.path),
@@ -278,6 +291,7 @@ pub(crate) fn truncate_snippet(text: &str, max: usize) -> String {
     format!("{truncated}…")
 }
 
+#[instrument(level = "debug", skip(ty))]
 pub(super) fn type_label(ty: &Type) -> String {
     match ty {
         Type::Path(type_path) => path_label(&type_path.path),
@@ -288,6 +302,7 @@ pub(super) fn type_label(ty: &Type) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(path))]
 fn path_label(path: &syn::Path) -> String {
     path.segments
         .last()

@@ -73,6 +73,7 @@ pub(crate) fn scan_rust_syntax(
     .chain
 }
 
+#[instrument(level = "debug", skip(file), err(level = "warn"))]
 fn scan_rust_file(
     file: &Path,
     src_root: &Path,

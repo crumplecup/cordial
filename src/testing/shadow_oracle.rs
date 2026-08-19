@@ -28,7 +28,7 @@ pub fn build_shadow_pair_report(
     ))
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(target, shadow))]
 pub fn build_shadow_pair_report_from_inventories(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
@@ -46,6 +46,7 @@ pub fn build_shadow_pair_report_from_inventories(
     build_shadow_report_from_inventories_with_maps(target, shadow, &maps)
 }
 
+#[instrument(level = "info", skip(session), fields(crate_name = crate_name), err(level = "warn"))]
 fn load_crate_inventory(
     session: &dyn SessionView,
     crate_name: &str,
@@ -59,6 +60,7 @@ fn load_crate_inventory(
     parse_rustdoc_json(&json_path, crate_name)
 }
 
+#[instrument(level = "info", skip(session), err(level = "warn"))]
 fn load_upstream_inventory(
     session: &dyn SessionView,
     upstream: &str,
@@ -70,6 +72,7 @@ fn load_upstream_inventory(
     load_crate_inventory(session, upstream)
 }
 
+#[instrument(level = "info", skip(session), err(level = "warn"))]
 fn load_shadow_dep_upstream_inventory(
     session: &dyn SessionView,
     shadow: &str,

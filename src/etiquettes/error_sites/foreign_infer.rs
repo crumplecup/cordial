@@ -11,6 +11,7 @@ pub enum ForeignTypeConfidence {
 }
 
 impl Display for ForeignTypeConfidence {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::High => write!(f, "FOREIGN-TYPE-CONFIDENCE-HIGH"),
@@ -110,30 +111,37 @@ const FOREIGN_TYPE_RULES: &[ForeignTypeRule] = &[
     },
 ];
 
+#[instrument(level = "debug", skip(source))]
 fn matches_std_fmt(source: &str) -> bool {
     source.contains("writeln!(…)") || source.contains("write!(…)")
 }
 
+#[instrument(level = "debug", skip(source))]
 fn matches_process_status(source: &str) -> bool {
     source.contains(".status(…)")
 }
 
+#[instrument(level = "debug", skip(source))]
 fn matches_std_fs(source: &str) -> bool {
     source.contains("std::fs::")
 }
 
+#[instrument(level = "debug", skip(source))]
 fn matches_unqualified_fs(source: &str) -> bool {
     source.starts_with("fs::")
 }
 
+#[instrument(level = "debug", skip(source))]
 fn matches_std_io(source: &str) -> bool {
     source.contains("std::io::")
 }
 
+#[instrument(level = "debug", skip(source))]
 fn matches_ensure_dirs(source: &str) -> bool {
     source.contains("ensure_dirs(…)")
 }
 
+#[instrument(level = "debug", skip(source))]
 fn matches_serde_json(source: &str) -> bool {
     source.contains("serde_json::from_str")
         || source.contains("serde_json::from_slice")
@@ -144,20 +152,24 @@ fn matches_serde_json(source: &str) -> bool {
         || source.contains("serde_json::to_writer")
 }
 
+#[instrument(level = "debug", skip(source))]
 fn matches_cargo_metadata(source: &str) -> bool {
     source.contains("cargo_metadata::")
 }
 
+#[instrument(level = "debug", skip(source))]
 fn matches_csv_writer(source: &str) -> bool {
     source.contains("csv::Writer") || source.contains("csv::Reader") || source.starts_with("csv::")
 }
 
+#[instrument(level = "debug", skip(source))]
 fn matches_csv_methods(source: &str) -> bool {
     source.contains(".write_record(…)")
         || source.contains(".flush(…)")
         || source.contains(".read_byte_record(…)")
 }
 
+#[instrument(level = "debug", skip(source))]
 fn matches_syn_parse(source: &str) -> bool {
     source.contains("syn::parse_file")
         || source.contains("syn::parse2")

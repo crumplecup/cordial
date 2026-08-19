@@ -6,6 +6,7 @@ use crate::ir::{ATTR_QUALIFIED_PATH, BasicQuery, IrMut, NodeKind};
 use crate::loader::LoadView;
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Attaches per-type feature probe attrs from cached or live probe rustdoc.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FeatureProbeEnricher;
@@ -19,18 +20,22 @@ impl FeatureProbeEnricher {
 }
 
 impl IrEnricher for FeatureProbeEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         5
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn required_loader(&self) -> &str {
         crate::RustdocLoader::ID
     }
 
+    #[instrument(level = "trace", skip(self, ir, _load, session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,

@@ -92,6 +92,7 @@ pub fn scan_compliance_rust_syntax(
     .compliance
 }
 
+#[instrument(level = "debug", skip(file), err(level = "warn"))]
 fn scan_compliance_rust_file(
     file: &Path,
     src_root: &Path,

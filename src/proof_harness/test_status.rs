@@ -43,7 +43,7 @@ impl TestStatus {
 }
 
 /// Determine proof and composition harness status for a type path.
-#[instrument(level = "trace")]
+#[instrument(level = "debug", skip(harness))]
 pub fn test_status_for_type_path(
     type_path: &str,
     has_factory_impl: bool,
@@ -89,6 +89,7 @@ pub fn test_status_for_type_path(
     )
 }
 
+#[instrument(level = "debug", skip(harness))]
 fn composition_test_status(name: &str, harness: &ProofHarness) -> TestStatus {
     let found = harness
         .composition_pairs

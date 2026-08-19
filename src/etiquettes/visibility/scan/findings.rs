@@ -7,6 +7,8 @@ use crate::etiquettes::visibility::types::{
     VisibilityRecord, VisibilityRuleId, VisibilityThresholds,
 };
 
+use tracing::instrument;
+#[instrument(level = "debug", skip(root, thresholds, eval))]
 pub(super) fn collect_findings(
     root: &ModuleNode,
     thresholds: VisibilityThresholds,
@@ -38,6 +40,7 @@ pub(super) fn collect_findings(
     out
 }
 
+#[instrument(level = "debug", skip(node, out))]
 fn collect_module_findings(node: &ModuleNode, thin_floor: usize, out: &mut Vec<VisibilityRecord>) {
     if !node.is_crate_root {
         let mismatch = node.declared_vis.is_unrestricted_pub() && !node.parent_declared_pub;

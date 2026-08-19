@@ -11,6 +11,8 @@ use crate::session::SessionView;
 use super::reporter::{AntipatternRow, antipattern_rows, escape_csv};
 use super::types::{AntipatternRuleId, build_workspace_version_in_member_summary};
 
+use tracing::instrument;
+#[instrument(level = "debug", skip(findings))]
 fn version_rows(findings: &[&dyn Finding]) -> Vec<AntipatternRow> {
     antipattern_rows(findings)
         .into_iter()
@@ -131,10 +133,12 @@ impl VersionInMemberSummaryReporter {
 }
 
 impl Reporter for VersionInMemberSummaryReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
     fn render(
         &self,
         findings: &[&dyn Finding],

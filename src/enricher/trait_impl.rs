@@ -6,6 +6,7 @@ use crate::ir::{
 use crate::loader::LoadView;
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Adds [`EdgeKind::Implements`] edges from materialized `trait_impls` attrs.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TraitImplEnricher;
@@ -15,18 +16,22 @@ impl TraitImplEnricher {
 }
 
 impl IrEnricher for TraitImplEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         3
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn required_loader(&self) -> &str {
         crate::RustdocLoader::ID
     }
 
+    #[instrument(level = "trace", skip(self, ir, _load, _session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,
@@ -77,6 +82,7 @@ impl IrEnricher for TraitImplEnricher {
     }
 }
 
+#[instrument(level = "debug", skip(ir), err(level = "warn"))]
 fn ensure_trait_node(ir: &mut dyn IrMut, trait_short: &str) -> CordialResult<crate::ir::NodeId> {
     if let Some(existing) = ir
         .nodes_matching(&BasicQuery::all_nodes())

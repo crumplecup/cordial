@@ -6,6 +6,7 @@ use crate::session::SessionView;
 
 use super::types::{MISSING_INSTRUMENT_LABEL, RECIPE_DELTA_LABEL, TracingMarker};
 
+use tracing::instrument;
 /// Matches traced function inventory nodes missing `#[instrument]`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct MissingInstrumentQuery;
@@ -37,14 +38,17 @@ static MISSING_INSTRUMENT_QUERY: MissingInstrumentQuery = MissingInstrumentQuery
 pub struct InstrumentedQuery;
 
 impl Query for InstrumentedQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &[NodeKind::Item(ItemKind::Fn)]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
         node.attr("function_kind").is_some()
             && node
@@ -98,14 +102,17 @@ impl RecipeDeltaProbe {
 }
 
 impl Probe for RecipeDeltaProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &INSTRUMENTED_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, _session))]
     fn probe(
         &self,
         ir: &dyn IrView,

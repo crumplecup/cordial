@@ -7,7 +7,7 @@ pub enum InternalErrorRecordKind {
 }
 
 impl InternalErrorRecordKind {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::TypeGraph => "type_graph",

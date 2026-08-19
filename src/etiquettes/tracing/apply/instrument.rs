@@ -19,7 +19,7 @@ pub(super) enum InstrumentAttrStyle {
     CratePath,
 }
 
-#[instrument(skip(lines))]
+#[instrument(level = "debug")]
 pub(super) fn attr_style(lines: &[String]) -> InstrumentAttrStyle {
     if file_declares_mod(lines, "tracing") {
         InstrumentAttrStyle::CratePath
@@ -30,7 +30,7 @@ pub(super) fn attr_style(lines: &[String]) -> InstrumentAttrStyle {
     }
 }
 
-#[instrument(skip(lines, gap, recipe))]
+#[instrument(level = "debug", skip(gap, recipe, style))]
 pub(super) fn apply_gap(
     lines: &mut Vec<String>,
     gap: &InstrumentGap,
@@ -69,6 +69,7 @@ pub(super) fn apply_gap(
     GapApplyOutcome::Applied
 }
 
+#[instrument(level = "debug", skip(recipe, style))]
 fn recipe_attr(recipe: &InstrumentRecipe, style: InstrumentAttrStyle) -> String {
     match style {
         InstrumentAttrStyle::Short => recipe.as_attribute(),
@@ -77,20 +78,29 @@ fn recipe_attr(recipe: &InstrumentRecipe, style: InstrumentAttrStyle) -> String 
     }
 }
 
-#[instrument(skip(records, gap))]
+#[instrument(level = "debug", skip(records, gap))]
 pub(super) fn recipe_for_gap<'a>(
     records: &'a [FunctionRecord],
     gap: &InstrumentGap,
 ) -> Option<&'a InstrumentRecipe> {
-    if let Some(record) = records
+    let rel = gap.rel_path.to_string_lossy().replace('\\', "/");
+    let named: Vec<_> = records
         .iter()
-        .find(|record| record.qualified_name == gap.qualified_name)
+        .filter(|record| record.qualified_name == gap.qualified_name)
+        .collect();
+    if let Some(record) = named
+        .iter()
+        .copied()
+        .filter(|record| file_matches(&record.file, &rel))
+        .min_by_key(|record| record.line.abs_diff(gap.line))
     {
+        return Some(&record.recipe);
+    }
+    if let Some(record) = named.first().copied() {
         return Some(&record.recipe);
     }
 
     let local = local_fn_name(&gap.qualified_name);
-    let rel = gap.rel_path.to_string_lossy().replace('\\', "/");
     records
         .iter()
         .filter(|record| {
@@ -101,11 +111,12 @@ pub(super) fn recipe_for_gap<'a>(
         .map(|record| &record.recipe)
 }
 
+#[instrument(level = "debug")]
 fn file_matches(record_file: &str, gap_file: &str) -> bool {
     record_file == gap_file || record_file.ends_with(gap_file) || gap_file.ends_with(record_file)
 }
 
-#[instrument(skip(lines, qualified_name))]
+#[instrument(level = "debug")]
 fn find_fn_line(lines: &[String], target_line: u32, qualified_name: &str) -> Option<usize> {
     let idx = target_line.saturating_sub(1) as usize;
     let expected_name = local_fn_name(qualified_name);
@@ -127,12 +138,12 @@ fn find_fn_line(lines: &[String], target_line: u32, qualified_name: &str) -> Opt
     named.first().map(|candidate| candidate.1)
 }
 
-#[instrument(skip(qualified_name))]
+#[instrument(level = "debug")]
 fn local_fn_name(qualified_name: &str) -> &str {
     qualified_name.rsplit("::").next().unwrap_or(qualified_name)
 }
 
-#[instrument(skip(line))]
+#[instrument(level = "debug")]
 fn extract_fn_name(line: &str) -> Option<&str> {
     let fn_idx = line.find("fn ")?;
     let rest = &line[fn_idx + 3..];
@@ -149,7 +160,7 @@ fn extract_fn_name(line: &str) -> Option<&str> {
     Some(name)
 }
 
-#[instrument(skip(lines))]
+#[instrument(level = "debug")]
 fn collect_attr_indices(lines: &[String], fn_idx: usize) -> Vec<usize> {
     let mut indices = Vec::new();
     let mut i = fn_idx;
@@ -168,7 +179,7 @@ fn collect_attr_indices(lines: &[String], fn_idx: usize) -> Vec<usize> {
     indices
 }
 
-#[instrument(skip(lines))]
+#[instrument(level = "debug")]
 fn instrument_attr_range(lines: &[String], fn_idx: usize) -> Option<(usize, usize)> {
     let attrs = collect_attr_indices(lines, fn_idx);
     for &start in &attrs {
@@ -187,10 +198,12 @@ fn instrument_attr_range(lines: &[String], fn_idx: usize) -> Option<(usize, usiz
     None
 }
 
+#[instrument(level = "debug")]
 fn attrs_match_recipe(attr_lines: &[String], recipe_attr: &str) -> bool {
     normalize_attr(&attr_lines.join(" ")) == normalize_attr(recipe_attr)
 }
 
+#[instrument(level = "debug")]
 fn normalize_attr(text: &str) -> String {
     text.split_whitespace()
         .collect::<String>()
@@ -198,7 +211,7 @@ fn normalize_attr(text: &str) -> String {
         .replace("#[tracing::instrument", "#[instrument")
 }
 
-#[instrument(skip(lines, attr_indices))]
+#[instrument(level = "debug")]
 fn insert_after_track_caller(lines: &[String], attr_indices: &[usize]) -> Option<usize> {
     for idx in attr_indices.iter().rev() {
         if lines[*idx].contains("track_caller") {
@@ -208,17 +221,19 @@ fn insert_after_track_caller(lines: &[String], attr_indices: &[usize]) -> Option
     attr_indices.first().copied()
 }
 
-#[instrument(skip(line))]
+#[instrument(level = "debug")]
 fn leading_indent(line: &str) -> String {
     line.chars()
         .take_while(|ch| *ch == ' ' || *ch == '\t')
         .collect()
 }
 
+#[instrument(level = "debug")]
 fn file_declares_mod(lines: &[String], name: &str) -> bool {
     lines.iter().any(|line| is_mod_decl(line.trim(), name))
 }
 
+#[instrument(level = "trace", ret)]
 fn is_mod_decl(stripped: &str, name: &str) -> bool {
     let rest = stripped
         .strip_prefix("pub(crate) ")
@@ -228,7 +243,7 @@ fn is_mod_decl(stripped: &str, name: &str) -> bool {
     rest == format!("mod {name};") || rest.starts_with(&format!("mod {name} {{"))
 }
 
-#[instrument(skip(lines))]
+#[instrument(level = "debug")]
 pub(super) fn ensure_use_instrument(lines: Vec<String>) -> Vec<String> {
     if attr_style(&lines) != InstrumentAttrStyle::Short || tracing_use_includes_instrument(&lines) {
         return lines;
@@ -266,6 +281,7 @@ pub(super) fn ensure_use_instrument(lines: Vec<String>) -> Vec<String> {
     out
 }
 
+#[instrument(level = "debug")]
 fn tracing_use_includes_instrument(lines: &[String]) -> bool {
     let mut i = 0usize;
     while i < lines.len() {
@@ -288,6 +304,7 @@ fn tracing_use_includes_instrument(lines: &[String]) -> bool {
     false
 }
 
+#[instrument(level = "debug")]
 fn import_names_include_instrument(block: &str) -> bool {
     if block.contains("use tracing::instrument;") || block.contains("use tracing::instrument as ") {
         return true;

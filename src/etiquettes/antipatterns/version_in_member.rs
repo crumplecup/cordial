@@ -82,7 +82,7 @@ pub fn scan_workspace_version_in_member(
 }
 
 /// Scan one member `Cargo.toml` for inline version declarations.
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(workspace_dep_names), err(level = "warn"))]
 pub fn scan_member_manifest(
     manifest_path: &Path,
     crate_root: &Path,
@@ -138,6 +138,7 @@ pub fn scan_member_manifest(
     Ok(findings)
 }
 
+#[instrument(level = "debug", skip(root_table))]
 fn workspace_dependency_names(root_table: &toml::Table) -> HashSet<String> {
     root_table
         .get("workspace")
@@ -148,6 +149,7 @@ fn workspace_dependency_names(root_table: &toml::Table) -> HashSet<String> {
         .unwrap_or_default()
 }
 
+#[instrument(level = "debug", skip(root_table))]
 fn workspace_package_has_version(root_table: &toml::Table) -> bool {
     root_table
         .get("workspace")
@@ -157,6 +159,7 @@ fn workspace_package_has_version(root_table: &toml::Table) -> bool {
         .is_some_and(|package| package.contains_key("version"))
 }
 
+#[instrument(level = "debug", skip(package))]
 fn package_uses_inline_version(package: &toml::map::Map<String, Value>) -> bool {
     let Some(version) = package.get("version") else {
         return false;
@@ -171,6 +174,7 @@ fn package_uses_inline_version(package: &toml::map::Map<String, Value>) -> bool 
     }
 }
 
+#[instrument(level = "debug", skip(dep, workspace_dep_names))]
 fn dependency_should_use_workspace(
     dep_name: &str,
     dep: &Value,
@@ -201,6 +205,7 @@ fn dependency_should_use_workspace(
     }
 }
 
+#[instrument(level = "debug", skip(deps, workspace_dep_names, findings))]
 fn scan_dependency_entries(
     deps: &toml::map::Map<String, Value>,
     section_path: &str,
@@ -226,6 +231,7 @@ fn scan_dependency_entries(
     }
 }
 
+#[instrument(level = "debug", skip(table, workspace_dep_names, findings))]
 fn scan_target_dependency_tables(
     table: &toml::Table,
     manifest_rel: &Path,
@@ -251,6 +257,7 @@ fn scan_target_dependency_tables(
     }
 }
 
+#[instrument(level = "debug", skip(table, workspace_dep_names, findings))]
 fn scan_dependency_sections_in_table(
     table: &toml::Table,
     section_prefix: &str,
@@ -288,6 +295,7 @@ fn scan_dependency_sections_in_table(
     }
 }
 
+#[instrument(level = "debug")]
 fn package_version_snippet(
     content: &str,
     line: u32,
@@ -307,6 +315,7 @@ fn package_version_snippet(
     }
 }
 
+#[instrument(level = "debug", skip(dep_value))]
 fn dependency_version_snippet(dep_name: &str, dep_value: &Value, in_workspace: bool) -> String {
     let current = match dep_value {
         Value::String(version) => format!("{dep_name} = \"{version}\""),
@@ -333,6 +342,7 @@ fn dependency_version_snippet(dep_name: &str, dep_value: &Value, in_workspace: b
     }
 }
 
+#[instrument(level = "debug")]
 fn manifest_rel_path(crate_root: &Path, manifest_path: &Path) -> PathBuf {
     if manifest_path
         .file_name()
@@ -347,6 +357,7 @@ fn manifest_rel_path(crate_root: &Path, manifest_path: &Path) -> PathBuf {
     }
 }
 
+#[instrument(level = "debug")]
 fn find_line(content: &str, needle: &str) -> Option<u32> {
     content.lines().enumerate().find_map(|(index, line)| {
         let trimmed = line.trim();
@@ -357,6 +368,7 @@ fn find_line(content: &str, needle: &str) -> Option<u32> {
     })
 }
 
+#[instrument(level = "debug")]
 fn find_dependency_line(content: &str, section_path: &str, dep_name: &str) -> Option<u32> {
     let section_header = if section_path.starts_with('[') {
         section_path.to_string()
@@ -387,6 +399,7 @@ fn find_dependency_line(content: &str, section_path: &str, dep_name: &str) -> Op
     find_line(content, dep_name)
 }
 
+#[instrument(level = "debug", err(level = "warn"))]
 fn parse_manifest_table(content: &str, manifest_path: &Path) -> CordialResult<toml::Table> {
     toml::from_str(content).map_err(|error| {
         CordialError::invariant(format!(

@@ -93,6 +93,7 @@ struct DeriveScanVisitor {
 }
 
 impl DeriveScanVisitor {
+    #[instrument(level = "debug", skip(self))]
     fn qualify(&self, local: &str) -> String {
         if self.module_prefix.is_empty() {
             local.to_string()
@@ -101,6 +102,10 @@ impl DeriveScanVisitor {
         }
     }
 
+    #[instrument(
+        level = "trace",
+        skip(self, rule_id, struct_name, recommendation, evidence)
+    )]
     fn site(
         &self,
         rule_id: DeriveRuleId,
@@ -123,6 +128,7 @@ impl DeriveScanVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, record))]
     fn push_finding(&mut self, mut record: DeriveSiteRecord) {
         if let Ok(rel) = record.file.strip_prefix(&self.crate_root) {
             record.file = rel.to_path_buf();
@@ -130,6 +136,7 @@ impl DeriveScanVisitor {
         self.findings.push(record);
     }
 
+    #[instrument(level = "debug", skip(self, items))]
     fn visit_module_items(&mut self, items: &[Item], module_prefix: &[String]) {
         let prev_prefix = self.module_prefix.clone();
         self.module_prefix = module_prefix.to_vec();
@@ -139,6 +146,7 @@ impl DeriveScanVisitor {
         self.module_prefix = prev_prefix;
     }
 
+    #[instrument(level = "debug", skip(self, item))]
     fn visit_item(&mut self, item: &Item) {
         match item {
             Item::Struct(item_struct) => self.register_struct(item_struct),
@@ -148,6 +156,7 @@ impl DeriveScanVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, item_mod))]
     fn visit_mod(&mut self, item_mod: &ItemMod) {
         if is_cfg_test(&item_mod.attrs) {
             return;
@@ -160,6 +169,7 @@ impl DeriveScanVisitor {
         self.visit_module_items(items, &nested);
     }
 
+    #[instrument(level = "debug", skip(self, item_struct))]
     fn register_struct(&mut self, item_struct: &ItemStruct) {
         let name = item_struct.ident.to_string();
         let (fields, exposed_fields) = collect_struct_fields(item_struct);
@@ -191,6 +201,7 @@ impl DeriveScanVisitor {
         self.push_finding(record);
     }
 
+    #[instrument(level = "debug", skip(self, item_impl))]
     fn visit_impl(&mut self, item_impl: &ItemImpl) {
         if item_impl.trait_.is_some() {
             return;
@@ -221,6 +232,7 @@ impl DeriveScanVisitor {
         self.maybe_flag_manual_builder(&self_ty, item_impl, &fluent_setters, build_line);
     }
 
+    #[instrument(level = "debug", skip(self, struct_info, method))]
     fn inspect_impl_method(
         &mut self,
         self_ty: &str,
@@ -246,6 +258,7 @@ impl DeriveScanVisitor {
         self.check_getter_candidate(self_ty, struct_info, method, &method_name);
     }
 
+    #[instrument(level = "debug", skip(self, item_impl))]
     fn maybe_flag_manual_builder(
         &mut self,
         self_ty: &str,
@@ -298,6 +311,7 @@ impl DeriveScanVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, struct_info, method))]
     fn check_getter_candidate(
         &mut self,
         self_ty: &str,
@@ -339,6 +353,7 @@ impl DeriveScanVisitor {
         self.push_finding(record);
     }
 
+    #[instrument(level = "debug", skip(self, struct_info, method))]
     fn check_setter_candidate(
         &mut self,
         self_ty: &str,
@@ -380,6 +395,7 @@ impl DeriveScanVisitor {
         self.push_finding(record);
     }
 
+    #[instrument(level = "debug", skip(self, struct_info, method))]
     fn check_new_candidate(
         &mut self,
         self_ty: &str,
@@ -416,6 +432,7 @@ impl DeriveScanVisitor {
     }
 }
 
+#[instrument(level = "debug", skip(item_struct))]
 fn collect_struct_fields(item_struct: &ItemStruct) -> (HashMap<String, FieldMeta>, Vec<String>) {
     let mut fields = HashMap::new();
     let mut exposed_fields = Vec::new();
@@ -445,6 +462,7 @@ fn collect_struct_fields(item_struct: &ItemStruct) -> (HashMap<String, FieldMeta
     (fields, exposed_fields)
 }
 
+#[instrument(level = "debug")]
 fn setter_field_name(method_name: &str) -> Option<&str> {
     method_name
         .strip_prefix("with_")
@@ -452,14 +470,17 @@ fn setter_field_name(method_name: &str) -> Option<&str> {
 }
 
 impl<'ast> Visit<'ast> for DeriveScanVisitor {
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_struct(&mut self, node: &'ast ItemStruct) {
         self.register_struct(node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         self.visit_mod(node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
         self.visit_impl(node);
     }

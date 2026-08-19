@@ -7,6 +7,7 @@ use crate::session::SessionView;
 
 use super::types::{ErrorOriginClass, ErrorSiteFinding, ErrorSiteKind, ErrorSiteRule};
 
+use tracing::instrument;
 /// Converts error-site markers into partitioned findings.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ErrorSiteAssessor;
@@ -16,14 +17,17 @@ impl ErrorSiteAssessor {
 }
 
 impl Assessor for ErrorSiteAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["error-site"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],
@@ -101,6 +105,7 @@ impl Assessor for ErrorSiteAssessor {
     }
 }
 
+#[instrument(level = "debug")]
 fn parse_origin_class(value: &str) -> ErrorOriginClass {
     if value.contains("OTHER") {
         ErrorOriginClass::Other

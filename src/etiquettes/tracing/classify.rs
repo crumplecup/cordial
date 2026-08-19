@@ -1,21 +1,17 @@
 //! Classify a function into [`FunctionRole`] and [`FunctionComplexity`].
 
-use std::collections::HashSet;
-
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{
-    Block, ExprIf, ExprMatch, FnArg, GenericArgument, Pat, PathArguments, ReturnType, Signature,
-    Stmt, Type, TypePath,
-};
+use syn::{Block, ExprIf, ExprMatch, FnArg, Pat, ReturnType, Signature, Stmt, Type, TypePath};
 
 use crate::config::ModularityThresholds;
 
+use super::recordable::{return_type_borrowed, return_type_unrecordable, unrecordable_params};
 use super::types::{FnContext, FunctionComplexity, FunctionKind, FunctionRole};
 
 use tracing::instrument;
 /// Classify `ident` (unqualified) from its signature, kind, and optional body.
-#[instrument(level = "debug", skip(kind))]
+#[instrument(level = "debug", skip(sig, kind, body))]
 pub fn classify(
     ident: &str,
     sig: &Signature,
@@ -43,13 +39,13 @@ pub fn classify(
         param_names: param_names(sig),
         unrecordable_params: unrecordable_params(sig),
         returns_result,
-        returns_self,
         return_unrecordable: return_type_unrecordable(sig),
-        body_lines,
+        return_borrowed: return_type_borrowed(sig),
         has_error_path_event: peek.has_error_path_event,
     }
 }
 
+#[instrument(level = "debug", skip(sig, kind, peek))]
 fn classify_role(
     ident: &str,
     sig: &Signature,
@@ -89,11 +85,13 @@ fn classify_role(
     FunctionRole::Other
 }
 
+#[instrument(level = "trace", ret)]
 fn is_constructor(ident: &str, returns_self: bool) -> bool {
     matches!(ident, "new" | "try_new" | "default")
         || ((ident == "from" || ident.starts_with("from_")) && returns_self)
 }
 
+#[instrument(level = "trace", skip(sig, peek))]
 fn is_getter(ident: &str, sig: &Signature, peek: &BodyPeek, returns_result: bool) -> bool {
     if returns_result {
         return false;
@@ -110,6 +108,7 @@ fn is_getter(ident: &str, sig: &Signature, peek: &BodyPeek, returns_result: bool
     peek.stmts <= 2 && !peek.has_branch
 }
 
+#[instrument(level = "debug")]
 fn getter_name(ident: &str) -> bool {
     ident.starts_with("as_")
         || ident.starts_with("to_")
@@ -119,6 +118,7 @@ fn getter_name(ident: &str) -> bool {
         || ident.ends_with("_name")
 }
 
+#[instrument(level = "trace", ret)]
 fn is_render(ident: &str) -> bool {
     ident.starts_with("render_")
         || ident.ends_with("_summary")
@@ -126,10 +126,12 @@ fn is_render(ident: &str) -> bool {
         || ident.ends_with("_csv")
 }
 
+#[instrument(level = "trace", ret)]
 fn is_entry(ident: &str) -> bool {
     ident == "main" || ident == "run" || ident.starts_with("run_")
 }
 
+#[instrument(level = "trace", skip(sig))]
 fn is_setter(ident: &str, sig: &Signature) -> bool {
     if ident.starts_with("set_") || ident.starts_with("with_") {
         return true;
@@ -140,15 +142,18 @@ fn is_setter(ident: &str, sig: &Signature) -> bool {
     recv.reference.is_none() && recv.mutability.is_some() && sig.inputs.len() >= 2
 }
 
+#[instrument(level = "trace", ret)]
 fn is_predicate(ident: &str, returns_bool: bool) -> bool {
     returns_bool
         && (has_prefix(ident, &["is_", "has_", "can_", "contains_"]) || ident.starts_with("eq_"))
 }
 
+#[instrument(level = "trace", ret)]
 fn has_prefix(ident: &str, prefixes: &[&str]) -> bool {
     prefixes.iter().any(|prefix| ident.starts_with(prefix))
 }
 
+#[instrument(level = "debug", skip(peek))]
 fn classify_complexity(
     body_lines: u32,
     returns_result: bool,
@@ -170,6 +175,7 @@ fn classify_complexity(
     FunctionComplexity::Linear
 }
 
+#[instrument(level = "debug", skip(sig))]
 fn param_names(sig: &Signature) -> Vec<String> {
     sig.inputs
         .iter()
@@ -183,97 +189,7 @@ fn param_names(sig: &Signature) -> Vec<String> {
         .collect()
 }
 
-fn unrecordable_params(sig: &Signature) -> Vec<String> {
-    let generics = type_param_names(sig);
-    sig.inputs
-        .iter()
-        .filter_map(|arg| match arg {
-            FnArg::Typed(pat) => {
-                let Pat::Ident(ident) = &*pat.pat else {
-                    return None;
-                };
-                if type_is_unrecordable(&pat.ty) || type_is_generic_param(&pat.ty, &generics) {
-                    Some(ident.ident.to_string())
-                } else {
-                    None
-                }
-            }
-            FnArg::Receiver(_) => None,
-        })
-        .collect()
-}
-
-fn type_param_names(sig: &Signature) -> HashSet<String> {
-    sig.generics
-        .type_params()
-        .map(|param| param.ident.to_string())
-        .collect()
-}
-
-fn return_type_unrecordable(sig: &Signature) -> bool {
-    match &sig.output {
-        ReturnType::Type(_, ty) => type_is_unrecordable(ty),
-        ReturnType::Default => false,
-    }
-}
-
-fn type_is_unrecordable(ty: &Type) -> bool {
-    match ty {
-        Type::ImplTrait(_) | Type::TraitObject(_) | Type::BareFn(_) | Type::Infer(_) => true,
-        Type::Never(_) | Type::Macro(_) | Type::Verbatim(_) => true,
-        Type::Reference(reference) => type_is_unrecordable(&reference.elem),
-        Type::Ptr(ptr) => type_is_unrecordable(&ptr.elem),
-        Type::Paren(paren) => type_is_unrecordable(&paren.elem),
-        Type::Group(group) => type_is_unrecordable(&group.elem),
-        Type::Slice(slice) => type_is_unrecordable(&slice.elem),
-        Type::Array(array) => type_is_unrecordable(&array.elem),
-        Type::Tuple(tuple) => tuple.elems.iter().any(type_is_unrecordable),
-        Type::Path(path) => path_is_unrecordable(path),
-        _ => false,
-    }
-}
-
-fn path_is_unrecordable(path: &TypePath) -> bool {
-    path.path
-        .segments
-        .iter()
-        .any(|segment| match &segment.arguments {
-            PathArguments::None => false,
-            PathArguments::Parenthesized(_) => true,
-            PathArguments::AngleBracketed(args) => args.args.iter().any(|arg| match arg {
-                GenericArgument::Type(inner) => type_is_unrecordable(inner),
-                GenericArgument::AssocType(assoc) => type_is_unrecordable(&assoc.ty),
-                _ => false,
-            }),
-        })
-}
-
-fn type_is_generic_param(ty: &Type, generics: &HashSet<String>) -> bool {
-    match ty {
-        Type::Path(TypePath { qself: None, path }) => path.segments.iter().any(|segment| {
-            generics.contains(&segment.ident.to_string())
-                || match &segment.arguments {
-                    PathArguments::AngleBracketed(args) => args.args.iter().any(|arg| match arg {
-                        GenericArgument::Type(inner) => type_is_generic_param(inner, generics),
-                        _ => false,
-                    }),
-                    _ => false,
-                }
-        }),
-        Type::Reference(reference) => type_is_generic_param(&reference.elem, generics),
-        Type::Ptr(ptr) => type_is_generic_param(&ptr.elem, generics),
-        Type::Paren(paren) => type_is_generic_param(&paren.elem, generics),
-        Type::Group(group) => type_is_generic_param(&group.elem, generics),
-        Type::Slice(slice) => type_is_generic_param(&slice.elem, generics),
-        Type::Array(array) => type_is_generic_param(&array.elem, generics),
-        Type::Tuple(tuple) => tuple
-            .elems
-            .iter()
-            .any(|inner| type_is_generic_param(inner, generics)),
-        _ => false,
-    }
-}
-
+#[instrument(level = "debug", skip(sig))]
 fn returns_named(sig: &Signature, name: &str) -> bool {
     match &sig.output {
         ReturnType::Type(_, ty) => type_path_contains(ty, name),
@@ -281,6 +197,7 @@ fn returns_named(sig: &Signature, name: &str) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(sig))]
 fn returns_result_ty(sig: &Signature) -> bool {
     match &sig.output {
         ReturnType::Type(_, ty) => type_is_result(ty),
@@ -288,6 +205,7 @@ fn returns_result_ty(sig: &Signature) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(ty))]
 fn type_is_result(ty: &Type) -> bool {
     match ty {
         Type::Path(TypePath { path, .. }) => path.segments.last().is_some_and(|segment| {
@@ -301,6 +219,7 @@ fn type_is_result(ty: &Type) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(sig))]
 fn returns_self_ty(sig: &Signature) -> bool {
     match &sig.output {
         ReturnType::Type(_, ty) => type_is_self(ty),
@@ -308,6 +227,7 @@ fn returns_self_ty(sig: &Signature) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(ty))]
 fn type_is_self(ty: &Type) -> bool {
     match ty {
         Type::Path(TypePath { path, .. }) => path.is_ident("Self"),
@@ -318,6 +238,7 @@ fn type_is_self(ty: &Type) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(ty))]
 fn type_path_contains(ty: &Type, name: &str) -> bool {
     match ty {
         Type::Path(TypePath { path, .. }) => path
@@ -335,6 +256,7 @@ fn type_path_contains(ty: &Type, name: &str) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(args))]
 fn type_args_contain(args: &syn::PathArguments, name: &str) -> bool {
     let syn::PathArguments::AngleBracketed(args) = args else {
         return false;
@@ -345,6 +267,7 @@ fn type_args_contain(args: &syn::PathArguments, name: &str) -> bool {
     })
 }
 
+#[instrument(level = "debug", skip(block))]
 fn block_lines(block: &Block) -> u32 {
     let start = block.span().start().line as u32;
     let end = block.span().end().line as u32;
@@ -358,6 +281,7 @@ struct BodyPeek {
     has_error_path_event: bool,
 }
 
+#[instrument(level = "debug", skip(block))]
 fn peek_body(block: &Block) -> BodyPeek {
     let stmts = block
         .stmts
@@ -376,26 +300,31 @@ fn peek_body(block: &Block) -> BodyPeek {
 struct BodyPeekVisitor<'a>(&'a mut BodyPeek);
 
 impl<'ast> Visit<'ast> for BodyPeekVisitor<'_> {
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_match(&mut self, node: &'ast ExprMatch) {
         self.0.has_branch = true;
         syn::visit::visit_expr_match(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_if(&mut self, node: &'ast ExprIf) {
         self.0.has_branch = true;
         syn::visit::visit_expr_if(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_while(&mut self, node: &'ast syn::ExprWhile) {
         self.0.has_branch = true;
         syn::visit::visit_expr_while(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_for_loop(&mut self, node: &'ast syn::ExprForLoop) {
         self.0.has_branch = true;
         syn::visit::visit_expr_for_loop(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_macro(&mut self, node: &'ast syn::Macro) {
         if is_error_or_warn_macro(&node.path) {
             self.0.has_error_path_event = true;
@@ -404,6 +333,7 @@ impl<'ast> Visit<'ast> for BodyPeekVisitor<'_> {
     }
 }
 
+#[instrument(level = "trace", skip(path), ret)]
 fn is_error_or_warn_macro(path: &syn::Path) -> bool {
     path.segments
         .last()

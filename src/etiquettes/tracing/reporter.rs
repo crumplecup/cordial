@@ -8,6 +8,7 @@ use crate::session::SessionView;
 
 use super::types::FunctionRole;
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone)]
 struct TracingRow {
     crate_name: String,
@@ -25,6 +26,7 @@ struct TracingRow {
 }
 
 impl TracingRow {
+    #[instrument(level = "debug", skip(finding), ret)]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -52,6 +54,7 @@ impl TracingRow {
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 fn tracing_rows(findings: &[&dyn Finding]) -> Vec<TracingRow> {
     findings
         .iter()
@@ -60,10 +63,12 @@ fn tracing_rows(findings: &[&dyn Finding]) -> Vec<TracingRow> {
         .collect()
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn open_rows(rows: &[TracingRow]) -> impl Iterator<Item = &TracingRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn crate_names(rows: &[&TracingRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();
@@ -71,6 +76,7 @@ fn crate_names(rows: &[&TracingRow]) -> Vec<String> {
     names
 }
 
+#[instrument(level = "debug")]
 fn escape_csv(value: &str) -> String {
     if value.contains(',') || value.contains('"') || value.contains('\n') {
         format!("\"{}\"", value.replace('"', "\"\""))
@@ -235,10 +241,12 @@ impl TracingSummaryReporter {
 }
 
 impl Reporter for TracingSummaryReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
     fn render(
         &self,
         findings: &[&dyn Finding],
@@ -299,6 +307,7 @@ impl Reporter for TracingSummaryReporter {
     }
 }
 
+#[instrument(level = "debug")]
 fn module_key(qualified_name: &str) -> String {
     match qualified_name.rsplit_once("::") {
         Some((module, _)) => module.to_string(),

@@ -14,6 +14,7 @@ use crate::etiquettes::internal_error_chain::{
     InternalErrorComplianceFinding, InternalErrorComplianceId,
 };
 
+use tracing::instrument;
 /// Per-file accumulator for the `internal_error_chain` compliance layer.
 #[derive(Default)]
 pub(super) struct ComplianceLayer {
@@ -21,10 +22,12 @@ pub(super) struct ComplianceLayer {
 }
 
 impl ComplianceLayer {
+    #[instrument(level = "debug")]
     pub(super) fn new() -> Self {
         Self::default()
     }
 
+    #[instrument(level = "debug", skip(self, rule_id, ctx))]
     fn push(
         &mut self,
         rule_id: InternalErrorComplianceId,
@@ -46,6 +49,7 @@ impl ComplianceLayer {
         });
     }
 
+    #[instrument(level = "debug", skip(self, receiver, converter, ctx))]
     pub(super) fn on_map_err(
         &mut self,
         receiver: &Expr,
@@ -83,6 +87,7 @@ impl ComplianceLayer {
         }
     }
 
+    #[instrument(level = "debug", skip(self, payload, source_expr, ctx))]
     fn on_err_payload(
         &mut self,
         payload: &Expr,
@@ -123,12 +128,14 @@ impl ComplianceLayer {
         }
     }
 
+    #[instrument(level = "debug", skip(self, expr, ctx))]
     pub(super) fn on_return_err(&mut self, expr: &Expr, line: u32, ctx: &SiteCtx) {
         if let Some(payload) = compliance_err_payload(expr) {
             self.on_err_payload(payload, None, line, "return Err(…)", ctx);
         }
     }
 
+    #[instrument(level = "debug", skip(self, node, ctx))]
     pub(super) fn on_if_let_err(&mut self, node: &ExprIf, ctx: &SiteCtx) {
         let Some(source) = if_let_err_source(&node.cond) else {
             return;
@@ -145,6 +152,7 @@ impl ComplianceLayer {
         );
     }
 
+    #[instrument(level = "debug", skip(self, node, ctx))]
     pub(super) fn on_match_err(&mut self, node: &ExprMatch, ctx: &SiteCtx) {
         for arm in &node.arms {
             if pat_is_err(&arm.pat)
@@ -161,15 +169,18 @@ impl ComplianceLayer {
         }
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub(super) fn into_findings(self) -> Vec<InternalErrorComplianceFinding> {
         self.findings
     }
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn compliance_expr_snippet(expr: &Expr) -> String {
     truncate_snippet(&raw_expr_snippet(expr), 96)
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn if_let_err_source(expr: &Expr) -> Option<&Expr> {
     let Expr::Let(let_expr) = expr else {
         return None;
@@ -180,6 +191,7 @@ fn if_let_err_source(expr: &Expr) -> Option<&Expr> {
     Some(&let_expr.expr)
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn internal_leaf_constructor(expr: &Expr) -> Option<String> {
     match expr {
         Expr::Call(call) => constructor_from_call(call),
@@ -195,6 +207,7 @@ fn internal_leaf_constructor(expr: &Expr) -> Option<String> {
     }
 }
 
+#[instrument(level = "debug", skip(call))]
 fn constructor_from_call(call: &ExprCall) -> Option<String> {
     let path = match &*call.func {
         Expr::Path(path) => path,
@@ -214,6 +227,7 @@ fn constructor_from_call(call: &ExprCall) -> Option<String> {
     }
 }
 
+#[instrument(level = "trace", ret)]
 fn is_internal_leaf_constructor(label: &str) -> bool {
     // Constructors that drop or stringify the foreign error. `from` / `syn_parse`
     // / `json_parse` / `cargo_metadata` / `Io(...)` keep the typed source.
@@ -221,6 +235,7 @@ fn is_internal_leaf_constructor(label: &str) -> bool {
     matches!(last, "invariant")
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn compliance_map_err_stringifies(expr: &Expr) -> bool {
     match expr {
         Expr::Closure(closure) => compliance_expr_contains_to_string(&closure.body),
@@ -228,6 +243,7 @@ fn compliance_map_err_stringifies(expr: &Expr) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn compliance_expr_contains_to_string(expr: &Expr) -> bool {
     match expr {
         Expr::MethodCall(call) if call.method == "to_string" => {
@@ -272,6 +288,7 @@ fn compliance_expr_contains_to_string(expr: &Expr) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn foreign_binding_in_expr(expr: &Expr) -> Option<String> {
     match expr {
         Expr::Call(call) if call.args.iter().any(expr_uses_error_binding) => {
@@ -284,6 +301,7 @@ fn foreign_binding_in_expr(expr: &Expr) -> Option<String> {
     }
 }
 
+#[instrument(level = "debug", skip(stmt))]
 fn stmt_expr(stmt: &Stmt) -> Option<&Expr> {
     match stmt {
         Stmt::Expr(expr, _) => Some(expr),
@@ -291,6 +309,7 @@ fn stmt_expr(stmt: &Stmt) -> Option<&Expr> {
     }
 }
 
+#[instrument(level = "debug")]
 fn macro_interpolates_error_binding(tokens: &str) -> bool {
     let compact = tokens.replace(' ', "");
     compact.contains("{e}")
@@ -307,6 +326,7 @@ fn macro_interpolates_error_binding(tokens: &str) -> bool {
         || compact.contains("(error)")
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn expr_uses_error_binding(expr: &Expr) -> bool {
     match expr {
         Expr::Path(path) => path
@@ -328,6 +348,7 @@ fn expr_uses_error_binding(expr: &Expr) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(block))]
 fn block_err_payload(block: &syn::Block) -> Option<&Expr> {
     for stmt in &block.stmts {
         let Stmt::Expr(expr, _) = stmt else {
@@ -340,6 +361,7 @@ fn block_err_payload(block: &syn::Block) -> Option<&Expr> {
     None
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn compliance_err_payload(expr: &Expr) -> Option<&Expr> {
     match expr {
         Expr::Return(ret) => ret.expr.as_deref().and_then(compliance_err_payload),
@@ -351,6 +373,7 @@ fn compliance_err_payload(expr: &Expr) -> Option<&Expr> {
     }
 }
 
+#[instrument(level = "debug", skip(path))]
 fn path_is_err(path: &ExprPath) -> bool {
     path.path
         .segments

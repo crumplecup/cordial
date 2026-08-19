@@ -19,7 +19,7 @@ pub enum CfgScatterRuleId {
 }
 
 impl CfgScatterRuleId {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Scatter001 => "CFG-SCATTER-001",
@@ -63,7 +63,7 @@ pub enum CfgSiteKind {
 }
 
 impl CfgSiteKind {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Field => "field",
@@ -90,6 +90,7 @@ impl CfgSiteKind {
 }
 
 impl Display for CfgSiteKind {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}", self.as_str())
     }
@@ -121,6 +122,7 @@ pub struct CfgScatterGroup {
 }
 
 impl CfgScatterGroup {
+    #[instrument(level = "trace", skip(self))]
     fn non_field_occurrences(&self) -> impl Iterator<Item = &CfgSiteOccurrence> {
         self.occurrences.iter().filter(|o| !o.kind.is_field_like())
     }
@@ -136,7 +138,7 @@ impl CfgScatterGroup {
     }
 
     /// Fields-only gating (any count) never flags — see [`CfgSiteKind`] docs.
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "trace", skip(self, thresholds))]
     pub fn is_scatter(&self, thresholds: &CfgScatterThresholds) -> bool {
         let distinct = self.distinct_non_field_kinds();
         !distinct.is_empty()
@@ -151,21 +153,24 @@ pub struct CfgScatterRule {
 }
 
 impl CfgScatterRule {
-    #[instrument(level = "debug", ret)]
+    #[instrument(level = "debug", skip(rule_id), ret)]
     pub fn new(rule_id: CfgScatterRuleId) -> Self {
         Self { rule_id }
     }
 }
 
 impl Rule for CfgScatterRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "cfg_scatter"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Same #[cfg(...)] predicate scattered across multiple item kinds in one file; \
          extract into a #[cfg]-gated module instead"
@@ -178,18 +183,22 @@ pub struct CfgScatterMarker {
 }
 
 impl Marker for CfgScatterMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         "cfg-scatter-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         "cfg-scatter-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -209,18 +218,22 @@ pub struct CfgScatterFinding {
 }
 
 impl Finding for CfgScatterFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);
@@ -243,6 +256,7 @@ pub struct CfgScatterRecord {
 }
 
 impl From<&CfgScatterGroup> for CfgScatterRecord {
+    #[instrument(level = "debug", skip(group), ret)]
     fn from(group: &CfgScatterGroup) -> Self {
         let distinct_kinds: Vec<CfgSiteKind> =
             group.distinct_non_field_kinds().into_iter().collect();

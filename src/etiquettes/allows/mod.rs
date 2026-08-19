@@ -1,3 +1,17 @@
+//! Inventory of `#[allow]` / `#![allow]` attributes.
+//!
+//! **What.** Records every `#[allow(...)]` and inner `#![allow(...)]`
+//! (`ALLOW-ATTR-001`). It does not decide whether the lint is justified.
+//!
+//! **Why.** Allows hide compiler and Clippy signal. A regeneratable catalog
+//! makes each suppression reviewable, exceptionable, and comparable across
+//! crates instead of disappearing into the source.
+//!
+//! **How to use.** Run `cordial quality` (feature `allows`, part of
+//! `quality`). Artifacts: `{store}/findings/allows.checklist.md`,
+//! `allows-summary.md`, and CSV. Exceptions: `cordial exceptions show allows`.
+//! Register [`ALLOWS_ETIQUETTE`] on a [`crate::Session`].
+
 mod assessor;
 mod enricher;
 mod probe;

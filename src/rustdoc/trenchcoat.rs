@@ -55,6 +55,7 @@ pub fn collect_trenchcoat_pairs(inventory: &RustdocInventory) -> Vec<TrenchcoatP
     pairs
 }
 
+#[instrument(level = "debug")]
 fn from_foreign_path(trait_: &rustdoc_types::Path) -> Option<String> {
     let GenericArgs::AngleBracketed { args, .. } = trait_.args.as_deref()? else {
         return None;
@@ -65,6 +66,7 @@ fn from_foreign_path(trait_: &rustdoc_types::Path) -> Option<String> {
     Some(path.path.clone())
 }
 
+#[instrument(level = "trace", skip(path), ret)]
 fn is_wrapper_path(path: &str) -> bool {
     path.contains("Wrapper")
         || path.ends_with("Coat")

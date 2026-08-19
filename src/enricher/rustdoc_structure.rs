@@ -16,6 +16,7 @@ use crate::rustdoc::{
 };
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Materializes rustdoc JSON facts onto type/trait item nodes as attrs.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct RustdocStructureEnricher;
@@ -25,18 +26,22 @@ impl RustdocStructureEnricher {
 }
 
 impl IrEnricher for RustdocStructureEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         1
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn required_loader(&self) -> &str {
         crate::RustdocLoader::ID
     }
 
+    #[instrument(level = "trace", skip(self, ir, load, _session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,

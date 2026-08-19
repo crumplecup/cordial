@@ -7,6 +7,7 @@ use crate::session::SessionView;
 
 use super::types::{CfgScatterFinding, CfgScatterRule, CfgScatterRuleId};
 
+use tracing::instrument;
 /// Converts scattered-`cfg` group markers into open findings.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CfgScatterAssessor;
@@ -16,14 +17,17 @@ impl CfgScatterAssessor {
 }
 
 impl Assessor for CfgScatterAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["cfg-scatter-site"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn crate::objects::Marker],

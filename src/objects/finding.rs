@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use super::anchor::IrAnchor;
 use super::artifact::FindingSink;
 
+use tracing::instrument;
 /// Severity or resolution state of a finding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Disposition {
@@ -27,6 +28,7 @@ pub trait Finding: Send + Sync {
 }
 
 impl Display for Disposition {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Open => write!(f, "open"),

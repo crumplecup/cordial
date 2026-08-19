@@ -78,7 +78,7 @@ pub fn load_crate_ir_if_missing(
     Ok(())
 }
 
-#[instrument(level = "info", skip(session), err(level = "warn"))]
+#[instrument(level = "info", skip(session, target), err(level = "warn"))]
 pub fn load_rustdoc_view(
     session: &dyn SessionView,
     target: &CrateTarget,
@@ -101,7 +101,7 @@ pub fn load_rustdoc_view(
     Ok(Box::new(RustdocLoadView::from_inventory(inventory)))
 }
 
-#[instrument(level = "trace")]
+#[instrument(level = "debug")]
 pub fn shadow_dep_rustdoc_path(
     store_root: &Path,
     shadow_crate: &str,

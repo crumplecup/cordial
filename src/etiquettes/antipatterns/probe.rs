@@ -6,18 +6,22 @@ use crate::session::SessionView;
 
 use super::types::{AntipatternMarker, AntipatternRuleId};
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 struct AntipatternSitesQuery;
 
 impl Query for AntipatternSitesQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &[NodeKind::Expr]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
         node.attr("antipattern_rule_id").is_some()
     }
@@ -34,14 +38,17 @@ impl AntipatternSiteProbe {
 }
 
 impl Probe for AntipatternSiteProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &ANTIPATTERN_SITES_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, _session))]
     fn probe(
         &self,
         ir: &dyn IrView,

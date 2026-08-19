@@ -1,3 +1,22 @@
+//! Scattered `#[cfg]` predicates that belong on a `mod`.
+//!
+//! **What.** Flags a `#[cfg(...)]` predicate copied across multiple item
+//! kinds in one file (functions, impls, imports, …), or repeated many times
+//! on one kind. `#[cfg]` on a `mod` is the recommended shape and is never
+//! scanned. Field- and variant-only gating is never flagged
+//! ([`CfgSiteKind`]).
+//!
+//! **Why.** Copy-pasted feature lists on free-standing items are a “this
+//! logic is its own module” signal. Gating a field that holds a
+//! feature-gated type is often unavoidable and is not that signal.
+//!
+//! **How to use.** Run `cordial quality` (feature `cfg_scatter`). Thresholds
+//! live under `[cfg_scatter]` in `cordial.toml` (`min_distinct_kinds`,
+//! `min_occurrences`). Artifacts: `{store}/findings/cfg-scatter.checklist.md`
+//! and `cfg-scatter-summary.md`. Register [`CFG_SCATTER_ETIQUETTE`].
+//!
+//! Policy: `docs/planning/cfg-scatter-etiquette.md`.
+
 mod assessor;
 mod enricher;
 mod probe;

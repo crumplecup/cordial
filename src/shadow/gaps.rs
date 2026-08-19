@@ -25,7 +25,7 @@ enum ShadowCoverageKind {
     InfrastructureExtra,
 }
 
-#[instrument(level = "trace")]
+#[instrument(level = "trace", ret)]
 pub fn is_shadow_infrastructure_name(bare_name: &str) -> bool {
     INFRA_SUFFIXES
         .iter()
@@ -33,7 +33,7 @@ pub fn is_shadow_infrastructure_name(bare_name: &str) -> bool {
 }
 
 /// Build the consolidated shadow gaps list from multiple per-pair reports.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(pairs))]
 pub fn build_shadow_gaps(pairs: &[(&str, &str, &ShadowReport)]) -> Vec<ShadowGapEntry> {
     let mut entries = Vec::new();
 
@@ -100,6 +100,7 @@ struct ShadowRowAssessment {
     action: String,
 }
 
+#[instrument(level = "debug", skip(row))]
 fn assess_shadow_row(row: &ShadowRow) -> ShadowRowAssessment {
     let coverage_kind = classify_shadow_coverage_kind(row);
     let primary_gap_kind = primary_gap_for_coverage(&coverage_kind);
@@ -119,6 +120,7 @@ fn assess_shadow_row(row: &ShadowRow) -> ShadowRowAssessment {
     }
 }
 
+#[instrument(level = "debug", skip(row))]
 fn classify_shadow_coverage_kind(row: &ShadowRow) -> ShadowCoverageKind {
     match row.status {
         ShadowStatus::Covered => ShadowCoverageKind::Covered,
@@ -135,6 +137,7 @@ fn classify_shadow_coverage_kind(row: &ShadowRow) -> ShadowCoverageKind {
     }
 }
 
+#[instrument(level = "debug", skip(coverage_kind))]
 fn primary_gap_for_coverage(coverage_kind: &ShadowCoverageKind) -> Option<ShadowGapKind> {
     match coverage_kind {
         ShadowCoverageKind::Covered => None,
@@ -145,6 +148,7 @@ fn primary_gap_for_coverage(coverage_kind: &ShadowCoverageKind) -> Option<Shadow
     }
 }
 
+#[instrument(level = "debug", skip(row, coverage_kind))]
 fn shadow_coverage_action(row: &ShadowRow, coverage_kind: &ShadowCoverageKind) -> String {
     match coverage_kind {
         ShadowCoverageKind::Covered => String::new(),
@@ -176,6 +180,7 @@ fn shadow_coverage_action(row: &ShadowRow, coverage_kind: &ShadowCoverageKind) -
     }
 }
 
+#[instrument(level = "debug", skip(kind))]
 fn shadow_gap_order(kind: &ShadowGapKind) -> u8 {
     match kind {
         ShadowGapKind::Missing => 0,
@@ -186,6 +191,7 @@ fn shadow_gap_order(kind: &ShadowGapKind) -> u8 {
     }
 }
 
+#[instrument(level = "debug", skip(row))]
 fn build_shadow_verification_action(row: &ShadowRow) -> String {
     let missing_our = row.shadow_missing_our_traits.as_str();
     let missing_external = row.shadow_missing_external_traits.as_str();
@@ -225,7 +231,7 @@ pub struct ShadowRowRender {
     pub action: String,
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(row))]
 pub fn render_shadow_row(row: &ShadowRow) -> ShadowRowRender {
     let assessment = assess_shadow_row(row);
     let coverage_kind = match classify_shadow_coverage_kind(row) {

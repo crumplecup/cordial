@@ -2,6 +2,7 @@
 
 use syn::{Attribute, Item, UseTree, Visibility};
 
+use tracing::instrument;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum VisKind {
     Private,
@@ -11,6 +12,7 @@ pub(super) enum VisKind {
 }
 
 impl VisKind {
+    #[instrument(level = "debug", skip(self))]
     pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::Private => "private",
@@ -20,11 +22,13 @@ impl VisKind {
         }
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     pub(super) fn is_unrestricted_pub(self) -> bool {
         matches!(self, Self::Pub)
     }
 }
 
+#[instrument(level = "debug", skip(vis))]
 pub(super) fn vis_kind(vis: &Visibility) -> VisKind {
     match vis {
         Visibility::Public(_) => VisKind::Pub,
@@ -41,6 +45,7 @@ pub(super) fn vis_kind(vis: &Visibility) -> VisKind {
     }
 }
 
+#[instrument(level = "debug", skip(item))]
 pub(super) fn item_vis(item: &Item) -> Option<VisKind> {
     let vis = match item {
         Item::Const(item) => &item.vis,
@@ -61,6 +66,7 @@ pub(super) fn item_vis(item: &Item) -> Option<VisKind> {
     Some(vis_kind(vis))
 }
 
+#[instrument(level = "debug", skip(item))]
 pub(super) fn leaf_name_count(item: &Item) -> usize {
     match item {
         Item::Use(item) => use_name_count(&item.tree),
@@ -77,6 +83,7 @@ pub(super) fn leaf_name_count(item: &Item) -> usize {
     }
 }
 
+#[instrument(level = "debug", skip(tree))]
 fn use_name_count(tree: &UseTree) -> usize {
     match tree {
         UseTree::Name(_) | UseTree::Rename(_) => 1,
@@ -86,6 +93,7 @@ fn use_name_count(tree: &UseTree) -> usize {
     }
 }
 
+#[instrument(level = "trace", skip(attrs), ret)]
 pub(super) fn is_cfg_test(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {
         let syn::Meta::List(list) = &attr.meta else {
@@ -95,6 +103,7 @@ pub(super) fn is_cfg_test(attrs: &[Attribute]) -> bool {
     })
 }
 
+#[instrument(level = "trace", skip(attrs))]
 pub(super) fn is_doc_hidden(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {
         if !attr.path().is_ident("doc") {

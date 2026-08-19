@@ -7,6 +7,7 @@ use crate::session::SessionView;
 
 use super::types::{ErrorChainFinding, ErrorChainProbeId, ErrorChainRule};
 
+use tracing::instrument;
 /// Converts error-chain markers into open findings (positive patterns).
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ErrorChainAssessor;
@@ -16,14 +17,17 @@ impl ErrorChainAssessor {
 }
 
 impl Assessor for ErrorChainAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["error-chain"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],

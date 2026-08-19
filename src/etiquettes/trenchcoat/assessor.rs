@@ -6,6 +6,7 @@ use crate::session::SessionView;
 
 use super::types::{TrenchcoatRule, UnwrappedFinding};
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrenchcoatAssessor;
 
@@ -14,14 +15,17 @@ impl TrenchcoatAssessor {
 }
 
 impl Assessor for TrenchcoatAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["unwrapped-foreign"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, _session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],

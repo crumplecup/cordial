@@ -4,6 +4,7 @@ use crate::ir::IrView;
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
 use crate::session::SessionView;
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone)]
 struct VisibilityRow {
     crate_name: String,
@@ -18,6 +19,7 @@ struct VisibilityRow {
 }
 
 impl VisibilityRow {
+    #[instrument(level = "debug", skip(finding), ret)]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -42,6 +44,7 @@ impl VisibilityRow {
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 fn visibility_rows(findings: &[&dyn Finding]) -> Vec<VisibilityRow> {
     findings
         .iter()
@@ -50,10 +53,12 @@ fn visibility_rows(findings: &[&dyn Finding]) -> Vec<VisibilityRow> {
         .collect()
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn open_rows(rows: &[VisibilityRow]) -> impl Iterator<Item = &VisibilityRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn crate_names(rows: &[&VisibilityRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();
@@ -168,10 +173,12 @@ impl VisibilitySummaryReporter {
 }
 
 impl Reporter for VisibilitySummaryReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
     fn render(
         &self,
         findings: &[&dyn Finding],

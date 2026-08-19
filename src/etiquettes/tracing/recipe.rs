@@ -24,6 +24,7 @@ pub(super) const DEFAULT_SKIP_PARAMS: &[&str] = &[
     "manifest",
     "msg",
     "options",
+    "other",
     "path",
     "report",
     "self",
@@ -53,6 +54,7 @@ pub fn recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     }
 }
 
+#[instrument(level = "debug", skip(ctx))]
 fn constructor_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     InstrumentRecipe {
         level: InstrumentLevel::Debug,
@@ -63,6 +65,7 @@ fn constructor_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecip
     }
 }
 
+#[instrument(level = "debug", skip(ctx))]
 fn getter_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     InstrumentRecipe {
         level: InstrumentLevel::Trace,
@@ -73,6 +76,7 @@ fn getter_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     }
 }
 
+#[instrument(level = "debug", skip(ctx))]
 fn setter_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     InstrumentRecipe {
         level: InstrumentLevel::Trace,
@@ -83,6 +87,7 @@ fn setter_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     }
 }
 
+#[instrument(level = "debug", skip(ctx))]
 fn predicate_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     InstrumentRecipe {
         level: InstrumentLevel::Trace,
@@ -93,6 +98,7 @@ fn predicate_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe 
     }
 }
 
+#[instrument(level = "debug", skip(ctx))]
 fn scan_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     InstrumentRecipe {
         level: InstrumentLevel::Debug,
@@ -103,6 +109,7 @@ fn scan_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     }
 }
 
+#[instrument(level = "debug", skip(ctx))]
 fn io_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     InstrumentRecipe {
         level: InstrumentLevel::Info,
@@ -113,6 +120,7 @@ fn io_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     }
 }
 
+#[instrument(level = "debug", skip(ctx))]
 fn render_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     InstrumentRecipe {
         level: InstrumentLevel::Debug,
@@ -123,6 +131,7 @@ fn render_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     }
 }
 
+#[instrument(level = "debug", skip(ctx))]
 fn trait_surface_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     InstrumentRecipe {
         level: InstrumentLevel::Trace,
@@ -133,6 +142,7 @@ fn trait_surface_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRec
     }
 }
 
+#[instrument(level = "debug", skip(ctx))]
 fn entry_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     InstrumentRecipe {
         level: InstrumentLevel::Info,
@@ -143,6 +153,7 @@ fn entry_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     }
 }
 
+#[instrument(level = "debug", skip(ctx))]
 fn other_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     let level = if ctx.complexity == FunctionComplexity::Hotspot {
         InstrumentLevel::Info
@@ -158,6 +169,7 @@ fn other_recipe(ctx: &FnContext, extra_skip: &[String]) -> InstrumentRecipe {
     }
 }
 
+#[instrument(level = "debug", skip(ctx))]
 fn skip_params(ctx: &FnContext, extra_skip: &[String]) -> Vec<String> {
     ctx.param_names
         .iter()
@@ -166,6 +178,7 @@ fn skip_params(ctx: &FnContext, extra_skip: &[String]) -> Vec<String> {
         .collect()
 }
 
+#[instrument(level = "debug", skip(ctx))]
 fn identity_fields(ctx: &FnContext, extra_skip: &[String]) -> Vec<String> {
     ctx.param_names
         .iter()
@@ -177,14 +190,16 @@ fn identity_fields(ctx: &FnContext, extra_skip: &[String]) -> Vec<String> {
         .collect()
 }
 
+#[instrument(level = "trace", ret)]
 fn is_skip_param(name: &str, extra_skip: &[String], unrecordable: &[String]) -> bool {
     DEFAULT_SKIP_PARAMS.contains(&name)
         || extra_skip.iter().any(|skip| skip == name)
         || unrecordable.iter().any(|skip| skip == name)
 }
 
+#[instrument(level = "debug", skip(ctx))]
 fn fallible_err(ctx: &FnContext) -> Option<InstrumentLevel> {
-    if ctx.returns_result {
+    if ctx.returns_result && !ctx.return_borrowed {
         Some(InstrumentLevel::Warn)
     } else {
         None

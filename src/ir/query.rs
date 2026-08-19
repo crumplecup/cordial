@@ -88,14 +88,17 @@ pub struct BasicQuery {
 }
 
 impl Query for BasicQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &self.node_kinds
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[EdgeKind] {
         &self.edge_kinds
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn NodeView) -> bool {
         match (&self.attr_key, &self.attr_value) {
             (Some(key), Some(expected)) => node

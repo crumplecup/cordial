@@ -8,6 +8,7 @@ use crate::session::SessionView;
 
 use super::scan::scan_crate_allows;
 
+use tracing::instrument;
 /// Materializes allow-attribute expression nodes in the IR graph.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AllowInventoryEnricher;
@@ -17,10 +18,12 @@ impl AllowInventoryEnricher {
 }
 
 impl IrEnricher for AllowInventoryEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, ir, load, session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,

@@ -6,19 +6,23 @@ use crate::session::SessionView;
 
 use super::types::{ErrorSiteKind, ErrorSiteMarker};
 
+use tracing::instrument;
 /// Matches error-site expression nodes in the IR.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ErrorSitesQuery;
 
 impl Query for ErrorSitesQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &[NodeKind::Expr]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
         node.attr("error_site_kind").is_some()
     }
@@ -35,14 +39,17 @@ impl ErrorSiteProbe {
 }
 
 impl Probe for ErrorSiteProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &ERROR_SITES_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, _session))]
     fn probe(
         &self,
         ir: &dyn IrView,

@@ -22,10 +22,12 @@ impl RustdocLoader {
 }
 
 impl Loader for RustdocLoader {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, session, target))]
     fn load(
         &self,
         session: &dyn SessionView,
@@ -55,21 +57,24 @@ impl RustdocLoadView {
 }
 
 impl crate::loader::LoadView for RustdocLoadView {
+    #[instrument(level = "trace", skip(self))]
     fn loader_id(&self) -> &str {
         RustdocLoader::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn crate_name(&self) -> &str {
         &self.inventory.crate_name
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 }
 
 impl RustdocLoadView {
-    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[instrument(level = "debug", skip(self, ir), err(level = "warn"))]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
         let root = ir.root;
         ir.set_attr(
@@ -143,6 +148,7 @@ pub fn resolve_rustdoc_json(
         })
 }
 
+#[instrument(level = "debug")]
 fn store_rustdoc_candidate(store_root: Option<&Path>, crate_name: &str) -> Option<PathBuf> {
     let store_root = store_root?;
     let path = store_root

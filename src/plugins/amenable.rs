@@ -11,6 +11,7 @@ use crate::plugin::{
 use crate::session::{RunFilter, SessionView};
 use crate::targets::discover_crate_targets;
 
+use tracing::instrument;
 static AMENABLE_ETIQUETTES: [&'static dyn Etiquette; 1] = [&AMENABLE_STD_ETIQUETTE];
 
 /// Registry-backed std coverage has no single composite trait requirement.
@@ -18,10 +19,12 @@ static AMENABLE_ETIQUETTES: [&'static dyn Etiquette; 1] = [&AMENABLE_STD_ETIQUET
 pub struct RegistryRequirement;
 
 impl TraitRequirement for RegistryRequirement {
+    #[instrument(level = "trace", skip(self))]
     fn composite_trait(&self) -> Option<&str> {
         None
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn supertraits(&self) -> &[&str] {
         &[]
     }
@@ -34,6 +37,7 @@ static REGISTRY_REQUIREMENT: RegistryRequirement = RegistryRequirement;
 pub struct AmenableStdTargetProvider;
 
 impl TargetProvider for AmenableStdTargetProvider {
+    #[instrument(level = "trace", skip(self, session, filter))]
     fn coverage_targets(
         &self,
         session: &dyn SessionView,
@@ -61,28 +65,34 @@ static AMENABLE_STD_TARGETS: AmenableStdTargetProvider = AmenableStdTargetProvid
 pub struct AmenableStdCoverage;
 
 impl Plugin for AmenableStdCoverage {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "amenable-std-coverage"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn name(&self) -> &str {
         "Amenable std coverage"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn etiquettes(&self) -> &[&'static dyn Etiquette] {
         &AMENABLE_ETIQUETTES
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> PluginCategory {
         PluginCategory::Coverage
     }
 }
 
 impl Coverage for AmenableStdCoverage {
+    #[instrument(level = "trace", skip(self))]
     fn target_provider(&self) -> &dyn TargetProvider {
         &AMENABLE_STD_TARGETS
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn trait_requirement(&self) -> &dyn TraitRequirement {
         &REGISTRY_REQUIREMENT
     }

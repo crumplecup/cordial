@@ -1,22 +1,19 @@
 //! Compare a classified recipe to the attribute (and events) already present.
 
 use super::present::PresentInstrument;
-use super::types::{FunctionComplexity, FunctionRole, InstrumentRecipe, TracingRuleKind};
+use super::types::{FunctionRole, InstrumentRecipe, TracingRuleKind};
 
+use tracing::instrument;
 /// Inputs the delta rules read besides the recipe itself.
 #[derive(Debug, Clone)]
 pub struct DeltaContext<'a> {
     pub role: FunctionRole,
-    #[allow(dead_code)] // kept for later strategy reads
-    pub complexity: FunctionComplexity,
-    #[allow(dead_code)] // was used for error-site join; recipe.err is the silent-path gate
-    pub qualified_path: &'a str,
     pub param_names: &'a [String],
     pub has_error_path_event: bool,
 }
 
 /// Recipe-vs-present findings for an already-instrumented function.
-#[tracing::instrument(level = "debug", skip(recipe, present, ctx))]
+#[instrument(level = "debug", skip(recipe, present, ctx))]
 pub fn recipe_deltas(
     recipe: &InstrumentRecipe,
     present: &PresentInstrument,
@@ -43,6 +40,7 @@ pub fn recipe_deltas(
     kinds
 }
 
+#[instrument(level = "debug", skip(recipe, present))]
 fn skip_missing(
     recipe: &InstrumentRecipe,
     present: &PresentInstrument,
@@ -56,6 +54,7 @@ fn skip_missing(
     })
 }
 
+#[instrument(level = "debug", skip(recipe, present))]
 fn fields_missing(recipe: &InstrumentRecipe, present: &PresentInstrument) -> bool {
     recipe
         .fields
@@ -63,6 +62,7 @@ fn fields_missing(recipe: &InstrumentRecipe, present: &PresentInstrument) -> boo
         .any(|name| !present.fields.iter().any(|got| got == name))
 }
 
+#[instrument(level = "debug", skip(recipe, present, ctx))]
 fn error_path_silent(
     recipe: &InstrumentRecipe,
     present: &PresentInstrument,

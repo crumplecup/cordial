@@ -6,6 +6,7 @@ use super::BranchingCache;
 use super::tree::{ModuleNode, collect_files, external_name_count, public_path_mods};
 use crate::etiquettes::visibility::types::VisibilityThresholds;
 
+use tracing::instrument;
 /// How the scanner applies [`VisibilityThresholds::min_module_names`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum VisibilityEval {
@@ -19,6 +20,7 @@ pub(super) enum VisibilityEval {
 }
 
 impl VisibilityEval {
+    #[instrument(level = "debug", skip(self, thresholds))]
     pub(super) fn thin_floor(self, thresholds: VisibilityThresholds) -> usize {
         match self {
             Self::Normal => thresholds.min_module_names,
@@ -27,6 +29,7 @@ impl VisibilityEval {
     }
 }
 
+#[instrument(level = "debug", skip(root, thresholds, cached))]
 pub(super) fn resolve_eval(
     root: &ModuleNode,
     thresholds: VisibilityThresholds,
@@ -51,6 +54,7 @@ pub(super) fn resolve_eval(
 /// flattened root until remaining names sit under `max_crate_names_for_flat`.
 /// Modules that already meet `min_module_names` stay put and do not move the
 /// floor. The thin floor follows each peeled module's size (10 → 9 → 7 → 6).
+#[instrument(level = "debug", skip(root, thresholds))]
 fn peel_branching_floor(root: &ModuleNode, thresholds: VisibilityThresholds) -> usize {
     let mut floor = thresholds.min_module_names;
     let mods = public_path_mods(root);
@@ -108,10 +112,12 @@ fn peel_branching_floor(root: &ModuleNode, thresholds: VisibilityThresholds) -> 
     floor
 }
 
+#[instrument(level = "trace", skip(path), ret)]
 fn is_path_under(path: &str, parent: &str) -> bool {
     path == parent || path.starts_with(&format!("{parent}::"))
 }
 
+#[instrument(level = "debug", skip(root))]
 fn tree_digest(root: &ModuleNode) -> String {
     let mut files = Vec::new();
     collect_files(root, &mut files);

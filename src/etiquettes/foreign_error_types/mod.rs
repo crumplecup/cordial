@@ -1,3 +1,21 @@
+//! Foreign error types that appear on this crate’s `Result` surface.
+//!
+//! **What.** From partitioned error sites, lists foreign `E` types (and
+//! confidence) that leak into this crate instead of being wrapped in an
+//! internal error. Checklist focuses on chain breaks; a second checklist
+//! covers other / edge partition candidates.
+//!
+//! **Why.** A public `Result<_, io::Error>` (or `syn::Error`, …) couples
+//! callers to an upstream type we do not control. Naming those types is the
+//! input to attenuation: wrap, map, or accept as infrastructure.
+//!
+//! **How to use.** Run `cordial quality` (feature `foreign_error_types`).
+//! Artifacts: `{store}/findings/foreign-error-types.checklist.md`,
+//! `foreign-errors.checklist.md`, `foreign-error-types-summary.md`. Register
+//! [`FOREIGN_ERROR_TYPES_ETIQUETTE`].
+//!
+//! Policy: `docs/planning/error-handling-as-plugin.md`.
+
 mod assessor;
 mod foreign_types;
 mod probe;

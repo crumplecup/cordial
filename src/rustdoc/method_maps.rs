@@ -11,6 +11,7 @@ use crate::error::CordialResult;
 use super::RustdocInventory;
 use super::public_extract::{collect_public_same_crate_reexport_aliases, item_is_public};
 
+#[instrument(level = "trace", ret)]
 fn is_user_facing_method(name: &str) -> bool {
     !name.starts_with("__")
         && name != "assert_receiver_is_total_eq"
@@ -18,7 +19,7 @@ fn is_user_facing_method(name: &str) -> bool {
 }
 
 /// Collect public method names keyed by canonical type path from a rustdoc crate.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(krate))]
 pub fn collect_type_methods_from_krate(krate: &Crate) -> HashMap<String, BTreeSet<String>> {
     let mut methods: HashMap<String, BTreeSet<String>> = HashMap::new();
 
@@ -80,7 +81,7 @@ pub fn collect_type_methods(json_path: &Path) -> CordialResult<HashMap<String, B
 }
 
 /// Build `trait_path → implementing type bare names` from rustdoc JSON.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(krate))]
 pub fn collect_trait_impl_map_from_krate(krate: &Crate) -> HashMap<String, BTreeSet<String>> {
     let own_crate = krate
         .index
@@ -152,7 +153,7 @@ pub fn collect_trait_impl_map(
 }
 
 /// Look up the method set for a type path, with bare-name suffix fallback.
-#[instrument(level = "trace")]
+#[instrument(level = "debug", skip(methods))]
 pub fn methods_for_type_path(
     item_path: &str,
     methods: &HashMap<String, BTreeSet<String>>,

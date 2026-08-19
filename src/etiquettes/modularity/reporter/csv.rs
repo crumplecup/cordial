@@ -10,6 +10,7 @@ use super::rows::{
     sort_by_lines_desc,
 };
 
+use tracing::instrument;
 /// Writes `modularity.csv`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ModularityCsvReporter;
@@ -19,10 +20,12 @@ impl ModularityCsvReporter {
 }
 
 impl Reporter for ModularityCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, _ir, session))]
     fn render(
         &self,
         findings: &[&dyn Finding],
@@ -63,6 +66,7 @@ impl Reporter for ModularityCsvReporter {
     }
 }
 
+#[instrument(level = "debug", skip(all_rows))]
 fn branches_csv_artifact(all_rows: &[ModularityRow]) -> Box<dyn Artifact> {
     let open: Vec<&ModularityRow> = open_rows(all_rows).collect();
     let mut body =

@@ -6,6 +6,7 @@ use crate::session::SessionView;
 
 use super::types::{PanicKind, PanicMarker};
 
+use tracing::instrument;
 static PANIC_SITES_QUERY: PanicSitesQuery = PanicSitesQuery;
 
 /// Emits markers for panic-site expression nodes in the IR.
@@ -17,14 +18,17 @@ impl PanicSiteProbe {
 }
 
 impl Probe for PanicSiteProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &PANIC_SITES_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, _session))]
     fn probe(
         &self,
         ir: &dyn IrView,

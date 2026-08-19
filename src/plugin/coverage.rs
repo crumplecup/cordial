@@ -1,7 +1,6 @@
 //! Coverage plugin semantics — shared supertrait for trait-impl coverage profiles.
 
 use crate::error::CordialResult;
-use tracing::instrument;
 #[cfg(feature = "impl_coverage")]
 use crate::etiquettes::impl_coverage::ImplGapKind;
 use crate::loader::CrateTarget;
@@ -9,6 +8,7 @@ use crate::plugin::{Plugin, PluginCategory};
 use crate::rustdoc::{ELICIT_COMPLETE_SUPERTRAITS, ELICIT_COMPLETE_TRAIT, TraitPrereqs};
 use crate::session::{RunFilter, SessionView};
 use crate::targets::discover_crate_targets;
+use tracing::instrument;
 
 /// Which library a coverage target represents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,10 +90,12 @@ pub trait TraitRequirement: Send + Sync {
 pub struct ElicitCompleteRequirement;
 
 impl TraitRequirement for ElicitCompleteRequirement {
+    #[instrument(level = "trace", skip(self))]
     fn composite_trait(&self) -> Option<&str> {
         Some(ELICIT_COMPLETE_TRAIT)
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn supertraits(&self) -> &[&str] {
         ELICIT_COMPLETE_SUPERTRAITS
     }
@@ -128,6 +130,7 @@ pub trait TargetProvider: Send + Sync {
 pub struct WorkspaceMembersTargetProvider;
 
 impl TargetProvider for WorkspaceMembersTargetProvider {
+    #[instrument(level = "trace", skip(self, session, filter))]
     fn coverage_targets(
         &self,
         session: &dyn SessionView,
@@ -163,7 +166,7 @@ pub trait Coverage: Plugin {
     }
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(prereqs))]
 #[cfg(feature = "impl_coverage")]
 pub fn classify_elicit_complete_gap(prereqs: &TraitPrereqs) -> Option<ImplGapKind> {
     if prereqs.elicit_complete {

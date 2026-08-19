@@ -30,7 +30,7 @@ pub fn build_wrapper_coverage_from_hub_ir(
 }
 
 /// `(foreign_path, wrapper_path)` pairs from materialized `wraps_foreign` attrs.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(ir))]
 pub fn collect_trenchcoat_pairs_from_ir(ir: &CrateIr) -> Vec<(String, String)> {
     static ALL_NODES: BasicQuery = BasicQuery {
         node_kinds: Vec::new(),
@@ -60,6 +60,7 @@ pub fn collect_trenchcoat_pairs_from_ir(ir: &CrateIr) -> Vec<(String, String)> {
     pairs
 }
 
+#[instrument(level = "debug", skip(ir))]
 fn elicit_complete_set_from_ir(ir: &CrateIr) -> ElicitCompleteSet {
     static ALL_NODES: BasicQuery = BasicQuery {
         node_kinds: Vec::new(),
@@ -94,6 +95,7 @@ fn elicit_complete_set_from_ir(ir: &CrateIr) -> ElicitCompleteSet {
     ElicitCompleteSet { concrete, factory }
 }
 
+#[instrument(level = "debug", skip(ir))]
 fn trait_prereqs_map_from_ir(ir: &CrateIr) -> HashMap<String, TraitPrereqs> {
     static ALL_NODES: BasicQuery = BasicQuery {
         node_kinds: Vec::new(),
@@ -115,7 +117,7 @@ fn trait_prereqs_map_from_ir(ir: &CrateIr) -> HashMap<String, TraitPrereqs> {
 }
 
 /// Compare IR-built map with inventory oracle for parity tests.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(left, right))]
 pub fn wrapper_maps_equivalent(left: &WrapperCoverageMap, right: &WrapperCoverageMap) -> bool {
     if left.len() != right.len() {
         return false;

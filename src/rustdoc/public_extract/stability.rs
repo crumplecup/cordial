@@ -30,7 +30,7 @@ type ReexportingUseMap = HashMap<rustdoc_types::Id, Vec<rustdoc_types::Id>>;
 /// "is the target of a `Use` item" as just another edge to climb, at every
 /// step, so any number of interleaved containment and re-export hops
 /// resolves the same way.
-#[instrument(skip(krate, item), fields(id = id.0))]
+#[instrument(level = "debug", skip(krate, id, item))]
 pub(super) fn rustdoc_item_is_unstable(
     krate: &rustdoc_types::Crate,
     id: &rustdoc_types::Id,
@@ -51,7 +51,7 @@ pub(super) fn rustdoc_item_is_unstable(
 /// of which is itself subject to the same two edge types). Depth-capped and
 /// deduplicated against a cycle in malformed rustdoc JSON or an unexpected
 /// re-export loop.
-#[instrument(skip(krate, ancestry, reexports))]
+#[instrument(level = "debug", skip(krate, ancestry, reexports, start))]
 fn walk_stability_ancestors(
     krate: &rustdoc_types::Crate,
     ancestry: &ModuleAncestryMap,
@@ -125,7 +125,7 @@ fn walk_stability_ancestors(
 /// this only runs for items whose own `attrs` already showed no stability
 /// marker (a minority), so recomputing here costs nothing that matters next
 /// to the rustdoc build this whole pipeline already pays for.
-#[instrument(skip(krate))]
+#[instrument(level = "debug", skip(krate))]
 fn module_ancestry(krate: &rustdoc_types::Crate) -> ModuleAncestryMap {
     let mut ancestry = HashMap::new();
     let mut module_count = 0usize;
@@ -154,7 +154,7 @@ fn module_ancestry(krate: &rustdoc_types::Crate) -> ModuleAncestryMap {
 /// same reasoning (see that function's doc comment), and this only runs as
 /// a fallback for the minority of items whose direct containment ancestry
 /// already came up empty.
-#[instrument(skip(krate))]
+#[instrument(level = "debug", skip(krate))]
 fn reexporting_use_ids(krate: &rustdoc_types::Crate) -> ReexportingUseMap {
     let mut reexports: ReexportingUseMap = HashMap::new();
     let mut use_item_count = 0usize;

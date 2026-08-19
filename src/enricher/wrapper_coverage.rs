@@ -5,6 +5,7 @@ use crate::loader::LoadView;
 use crate::rustdoc::lookup_wrapper_coverage;
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Attaches wrapper coverage attrs on type nodes from the elicitation hub map.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct WrapperCoverageEnricher;
@@ -16,18 +17,22 @@ impl WrapperCoverageEnricher {
 }
 
 impl IrEnricher for WrapperCoverageEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         6
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn required_loader(&self) -> &str {
         crate::RustdocLoader::ID
     }
 
+    #[instrument(level = "trace", skip(self, ir, _load, _session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,

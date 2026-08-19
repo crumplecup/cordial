@@ -20,7 +20,7 @@ pub enum AntipatternRuleId {
 }
 
 impl AntipatternRuleId {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::BoxDynError001 => "ANTIPATTERN-BOX-DYN-ERROR-001",
@@ -47,6 +47,7 @@ impl AntipatternRuleId {
 }
 
 impl Display for AntipatternRuleId {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}", self.as_str())
     }
@@ -58,21 +59,24 @@ pub struct AntipatternRule {
 }
 
 impl AntipatternRule {
-    #[instrument(level = "debug", ret)]
+    #[instrument(level = "debug", skip(rule_id), ret)]
     pub fn new(rule_id: AntipatternRuleId) -> Self {
         Self { rule_id }
     }
 }
 
 impl Rule for AntipatternRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "antipatterns"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         match self.rule_id {
             AntipatternRuleId::BoxDynError001 => {
@@ -103,18 +107,22 @@ pub struct AntipatternMarker {
 }
 
 impl Marker for AntipatternMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         "antipattern-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         "antipattern-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -132,18 +140,22 @@ pub struct AntipatternFinding {
 }
 
 impl Finding for AntipatternFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);
@@ -177,7 +189,7 @@ pub struct AntipatternRuleCounts {
 }
 
 impl AntipatternRuleCounts {
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "debug", skip(self, rule_id))]
     pub fn accumulate(&mut self, rule_id: AntipatternRuleId) {
         match rule_id {
             AntipatternRuleId::BoxDynError001 => self.box_dyn_error += 1,

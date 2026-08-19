@@ -9,18 +9,19 @@ use tracing::instrument;
 pub struct NodeId(pub u32);
 
 impl NodeId {
-    #[instrument(level = "debug", ret)]
+    #[instrument(level = "debug", skip(index), ret)]
     pub(crate) fn from_index(index: NodeIndex) -> Self {
         Self(index.index() as u32)
     }
 
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub(crate) fn to_index(self) -> NodeIndex {
         NodeIndex::new(self.0 as usize)
     }
 }
 
 impl Display for NodeId {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "node:{}", self.0)
     }
@@ -93,18 +94,18 @@ impl NodeWeight {
         self
     }
 
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "trace", skip(self, span))]
     pub fn with_span(mut self, span: crate::objects::FileSpan) -> Self {
         self.span = Some(span);
         self
     }
 
-    #[instrument(level = "trace", skip(self, key))]
+    #[instrument(level = "trace", skip(self, value))]
     pub fn set_attr(&mut self, key: &str, value: serde_json::Value) {
         self.attrs.push((key.to_string(), value));
     }
 
-    #[instrument(level = "trace", skip(self, key))]
+    #[instrument(level = "trace", skip(self))]
     pub fn attr(&self, key: &str) -> Option<&serde_json::Value> {
         self.attrs
             .iter()

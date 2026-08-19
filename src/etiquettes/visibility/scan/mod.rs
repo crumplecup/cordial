@@ -46,7 +46,7 @@ impl BranchingCache {
 
 /// Walk the crate's root module tree (`src/lib.rs` or `src/main.rs`) and
 /// apply `thresholds`. The scanner never picks thresholds itself.
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(thresholds), err(level = "warn"))]
 pub fn scan_crate_visibility(
     crate_root: &Path,
     thresholds: VisibilityThresholds,
@@ -58,7 +58,7 @@ pub fn scan_crate_visibility(
 /// crate-file digest still matches. On mismatch (or first run) this peels,
 /// writes a new cache payload, then applies the lowered floor — a two-pass
 /// analysis so undersized peeled modules do not fire `VIS-MOD-THIN-001`.
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(thresholds, cached), err(level = "warn"))]
 pub fn scan_crate_visibility_with_cache(
     crate_root: &Path,
     thresholds: VisibilityThresholds,
@@ -79,6 +79,7 @@ pub fn scan_crate_visibility_with_cache(
     Ok((collect_findings(&root, thresholds, eval), new_cache))
 }
 
+#[instrument(level = "debug")]
 fn crate_root_file(crate_root: &Path) -> Option<PathBuf> {
     let src_lib = crate_root.join("src").join("lib.rs");
     if src_lib.is_file() {

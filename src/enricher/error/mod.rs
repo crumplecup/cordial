@@ -46,7 +46,7 @@ pub static ERROR_IR_ENRICHERS: &[&'static dyn IrEnricher] = &[
 ];
 
 /// Enricher ids in the shared stack for the given policy layers and enabled features.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(layers))]
 pub fn error_ir_enricher_ids(layers: ErrorHandlingLayers) -> Vec<&'static str> {
     let mut ids = vec![ScopeEnricher::ID];
     if layers.sites || layers.chain || layers.internal {

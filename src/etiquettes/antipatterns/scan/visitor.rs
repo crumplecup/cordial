@@ -18,6 +18,7 @@ use super::preds::{
 };
 use crate::etiquettes::antipatterns::types::{AntipatternRuleId, AntipatternSiteRecord};
 
+use tracing::instrument;
 pub(super) struct AntipatternScanVisitor {
     pub(super) file: PathBuf,
     pub(super) crate_root: PathBuf,
@@ -29,6 +30,7 @@ pub(super) struct AntipatternScanVisitor {
 }
 
 impl AntipatternScanVisitor {
+    #[instrument(level = "debug", skip(self))]
     fn site_context(&self) -> String {
         let mut parts = self.module_prefix.clone();
         if let Some(ty) = &self.impl_type {
@@ -42,6 +44,7 @@ impl AntipatternScanVisitor {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn rel_file(&self) -> PathBuf {
         self.file
             .strip_prefix(&self.crate_root)
@@ -49,6 +52,7 @@ impl AntipatternScanVisitor {
             .unwrap_or_else(|_| self.file.clone())
     }
 
+    #[instrument(level = "debug", skip(self, ty))]
     fn check_box_dyn_error_type(&mut self, ty: &Type) {
         let Some(trait_obj) = box_dyn_error_trait_object(ty) else {
             return;
@@ -62,6 +66,7 @@ impl AntipatternScanVisitor {
         });
     }
 
+    #[instrument(level = "debug", skip(self, ty))]
     fn check_string_error_type(&mut self, ty: &Type) {
         let Some(error_ty) = result_error_type(ty) else {
             return;
@@ -78,6 +83,7 @@ impl AntipatternScanVisitor {
         });
     }
 
+    #[instrument(level = "debug", skip(self, ty))]
     fn check_adt_field(&mut self, owner: &str, field_name: &str, ty: &Type) {
         if !type_contains_static_lifetime_ref(ty) {
             return;
@@ -91,6 +97,7 @@ impl AntipatternScanVisitor {
         });
     }
 
+    #[instrument(level = "debug", skip(self, variant))]
     fn check_enum_variant(&mut self, enum_name: &str, variant: &syn::Variant) {
         let owner = format!("{enum_name}::{}", variant.ident);
         match &variant.fields {
@@ -100,6 +107,7 @@ impl AntipatternScanVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self))]
     fn adt_field_context(&self, owner: &str, field_name: &str) -> String {
         let mut parts = self.module_prefix.clone();
         parts.push(owner.to_string());
@@ -107,6 +115,7 @@ impl AntipatternScanVisitor {
         parts.join("::")
     }
 
+    #[instrument(level = "debug", skip(self, fields))]
     fn check_named_fields(&mut self, owner: &str, fields: &syn::FieldsNamed) {
         for field in &fields.named {
             let name = field
@@ -118,12 +127,14 @@ impl AntipatternScanVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, fields))]
     fn check_unnamed_fields(&mut self, owner: &str, fields: &syn::FieldsUnnamed) {
         for (index, field) in fields.unnamed.iter().enumerate() {
             self.check_adt_field(owner, &format!("_{index}"), &field.ty);
         }
     }
 
+    #[instrument(level = "debug", skip(self, sig))]
     fn check_fn_sig(&mut self, sig: &Signature) {
         if self.in_trait_definition {
             return;
@@ -144,6 +155,7 @@ impl AntipatternScanVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, items))]
     fn visit_module_items(&mut self, items: &[syn::Item], module_prefix: &[String]) {
         let prev_prefix = self.module_prefix.clone();
         self.module_prefix = module_prefix.to_vec();
@@ -153,6 +165,7 @@ impl AntipatternScanVisitor {
         self.module_prefix = prev_prefix;
     }
 
+    #[instrument(level = "debug", skip(self, item_mod))]
     fn visit_mod(&mut self, item_mod: &ItemMod) {
         if is_cfg_test(&item_mod.attrs) {
             return;
@@ -167,10 +180,12 @@ impl AntipatternScanVisitor {
 }
 
 impl<'ast> Visit<'ast> for AntipatternScanVisitor {
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         self.visit_mod(node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_struct(&mut self, node: &'ast ItemStruct) {
         let owner = node.ident.to_string();
         match &node.fields {
@@ -181,6 +196,7 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor {
         syn::visit::visit_item_struct(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_enum(&mut self, node: &'ast ItemEnum) {
         let enum_name = node.ident.to_string();
         for variant in &node.variants {
@@ -189,6 +205,7 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor {
         syn::visit::visit_item_enum(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         self.fn_stack.push(node.sig.ident.to_string());
         self.check_fn_sig(&node.sig);
@@ -196,6 +213,7 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor {
         self.fn_stack.pop();
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_trait(&mut self, node: &'ast ItemTrait) {
         let prev = self.in_trait_definition;
         self.in_trait_definition = true;
@@ -208,12 +226,14 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor {
         self.in_trait_definition = prev;
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_type(&mut self, node: &'ast ItemType) {
         self.fn_stack.push(node.ident.to_string());
         syn::visit::visit_item_type(self, node);
         self.fn_stack.pop();
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
         let prev = self.impl_type.clone();
         self.impl_type = Some(type_label(&node.self_ty));
@@ -221,6 +241,7 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor {
         self.impl_type = prev;
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
         self.fn_stack.push(node.sig.ident.to_string());
         self.check_fn_sig(&node.sig);
@@ -228,8 +249,10 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor {
         self.fn_stack.pop();
     }
 
+    #[instrument(level = "debug", skip(self, _node))]
     fn visit_expr_closure(&mut self, _node: &'ast syn::ExprClosure) {}
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_type(&mut self, node: &'ast Type) {
         self.check_box_dyn_error_type(node);
         self.check_string_error_type(node);

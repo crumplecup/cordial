@@ -16,6 +16,7 @@ pub enum FrameworkTraitStatus {
 }
 
 impl std::fmt::Display for FrameworkTraitStatus {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Complete => write!(f, "Complete"),
@@ -99,7 +100,7 @@ pub struct FrameworkGapEntry {
 pub type SkipMap = std::collections::HashMap<String, String>;
 
 /// Classify one std inventory row for framework trait coverage.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(impl_paths, skip_map))]
 pub fn classify_framework_std_row(
     type_path: &str,
     impl_paths: &HashSet<String>,
@@ -116,7 +117,7 @@ pub fn classify_framework_std_row(
 }
 
 /// Build a framework trait coverage report from std inventory and impl-crate trait paths.
-#[instrument(level = "debug", skip(items))]
+#[instrument(level = "debug", skip(items, impl_paths, skip_map))]
 pub fn build_framework_trait_report(
     source_crate: &str,
     items: &[StdInventoryItem],
@@ -196,6 +197,7 @@ pub fn framework_std_type_items(
     })
 }
 
+#[instrument(level = "trace", skip(item), ret)]
 fn is_rustdoc_primitive(item: &StdInventoryItem) -> bool {
     item.kind == InventoryItemKind::Other
         && item.path.split("::").count() == 2
@@ -203,7 +205,7 @@ fn is_rustdoc_primitive(item: &StdInventoryItem) -> bool {
 }
 
 /// Merge concrete type items from multiple std-family inventories, deduped by path.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(inventories))]
 pub fn merge_std_inventory_items(inventories: &[Vec<StdInventoryItem>]) -> Vec<StdInventoryItem> {
     let mut items = Vec::new();
     let mut seen = HashSet::new();

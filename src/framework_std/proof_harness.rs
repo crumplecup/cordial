@@ -26,6 +26,7 @@ pub fn collect_proof_chain_subjects(project_root: &Path) -> CordialResult<HashSe
     Ok(subjects)
 }
 
+#[instrument(level = "debug", skip(path), err(level = "warn"))]
 fn collect_proof_chain_subjects_from_file(path: &Path) -> CordialResult<HashSet<String>> {
     let source = std::fs::read_to_string(path)?;
     let mut subjects = HashSet::new();
@@ -41,6 +42,7 @@ fn collect_proof_chain_subjects_from_file(path: &Path) -> CordialResult<HashSet<
     Ok(subjects)
 }
 
+#[instrument(level = "debug")]
 fn extract_string_arg(line: &str, fn_name: &str) -> Option<String> {
     let prefix = format!("{fn_name}(\"");
     let start = line.find(&prefix)? + prefix.len();

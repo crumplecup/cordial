@@ -1,3 +1,19 @@
+//! Trait-impl coverage against elicitation requirements.
+//!
+//! **What.** From rustdoc JSON, finds types that should implement
+//! `ElicitComplete` (and prerequisite traits) and classifies gaps
+//! ([`ImplGapKind`]): missing our traits, ready for `ElicitComplete`,
+//! feature-gated external, or externally blocked.
+//!
+//! **Why.** Elicitation coverage is a completeness inventory, not a source
+//! lint. Types that wrap foreign values or sit on a tracked target need the
+//! trait stack before they are “done.”
+//!
+//! **How to use.** `cordial build rustdoc`, then `cordial coverage` (feature
+//! `impl_coverage` / `elicitation`). Artifacts:
+//! `{store}/findings/impl-coverage.checklist.md` plus coverage/gaps CSVs.
+//! Register [`IMPL_COVERAGE_ETIQUETTE`].
+
 mod assessor;
 mod gap_classify;
 mod node_context;

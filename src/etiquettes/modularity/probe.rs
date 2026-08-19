@@ -6,19 +6,23 @@ use crate::session::SessionView;
 
 use super::types::{ModularityKind, ModularityMarker};
 
+use tracing::instrument;
 /// Matches modularity-site expression nodes in the IR.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ModularitySitesQuery;
 
 impl Query for ModularitySitesQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &[NodeKind::Expr]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
         node.attr("modularity_kind").is_some()
     }
@@ -35,14 +39,17 @@ impl ModularitySiteProbe {
 }
 
 impl Probe for ModularitySiteProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &MODULARITY_SITES_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, _session))]
     fn probe(
         &self,
         ir: &dyn IrView,

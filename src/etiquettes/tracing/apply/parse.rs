@@ -42,7 +42,7 @@ pub fn parse_tracing_instrument_checklist_text(body: &str) -> Vec<InstrumentGap>
     gaps
 }
 
-#[instrument(skip(line))]
+#[instrument(level = "debug")]
 fn parse_crate_heading(line: &str) -> Option<String> {
     let trimmed = line.trim();
     let rest = trimmed.strip_prefix("## `")?;
@@ -50,7 +50,7 @@ fn parse_crate_heading(line: &str) -> Option<String> {
     Some(crate_name.to_string())
 }
 
-#[instrument(skip(line))]
+#[instrument(level = "debug")]
 fn parse_gap_line(line: &str) -> Option<(String, String, u32)> {
     let trimmed = line.trim();
     if !trimmed.starts_with("- [ ] `") {

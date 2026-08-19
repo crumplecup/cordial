@@ -28,7 +28,7 @@ pub fn std_items_from_extracted(items: &[ExtractedItem]) -> Vec<StdInventoryItem
 }
 
 /// Load one std-family inventory from the shared sysroot cache.
-#[instrument(level = "info", fields(crate_name = crate_name), err(level = "warn"))]
+#[instrument(level = "info", skip(sysroot), fields(crate_name = crate_name), err(level = "warn"))]
 pub fn load_std_inventory_from_sysroot(
     sysroot: &SysrootCache,
     crate_name: &str,
@@ -56,7 +56,7 @@ pub fn load_std_inventory_from_json(
 }
 
 /// Load merged std/core/alloc inventories from the sysroot cache.
-#[instrument(level = "info", err(level = "warn"))]
+#[instrument(level = "info", skip(sysroot), err(level = "warn"))]
 pub fn load_merged_std_inventory(sysroot: &SysrootCache) -> CordialResult<Vec<StdInventoryItem>> {
     let mut inventories = Vec::new();
     for source in FRAMEWORK_STD_SOURCES {

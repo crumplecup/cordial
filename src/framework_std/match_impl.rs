@@ -41,6 +41,7 @@ pub fn collect_trait_impl_paths(inventory: &RustdocInventory, trait_name: &str) 
     paths
 }
 
+#[instrument(level = "debug", skip(krate, ty))]
 fn impl_type_path(krate: &Crate, ty: &Type) -> Option<String> {
     match ty {
         Type::ResolvedPath(path) => {
@@ -68,7 +69,7 @@ pub fn type_path_without_generics(type_str: &str) -> String {
 }
 
 /// Whether `type_path` from a std inventory row has a matching trait impl path.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(impl_paths))]
 pub fn type_has_trait_impl(impl_paths: &HashSet<String>, type_path: &str) -> bool {
     if impl_paths.contains(type_path) {
         return true;
@@ -91,6 +92,7 @@ pub fn type_has_trait_impl(impl_paths: &HashSet<String>, type_path: &str) -> boo
     })
 }
 
+#[instrument(level = "debug")]
 fn compound_primitive_shape(text: &str) -> Option<&'static str> {
     let text = text.trim();
     if text == "()" {
@@ -125,6 +127,7 @@ fn compound_primitive_shape(text: &str) -> Option<&'static str> {
     None
 }
 
+#[instrument(level = "debug", skip(path))]
 fn path_without_crate_root(path: &str) -> &str {
     path.split_once("::").map_or(path, |(_root, rest)| rest)
 }

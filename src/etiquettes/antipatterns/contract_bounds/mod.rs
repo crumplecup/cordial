@@ -85,7 +85,7 @@ pub use registry::fetch_contract_records;
 /// throwaway probes, not reusable bounds worth a named contract type,
 /// so the whole subtree is pruned from this rule's walk rather than
 /// flagged and then hand-excepted site by site.
-#[instrument(skip(entry))]
+#[instrument(level = "trace", skip(entry), ret)]
 fn is_gallery_dir(entry: &walkdir::DirEntry) -> bool {
     entry.file_type().is_dir() && entry.file_name() == "gallery"
 }
@@ -93,7 +93,7 @@ fn is_gallery_dir(entry: &walkdir::DirEntry) -> bool {
 /// Scan one crate's `src/**/*.rs` tree for the backend it's written for.
 /// Returns no findings for any other crate — this rule only applies to
 /// the three verifier crates.
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(registry), err(level = "warn"))]
 pub fn scan_crate_contract_bounds(
     crate_root: &Path,
     crate_name: &str,
@@ -149,14 +149,14 @@ pub fn scan_crate_contract_bounds(
     Ok(findings)
 }
 
-#[instrument(skip(module_prefix))]
+#[instrument(level = "debug")]
 pub(super) fn site_context(module_prefix: &[String], leaf: &str) -> String {
     let mut parts = module_prefix.to_vec();
     parts.push(leaf.to_string());
     parts.join("::")
 }
 
-#[instrument(skip(normalized))]
+#[instrument(level = "debug", skip(file))]
 pub(super) fn make_finding(
     _crate_name: &str,
     context: String,
@@ -175,7 +175,7 @@ pub(super) fn make_finding(
 
 /// Scan one Creusot source string (used by tests, mirroring
 /// `scan_antipatterns_rust_source`'s shape for the other three rules).
-#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, file, registry), err(level = "warn"))]
 pub fn scan_creusot_contract_bounds_source(
     source: &str,
     file: &Path,
@@ -193,7 +193,7 @@ pub fn scan_creusot_contract_bounds_source(
 }
 
 /// Scan one Verus source string (used by tests).
-#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, file, registry), err(level = "warn"))]
 pub fn scan_verus_contract_bounds_source(
     source: &str,
     file: &Path,
@@ -211,7 +211,7 @@ pub fn scan_verus_contract_bounds_source(
 }
 
 /// Scan one Kani source string (used by tests).
-#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, file, registry), err(level = "warn"))]
 pub fn scan_kani_contract_bounds_source(
     source: &str,
     file: &Path,
@@ -235,7 +235,7 @@ pub fn scan_kani_contract_bounds_source(
 /// `syn::visit::Visit`. Extracts and parses the trailing brace-delimited
 /// group (`{ item }`) as a real `ItemFn`, so it can be fed back into the
 /// same visitor logic that already handles top-level functions.
-#[instrument(skip(node))]
+#[instrument(level = "debug", skip(node))]
 pub(super) fn harness_macro_item_fn(node: &ItemMacro) -> Option<ItemFn> {
     if node
         .mac

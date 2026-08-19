@@ -93,6 +93,7 @@ struct FileScanVisitor<'a> {
 }
 
 impl FileScanVisitor<'_> {
+    #[instrument(level = "debug", skip(self))]
     fn qualify(&self, local: &str) -> String {
         if self.module_prefix.is_empty() {
             local.to_string()
@@ -101,6 +102,7 @@ impl FileScanVisitor<'_> {
         }
     }
 
+    #[instrument(level = "debug", skip(self, sig, attrs, visibility, span, kind, body))]
     fn record_fn(
         &mut self,
         sig: &syn::Signature,
@@ -130,6 +132,7 @@ impl FileScanVisitor<'_> {
         });
     }
 
+    #[instrument(level = "debug", skip(self, items))]
     fn visit_module_items(&mut self, items: &[Item], module_prefix: &[String]) {
         let prev = self.module_prefix.clone();
         self.module_prefix = module_prefix.to_vec();
@@ -139,6 +142,7 @@ impl FileScanVisitor<'_> {
         self.module_prefix = prev;
     }
 
+    #[instrument(level = "debug", skip(self, item))]
     fn visit_item(&mut self, item: &Item) {
         match item {
             Item::Fn(item_fn) => {
@@ -158,6 +162,7 @@ impl FileScanVisitor<'_> {
         }
     }
 
+    #[instrument(level = "debug", skip(self, item_mod))]
     fn visit_mod(&mut self, item_mod: &ItemMod) {
         if crate::enricher::is_cfg_test(&item_mod.attrs) {
             return;
@@ -170,6 +175,7 @@ impl FileScanVisitor<'_> {
         self.visit_module_items(items, &nested);
     }
 
+    #[instrument(level = "debug", skip(self, item_impl))]
     fn visit_impl(&mut self, item_impl: &ItemImpl) {
         let self_ty = type_label(&item_impl.self_ty);
         let trait_name = item_impl
@@ -204,6 +210,7 @@ impl FileScanVisitor<'_> {
 }
 
 impl<'ast> Visit<'ast> for FileScanVisitor<'_> {
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         self.record_fn(
             &node.sig,
@@ -216,15 +223,18 @@ impl<'ast> Visit<'ast> for FileScanVisitor<'_> {
         );
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         self.visit_mod(node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
         self.visit_impl(node);
     }
 }
 
+#[instrument(level = "trace", skip(attrs), ret)]
 fn is_instrumented(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {
         let path = attr.path();
@@ -235,6 +245,7 @@ fn is_instrumented(attrs: &[Attribute]) -> bool {
     })
 }
 
+#[instrument(level = "debug", skip(vis))]
 fn visibility_label(vis: &Visibility) -> VisibilityLabel {
     match vis {
         Visibility::Public(_) => VisibilityLabel::Public,
@@ -251,6 +262,7 @@ fn visibility_label(vis: &Visibility) -> VisibilityLabel {
     }
 }
 
+#[instrument(level = "debug", skip(ty))]
 fn type_label(ty: &Type) -> String {
     match ty {
         Type::Path(type_path) => syn_path_label(&type_path.path),
@@ -261,6 +273,7 @@ fn type_label(ty: &Type) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(path))]
 fn syn_path_label(path: &syn::Path) -> String {
     path.segments
         .last()

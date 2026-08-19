@@ -55,6 +55,7 @@ pub struct SessionBuilder {
 }
 
 impl std::fmt::Debug for SessionBuilder {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SessionBuilder")
             .field("project_root", &self.project_root)
@@ -130,20 +131,24 @@ pub struct RuntimeSession {
 }
 
 impl SessionView for RuntimeSession {
+    #[instrument(level = "trace", skip(self))]
     fn project_root(&self) -> &Path {
         &self.project_root
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn store_root(&self) -> &Path {
         &self.store_root
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn store_home(&self) -> &Path {
         &self.store_home
     }
 }
 
 impl Session for RuntimeSession {
+    #[instrument(level = "trace", skip(self, etiquette))]
     fn register(&mut self, etiquette: &'static dyn Etiquette) {
         let id = etiquette.id();
         if !self.etiquettes.iter().any(|existing| existing.id() == id) {
@@ -151,6 +156,7 @@ impl Session for RuntimeSession {
         }
     }
 
+    #[instrument(level = "trace", skip(self, plugin))]
     fn register_plugin(&mut self, plugin: &'static dyn Plugin) {
         let id = plugin.id();
         if !self.plugins.iter().any(|existing| existing.id() == id) {
@@ -158,6 +164,7 @@ impl Session for RuntimeSession {
         }
     }
 
+    #[instrument(level = "trace", skip(self, filter))]
     fn run(&self, filter: &dyn RunFilter) -> CordialResult<Box<dyn RunOutcome>> {
         run::run_session(self, filter)
     }
@@ -168,14 +175,17 @@ impl Session for RuntimeSession {
 pub struct RunAll;
 
 impl RunFilter for RunAll {
+    #[instrument(level = "trace", skip(self))]
     fn plugins(&self) -> Option<&[&str]> {
         None
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn etiquettes(&self) -> Option<&[&str]> {
         None
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn crates(&self) -> Option<&[&str]> {
         None
     }

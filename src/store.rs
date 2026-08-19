@@ -190,6 +190,7 @@ impl SysrootCache {
 }
 
 impl Default for SysrootCache {
+    #[instrument(level = "debug", ret)]
     fn default() -> Self {
         Self::default_cache()
     }
@@ -203,7 +204,7 @@ pub fn default_store_home() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".cordial"))
 }
 
-#[instrument(level = "trace")]
+#[instrument(level = "debug")]
 pub fn project_slug_from_path(project_root: &Path) -> String {
     project_root
         .file_name()

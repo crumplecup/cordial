@@ -390,8 +390,12 @@ pub fn scan_tree() {}
         !updated.contains("/// A documented helper.\nuse tracing::instrument;"),
         "use must not land between docs and the item:\n{updated}"
     );
-    let use_idx = updated.find("use tracing::instrument;").expect("use");
-    let doc_idx = updated.find("/// A documented helper.").expect("doc");
+    let use_idx = updated
+        .find("use tracing::instrument;")
+        .ok_or_else(|| miette::miette!("expected `use tracing::instrument;` in:\n{updated}"))?;
+    let doc_idx = updated
+        .find("/// A documented helper.")
+        .ok_or_else(|| miette::miette!("expected doc comment in:\n{updated}"))?;
     assert!(use_idx < doc_idx, "{updated}");
     Ok(())
 }
@@ -526,8 +530,12 @@ pub fn load_config() -> Result<(), Boom> {
         !updated.contains("#[derive(Debug)]\nuse tracing::instrument;"),
         "use must not land between derive and the item:\n{updated}"
     );
-    let use_idx = updated.find("use tracing::instrument;").expect("use");
-    let derive_idx = updated.find("#[derive(Debug)]").expect("derive");
+    let use_idx = updated
+        .find("use tracing::instrument;")
+        .ok_or_else(|| miette::miette!("expected `use tracing::instrument;` in:\n{updated}"))?;
+    let derive_idx = updated
+        .find("#[derive(Debug)]")
+        .ok_or_else(|| miette::miette!("expected `#[derive(Debug)]` in:\n{updated}"))?;
     assert!(use_idx < derive_idx, "{updated}");
     Ok(())
 }
@@ -561,7 +569,7 @@ impl Artifact {
         .into_diagnostic()
         .wrap_err("read updated source")?;
     assert!(
-        updated.contains("#[instrument(level = \"debug\", skip(crate_name), ret)]"),
+        updated.contains("#[instrument(level = \"debug\", skip(crate_name))]"),
         "{updated}"
     );
     assert!(

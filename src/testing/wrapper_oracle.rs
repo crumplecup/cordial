@@ -17,7 +17,7 @@ use crate::rustdoc_loader::resolve_rustdoc_json;
 use crate::session::RunFilter;
 
 /// Cache path for the serialized wrapper coverage map.
-#[instrument(level = "trace")]
+#[instrument(level = "debug")]
 pub fn wrapper_coverage_cache_path(store_root: &Path) -> PathBuf {
     store_root.join("cache/wrapper-coverage.json")
 }

@@ -1,3 +1,23 @@
+//! Public module paths must earn their existence.
+//!
+//! **What.** Three rules ([`VisibilityRuleId`]): a small crate stays flat
+//! (`VIS-CRATE-FLAT-001`); a visible module needs enough leaf names
+//! (`VIS-MOD-THIN-001`); a child’s visibility must not exceed its parent
+//! (`VIS-MOD-MISMATCH-001`). Pub *fields* stay in `derives`.
+//!
+//! **Why.** `pub mod` is a promise of a public path. A thin module or a
+//! `pub` child of a private parent splits crate-internal navigation without
+//! buying a real API. Companion to `modularity` (mass) and `cfg_scatter`
+//! (gates).
+//!
+//! **How to use.** Run `cordial quality` (feature `visibility`). Thresholds
+//! live under `[visibility]` in `cordial.toml`. When flattening would overflow
+//! the crate-name cap, `prefer_root` (default true) keeps a fat root.
+//! Artifacts: `{store}/findings/visibility.checklist.md` and
+//! `visibility-summary.md`. Register [`VISIBILITY_ETIQUETTE`].
+//!
+//! Policy: `docs/planning/visibility-etiquette.md`.
+
 mod assessor;
 mod enricher;
 mod probe;

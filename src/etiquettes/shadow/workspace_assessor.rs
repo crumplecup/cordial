@@ -22,10 +22,12 @@ impl CrossCrateShadowWorkspaceAssessor {
 }
 
 impl WorkspaceAssessor for CrossCrateShadowWorkspaceAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, workspace, session, filter))]
     fn assess(
         &self,
         workspace: &WorkspaceIr,
@@ -53,7 +55,7 @@ impl WorkspaceAssessor for CrossCrateShadowWorkspaceAssessor {
     }
 }
 
-#[instrument(level = "debug", skip(report), err(level = "warn"))]
+#[instrument(level = "debug", skip(report, anchor), err(level = "warn"))]
 pub fn findings_from_shadow_pair_report(
     report: &crate::shadow::ShadowReport,
     upstream: &str,

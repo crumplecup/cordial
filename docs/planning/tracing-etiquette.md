@@ -1,9 +1,10 @@
 # Tracing etiquette
 
 Upgrade the tracing etiquette from a missing-`#[instrument]` census to a
-**classified recommendation**: every visible function gets a use-class, a
+**classified recommendation**: every function gets a use-class, a
 complexity, and a target recipe. Apply writes that recipe. Volume is a
-subscriber `level` problem, not a reason to skip spans.
+subscriber `level` problem, not a reason to skip spans. Visibility is not
+a filter.
 
 Companion to [derives](elicit-doc-parity.md) (manual getter/setter/`new` —
 different question) and [error-handling-as-plugin.md](error-handling-as-plugin.md)
@@ -168,17 +169,16 @@ Findings are **recipe deltas**, not a second census of every function.
 
 | Rule | When |
 | --- | --- |
-| `TRACING-MISSING-INSTRUMENT` | Visible fn (`pub` / `pub(crate)`), no `#[instrument]`. Carry the recipe so apply knows what to write. |
+| `TRACING-MISSING-INSTRUMENT` | Function with no `#[instrument]`. Carry the recipe so apply knows what to write. |
 | `TRACING-LEVEL-MISMATCH` | Span present, recorded `level` (default **info**) is higher-volume than the recipe (e.g. getter at info). |
 | `TRACING-SKIP-MISSING` | Recipe `skip` names are live params and absent from `skip(...)`. |
 | `TRACING-ERR-MISSING` | Recipe wants `err` (fallible / `Result`) and the attribute has neither `err` nor `err(level = ...)`. |
 | `TRACING-ERROR-PATH-SILENT` | Recipe wants `err`, the attr has no `err`, and the body has no `warn!`/`error!`. Not fired for `Option` lookups or non-Result error-site joins. |
 | `TRACING-FIELDS-MISSING` | Recipe `fields` empty on an `Entry`/`Constructor` that has a clear identity param. |
 
-Private / `pub(super)` stay out of the checklist (same as today).
-`TraitSurface` is in because inherited vis on trait impls is currently
-dropped — classify those impls explicitly so `Rule::id` can still be
-spanned at `trace` without flooding INFO.
+Private, `pub(super)`, `pub(crate)`, and `pub` are all on the checklist.
+`TraitSurface` is in so inherited vis on trait impls still gets a `trace`
+span without flooding INFO.
 
 Documented exceptions keep working (JSON patches). Exceptions are for
 policy, not for “this getter would be noisy.”
@@ -229,15 +229,14 @@ input to the recipe, not the only knob.
 
 ```toml
 [tracing]
-# Checklist vis: pub + pub(crate) (today). pub(super) stays off.
-include_pub_super = false
 # Default skip param names (union with built-in list).
 # extra_skip = ["inventory"]
 ```
 
 Role→level maps stay in code for v1 (the enum is the policy). Promote to
-TOML only if dogfood needs a project override. Do not add a “ignore
-getters” flag; that is the hatchet this upgrade removes.
+TOML only if dogfood needs a project override. Do not add a visibility
+filter or an “ignore getters” flag; those are the hatchets this upgrade
+removes. Filter at the subscriber (`RUST_LOG=info` vs `trace`).
 
 ---
 
@@ -247,6 +246,7 @@ getters” flag; that is the hatchet this upgrade removes.
 src/etiquettes/tracing/
   types.rs          FunctionRole, FunctionComplexity, InstrumentRecipe, rules
   classify.rs       classify(sig, name, kind, body peek) -> (role, complexity)
+  recordable.rs     which params/returns tracing can record without extra bounds
   recipe.rs         recipe(role, ctx) match + per-variant fns
   scan.rs           keep inventory; stop discarding sig/attrs; record role
   enricher.rs       IR attrs: role, complexity, instrumented, instrument_meta
@@ -282,9 +282,9 @@ than weakening fixture recall.
 ## Status
 
 **Phase 4 complete.** Classify + recipe on every finding; delta rules vs present
-`#[instrument]`; apply writes the recipe. `[tracing]` knobs
-(`include_pub_super`, `extra_skip`) load through `cordial.toml`. The quality
-report blurb is open gaps **by role**.
+`#[instrument]`; apply writes the recipe. `[tracing]` knobs (`extra_skip`) load
+through `cordial.toml`. The quality report blurb is open gaps **by role**.
 
-Self-scan of this repo: **610** open tracing gaps (constructor 34, getter 103,
-setter 14, predicate 15, scan 84, io 32, render 15, entry 2, other 311).
+Every function is on the checklist. Visibility is recorded on the finding;
+it does not suppress a gap. Role recipes pick `trace` / `debug` / `info` so
+subscribers control volume.

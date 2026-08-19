@@ -8,6 +8,7 @@ use crate::session::SessionView;
 
 use super::scan_crate::scan_crate_antipatterns;
 
+use tracing::instrument;
 /// Materializes antipattern-site expression nodes in the IR graph.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AntipatternInventoryEnricher;
@@ -17,10 +18,12 @@ impl AntipatternInventoryEnricher {
 }
 
 impl IrEnricher for AntipatternInventoryEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, ir, load, session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,

@@ -16,7 +16,7 @@ use crate::loader::module_path_from_src_file;
 use super::index::{ContractIndex, is_trivial, normalize_tokens, split_top_level_commas};
 use super::{harness_macro_item_fn, make_finding, site_context};
 
-#[instrument(skip(source, index), fields(file = %file.display()))]
+#[instrument(level = "debug", skip(source, file, index), err(level = "warn"))]
 pub(super) fn scan_kani_source(
     source: &str,
     file: &Path,
@@ -56,7 +56,7 @@ struct KaniVisitor<'a> {
 }
 
 impl KaniVisitor<'_> {
-    #[instrument(skip(attrs))]
+    #[instrument(level = "trace", skip(attrs), ret)]
     fn is_kani_proof(attrs: &[Attribute]) -> bool {
         attrs.iter().any(|attr| {
             attr.path()
@@ -70,7 +70,7 @@ impl KaniVisitor<'_> {
     /// Common tail for every Kani clause, whichever shape it was
     /// captured from: normalize, skip trivial/registered clauses, else
     /// record a finding.
-    #[instrument(skip(self, clause))]
+    #[instrument(level = "debug", skip(self, clause))]
     fn check_clause(&mut self, kind: &str, clause: TokenStream, line: u32) {
         let normalized = normalize_tokens(clause.clone());
         if is_trivial(&normalized) || self.index.matches_named_call("kani", kind, clause) {
@@ -90,7 +90,7 @@ impl KaniVisitor<'_> {
     /// `assert_eq!` synthesizes the clause `A == B` from its two
     /// comparands: a direct transcription of what's on the page, not a
     /// guess.
-    #[instrument(skip(self, node))]
+    #[instrument(level = "debug", skip(self, node))]
     fn check_macro_call(&mut self, node: &syn::Macro) {
         if !self.in_kani_proof {
             return;
@@ -139,7 +139,7 @@ impl KaniVisitor<'_> {
     /// `assert!`/`assert_eq!`, this is a plain function call (`assume`
     /// has no `!`), never a macro invocation, so it needs its own
     /// `syn::ExprCall` visitor rather than living in [`Self::check_macro_call`].
-    #[instrument(skip(self, node))]
+    #[instrument(level = "debug", skip(self, node))]
     fn check_assume_call(&mut self, node: &syn::ExprCall) {
         if !self.in_kani_proof {
             return;
@@ -165,7 +165,7 @@ impl KaniVisitor<'_> {
 }
 
 impl<'ast> Visit<'ast> for KaniVisitor<'_> {
-    #[instrument(skip(self, node))]
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         if self.error.is_some() {
             return;
@@ -178,7 +178,7 @@ impl<'ast> Visit<'ast> for KaniVisitor<'_> {
         self.in_kani_proof = prev;
     }
 
-    #[instrument(skip(self, node))]
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_macro(&mut self, node: &'ast syn::Macro) {
         if self.error.is_some() {
             return;
@@ -187,7 +187,7 @@ impl<'ast> Visit<'ast> for KaniVisitor<'_> {
         syn::visit::visit_macro(self, node);
     }
 
-    #[instrument(skip(self, node))]
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_call(&mut self, node: &'ast syn::ExprCall) {
         if self.error.is_some() {
             return;
@@ -196,7 +196,7 @@ impl<'ast> Visit<'ast> for KaniVisitor<'_> {
         syn::visit::visit_expr_call(self, node);
     }
 
-    #[instrument(skip(self, node))]
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_macro(&mut self, node: &'ast ItemMacro) {
         if self.error.is_some() {
             return;

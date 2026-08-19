@@ -26,14 +26,17 @@ impl ShadowLinkEnricher {
 }
 
 impl IrEnricher for ShadowLinkEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         5
     }
 
+    #[instrument(level = "trace", skip(self, ir, _load, session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,
@@ -107,6 +110,7 @@ pub fn discover_same_crate_shadow_pairs(ir: &dyn IrView) -> Vec<ShadowMapEntry> 
     entries
 }
 
+#[instrument(level = "debug")]
 fn shadow_path_for(target_path: &str) -> Option<String> {
     let (prefix, name) = target_path.rsplit_once("::")?;
     if name.ends_with("Shadow") {

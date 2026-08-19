@@ -9,6 +9,7 @@ use crate::error::CordialResult;
 
 use super::vis::{VisKind, is_cfg_test, is_doc_hidden, item_vis, leaf_name_count, vis_kind};
 
+use tracing::instrument;
 pub(super) struct ModuleNode {
     pub(super) path: String,
     pub(super) file: PathBuf,
@@ -32,6 +33,7 @@ pub(super) struct ScanHeader<'a> {
     line: u32,
 }
 
+#[instrument(level = "debug", skip(file, path, declared_vis), err(level = "warn"))]
 pub(super) fn scan_module_file(
     file: &Path,
     path: String,
@@ -57,6 +59,7 @@ pub(super) fn scan_module_file(
     )
 }
 
+#[instrument(level = "debug", skip(items, header), err(level = "warn"))]
 fn scan_items(items: &[Item], header: ScanHeader<'_>) -> CordialResult<ModuleNode> {
     let ScanHeader {
         file,
@@ -130,6 +133,11 @@ fn scan_items(items: &[Item], header: ScanHeader<'_>) -> CordialResult<ModuleNod
     })
 }
 
+#[instrument(
+    level = "debug",
+    skip(item_mod, path, declared_vis),
+    err(level = "warn")
+)]
 fn scan_child_mod(
     item_mod: &ItemMod,
     parent_file: &Path,
@@ -178,6 +186,7 @@ fn scan_child_mod(
     )
 }
 
+#[instrument(level = "debug", skip(item_mod))]
 fn resolve_mod_file(parent_file: &Path, ident: &str, item_mod: &ItemMod) -> Option<PathBuf> {
     if let Some(path_val) = path_attr(&item_mod.attrs) {
         let resolved = parent_file.parent()?.join(path_val);
@@ -198,6 +207,7 @@ fn resolve_mod_file(parent_file: &Path, ident: &str, item_mod: &ItemMod) -> Opti
     nested.is_file().then_some(nested)
 }
 
+#[instrument(level = "debug", skip(attrs))]
 fn path_attr(attrs: &[Attribute]) -> Option<String> {
     for attr in attrs {
         if !attr.path().is_ident("path") {
@@ -215,6 +225,7 @@ fn path_attr(attrs: &[Attribute]) -> Option<String> {
     None
 }
 
+#[instrument(level = "debug", skip(node))]
 pub(super) fn collect_files(node: &ModuleNode, files: &mut Vec<PathBuf>) {
     files.push(node.file.clone());
     for child in &node.children {
@@ -222,6 +233,7 @@ pub(super) fn collect_files(node: &ModuleNode, files: &mut Vec<PathBuf>) {
     }
 }
 
+#[instrument(level = "debug", skip(node))]
 pub(super) fn external_name_count(node: &ModuleNode) -> usize {
     let mut n = node.leaf_pub;
     for child in &node.children {
@@ -232,6 +244,7 @@ pub(super) fn external_name_count(node: &ModuleNode) -> usize {
     n
 }
 
+#[instrument(level = "debug", skip(node))]
 pub(super) fn public_path_mods(node: &ModuleNode) -> Vec<&ModuleNode> {
     let mut out = Vec::new();
     for child in &node.children {

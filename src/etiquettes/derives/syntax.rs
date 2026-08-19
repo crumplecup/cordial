@@ -1,9 +1,12 @@
 use syn::{Attribute, Block, Expr, ReturnType, Signature, Stmt, Type, Visibility};
 
+use tracing::instrument;
+#[instrument(level = "debug", skip(vis))]
 pub(super) fn field_is_exposed(vis: &Visibility) -> bool {
     !matches!(vis, Visibility::Inherited)
 }
 
+#[instrument(level = "trace", skip(attrs))]
 pub(super) fn is_cfg_test(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {
         let syn::Meta::List(list) = &attr.meta else {
@@ -16,6 +19,7 @@ pub(super) fn is_cfg_test(attrs: &[Attribute]) -> bool {
     })
 }
 
+#[instrument(level = "trace", skip(attrs))]
 pub(super) fn has_derive(attrs: &[Attribute], needle: &str) -> bool {
     attrs.iter().any(|attr| {
         let syn::Meta::List(list) = &attr.meta else {
@@ -34,10 +38,12 @@ pub(super) fn has_derive(attrs: &[Attribute], needle: &str) -> bool {
     })
 }
 
+#[instrument(level = "debug", skip(sig))]
 pub(super) fn consumes_self(sig: &Signature) -> bool {
     matches!(sig.receiver(), Some(recv) if recv.reference.is_none())
 }
 
+#[instrument(level = "trace", skip(sig))]
 pub(super) fn is_fluent_setter(sig: &Signature) -> bool {
     if !matches!(sig.output, ReturnType::Type(_, _)) {
         return false;
@@ -51,6 +57,7 @@ pub(super) fn is_fluent_setter(sig: &Signature) -> bool {
     recv.mutability.is_some() && sig.inputs.len() >= 2
 }
 
+#[instrument(level = "debug", skip(block))]
 pub(super) fn body_is_trivial_field_access(block: &Block, field_name: &str) -> bool {
     let stmts = non_item_stmts(block);
     if stmts.len() != 1 {
@@ -62,6 +69,7 @@ pub(super) fn body_is_trivial_field_access(block: &Block, field_name: &str) -> b
     expr_is_field_access(expr, field_name)
 }
 
+#[instrument(level = "debug", skip(block))]
 pub(super) fn body_is_struct_literal(block: &Block, type_name: &str) -> bool {
     let stmts = non_item_stmts(block);
     if stmts.is_empty() || stmts.len() > 2 {
@@ -72,6 +80,7 @@ pub(super) fn body_is_struct_literal(block: &Block, type_name: &str) -> bool {
     })
 }
 
+#[instrument(level = "debug", skip(block))]
 fn non_item_stmts(block: &Block) -> Vec<&Stmt> {
     block
         .stmts
@@ -80,6 +89,7 @@ fn non_item_stmts(block: &Block) -> Vec<&Stmt> {
         .collect()
 }
 
+#[instrument(level = "debug", skip(stmt))]
 fn stmt_tail_expr(stmt: &Stmt) -> Option<&Expr> {
     match stmt {
         Stmt::Expr(expr, _) => Some(expr),
@@ -87,6 +97,7 @@ fn stmt_tail_expr(stmt: &Stmt) -> Option<&Expr> {
     }
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn expr_is_field_access(expr: &Expr, field_name: &str) -> bool {
     match expr {
         Expr::Field(field) => field_member_name(&field.member).as_deref() == Some(field_name),
@@ -102,6 +113,7 @@ fn expr_is_field_access(expr: &Expr, field_name: &str) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn expr_is_struct_literal(expr: &Expr, type_name: &str) -> bool {
     match expr {
         Expr::Struct(item) => type_matches(&item.path, type_name) || path_is_self(&item.path),
@@ -113,10 +125,12 @@ fn expr_is_struct_literal(expr: &Expr, type_name: &str) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(path))]
 fn path_is_self(path: &syn::Path) -> bool {
     path.is_ident("Self")
 }
 
+#[instrument(level = "debug", skip(member))]
 fn field_member_name(member: &syn::Member) -> Option<String> {
     match member {
         syn::Member::Named(ident) => Some(ident.to_string()),
@@ -124,12 +138,14 @@ fn field_member_name(member: &syn::Member) -> Option<String> {
     }
 }
 
+#[instrument(level = "debug", skip(path))]
 fn type_matches(path: &syn::Path, type_name: &str) -> bool {
     path.segments
         .last()
         .is_some_and(|segment| segment.ident == type_name)
 }
 
+#[instrument(level = "debug", skip(ty))]
 pub(super) fn type_label(ty: &Type) -> String {
     match ty {
         Type::Path(type_path) => syn_path_label(&type_path.path),
@@ -140,6 +156,7 @@ pub(super) fn type_label(ty: &Type) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(path))]
 fn syn_path_label(path: &syn::Path) -> String {
     path.segments
         .last()

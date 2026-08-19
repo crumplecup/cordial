@@ -8,6 +8,7 @@ use crate::session::SessionView;
 
 use super::scan::scan_source_tree;
 
+use tracing::instrument;
 /// Materializes function item nodes (including impl methods) in the IR graph.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FunctionInventoryEnricher;
@@ -17,14 +18,17 @@ impl FunctionInventoryEnricher {
 }
 
 impl IrEnricher for FunctionInventoryEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         1
     }
 
+    #[instrument(level = "trace", skip(self, ir, load, session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,
@@ -147,6 +151,7 @@ impl IrEnricher for FunctionInventoryEnricher {
     }
 }
 
+#[instrument(level = "debug")]
 fn module_context(qualified_name: &str) -> String {
     match qualified_name.rsplit_once("::") {
         Some((module, _)) => module.to_string(),

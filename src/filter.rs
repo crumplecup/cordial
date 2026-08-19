@@ -51,6 +51,7 @@ impl NamedRunFilter {
 }
 
 impl RunFilter for NamedRunFilter {
+    #[instrument(level = "trace", skip(self))]
     fn plugins(&self) -> Option<&[&str]> {
         if self.plugins.is_empty() {
             None
@@ -59,6 +60,7 @@ impl RunFilter for NamedRunFilter {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn etiquettes(&self) -> Option<&[&str]> {
         if self.etiquettes.is_empty() {
             None
@@ -67,6 +69,7 @@ impl RunFilter for NamedRunFilter {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn crate_name(&self) -> Option<&str> {
         self.crate_name.as_deref()
     }

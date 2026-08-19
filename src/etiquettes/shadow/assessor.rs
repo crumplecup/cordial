@@ -6,6 +6,7 @@ use crate::session::SessionView;
 
 use super::types::{MissingMirrorFinding, ShadowRule};
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ShadowAssessor;
 
@@ -14,14 +15,17 @@ impl ShadowAssessor {
 }
 
 impl Assessor for ShadowAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["missing-shadow-mirror"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, _session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],

@@ -54,7 +54,7 @@ pub struct ContractRecordDump {
 }
 
 /// Run `cargo run -p amenable -- dump-registry` in the workspace.
-#[instrument(level = "debug", skip(workspace), err(level = "warn"))]
+#[instrument(level = "info", skip(workspace), err(level = "warn"))]
 pub fn run_amenable_dump_registry(workspace: &Path, out_path: &Path) -> CordialResult<()> {
     if let Some(parent) = out_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -105,7 +105,7 @@ pub fn parse_rust_std_standard_inner(evidence: &str) -> Option<String> {
     Some(type_path_without_generics(typed))
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(registry))]
 pub fn evidence_for_std_type(registry: &RegistryDump, type_path: &str) -> Option<String> {
     for link in &registry.evidence_links {
         let Some(inner) = parse_rust_std_standard_inner(&link.name) else {
@@ -119,7 +119,7 @@ pub fn evidence_for_std_type(registry: &RegistryDump, type_path: &str) -> Option
     None
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(proof_chain_subjects))]
 pub fn std_type_has_proof_test(proof_chain_subjects: &HashSet<String>, type_path: &str) -> bool {
     proof_chain_subjects
         .iter()
@@ -136,7 +136,7 @@ pub fn proof_chain_subject_matches_type(subject: &str, type_path: &str) -> bool 
     type_has_trait_impl(&singleton, type_path)
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(registry))]
 pub fn witness_verifiers_for_std_type(registry: &RegistryDump, type_path: &str) -> HashSet<String> {
     let mut verifiers = HashSet::new();
     for record in &registry.proof_records {
@@ -151,6 +151,7 @@ pub fn witness_verifiers_for_std_type(registry: &RegistryDump, type_path: &str) 
     verifiers
 }
 
+#[instrument(level = "debug")]
 fn extract_wrapped_type(rest: &str) -> Option<&str> {
     let mut depth = 0i32;
     for (index, ch) in rest.char_indices() {

@@ -7,6 +7,7 @@ use crate::session::SessionView;
 
 use super::types::{DeriveFinding, DeriveRule, DeriveRuleId};
 
+use tracing::instrument;
 /// Converts derive-site markers into open findings.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct DeriveAssessor;
@@ -16,14 +17,17 @@ impl DeriveAssessor {
 }
 
 impl Assessor for DeriveAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["derive-site"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],

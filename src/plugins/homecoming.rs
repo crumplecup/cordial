@@ -11,6 +11,7 @@ use crate::plugin::{
 use crate::session::{RunFilter, SessionView};
 use crate::targets::discover_crate_targets;
 
+use tracing::instrument;
 static HOMECOMING_ETIQUETTES: [&'static dyn Etiquette; 1] = [&HOMECOMING_STD_ETIQUETTE];
 
 /// Single-trait requirement for homecoming std coverage.
@@ -18,10 +19,12 @@ static HOMECOMING_ETIQUETTES: [&'static dyn Etiquette; 1] = [&HOMECOMING_STD_ETI
 pub struct CodeRequirement;
 
 impl TraitRequirement for CodeRequirement {
+    #[instrument(level = "trace", skip(self))]
     fn composite_trait(&self) -> Option<&str> {
         None
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn supertraits(&self) -> &[&str] {
         &[HOMECOMING_TRAIT]
     }
@@ -34,6 +37,7 @@ static CODE_REQUIREMENT: CodeRequirement = CodeRequirement;
 pub struct FrameworkStdTargetProvider;
 
 impl TargetProvider for FrameworkStdTargetProvider {
+    #[instrument(level = "trace", skip(self, session, filter))]
     fn coverage_targets(
         &self,
         session: &dyn SessionView,
@@ -61,28 +65,34 @@ static FRAMEWORK_STD_TARGETS: FrameworkStdTargetProvider = FrameworkStdTargetPro
 pub struct HomecomingStdCoverage;
 
 impl Plugin for HomecomingStdCoverage {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "homecoming-std-coverage"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn name(&self) -> &str {
         "Homecoming std coverage"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn etiquettes(&self) -> &[&'static dyn Etiquette] {
         &HOMECOMING_ETIQUETTES
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> PluginCategory {
         PluginCategory::Coverage
     }
 }
 
 impl Coverage for HomecomingStdCoverage {
+    #[instrument(level = "trace", skip(self))]
     fn target_provider(&self) -> &dyn TargetProvider {
         &FRAMEWORK_STD_TARGETS
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn trait_requirement(&self) -> &dyn TraitRequirement {
         &CODE_REQUIREMENT
     }

@@ -23,7 +23,7 @@ pub enum VisibilityRuleId {
 }
 
 impl VisibilityRuleId {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::CrateFlat001 => "VIS-CRATE-FLAT-001",
@@ -44,6 +44,7 @@ impl VisibilityRuleId {
 }
 
 impl Display for VisibilityRuleId {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}", self.as_str())
     }
@@ -58,21 +59,24 @@ pub struct VisibilityRule {
 }
 
 impl VisibilityRule {
-    #[instrument(level = "debug", ret)]
+    #[instrument(level = "debug", skip(rule_id), ret)]
     pub fn new(rule_id: VisibilityRuleId) -> Self {
         Self { rule_id }
     }
 }
 
 impl Rule for VisibilityRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "visibility"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Public module paths must earn their existence: a small crate stays flat; \
          a visible module needs enough names; a child's vis must not exceed its parent"
@@ -85,18 +89,22 @@ pub struct VisibilityMarker {
 }
 
 impl Marker for VisibilityMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         "visibility-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         "visibility-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -116,18 +124,22 @@ pub struct VisibilityFinding {
 }
 
 impl Finding for VisibilityFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);

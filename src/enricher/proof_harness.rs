@@ -6,6 +6,7 @@ use crate::loader::LoadView;
 use crate::proof_harness::{load_workspace_proof_harness, test_status_for_type_path};
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Attaches proof harness test status attrs on type nodes.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ProofHarnessEnricher;
@@ -18,18 +19,22 @@ impl ProofHarnessEnricher {
 }
 
 impl IrEnricher for ProofHarnessEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         7
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn required_loader(&self) -> &str {
         crate::RustdocLoader::ID
     }
 
+    #[instrument(level = "trace", skip(self, ir, _load, session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,

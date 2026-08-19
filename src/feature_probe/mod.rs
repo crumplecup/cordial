@@ -20,7 +20,7 @@ pub struct TypeFeatureProbe {
 }
 
 /// Hub crate name for feature-probe dependency resolution.
-#[instrument(level = "trace")]
+#[instrument(level = "debug", skip(hub))]
 pub fn hub_crate_name(hub: WorkspaceHub) -> Option<&'static str> {
     match hub {
         WorkspaceHub::Elicitation => Some("elicitation"),
@@ -134,6 +134,7 @@ pub fn build_type_feature_probes(
     Ok(probes)
 }
 
+#[instrument(level = "debug", err(level = "warn"))]
 fn resolve_probe_prereqs(
     project_root: &Path,
     store_root: &Path,
@@ -173,6 +174,7 @@ fn resolve_probe_prereqs(
     )?))
 }
 
+#[instrument(level = "debug")]
 fn probe_rustdoc_cache_path(store_root: &Path, crate_name: &str) -> PathBuf {
     let normalized = crate_name.replace('-', "_");
     store_root
@@ -180,6 +182,7 @@ fn probe_rustdoc_cache_path(store_root: &Path, crate_name: &str) -> PathBuf {
         .join(format!("{normalized}.json"))
 }
 
+#[instrument(level = "debug")]
 fn should_build_probe_rustdoc() -> bool {
     std::env::var("CORDIAL_PROBE_FEATURES")
         .ok()

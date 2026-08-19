@@ -6,6 +6,7 @@ use crate::session::SessionView;
 
 use super::{CrateTarget, LoadView};
 
+use tracing::instrument;
 /// Loads Rust source files into a [`SourceLoadView`].
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SourceLoader;
@@ -17,10 +18,12 @@ impl SourceLoader {
 }
 
 impl Loader for SourceLoader {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, _session, target))]
     fn load(
         &self,
         _session: &dyn SessionView,
@@ -70,14 +73,17 @@ pub struct SourceLoadView {
 }
 
 impl LoadView for SourceLoadView {
+    #[instrument(level = "trace", skip(self))]
     fn loader_id(&self) -> &str {
         SourceLoader::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn crate_name(&self) -> &str {
         &self.crate_name
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

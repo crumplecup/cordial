@@ -105,7 +105,7 @@ impl TraitPrereqs {
         }
     }
 
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "debug", skip(self, other))]
     pub fn merge(&mut self, other: &Self) {
         self.serialize |= other.serialize;
         self.deserialize |= other.deserialize;

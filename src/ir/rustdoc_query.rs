@@ -10,10 +10,12 @@ use crate::ir::{
 use crate::rustdoc::{InventoryItemKind, TraitPrereqs};
 
 use tracing::instrument;
+#[instrument(level = "debug", skip(ir))]
 fn node_for_path<'a>(ir: &'a dyn IrView, type_path: &str) -> Option<NodeRef<'a>> {
     ir.node_by_path(type_path).and_then(|id| ir.node(id))
 }
 
+#[instrument(level = "debug", skip(node))]
 fn string_list_attr(node: &NodeRef<'_>, key: &str) -> Vec<String> {
     node.attr(key)
         .and_then(|value| value.as_array())
@@ -72,7 +74,7 @@ pub fn type_wraps_foreign(ir: &dyn IrView, wrapper_path: &str) -> Option<String>
 }
 
 /// Paired node linked by [`EdgeKind::Mirrors`] (upstream → shadow or reverse).
-#[instrument(level = "debug", skip(ir))]
+#[instrument(level = "debug", skip(ir, node))]
 pub fn mirror_target(ir: &dyn IrView, node: NodeId) -> Option<NodeId> {
     ir.children(node, EdgeKind::Mirrors)
         .into_iter()
@@ -100,6 +102,7 @@ pub fn rustdoc_item_nodes(ir: &dyn IrView) -> Vec<NodeRef<'_>> {
         .collect()
 }
 
+#[instrument(level = "debug")]
 fn inventory_kind_from_attr(raw: &str) -> Option<InventoryItemKind> {
     match raw {
         "Struct" => Some(InventoryItemKind::Struct),
@@ -113,7 +116,7 @@ fn inventory_kind_from_attr(raw: &str) -> Option<InventoryItemKind> {
 }
 
 /// Count public type nodes materialized from rustdoc on one crate graph.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(ir))]
 pub fn count_type_nodes(ir: &CrateIr) -> usize {
     rustdoc_item_nodes(ir)
         .into_iter()

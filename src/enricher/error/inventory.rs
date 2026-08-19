@@ -13,6 +13,7 @@ use crate::session::SessionView;
 
 use super::scan::scan_crate_error_ir;
 
+use tracing::instrument;
 /// Single enricher pass: unified scan → IR nodes (sites and chain merged by location).
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ErrorIrScanEnricher;
@@ -22,14 +23,17 @@ impl ErrorIrScanEnricher {
 }
 
 impl IrEnricher for ErrorIrScanEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         50
     }
 
+    #[instrument(level = "trace", skip(self, ir, load, session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,
@@ -47,6 +51,7 @@ impl IrEnricher for ErrorIrScanEnricher {
     }
 }
 
+#[instrument(level = "debug", skip(ir, report), err(level = "warn"))]
 fn materialize_error_ir(
     ir: &mut dyn IrMut,
     crate_root: &std::path::Path,
@@ -188,10 +193,12 @@ fn materialize_error_ir(
     Ok(())
 }
 
+#[instrument(level = "debug", skip(file))]
 fn site_key(file: &std::path::Path, line: u32) -> (String, u32) {
     (file.display().to_string(), line)
 }
 
+#[instrument(level = "debug", skip(ir, record), err(level = "warn"))]
 fn insert_error_site_node(
     ir: &mut dyn IrMut,
     crate_root: &std::path::Path,
@@ -242,6 +249,7 @@ mod chain {
     use super::*;
     use crate::etiquettes::error_chain::ErrorChainRecord;
 
+    #[instrument(level = "debug", skip(ir, node, record), err(level = "warn"))]
     pub(super) fn apply_chain_attrs(
         ir: &mut dyn IrMut,
         node: crate::ir::NodeId,
@@ -272,6 +280,7 @@ mod chain {
         Ok(())
     }
 
+    #[instrument(level = "debug", skip(ir, record), err(level = "warn"))]
     pub(super) fn insert_error_chain_node(
         ir: &mut dyn IrMut,
         crate_root: &std::path::Path,

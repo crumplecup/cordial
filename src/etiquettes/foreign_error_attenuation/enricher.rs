@@ -15,6 +15,7 @@ use crate::session::SessionView;
 
 use super::assess::{ErrorBridgeHint, build_foreign_error_attenuation_report_with_bridges};
 
+use tracing::instrument;
 /// Joins typed foreign error sites with chain probes and annotates matching IR nodes.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ForeignErrorAttenuationInventoryEnricher;
@@ -24,14 +25,17 @@ impl ForeignErrorAttenuationInventoryEnricher {
 }
 
 impl IrEnricher for ForeignErrorAttenuationInventoryEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         52
     }
 
+    #[instrument(level = "trace", skip(self, ir, load, session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,
@@ -148,6 +152,7 @@ struct SiteKey {
     line: u32,
 }
 
+#[instrument(level = "debug", skip(ir))]
 fn foreign_report_from_ir(ir: &dyn IrView, crate_root: &Path) -> ForeignErrorTypeReport {
     let crate_name = ir.crate_name().to_string();
     let findings = ir
@@ -163,6 +168,7 @@ fn foreign_report_from_ir(ir: &dyn IrView, crate_root: &Path) -> ForeignErrorTyp
     }
 }
 
+#[instrument(level = "debug", skip(node))]
 fn typed_foreign_record(
     node: crate::ir::NodeRef<'_>,
     crate_name: &str,
@@ -235,6 +241,7 @@ fn typed_foreign_record(
     })
 }
 
+#[instrument(level = "debug", skip(ir, _session))]
 fn chain_records_from_ir(
     ir: &dyn IrView,
     _session: &dyn SessionView,
@@ -279,6 +286,7 @@ fn chain_records_from_ir(
         .collect()
 }
 
+#[instrument(level = "debug", skip(ir))]
 fn error_bridges_from_ir(ir: &dyn IrView) -> Vec<ErrorBridgeHint> {
     ir.nodes_matching(&BasicQuery::all_nodes())
         .into_iter()
@@ -311,6 +319,7 @@ fn error_bridges_from_ir(ir: &dyn IrView) -> Vec<ErrorBridgeHint> {
         .collect()
 }
 
+#[instrument(level = "debug", skip(ir, _session))]
 fn index_typed_error_sites(
     ir: &dyn IrView,
     _session: &dyn SessionView,
@@ -344,6 +353,7 @@ fn index_typed_error_sites(
     map
 }
 
+#[instrument(level = "debug", skip(path))]
 fn relative_file(path: &str, crate_root: &Path) -> PathBuf {
     let resolved = PathBuf::from(path);
     resolved
@@ -352,6 +362,7 @@ fn relative_file(path: &str, crate_root: &Path) -> PathBuf {
         .unwrap_or(resolved)
 }
 
+#[instrument(level = "debug")]
 fn parse_confidence(value: &str) -> crate::etiquettes::error_sites::ForeignTypeConfidence {
     if value.contains("MEDIUM") {
         crate::etiquettes::error_sites::ForeignTypeConfidence::Medium
@@ -365,6 +376,7 @@ trait IrViewRef {
 }
 
 impl IrViewRef for &mut dyn IrMut {
+    #[instrument(level = "trace", skip(self))]
     fn as_view(&self) -> &dyn IrView {
         *self as &dyn IrView
     }

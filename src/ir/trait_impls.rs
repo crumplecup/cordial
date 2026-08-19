@@ -33,6 +33,7 @@ pub fn collect_trait_impl_type_paths_from_ir(
     paths
 }
 
+#[instrument(level = "debug", skip(ir, type_node))]
 fn type_has_trait_short(ir: &dyn IrView, type_node: crate::ir::NodeId, trait_short: &str) -> bool {
     ir.children(type_node, EdgeKind::Implements)
         .into_iter()

@@ -15,7 +15,7 @@ pub struct WorkspaceIr {
 }
 
 impl WorkspaceIr {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "trace", skip(self, map))]
     #[cfg(feature = "impl_coverage")]
     pub fn set_wrapper_coverage_map(&mut self, map: crate::rustdoc::WrapperCoverageMap) {
         self.wrapper_coverage_map = Some(map);
@@ -45,7 +45,7 @@ impl WorkspaceIr {
             .map(str::to_string)
     }
 
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "debug", skip(self, crate_ir))]
     pub fn insert_crate(&mut self, crate_ir: CrateIr) -> NodeId {
         let root = crate_ir.root;
         self.crates.insert(crate_ir.crate_name.clone(), crate_ir);
@@ -62,17 +62,19 @@ impl WorkspaceIr {
         self.crates.get_mut(crate_name)
     }
 
+    #[instrument(level = "debug", skip(self))]
     fn require_crate(&self, crate_name: &str) -> CordialResult<&CrateIr> {
         self.crate_ir(crate_name)
             .ok_or_else(|| CordialError::invariant(format!("crate `{crate_name}` must exist")))
     }
 
+    #[instrument(level = "debug", skip(self))]
     fn require_crate_mut(&mut self, crate_name: &str) -> CordialResult<&mut CrateIr> {
         self.crate_ir_mut(crate_name)
             .ok_or_else(|| CordialError::invariant(format!("crate `{crate_name}` must exist")))
     }
 
-    #[instrument(level = "debug", skip(self, from_crate, to_crate, kind))]
+    #[instrument(level = "debug", skip(self, from_crate, from, to_crate, to, kind))]
     pub fn insert_cross_crate_edge(
         &mut self,
         from_crate: impl Into<String>,
@@ -145,18 +147,22 @@ pub struct CrateViewMut<'a> {
 }
 
 impl IrView for CrateViewMut<'_> {
+    #[instrument(level = "trace", skip(self))]
     fn crate_name(&self) -> &str {
         &self.crate_name
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn root(&self) -> CordialResult<NodeId> {
         Ok(self.workspace.require_crate(&self.crate_name)?.root)
     }
 
+    #[instrument(level = "trace", skip(self, id))]
     fn node(&self, id: NodeId) -> Option<crate::ir::NodeRef<'_>> {
         self.workspace.crate_ir(&self.crate_name)?.node(id)
     }
 
+    #[instrument(level = "trace", skip(self, query))]
     fn nodes_matching(&self, query: &dyn crate::ir::Query) -> Vec<crate::ir::NodeRef<'_>> {
         self.workspace
             .crate_ir(&self.crate_name)
@@ -164,6 +170,7 @@ impl IrView for CrateViewMut<'_> {
             .unwrap_or_default()
     }
 
+    #[instrument(level = "trace", skip(self, id, kind))]
     fn parents(&self, id: NodeId, kind: EdgeKind) -> Vec<NodeId> {
         self.workspace
             .crate_ir(&self.crate_name)
@@ -171,6 +178,7 @@ impl IrView for CrateViewMut<'_> {
             .unwrap_or_default()
     }
 
+    #[instrument(level = "trace", skip(self, id, kind))]
     fn children(&self, id: NodeId, kind: EdgeKind) -> Vec<NodeId> {
         self.workspace
             .crate_ir(&self.crate_name)
@@ -178,6 +186,7 @@ impl IrView for CrateViewMut<'_> {
             .unwrap_or_default()
     }
 
+    #[instrument(level = "trace", skip(self, path))]
     fn node_by_path(&self, path: &str) -> Option<NodeId> {
         self.workspace
             .crate_ir(&self.crate_name)
@@ -186,6 +195,7 @@ impl IrView for CrateViewMut<'_> {
 }
 
 impl IrMut for CrateViewMut<'_> {
+    #[instrument(level = "trace", skip(self, weight))]
     fn insert_node(&mut self, weight: crate::ir::NodeWeight) -> CordialResult<NodeId> {
         Ok(self
             .workspace
@@ -193,18 +203,21 @@ impl IrMut for CrateViewMut<'_> {
             .insert_node(weight))
     }
 
+    #[instrument(level = "trace", skip(self, from, to, kind))]
     fn insert_edge(&mut self, from: NodeId, to: NodeId, kind: EdgeKind) -> CordialResult<()> {
         self.workspace
             .require_crate_mut(&self.crate_name)?
             .insert_edge(from, to, kind)
     }
 
+    #[instrument(level = "trace", skip(self, node, value), err(level = "warn"))]
     fn set_attr(&mut self, node: NodeId, key: &str, value: serde_json::Value) -> CordialResult<()> {
         self.workspace
             .require_crate_mut(&self.crate_name)?
             .set_attr(node, key, value)
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn rebuild_path_index(&mut self) -> CordialResult<()> {
         self.workspace
             .require_crate_mut(&self.crate_name)?
@@ -212,6 +225,7 @@ impl IrMut for CrateViewMut<'_> {
         Ok(())
     }
 
+    #[instrument(level = "trace", skip(self))]
     #[cfg(feature = "impl_coverage")]
     fn workspace_wrapper_coverage(&self) -> Option<&crate::rustdoc::WrapperCoverageMap> {
         self.workspace.wrapper_coverage_map()

@@ -13,7 +13,7 @@ pub enum InternalErrorNodeClass {
 }
 
 impl InternalErrorNodeClass {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::InternalLeaf => "ERROR-CHAIN-INTERNAL-LEAF",
@@ -36,6 +36,7 @@ impl InternalErrorNodeClass {
 }
 
 impl Display for InternalErrorNodeClass {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}", self.as_str())
     }

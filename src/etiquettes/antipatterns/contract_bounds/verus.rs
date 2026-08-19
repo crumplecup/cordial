@@ -13,7 +13,7 @@ use crate::loader::module_path_from_src_file;
 use super::index::{ContractIndex, is_trivial, normalize_tokens, split_top_level_commas};
 use super::{make_finding, site_context};
 
-#[instrument(skip(source, index), fields(file = %file.display()))]
+#[instrument(level = "debug", skip(source, file, index), err(level = "warn"))]
 pub(super) fn scan_verus_source(
     source: &str,
     file: &Path,
@@ -77,7 +77,7 @@ pub(super) fn scan_verus_source(
 /// function's signature, at the same top-level token sequence as the `fn`
 /// keyword — never inside a nested `Group`), and attaches it to each
 /// clause so matching can be scoped to "this clause's own site."
-#[instrument(skip(tokens, out))]
+#[instrument(level = "debug", skip(tokens, out))]
 fn walk_verus_tokens(tokens: TokenStream, out: &mut Vec<(&'static str, TokenStream, String)>) {
     let items: Vec<TokenTree> = tokens.into_iter().collect();
     let mut i = 0;

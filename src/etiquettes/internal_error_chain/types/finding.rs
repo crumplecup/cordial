@@ -2,6 +2,7 @@ use crate::objects::{Disposition, FileSpan, Finding, FindingSink, IrAnchor, Rule
 
 use super::{InternalErrorChainRule, InternalErrorNodeClass, InternalErrorRecordKind};
 
+use tracing::instrument;
 #[derive(Debug, Clone)]
 pub struct InternalErrorChainFinding {
     pub rule: InternalErrorChainRule,
@@ -22,18 +23,22 @@ pub struct InternalErrorChainFinding {
 }
 
 impl Finding for InternalErrorChainFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("record_kind", &self.record_kind.as_str());

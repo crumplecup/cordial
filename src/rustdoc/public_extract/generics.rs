@@ -7,7 +7,7 @@ use tracing::instrument;
 use super::ExtractedItem;
 use super::type_walk::{collect_items_from_path, collect_items_from_type};
 
-#[instrument(skip(krate, args, own_crate_key, prefix_match, seen, discovered))]
+#[instrument(level = "debug", skip(krate, args, seen, discovered))]
 pub(super) fn collect_items_from_generic_args(
     krate: &rustdoc_types::Crate,
     args: &rustdoc_types::GenericArgs,
@@ -92,7 +92,7 @@ pub(super) fn collect_items_from_generic_args(
         rustdoc_types::GenericArgs::ReturnTypeNotation => {}
     }
 }
-#[instrument(skip(krate, term, own_crate_key, prefix_match, seen, discovered))]
+#[instrument(level = "debug", skip(krate, term, seen, discovered))]
 fn collect_items_from_term(
     krate: &rustdoc_types::Crate,
     term: &rustdoc_types::Term,
@@ -105,7 +105,7 @@ fn collect_items_from_term(
         collect_items_from_type(krate, ty, own_crate_key, prefix_match, seen, discovered);
     }
 }
-#[instrument(skip(krate, bound, own_crate_key, prefix_match, seen, discovered))]
+#[instrument(level = "debug", skip(krate, bound, seen, discovered))]
 pub(super) fn collect_items_from_generic_bound(
     krate: &rustdoc_types::Crate,
     bound: &rustdoc_types::GenericBound,
@@ -131,7 +131,7 @@ pub(super) fn collect_items_from_generic_bound(
         );
     }
 }
-#[instrument(skip(krate, poly_trait, seen, discovered), fields(path = %poly_trait.trait_.path))]
+#[instrument(level = "debug", skip(krate, poly_trait, seen, discovered))]
 pub(super) fn collect_items_from_poly_trait(
     krate: &rustdoc_types::Crate,
     poly_trait: &rustdoc_types::PolyTrait,
@@ -157,7 +157,7 @@ pub(super) fn collect_items_from_poly_trait(
         discovered,
     );
 }
-#[instrument(skip(krate, generic_params, seen, discovered), fields(param_count = generic_params.len()))]
+#[instrument(level = "debug", skip(krate, generic_params, seen, discovered))]
 pub(super) fn collect_items_from_generic_param_defs(
     krate: &rustdoc_types::Crate,
     generic_params: &[rustdoc_types::GenericParamDef],
@@ -206,7 +206,7 @@ pub(super) fn collect_items_from_generic_param_defs(
         }
     }
 }
-#[instrument(skip(krate, generics, seen, discovered), fields(param_count = generics.params.len(), predicate_count = generics.where_predicates.len()))]
+#[instrument(level = "debug", skip(krate, generics, seen, discovered))]
 pub(super) fn collect_items_from_generics(
     krate: &rustdoc_types::Crate,
     generics: &rustdoc_types::Generics,
@@ -234,7 +234,7 @@ pub(super) fn collect_items_from_generics(
         );
     }
 }
-#[instrument(skip(krate, predicate, own_crate_key, prefix_match, seen, discovered))]
+#[instrument(level = "debug", skip(krate, predicate, seen, discovered))]
 fn collect_items_from_where_predicate(
     krate: &rustdoc_types::Crate,
     predicate: &rustdoc_types::WherePredicate,
@@ -276,7 +276,7 @@ fn collect_items_from_where_predicate(
         rustdoc_types::WherePredicate::LifetimePredicate { .. } => {}
     }
 }
-#[instrument(skip(ty))]
+#[instrument(level = "debug", skip(ty))]
 pub(super) fn type_kind_name(ty: &rustdoc_types::Type) -> &'static str {
     match ty {
         rustdoc_types::Type::ResolvedPath(_) => "ResolvedPath",

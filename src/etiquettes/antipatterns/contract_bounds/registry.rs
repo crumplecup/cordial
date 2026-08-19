@@ -50,6 +50,7 @@ pub fn fetch_contract_records(workspace_root: &Path, store_root: &Path) -> Vec<C
     records
 }
 
+#[instrument(level = "info", skip(path), err(level = "warn"))]
 fn load_registry_dump(path: &Path) -> CordialResult<Vec<ContractRecordDump>> {
     let content = std::fs::read_to_string(path)?;
     let dump: RegistryDump = serde_json::from_str(&content)
@@ -57,6 +58,7 @@ fn load_registry_dump(path: &Path) -> CordialResult<Vec<ContractRecordDump>> {
     Ok(dump.contract_records)
 }
 
+#[instrument(level = "debug")]
 fn workspace_has_amenable(workspace_root: &Path) -> bool {
     cargo_metadata::MetadataCommand::new()
         .current_dir(workspace_root)
@@ -69,6 +71,7 @@ fn workspace_has_amenable(workspace_root: &Path) -> bool {
         })
 }
 
+#[instrument(level = "info", skip(workspace), err(level = "warn"))]
 fn run_amenable_dump_registry(workspace: &Path, out_path: &Path) -> CordialResult<()> {
     if let Some(parent) = out_path.parent() {
         std::fs::create_dir_all(parent)?;

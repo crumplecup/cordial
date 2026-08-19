@@ -6,6 +6,7 @@ use crate::ir::{
 use crate::loader::LoadView;
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Adds [`EdgeKind::Wraps`] edges from materialized `wraps_foreign` attrs.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TrenchcoatEnricher;
@@ -15,18 +16,22 @@ impl TrenchcoatEnricher {
 }
 
 impl IrEnricher for TrenchcoatEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         4
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn required_loader(&self) -> &str {
         crate::RustdocLoader::ID
     }
 
+    #[instrument(level = "trace", skip(self, ir, _load, _session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,
@@ -65,6 +70,7 @@ impl IrEnricher for TrenchcoatEnricher {
     }
 }
 
+#[instrument(level = "trace", skip(ir, wrapper, foreign), ret)]
 fn has_wraps_edge(
     ir: &dyn crate::ir::IrView,
     wrapper: crate::ir::NodeId,
@@ -75,6 +81,7 @@ fn has_wraps_edge(
         .any(|target| target == foreign)
 }
 
+#[instrument(level = "debug", skip(ir, path), err(level = "warn"))]
 fn ensure_type_node(ir: &mut dyn IrMut, path: &str) -> CordialResult<crate::ir::NodeId> {
     if let Some(existing) = ir.node_by_path(path) {
         return Ok(existing);

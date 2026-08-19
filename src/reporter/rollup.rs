@@ -6,6 +6,7 @@ use crate::ir::IrView;
 use crate::objects::{Artifact, Disposition, Finding, MapFindingSink, TextArtifact};
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Executive summary across all etiquettes in one run.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct RollupReporter;
@@ -15,10 +16,12 @@ impl RollupReporter {
 }
 
 impl Reporter for RollupReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, ir, session))]
     fn render(
         &self,
         findings: &[&dyn Finding],
@@ -144,11 +147,13 @@ struct CategoryCounts {
 }
 
 impl CategoryCounts {
+    #[instrument(level = "debug", skip(self))]
     fn total(self) -> usize {
         self.open + self.exemplar + self.suppressed
     }
 }
 
+#[instrument(level = "debug", skip(sink))]
 fn field(sink: &MapFindingSink, name: &str) -> Option<String> {
     sink.fields
         .iter()

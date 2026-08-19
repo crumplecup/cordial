@@ -14,7 +14,7 @@ pub struct WorkspaceInternalErrorChainSummary {
     pub crates: Vec<InternalErrorChainCrateSummary>,
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(reports))]
 pub fn build_workspace_internal_error_chain_summary(
     reports: &[InternalErrorChainScanReport],
 ) -> WorkspaceInternalErrorChainSummary {

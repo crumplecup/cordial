@@ -1,5 +1,6 @@
 use crate::ir::NodeId;
 
+use tracing::instrument;
 /// Stable reference to a node in the IR graph.
 pub trait IrAnchor: Send + Sync {
     fn node_id(&self) -> NodeId;
@@ -10,6 +11,7 @@ pub trait IrAnchor: Send + Sync {
 pub struct NodeAnchor(pub NodeId);
 
 impl IrAnchor for NodeAnchor {
+    #[instrument(level = "trace", skip(self))]
     fn node_id(&self) -> NodeId {
         self.0
     }

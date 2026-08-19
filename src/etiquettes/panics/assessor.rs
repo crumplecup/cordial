@@ -8,6 +8,7 @@ use crate::session::SessionView;
 
 use super::types::{PanicFinding, PanicKind, PanicRule};
 
+use tracing::instrument;
 /// Converts panic-site markers into open findings.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PanicAssessor;
@@ -17,14 +18,17 @@ impl PanicAssessor {
 }
 
 impl Assessor for PanicAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["panic-site"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],

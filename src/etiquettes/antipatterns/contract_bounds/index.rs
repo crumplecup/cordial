@@ -34,7 +34,7 @@ pub(super) struct ContractIndex {
 type ContractRecordMap = HashMap<(String, String), Vec<(String, String)>>;
 
 impl ContractIndex {
-    #[instrument(skip(records))]
+    #[instrument(level = "debug", skip(records))]
     pub(super) fn build(records: &[ContractRecordDump]) -> Self {
         let mut by_key: ContractRecordMap = HashMap::new();
         for record in records {
@@ -79,7 +79,7 @@ impl ContractIndex {
     /// `assert!(!Type::ensures(value), "message")` is the idiomatic way
     /// to write a rejection-precondition check — still a real call to the
     /// registered `ensures` predicate. Only a single leading `!` is stripped.
-    #[instrument(skip(self, clause))]
+    #[instrument(level = "debug", skip(self, clause))]
     pub(super) fn matches_named_call(
         &self,
         verifier: &str,
@@ -139,7 +139,7 @@ impl ContractIndex {
 /// generic argument list — `evidence` strings are always written in
 /// plain type position (`Type<Args>`, no turbofish), so the two need the
 /// same rendering before a suffix comparison means anything.
-#[instrument]
+#[instrument(level = "debug")]
 fn strip_turbofish(text: &str) -> String {
     text.replace(" :: <", " <")
 }
@@ -155,7 +155,7 @@ fn strip_turbofish(text: &str) -> String {
 /// comment mentioning "fn" in prose can't produce a false match either,
 /// since `///` lines tokenize into a single opaque `#[doc = "..."]`
 /// string-literal token, not separate identifiers.
-#[instrument(skip(fragment))]
+#[instrument(level = "debug")]
 fn fragment_fn_name(fragment: &str) -> Option<String> {
     let tokens: TokenStream = fragment.parse().ok()?;
     let items: Vec<TokenTree> = tokens.into_iter().collect();
@@ -169,7 +169,7 @@ fn fragment_fn_name(fragment: &str) -> Option<String> {
 
 /// Which verifier a crate name maps to, if any — the only crates this rule
 /// applies to.
-#[instrument]
+#[instrument(level = "debug")]
 pub(super) fn verifier_for_crate(crate_name: &str) -> Option<&'static str> {
     match crate_name {
         "amenable_creusot" => Some("creusot"),
@@ -186,7 +186,7 @@ pub(super) fn verifier_for_crate(crate_name: &str) -> Option<&'static str> {
 ///
 /// Also splits any adjacent `>` run apart ([`split_adjacent_gt`]) so
 /// suffix comparison succeeds against nested-generic `evidence` strings.
-#[instrument]
+#[instrument(level = "debug")]
 fn normalize_text(text: &str) -> String {
     text.parse::<TokenStream>()
         .map(|stream| split_adjacent_gt(&stream.to_string()))
@@ -194,7 +194,7 @@ fn normalize_text(text: &str) -> String {
 }
 
 /// Insert a space between every pair of immediately-adjacent `>` characters.
-#[instrument]
+#[instrument(level = "debug")]
 fn split_adjacent_gt(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
@@ -207,7 +207,7 @@ fn split_adjacent_gt(s: &str) -> String {
     out
 }
 
-#[instrument(skip(tokens))]
+#[instrument(level = "debug", skip(tokens))]
 pub(super) fn normalize_tokens(tokens: TokenStream) -> String {
     tokens.to_string()
 }
@@ -244,7 +244,7 @@ pub(super) fn normalize_tokens(tokens: TokenStream) -> String {
 /// iterator carriers (`iter_stateful_carrier`, `iter_sequence_carrier`,
 /// `vec_deque_carrier`, ...) — the same tuple-position convention, not a
 /// shared claim about those types themselves.
-#[instrument]
+#[instrument(level = "trace", ret)]
 pub(super) fn is_trivial(normalized: &str) -> bool {
     normalized == "true"
         || normalized == "false"
@@ -256,7 +256,7 @@ pub(super) fn is_trivial(normalized: &str) -> bool {
 
 /// Whether `normalized` is exactly `result . N` or `! result . N` for
 /// some decimal tuple index `N` — nothing else appended.
-#[instrument]
+#[instrument(level = "trace", ret)]
 fn is_bare_result_projection(normalized: &str) -> bool {
     let rest = normalized.strip_prefix("! ").unwrap_or(normalized);
     rest.strip_prefix("result . ")
@@ -265,7 +265,7 @@ fn is_bare_result_projection(normalized: &str) -> bool {
 
 /// Whether `normalized` is exactly `result . N is None` for some decimal
 /// tuple index `N` — nothing else appended.
-#[instrument]
+#[instrument(level = "trace", ret)]
 fn is_bare_result_is_none(normalized: &str) -> bool {
     normalized
         .strip_prefix("result . ")
@@ -277,7 +277,7 @@ fn is_bare_result_is_none(normalized: &str) -> bool {
 /// construction: `TokenStream` iteration only ever yields top-level
 /// `TokenTree`s — a comma inside a nested `Group` (e.g. `contains(&value)`)
 /// is inside that `Group`'s own inner stream, never seen at this level.
-#[instrument(skip(tokens))]
+#[instrument(level = "debug", skip(tokens))]
 pub(super) fn split_top_level_commas(tokens: &[TokenTree]) -> Vec<Vec<TokenTree>> {
     let mut segments = Vec::new();
     let mut current = Vec::new();

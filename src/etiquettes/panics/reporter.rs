@@ -6,6 +6,7 @@ use crate::ir::IrView;
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
 use crate::session::SessionView;
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone)]
 struct PanicRow {
     crate_name: String,
@@ -21,6 +22,7 @@ struct PanicRow {
 }
 
 impl PanicRow {
+    #[instrument(level = "debug", skip(finding), ret)]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -46,6 +48,7 @@ impl PanicRow {
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 fn panic_rows(findings: &[&dyn Finding]) -> Vec<PanicRow> {
     findings
         .iter()
@@ -54,10 +57,12 @@ fn panic_rows(findings: &[&dyn Finding]) -> Vec<PanicRow> {
         .collect()
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn open_panic_rows(rows: &[PanicRow]) -> impl Iterator<Item = &PanicRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn checklist_panic_rows(rows: &[PanicRow]) -> impl Iterator<Item = &PanicRow> {
     open_panic_rows(rows).filter(|row| row.checklist != "false")
 }
@@ -217,10 +222,12 @@ impl PanicSummaryReporter {
 }
 
 impl Reporter for PanicSummaryReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, ir, _session))]
     fn render(
         &self,
         findings: &[&dyn Finding],
@@ -286,6 +293,7 @@ impl Reporter for PanicSummaryReporter {
     }
 }
 
+#[instrument(level = "debug")]
 fn escape_csv(value: &str) -> String {
     if value.contains(',') || value.contains('"') || value.contains('\n') {
         format!("\"{}\"", value.replace('"', "\"\""))

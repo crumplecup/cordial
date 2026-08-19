@@ -7,6 +7,8 @@ use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
 use crate::session::SessionView;
 use crate::shadow::api_family;
 
+use tracing::instrument;
+#[instrument(level = "debug", skip(findings))]
 fn pair_rows(findings: &[&dyn Finding]) -> Vec<MapFindingSink> {
     findings
         .iter()
@@ -19,6 +21,7 @@ fn pair_rows(findings: &[&dyn Finding]) -> Vec<MapFindingSink> {
         .collect()
 }
 
+#[instrument(level = "debug", skip(sink))]
 fn field<'a>(sink: &'a MapFindingSink, name: &str) -> &'a str {
     sink.fields
         .iter()
@@ -159,6 +162,7 @@ impl Reporter for ShadowGapsCsvReporter {
     }
 }
 
+#[instrument(level = "debug")]
 fn csv_escape(value: &str) -> String {
     if value.contains(',') || value.contains('"') || value.contains('\n') {
         format!("\"{}\"", value.replace('"', "\"\""))
@@ -223,10 +227,12 @@ impl ShadowMethodChecklistReporter {
 }
 
 impl Reporter for ShadowMethodChecklistReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
     fn render(
         &self,
         findings: &[&dyn Finding],

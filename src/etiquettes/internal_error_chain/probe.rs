@@ -6,19 +6,23 @@ use crate::session::SessionView;
 
 use super::types::{InternalErrorChainMarker, InternalErrorRecordKind};
 
+use tracing::instrument;
 /// Matches internal error-chain nodes in the IR.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct InternalErrorChainQuery;
 
 impl Query for InternalErrorChainQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &[NodeKind::Expr]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
         node.attr("internal_error_record_kind").is_some()
     }
@@ -35,14 +39,17 @@ impl InternalErrorChainProbe {
 }
 
 impl Probe for InternalErrorChainProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &INTERNAL_ERROR_CHAIN_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, _session))]
     fn probe(
         &self,
         ir: &dyn IrView,

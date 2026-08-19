@@ -38,6 +38,7 @@ pub enum ErrorHandlingResolutionId {
 }
 
 impl Display for ErrorHandlingResolutionId {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::MaintainExemplar => write!(f, "ERROR-RESOLUTION-MAINTAIN-EXEMPLAR"),
@@ -142,7 +143,7 @@ pub struct WorkspaceForeignErrorAttenuationSummary {
     pub resolutions: BTreeMap<String, usize>,
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(reports))]
 pub fn build_workspace_foreign_error_attenuation_summary(
     reports: &[ForeignErrorAttenuationReport],
 ) -> WorkspaceForeignErrorAttenuationSummary {
@@ -249,13 +250,14 @@ pub struct ForeignErrorAttenuationRule {
 }
 
 impl ForeignErrorAttenuationRule {
-    #[instrument(level = "debug", ret)]
+    #[instrument(level = "debug", skip(handling_class), ret)]
     pub fn new(handling_class: ForeignErrorHandlingClass) -> Self {
         Self { handling_class }
     }
 }
 
 impl Rule for ForeignErrorAttenuationRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         match self.handling_class {
             ForeignErrorHandlingClass::ChainPreserved => "ERROR-HANDLING-CHAIN-PRESERVED",
@@ -265,10 +267,12 @@ impl Rule for ForeignErrorAttenuationRule {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "foreign_error_attenuation"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Foreign error site classified against chain-preservation probes with resolution guidance"
     }
@@ -280,18 +284,22 @@ pub struct ForeignErrorAttenuationMarker {
 }
 
 impl Marker for ForeignErrorAttenuationMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         "foreign-error-attenuation"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         "foreign-error-attenuation"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -319,18 +327,22 @@ pub struct ForeignErrorAttenuationFinding {
 }
 
 impl Finding for ForeignErrorAttenuationFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("handling_class", &self.handling_class.to_string());

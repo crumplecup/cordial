@@ -12,6 +12,7 @@ use tracing::instrument;
 static WORKSPACE_SCOPES: WorkspaceMembersErrorScopeProvider = WorkspaceMembersErrorScopeProvider;
 static STANDARD_POLICY: StandardErrorHandlingPolicy = StandardErrorHandlingPolicy;
 
+#[instrument(level = "debug")]
 fn collect_error_handling_etiquettes() -> Vec<&'static dyn Etiquette> {
     let items: [Option<&'static dyn Etiquette>; 6] = [
         #[cfg(feature = "panics")]
@@ -42,6 +43,7 @@ fn collect_error_handling_etiquettes() -> Vec<&'static dyn Etiquette> {
     items.into_iter().flatten().collect()
 }
 
+#[instrument(level = "debug")]
 fn leaked_error_handling_etiquette_slice() -> &'static [&'static dyn Etiquette] {
     static SLICE: OnceLock<&'static [&'static dyn Etiquette]> = OnceLock::new();
     SLICE.get_or_init(|| {
@@ -56,28 +58,34 @@ fn leaked_error_handling_etiquette_slice() -> &'static [&'static dyn Etiquette] 
 pub struct StandardErrorHandling;
 
 impl Plugin for StandardErrorHandling {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "error-handling"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn name(&self) -> &str {
         "Error handling"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn etiquettes(&self) -> &[&'static dyn Etiquette] {
         leaked_error_handling_etiquette_slice()
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> PluginCategory {
         PluginCategory::ErrorHandling
     }
 }
 
 impl ErrorHandling for StandardErrorHandling {
+    #[instrument(level = "trace", skip(self))]
     fn scope_provider(&self) -> &dyn ErrorScopeProvider {
         &WORKSPACE_SCOPES
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn policy(&self) -> &dyn ErrorHandlingPolicy {
         &STANDARD_POLICY
     }

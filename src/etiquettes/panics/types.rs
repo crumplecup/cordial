@@ -42,7 +42,7 @@ impl PanicKind {
         }
     }
 
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_attr(self) -> &'static str {
         match self {
             Self::Panic => "panic",
@@ -55,6 +55,7 @@ impl PanicKind {
 }
 
 impl Display for PanicKind {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}", self.rule_id())
     }
@@ -73,14 +74,17 @@ impl PanicRule {
 }
 
 impl Rule for PanicRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.kind.rule_id()
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "panics"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Non-Result failure site: panic, unreachable, expect, unwrap, or compile_error. \
          Library code should return internal error types; binary and test code should use miette"
@@ -94,18 +98,22 @@ pub struct PanicMarker {
 }
 
 impl Marker for PanicMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         "panic-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         "panic-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -126,18 +134,22 @@ pub struct PanicFinding {
 }
 
 impl Finding for PanicFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("kind", &self.rule.kind);

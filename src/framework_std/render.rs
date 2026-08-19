@@ -27,7 +27,7 @@ pub fn render_framework_coverage_csv(report: &FrameworkTraitReport) -> CordialRe
     Ok(body)
 }
 
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(gaps), err(level = "warn"))]
 pub fn render_framework_gaps_csv(gaps: &[FrameworkGapEntry]) -> CordialResult<String> {
     let mut body = String::from("source_crate,type_path,type_kind,trait_name,impl_crate,action\n");
     for gap in gaps {
@@ -45,7 +45,7 @@ pub fn render_framework_gaps_csv(gaps: &[FrameworkGapEntry]) -> CordialResult<St
     Ok(body)
 }
 
-#[instrument(level = "debug", skip(report), err(level = "warn"))]
+#[instrument(level = "debug", skip(report, skip_map), err(level = "warn"))]
 pub fn render_framework_checklist_md(
     report: &FrameworkTraitReport,
     skip_map: &SkipMap,
@@ -160,6 +160,7 @@ pub fn render_framework_summary_md(report: &FrameworkTraitReport) -> String {
     )
 }
 
+#[instrument(level = "debug")]
 fn csv_escape(value: &str) -> String {
     if value.contains(',') || value.contains('"') || value.contains('\n') {
         format!("\"{}\"", value.replace('"', "\"\""))

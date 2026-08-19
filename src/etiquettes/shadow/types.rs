@@ -1,5 +1,6 @@
 use crate::objects::{Disposition, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan};
 
+use tracing::instrument;
 #[derive(Debug, Clone, Copy)]
 pub struct ShadowRule;
 
@@ -23,18 +24,22 @@ pub struct MissingMirrorMarker {
 }
 
 impl Marker for MissingMirrorMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         "missing-shadow-mirror"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         "missing-shadow-mirror"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -71,14 +76,17 @@ impl Rule for ShadowPairRule {
 pub struct ShadowPairChecklistRule;
 
 impl Rule for ShadowPairChecklistRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "SHADOW-PAIR-CHECKLIST"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "shadow-pair-checklist"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Cross-crate shadow method/trait checklist for one upstream ↔ shadow pair"
     }
@@ -178,18 +186,22 @@ impl Finding for CrossCrateShadowFinding {
 }
 
 impl Finding for MissingMirrorFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("kind", &self.rule().id());

@@ -15,7 +15,7 @@ struct SkipEntry {
 }
 
 /// Load framework std skip list from `{store}/patches/{patch_set}.json`.
-#[instrument(skip(store), fields(patch_set))]
+#[instrument(level = "info", skip(store))]
 pub fn load_framework_skip_map(store: &StoreLayout, patch_set: &str) -> SkipMap {
     let candidates = [
         store.root.join("patches").join(format!("{patch_set}.json")),
@@ -29,6 +29,7 @@ pub fn load_framework_skip_map(store: &StoreLayout, patch_set: &str) -> SkipMap 
     SkipMap::new()
 }
 
+#[instrument(level = "info", skip(path))]
 fn load_skip_file(path: &Path) -> SkipMap {
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,

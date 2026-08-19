@@ -20,7 +20,7 @@ pub enum ForeignErrorRecordKind {
 }
 
 impl ForeignErrorRecordKind {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_attr(self) -> &'static str {
         match self {
             Self::Typed => "typed",
@@ -50,7 +50,7 @@ pub enum ErrorSiteKind {
 }
 
 impl ErrorSiteKind {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_attr(self) -> &'static str {
         match self {
             Self::QuestionMark => "question_mark",
@@ -106,6 +106,7 @@ pub enum ErrorOriginClass {
 }
 
 impl Display for ErrorOriginClass {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Internal => write!(f, "ERROR-ORIGIN-INTERNAL"),
@@ -128,6 +129,7 @@ impl ErrorSiteRule {
 }
 
 impl Rule for ErrorSiteRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         match self.kind {
             ErrorSiteKind::QuestionMark => "ERROR-SITE-QUESTION-MARK",
@@ -139,10 +141,12 @@ impl Rule for ErrorSiteRule {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "error_sites"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Control-flow site where a Result error is propagated, converted, returned, or constructed"
     }
@@ -154,18 +158,22 @@ pub struct ErrorSiteMarker {
 }
 
 impl Marker for ErrorSiteMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         "error-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         "error-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -188,18 +196,22 @@ pub struct ErrorSiteFinding {
 }
 
 impl Finding for ErrorSiteFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("site_kind", &self.kind.to_string());

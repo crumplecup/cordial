@@ -6,6 +6,7 @@ use crate::session::SessionView;
 
 use super::types::{VisibilityFinding, VisibilityRule, VisibilityRuleId};
 
+use tracing::instrument;
 /// Converts visibility-path markers into open findings.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct VisibilityAssessor;
@@ -15,14 +16,17 @@ impl VisibilityAssessor {
 }
 
 impl Assessor for VisibilityAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["visibility-site"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn crate::objects::Marker],

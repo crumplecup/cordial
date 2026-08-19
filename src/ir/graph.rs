@@ -55,12 +55,12 @@ impl CrateIr {
         &self.indexes
     }
 
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "trace", skip(self, id))]
     pub fn node_weight(&self, id: NodeId) -> Option<&NodeWeight> {
         self.graph.node_weight(id.to_index())
     }
 
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "debug", skip(self, weight))]
     pub fn insert_node(&mut self, weight: NodeWeight) -> NodeId {
         let index = self.graph.add_node(weight);
         let id = NodeId::from_index(index);
@@ -70,7 +70,7 @@ impl CrateIr {
         id
     }
 
-    #[instrument(level = "debug", skip(self, kind), err(level = "warn"))]
+    #[instrument(level = "debug", skip(self, from, to, kind), err(level = "warn"))]
     pub fn insert_edge(&mut self, from: NodeId, to: NodeId, kind: EdgeKind) -> CordialResult<()> {
         if self.graph.node_weight(from.to_index()).is_none()
             || self.graph.node_weight(to.to_index()).is_none()
@@ -82,7 +82,7 @@ impl CrateIr {
         Ok(())
     }
 
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    #[instrument(level = "trace", skip(self, node, value), err(level = "warn"))]
     pub fn set_attr(
         &mut self,
         node: NodeId,
@@ -105,7 +105,7 @@ impl CrateIr {
         self.indexes.rebuild_by_path(&self.graph);
     }
 
-    #[instrument(level = "debug", skip(self, kind))]
+    #[instrument(level = "debug", skip(self, node, kind, direction))]
     pub fn neighbors(
         &self,
         node: NodeId,
@@ -150,7 +150,7 @@ impl CrateIr {
         })
     }
 
-    #[instrument(level = "debug", err(level = "warn"))]
+    #[instrument(level = "debug", skip(snapshot), err(level = "warn"))]
     pub fn from_snapshot(snapshot: CrateIrSnapshot) -> CordialResult<Self> {
         let mut graph = StableDiGraph::new();
         let mut index_map = Vec::with_capacity(snapshot.nodes.len());
@@ -198,7 +198,7 @@ impl CrateIr {
         Self::from_snapshot(snapshot)
     }
 
-    #[instrument(level = "trace")]
+    #[instrument(level = "debug")]
     pub fn cache_path(cache_dir: &Path, crate_name: &str) -> PathBuf {
         cache_dir.join(format!("{crate_name}.ir.json"))
     }

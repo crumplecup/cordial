@@ -12,7 +12,7 @@ use rustdoc_types::{
 use crate::error::CordialResult;
 
 use tracing::instrument;
-#[instrument(level = "info", skip(path), err(level = "warn"))]
+#[instrument(level = "info", skip(path, krate), err(level = "warn"))]
 pub fn write_rustdoc_crate_json(path: &Path, krate: &Crate) -> CordialResult<()> {
     std::fs::write(path, serde_json::to_string_pretty(krate)?)?;
     Ok(())
@@ -261,6 +261,7 @@ pub fn demo_shadow_crate() -> Crate {
     base_crate(root, paths, index)
 }
 
+#[instrument(level = "debug", skip(id, items))]
 fn module_item(id: Id, name: &str, is_crate: bool, items: Vec<Id>) -> Item {
     Item {
         id,
@@ -280,6 +281,7 @@ fn module_item(id: Id, name: &str, is_crate: bool, items: Vec<Id>) -> Item {
     }
 }
 
+#[instrument(level = "debug", skip(id, impls))]
 fn struct_item(id: Id, name: &str, impls: Vec<Id>) -> Item {
     Item {
         id,
@@ -299,6 +301,7 @@ fn struct_item(id: Id, name: &str, impls: Vec<Id>) -> Item {
     }
 }
 
+#[instrument(level = "debug", skip(path, kind))]
 fn summary(path: Vec<String>, kind: ItemKind) -> ItemSummary {
     ItemSummary {
         crate_id: 0,
@@ -307,6 +310,7 @@ fn summary(path: Vec<String>, kind: ItemKind) -> ItemSummary {
     }
 }
 
+#[instrument(level = "debug")]
 fn empty_generics() -> Generics {
     Generics {
         params: Vec::new(),
@@ -314,6 +318,7 @@ fn empty_generics() -> Generics {
     }
 }
 
+#[instrument(level = "debug")]
 fn empty_function() -> Function {
     Function {
         sig: FunctionSignature {
@@ -332,6 +337,7 @@ fn empty_function() -> Function {
     }
 }
 
+#[instrument(level = "debug", skip(root, paths, index))]
 fn base_crate(root: Id, paths: HashMap<Id, ItemSummary>, index: HashMap<Id, Item>) -> Crate {
     Crate {
         root,

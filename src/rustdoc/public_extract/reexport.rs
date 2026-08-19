@@ -13,7 +13,7 @@ use super::{ExtractedItem, item_is_public, path_matches_scope};
 /// Rustdoc JSON `Use` items for `pub use` re-exports are often absent from
 /// `krate.paths`.  Walking the module tree gives us an alternative way to
 /// infer the re-export path: `parent_module_path + use_item.name`.
-#[instrument(skip(krate))]
+#[instrument(level = "debug", skip(krate))]
 fn build_parent_module_paths(
     krate: &rustdoc_types::Crate,
 ) -> HashMap<rustdoc_types::Id, Vec<String>> {
@@ -32,7 +32,7 @@ fn build_parent_module_paths(
     parent_paths
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(krate))]
 pub(in crate::rustdoc) fn collect_public_same_crate_reexport_aliases(
     krate: &rustdoc_types::Crate,
     own_crate_key: &str,
@@ -112,7 +112,7 @@ pub(in crate::rustdoc) fn collect_public_same_crate_reexport_aliases(
 
     aliases
 }
-#[instrument(skip(krate, existing_paths), fields(own_crate_key, prefix_match, existing_count = existing_paths.len()))]
+#[instrument(level = "debug", skip(krate, existing_paths))]
 pub(super) fn collect_public_reexport_dependency_items(
     krate: &rustdoc_types::Crate,
     own_crate_key: &str,
@@ -160,7 +160,7 @@ pub(super) fn collect_public_reexport_dependency_items(
 
     discovered
 }
-#[instrument(skip(candidate, incumbent))]
+#[instrument(level = "debug")]
 fn item_path_preferred_over(candidate: &[String], incumbent: &[String]) -> bool {
     candidate.len() < incumbent.len()
         || (candidate.len() == incumbent.len() && candidate < incumbent)

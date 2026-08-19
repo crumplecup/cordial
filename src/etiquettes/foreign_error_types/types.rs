@@ -56,7 +56,7 @@ pub struct WorkspaceForeignErrorTypeSummary {
     pub types: Vec<ForeignErrorTypeSummaryRow>,
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(reports))]
 pub fn build_workspace_foreign_error_type_summary(
     reports: &[ForeignErrorTypeReport],
 ) -> WorkspaceForeignErrorTypeSummary {
@@ -141,14 +141,17 @@ impl Rule for ForeignErrorTypeRule {
 pub struct ForeignErrorCandidateRule;
 
 impl Rule for ForeignErrorCandidateRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "FOREIGN-ERROR-CANDIDATE"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "foreign_error_types"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Partitioned error site classified as other or edge foreign-error candidate"
     }
@@ -160,18 +163,22 @@ pub struct ForeignErrorTypeMarker {
 }
 
 impl Marker for ForeignErrorTypeMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         "foreign-error-type"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         "foreign-error-type"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -199,6 +206,7 @@ pub struct ForeignErrorTypeFinding {
 }
 
 impl Finding for ForeignErrorTypeFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         if self.record_kind == ForeignErrorRecordKind::Candidate {
             static CANDIDATE_RULE: ForeignErrorCandidateRule = ForeignErrorCandidateRule;
@@ -208,14 +216,17 @@ impl Finding for ForeignErrorTypeFinding {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("record_kind", &self.record_kind.to_string());
@@ -237,6 +248,7 @@ impl Finding for ForeignErrorTypeFinding {
 }
 
 impl Display for ForeignErrorRecordKind {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Typed => write!(f, "typed"),

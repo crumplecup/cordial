@@ -31,6 +31,7 @@ pub struct TrackedTargetRosterGap {
 pub struct ElicitationTargetProvider;
 
 impl TargetProvider for ElicitationTargetProvider {
+    #[instrument(level = "trace", skip(self, session, filter))]
     fn coverage_targets(
         &self,
         session: &dyn SessionView,
@@ -69,7 +70,7 @@ impl TargetProvider for ElicitationTargetProvider {
 }
 
 /// Tracked shadow targets whose mirror crate exists in this workspace.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(workspace_members))]
 pub fn active_tracked_targets(
     workspace_members: &HashSet<String>,
 ) -> Vec<&'static ElicitationTrackedTarget> {
@@ -99,6 +100,7 @@ pub fn discover_active_shadow_pairs(
     Ok(filter_shadow_pairs(pairs, filter))
 }
 
+#[instrument(level = "debug", skip(pairs, filter))]
 fn filter_shadow_pairs(pairs: Vec<ShadowPair>, filter: &dyn RunFilter) -> Vec<ShadowPair> {
     if let Some(name) = filter.crate_name() {
         return pairs
@@ -158,6 +160,7 @@ pub fn compare_tracked_target_roster(workspace_members: &[String]) -> TrackedTar
     }
 }
 
+#[instrument(level = "debug", skip(targets, filter))]
 fn apply_coverage_filter(
     targets: Vec<CoverageTarget>,
     filter: &dyn RunFilter,

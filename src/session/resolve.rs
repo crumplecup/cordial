@@ -10,9 +10,11 @@ use crate::loader::{LoadView, SourceLoader};
 use crate::plugin::{Plugin, etiquettes_from_plugins, selected_plugins};
 #[cfg(feature = "rustdoc")]
 use crate::{RustdocLoader, enricher::RustdocStructureEnricher};
+use tracing::instrument;
 
 use super::RunFilter;
 
+#[instrument(level = "debug", skip(plugins, direct_etiquettes, filter))]
 pub(super) fn resolved_etiquettes(
     plugins: &[&'static dyn Plugin],
     direct_etiquettes: &[&'static dyn Etiquette],
@@ -48,6 +50,7 @@ pub(super) fn resolved_etiquettes(
     }
 }
 
+#[instrument(level = "debug", skip(etiquettes))]
 pub(super) fn dedupe_loaders(etiquettes: &[&'static dyn Etiquette]) -> Vec<&'static dyn Loader> {
     dedupe_hooks(
         etiquettes
@@ -56,6 +59,7 @@ pub(super) fn dedupe_loaders(etiquettes: &[&'static dyn Etiquette]) -> Vec<&'sta
     )
 }
 
+#[instrument(level = "debug", skip(etiquettes, loaders))]
 pub(super) fn dedupe_enrichers(
     etiquettes: &[&'static dyn Etiquette],
     loaders: &[&'static dyn Loader],
@@ -100,6 +104,7 @@ pub(super) fn dedupe_enrichers(
     out
 }
 
+#[instrument(level = "debug", skip(loaders))]
 fn loaders_include_source_and_rustdoc(loaders: &[&'static dyn Loader]) -> bool {
     let mut has_source = false;
     #[cfg_attr(not(feature = "rustdoc"), allow(unused_mut))]
@@ -123,6 +128,7 @@ fn loaders_include_source_and_rustdoc(loaders: &[&'static dyn Loader]) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(enricher, load_views))]
 pub(super) fn select_load_view<'a>(
     enricher: &dyn IrEnricher,
     load_views: &'a HashMap<String, Box<dyn LoadView>>,
@@ -145,6 +151,7 @@ pub(super) fn select_load_view<'a>(
     )))
 }
 
+#[instrument(level = "debug", skip(etiquettes))]
 pub(super) fn dedupe_probes(etiquettes: &[&'static dyn Etiquette]) -> Vec<&'static dyn Probe> {
     dedupe_hooks(
         etiquettes
@@ -153,6 +160,7 @@ pub(super) fn dedupe_probes(etiquettes: &[&'static dyn Etiquette]) -> Vec<&'stat
     )
 }
 
+#[instrument(level = "debug", skip(etiquettes))]
 pub(super) fn dedupe_assessors(
     etiquettes: &[&'static dyn Etiquette],
 ) -> Vec<&'static dyn Assessor> {
@@ -163,6 +171,7 @@ pub(super) fn dedupe_assessors(
     )
 }
 
+#[instrument(level = "debug", skip(etiquettes))]
 pub(super) fn dedupe_workspace_assessors(
     etiquettes: &[&'static dyn Etiquette],
 ) -> Vec<&'static dyn WorkspaceAssessor> {
@@ -173,6 +182,7 @@ pub(super) fn dedupe_workspace_assessors(
     )
 }
 
+#[instrument(level = "debug", skip(etiquettes))]
 pub(super) fn dedupe_reporters(
     etiquettes: &[&'static dyn Etiquette],
 ) -> Vec<&'static dyn Reporter> {
@@ -183,6 +193,7 @@ pub(super) fn dedupe_reporters(
     )
 }
 
+#[instrument(level = "debug", skip(items))]
 fn dedupe_hooks<'a, T: Hook + ?Sized>(items: impl Iterator<Item = &'a T>) -> Vec<&'a T> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
@@ -229,6 +240,7 @@ impl Hook for dyn WorkspaceAssessor {
 }
 
 impl Hook for dyn Reporter {
+    #[instrument(level = "trace", skip(self))]
     fn hook_id(&self) -> &str {
         self.id()
     }

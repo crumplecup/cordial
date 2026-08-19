@@ -10,6 +10,7 @@ use crate::session::SessionView;
 
 use super::types::{AntipatternRuleId, build_workspace_antipatterns_summary};
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone)]
 pub(super) struct AntipatternRow {
     pub(super) crate_name: String,
@@ -23,6 +24,7 @@ pub(super) struct AntipatternRow {
 }
 
 impl AntipatternRow {
+    #[instrument(level = "debug", skip(finding), ret)]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -46,6 +48,7 @@ impl AntipatternRow {
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 pub(super) fn antipattern_rows(findings: &[&dyn Finding]) -> Vec<AntipatternRow> {
     findings
         .iter()
@@ -54,10 +57,12 @@ pub(super) fn antipattern_rows(findings: &[&dyn Finding]) -> Vec<AntipatternRow>
         .collect()
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn open_rows(rows: &[AntipatternRow]) -> impl Iterator<Item = &AntipatternRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+#[instrument(level = "debug")]
 pub(super) fn escape_csv(value: &str) -> String {
     if value.contains(',') || value.contains('"') || value.contains('\n') {
         format!("\"{}\"", value.replace('"', "\"\""))
@@ -181,6 +186,7 @@ impl Reporter for AntipatternChecklistReporter {
     }
 }
 
+#[instrument(level = "info", skip(findings), err(level = "warn"))]
 fn write_finding_sections(body: &mut String, findings: &[&AntipatternRow]) -> CordialResult<()> {
     let mut by_rule: BTreeMap<String, Vec<&AntipatternRow>> = BTreeMap::new();
     for finding in findings {
@@ -209,6 +215,7 @@ fn write_finding_sections(body: &mut String, findings: &[&AntipatternRow]) -> Co
     Ok(())
 }
 
+#[instrument(level = "info", skip(entries), err(level = "warn"))]
 fn write_duplicate_clusters(body: &mut String, entries: &[&AntipatternRow]) -> CordialResult<()> {
     let mut by_shape: BTreeMap<String, Vec<&AntipatternRow>> = BTreeMap::new();
     for entry in entries {
@@ -253,6 +260,7 @@ fn write_duplicate_clusters(body: &mut String, entries: &[&AntipatternRow]) -> C
     Ok(())
 }
 
+#[instrument(level = "debug")]
 fn clause_shape(snippet: &str) -> String {
     snippet
         .parse::<TokenStream>()
@@ -260,6 +268,7 @@ fn clause_shape(snippet: &str) -> String {
         .unwrap_or_else(|_| snippet.to_string())
 }
 
+#[instrument(level = "debug", skip(tokens))]
 fn shape_tokens(tokens: TokenStream) -> TokenStream {
     let items: Vec<TokenTree> = tokens.into_iter().collect();
     let mut out = Vec::with_capacity(items.len());
@@ -303,10 +312,12 @@ impl AntipatternSummaryReporter {
 }
 
 impl Reporter for AntipatternSummaryReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
     fn render(
         &self,
         findings: &[&dyn Finding],

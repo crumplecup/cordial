@@ -6,19 +6,23 @@ use crate::session::SessionView;
 
 use super::types::{ErrorChainMarker, ErrorChainProbeId};
 
+use tracing::instrument;
 /// Matches error-chain expression nodes in the IR.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ErrorChainQuery;
 
 impl Query for ErrorChainQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &[NodeKind::Expr]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
         node.attr("error_chain_rule_id").is_some()
     }
@@ -35,14 +39,17 @@ impl ErrorChainProbe {
 }
 
 impl Probe for ErrorChainProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &ERROR_CHAIN_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, _session))]
     fn probe(
         &self,
         ir: &dyn IrView,

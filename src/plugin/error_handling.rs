@@ -93,7 +93,7 @@ impl ErrorSurface {
         Self::Library
     }
 
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Library => "library",
@@ -122,6 +122,7 @@ impl ErrorSurface {
 }
 
 impl std::fmt::Display for ErrorSurface {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
     }
@@ -146,6 +147,7 @@ pub trait ErrorScopeProvider: Send + Sync {
 pub struct WorkspaceMembersErrorScopeProvider;
 
 impl ErrorScopeProvider for WorkspaceMembersErrorScopeProvider {
+    #[instrument(level = "trace", skip(self, session, filter))]
     fn error_scopes(
         &self,
         session: &dyn SessionView,
@@ -164,6 +166,7 @@ impl ErrorScopeProvider for WorkspaceMembersErrorScopeProvider {
 pub struct StandardErrorHandlingPolicy;
 
 impl ErrorHandlingPolicy for StandardErrorHandlingPolicy {
+    #[instrument(level = "trace", skip(self))]
     fn layers(&self) -> ErrorHandlingLayers {
         ErrorHandlingLayers::FULL
     }

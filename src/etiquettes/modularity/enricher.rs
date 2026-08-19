@@ -9,6 +9,7 @@ use crate::session::SessionView;
 use super::scan::scan_source_tree;
 use super::types::ModularityKind;
 
+use tracing::instrument;
 /// Materializes modularity-site expression nodes in the IR graph.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ModularityInventoryEnricher;
@@ -18,10 +19,12 @@ impl ModularityInventoryEnricher {
 }
 
 impl IrEnricher for ModularityInventoryEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, ir, load, session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,

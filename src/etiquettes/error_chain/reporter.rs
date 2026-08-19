@@ -8,6 +8,7 @@ use crate::session::SessionView;
 
 use super::types::{ErrorChainProbeCounts, ErrorChainProbeId};
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone)]
 struct ErrorChainRow {
     crate_name: String,
@@ -21,6 +22,7 @@ struct ErrorChainRow {
 }
 
 impl ErrorChainRow {
+    #[instrument(level = "debug", skip(finding), ret)]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -44,6 +46,7 @@ impl ErrorChainRow {
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 fn error_chain_rows(findings: &[&dyn Finding]) -> Vec<ErrorChainRow> {
     findings
         .iter()
@@ -52,10 +55,12 @@ fn error_chain_rows(findings: &[&dyn Finding]) -> Vec<ErrorChainRow> {
         .collect()
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn open_rows(rows: &[ErrorChainRow]) -> impl Iterator<Item = &ErrorChainRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn probe_counts_from_rows(rows: &[ErrorChainRow]) -> ErrorChainProbeCounts {
     let mut counts = ErrorChainProbeCounts::default();
     for row in rows {
@@ -79,6 +84,7 @@ fn probe_counts_from_rows(rows: &[ErrorChainRow]) -> ErrorChainProbeCounts {
     counts
 }
 
+#[instrument(level = "debug")]
 fn escape_csv(value: &str) -> String {
     if value.contains(',') || value.contains('"') || value.contains('\n') {
         format!("\"{}\"", value.replace('"', "\"\""))
@@ -203,10 +209,12 @@ impl ErrorChainSummaryReporter {
 }
 
 impl Reporter for ErrorChainSummaryReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, ir, _session))]
     fn render(
         &self,
         findings: &[&dyn Finding],

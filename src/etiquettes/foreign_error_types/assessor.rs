@@ -8,6 +8,7 @@ use crate::session::SessionView;
 
 use super::types::{ForeignErrorRecordKind, ForeignErrorTypeFinding, ForeignErrorTypeRule};
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ForeignErrorTypeAssessor;
 
@@ -16,14 +17,17 @@ impl ForeignErrorTypeAssessor {
 }
 
 impl Assessor for ForeignErrorTypeAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["foreign-error-type"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],
@@ -168,6 +172,7 @@ impl Assessor for ForeignErrorTypeAssessor {
     }
 }
 
+#[instrument(level = "debug")]
 fn parse_confidence(value: &str) -> ForeignTypeConfidence {
     if value.contains("MEDIUM") {
         ForeignTypeConfidence::Medium
@@ -176,6 +181,7 @@ fn parse_confidence(value: &str) -> ForeignTypeConfidence {
     }
 }
 
+#[instrument(level = "debug")]
 fn parse_origin_class(value: &str) -> ErrorOriginClass {
     if value.contains("OTHER") {
         ErrorOriginClass::Other

@@ -11,6 +11,7 @@ use super::types::{
     WorkspaceForeignErrorAttenuationSummary, build_workspace_foreign_error_attenuation_summary,
 };
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone)]
 struct ForeignErrorAttenuationRow {
     crate_name: String,
@@ -32,6 +33,7 @@ struct ForeignErrorAttenuationRow {
 }
 
 impl ForeignErrorAttenuationRow {
+    #[instrument(level = "debug", skip(finding), ret)]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -63,6 +65,7 @@ impl ForeignErrorAttenuationRow {
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 fn attenuation_rows(findings: &[&dyn Finding]) -> Vec<ForeignErrorAttenuationRow> {
     findings
         .iter()
@@ -71,12 +74,14 @@ fn attenuation_rows(findings: &[&dyn Finding]) -> Vec<ForeignErrorAttenuationRow
         .collect()
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn open_rows(
     rows: &[ForeignErrorAttenuationRow],
 ) -> impl Iterator<Item = &ForeignErrorAttenuationRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+#[instrument(level = "debug")]
 fn escape_csv(value: &str) -> String {
     if value.contains(',') || value.contains('"') || value.contains('\n') {
         format!("\"{}\"", value.replace('"', "\"\""))
@@ -85,6 +90,7 @@ fn escape_csv(value: &str) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn report_from_rows(rows: &[ForeignErrorAttenuationRow]) -> ForeignErrorAttenuationReport {
     let crate_name = rows
         .first()
@@ -120,6 +126,7 @@ fn report_from_rows(rows: &[ForeignErrorAttenuationRow]) -> ForeignErrorAttenuat
     }
 }
 
+#[instrument(level = "debug")]
 fn parse_handling_class(value: &str) -> ForeignErrorHandlingClass {
     if value.contains("CHAIN-PRESERVED") {
         ForeignErrorHandlingClass::ChainPreserved
@@ -132,6 +139,7 @@ fn parse_handling_class(value: &str) -> ForeignErrorHandlingClass {
     }
 }
 
+#[instrument(level = "debug")]
 fn parse_resolution_id(value: &str) -> super::types::ErrorHandlingResolutionId {
     use super::types::ErrorHandlingResolutionId;
     if value.contains("MAINTAIN-EXEMPLAR") {
@@ -145,6 +153,7 @@ fn parse_resolution_id(value: &str) -> super::types::ErrorHandlingResolutionId {
     }
 }
 
+#[instrument(level = "debug")]
 fn parse_site_kind(value: &str) -> crate::etiquettes::error_sites::ErrorSiteKind {
     use crate::etiquettes::error_sites::ErrorSiteKind;
     match value {
@@ -272,6 +281,7 @@ impl Reporter for ForeignErrorAttenuationChecklistReporter {
     }
 }
 
+#[instrument(level = "info", skip(report, class))]
 fn write_class_section(
     body: &mut String,
     report: &ForeignErrorAttenuationReport,
@@ -337,10 +347,12 @@ impl ForeignErrorAttenuationSummaryReporter {
 }
 
 impl Reporter for ForeignErrorAttenuationSummaryReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, _ir, _session))]
     fn render(
         &self,
         findings: &[&dyn Finding],
@@ -360,6 +372,7 @@ impl Reporter for ForeignErrorAttenuationSummaryReporter {
     }
 }
 
+#[instrument(level = "debug", skip(summary))]
 fn render_summary(summary: &WorkspaceForeignErrorAttenuationSummary) -> String {
     let mut body = String::new();
     body.push_str("# Foreign error handling attenuation summary\n\n");

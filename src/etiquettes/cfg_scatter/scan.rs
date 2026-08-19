@@ -18,7 +18,7 @@ use crate::loader::module_path_from_src_file;
 use super::types::{CfgScatterGroup, CfgScatterThresholds, CfgSiteKind, CfgSiteOccurrence};
 
 use tracing::instrument;
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(thresholds), err(level = "warn"))]
 pub fn scan_source_tree(
     src_root: &Path,
     crate_root: &Path,
@@ -88,6 +88,7 @@ struct CfgScatterVisitor {
 }
 
 impl CfgScatterVisitor {
+    #[instrument(level = "debug", skip(self))]
     fn into_groups(self) -> Vec<CfgScatterGroup> {
         self.occurrences
             .into_iter()
@@ -99,6 +100,7 @@ impl CfgScatterVisitor {
             .collect()
     }
 
+    #[instrument(level = "debug", skip(self))]
     fn site_context(&self) -> String {
         let mut parts = self.module_prefix.clone();
         if let Some(ty) = &self.impl_type {
@@ -112,6 +114,7 @@ impl CfgScatterVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, attrs, kind, snippet))]
     fn check_attrs(&mut self, attrs: &[Attribute], kind: CfgSiteKind, snippet: impl Into<String>) {
         let line = attrs
             .first()
@@ -132,6 +135,7 @@ impl CfgScatterVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, items))]
     fn visit_module_items(&mut self, items: &[syn::Item], module_prefix: &[String]) {
         let prev_prefix = self.module_prefix.clone();
         self.module_prefix = module_prefix.to_vec();
@@ -141,6 +145,7 @@ impl CfgScatterVisitor {
         self.module_prefix = prev_prefix;
     }
 
+    #[instrument(level = "debug", skip(self, item_mod))]
     fn visit_mod(&mut self, item_mod: &ItemMod) {
         // Deliberately not scanned: gating the whole module at the `mod`
         // declaration is the recommended pattern, not the antipattern.
@@ -154,10 +159,12 @@ impl CfgScatterVisitor {
 }
 
 impl<'ast> Visit<'ast> for CfgScatterVisitor {
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         self.visit_mod(node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         self.check_attrs(
             &node.attrs,
@@ -169,6 +176,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         self.fn_stack.pop();
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_struct(&mut self, node: &'ast ItemStruct) {
         self.check_attrs(
             &node.attrs,
@@ -178,6 +186,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         syn::visit::visit_item_struct(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_enum(&mut self, node: &'ast ItemEnum) {
         self.check_attrs(
             &node.attrs,
@@ -187,6 +196,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         syn::visit::visit_item_enum(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_trait(&mut self, node: &'ast ItemTrait) {
         self.check_attrs(
             &node.attrs,
@@ -196,6 +206,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         syn::visit::visit_item_trait(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_const(&mut self, node: &'ast ItemConst) {
         self.check_attrs(
             &node.attrs,
@@ -205,6 +216,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         syn::visit::visit_item_const(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_static(&mut self, node: &'ast ItemStatic) {
         self.check_attrs(
             &node.attrs,
@@ -214,6 +226,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         syn::visit::visit_item_static(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_type(&mut self, node: &'ast ItemType) {
         self.check_attrs(
             &node.attrs,
@@ -223,11 +236,13 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         syn::visit::visit_item_type(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_use(&mut self, node: &'ast ItemUse) {
         self.check_attrs(&node.attrs, CfgSiteKind::Use, "use ...".to_string());
         syn::visit::visit_item_use(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
         let label = format!("impl {}", type_label(&node.self_ty));
         self.check_attrs(&node.attrs, CfgSiteKind::Impl, label.clone());
@@ -237,6 +252,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         self.impl_type = prev;
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_impl_item_fn(&mut self, node: &'ast ImplItemFn) {
         self.check_attrs(
             &node.attrs,
@@ -248,6 +264,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         self.fn_stack.pop();
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_impl_item_const(&mut self, node: &'ast ImplItemConst) {
         self.check_attrs(
             &node.attrs,
@@ -257,6 +274,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         syn::visit::visit_impl_item_const(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_impl_item_type(&mut self, node: &'ast ImplItemType) {
         self.check_attrs(
             &node.attrs,
@@ -270,6 +288,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
     /// [`Self::visit_impl_item_fn`] that was previously missing, which made
     /// `#[cfg(...)]` scattered across trait default methods invisible to
     /// this scanner (see `docs/planning/cfg-scatter-etiquette.md`).
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_trait_item_fn(&mut self, node: &'ast TraitItemFn) {
         self.check_attrs(
             &node.attrs,
@@ -281,6 +300,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         self.fn_stack.pop();
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_trait_item_const(&mut self, node: &'ast TraitItemConst) {
         self.check_attrs(
             &node.attrs,
@@ -290,6 +310,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         syn::visit::visit_trait_item_const(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_trait_item_type(&mut self, node: &'ast TraitItemType) {
         self.check_attrs(
             &node.attrs,
@@ -299,6 +320,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         syn::visit::visit_trait_item_type(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_field(&mut self, node: &'ast Field) {
         let name = node
             .ident
@@ -309,6 +331,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         syn::visit::visit_field(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_variant(&mut self, node: &'ast Variant) {
         self.check_attrs(
             &node.attrs,
@@ -318,6 +341,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         syn::visit::visit_variant(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_arm(&mut self, node: &'ast syn::Arm) {
         self.check_attrs(&node.attrs, CfgSiteKind::Arm, "match arm".to_string());
         syn::visit::visit_arm(self, node);
@@ -328,6 +352,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
 /// attribute in `attrs` (there is normally at most one, but attributes can
 /// repeat). `#[cfg(test)]` is excluded — it's a build-mode switch, not a
 /// feature-flag antipattern candidate.
+#[instrument(level = "debug", skip(attrs))]
 fn cfg_predicates(attrs: &[Attribute]) -> Vec<String> {
     attrs
         .iter()
@@ -347,6 +372,7 @@ fn cfg_predicates(attrs: &[Attribute]) -> Vec<String> {
         .collect()
 }
 
+#[instrument(level = "debug")]
 fn normalize_cfg_tokens(text: &str) -> String {
     text.split_whitespace()
         .collect::<Vec<_>>()
@@ -357,6 +383,7 @@ fn normalize_cfg_tokens(text: &str) -> String {
         .replace(" ,", ",")
 }
 
+#[instrument(level = "debug", skip(ty))]
 fn type_label(ty: &Type) -> String {
     match ty {
         Type::Path(type_path) => path_label(&type_path.path),
@@ -367,6 +394,7 @@ fn type_label(ty: &Type) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(path))]
 fn path_label(path: &syn::Path) -> String {
     path.segments
         .last()

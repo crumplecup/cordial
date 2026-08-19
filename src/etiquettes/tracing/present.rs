@@ -17,6 +17,7 @@ pub struct PresentInstrument {
 }
 
 impl Default for PresentInstrument {
+    #[instrument(level = "debug", ret)]
     fn default() -> Self {
         Self {
             level: InstrumentLevel::Info,
@@ -30,7 +31,7 @@ impl Default for PresentInstrument {
 }
 
 /// Load present instrument args from `HasAttr` children, if any.
-#[instrument(level = "debug", skip(ir))]
+#[instrument(level = "debug", skip(ir, node_id))]
 pub fn present_instrument(ir: &dyn IrView, node_id: NodeId) -> Option<PresentInstrument> {
     for child_id in ir.children(node_id, EdgeKind::HasAttr) {
         let Some(child) = ir.node(child_id) else {
@@ -52,6 +53,7 @@ pub fn present_instrument(ir: &dyn IrView, node_id: NodeId) -> Option<PresentIns
     None
 }
 
+#[instrument(level = "trace", skip(path), ret)]
 fn is_instrument_path(path: &str) -> bool {
     path == "instrument" || path.ends_with("::instrument")
 }
@@ -101,6 +103,7 @@ pub fn parse_instrument_meta(meta: &str) -> PresentInstrument {
     present
 }
 
+#[instrument(level = "debug")]
 fn instrument_inner(meta: &str) -> Option<&str> {
     let rest = meta.strip_prefix("instrument")?;
     if rest.is_empty() {
@@ -111,16 +114,19 @@ fn instrument_inner(meta: &str) -> Option<&str> {
     Some(inner.trim())
 }
 
+#[instrument(level = "debug")]
 fn named_value<'a>(arg: &'a str, name: &str) -> Option<&'a str> {
     let rest = arg.strip_prefix(name)?.trim_start();
     let rest = rest.strip_prefix('=')?.trim();
     Some(rest)
 }
 
+#[instrument(level = "debug")]
 fn ident_eq(arg: &str, name: &str) -> bool {
     arg == name
 }
 
+#[instrument(level = "debug")]
 fn grouped_args<'a>(arg: &'a str, name: &str) -> Option<&'a str> {
     let rest = arg.strip_prefix(name)?;
     if !rest.is_empty() && !rest.starts_with(|ch: char| ch == '(' || ch.is_whitespace()) {
@@ -133,6 +139,7 @@ fn grouped_args<'a>(arg: &'a str, name: &str) -> Option<&'a str> {
     rest.strip_prefix('(')?.strip_suffix(')').map(str::trim)
 }
 
+#[instrument(level = "debug")]
 fn parse_level(value: &str) -> Option<InstrumentLevel> {
     let token = value
         .trim()
@@ -144,6 +151,7 @@ fn parse_level(value: &str) -> Option<InstrumentLevel> {
     InstrumentLevel::from_attr(&token.to_ascii_lowercase())
 }
 
+#[instrument(level = "debug")]
 fn split_top_level(input: &str) -> Vec<&str> {
     let mut parts = Vec::new();
     let mut start = 0;
@@ -165,6 +173,7 @@ fn split_top_level(input: &str) -> Vec<&str> {
     parts
 }
 
+#[instrument(level = "debug")]
 fn csv_idents(inner: &str) -> Vec<String> {
     inner
         .split(',')
@@ -174,6 +183,7 @@ fn csv_idents(inner: &str) -> Vec<String> {
         .collect()
 }
 
+#[instrument(level = "debug")]
 fn field_names(inner: &str) -> Vec<String> {
     split_top_level(inner)
         .into_iter()

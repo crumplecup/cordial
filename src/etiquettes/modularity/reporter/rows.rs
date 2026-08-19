@@ -2,6 +2,7 @@ use crate::objects::{Finding, MapFindingSink};
 
 use super::super::hierarchy::ModuleSizeInput;
 
+use tracing::instrument;
 pub(super) const SUMMARY_MODULE_ROWS: usize = 20;
 pub(super) const SUMMARY_RANK_ROWS: usize = 10;
 pub(super) const HOTSPOT_METHODS: usize = 3;
@@ -23,6 +24,7 @@ pub(super) struct ModularityRow {
 }
 
 impl ModularityRow {
+    #[instrument(level = "debug", skip(finding), ret)]
     pub(super) fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -49,15 +51,18 @@ impl ModularityRow {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub(super) fn line_count(&self) -> u32 {
         self.lines.parse().unwrap_or(0)
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub(super) fn is_checklist(&self) -> bool {
         self.checklist == "true"
     }
 }
 
+#[instrument(level = "trace", skip(row, thresholds))]
 pub(super) fn is_inventory_row(
     row: &ModularityRow,
     thresholds: &crate::config::ModularityThresholds,
@@ -69,6 +74,7 @@ pub(super) fn is_inventory_row(
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 pub(super) fn modularity_rows(findings: &[&dyn Finding]) -> Vec<ModularityRow> {
     findings
         .iter()
@@ -77,10 +83,12 @@ pub(super) fn modularity_rows(findings: &[&dyn Finding]) -> Vec<ModularityRow> {
         .collect()
 }
 
+#[instrument(level = "debug", skip(rows))]
 pub(super) fn open_rows(rows: &[ModularityRow]) -> impl Iterator<Item = &ModularityRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+#[instrument(level = "debug", skip(rows))]
 pub(super) fn crate_names(rows: &[&ModularityRow]) -> Vec<String> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();
@@ -88,6 +96,7 @@ pub(super) fn crate_names(rows: &[&ModularityRow]) -> Vec<String> {
     names
 }
 
+#[instrument(level = "debug", skip(rows))]
 pub(super) fn sort_by_lines_desc(rows: &mut [&ModularityRow]) {
     rows.sort_by(|left, right| {
         right
@@ -98,10 +107,12 @@ pub(super) fn sort_by_lines_desc(rows: &mut [&ModularityRow]) {
     });
 }
 
+#[instrument(level = "debug", skip(rows))]
 pub(super) fn count_kind(rows: &[&ModularityRow], kind: &str) -> usize {
     rows.iter().filter(|row| row.kind == kind).count()
 }
 
+#[instrument(level = "debug", skip(rows))]
 pub(super) fn max_lines(rows: &[&ModularityRow], kind: &str) -> u32 {
     rows.iter()
         .filter(|row| row.kind == kind)
@@ -110,6 +121,7 @@ pub(super) fn max_lines(rows: &[&ModularityRow], kind: &str) -> u32 {
         .unwrap_or(0)
 }
 
+#[instrument(level = "debug", skip(rows))]
 pub(super) fn file_module_inputs(rows: &[&ModularityRow]) -> Vec<ModuleSizeInput> {
     rows.iter()
         .filter(|row| row.kind == "MODULARITY-MODULE-SIZE" && row.inline != "true")

@@ -1,4 +1,12 @@
 //! Apply `#[instrument]` attributes from a tracing instrument checklist.
+//!
+//! Reads open rows from `{store}/findings/tracing-instrument.checklist.md`
+//! (or `--checklist`) and writes the classified recipe onto the named
+//! function. `cordial quality --apply` is the CLI; `--dry-run` logs without
+//! writing. Path-qualified forms (`#[tracing::instrument]`) are used when
+//! `instrument` would clash with a module name. Unrecordable parameters
+//! (`impl Trait`, `dyn`, generics) are skipped as fields; `err` is only
+//! applied when the function returns `Result` or a `*Result` alias.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -38,7 +46,7 @@ pub struct InstrumentApplySummary {
 }
 
 /// Patch source files listed in the tracing instrument checklist.
-#[tracing::instrument(level = "debug", err(level = "warn"))]
+#[tracing::instrument(level = "info", err(level = "warn"))]
 pub fn run_tracing_instrument_apply(
     project_root: &Path,
     checklist_path: &Path,
@@ -186,6 +194,7 @@ pub fn run_tracing_instrument_apply(
     Ok(summary)
 }
 
+#[tracing::instrument(level = "debug", skip(gaps))]
 fn dedupe_gaps(gaps: &mut Vec<InstrumentGap>) {
     gaps.sort_by(|left, right| {
         left.qualified_name

@@ -24,12 +24,12 @@ pub struct SourceFileDigest {
 }
 
 impl IrCacheDigest {
-    #[instrument(level = "trace")]
+    #[instrument(level = "debug")]
     pub fn cache_path(cache_dir: &Path, crate_name: &str) -> PathBuf {
         cache_dir.join(format!("{crate_name}.ir.digests.json"))
     }
 
-    #[instrument(level = "debug", skip(load_views), err(level = "warn"))]
+    #[instrument(level = "debug", skip(target, load_views), err(level = "warn"))]
     pub fn compute(
         target: &CrateTarget,
         enricher_ids: &[&str],
@@ -78,6 +78,7 @@ impl IrCacheDigest {
     }
 }
 
+#[instrument(level = "debug", skip(files))]
 fn digest_source_files(files: &[crate::loader::SourceFile]) -> Vec<SourceFileDigest> {
     let mut digests: Vec<SourceFileDigest> = files
         .iter()
@@ -90,12 +91,14 @@ fn digest_source_files(files: &[crate::loader::SourceFile]) -> Vec<SourceFileDig
     digests
 }
 
+#[instrument(level = "debug", skip(path), err(level = "warn"))]
 #[cfg(feature = "rustdoc")]
 fn digest_file(path: &Path) -> CordialResult<String> {
     let bytes = std::fs::read(path)?;
     Ok(digest_bytes(&bytes))
 }
 
+#[instrument(level = "debug")]
 fn digest_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);

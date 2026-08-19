@@ -34,7 +34,7 @@ pub fn render_amenable_std_coverage_csv(report: &AmenableStdReport) -> CordialRe
     Ok(body)
 }
 
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(gaps), err(level = "warn"))]
 pub fn render_amenable_std_gaps_csv(gaps: &[AmenableStdGapEntry]) -> CordialResult<String> {
     let mut body = String::from("source_crate,type_path,type_kind,status,missing_layers,action\n");
     for gap in gaps {
@@ -52,7 +52,7 @@ pub fn render_amenable_std_gaps_csv(gaps: &[AmenableStdGapEntry]) -> CordialResu
     Ok(body)
 }
 
-#[instrument(level = "debug", skip(report), err(level = "warn"))]
+#[instrument(level = "debug", skip(report, skip_map), err(level = "warn"))]
 pub fn render_amenable_std_checklist_md(
     report: &AmenableStdReport,
     skip_map: &VerifierSkipMap,
@@ -205,6 +205,7 @@ pub fn render_amenable_std_summary_md(report: &AmenableStdReport) -> String {
     )
 }
 
+#[instrument(level = "debug")]
 fn csv_escape(value: &str) -> String {
     if value.contains(',') || value.contains('"') || value.contains('\n') {
         format!("\"{}\"", value.replace('"', "\"\""))

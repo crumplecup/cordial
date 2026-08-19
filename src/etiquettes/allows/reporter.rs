@@ -6,6 +6,7 @@ use crate::ir::IrView;
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
 use crate::session::SessionView;
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone)]
 struct AllowRow {
     crate_name: String,
@@ -18,6 +19,7 @@ struct AllowRow {
 }
 
 impl AllowRow {
+    #[instrument(level = "debug", skip(finding), ret)]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -40,6 +42,7 @@ impl AllowRow {
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 fn allow_rows(findings: &[&dyn Finding]) -> Vec<AllowRow> {
     findings
         .iter()
@@ -48,6 +51,7 @@ fn allow_rows(findings: &[&dyn Finding]) -> Vec<AllowRow> {
         .collect()
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn open_rows(rows: &[AllowRow]) -> impl Iterator<Item = &AllowRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
@@ -155,10 +159,12 @@ impl AllowSummaryReporter {
 }
 
 impl Reporter for AllowSummaryReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, ir, _session))]
     fn render(
         &self,
         findings: &[&dyn Finding],
@@ -189,6 +195,7 @@ impl Reporter for AllowSummaryReporter {
     }
 }
 
+#[instrument(level = "debug")]
 fn escape_csv(value: &str) -> String {
     if value.contains(',') || value.contains('"') || value.contains('\n') {
         format!("\"{}\"", value.replace('"', "\"\""))

@@ -21,6 +21,7 @@ pub fn build_foreign_error_type_report(
     }
 }
 
+#[instrument(level = "debug", skip(finding))]
 fn infer_foreign_error_type_finding(
     finding: &PartitionedErrorSiteRow,
 ) -> Option<ForeignErrorTypeRecord> {

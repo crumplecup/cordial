@@ -87,6 +87,7 @@ struct PanicScanVisitor {
 }
 
 impl PanicScanVisitor {
+    #[instrument(level = "debug", skip(self))]
     fn site_context(&self) -> String {
         let mut parts = self.module_prefix.clone();
         if let Some(ty) = &self.impl_type {
@@ -100,6 +101,7 @@ impl PanicScanVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, kind))]
     fn push_finding(&mut self, kind: PanicKind, line: u32, snippet: String) {
         let mut file = self.file.clone();
         if let Ok(rel) = file.strip_prefix(&self.crate_root) {
@@ -122,6 +124,7 @@ impl PanicScanVisitor {
         });
     }
 
+    #[instrument(level = "debug", skip(self, mac))]
     fn check_macro(&mut self, mac: &Macro) {
         let Some(kind) = macro_panic_kind(&mac.path) else {
             return;
@@ -129,6 +132,7 @@ impl PanicScanVisitor {
         self.push_finding(kind, mac.span().start().line as u32, macro_snippet(mac));
     }
 
+    #[instrument(level = "debug", skip(self, call))]
     fn check_method_call(&mut self, call: &ExprMethodCall) {
         match call.method.to_string().as_str() {
             "expect" => self.push_finding(
@@ -145,6 +149,7 @@ impl PanicScanVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, items))]
     fn visit_module_items(&mut self, items: &[Item], module_prefix: &[String]) {
         let prev_prefix = self.module_prefix.clone();
         self.module_prefix = module_prefix.to_vec();
@@ -154,6 +159,7 @@ impl PanicScanVisitor {
         self.module_prefix = prev_prefix;
     }
 
+    #[instrument(level = "debug", skip(self, item_mod))]
     fn visit_mod(&mut self, item_mod: &ItemMod) {
         let prev = self.in_cfg_test;
         if is_cfg_test(&item_mod.attrs) {
@@ -171,10 +177,12 @@ impl PanicScanVisitor {
 }
 
 impl<'ast> Visit<'ast> for PanicScanVisitor {
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         self.visit_mod(node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         let prev = self.in_cfg_test;
         if is_cfg_test(&node.attrs) {
@@ -186,6 +194,7 @@ impl<'ast> Visit<'ast> for PanicScanVisitor {
         self.in_cfg_test = prev;
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
         let prev_cfg = self.in_cfg_test;
         if is_cfg_test(&node.attrs) {
@@ -198,6 +207,7 @@ impl<'ast> Visit<'ast> for PanicScanVisitor {
         self.in_cfg_test = prev_cfg;
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
         let prev = self.in_cfg_test;
         if is_cfg_test(&node.attrs) {
@@ -209,26 +219,31 @@ impl<'ast> Visit<'ast> for PanicScanVisitor {
         self.in_cfg_test = prev;
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_stmt_macro(&mut self, node: &'ast syn::StmtMacro) {
         self.check_macro(&node.mac);
         syn::visit::visit_stmt_macro(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_macro(&mut self, node: &'ast syn::ItemMacro) {
         self.check_macro(&node.mac);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_macro(&mut self, node: &'ast ExprMacro) {
         self.check_macro(&node.mac);
         syn::visit::visit_expr_macro(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
         self.check_method_call(node);
         syn::visit::visit_expr_method_call(self, node);
     }
 }
 
+#[instrument(level = "trace", skip(call), ret)]
 fn is_unwrap_variant(call: &ExprMethodCall) -> bool {
     matches!(
         call.method.to_string().as_str(),
@@ -236,6 +251,7 @@ fn is_unwrap_variant(call: &ExprMethodCall) -> bool {
     )
 }
 
+#[instrument(level = "trace", skip(attrs))]
 fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| {
         let syn::Meta::List(list) = &attr.meta else {
@@ -248,6 +264,7 @@ fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
     })
 }
 
+#[instrument(level = "debug", skip(path))]
 fn macro_panic_kind(path: &syn::Path) -> Option<PanicKind> {
     let ident = path.segments.last()?.ident.to_string();
     match ident.as_str() {
@@ -258,6 +275,7 @@ fn macro_panic_kind(path: &syn::Path) -> Option<PanicKind> {
     }
 }
 
+#[instrument(level = "debug", skip(mac))]
 fn macro_snippet(mac: &Macro) -> String {
     let name = path_label(&mac.path);
     let args = mac.tokens.to_string();
@@ -265,6 +283,7 @@ fn macro_snippet(mac: &Macro) -> String {
     format!("{name}!({trimmed})")
 }
 
+#[instrument(level = "debug", skip(call))]
 fn expect_snippet(call: &ExprMethodCall) -> String {
     if let Some(Expr::Lit(ExprLit {
         lit: Lit::Str(lit), ..
@@ -275,6 +294,7 @@ fn expect_snippet(call: &ExprMethodCall) -> String {
     ".expect(…)".to_string()
 }
 
+#[instrument(level = "debug")]
 fn truncate_snippet(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_string();
@@ -283,6 +303,7 @@ fn truncate_snippet(text: &str, max: usize) -> String {
     format!("{truncated}…")
 }
 
+#[instrument(level = "debug", skip(ty))]
 fn type_label(ty: &Type) -> String {
     match ty {
         Type::Path(type_path) => path_label(&type_path.path),
@@ -293,6 +314,7 @@ fn type_label(ty: &Type) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(path))]
 fn path_label(path: &syn::Path) -> String {
     path.segments
         .last()

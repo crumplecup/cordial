@@ -93,6 +93,7 @@ struct AllowScanVisitor {
 }
 
 impl AllowScanVisitor {
+    #[instrument(level = "debug", skip(self))]
     fn site_context(&self) -> String {
         let mut parts = self.module_prefix.clone();
         if let Some(ty) = &self.impl_type {
@@ -106,6 +107,7 @@ impl AllowScanVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, attrs))]
     fn check_attrs(&mut self, attrs: &[Attribute]) {
         for attr in attrs {
             let Some(snippet) = allow_snippet(attr) else {
@@ -125,6 +127,7 @@ impl AllowScanVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, items))]
     fn visit_module_items(&mut self, items: &[syn::Item], module_prefix: &[String]) {
         let prev_prefix = self.module_prefix.clone();
         self.module_prefix = module_prefix.to_vec();
@@ -134,6 +137,7 @@ impl AllowScanVisitor {
         self.module_prefix = prev_prefix;
     }
 
+    #[instrument(level = "debug", skip(self, item_mod))]
     fn visit_mod(&mut self, item_mod: &ItemMod) {
         self.check_attrs(&item_mod.attrs);
         if is_cfg_test(&item_mod.attrs) {
@@ -149,15 +153,18 @@ impl AllowScanVisitor {
 }
 
 impl<'ast> Visit<'ast> for AllowScanVisitor {
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_file(&mut self, node: &'ast File) {
         self.check_attrs(&node.attrs);
         syn::visit::visit_file(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         self.visit_mod(node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         self.fn_stack.push(node.sig.ident.to_string());
         self.check_attrs(&node.attrs);
@@ -165,36 +172,43 @@ impl<'ast> Visit<'ast> for AllowScanVisitor {
         self.fn_stack.pop();
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_struct(&mut self, node: &'ast syn::ItemStruct) {
         self.check_attrs(&node.attrs);
         syn::visit::visit_item_struct(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_enum(&mut self, node: &'ast syn::ItemEnum) {
         self.check_attrs(&node.attrs);
         syn::visit::visit_item_enum(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_trait(&mut self, node: &'ast syn::ItemTrait) {
         self.check_attrs(&node.attrs);
         syn::visit::visit_item_trait(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_const(&mut self, node: &'ast syn::ItemConst) {
         self.check_attrs(&node.attrs);
         syn::visit::visit_item_const(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_static(&mut self, node: &'ast syn::ItemStatic) {
         self.check_attrs(&node.attrs);
         syn::visit::visit_item_static(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_type(&mut self, node: &'ast syn::ItemType) {
         self.check_attrs(&node.attrs);
         syn::visit::visit_item_type(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
         self.check_attrs(&node.attrs);
         let prev = self.impl_type.clone();
@@ -203,6 +217,7 @@ impl<'ast> Visit<'ast> for AllowScanVisitor {
         self.impl_type = prev;
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_impl_item_fn(&mut self, node: &'ast ImplItemFn) {
         self.fn_stack.push(node.sig.ident.to_string());
         self.check_attrs(&node.attrs);
@@ -210,16 +225,19 @@ impl<'ast> Visit<'ast> for AllowScanVisitor {
         self.fn_stack.pop();
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_field(&mut self, node: &'ast Field) {
         self.check_attrs(&node.attrs);
         syn::visit::visit_field(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_variant(&mut self, node: &'ast Variant) {
         self.check_attrs(&node.attrs);
         syn::visit::visit_variant(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr(&mut self, node: &'ast Expr) {
         if let Expr::Closure(closure) = node {
             self.check_attrs(&closure.attrs);
@@ -228,6 +246,7 @@ impl<'ast> Visit<'ast> for AllowScanVisitor {
     }
 }
 
+#[instrument(level = "debug", skip(attr))]
 fn allow_snippet(attr: &Attribute) -> Option<String> {
     match &attr.meta {
         Meta::List(list) if list.path.is_ident("allow") => Some(truncate_snippet(
@@ -238,6 +257,7 @@ fn allow_snippet(attr: &Attribute) -> Option<String> {
     }
 }
 
+#[instrument(level = "debug")]
 fn normalize_allow_tokens(text: &str) -> String {
     let collapsed = text
         .split_whitespace()
@@ -251,6 +271,7 @@ fn normalize_allow_tokens(text: &str) -> String {
     }
 }
 
+#[instrument(level = "trace", skip(attrs))]
 fn is_cfg_test(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {
         let Meta::List(list) = &attr.meta else {
@@ -263,6 +284,7 @@ fn is_cfg_test(attrs: &[Attribute]) -> bool {
     })
 }
 
+#[instrument(level = "debug")]
 fn truncate_snippet(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_string();
@@ -271,6 +293,7 @@ fn truncate_snippet(text: &str, max: usize) -> String {
     format!("{truncated}…")
 }
 
+#[instrument(level = "debug", skip(ty))]
 fn type_label(ty: &Type) -> String {
     match ty {
         Type::Path(type_path) => path_label(&type_path.path),
@@ -281,6 +304,7 @@ fn type_label(ty: &Type) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(path))]
 fn path_label(path: &syn::Path) -> String {
     path.segments
         .last()
