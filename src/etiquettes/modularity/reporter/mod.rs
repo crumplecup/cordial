@@ -1,6 +1,7 @@
 mod checklist;
 mod csv;
 mod rows;
+mod structure;
 mod summary;
 
 pub use checklist::ModularityChecklistReporter;

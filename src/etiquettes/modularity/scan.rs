@@ -13,7 +13,7 @@ use crate::loader::module_path_from_src_file;
 use super::types::{ModularityKind, ModularitySiteRecord, ModularityThresholds};
 
 use tracing::instrument;
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(thresholds), err(level = "warn"))]
 pub fn scan_source_tree(
     src_root: &Path,
     crate_root: &Path,
@@ -51,7 +51,7 @@ pub fn scan_source_tree(
     Ok(findings)
 }
 
-#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, file, thresholds), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,
@@ -89,6 +89,11 @@ pub fn scan_rust_source(
     Ok(findings)
 }
 
+#[instrument(
+    level = "debug",
+    skip(source, file, thresholds, findings),
+    err(level = "warn")
+)]
 fn maybe_push_file_finding(
     source: &str,
     file: &Path,
@@ -111,6 +116,7 @@ fn maybe_push_file_finding(
     Ok(())
 }
 
+#[instrument(level = "debug", skip(source, syntax, file, findings))]
 fn push_module_size_records(
     source: &str,
     syntax: &syn::File,
@@ -131,6 +137,7 @@ fn push_module_size_records(
     collect_inline_module_sizes(&syntax.items, module_prefix, rel_file, findings);
 }
 
+#[instrument(level = "debug", skip(items, file, findings))]
 fn collect_inline_module_sizes(
     items: &[syn::Item],
     module_prefix: &[String],
@@ -161,6 +168,7 @@ fn collect_inline_module_sizes(
     }
 }
 
+#[instrument(level = "debug")]
 fn module_path_label(parts: &[String]) -> String {
     if parts.is_empty() {
         "<crate>".to_string()
@@ -169,6 +177,7 @@ fn module_path_label(parts: &[String]) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(syntax, file, thresholds, findings))]
 fn maybe_push_types_finding(
     syntax: &syn::File,
     file: &Path,
@@ -191,12 +200,14 @@ fn maybe_push_types_finding(
     });
 }
 
+#[instrument(level = "debug", skip(items))]
 fn file_type_names(items: &[syn::Item]) -> Vec<String> {
     let mut names = Vec::new();
     collect_type_names(items, &mut names);
     names
 }
 
+#[instrument(level = "debug", skip(items))]
 fn collect_type_names(items: &[syn::Item], names: &mut Vec<String>) {
     for item in items {
         match item {
@@ -222,12 +233,14 @@ fn collect_type_names(items: &[syn::Item], names: &mut Vec<String>) {
     }
 }
 
+#[instrument(level = "debug", skip(file))]
 fn relative_source_path(file: &Path, crate_root: &Path) -> PathBuf {
     file.strip_prefix(crate_root)
         .map(Path::to_path_buf)
         .unwrap_or_else(|_| file.to_path_buf())
 }
 
+#[instrument(level = "debug", skip(source))]
 fn count_source_lines(source: &str) -> u32 {
     u32::try_from(source.lines().count()).unwrap_or(u32::MAX)
 }
@@ -244,6 +257,7 @@ struct ModularityScanVisitor {
 }
 
 impl ModularityScanVisitor {
+    #[instrument(level = "debug", skip(self))]
     fn site_context(&self) -> String {
         let mut parts = self.module_prefix.clone();
         if let Some(ty) = &self.impl_type {
@@ -257,6 +271,7 @@ impl ModularityScanVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, span))]
     fn check_function(&mut self, span: proc_macro2::Span) {
         let lines = span_line_count(span);
         if lines < self.thresholds.function_scan_min_lines(self.file_lines) {
@@ -272,6 +287,7 @@ impl ModularityScanVisitor {
         });
     }
 
+    #[instrument(level = "debug", skip(self, attrs, block))]
     fn check_function_body(&mut self, attrs: &[syn::Attribute], block: &syn::Block) {
         if is_cfg_test(attrs) {
             return;
@@ -279,6 +295,7 @@ impl ModularityScanVisitor {
         self.check_function(block.span());
     }
 
+    #[instrument(level = "debug", skip(self, items))]
     fn visit_module_items(&mut self, items: &[syn::Item], module_prefix: &[String]) {
         let prev_prefix = self.module_prefix.clone();
         self.module_prefix = module_prefix.to_vec();
@@ -288,6 +305,7 @@ impl ModularityScanVisitor {
         self.module_prefix = prev_prefix;
     }
 
+    #[instrument(level = "debug", skip(self, item_mod))]
     fn visit_mod(&mut self, item_mod: &ItemMod) {
         if is_cfg_test(&item_mod.attrs) {
             return;
@@ -302,10 +320,12 @@ impl ModularityScanVisitor {
 }
 
 impl<'ast> Visit<'ast> for ModularityScanVisitor {
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         self.visit_mod(node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         if is_cfg_test(&node.attrs) {
             return;
@@ -316,6 +336,7 @@ impl<'ast> Visit<'ast> for ModularityScanVisitor {
         self.fn_stack.pop();
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
         if is_cfg_test(&node.attrs) {
             return;
@@ -326,6 +347,7 @@ impl<'ast> Visit<'ast> for ModularityScanVisitor {
         self.impl_type = prev;
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
         if is_cfg_test(&node.attrs) {
             return;
@@ -336,6 +358,7 @@ impl<'ast> Visit<'ast> for ModularityScanVisitor {
         self.fn_stack.pop();
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_trait(&mut self, node: &'ast ItemTrait) {
         if is_cfg_test(&node.attrs) {
             return;
@@ -346,6 +369,7 @@ impl<'ast> Visit<'ast> for ModularityScanVisitor {
         self.impl_type = prev;
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
         if is_cfg_test(&node.attrs) {
             return;
@@ -359,15 +383,18 @@ impl<'ast> Visit<'ast> for ModularityScanVisitor {
         self.fn_stack.pop();
     }
 
+    #[instrument(level = "debug", skip(self, _node))]
     fn visit_expr_closure(&mut self, _node: &'ast syn::ExprClosure) {}
 }
 
+#[instrument(level = "debug", skip(span))]
 fn span_line_count(span: proc_macro2::Span) -> u32 {
     let start = span.start().line;
     let end = span.end().line;
     u32::try_from(end.saturating_sub(start).saturating_add(1)).unwrap_or(u32::MAX)
 }
 
+#[instrument(level = "trace", skip(attrs))]
 fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| {
         let syn::Meta::List(list) = &attr.meta else {
@@ -380,6 +407,7 @@ fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
     })
 }
 
+#[instrument(level = "debug", skip(ty))]
 fn type_label(ty: &syn::Type) -> String {
     match ty {
         syn::Type::Path(type_path) => path_label(&type_path.path),
@@ -390,6 +418,7 @@ fn type_label(ty: &syn::Type) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(path))]
 fn path_label(path: &syn::Path) -> String {
     path.segments
         .last()

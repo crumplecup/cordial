@@ -5,7 +5,7 @@ use cordial::{
     Finding, MODULARITY_ETIQUETTE, MapFindingSink, ModularityKind, ModularityThresholds,
     ModuleHierarchyNode, ModuleSizeInput, ModuleSizeStats, RunAll, Session, SessionBuilder,
     build_module_hierarchy, fat_leaves, library_branches, lopsided_siblings, order_bands,
-    scan_modularity_rust_source, top_heavy_parents,
+    scan_modularity_rust_source, top_heavy_parents, unary_nests,
 };
 
 fn test_thresholds() -> ModularityThresholds {
@@ -881,6 +881,52 @@ fn lopsided_hit_requires_seventy_five_percent_of_substantial_siblings() {
 }
 
 #[test]
+fn unary_nests_rank_the_passthrough_directory() {
+    let nodes = build_module_hierarchy(&[
+        input("<crate>", "src/lib.rs", 10),
+        input("error", "src/error.rs", 200),
+        input("error::sources", "src/error/sources/mod.rs", 14),
+        input("error::sources::io", "src/error/sources/io.rs", 140),
+        input("error::sources::local", "src/error/sources/local.rs", 210),
+        input("error::sources::parse", "src/error/sources/parse.rs", 200),
+    ]);
+    let ranked = unary_nests(&nodes, 150);
+    assert_eq!(ranked.len(), 1);
+    assert_eq!(ranked[0].parent, "error");
+    assert_eq!(ranked[0].passthrough, "error::sources");
+    assert_eq!(ranked[0].passthrough_own, 14);
+    assert_eq!(ranked[0].grandchildren.len(), 3);
+}
+
+#[test]
+fn unary_nests_ignore_a_unary_leaf_child() {
+    let nodes = build_module_hierarchy(&[
+        input("<crate>", "src/lib.rs", 10),
+        input("chain_layer", "src/chain_layer/mod.rs", 194),
+        input("chain_layer::preds", "src/chain_layer/preds.rs", 352),
+    ]);
+    assert!(unary_nests(&nodes, 150).is_empty());
+}
+
+#[test]
+fn unary_nests_ignore_crate_root_unary_package() {
+    let nodes = build_module_hierarchy(&[
+        input("<crate>", "src/lib.rs", 10),
+        input("only", "src/only/mod.rs", 8),
+        input("only::a", "src/only/a.rs", 80),
+        input("only::b", "src/only/b.rs", 80),
+    ]);
+    assert!(unary_nests(&nodes, 150).is_empty());
+}
+
+#[test]
+fn collapse_hit_requires_hierarchy_min_subtree() {
+    let thresholds = ModularityThresholds::default();
+    assert!(!thresholds.is_collapse_hit(149));
+    assert!(thresholds.is_collapse_hit(150));
+}
+
+#[test]
 fn top_heavy_parent_is_a_peel_checklist_item() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src/fat"))
@@ -971,6 +1017,113 @@ fn lopsided_sibling_is_a_split_checklist_item() -> miette::Result<()> {
     assert!(
         checklist.contains("split `big`"),
         "checklist should name the split-dominant action: {checklist}"
+    );
+    Ok(())
+}
+
+#[test]
+fn unary_nest_is_a_collapse_checklist_item() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src/error/sources"))
+        .into_diagnostic()
+        .wrap_err("sources")?;
+    fs::write(fixture.path().join("src/lib.rs"), "mod error;\n")
+        .into_diagnostic()
+        .wrap_err("lib")?;
+    fs::write(
+        fixture.path().join("src/error.rs"),
+        format!("mod sources;\n{}", padded_module(40)),
+    )
+    .into_diagnostic()
+    .wrap_err("error")?;
+    fs::write(
+        fixture.path().join("src/error/sources/mod.rs"),
+        "mod io;\nmod local;\n",
+    )
+    .into_diagnostic()
+    .wrap_err("sources mod")?;
+    fs::write(
+        fixture.path().join("src/error/sources/io.rs"),
+        padded_module(80),
+    )
+    .into_diagnostic()
+    .wrap_err("io")?;
+    fs::write(
+        fixture.path().join("src/error/sources/local.rs"),
+        padded_module(80),
+    )
+    .into_diagnostic()
+    .wrap_err("local")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[modularity]\nhierarchy_min_lines = 50\nmodule_size_sigma = 10\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&MODULARITY_ETIQUETTE)
+        .build();
+    let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
+    assert!(
+        outcome.findings().any(|finding| {
+            finding.rule().id() == "MODULARITY-COLLAPSE"
+                && field(finding, "checklist").as_deref() == Some("true")
+                && field(finding, "context").as_deref() == Some("error::sources")
+        }),
+        "error::sources should be a collapse hit"
+    );
+    let checklist = fs::read_to_string(store.path().join("findings/modularity.checklist.md"))
+        .into_diagnostic()
+        .wrap_err("checklist")?;
+    assert!(
+        checklist.contains("collapse `error::sources`"),
+        "checklist should name the collapse action: {checklist}"
+    );
+    Ok(())
+}
+
+#[test]
+fn unary_leaf_is_not_a_collapse_checklist_item() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src/chain_layer"))
+        .into_diagnostic()
+        .wrap_err("chain_layer")?;
+    fs::write(fixture.path().join("src/lib.rs"), "mod chain_layer;\n")
+        .into_diagnostic()
+        .wrap_err("lib")?;
+    fs::write(
+        fixture.path().join("src/chain_layer/mod.rs"),
+        format!("mod preds;\n{}", padded_module(40)),
+    )
+    .into_diagnostic()
+    .wrap_err("mod")?;
+    fs::write(
+        fixture.path().join("src/chain_layer/preds.rs"),
+        padded_module(80),
+    )
+    .into_diagnostic()
+    .wrap_err("preds")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[modularity]\nhierarchy_min_lines = 50\nmodule_size_sigma = 10\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&MODULARITY_ETIQUETTE)
+        .build();
+    let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
+    assert!(
+        !outcome
+            .findings()
+            .any(|finding| finding.rule().id() == "MODULARITY-COLLAPSE"),
+        "a unary leaf child is a peel, not a collapse"
     );
     Ok(())
 }
@@ -1224,6 +1377,7 @@ fn module_hierarchy_session_writes_branch_ranking() -> miette::Result<()> {
     assert!(summary.contains("## Fat leaves"));
     assert!(summary.contains("## Top-heavy parents"));
     assert!(summary.contains("## Lopsided siblings"));
+    assert!(summary.contains("## Unary nests"));
     let fat_pos = summary
         .find("| `fat`")
         .ok_or_else(|| miette::miette!("fat branch"))?;

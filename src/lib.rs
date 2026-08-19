@@ -120,9 +120,9 @@ pub use etiquettes::internal_error_chain::{
 #[cfg(feature = "modularity")]
 pub use etiquettes::modularity::{
     MODULARITY_ETIQUETTE, ModularityKind, ModuleHierarchyNode, ModuleSizeInput, ModuleSizeStats,
-    OrderBand, SiblingImbalance, build_module_hierarchy, fat_leaves, library_branches,
+    OrderBand, SiblingImbalance, UnaryNest, build_module_hierarchy, fat_leaves, library_branches,
     lopsided_siblings, order_bands, scan_rust_source as scan_modularity_rust_source,
-    top_heavy_parents,
+    top_heavy_parents, unary_nests,
 };
 #[cfg(feature = "panics")]
 pub use etiquettes::panics::{

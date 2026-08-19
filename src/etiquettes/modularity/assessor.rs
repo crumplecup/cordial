@@ -10,10 +10,11 @@ use crate::session::SessionView;
 
 use super::hierarchy::{
     ModuleSizeInput, build_module_hierarchy, child_mass_list, format_mass_list, lopsided_siblings,
-    top_heavy_parents,
+    top_heavy_parents, unary_nests,
 };
 use super::types::{ModularityFinding, ModularityKind, ModularityRule, ModuleSizeStats};
 
+use tracing::instrument;
 /// Converts modularity-site markers into open findings.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ModularityAssessor;
@@ -33,14 +34,17 @@ struct PendingSite {
 }
 
 impl Assessor for ModularityAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &["modularity-site"]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],
@@ -130,6 +134,7 @@ impl Assessor for ModularityAssessor {
     }
 }
 
+#[instrument(level = "debug", skip(pending, thresholds))]
 fn hierarchy_findings(
     pending: &[PendingSite],
     crate_name: &str,
@@ -204,9 +209,34 @@ fn hierarchy_findings(
             detail,
         ));
     }
+    for nest in unary_nests(&tree, thresholds.hierarchy_min_lines) {
+        if !thresholds.is_collapse_hit(nest.passthrough_subtree) {
+            continue;
+        }
+        let Some(site) = by_path.get(nest.passthrough.as_str()).copied() else {
+            continue;
+        };
+        let detail = format!(
+            "under {}; lift {}",
+            nest.parent,
+            format_mass_list(&nest.grandchildren)
+        );
+        findings.push(finding_from_site(
+            site,
+            ModularityKind::Collapse,
+            crate_name,
+            nest.passthrough.clone(),
+            nest.passthrough_subtree,
+            true,
+            None,
+            None,
+            detail,
+        ));
+    }
     findings
 }
 
+#[instrument(level = "debug", skip(site, kind))]
 fn finding_from_site(
     site: &PendingSite,
     kind: ModularityKind,

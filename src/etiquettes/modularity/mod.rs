@@ -1,3 +1,21 @@
+//! File, function, packing, and module-hierarchy size.
+//!
+//! **What.** Seven rules: oversized files and function bodies, too many types
+//! per file, modules far from the crate mean (σ), top-heavy parents, lopsided
+//! siblings, and unary child directories. See [`ModularityKind`].
+//!
+//! **Why.** Size and packing problems are split/extract signals. Visibility
+//! asks whether a `pub mod` path has earned its existence; this etiquette
+//! asks whether the *mass* in those modules should be peeled, split, or
+//! collapsed. Companion to `visibility` and `cfg_scatter`.
+//!
+//! **How to use.** Run `cordial quality` (feature `modularity`). Thresholds
+//! live under `[modularity]` in `cordial.toml`. Artifacts:
+//! `{store}/findings/modularity.checklist.md`, `modularity-summary.md`, and
+//! CSV. Register [`MODULARITY_ETIQUETTE`] on a [`crate::Session`].
+//!
+//! Policy: `docs/planning/modularity-etiquette.md`.
+
 mod assessor;
 mod enricher;
 mod hierarchy;
@@ -9,8 +27,9 @@ mod types;
 pub use assessor::ModularityAssessor;
 pub use enricher::ModularityInventoryEnricher;
 pub use hierarchy::{
-    ModuleHierarchyNode, ModuleSizeInput, OrderBand, SiblingImbalance, build_module_hierarchy,
-    fat_leaves, library_branches, lopsided_siblings, order_bands, top_heavy_parents,
+    ModuleHierarchyNode, ModuleSizeInput, OrderBand, SiblingImbalance, UnaryNest,
+    build_module_hierarchy, fat_leaves, library_branches, lopsided_siblings, order_bands,
+    top_heavy_parents, unary_nests,
 };
 pub use probe::ModularitySiteProbe;
 pub use reporter::{ModularityChecklistReporter, ModularityCsvReporter, ModularitySummaryReporter};

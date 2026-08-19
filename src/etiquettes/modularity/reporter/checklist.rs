@@ -12,6 +12,7 @@ use super::rows::{
     modularity_rows, open_rows, sort_by_lines_desc,
 };
 
+use tracing::instrument;
 /// Writes `modularity.checklist.md`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ModularityChecklistReporter;
@@ -21,10 +22,12 @@ impl ModularityChecklistReporter {
 }
 
 impl Reporter for ModularityChecklistReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, _ir, session))]
     fn render(
         &self,
         findings: &[&dyn Finding],
@@ -45,8 +48,10 @@ impl Reporter for ModularityChecklistReporter {
             "Large files/modules (with the longest bodies, packed types, extract-helpers, \
              and whether to grow a subtree named on the same item), function/method bodies >= {} \
              lines, files with more than {} types, parents that kept >= {}% of their \
-             subtree, and siblings that hold >= {}% of the combined child mass \
-             (siblings below {} lines ignored). Inventory also lists smaller units \
+             subtree, siblings that hold >= {}% of the combined child mass \
+             (siblings below {} lines ignored), and unary child directories whose \
+             subtree is at least {} lines (collapse the extra hop). Inventory also \
+             lists smaller units \
              above the floor (files >= {}, functions/methods >= {}) plus every \
              module's size. Too-long files also name bodies >= {} lines as \
              extract-helpers. File checklist >= {}, module size |z| > {} \
@@ -56,6 +61,7 @@ impl Reporter for ModularityChecklistReporter {
             thresholds.max_types_per_file,
             thresholds.top_heavy_min_percent,
             thresholds.lopsided_min_percent,
+            thresholds.hierarchy_min_lines,
             thresholds.hierarchy_min_lines,
             thresholds.file_inventory_min_lines,
             thresholds.function_inventory_min_lines,
@@ -116,8 +122,10 @@ struct FileHotspot<'a> {
     grow_subtree: bool,
     top_heavy: Option<&'a ModularityRow>,
     lopsided: Option<&'a ModularityRow>,
+    collapse: Option<&'a ModularityRow>,
 }
 
+#[instrument(level = "debug", skip(open))]
 fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
     let hotspots = file_hotspots(open);
     let nested_files: BTreeSet<&str> = hotspots.iter().map(|hotspot| hotspot.file).collect();
@@ -138,6 +146,10 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
     let nested_top_heavy: BTreeSet<&str> = hotspots
         .iter()
         .filter_map(|hotspot| hotspot.top_heavy.map(|row| row.context.as_str()))
+        .collect();
+    let nested_collapse: BTreeSet<&str> = hotspots
+        .iter()
+        .filter_map(|hotspot| hotspot.collapse.map(|row| row.context.as_str()))
         .collect();
 
     let mut leftover_functions: Vec<&ModularityRow> = open
@@ -231,6 +243,13 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
                     detail_suffix(&lopsided.detail),
                 ));
             }
+            if let Some(collapse) = hotspot.collapse {
+                body.push_str(&format!(
+                    "  - collapse this extra hop — **{} lines**{}\n",
+                    collapse.lines,
+                    detail_suffix(&collapse.detail),
+                ));
+            }
         }
         body.push('\n');
     }
@@ -264,56 +283,84 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
         body.push('\n');
     }
 
-    let mut leftover_top_heavy: Vec<&ModularityRow> = open
-        .iter()
-        .copied()
-        .filter(|row| {
-            row.kind == "MODULARITY-TOP-HEAVY"
-                && row.is_checklist()
-                && !nested_top_heavy.contains(row.context.as_str())
-        })
-        .collect();
-    sort_by_lines_desc(&mut leftover_top_heavy);
-
-    let mut leftover_lopsided: Vec<&ModularityRow> = open
-        .iter()
-        .copied()
-        .filter(|row| {
-            row.kind == "MODULARITY-LOPSIDED"
-                && row.is_checklist()
-                && !nested_lopsided.contains(row.context.as_str())
-        })
-        .collect();
-    sort_by_lines_desc(&mut leftover_lopsided);
-
-    if !leftover_top_heavy.is_empty() || !leftover_lopsided.is_empty() {
-        body.push_str("### Rebalance\n\n");
-        for entry in leftover_top_heavy {
-            count += 1;
-            body.push_str(&format!(
-                "- [ ] peel `{}` — **{} lines** still in the parent (top-heavy {}){}\n",
-                entry.context,
-                entry.lines,
-                entry.share,
-                detail_suffix(&entry.detail),
-            ));
-        }
-        for entry in leftover_lopsided {
-            count += 1;
-            body.push_str(&format!(
-                "- [ ] split `{}` — **{} lines**, {} of sibling mass{}\n",
-                entry.context,
-                entry.lines,
-                share_label(entry),
-                detail_suffix(&entry.detail),
-            ));
-        }
-        body.push('\n');
-    }
+    let (rebalance, rebalance_count) =
+        render_rebalance(open, &nested_top_heavy, &nested_lopsided, &nested_collapse);
+    body.push_str(&rebalance);
+    count += rebalance_count;
 
     (body, count)
 }
 
+#[instrument(
+    level = "debug",
+    skip(open, nested_top_heavy, nested_lopsided, nested_collapse)
+)]
+fn render_rebalance<'a>(
+    open: &[&'a ModularityRow],
+    nested_top_heavy: &BTreeSet<&str>,
+    nested_lopsided: &BTreeSet<&str>,
+    nested_collapse: &BTreeSet<&str>,
+) -> (String, usize) {
+    let leftover_top_heavy = leftover_kind(open, "MODULARITY-TOP-HEAVY", nested_top_heavy);
+    let leftover_lopsided = leftover_kind(open, "MODULARITY-LOPSIDED", nested_lopsided);
+    let leftover_collapse = leftover_kind(open, "MODULARITY-COLLAPSE", nested_collapse);
+    if leftover_top_heavy.is_empty() && leftover_lopsided.is_empty() && leftover_collapse.is_empty()
+    {
+        return (String::new(), 0);
+    }
+    let mut body = String::from("### Rebalance\n\n");
+    let mut count = 0usize;
+    for entry in leftover_top_heavy {
+        count += 1;
+        body.push_str(&format!(
+            "- [ ] peel `{}` — **{} lines** still in the parent (top-heavy {}){}\n",
+            entry.context,
+            entry.lines,
+            entry.share,
+            detail_suffix(&entry.detail),
+        ));
+    }
+    for entry in leftover_lopsided {
+        count += 1;
+        body.push_str(&format!(
+            "- [ ] split `{}` — **{} lines**, {} of sibling mass{}\n",
+            entry.context,
+            entry.lines,
+            share_label(entry),
+            detail_suffix(&entry.detail),
+        ));
+    }
+    for entry in leftover_collapse {
+        count += 1;
+        body.push_str(&format!(
+            "- [ ] collapse `{}` — **{} lines**{}\n",
+            entry.context,
+            entry.lines,
+            detail_suffix(&entry.detail),
+        ));
+    }
+    body.push('\n');
+    (body, count)
+}
+
+#[instrument(level = "debug", skip(open, nested))]
+fn leftover_kind<'a>(
+    open: &[&'a ModularityRow],
+    kind: &str,
+    nested: &BTreeSet<&str>,
+) -> Vec<&'a ModularityRow> {
+    let mut rows: Vec<&ModularityRow> = open
+        .iter()
+        .copied()
+        .filter(|row| {
+            row.kind == kind && row.is_checklist() && !nested.contains(row.context.as_str())
+        })
+        .collect();
+    sort_by_lines_desc(&mut rows);
+    rows
+}
+
+#[instrument(level = "debug", skip(row))]
 fn share_label(row: &ModularityRow) -> String {
     if row.share.is_empty() {
         "most".to_string()
@@ -322,6 +369,7 @@ fn share_label(row: &ModularityRow) -> String {
     }
 }
 
+#[instrument(level = "debug")]
 fn share_as_percent(share: &str) -> String {
     share
         .parse::<f64>()
@@ -329,6 +377,7 @@ fn share_as_percent(share: &str) -> String {
         .unwrap_or_else(|_| share.to_string())
 }
 
+#[instrument(level = "debug")]
 fn detail_suffix(detail: &str) -> String {
     if detail.is_empty() {
         String::new()
@@ -337,6 +386,7 @@ fn detail_suffix(detail: &str) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(open))]
 fn file_hotspots<'a>(open: &[&'a ModularityRow]) -> Vec<FileHotspot<'a>> {
     let tree = build_module_hierarchy(&file_module_inputs(open));
     let fat_leaf_paths: BTreeSet<String> = fat_leaves(&tree)
@@ -385,6 +435,9 @@ fn file_hotspots<'a>(open: &[&'a ModularityRow]) -> Vec<FileHotspot<'a>> {
         let lopsided = open.iter().copied().find(|row| {
             row.kind == "MODULARITY-LOPSIDED" && row.file == file && row.is_checklist()
         });
+        let collapse = open.iter().copied().find(|row| {
+            row.kind == "MODULARITY-COLLAPSE" && row.file == file && row.is_checklist()
+        });
         let grow_subtree = module_path
             .map(|path| fat_leaf_paths.contains(path))
             .unwrap_or(false);
@@ -398,6 +451,7 @@ fn file_hotspots<'a>(open: &[&'a ModularityRow]) -> Vec<FileHotspot<'a>> {
             grow_subtree,
             top_heavy,
             lopsided,
+            collapse,
         });
     }
     hotspots.sort_by(|left, right| {

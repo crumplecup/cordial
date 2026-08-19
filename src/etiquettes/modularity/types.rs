@@ -17,10 +17,11 @@ pub enum ModularityKind {
     ModuleSize,
     TopHeavy,
     Lopsided,
+    Collapse,
 }
 
 impl ModularityKind {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::File => "MODULARITY-FILE",
@@ -29,6 +30,7 @@ impl ModularityKind {
             Self::ModuleSize => "MODULARITY-MODULE-SIZE",
             Self::TopHeavy => "MODULARITY-TOP-HEAVY",
             Self::Lopsided => "MODULARITY-LOPSIDED",
+            Self::Collapse => "MODULARITY-COLLAPSE",
         }
     }
 
@@ -41,12 +43,14 @@ impl ModularityKind {
             "MODULARITY-MODULE-SIZE" => Some(Self::ModuleSize),
             "MODULARITY-TOP-HEAVY" => Some(Self::TopHeavy),
             "MODULARITY-LOPSIDED" => Some(Self::Lopsided),
+            "MODULARITY-COLLAPSE" => Some(Self::Collapse),
             _ => None,
         }
     }
 }
 
 impl Display for ModularityKind {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}", self.as_str())
     }
@@ -64,7 +68,7 @@ impl ModularityThresholds {
             ModularityKind::File => lines >= self.file_checklist_min_lines,
             ModularityKind::Function => lines >= self.function_checklist_min_lines,
             ModularityKind::TypesPerFile => true,
-            ModularityKind::TopHeavy | ModularityKind::Lopsided => true,
+            ModularityKind::TopHeavy | ModularityKind::Lopsided | ModularityKind::Collapse => true,
             // Signed z-score in the assessor: upper tail also needs the
             // file inventory floor; lower tail has its own ignore flag.
             ModularityKind::ModuleSize => false,
@@ -85,18 +89,22 @@ impl ModularityRule {
 }
 
 impl Rule for ModularityRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.kind.as_str()
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "modularity"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Oversized source file, a function or method body that should be split, \
          too many types in one file, a module whose size is a crate-wide outlier, \
-         a parent that kept most of its subtree, or a sibling that dwarfs the rest"
+         a parent that kept most of its subtree, a sibling that dwarfs the rest, \
+         or a unary child directory that adds a hop without a fork"
     }
 }
 
@@ -106,18 +114,22 @@ pub struct ModularityMarker {
 }
 
 impl Marker for ModularityMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         "modularity-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         "modularity-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -140,18 +152,22 @@ pub struct ModularityFinding {
 }
 
 impl Finding for ModularityFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("kind", &self.rule.kind);

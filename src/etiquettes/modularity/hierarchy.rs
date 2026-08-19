@@ -3,7 +3,8 @@
 //! Leaves are order 1. A parent is `k + 1` when at least two children have
 //! order `k`, otherwise it keeps the max child order — the same rule used
 //! for stream networks. Top-heaviness is the fraction of a node's subtree
-//! lines that live in the node itself (`own / subtree`).
+//! lines that live in the node itself (`own / subtree`). Unary nests are a
+//! parent whose only child is itself a branch.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -49,6 +50,7 @@ impl ModuleHierarchyNode {
 
 pub const CRATE_ROOT_PATH: &str = "<crate>";
 
+#[instrument(level = "debug", skip(path))]
 fn parent_path(path: &str) -> Option<String> {
     if path == CRATE_ROOT_PATH {
         None
@@ -59,6 +61,7 @@ fn parent_path(path: &str) -> Option<String> {
     }
 }
 
+#[instrument(level = "debug", skip(path, existing))]
 fn nearest_parent(path: &str, existing: &BTreeSet<String>) -> Option<String> {
     let mut current = parent_path(path)?;
     loop {
@@ -73,7 +76,7 @@ fn nearest_parent(path: &str, existing: &BTreeSet<String>) -> Option<String> {
 }
 
 /// Build the module tree and assign Strahler order, depth, and subtree size.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(modules))]
 pub fn build_module_hierarchy(modules: &[ModuleSizeInput]) -> Vec<ModuleHierarchyNode> {
     if modules.is_empty() {
         return Vec::new();
@@ -199,7 +202,7 @@ pub fn build_module_hierarchy(modules: &[ModuleSizeInput]) -> Vec<ModuleHierarch
 
 /// Direct children of the crate root that have nested modules, ranked most
 /// top-heavy first. Undecomposed crate-root files are [`fat_leaves`], not this.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(nodes))]
 pub fn library_branches(nodes: &[ModuleHierarchyNode]) -> Vec<&ModuleHierarchyNode> {
     let mut branches: Vec<&ModuleHierarchyNode> = nodes
         .iter()
@@ -217,7 +220,7 @@ pub fn library_branches(nodes: &[ModuleHierarchyNode]) -> Vec<&ModuleHierarchyNo
 
 /// File modules with no children, ranked largest first. These never grew a
 /// subtree — a different failure mode from a parent that kept the mass.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(nodes))]
 pub fn fat_leaves(nodes: &[ModuleHierarchyNode]) -> Vec<&ModuleHierarchyNode> {
     let mut leaves: Vec<&ModuleHierarchyNode> = nodes
         .iter()
@@ -233,7 +236,7 @@ pub fn fat_leaves(nodes: &[ModuleHierarchyNode]) -> Vec<&ModuleHierarchyNode> {
 }
 
 /// Parents that retained subtree mass, at any depth except the crate root.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(nodes))]
 pub fn top_heavy_parents(nodes: &[ModuleHierarchyNode]) -> Vec<&ModuleHierarchyNode> {
     let mut parents: Vec<&ModuleHierarchyNode> = nodes
         .iter()
@@ -264,7 +267,7 @@ pub struct SiblingImbalance {
 /// Parents with two or more children, ranked by the largest child's share of
 /// sibling subtree lines. Children below `min_child_lines` are omitted from
 /// the group (a stub next to a real module is not lopsided).
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(nodes))]
 pub fn lopsided_siblings(
     nodes: &[ModuleHierarchyNode],
     min_child_lines: u32,
@@ -318,6 +321,63 @@ pub fn lopsided_siblings(
     ranked
 }
 
+/// A parent whose only child is itself a branch: an extra hop with no fork.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnaryNest {
+    pub parent: String,
+    pub passthrough: String,
+    pub passthrough_own: u32,
+    pub passthrough_subtree: u32,
+    pub grandchildren: Vec<(String, u32)>,
+}
+
+/// Parents (not the crate root) with exactly one child, when that child has
+/// children of its own and a subtree of at least `min_subtree_lines`.
+///
+/// A unary *leaf* is a peel (`chain_layer` + `preds.rs`), not this. Ranked
+/// by passthrough subtree, largest first.
+#[instrument(level = "debug", skip(nodes))]
+pub fn unary_nests(nodes: &[ModuleHierarchyNode], min_subtree_lines: u32) -> Vec<UnaryNest> {
+    let by_path: HashMap<&str, &ModuleHierarchyNode> = nodes
+        .iter()
+        .map(|node| (node.path.as_str(), node))
+        .collect();
+    let mut ranked = Vec::new();
+    for parent in nodes
+        .iter()
+        .filter(|node| node.path != CRATE_ROOT_PATH && node.children.len() == 1)
+    {
+        let Some(child) = by_path.get(parent.children[0].as_str()).copied() else {
+            continue;
+        };
+        if !child.is_branch() || child.subtree_lines < min_subtree_lines {
+            continue;
+        }
+        ranked.push(UnaryNest {
+            parent: parent.path.clone(),
+            passthrough: child.path.clone(),
+            passthrough_own: child.own_lines,
+            passthrough_subtree: child.subtree_lines,
+            grandchildren: child
+                .children
+                .iter()
+                .filter_map(|path| {
+                    by_path
+                        .get(path.as_str())
+                        .map(|kid| (kid.path.clone(), kid.subtree_lines))
+                })
+                .collect(),
+        });
+    }
+    ranked.sort_by(|left, right| {
+        right
+            .passthrough_subtree
+            .cmp(&left.passthrough_subtree)
+            .then_with(|| left.passthrough.cmp(&right.passthrough))
+    });
+    ranked
+}
+
 #[instrument(level = "debug")]
 pub fn format_mass_list(entries: &[(String, u32)]) -> String {
     entries
@@ -327,7 +387,7 @@ pub fn format_mass_list(entries: &[(String, u32)]) -> String {
         .join("; ")
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(node, nodes))]
 pub fn child_mass_list(node: &ModuleHierarchyNode, nodes: &[ModuleHierarchyNode]) -> String {
     let by_path: HashMap<&str, &ModuleHierarchyNode> = nodes
         .iter()
@@ -346,7 +406,7 @@ pub fn child_mass_list(node: &ModuleHierarchyNode, nodes: &[ModuleHierarchyNode]
 }
 
 /// Horton-style rollup: count and mean sizes at each Strahler order.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(nodes))]
 pub fn order_bands(nodes: &[ModuleHierarchyNode]) -> Vec<OrderBand> {
     let mut bands: BTreeMap<u32, (usize, u64, u64)> = BTreeMap::new();
     for node in nodes {

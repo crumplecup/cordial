@@ -40,7 +40,6 @@ min_distinct_kinds = 2
 min_occurrences = 5
 
 [tracing]
-include_pub_super = false
 # extra_skip = ["inventory"]
 ```
 
@@ -50,7 +49,7 @@ in code until dogfood needs a project override.
 ## Status
 
 Implemented (`tests/cordial_config.rs`). Visibility, modularity (including
-types-per-file, module-size σ with an upper-tail file floor and optional
-lower-tail ignore, hotspot diagnosis, and hierarchy lints), cfg_scatter, and
-tracing (`include_pub_super`, `extra_skip`) read through `load_session_config`.
+types-per-file, module-size 2σ, lower-tail ignore, hotspot diagnosis, and
+hierarchy lints: top-heavy, lopsided, unary-nest collapse), cfg_scatter, and
+tracing (`extra_skip`) read through `load_session_config`.
 Role→level maps stay in code.

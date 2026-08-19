@@ -35,6 +35,7 @@ hierarchy_min_lines = 150
 | `MODULARITY-MODULE-SIZE` | Every module is inventoried. Checklist from a signed z-score vs the crate mean (`|z| > σ`, default 2). **Upper tail** (`z > σ`) also requires `lines >= file_inventory_min_lines` (default 500) so a moving σ does not checklist files below the file inventory floor. **Lower tail** (`z < -σ`) is not gated by that floor; set `module_size_ignore_lower_tail` to drop it from the checklist. `min_module_lines` only omits modules from the σ *sample* — it is not a checklist floor and must not be used to silence the lower tail. |
 | `MODULARITY-TOP-HEAVY` | A parent (not the crate root) kept ≥ `top_heavy_min_percent` of its subtree in its own file, and own lines ≥ `hierarchy_min_lines`. Action: peel the leftover mass into children. |
 | `MODULARITY-LOPSIDED` | One child holds ≥ `lopsided_min_percent` of its siblings' combined subtree after dropping siblings below `hierarchy_min_lines`, and at least two siblings remain. Action: split the dominant sibling. |
+| `MODULARITY-COLLAPSE` | A parent (not the crate root) has exactly one child, that child is itself a branch, and the child's subtree ≥ `hierarchy_min_lines`. Action: collapse the extra directory and lift grandchildren into the parent. A unary *leaf* (`chain_layer` + `preds.rs`) is a peel, not this. |
 
 `max_types_per_file` is a packing cap, not a file-per-type rule. Default `10`
 lets a handful of types share a file; only files above that become peel-types
@@ -80,8 +81,8 @@ not appear as two unexplained rows for the same path:
   under a too-long file.
 - **Packed types** — files over `max_types_per_file` that are not already
   nested under a too-long file.
-- **Rebalance** — top-heavy parents and lopsided dominant siblings that
-  are not already nested under a too-long file.
+- **Rebalance** — top-heavy parents, lopsided dominant siblings, and unary
+  child directories that are not already nested under a too-long file.
 
 ## Hierarchy
 
@@ -98,6 +99,7 @@ structure views now have hit criteria and a named next action:
 | Fat leaf | Too-long file with no child modules | Extract helpers first; grow a subtree only if those helpers belong together as a named layer |
 | Top-heavy parent | Own/subtree ≥ 50% and own ≥ 150 | Peel remaining mass out of the parent into children |
 | Lopsided siblings | One child ≥ 75% of sibling mass after dropping siblings below 150 lines | Split the dominant child |
+| Unary nest | Parent has exactly one child; that child is a branch; child's subtree ≥ 150 | Collapse the extra directory; lift grandchildren into the parent |
 
 `modularity-summary.md` ranks the same signals and marks Hits. Stream
 order has no lint. `modularity-branches.csv` has every file-module node
@@ -105,8 +107,9 @@ order has no lint. `modularity-branches.csv` has every file-module node
 
 The CSV `lines` column is the measured magnitude: line count for size
 rules, type count for `MODULARITY-TYPES-PER-FILE`, own lines for
-top-heavy, dominant subtree for lopsided. Hierarchy rows also emit
-`share` and `detail` (child or sibling masses).
+top-heavy, dominant subtree for lopsided, passthrough subtree for
+collapse. Hierarchy rows also emit `share` and `detail` (child or sibling
+masses; collapse `detail` names the parent and the grandchildren to lift).
 
 ## Status
 
@@ -114,6 +117,6 @@ Size rules, types-per-file (default 10), module-size 2σ (upper tail gated
 on the file inventory floor; lower tail optional via
 `module_size_ignore_lower_tail`), hotspot diagnosis (including
 extract-helpers down to 80 body lines on too-long files), and hierarchy
-lints (top-heavy peel, lopsided split at 75% after dropping stub siblings)
-are in place. Modularize means extract helpers as well as split into a
-directory.
+lints (top-heavy peel, lopsided split at 75% after dropping stub siblings,
+unary-nest collapse) are in place. Modularize means extract helpers as
+well as split into a directory.
