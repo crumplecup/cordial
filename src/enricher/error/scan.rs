@@ -5,16 +5,20 @@ use std::path::Path;
 use crate::error::CordialResult;
 use crate::etiquettes::error_sites::ErrorSiteRecord;
 use crate::etiquettes::{ErrorIrScanLayers, scan_rust_file_syntax};
-use crate::loader::{is_error_module_path, path_has_fixtures, quality_scan_trees};
+use crate::loader::{path_has_fixtures, quality_scan_trees};
 
-use tracing::instrument;
 #[cfg(feature = "error_chain")]
 use crate::etiquettes::error_chain::ErrorChainRecord;
+use tracing::instrument;
+
+#[cfg(feature = "internal_error_chain")]
+use std::collections::BTreeSet;
 
 #[cfg(feature = "internal_error_chain")]
 use crate::etiquettes::internal_error_chain::{
     InternalErrorChainScanReport, InternalErrorComplianceFinding, InternalErrorComplianceReport,
-    InternalErrorTypeGraphReport, RawTypeNode, finalize_type_graph,
+    InternalErrorTypeGraphReport, RawTypeNode, finalize_type_graph, scan_crate_error_architecture,
+    type_path_is_error_related,
 };
 
 /// Combined scan output for one crate (one parse + unified walk per file).
@@ -51,11 +55,12 @@ pub fn scan_crate_error_ir(
     crate_name: &str,
 ) -> CordialResult<ErrorIrScanReport> {
     let src_root = crate_root.join("src");
-    let error_root = src_root.join("error");
     let mut report = ErrorIrScanReport::default();
 
     #[cfg(feature = "internal_error_chain")]
     let mut type_graph_raw = Vec::<RawTypeNode>::new();
+    #[cfg(feature = "internal_error_chain")]
+    let mut error_impls = BTreeSet::<String>::new();
 
     for tree_root in quality_scan_trees(crate_root) {
         if !tree_root.is_dir() {
@@ -80,21 +85,15 @@ pub fn scan_crate_error_ir(
             })?;
 
             let under_src = path.starts_with(&src_root);
-            let under_error_module = is_error_module_path(path, &src_root);
-            let type_graph_root = if path == src_root.join("error.rs") {
-                src_root.as_path()
-            } else {
-                error_root.as_path()
-            };
             let file_scan = scan_rust_file_syntax(
                 &syntax,
                 path,
                 &tree_root,
                 &src_root,
-                type_graph_root,
+                &src_root,
                 crate_root,
                 crate_name,
-                ErrorIrScanLayers::for_unified_file(under_src, under_error_module),
+                ErrorIrScanLayers::for_unified_file(under_src),
             );
 
             report.sites.extend(file_scan.sites);
@@ -104,12 +103,14 @@ pub fn scan_crate_error_ir(
             {
                 report.compliance.extend(file_scan.compliance);
                 type_graph_raw.extend(file_scan.type_graph_raw);
+                error_impls.extend(file_scan.error_impls);
             }
         }
     }
 
     #[cfg(feature = "internal_error_chain")]
     {
+        type_graph_raw.retain(|node| type_path_is_error_related(&node.type_path, &error_impls));
         let mut nodes = finalize_type_graph(type_graph_raw, crate_name);
         for node in &mut nodes {
             if let Ok(rel) = node.file.strip_prefix(crate_root) {
@@ -120,6 +121,9 @@ pub fn scan_crate_error_ir(
             crate_name: crate_name.to_string(),
             nodes,
         };
+        report
+            .compliance
+            .extend(scan_crate_error_architecture(crate_root, crate_name)?);
         compliance_sort::sort_compliance(&mut report.compliance);
         for finding in &mut report.compliance {
             if let Ok(rel) = finding.file.strip_prefix(crate_root) {
@@ -135,6 +139,7 @@ pub fn scan_crate_error_ir(
     Ok(report)
 }
 
+#[instrument(level = "debug", skip(sites))]
 fn sort_sites(sites: &mut [ErrorSiteRecord]) {
     sites.sort_by(|a, b| {
         a.file
@@ -149,6 +154,7 @@ fn sort_sites(sites: &mut [ErrorSiteRecord]) {
 mod chain_sort {
     use super::*;
 
+    #[instrument(level = "debug", skip(chain))]
     pub(super) fn sort_chain(chain: &mut [ErrorChainRecord]) {
         chain.sort_by(|a, b| {
             a.file
@@ -163,6 +169,7 @@ mod chain_sort {
 mod compliance_sort {
     use super::*;
 
+    #[instrument(level = "debug", skip(findings))]
     pub(super) fn sort_compliance(findings: &mut [InternalErrorComplianceFinding]) {
         findings.sort_by(|a, b| {
             a.file

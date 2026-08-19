@@ -14,12 +14,14 @@ use crate::etiquettes::error_ir::chain_layer::ChainLayer;
 #[cfg(feature = "internal_error_chain")]
 use crate::etiquettes::error_ir::compliance_layer::ComplianceLayer;
 use crate::etiquettes::error_sites::{ErrorSiteKind, ErrorSiteRecord};
+use tracing::instrument;
 
 use super::ErrorIrScanLayers;
 use super::expr::{
     if_let_err_source, impl_type_label, match_has_err_arm, sites_err_payload, sites_expr_snippet,
     truncate_snippet,
 };
+#[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
 use super::site::SiteCtx;
 
 pub(super) struct ErrorIrUnifiedVisitor {
@@ -38,6 +40,7 @@ pub(super) struct ErrorIrUnifiedVisitor {
 }
 
 impl ErrorIrUnifiedVisitor {
+    #[instrument(level = "debug", skip(self))]
     fn site_context(&self) -> String {
         let mut parts = self.module_prefix.clone();
         if let Some(ty) = &self.impl_type {
@@ -51,6 +54,7 @@ impl ErrorIrUnifiedVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self))]
     fn rel_file(&self) -> PathBuf {
         let mut file = self.file.clone();
         if let Ok(rel) = file.strip_prefix(&self.crate_root) {
@@ -59,6 +63,7 @@ impl ErrorIrUnifiedVisitor {
         file
     }
 
+    #[instrument(level = "trace", skip(self))]
     #[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
     fn site_ctx(&self) -> SiteCtx {
         SiteCtx {
@@ -69,6 +74,7 @@ impl ErrorIrUnifiedVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, kind, source))]
     fn push_site(&mut self, kind: ErrorSiteKind, line: u32, source: &Expr, site: String) {
         self.sites.push(ErrorSiteRecord {
             kind,
@@ -80,6 +86,7 @@ impl ErrorIrUnifiedVisitor {
         });
     }
 
+    #[instrument(level = "debug", skip(self, items))]
     fn visit_module_items(&mut self, items: &[syn::Item], module_prefix: &[String]) {
         let prev_prefix = self.module_prefix.clone();
         self.module_prefix = module_prefix.to_vec();
@@ -89,6 +96,7 @@ impl ErrorIrUnifiedVisitor {
         self.module_prefix = prev_prefix;
     }
 
+    #[instrument(level = "debug", skip(self, item_mod))]
     fn visit_mod(&mut self, item_mod: &ItemMod) {
         if is_cfg_test(&item_mod.attrs) {
             return;
@@ -103,10 +111,12 @@ impl ErrorIrUnifiedVisitor {
 }
 
 impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         self.visit_mod(node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         #[cfg(feature = "error_chain")]
         let prev_return = self
@@ -122,6 +132,7 @@ impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
         #[cfg(feature = "error_chain")]
         if self.layers.chain {
@@ -134,6 +145,7 @@ impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
         self.impl_type = prev;
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
         #[cfg(feature = "error_chain")]
         let prev_return = self
@@ -149,6 +161,7 @@ impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_struct(&mut self, node: &'ast syn::ItemStruct) {
         #[cfg(feature = "error_chain")]
         if self.layers.chain {
@@ -158,6 +171,7 @@ impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
         syn::visit::visit_item_struct(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_enum(&mut self, node: &'ast syn::ItemEnum) {
         #[cfg(feature = "error_chain")]
         if self.layers.chain {
@@ -167,6 +181,7 @@ impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
         syn::visit::visit_item_enum(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_try(&mut self, node: &'ast ExprTry) {
         if self.layers.sites {
             let site = format!("{}?", sites_expr_snippet(&node.expr));
@@ -187,6 +202,7 @@ impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
         syn::visit::visit_expr_try(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
         if self.layers.sites {
             if node.method == "map_err" {
@@ -231,6 +247,7 @@ impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
         syn::visit::visit_expr_method_call(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_return(&mut self, node: &'ast ExprReturn) {
         if let Some(expr) = &node.expr {
             if self.layers.sites
@@ -253,6 +270,7 @@ impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
         syn::visit::visit_expr_return(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_if(&mut self, node: &'ast ExprIf) {
         if self.layers.sites
             && let Some(source) = if_let_err_source(&node.cond)
@@ -272,6 +290,7 @@ impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
         syn::visit::visit_expr_if(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_match(&mut self, node: &'ast ExprMatch) {
         if self.layers.sites && match_has_err_arm(&node.arms) {
             self.push_site(

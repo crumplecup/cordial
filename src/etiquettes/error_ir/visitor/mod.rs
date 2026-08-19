@@ -12,7 +12,9 @@ use std::path::Path;
 
 use syn::visit::Visit;
 
-use tracing::instrument;
+#[cfg(feature = "internal_error_chain")]
+use std::collections::BTreeSet;
+
 #[cfg(feature = "internal_error_chain")]
 use super::compliance_layer::ComplianceLayer;
 use crate::etiquettes::error_sites::ErrorSiteRecord;
@@ -21,14 +23,17 @@ use crate::etiquettes::internal_error_chain::{
     InternalErrorComplianceFinding, RawTypeNode, scan_error_rust_syntax_raw,
 };
 use crate::loader::module_path_from_src_file;
+use tracing::instrument;
 #[cfg(feature = "error_chain")]
 use {super::chain_layer::ChainLayer, crate::etiquettes::error_chain::ErrorChainRecord};
 
 mod expr;
+#[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
 mod site;
 mod walk;
 
 pub(super) use expr::{pat_is_err, raw_expr_snippet, truncate_snippet};
+#[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
 pub(super) use site::SiteCtx;
 use walk::ErrorIrUnifiedVisitor;
 
@@ -65,21 +70,13 @@ impl ErrorIrScanLayers {
         type_graph: false,
     };
 
-    #[allow(dead_code)]
-    pub const FULL_SRC: Self = Self {
-        sites: true,
-        chain: true,
-        compliance: true,
-        type_graph: false,
-    };
-
     #[instrument(level = "debug")]
-    pub fn for_unified_file(under_src: bool, under_error_module: bool) -> Self {
+    pub fn for_unified_file(under_src: bool) -> Self {
         Self {
             sites: true,
             chain: under_src,
             compliance: under_src,
-            type_graph: under_error_module,
+            type_graph: under_src,
         }
     }
 }
@@ -94,10 +91,12 @@ pub struct ErrorIrFileScan {
     pub compliance: Vec<InternalErrorComplianceFinding>,
     #[cfg(feature = "internal_error_chain")]
     pub type_graph_raw: Vec<RawTypeNode>,
+    #[cfg(feature = "internal_error_chain")]
+    pub error_impls: BTreeSet<String>,
 }
 
 /// Scan a pre-parsed file for error-handling IR facts (one AST walk for sites/chain/compliance).
-#[instrument(level = "debug", skip(syntax, file))]
+#[instrument(level = "debug", skip(syntax, file, layers))]
 pub fn scan_rust_file_syntax(
     syntax: &syn::File,
     file: &Path,
@@ -108,7 +107,7 @@ pub fn scan_rust_file_syntax(
     crate_name: &str,
     layers: ErrorIrScanLayers,
 ) -> ErrorIrFileScan {
-    let _ = src_root;
+    let _ = error_root;
     let module_prefix = module_path_from_src_file(tree_root, file);
     let mut visitor = ErrorIrUnifiedVisitor {
         layers,
@@ -134,11 +133,15 @@ pub fn scan_rust_file_syntax(
         compliance: visitor.compliance_layer.into_findings(),
         #[cfg(feature = "internal_error_chain")]
         type_graph_raw: Vec::new(),
+        #[cfg(feature = "internal_error_chain")]
+        error_impls: BTreeSet::new(),
     };
 
     #[cfg(feature = "internal_error_chain")]
     if layers.type_graph {
-        scan.type_graph_raw = scan_error_rust_syntax_raw(syntax, file, error_root);
+        let graph = scan_error_rust_syntax_raw(syntax, file, src_root);
+        scan.type_graph_raw = graph.nodes;
+        scan.error_impls = graph.error_impls;
     }
 
     scan

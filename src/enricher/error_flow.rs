@@ -13,6 +13,7 @@ use crate::ir::{BasicQuery, EdgeKind, IrMut, NodeKind, NodeWeight};
 use crate::loader::LoadView;
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Partitions error-site expression nodes and materializes `ErrorFlow` origin links.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ErrorFlowEnricher;
@@ -23,14 +24,17 @@ impl ErrorFlowEnricher {
 }
 
 impl IrEnricher for ErrorFlowEnricher {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn priority(&self) -> u8 {
         51
     }
 
+    #[instrument(level = "trace", skip(self, ir, _load, _session))]
     fn enrich(
         &self,
         ir: &mut dyn IrMut,
@@ -57,6 +61,11 @@ impl IrEnricher for ErrorFlowEnricher {
     }
 }
 
+#[instrument(
+    level = "debug",
+    skip(ir, site_id, crate_root, origin_nodes),
+    err(level = "warn")
+)]
 fn enrich_error_site(
     ir: &mut dyn IrMut,
     site_id: crate::ir::NodeId,
@@ -93,6 +102,7 @@ fn enrich_error_site(
     Ok(())
 }
 
+#[instrument(level = "debug", skip(ir, site_id))]
 fn scan_row_from_node(
     ir: &dyn IrMut,
     site_id: crate::ir::NodeId,
@@ -136,6 +146,7 @@ fn scan_row_from_node(
     })
 }
 
+#[instrument(level = "debug", skip(partitioned))]
 fn origin_key_for(partitioned: &crate::etiquettes::error_sites::PartitionedErrorSiteRow) -> String {
     if partitioned.origin_class == ErrorOriginClass::Internal {
         format!("internal:{}", partitioned.origin_detail)
@@ -144,6 +155,11 @@ fn origin_key_for(partitioned: &crate::etiquettes::error_sites::PartitionedError
     }
 }
 
+#[instrument(
+    level = "debug",
+    skip(ir, origin_nodes, crate_root),
+    err(level = "warn")
+)]
 fn origin_node(
     ir: &mut dyn IrMut,
     origin_nodes: &mut BTreeMap<String, crate::ir::NodeId>,
@@ -171,6 +187,7 @@ fn origin_node(
     Ok(node_id)
 }
 
+#[instrument(level = "debug", skip(ir, site_id, partitioned), err(level = "warn"))]
 fn apply_foreign_error_attrs(
     ir: &mut dyn IrMut,
     site_id: crate::ir::NodeId,
@@ -230,6 +247,7 @@ fn apply_foreign_error_attrs(
     Ok(())
 }
 
+#[instrument(level = "debug")]
 fn chain_probe_preserves(rule_id: &str) -> bool {
     rule_id == "ERROR-CHAIN-PRESERVED-MAP-ERR-001"
         || rule_id == "ERROR-CHAIN-PRESERVED-QUESTION-MARK-001"

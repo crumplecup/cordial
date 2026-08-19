@@ -30,6 +30,8 @@ impl Error for DomainError {
         }
     }
 }
+
+impl Error for InnerSource {}
 "#;
 
 const COMPLIANCE_FIXTURE: &str = r#"
@@ -444,5 +446,770 @@ fn scan_crate_internal_error_chain_combines_both_scans() -> miette::Result<()> {
         .wrap_err("combined scan")?;
     assert!(!report.type_graph.nodes.is_empty());
     assert!(!report.compliance.findings.is_empty());
+    Ok(())
+}
+
+const WELL_FORMED_SOURCE: &str = r#"
+use std::io;
+use std::panic::Location;
+
+pub struct Error {
+    kind: Box<ErrorKind>,
+}
+
+pub enum ErrorKind {
+    Io(IoSource),
+}
+
+pub struct IoSource {
+    source: io::Error,
+    file: &'static str,
+    line: u32,
+}
+
+impl IoSource {
+    #[track_caller]
+    pub fn new(source: io::Error) -> Self {
+        let loc = Location::caller();
+        Self {
+            source,
+            file: loc.file(),
+            line: loc.line(),
+        }
+    }
+}
+
+impl From<io::Error> for IoSource {
+    #[track_caller]
+    fn from(source: io::Error) -> Self {
+        Self::new(source)
+    }
+}
+
+impl std::error::Error for Error {}
+impl std::error::Error for IoSource {}
+"#;
+
+const LOCATION_FIELD_SOURCE: &str = r#"
+use std::io;
+use std::panic::Location;
+
+pub struct Error {
+    kind: Box<ErrorKind>,
+}
+
+pub enum ErrorKind {
+    Io(IoSource),
+}
+
+pub struct IoSource {
+    source: io::Error,
+    location: &'static Location<'static>,
+}
+
+impl IoSource {
+    #[track_caller]
+    pub fn new(source: io::Error) -> Self {
+        Self {
+            source,
+            location: Location::caller(),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+impl std::error::Error for IoSource {}
+"#;
+
+const MISSING_TRACK_CALLER_SOURCE: &str = r#"
+use std::io;
+
+pub struct Error {
+    kind: Box<ErrorKind>,
+}
+
+pub enum ErrorKind {
+    Io(IoSource),
+}
+
+pub struct IoSource {
+    source: io::Error,
+    file: &'static str,
+    line: u32,
+}
+
+impl IoSource {
+    pub fn new(source: io::Error, file: &'static str, line: u32) -> Self {
+        Self { source, file, line }
+    }
+}
+
+impl std::error::Error for Error {}
+impl std::error::Error for IoSource {}
+"#;
+
+fn write_error_crate(src: &str) -> miette::Result<tempfile::TempDir> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    fs::write(fixture.path().join("src/error.rs"), src)
+        .into_diagnostic()
+        .wrap_err("write error.rs")?;
+    fs::write(fixture.path().join("src/lib.rs"), "mod error;\n")
+        .into_diagnostic()
+        .wrap_err("write lib")?;
+    Ok(fixture)
+}
+
+#[test]
+fn incomplete_source_wrapper_is_shape_and_track_caller_violation() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src/error"))
+        .into_diagnostic()
+        .wrap_err("error dir")?;
+    fs::write(
+        fixture.path().join("src/error/type_graph.rs"),
+        TYPE_GRAPH_FIXTURE,
+    )
+    .into_diagnostic()
+    .wrap_err("write type graph")?;
+
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    assert!(
+        report.compliance.findings.iter().any(|finding| {
+            finding.rule_id == InternalErrorComplianceId::SourceShape001
+                && finding.context.contains("InnerSource")
+        }),
+        "InnerSource without file/line must be SOURCE-SHAPE: {:?}",
+        report.compliance.findings
+    );
+    assert!(
+        report.compliance.findings.iter().any(|finding| {
+            finding.rule_id == InternalErrorComplianceId::SourceTrackCaller001
+                && finding.context.contains("InnerSource")
+        }),
+        "InnerSource without #[track_caller] constructor must be TRACK-CALLER: {:?}",
+        report.compliance.findings
+    );
+    Ok(())
+}
+
+#[test]
+fn well_formed_source_wrapper_is_not_a_compliance_violation() -> miette::Result<()> {
+    let fixture = write_error_crate(WELL_FORMED_SOURCE)?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    let source_findings: Vec<_> = report
+        .compliance
+        .findings
+        .iter()
+        .filter(|finding| {
+            matches!(
+                finding.rule_id,
+                InternalErrorComplianceId::SourceShape001
+                    | InternalErrorComplianceId::SourceTrackCaller001
+            )
+        })
+        .collect();
+    assert!(
+        source_findings.is_empty(),
+        "well-formed IoSource must not be flagged: {source_findings:?}"
+    );
+    assert!(
+        !report.compliance.findings.iter().any(|finding| {
+            matches!(
+                finding.rule_id,
+                InternalErrorComplianceId::ArchParent001
+                    | InternalErrorComplianceId::ArchKindBox001
+                    | InternalErrorComplianceId::ArchKindVariant001
+                    | InternalErrorComplianceId::ArchOrphanSource001
+            )
+        }),
+        "well-formed parent/Kind/source must not be architecture-flagged: {:?}",
+        report.compliance.findings
+    );
+    Ok(())
+}
+
+#[test]
+fn location_field_is_accepted_instead_of_file_and_line() -> miette::Result<()> {
+    let fixture = write_error_crate(LOCATION_FIELD_SOURCE)?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    assert!(
+        !report.compliance.findings.iter().any(|finding| {
+            matches!(
+                finding.rule_id,
+                InternalErrorComplianceId::SourceShape001
+                    | InternalErrorComplianceId::SourceTrackCaller001
+            )
+        }),
+        "location: &'static Location must satisfy the shape: {:?}",
+        report.compliance.findings
+    );
+    Ok(())
+}
+
+#[test]
+fn constructor_without_track_caller_is_a_violation() -> miette::Result<()> {
+    let fixture = write_error_crate(MISSING_TRACK_CALLER_SOURCE)?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    assert!(
+        report.compliance.findings.iter().any(|finding| {
+            finding.rule_id == InternalErrorComplianceId::SourceTrackCaller001
+                && finding.context.contains("IoSource")
+        }),
+        "new(source, file, line) without #[track_caller] must be flagged: {:?}",
+        report.compliance.findings
+    );
+    assert!(
+        !report
+            .compliance
+            .findings
+            .iter()
+            .any(|finding| finding.rule_id == InternalErrorComplianceId::SourceShape001),
+        "file+line fields are present: {:?}",
+        report.compliance.findings
+    );
+    Ok(())
+}
+
+#[test]
+fn from_impl_without_track_caller_is_a_violation() -> miette::Result<()> {
+    let src = r#"
+use std::io;
+use std::panic::Location;
+
+pub struct Error {
+    kind: Box<ErrorKind>,
+}
+
+pub enum ErrorKind {
+    Io(IoSource),
+}
+
+pub struct IoSource {
+    source: io::Error,
+    file: &'static str,
+    line: u32,
+}
+
+impl IoSource {
+    #[track_caller]
+    pub fn new(source: io::Error) -> Self {
+        let loc = Location::caller();
+        Self { source, file: loc.file(), line: loc.line() }
+    }
+}
+
+impl From<io::Error> for IoSource {
+    fn from(source: io::Error) -> Self {
+        Self::new(source)
+    }
+}
+
+impl std::error::Error for Error {}
+impl std::error::Error for IoSource {}
+"#;
+    let fixture = write_error_crate(src)?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    assert!(
+        report.compliance.findings.iter().any(|finding| {
+            finding.rule_id == InternalErrorComplianceId::SourceTrackCaller001
+                && finding
+                    .internal_constructor
+                    .as_deref()
+                    .is_some_and(|name| name.contains("From"))
+        }),
+        "From::from without #[track_caller] must be flagged: {:?}",
+        report.compliance.findings
+    );
+    Ok(())
+}
+
+#[test]
+fn from_alone_is_not_a_substitute_for_new() -> miette::Result<()> {
+    let src = r#"
+use std::io;
+use std::panic::Location;
+
+pub struct Error {
+    kind: Box<ErrorKind>,
+}
+
+pub enum ErrorKind {
+    Io(IoSource),
+}
+
+pub struct IoSource {
+    source: io::Error,
+    file: &'static str,
+    line: u32,
+}
+
+impl From<io::Error> for IoSource {
+    #[track_caller]
+    fn from(source: io::Error) -> Self {
+        let loc = Location::caller();
+        Self { source, file: loc.file(), line: loc.line() }
+    }
+}
+
+impl std::error::Error for Error {}
+impl std::error::Error for IoSource {}
+"#;
+    let fixture = write_error_crate(src)?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    assert!(
+        report.compliance.findings.iter().any(|finding| {
+            finding.rule_id == InternalErrorComplianceId::SourceTrackCaller001
+                && finding.context.contains("IoSource")
+                && finding.snippet.contains("fn new")
+        }),
+        "From::from with Location::caller() must not stand in for new: {:?}",
+        report.compliance.findings
+    );
+    Ok(())
+}
+
+#[test]
+fn new_must_not_take_file_and_line_args() -> miette::Result<()> {
+    let src = r#"
+use std::io;
+use std::panic::Location;
+
+pub struct Error {
+    kind: Box<ErrorKind>,
+}
+
+pub enum ErrorKind {
+    Io(IoSource),
+}
+
+pub struct IoSource {
+    source: io::Error,
+    file: &'static str,
+    line: u32,
+}
+
+impl IoSource {
+    #[track_caller]
+    pub fn new(source: io::Error, file: &'static str, line: u32) -> Self {
+        let _ = Location::caller();
+        Self { source, file, line }
+    }
+}
+
+impl std::error::Error for Error {}
+impl std::error::Error for IoSource {}
+"#;
+    let fixture = write_error_crate(src)?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    assert!(
+        report.compliance.findings.iter().any(|finding| {
+            finding.rule_id == InternalErrorComplianceId::SourceTrackCaller001
+                && finding
+                    .internal_constructor
+                    .as_deref()
+                    .is_some_and(|name| name == "new")
+                && finding.snippet.contains("must not take file/line/location")
+        }),
+        "new(source, file, line) must be flagged even with Location::caller(): {:?}",
+        report.compliance.findings
+    );
+    Ok(())
+}
+
+#[test]
+fn parent_from_without_track_caller_is_a_violation() -> miette::Result<()> {
+    let src = r#"
+use std::io;
+use std::panic::Location;
+
+pub struct Error {
+    kind: Box<ErrorKind>,
+}
+
+pub enum ErrorKind {
+    Io(IoSource),
+}
+
+pub struct IoSource {
+    source: io::Error,
+    file: &'static str,
+    line: u32,
+}
+
+impl IoSource {
+    #[track_caller]
+    pub fn new(source: io::Error) -> Self {
+        let loc = Location::caller();
+        Self { source, file: loc.file(), line: loc.line() }
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(source: io::Error) -> Self {
+        Self { kind: Box::new(ErrorKind::Io(IoSource::new(source))) }
+    }
+}
+
+impl std::error::Error for Error {}
+impl std::error::Error for IoSource {}
+"#;
+    let fixture = write_error_crate(src)?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    assert!(
+        report.compliance.findings.iter().any(|finding| {
+            finding.rule_id == InternalErrorComplianceId::SourceTrackCaller001
+                && finding.context.contains("Error")
+                && finding
+                    .internal_constructor
+                    .as_deref()
+                    .is_some_and(|name| name.contains("From"))
+        }),
+        "parent From without #[track_caller] hides the call site: {:?}",
+        report.compliance.findings
+    );
+    Ok(())
+}
+
+#[test]
+fn error_enum_is_not_a_parent() -> miette::Result<()> {
+    let fixture = write_error_crate(ERROR_RS_FIXTURE)?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    assert!(
+        report.compliance.findings.iter().any(|finding| {
+            finding.rule_id == InternalErrorComplianceId::ArchParent001
+                && finding.context.contains("CordialError")
+        }),
+        "error enum must not stand in for parent+Kind: {:?}",
+        report.compliance.findings
+    );
+    assert!(
+        report.compliance.findings.iter().any(|finding| {
+            finding.rule_id == InternalErrorComplianceId::ArchKindVariant001
+                && finding
+                    .foreign_error_type
+                    .as_deref()
+                    .is_some_and(|ty| ty.contains("io"))
+        }),
+        "naked foreign variant must be KIND-VARIANT: {:?}",
+        report.compliance.findings
+    );
+    Ok(())
+}
+
+#[test]
+fn unboxed_kind_field_is_a_violation() -> miette::Result<()> {
+    let src = r#"
+use std::io;
+use std::panic::Location;
+
+pub struct Error {
+    kind: ErrorKind,
+}
+
+pub enum ErrorKind {
+    Io(IoSource),
+}
+
+pub struct IoSource {
+    source: io::Error,
+    file: &'static str,
+    line: u32,
+}
+
+impl IoSource {
+    #[track_caller]
+    pub fn new(source: io::Error) -> Self {
+        let loc = Location::caller();
+        Self { source, file: loc.file(), line: loc.line() }
+    }
+}
+
+impl std::error::Error for Error {}
+impl std::error::Error for IoSource {}
+"#;
+    let fixture = write_error_crate(src)?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    assert!(
+        report
+            .compliance
+            .findings
+            .iter()
+            .any(|finding| finding.rule_id == InternalErrorComplianceId::ArchKindBox001),
+        "unboxed kind must be KIND-BOX: {:?}",
+        report.compliance.findings
+    );
+    Ok(())
+}
+
+#[test]
+fn nested_kind_on_native_source_is_accepted() -> miette::Result<()> {
+    let src = r#"
+use std::io;
+use std::panic::Location;
+
+pub struct Error {
+    kind: Box<ErrorKind>,
+}
+
+pub enum ErrorKind {
+    Parse(ParseSource),
+}
+
+pub struct ParseSource {
+    kind: Box<ParseKind>,
+    file: &'static str,
+    line: u32,
+}
+
+impl ParseSource {
+    #[track_caller]
+    pub fn new(kind: ParseKind) -> Self {
+        let loc = Location::caller();
+        Self { kind: Box::new(kind), file: loc.file(), line: loc.line() }
+    }
+}
+
+pub enum ParseKind {
+    Io(IoSource),
+}
+
+pub struct IoSource {
+    source: io::Error,
+    file: &'static str,
+    line: u32,
+}
+
+impl IoSource {
+    #[track_caller]
+    pub fn new(source: io::Error) -> Self {
+        let loc = Location::caller();
+        Self { source, file: loc.file(), line: loc.line() }
+    }
+}
+
+impl std::error::Error for Error {}
+impl std::error::Error for ParseSource {}
+impl std::error::Error for IoSource {}
+"#;
+    let fixture = write_error_crate(src)?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    let arch: Vec<_> = report
+        .compliance
+        .findings
+        .iter()
+        .filter(|finding| {
+            matches!(
+                finding.rule_id,
+                InternalErrorComplianceId::ArchParent001
+                    | InternalErrorComplianceId::ArchKindBox001
+                    | InternalErrorComplianceId::ArchKindVariant001
+                    | InternalErrorComplianceId::ArchOrphanSource001
+                    | InternalErrorComplianceId::SourceShape001
+                    | InternalErrorComplianceId::SourceTrackCaller001
+            )
+        })
+        .collect();
+    assert!(
+        arch.is_empty(),
+        "nested Kind on a native source must be accepted: {arch:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn native_source_beside_call_site_is_connected() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        "pub mod error;\npub mod io;\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write lib")?;
+    fs::write(
+        fixture.path().join("src/error.rs"),
+        r#"
+use crate::io::IoSource;
+
+pub struct Error {
+    kind: Box<ErrorKind>,
+}
+
+pub enum ErrorKind {
+    Io(IoSource),
+}
+
+impl std::error::Error for Error {}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write error")?;
+    fs::write(
+        fixture.path().join("src/io.rs"),
+        r#"
+use std::io;
+use std::panic::Location;
+
+pub struct IoSource {
+    source: io::Error,
+    file: &'static str,
+    line: u32,
+}
+
+impl IoSource {
+    #[track_caller]
+    pub fn new(source: io::Error) -> Self {
+        let loc = Location::caller();
+        Self { source, file: loc.file(), line: loc.line() }
+    }
+}
+
+impl std::error::Error for IoSource {}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write io")?;
+
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    let arch: Vec<_> = report
+        .compliance
+        .findings
+        .iter()
+        .filter(|finding| {
+            matches!(
+                finding.rule_id,
+                InternalErrorComplianceId::ArchParent001
+                    | InternalErrorComplianceId::ArchKindBox001
+                    | InternalErrorComplianceId::ArchKindVariant001
+                    | InternalErrorComplianceId::ArchOrphanSource001
+                    | InternalErrorComplianceId::SourceShape001
+                    | InternalErrorComplianceId::SourceTrackCaller001
+            )
+        })
+        .collect();
+    assert!(
+        arch.is_empty(),
+        "IoSource next to its call site must connect to parent/Kind: {arch:?}"
+    );
+    assert!(
+        report.type_graph.nodes.iter().any(|node| {
+            node.type_path.contains("IoSource")
+                && node.node_class == InternalErrorNodeClass::ForeignBridge
+        }),
+        "type graph must include the out-of-error-module source: {:?}",
+        report.type_graph.nodes
+    );
+    Ok(())
+}
+
+#[test]
+fn type_without_error_impl_is_not_a_native_source() -> miette::Result<()> {
+    let fixture = write_error_crate(
+        r#"
+use std::io;
+use std::panic::Location;
+
+pub struct Error {
+    kind: Box<ErrorKind>,
+}
+
+pub enum ErrorKind {
+    Io(IoSource),
+}
+
+pub struct IoSource {
+    source: io::Error,
+    file: &'static str,
+    line: u32,
+}
+
+impl IoSource {
+    #[track_caller]
+    pub fn new(source: io::Error) -> Self {
+        let loc = Location::caller();
+        Self { source, file: loc.file(), line: loc.line() }
+    }
+}
+
+pub struct NotAnError {
+    source: io::Error,
+    file: &'static str,
+    line: u32,
+}
+
+impl std::error::Error for Error {}
+impl std::error::Error for IoSource {}
+"#,
+    )?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    assert!(
+        !report
+            .compliance
+            .findings
+            .iter()
+            .any(|finding| finding.context.contains("NotAnError")),
+        "structs that do not implement Error are not in the error set: {:?}",
+        report.compliance.findings
+    );
+    Ok(())
+}
+
+#[test]
+fn dogfood_cordial_follows_error_architecture() -> miette::Result<()> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let report = scan_crate_internal_error_chain(root, "cordial")
+        .into_diagnostic()
+        .wrap_err("scan cordial")?;
+    let arch: Vec<_> = report
+        .compliance
+        .findings
+        .iter()
+        .filter(|finding| {
+            matches!(
+                finding.rule_id,
+                InternalErrorComplianceId::ArchParent001
+                    | InternalErrorComplianceId::ArchKindBox001
+                    | InternalErrorComplianceId::ArchKindVariant001
+                    | InternalErrorComplianceId::ArchOrphanSource001
+                    | InternalErrorComplianceId::SourceShape001
+                    | InternalErrorComplianceId::SourceTrackCaller001
+            )
+        })
+        .collect();
+    assert!(
+        arch.is_empty(),
+        "cordial should follow parent/Kind/native-source architecture: {arch:?}"
+    );
     Ok(())
 }

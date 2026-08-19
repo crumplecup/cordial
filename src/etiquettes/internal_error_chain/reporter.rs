@@ -8,6 +8,7 @@ use crate::session::SessionView;
 
 use super::types::{InternalErrorComplianceId, InternalErrorNodeClass, InternalErrorRecordKind};
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone)]
 struct InternalErrorChainRow {
     crate_name: String,
@@ -28,6 +29,7 @@ struct InternalErrorChainRow {
 }
 
 impl InternalErrorChainRow {
+    #[instrument(level = "debug", skip(finding), ret)]
     fn from_finding(finding: &dyn Finding) -> Self {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
@@ -58,6 +60,7 @@ impl InternalErrorChainRow {
     }
 }
 
+#[instrument(level = "debug", skip(findings))]
 fn internal_error_chain_rows(findings: &[&dyn Finding]) -> Vec<InternalErrorChainRow> {
     findings
         .iter()
@@ -66,16 +69,19 @@ fn internal_error_chain_rows(findings: &[&dyn Finding]) -> Vec<InternalErrorChai
         .collect()
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn type_graph_rows(rows: &[InternalErrorChainRow]) -> impl Iterator<Item = &InternalErrorChainRow> {
     rows.iter()
         .filter(|row| row.record_kind == InternalErrorRecordKind::TypeGraph.as_str())
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn compliance_rows(rows: &[InternalErrorChainRow]) -> impl Iterator<Item = &InternalErrorChainRow> {
     rows.iter()
         .filter(|row| row.record_kind == InternalErrorRecordKind::Compliance.as_str())
 }
 
+#[instrument(level = "debug")]
 fn escape_csv(value: &str) -> String {
     if value.contains(',') || value.contains('"') || value.contains('\n') {
         format!("\"{}\"", value.replace('"', "\"\""))
@@ -84,6 +90,7 @@ fn escape_csv(value: &str) -> String {
     }
 }
 
+#[instrument(level = "debug", skip(rows))]
 fn class_counts(rows: &[InternalErrorChainRow]) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
     for row in type_graph_rows(rows) {
@@ -95,19 +102,34 @@ fn class_counts(rows: &[InternalErrorChainRow]) -> BTreeMap<String, usize> {
     counts
 }
 
-fn compliance_counts(rows: &[InternalErrorChainRow]) -> (usize, usize) {
+#[instrument(level = "debug", skip(rows))]
+fn compliance_counts(rows: &[InternalErrorChainRow]) -> (usize, usize, usize, usize, usize) {
     let mut stringify = 0usize;
     let mut discard = 0usize;
+    let mut source_shape = 0usize;
+    let mut track_caller = 0usize;
+    let mut architecture = 0usize;
     for row in compliance_rows(rows) {
         match row.rule_id.as_str() {
             id if id == InternalErrorComplianceId::StringifyForeign001.as_str() => {
                 stringify += 1;
             }
             id if id == InternalErrorComplianceId::DiscardTyped001.as_str() => discard += 1,
+            id if id == InternalErrorComplianceId::SourceShape001.as_str() => source_shape += 1,
+            id if id == InternalErrorComplianceId::SourceTrackCaller001.as_str() => {
+                track_caller += 1;
+            }
+            id if id == InternalErrorComplianceId::ArchParent001.as_str()
+                || id == InternalErrorComplianceId::ArchKindBox001.as_str()
+                || id == InternalErrorComplianceId::ArchKindVariant001.as_str()
+                || id == InternalErrorComplianceId::ArchOrphanSource001.as_str() =>
+            {
+                architecture += 1;
+            }
             _ => {}
         }
     }
-    (stringify, discard)
+    (stringify, discard, source_shape, track_caller, architecture)
 }
 
 /// Writes `internal-error-type-graph.csv`.
@@ -232,7 +254,17 @@ impl Reporter for InternalErrorChainChecklistReporter {
         ));
         body.push_str(
             "Static inventory of crate error types (internal leaves vs links vs foreign bridges) \
-             and call sites that stringify or discard typed foreign errors.\n\n",
+             and call sites that stringify or discard typed foreign errors. \
+             Source wrappers that hold a foreign error must keep it in `source` and \
+             carry `file`/`line` (or `location`). Capture that location in a custom \
+             `#[track_caller] fn new` via `Location::caller()` — do not pass file/line \
+             as arguments. Parent constructors that wrap a source must also be \
+             `#[track_caller]` so the call site is preserved. The parent error boxes a \
+             `*Kind` enum; every Kind variant is a native source that implements `Error`. \
+             Types that implement `Error` anywhere under `src/` are the catalog — \
+             sources may live next to their call site. When the crate has a library \
+             and a binary, clap types and dispatch live in the library (`Cli::act`); \
+             `main` only parses and converts the umbrella error with miette.\n\n",
         );
         body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
 
@@ -311,10 +343,12 @@ impl InternalErrorChainSummaryReporter {
 }
 
 impl Reporter for InternalErrorChainSummaryReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, ir, _session))]
     fn render(
         &self,
         findings: &[&dyn Finding],
@@ -341,7 +375,13 @@ impl Reporter for InternalErrorChainSummaryReporter {
             .copied()
             .unwrap_or(0);
         let compliance_findings = compliance_rows(&rows).count();
-        let (stringify_violations, discard_violations) = compliance_counts(&rows);
+        let (
+            stringify_violations,
+            discard_violations,
+            source_shape_violations,
+            track_caller_violations,
+            architecture_violations,
+        ) = compliance_counts(&rows);
 
         let mut body = String::new();
         body.push_str("# Internal error chain summary\n\n");
@@ -350,15 +390,19 @@ impl Reporter for InternalErrorChainSummaryReporter {
             "Workspace totals: **{type_nodes}** type nodes — **{internal_leaves}** internal leaves, \
              **{internal_links}** internal links, **{foreign_bridges}** foreign bridges — \
              **{compliance_findings}** compliance violations (**{stringify_violations}** stringify, \
-             **{discard_violations}** discard).\n\n"
+             **{discard_violations}** discard, **{source_shape_violations}** source-shape, \
+             **{track_caller_violations}** track-caller, **{architecture_violations}** architecture).\n\n"
         ));
         body.push_str(
-            "| Crate | Nodes | Leaves | Links | Bridges | Violations | Stringify | Discard |\n",
+            "| Crate | Nodes | Leaves | Links | Bridges | Violations | Stringify | Discard | Source shape | Track caller | Architecture |\n",
         );
-        body.push_str("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
+        body.push_str(
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
+        );
         body.push_str(&format!(
             "| `{}` | {type_nodes} | {internal_leaves} | {internal_links} | {foreign_bridges} | \
-             {compliance_findings} | {stringify_violations} | {discard_violations} |\n\n",
+             {compliance_findings} | {stringify_violations} | {discard_violations} | \
+             {source_shape_violations} | {track_caller_violations} | {architecture_violations} |\n\n",
             ir.crate_name()
         ));
 

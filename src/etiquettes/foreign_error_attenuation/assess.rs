@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use crate::etiquettes::error_chain::{ErrorChainProbeId, ErrorChainRecord};
 use crate::etiquettes::error_sites::ErrorSiteKind;
 use crate::etiquettes::foreign_error_types::ForeignErrorTypeRecord;
+use crate::plugin::ErrorSurface;
 
 use super::types::{
     ErrorHandlingResolutionId, ForeignErrorAttenuationRecord, ForeignErrorAttenuationReport,
@@ -18,7 +19,7 @@ struct SiteKey {
 }
 
 /// Merge typed foreign sites with positive/negative chain probe results.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(foreign_report, chain_records))]
 pub fn build_foreign_error_attenuation_report(
     foreign_report: &crate::etiquettes::foreign_error_types::ForeignErrorTypeReport,
     chain_records: &[ErrorChainRecord],
@@ -33,7 +34,7 @@ pub(crate) struct ErrorBridgeHint {
     pub constructor: String,
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(foreign_report, chain_records, bridges))]
 pub(crate) fn build_foreign_error_attenuation_report_with_bridges(
     foreign_report: &crate::etiquettes::foreign_error_types::ForeignErrorTypeReport,
     chain_records: &[ErrorChainRecord],
@@ -68,6 +69,7 @@ pub(crate) fn build_foreign_error_attenuation_report_with_bridges(
     }
 }
 
+#[instrument(level = "debug", skip(chain_records))]
 fn index_preserved_propagation_sites(
     chain_records: &[ErrorChainRecord],
 ) -> HashMap<SiteKey, ErrorChainRecord> {
@@ -87,6 +89,7 @@ fn index_preserved_propagation_sites(
     map
 }
 
+#[instrument(level = "trace", skip(rule_id), ret)]
 fn is_propagation_probe(rule_id: ErrorChainProbeId) -> bool {
     matches!(
         rule_id,
@@ -94,6 +97,7 @@ fn is_propagation_probe(rule_id: ErrorChainProbeId) -> bool {
     )
 }
 
+#[instrument(level = "debug", skip(foreign, preserved_by_site, bridges))]
 fn classify_foreign_site(
     foreign: &ForeignErrorTypeRecord,
     preserved_by_site: &HashMap<SiteKey, ErrorChainRecord>,
@@ -153,6 +157,9 @@ fn classify_foreign_site(
     if foreign.kind == ErrorSiteKind::QuestionMark {
         if foreign.source_snippet.contains(".ok(") || foreign.site_snippet.contains(".ok(") {
             return option_ok_neutral_record(foreign);
+        }
+        if is_miette_surface_site(foreign) {
+            return miette_surface_record(foreign);
         }
         if find_bridge(bridges, &foreign.foreign_error_type).is_some() {
             return ForeignErrorAttenuationRecord {
@@ -224,6 +231,39 @@ fn classify_foreign_site(
     }
 }
 
+#[instrument(level = "trace", skip(foreign), ret)]
+fn is_miette_surface_site(foreign: &ForeignErrorTypeRecord) -> bool {
+    matches!(
+        ErrorSurface::from_path(&foreign.file),
+        ErrorSurface::Test | ErrorSurface::Binary
+    ) && (foreign.source_snippet.contains("into_diagnostic")
+        || foreign.site_snippet.contains("into_diagnostic"))
+}
+
+#[instrument(level = "debug", skip(foreign))]
+fn miette_surface_record(foreign: &ForeignErrorTypeRecord) -> ForeignErrorAttenuationRecord {
+    ForeignErrorAttenuationRecord {
+        crate_name: foreign.crate_name.clone(),
+        foreign_error_type: foreign.foreign_error_type.clone(),
+        inference_rule_id: foreign.rule_id.clone(),
+        confidence: foreign.confidence,
+        handling_class: ForeignErrorHandlingClass::ChainPreserved,
+        resolution_id: ErrorHandlingResolutionId::MaintainExemplar,
+        resolution: "Reference pattern — tests and binaries surface foreign errors with miette \
+                      (`into_diagnostic`), not a crate `From` bridge."
+            .to_string(),
+        kind: foreign.kind,
+        context: foreign.context.clone(),
+        file: foreign.file.clone(),
+        line: foreign.line,
+        source_snippet: foreign.source_snippet.clone(),
+        site_snippet: foreign.site_snippet.clone(),
+        good_pattern: foreign.site_snippet.clone(),
+        bad_pattern: String::new(),
+    }
+}
+
+#[instrument(level = "debug", skip(foreign))]
 fn option_ok_neutral_record(foreign: &ForeignErrorTypeRecord) -> ForeignErrorAttenuationRecord {
     ForeignErrorAttenuationRecord {
         crate_name: foreign.crate_name.clone(),
@@ -245,6 +285,7 @@ fn option_ok_neutral_record(foreign: &ForeignErrorTypeRecord) -> ForeignErrorAtt
     }
 }
 
+#[instrument(level = "debug", skip(bridges))]
 fn chain_break_resolution(
     foreign_error_type: &str,
     source_snippet: &str,
@@ -272,6 +313,7 @@ fn chain_break_resolution(
     )
 }
 
+#[instrument(level = "debug", skip(bridges))]
 fn pending_infrastructure_resolution(
     foreign_error_type: &str,
     source_snippet: &str,
@@ -296,6 +338,7 @@ fn pending_infrastructure_resolution(
     )
 }
 
+#[instrument(level = "debug", skip(bridges))]
 fn good_pattern_template(
     foreign_error_type: &str,
     source_snippet: &str,
@@ -314,6 +357,7 @@ fn good_pattern_template(
     }
 }
 
+#[instrument(level = "debug", skip(bridges))]
 fn find_bridge<'a>(
     bridges: &'a [ErrorBridgeHint],
     foreign_error_type: &str,

@@ -106,9 +106,10 @@ scope → error-ir-scan → error-flow → foreign-error-attenuation-inventory �
 
 `error-ir-scan` parses each source file once, then runs site, chain, and
 compliance collectors in a **single AST walk** (`src/etiquettes/error_ir/visitor.rs`).
-Type-graph facts for `src/error.rs` and `src/error/` files use a focused
-second item-only pass on the same parse. Named `source` **or `err`** fields
-count as typed bridges. Expression-level chain probes merge onto existing
+Type-graph facts for types that implement `Error` (or `#[derive(Error)]`)
+across `src/**` use a focused item-only pass on the same parse. Native
+sources may live next to their call site; `src/error.rs` is not required.
+Named `source` **or `err`** fields count as typed bridges. Expression-level chain probes merge onto existing
 error-site nodes when they share `(file, line)` — including every site
 kind on that line, so a same-line `map_err`+`?` pair both see preservation.
 Constructors that keep the foreign error (`From`, `syn_parse`, `json_parse`,
@@ -127,6 +128,59 @@ error binding. Quality-report open counts unique compliance sites that are not
 already chain-break/pending rows, and include `Result<_, String>` next to
 `Box<dyn Error>`.
 
+### Error architecture
+
+Mechanical, recursive shape. The catalog is every type that implements
+`Error` (or `#[derive(Error)]`) under `src/`, not the `src/error` path.
+Those types are the list to connect:
+
+```text
+ParentError { kind: Box<ErrorKind> }
+  └── ErrorKind
+        ├── Io(IoSource)            // native source wrapping a foreign error
+        └── Parse(ParseSource)      // native source boxing a nested Kind
+              └── ParseKind
+                    └── Syn(SynSource)
+```
+
+1. **Parent** — an `Error`-implementing struct whose `kind` field is
+   `Box<*Kind>`. The umbrella is not itself the public error enum. Extra
+   context belongs on the parent; that is why the Kind is boxed.
+2. **Kind variants** — each variant is a 1-tuple of a **native source**
+   that implements `Error`. Not a foreign error, not `String`, not another
+   Kind. Kind enums themselves need not implement `Error`; they are pulled
+   in because an error type boxes them (or their payloads implement `Error`).
+3. **Native source (foreign origin)** — `source: ForeignError` plus `file`+`line`
+   (or `location`). Write a custom `#[track_caller] fn new` that takes the
+   error (and any extra context), then reads file/line from
+   `Location::caller()` in that body. Do not pass `file`/`line`/`location` as
+   arguments. `From::from`, if present, is `#[track_caller]` and delegates to
+   `new`; it need not call `Location::caller()` itself.
+4. **Native source (nested)** — `kind: Box<NestedKind>` plus location, same
+   `new` shape. Nested Kind variants follow the same rules. Parent `From` and
+   inherent constructors that return the parent must be `#[track_caller]` so
+   they do not hide the call site from source `new`.
+5. **Coverage** — every native source (every `Error`-implementing struct
+   that is not the parent) appears as a Kind variant (no orphans).
+
+| Rule | When |
+| --- | --- |
+| `ERROR-CHAIN-COMPLIANCE-ARCH-PARENT-001` | No parent boxing a Kind, error enum used as the parent, extra parent, or boxed type is not `*Kind` |
+| `ERROR-CHAIN-COMPLIANCE-ARCH-KIND-BOX-001` | `kind` field is not `Box<_>` |
+| `ERROR-CHAIN-COMPLIANCE-ARCH-KIND-VARIANT-001` | Kind (or leftover `*Error` enum) variant is not a native source that implements `Error` |
+| `ERROR-CHAIN-COMPLIANCE-ARCH-ORPHAN-SOURCE-001` | Native source is not a Kind variant |
+| `ERROR-CHAIN-COMPLIANCE-SOURCE-SHAPE-001` | Native source missing `source` / file+line / `location` |
+| `ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001` | Native source missing `#[track_caller] fn new` that calls `Location::caller()` (not a helper, not `From` alone); `new` takes file/line/location as args; or a parent/`From` wrapper lacks `#[track_caller]` |
+
+Call-site chain preservation (stringify / discard) remains a separate layer.
+`std::error::Error::source()` forwarding is still inventory on the type graph.
+
+Implementation: `src/etiquettes/internal_error_chain/architecture.rs`,
+crate-level over library `src/` (modules reachable from `lib.rs`) so
+parent/Kind/source may live in different modules. Binary-only files are not
+in the parent/Kind catalog. CLI layout (`act` on clap types, thin `main`)
+is a separate etiquette: `docs/planning/one-crate-cli-layout.md`.
+
 (feature-gated; session dedupes when multiple etiquettes are active)
 
 Implementation: `src/enricher/error/` and `src/etiquettes/error_ir/`.
@@ -137,7 +191,7 @@ Merging three formerly-independent scanners into one visitor risked scattering
 `#[cfg(feature = ...)]` across dozens of struct fields, consts, and match arms
 inside a single file — 82 occurrences in `visitor.rs` at one point. Instead,
 `error_chain`- and `internal_error_chain`-specific logic each live in their own
-file (`error_ir/chain_layer.rs`, `error_ir/compliance_layer.rs`), gated as a
+file (`error_ir/chain_layer/`, `error_ir/compliance_layer.rs`), gated as a
 whole unit by **one** `#[cfg(feature = ...)]` on the `mod` declaration in
 `error_ir/mod.rs`. Nothing inside either layer file needs its own `#[cfg]`.
 
@@ -185,10 +239,14 @@ merge cross-cutting, feature-optional logic; prefer plain mod-level gating
 | Dogfood: typed `CargoMetadata`/`json_parse`/`CliError`; `map_err(ctor)` preserve | done |
 | SNR: test `.unwrap` / `.expect` are checklist (miette); `#[cfg(test)]` in `src/` is the test surface | done |
 | Library Result-returning abort sites → `CordialError` (`From` wrap of associated error, including `fmt::Error` / `LexError`) | done |
-| Binary: `cordial_cli` surfaces failures with miette (`src/boundary.rs`, linked from `main` only) | done |
+| Binary: `cordial_cli` surfaces failures with miette (`src/boundary.rs`, linked from `main` only) | superseded — one crate, thin `main`, no `BinaryError` |
 | Tests: harness abort sites → `miette::Result` + `into_diagnostic` / `ok_or_else` | done |
 | `IrView::root`, `IrMut::insert_node`, `rebuild_path_index` return `CordialResult` | done |
 | Dogfood panics: checklist **0**; tests **0** miette items; no inventory-only abort sites; abort-site action items **0** | done |
+| Source-wrapper shape (`source` + file/line + `#[track_caller] fn new` that calls `Location::caller()`) | done |
+| Error architecture suite (`Error` impls under `src/`; parent boxes Kind; native sources; recurse) | done |
+| Dogfood: `CordialError` / `CliError` follow parent + boxed Kind + native sources; bin miette wrappers excluded | superseded — `CliError` folded into `CordialError` |
+| One crate: CLI native sources on `CordialErrorKind`; `Cli::act`; miette only in `main` | done |
 | Profile-specific `ErrorHandlingPolicy` layer gating in session | future |
 
 ---

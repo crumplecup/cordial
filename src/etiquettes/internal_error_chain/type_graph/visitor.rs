@@ -1,120 +1,82 @@
-//! Static scan of crate error types under `src/error.rs` and `src/error/`.
+//! One-file syn visitor that records Error-implementing types.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Fields, ItemEnum, ItemImpl, ItemMod, ItemStruct, Type, TypePath};
-use walkdir::WalkDir;
+use syn::{Fields, ItemEnum, ItemImpl, ItemMod, ItemStruct};
 
 use crate::enricher::is_cfg_test;
 use crate::error::CordialResult;
+use crate::loader::module_path_from_src_file;
 
-use super::types::{
-    InternalErrorNodeClass, InternalErrorTypeGraphReport, InternalErrorTypeNode,
-    InternalErrorTypeProbeId,
+use super::super::types::InternalErrorTypeProbeId;
+use super::walk::{
+    extract_source_return_type, is_string_type, item_derives_error, last_ident,
+    qualified_type_name, trait_is_std_error, type_label,
 };
 
 use tracing::instrument;
-/// Scan `src/error.rs` and `src/error/**` for the internal error type graph.
-#[instrument(level = "debug", err(level = "warn"))]
-pub fn scan_crate_internal_error_type_graph(
-    crate_root: &Path,
-    crate_name: &str,
-) -> CordialResult<InternalErrorTypeGraphReport> {
-    let src_root = crate_root.join("src");
-    let error_dir = src_root.join("error");
-    let error_file = src_root.join("error.rs");
-    let mut raw_nodes = Vec::new();
 
-    if error_file.is_file() {
-        raw_nodes.extend(scan_error_rust_file_raw(&error_file, &src_root)?);
-    }
-    if error_dir.is_dir() {
-        for entry in WalkDir::new(&error_dir)
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(|entry| entry.file_type().is_file())
-        {
-            let path = entry.path();
-            if path.extension().is_none_or(|ext| ext != "rs") {
-                continue;
-            }
-            raw_nodes.extend(scan_error_rust_file_raw(path, &error_dir)?);
-        }
-    }
-
-    let mut nodes = finalize_type_graph(raw_nodes, crate_name);
-    for node in &mut nodes {
-        if let Ok(rel) = node.file.strip_prefix(crate_root) {
-            node.file = rel.to_path_buf();
-        }
-    }
-
-    Ok(InternalErrorTypeGraphReport {
-        crate_name: crate_name.to_string(),
-        nodes,
-    })
+/// Raw type-graph facts plus the `Error`-implementing type idents in one file.
+#[derive(Debug, Default)]
+pub(crate) struct RawTypeGraphScan {
+    pub nodes: Vec<RawTypeNode>,
+    pub error_impls: BTreeSet<String>,
 }
 
-/// Scan one error-module source file (used by tests).
-#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
-pub fn scan_error_rust_source(
-    source: &str,
-    file: &Path,
-    error_root: &Path,
-    crate_name: &str,
-) -> CordialResult<Vec<InternalErrorTypeNode>> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    Ok(finalize_type_graph(
-        scan_error_rust_syntax_raw(&syntax, file, error_root),
-        crate_name,
-    ))
-}
-
-/// Collect raw type-graph nodes from a pre-parsed error-module file.
+/// Collect raw type-graph nodes from a pre-parsed source file.
 #[instrument(level = "debug", skip(syntax, file))]
 pub(crate) fn scan_error_rust_syntax_raw(
     syntax: &syn::File,
     file: &Path,
-    error_root: &Path,
-) -> Vec<RawTypeNode> {
-    let module_prefix = module_path_from_error_file(error_root, file);
+    module_root: &Path,
+) -> RawTypeGraphScan {
+    let module_prefix = module_path_from_src_file(module_root, file);
     let mut visitor = TypeGraphScanVisitor {
         file: file.to_path_buf(),
         module_prefix,
         raw_nodes: Vec::new(),
+        error_impls: BTreeSet::new(),
     };
     visitor.visit_file(syntax);
-    visitor.raw_nodes
+    RawTypeGraphScan {
+        nodes: visitor.raw_nodes,
+        error_impls: visitor.error_impls,
+    }
 }
 
-fn scan_error_rust_file_raw(file: &Path, error_root: &Path) -> CordialResult<Vec<RawTypeNode>> {
+#[instrument(level = "debug", skip(file), err(level = "warn"))]
+pub(super) fn scan_error_rust_file_raw(
+    file: &Path,
+    module_root: &Path,
+) -> CordialResult<RawTypeGraphScan> {
     let source = std::fs::read_to_string(file)?;
     let syntax = syn::parse_file(&source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    Ok(scan_error_rust_syntax_raw(&syntax, file, error_root))
+    Ok(scan_error_rust_syntax_raw(&syntax, file, module_root))
 }
 
 #[derive(Debug)]
 pub(crate) struct RawTypeNode {
-    type_path: String,
-    probe_id: InternalErrorTypeProbeId,
-    source_target: Option<String>,
-    file: PathBuf,
-    line: u32,
-    snippet: String,
+    pub(crate) type_path: String,
+    pub(crate) probe_id: InternalErrorTypeProbeId,
+    pub(crate) source_target: Option<String>,
+    pub(crate) file: PathBuf,
+    pub(crate) line: u32,
+    pub(crate) snippet: String,
 }
 
 struct TypeGraphScanVisitor {
     file: PathBuf,
     module_prefix: Vec<String>,
     raw_nodes: Vec<RawTypeNode>,
+    error_impls: BTreeSet<String>,
 }
 
 impl TypeGraphScanVisitor {
+    #[instrument(level = "debug", skip(self, item_struct))]
     fn check_wrapper_struct(&mut self, item_struct: &ItemStruct) {
         let type_path = qualified_type_name(&self.module_prefix, &item_struct.ident.to_string());
         if item_struct.ident == "CordialError" {
@@ -157,6 +119,7 @@ impl TypeGraphScanVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self, item_enum))]
     fn check_error_enum(&mut self, item_enum: &ItemEnum) {
         let enum_name = item_enum.ident.to_string();
         for variant in &item_enum.variants {
@@ -236,21 +199,21 @@ impl TypeGraphScanVisitor {
         }
     }
 
+    #[instrument(level = "debug", skip(self))]
+    fn mark_error_ident(&mut self, ident: &str) {
+        self.error_impls.insert(ident.to_string());
+    }
+
+    #[instrument(level = "debug", skip(self, item_impl))]
     fn check_error_source_impl(&mut self, item_impl: &ItemImpl) {
         let Some((_, trait_path, _)) = &item_impl.trait_ else {
             return;
         };
-        let Some(trait_name) = trait_path
-            .segments
-            .last()
-            .map(|segment| segment.ident.to_string())
-        else {
-            return;
-        };
-        if trait_name != "Error" {
+        if !trait_is_std_error(trait_path) {
             return;
         }
         let self_type = type_label(&item_impl.self_ty);
+        self.mark_error_ident(last_ident(&self_type));
         let Some(target) = extract_source_return_type(item_impl) else {
             return;
         };
@@ -266,6 +229,7 @@ impl TypeGraphScanVisitor {
 }
 
 impl<'ast> Visit<'ast> for TypeGraphScanVisitor {
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         if is_cfg_test(&node.attrs) {
             return;
@@ -283,186 +247,27 @@ impl<'ast> Visit<'ast> for TypeGraphScanVisitor {
         self.module_prefix = prev;
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_struct(&mut self, node: &'ast ItemStruct) {
+        if item_derives_error(&node.attrs) {
+            self.mark_error_ident(&node.ident.to_string());
+        }
         self.check_wrapper_struct(node);
         syn::visit::visit_item_struct(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_enum(&mut self, node: &'ast ItemEnum) {
+        if item_derives_error(&node.attrs) {
+            self.mark_error_ident(&node.ident.to_string());
+        }
         self.check_error_enum(node);
         syn::visit::visit_item_enum(self, node);
     }
 
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
         self.check_error_source_impl(node);
         syn::visit::visit_item_impl(self, node);
     }
-}
-
-#[instrument(level = "debug")]
-pub(crate) fn finalize_type_graph(
-    raw_nodes: Vec<RawTypeNode>,
-    crate_name: &str,
-) -> Vec<InternalErrorTypeNode> {
-    let mut edges: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for raw in &raw_nodes {
-        if let Some(target) = &raw.source_target {
-            edges
-                .entry(raw.type_path.clone())
-                .or_default()
-                .insert(target.clone());
-        }
-    }
-
-    let mut nodes = Vec::with_capacity(raw_nodes.len());
-    for raw in raw_nodes {
-        let node_class = classify_node(&raw);
-        let (reaches_foreign, chain_depth) = graph_metrics(&raw.type_path, &edges);
-        nodes.push(InternalErrorTypeNode {
-            crate_name: crate_name.to_string(),
-            type_path: raw.type_path,
-            node_class,
-            probe_id: raw.probe_id,
-            source_target: raw.source_target,
-            reaches_foreign,
-            chain_depth,
-            file: raw.file,
-            line: raw.line,
-            snippet: raw.snippet,
-        });
-    }
-
-    nodes.sort_by(|a, b| a.type_path.cmp(&b.type_path).then(a.line.cmp(&b.line)));
-    nodes
-}
-
-fn classify_node(raw: &RawTypeNode) -> InternalErrorNodeClass {
-    if raw.type_path == "CordialError" {
-        return InternalErrorNodeClass::UmbrellaWrapper;
-    }
-    if raw.probe_id == InternalErrorTypeProbeId::InternalLeaf001 {
-        return InternalErrorNodeClass::InternalLeaf;
-    }
-    if let Some(target) = &raw.source_target {
-        if raw.type_path.ends_with("Source") && is_foreign_type_label(target) {
-            return InternalErrorNodeClass::ForeignBridge;
-        }
-        if is_foreign_type_label(target) {
-            return InternalErrorNodeClass::ForeignBridge;
-        }
-        return InternalErrorNodeClass::InternalLink;
-    }
-    InternalErrorNodeClass::InternalLink
-}
-
-fn graph_metrics(start: &str, edges: &BTreeMap<String, BTreeSet<String>>) -> (bool, u32) {
-    let mut visited = BTreeSet::new();
-    let mut queue = vec![(start.to_string(), 0u32)];
-    let mut reaches_foreign = false;
-    let mut max_depth = 0u32;
-
-    while let Some((node, depth)) = queue.pop() {
-        if !visited.insert(node.clone()) {
-            continue;
-        }
-        max_depth = max_depth.max(depth);
-        if is_foreign_type_label(&node) {
-            reaches_foreign = true;
-        }
-        let Some(targets) = edges.get(&node) else {
-            continue;
-        };
-        for target in targets {
-            if is_foreign_type_label(target) {
-                reaches_foreign = true;
-            }
-            queue.push((target.clone(), depth + 1));
-        }
-    }
-
-    (reaches_foreign, max_depth)
-}
-
-fn extract_source_return_type(item_impl: &ItemImpl) -> Option<String> {
-    for item in &item_impl.items {
-        let syn::ImplItem::Fn(method) = item else {
-            continue;
-        };
-        if method.sig.ident != "source" {
-            continue;
-        }
-        let syn::Stmt::Expr(syn::Expr::Match(match_expr), _) = method.block.stmts.first()? else {
-            continue;
-        };
-        for arm in &match_expr.arms {
-            if let syn::Expr::Path(path) = &*arm.body {
-                return Some(type_path_label(&path.path));
-            }
-        }
-    }
-    None
-}
-
-#[instrument(level = "debug", skip(file))]
-pub(crate) fn module_path_from_error_file(error_root: &Path, file: &Path) -> Vec<String> {
-    let Ok(rel) = file.strip_prefix(error_root) else {
-        return Vec::new();
-    };
-    let rel = rel.with_extension("");
-    rel.components()
-        .filter_map(|component| component.as_os_str().to_str().map(str::to_string))
-        .collect()
-}
-
-fn qualified_type_name(module_prefix: &[String], name: &str) -> String {
-    if module_prefix.is_empty() {
-        name.to_string()
-    } else {
-        format!("{}::{}", module_prefix.join("::"), name)
-    }
-}
-
-fn is_foreign_type_label(label: &str) -> bool {
-    [
-        "std::",
-        "serde_json::",
-        "serde_yaml::",
-        "syn::",
-        "csv::",
-        "cargo_metadata::",
-        "reqwest::",
-        "url::",
-        "toml::",
-    ]
-    .iter()
-    .any(|prefix| label.starts_with(prefix))
-        || (label.ends_with("Error") && label.contains("::"))
-}
-
-fn is_string_type(ty: &Type) -> bool {
-    match ty {
-        Type::Path(TypePath { path, .. }) => path.is_ident("String"),
-        Type::Reference(reference) => is_string_type(&reference.elem),
-        Type::Paren(paren) => is_string_type(&paren.elem),
-        Type::Group(group) => is_string_type(&group.elem),
-        _ => false,
-    }
-}
-
-fn type_label(ty: &Type) -> String {
-    match ty {
-        Type::Path(type_path) => type_path_label(&type_path.path),
-        Type::Reference(reference) => type_label(&reference.elem),
-        Type::Paren(paren) => type_label(&paren.elem),
-        Type::Group(group) => type_label(&group.elem),
-        _ => "?".to_string(),
-    }
-}
-
-fn type_path_label(path: &syn::Path) -> String {
-    path.segments
-        .iter()
-        .map(|segment| segment.ident.to_string())
-        .collect::<Vec<_>>()
-        .join("::")
 }

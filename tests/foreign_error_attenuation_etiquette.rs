@@ -1,12 +1,13 @@
 use miette::{IntoDiagnostic, WrapErr};
 use std::fs;
+use std::path::PathBuf;
 
 use cordial::{
-    ErrorSiteScanRow, FOREIGN_ERROR_ATTENUATION_ETIQUETTE, ForeignErrorHandlingClass, RunAll,
-    Session, SessionBuilder, build_error_site_partition_report,
-    build_foreign_error_attenuation_report, build_foreign_error_type_report,
-    partition_error_site_records, scan_crate_error_chain, scan_error_chain_rust_source,
-    scan_error_sites_rust_source,
+    ErrorSiteKind, ErrorSiteScanRow, FOREIGN_ERROR_ATTENUATION_ETIQUETTE, ForeignErrorHandlingClass,
+    ForeignErrorTypeRecord, ForeignErrorTypeReport, ForeignTypeConfidence, RunAll, Session,
+    SessionBuilder, build_error_site_partition_report, build_foreign_error_attenuation_report,
+    build_foreign_error_type_report, partition_error_site_records, scan_crate_error_chain,
+    scan_error_chain_rust_source, scan_error_sites_rust_source,
 };
 
 const PRESERVED_FIXTURE: &str = r#"
@@ -124,6 +125,57 @@ fn attenuator_pairs_preserved_and_chain_break_sites() -> miette::Result<()> {
             && finding.context.contains("preserved_map_err_from")
     }));
     Ok(())
+}
+
+#[test]
+fn test_into_diagnostic_is_miette_exemplar_not_pending_infra() {
+    let foreign = ForeignErrorTypeReport {
+        crate_name: "example".to_string(),
+        findings: vec![ForeignErrorTypeRecord {
+            crate_name: "example".to_string(),
+            foreign_error_type: "std::io::Error".to_string(),
+            rule_id: "FOREIGN-ERROR-TYPE-STD-IO-FS-001".to_string(),
+            confidence: ForeignTypeConfidence::High,
+            chain_break: false,
+            kind: ErrorSiteKind::QuestionMark,
+            context: "register::three_plugin_kinds_register_and_quality_finds_todo".to_string(),
+            file: PathBuf::from("examples/custom_plugins/tests/register.rs"),
+            line: 25,
+            source_snippet: "std::fs::create_dir_all(…).into_diagnostic(…).wrap_err(…)".to_string(),
+            site_snippet: "std::fs::create_dir_all(…).into_diagnostic(…).wrap_err(…)?".to_string(),
+        }],
+    };
+    let report = build_foreign_error_attenuation_report(&foreign, &[]);
+    assert_eq!(report.findings.len(), 1);
+    assert_eq!(
+        report.findings[0].handling_class,
+        ForeignErrorHandlingClass::ChainPreserved
+    );
+}
+
+#[test]
+fn library_into_diagnostic_without_bridge_is_still_pending_infra() {
+    let foreign = ForeignErrorTypeReport {
+        crate_name: "example".to_string(),
+        findings: vec![ForeignErrorTypeRecord {
+            crate_name: "example".to_string(),
+            foreign_error_type: "std::io::Error".to_string(),
+            rule_id: "FOREIGN-ERROR-TYPE-STD-IO-FS-001".to_string(),
+            confidence: ForeignTypeConfidence::High,
+            chain_break: false,
+            kind: ErrorSiteKind::QuestionMark,
+            context: "lib::load".to_string(),
+            file: PathBuf::from("src/lib.rs"),
+            line: 10,
+            source_snippet: "std::fs::read_to_string(…).into_diagnostic()".to_string(),
+            site_snippet: "std::fs::read_to_string(…).into_diagnostic()?".to_string(),
+        }],
+    };
+    let report = build_foreign_error_attenuation_report(&foreign, &[]);
+    assert_eq!(
+        report.findings[0].handling_class,
+        ForeignErrorHandlingClass::PendingInfrastructure
+    );
 }
 
 #[test]

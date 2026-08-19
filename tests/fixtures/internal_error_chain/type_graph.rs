@@ -20,3 +20,5 @@ impl Error for DomainError {
         }
     }
 }
+
+impl Error for InnerSource {}

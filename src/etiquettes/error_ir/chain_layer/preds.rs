@@ -1,200 +1,41 @@
-//! Error-chain layer: preserved vs. discarded foreign error chains.
-//!
-//! Gated as a whole unit by `#[cfg(feature = "error_chain")]` on the `mod
-//! chain_layer;` declaration in `error_ir/mod.rs` — nothing inside this file
-//! needs its own `#[cfg]`, since the entire file only compiles when the
-//! feature is enabled.
+//! Predicates and labels used by [`super::ChainLayer`].
 
-use syn::spanned::Spanned;
 use syn::{
-    Expr, ExprClosure, ExprMethodCall, ExprPath, ExprTry, Fields, GenericArgument, ItemEnum,
-    ItemImpl, ItemStruct, Member, PathArguments, ReturnType, Type, TypePath,
+    Expr, ExprClosure, ExprMethodCall, ExprPath, GenericArgument, Member, PathArguments,
+    ReturnType, Type, TypePath,
 };
 
-use super::visitor::{SiteCtx, raw_expr_snippet, truncate_snippet};
-use crate::etiquettes::error_chain::{ErrorChainProbeId, ErrorChainRecord};
+use super::super::visitor::{raw_expr_snippet, truncate_snippet};
 use crate::etiquettes::error_sites::infer_foreign_error_type;
 
-/// Per-file accumulator for the `error_chain` layer.
-#[derive(Default)]
-pub(super) struct ChainLayer {
-    fn_return_type: Option<String>,
-    chain: Vec<ErrorChainRecord>,
-}
+use tracing::instrument;
 
-impl ChainLayer {
-    pub(super) fn new() -> Self {
-        Self::default()
-    }
-
-    /// Enter a fn/method body, returning the previous return-type label so
-    /// the caller can restore it via [`Self::exit_fn`].
-    pub(super) fn enter_fn(&mut self, output: &ReturnType) -> Option<String> {
-        let prev = self.fn_return_type.take();
-        self.fn_return_type = return_type_label(output);
-        prev
-    }
-
-    pub(super) fn exit_fn(&mut self, prev: Option<String>) {
-        self.fn_return_type = prev;
-    }
-
-    fn push(
-        &mut self,
-        rule_id: ErrorChainProbeId,
-        line: u32,
-        snippet: String,
-        foreign_error_type: Option<String>,
-        ctx: &SiteCtx,
-    ) {
-        self.chain.push(ErrorChainRecord {
-            rule_id,
-            context: ctx.context.clone(),
-            file: ctx.rel_file.clone(),
-            line,
-            snippet,
-            foreign_error_type,
-        });
-    }
-
-    pub(super) fn on_item_struct(&mut self, item_struct: &ItemStruct, ctx: &SiteCtx) {
-        let Fields::Named(fields) = &item_struct.fields else {
-            return;
-        };
-        for field in &fields.named {
-            let Some(ident) = &field.ident else {
-                continue;
-            };
-            if ident != "source" {
-                continue;
-            }
-            if is_string_type(&field.ty) {
-                continue;
-            }
-            self.push(
-                ErrorChainProbeId::WrapperSourceField001,
-                field.span().start().line as u32,
-                format!(
-                    "struct {} {{ source: {} }}",
-                    item_struct.ident,
-                    type_label(&field.ty)
-                ),
-                foreign_type_from_rust_type(&field.ty),
-                ctx,
-            );
-        }
-    }
-
-    pub(super) fn on_item_enum(&mut self, item_enum: &ItemEnum, ctx: &SiteCtx) {
-        if !enum_name_suggests_error_kind(&item_enum.ident.to_string()) {
-            return;
-        }
-        for variant in &item_enum.variants {
-            let payload = match &variant.fields {
-                Fields::Unnamed(fields) if fields.unnamed.len() == 1 => &fields.unnamed[0].ty,
-                Fields::Named(fields) if fields.named.len() == 1 => &fields.named[0].ty,
-                _ => continue,
-            };
-            if is_string_type(payload) {
-                continue;
-            }
-            self.push(
-                ErrorChainProbeId::KindWrapperPayload001,
-                variant.span().start().line as u32,
-                format!(
-                    "enum {} {{ {}({}) }}",
-                    item_enum.ident,
-                    variant.ident,
-                    type_label(payload)
-                ),
-                foreign_type_from_rust_type(payload),
-                ctx,
-            );
-        }
-    }
-
-    pub(super) fn on_item_impl(&mut self, item_impl: &ItemImpl, ctx: &SiteCtx) {
-        let Some((_, trait_path, _)) = &item_impl.trait_ else {
-            return;
-        };
-        let Some(from_type) = extract_from_source_type(trait_path) else {
-            return;
-        };
-        if is_string_type(from_type) || !is_foreign_rust_type(from_type) {
-            return;
-        }
-        self.push(
-            ErrorChainProbeId::FromBridge001,
-            item_impl.span().start().line as u32,
-            format!(
-                "impl From<{}> for {}",
-                type_label(from_type),
-                type_label(&item_impl.self_ty)
-            ),
-            foreign_type_from_rust_type(from_type),
-            ctx,
-        );
-    }
-
-    pub(super) fn on_map_err(&mut self, call: &ExprMethodCall, ctx: &SiteCtx) {
-        if !return_type_is_umbrella(&self.fn_return_type) {
-            return;
-        }
-        if let Some((foreign_type, source_snippet)) =
-            preserved_map_err_conversion(call, &call.receiver)
-        {
-            self.push(
-                ErrorChainProbeId::PreservedMapErr001,
-                call.span().start().line as u32,
-                format!("{source_snippet}.map_err(…)"),
-                Some(foreign_type),
-                ctx,
-            );
-        }
-    }
-
-    pub(super) fn on_expr_try(&mut self, node: &ExprTry, ctx: &SiteCtx) {
-        if !try_propagates_into_umbrella(&self.fn_return_type, &node.expr) {
-            return;
-        }
-        if expr_contains_map_err(&node.expr) {
-            return;
-        }
-        if let Some((foreign_type, source_snippet)) = foreign_try_site(&node.expr) {
-            self.push(
-                ErrorChainProbeId::PreservedQuestionMark001,
-                node.span().start().line as u32,
-                format!("{source_snippet}?"),
-                Some(foreign_type),
-                ctx,
-            );
-        }
-    }
-
-    pub(super) fn into_records(self) -> Vec<ErrorChainRecord> {
-        self.chain
-    }
-}
-
+#[instrument(level = "debug", skip(expr))]
 fn chain_expr_snippet(expr: &Expr) -> String {
     truncate_snippet(&raw_expr_snippet(expr), 96)
 }
 
-fn return_type_label(output: &ReturnType) -> Option<String> {
+#[instrument(level = "debug", skip(output))]
+pub(super) fn return_type_label(output: &ReturnType) -> Option<String> {
     match output {
         ReturnType::Default => None,
         ReturnType::Type(_, ty) => Some(type_label(ty)),
     }
 }
 
-fn try_propagates_into_umbrella(fn_return_type: &Option<String>, try_expr: &Expr) -> bool {
+#[instrument(level = "debug", skip(try_expr))]
+pub(super) fn try_propagates_into_umbrella(
+    fn_return_type: &Option<String>,
+    try_expr: &Expr,
+) -> bool {
     if is_option_try_expr(try_expr) {
         return false;
     }
     return_type_is_umbrella(fn_return_type)
 }
 
-fn return_type_is_umbrella(fn_return_type: &Option<String>) -> bool {
+#[instrument(level = "debug")]
+pub(super) fn return_type_is_umbrella(fn_return_type: &Option<String>) -> bool {
     let Some(return_type) = fn_return_type else {
         return false;
     };
@@ -207,10 +48,12 @@ fn return_type_is_umbrella(fn_return_type: &Option<String>) -> bool {
     return_type.contains("Result")
 }
 
+#[instrument(level = "trace", skip(expr), ret)]
 fn is_option_try_expr(expr: &Expr) -> bool {
     matches!(expr, Expr::MethodCall(call) if call.method == "ok")
 }
 
+#[instrument(level = "trace")]
 fn is_foreign_result_return_type(return_type: &str) -> bool {
     if return_type.contains("io::Result") {
         return true;
@@ -229,7 +72,8 @@ fn is_foreign_result_return_type(return_type: &str) -> bool {
     false
 }
 
-fn foreign_try_site(expr: &Expr) -> Option<(String, String)> {
+#[instrument(level = "debug", skip(expr))]
+pub(super) fn foreign_try_site(expr: &Expr) -> Option<(String, String)> {
     if expr_contains_map_err(expr) {
         return None;
     }
@@ -238,7 +82,8 @@ fn foreign_try_site(expr: &Expr) -> Option<(String, String)> {
     Some((foreign_type, source_snippet))
 }
 
-fn preserved_map_err_conversion(
+#[instrument(level = "debug", skip(call, receiver))]
+pub(super) fn preserved_map_err_conversion(
     call: &ExprMethodCall,
     receiver: &Expr,
 ) -> Option<(String, String)> {
@@ -254,7 +99,8 @@ fn preserved_map_err_conversion(
     Some((foreign_type, source_snippet))
 }
 
-fn extract_from_source_type(trait_path: &syn::Path) -> Option<&Type> {
+#[instrument(level = "debug")]
+pub(super) fn extract_from_source_type(trait_path: &syn::Path) -> Option<&Type> {
     let segment = trait_path.segments.last()?;
     if segment.ident != "From" {
         return None;
@@ -268,10 +114,12 @@ fn extract_from_source_type(trait_path: &syn::Path) -> Option<&Type> {
     Some(from_type)
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn map_err_stringifies(expr: &Expr) -> bool {
     chain_expr_contains_to_string(expr)
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn map_err_preserves_chain(expr: &Expr) -> bool {
     match expr {
         // `map_err(CrateError::from)` and `map_err(CrateError::cargo_metadata)` are
@@ -285,6 +133,7 @@ fn map_err_preserves_chain(expr: &Expr) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(path))]
 fn path_is_into_or_from(path: &ExprPath) -> bool {
     let segments = &path.path.segments;
     if segments.len() == 2 && segments[0].ident == "Into" && segments[1].ident == "into" {
@@ -295,6 +144,7 @@ fn path_is_into_or_from(path: &ExprPath) -> bool {
         .is_some_and(|segment| segment.ident == "from")
 }
 
+#[instrument(level = "debug", skip(func))]
 fn path_is_into_or_from_fn(func: &Expr) -> bool {
     match func {
         Expr::Path(path) => path
@@ -306,6 +156,7 @@ fn path_is_into_or_from_fn(func: &Expr) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(closure))]
 fn closure_preserves_chain(closure: &ExprClosure) -> bool {
     if chain_expr_contains_to_string(&closure.body) {
         return false;
@@ -313,6 +164,7 @@ fn closure_preserves_chain(closure: &ExprClosure) -> bool {
     expr_contains_source_field(&closure.body) || expr_forwards_error_binding(&closure.body)
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn expr_forwards_error_binding(expr: &Expr) -> bool {
     match expr {
         Expr::Call(call) if path_is_into_or_from_fn(&call.func) => true,
@@ -333,6 +185,7 @@ fn expr_forwards_error_binding(expr: &Expr) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(func))]
 fn constructor_drops_typed_source(func: &Expr) -> bool {
     let Expr::Path(path) = func else {
         return false;
@@ -340,6 +193,7 @@ fn constructor_drops_typed_source(func: &Expr) -> bool {
     path_constructor_drops_typed_source(path)
 }
 
+#[instrument(level = "debug", skip(path))]
 fn path_constructor_drops_typed_source(path: &ExprPath) -> bool {
     path.path.segments.last().is_some_and(|segment| {
         matches!(
@@ -349,6 +203,7 @@ fn path_constructor_drops_typed_source(path: &ExprPath) -> bool {
     })
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn expr_is_error_binding(expr: &Expr) -> bool {
     match expr {
         Expr::Path(path) => path
@@ -360,6 +215,7 @@ fn expr_is_error_binding(expr: &Expr) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn chain_expr_contains_to_string(expr: &Expr) -> bool {
     match expr {
         Expr::MethodCall(call) if call.method == "to_string" => {
@@ -389,6 +245,7 @@ fn chain_expr_contains_to_string(expr: &Expr) -> bool {
     }
 }
 
+#[instrument(level = "debug", skip(expr))]
 fn expr_contains_source_field(expr: &Expr) -> bool {
     match expr {
         Expr::Struct(item) => item.fields.iter().any(|field| {
@@ -413,7 +270,8 @@ fn expr_contains_source_field(expr: &Expr) -> bool {
     }
 }
 
-fn expr_contains_map_err(expr: &Expr) -> bool {
+#[instrument(level = "debug", skip(expr))]
+pub(super) fn expr_contains_map_err(expr: &Expr) -> bool {
     match expr {
         Expr::MethodCall(call) if call.method == "map_err" => true,
         Expr::Try(try_expr) => expr_contains_map_err(&try_expr.expr),
@@ -430,7 +288,8 @@ fn expr_contains_map_err(expr: &Expr) -> bool {
     }
 }
 
-fn is_foreign_rust_type(ty: &Type) -> bool {
+#[instrument(level = "trace", skip(ty), ret)]
+pub(super) fn is_foreign_rust_type(ty: &Type) -> bool {
     let label = type_label(ty);
     [
         "std::",
@@ -450,11 +309,13 @@ fn is_foreign_rust_type(ty: &Type) -> bool {
         || label.ends_with("Error") && label.contains("::") && !label.ends_with("ErrorKind")
 }
 
-fn enum_name_suggests_error_kind(name: &str) -> bool {
+#[instrument(level = "debug")]
+pub(super) fn enum_name_suggests_error_kind(name: &str) -> bool {
     name.ends_with("ErrorKind") || name.ends_with("Kind")
 }
 
-fn foreign_type_from_rust_type(ty: &Type) -> Option<String> {
+#[instrument(level = "debug", skip(ty))]
+pub(super) fn foreign_type_from_rust_type(ty: &Type) -> Option<String> {
     let label = type_label(ty);
     if label == "String" || label == "?" {
         return None;
@@ -462,7 +323,8 @@ fn foreign_type_from_rust_type(ty: &Type) -> Option<String> {
     Some(label)
 }
 
-fn type_label(ty: &Type) -> String {
+#[instrument(level = "debug", skip(ty))]
+pub(super) fn type_label(ty: &Type) -> String {
     match ty {
         Type::Path(type_path) => type_path
             .path
@@ -478,7 +340,8 @@ fn type_label(ty: &Type) -> String {
     }
 }
 
-fn is_string_type(ty: &Type) -> bool {
+#[instrument(level = "trace", skip(ty))]
+pub(super) fn is_string_type(ty: &Type) -> bool {
     match ty {
         Type::Path(TypePath { path, .. }) => path.is_ident("String"),
         Type::Reference(reference) => is_string_type(&reference.elem),
