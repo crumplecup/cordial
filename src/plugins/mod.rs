@@ -27,7 +27,8 @@ mod error_handling_plugin_wiring {
     pub use super::error_handling::{
         STANDARD_ERROR_HANDLING, StandardErrorHandling, standard_error_handling_etiquettes,
     };
-    use super::*;
+    use crate::plugin::Plugin;
+    use tracing::instrument;
 
     /// Built-in error-handling plugins.
     #[instrument(level = "debug")]
@@ -48,16 +49,23 @@ pub use error_handling_plugin_wiring::{
     error_handling_plugins, standard_error_handling_etiquettes,
 };
 
-use crate::error::CordialResult;
 use crate::etiquette::Etiquette;
-use crate::plugin::{
-    EtiquettePlugin, Plugin, PluginCategory, plugins_in_category, selected_plugins,
-};
-use crate::session::{RunFilter, SessionView};
+use crate::plugin::{EtiquettePlugin, Plugin, PluginCategory, plugins_in_category};
 #[cfg(feature = "rustdoc")]
 mod coverage_targets {
-    use super::*;
-    use crate::plugin::{Coverage, CoverageTarget};
+    use crate::error::CordialResult;
+    use crate::plugin::{
+        Coverage, CoverageTarget, Plugin, PluginCategory, plugins_in_category, selected_plugins,
+    };
+    use crate::session::{RunFilter, SessionView};
+    use tracing::instrument;
+
+    #[cfg(feature = "amenable_std")]
+    use super::AMENABLE_STD_COVERAGE;
+    #[cfg(feature = "elicitation")]
+    use super::ELICITATION_COVERAGE;
+    #[cfg(feature = "homecoming_std")]
+    use super::HOMECOMING_STD_COVERAGE;
 
     /// Union [`CoverageTarget`] rows from active coverage plugins in this run.
     #[instrument(level = "debug", skip(plugins, session, filter), err(level = "warn"))]
@@ -222,7 +230,7 @@ pub fn coverage_only_plugins() -> Vec<&'static dyn Plugin> {
 /// Static quality plugins wrapping each enabled etiquette.
 #[instrument(level = "debug")]
 fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
-    let items: [Option<&'static EtiquettePlugin>; 8] = [
+    let items: [Option<&'static EtiquettePlugin>; 10] = [
         #[cfg(feature = "tracing")]
         Some(tracing_plugin()),
         #[cfg(not(feature = "tracing"))]
@@ -254,6 +262,14 @@ fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
         #[cfg(feature = "cli_layout")]
         Some(cli_layout_plugin()),
         #[cfg(not(feature = "cli_layout"))]
+        None,
+        #[cfg(feature = "glob_imports")]
+        Some(glob_imports_plugin()),
+        #[cfg(not(feature = "glob_imports"))]
+        None,
+        #[cfg(feature = "inline_tests")]
+        Some(inline_tests_plugin()),
+        #[cfg(not(feature = "inline_tests"))]
         None,
     ];
     items.into_iter().flatten().collect()
@@ -304,6 +320,16 @@ etiquette_plugin_fn!(
 etiquette_plugin_fn!(
     cli_layout_plugin,
     &crate::etiquettes::cli_layout::CLI_LAYOUT_ETIQUETTE
+);
+#[cfg(feature = "glob_imports")]
+etiquette_plugin_fn!(
+    glob_imports_plugin,
+    &crate::etiquettes::glob_imports::GLOB_IMPORTS_ETIQUETTE
+);
+#[cfg(feature = "inline_tests")]
+etiquette_plugin_fn!(
+    inline_tests_plugin,
+    &crate::etiquettes::inline_tests::INLINE_TESTS_ETIQUETTE
 );
 
 /// Legacy etiquette list — flatten of all registered quality + coverage plugins.

@@ -14,8 +14,8 @@
 //!
 //! Built-in plugins are feature-gated:
 //!
-//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout` — source-quality scanners
-//!   (`panics` and `tracing` enabled by default)
+//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `glob_imports`, `inline_tests` — source-quality scanners
+//!   (the `quality` umbrella is enabled by default)
 //! - `cli` — clap binary (`cordial`); enabled by default
 //! - `impl_coverage`, `trenchcoat`, `shadow` — rustdoc coverage scanners
 //! - `elicitation` — umbrella for all coverage plugins
@@ -107,8 +107,18 @@ pub use etiquettes::foreign_error_types::{
     ForeignErrorTypeReport, WorkspaceForeignErrorTypeSummary, build_error_site_partition_report,
     build_foreign_error_type_report, build_workspace_foreign_error_type_summary,
 };
+#[cfg(feature = "glob_imports")]
+pub use etiquettes::glob_imports::{
+    GLOB_IMPORTS_ETIQUETTE, GlobImportRuleId, scan_crate_glob_imports,
+    scan_rust_source as scan_glob_imports_rust_source,
+};
 #[cfg(feature = "impl_coverage")]
 pub use etiquettes::impl_coverage::IMPL_COVERAGE_ETIQUETTE;
+#[cfg(feature = "inline_tests")]
+pub use etiquettes::inline_tests::{
+    INLINE_TESTS_ETIQUETTE, InlineTestRuleId, scan_crate_inline_tests,
+    scan_rust_source as scan_inline_tests_rust_source,
+};
 #[cfg(feature = "internal_error_chain")]
 pub use etiquettes::internal_error_chain::{
     INTERNAL_ERROR_CHAIN_ETIQUETTE, InternalErrorChainScanReport, InternalErrorComplianceFinding,
@@ -166,7 +176,9 @@ pub use digest::{
     feature = "antipatterns",
     feature = "cfg_scatter",
     feature = "visibility",
-    feature = "cli_layout"
+    feature = "cli_layout",
+    feature = "glob_imports",
+    feature = "inline_tests"
 ))]
 pub use enricher::AttributeEnricher;
 pub use enricher::ScopeEnricher;
@@ -280,7 +292,9 @@ pub use session::{
 pub use store::{StoreLayout, SysrootCache, default_store_home, project_slug_from_path};
 #[cfg(feature = "homecoming_std")]
 pub use {
-    cargo_rustdoc::build_sysroot_libraries,
+    cargo_rustdoc::{
+        build_sysroot_libraries, is_std_family_crate, resolve_sysroot_library_manifest,
+    },
     etiquettes::framework_std::HOMECOMING_STD_ETIQUETTE,
     plugin::{WorkspaceHub, detect_workspace_hub, discover_workspace_hub},
     plugins::{HOMECOMING_STD_COVERAGE, HomecomingStdCoverage, coverage_plugins_for_hub},

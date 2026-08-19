@@ -17,6 +17,8 @@ Active implementation plans for `cordial`.
 | [cordial.toml config](docs/planning/cordial-config.md) | **Active** | Layered `cordial.toml` via the `config` crate; canonical etiquette thresholds |
 | [Modularity etiquette](docs/planning/modularity-etiquette.md) | **Active** | Combined modularity plugin: size, packing, hierarchy lints |
 | [Tracing etiquette](docs/planning/tracing-etiquette.md) | **Active** | Classify by role; every function; recipe deltas; apply writes the recipe |
+| [Glob imports](docs/planning/glob-imports-etiquette.md) | **Active** | Flag `use …::*`; replace with explicit names |
+| [Inline tests](docs/planning/inline-tests-etiquette.md) | **Active** | `#[cfg(test)]` / `#[test]` under `src/` belong in `tests/` |
 
 ## Completed / archived
 

@@ -69,20 +69,20 @@ framework itself.
 
 | Feature | Plugin |
 | --- | --- |
-| `panics` (default) | Panic sources — error-handling layer (library → internal errors, binary/tests → miette) |
-| `tracing` (default) | `#[instrument]` coverage → classified recipes ([tracing-etiquette.md](docs/planning/tracing-etiquette.md)) |
+| `panics` | Panic sources — error-handling layer (library → internal errors, binary/tests → miette) |
+| `tracing` | `#[instrument]` coverage → classified recipes ([tracing-etiquette.md](docs/planning/tracing-etiquette.md)) |
 | `derives` | Manual builder/getter/setter/new patterns |
 | `allows` | `#[allow(...)]` inventory |
 | `modularity` | File/function size, types-per-file, module-size σ, hierarchy lints |
-| `quality` | All quality plugins above |
+| `quality` (default) | All source-quality scanners (panics, tracing, error stack, derives, allows, modularity, antipatterns, cfg_scatter, visibility, cli_layout, glob_imports, inline_tests) |
 | `impl_coverage` | Trait impl coverage (requires `rustdoc`) |
 | `trenchcoat` | Trenchcoat wrapper coverage |
 | `shadow` | Shadow mirror coverage |
 | `elicitation` | All coverage plugins (`impl_coverage`, `trenchcoat`, `shadow`) |
 | `full` | Every built-in plugin |
 
-Downstream: enable `cordial/elicitation` (and `cli` for the binary). Default features
-include `cli` plus `panics` and `tracing`.
+Downstream: enable `cordial/elicitation` (and `cli` for the binary). Default
+features are `quality` and `cli`.
 
 Usage: *"run the panics etiquette"*, *"register a custom etiquette"*.
 

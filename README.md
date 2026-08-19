@@ -22,8 +22,8 @@ why / how) live on each etiquette in `src/etiquettes/`.
 ## Install and run
 
 ```sh
-cargo install --path . --features quality
-# coverage commands also need --features elicitation (CLI default)
+cargo install --path .
+# coverage commands also need --features elicitation
 # std-family coverage: --features full
 ```
 
@@ -57,8 +57,9 @@ Documented exceptions are JSON patches under the project store
 
 ## Quality etiquettes
 
-`cordial quality` (Cargo feature `quality`, or individual features). `panics`
-and `tracing` are on by default.
+`cordial quality` runs every source-quality etiquette (Cargo feature `quality`,
+on by default). Opt out with `--no-default-features --features cli` plus the
+scanners you want.
 
 | Id | What it asks |
 | --- | --- |
@@ -76,6 +77,8 @@ and `tracing` are on by default.
 | `cfg_scatter` | Is the same `#[cfg]` copied across item kinds instead of a gated `mod`? Field/variant gating is never flagged. `[cfg_scatter]` in `cordial.toml`. |
 | `visibility` | Do `pub mod` paths earn their existence (flat crate, thin module, vis mismatch)? `[visibility]` in `cordial.toml`. |
 | `cli_layout` | Do clap types live in the library and dispatch with `act`? Is `main` only parse + `act` + miette? |
+| `glob_imports` | Are there glob `use` trees (`foo::*`, including `super::*`)? Replace them with explicit names. |
+| `inline_tests` | Are `#[cfg(test)]` modules or `#[test]` functions mixed into `src/`? Move them to `tests/`. |
 
 Error-handling etiquettes share one source scan (`error_ir`). Tracing apply is
 the only quality path that rewrites source.

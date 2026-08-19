@@ -30,6 +30,8 @@
 //! | `cfg_scatter` | `cfg_scatter` | Is the same `#[cfg]` copied across item kinds? |
 //! | `visibility` | `visibility` | Do `pub mod` paths earn their existence? |
 //! | `cli_layout` | `cli_layout` | Do clap types dispatch in the library with `act`? |
+//! | `glob_imports` | `glob_imports` | Are there glob `use` trees (`foo::*`, including `super::*`)? |
+//! | `inline_tests` | `inline_tests` | Are tests mixed into `src/` instead of `tests/`? |
 //!
 //! # Coverage
 //!
@@ -56,6 +58,10 @@ pub(crate) mod cli_layout;
 pub(crate) mod derives;
 #[cfg(feature = "error_sites")]
 mod error_ir;
+#[cfg(feature = "glob_imports")]
+pub(crate) mod glob_imports;
+#[cfg(feature = "inline_tests")]
+pub(crate) mod inline_tests;
 #[cfg(feature = "visibility")]
 pub(crate) mod visibility;
 #[cfg(feature = "error_sites")]
@@ -88,7 +94,7 @@ pub(crate) mod trenchcoat;
 /// Built-in source-quality etiquettes enabled in the current feature set.
 #[::tracing::instrument(level = "debug")]
 pub fn quality_etiquettes() -> Vec<&'static dyn crate::Etiquette> {
-    let items: [Option<&'static dyn crate::Etiquette>; 14] = [
+    let items: [Option<&'static dyn crate::Etiquette>; 16] = [
         #[cfg(feature = "panics")]
         Some(&panics::PANICS_ETIQUETTE as &dyn crate::Etiquette),
         #[cfg(not(feature = "panics"))]
@@ -147,6 +153,14 @@ pub fn quality_etiquettes() -> Vec<&'static dyn crate::Etiquette> {
         #[cfg(feature = "cli_layout")]
         Some(&cli_layout::CLI_LAYOUT_ETIQUETTE as &dyn crate::Etiquette),
         #[cfg(not(feature = "cli_layout"))]
+        None,
+        #[cfg(feature = "glob_imports")]
+        Some(&glob_imports::GLOB_IMPORTS_ETIQUETTE as &dyn crate::Etiquette),
+        #[cfg(not(feature = "glob_imports"))]
+        None,
+        #[cfg(feature = "inline_tests")]
+        Some(&inline_tests::INLINE_TESTS_ETIQUETTE as &dyn crate::Etiquette),
+        #[cfg(not(feature = "inline_tests"))]
         None,
     ];
     items.into_iter().flatten().collect()

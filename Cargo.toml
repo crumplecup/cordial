@@ -45,7 +45,7 @@ clap = { version = "4", features = ["derive", "env"], optional = true }
 miette = { version = "7", features = ["fancy"], optional = true }
 
 [features]
-default = ["panics", "tracing", "cli"]
+default = ["quality", "cli"]
 # Quality plugins (syn scans of source).
 panics = []
 tracing = []
@@ -62,7 +62,9 @@ antipatterns = ["dep:toml", "dep:quote"]
 cfg_scatter = []
 visibility = []
 cli_layout = []
-quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout"]
+glob_imports = []
+inline_tests = []
+quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "glob_imports", "inline_tests"]
 # Shared rustdoc JSON support for coverage plugins.
 rustdoc = ["dep:rustdoc-types", "dep:nom"]
 # Elicitation coverage plugins (each requires rustdoc).
@@ -144,6 +146,14 @@ required-features = ["visibility"]
 [[test]]
 name = "cli_layout_etiquette"
 required-features = ["cli_layout"]
+
+[[test]]
+name = "glob_imports_etiquette"
+required-features = ["glob_imports"]
+
+[[test]]
+name = "inline_tests_etiquette"
+required-features = ["inline_tests"]
 
 [[test]]
 name = "derives_etiquette"
@@ -286,5 +296,5 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(creusot)',
   'cfg(prusti)',
   'cfg(verus)',
-  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
+  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "glob_imports", "inline_tests", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
 ] }
