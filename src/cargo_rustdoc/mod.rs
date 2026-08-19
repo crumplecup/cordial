@@ -26,7 +26,7 @@ pub use shadow_dep::{
     resolve_shadow_dep_build_config,
 };
 #[cfg(feature = "homecoming_std")]
-pub use sysroot::build_sysroot_libraries;
+pub use sysroot::{build_sysroot_libraries, is_std_family_crate, resolve_sysroot_library_manifest};
 
 use crate::error::CordialResult;
 use crate::session::RunAll;

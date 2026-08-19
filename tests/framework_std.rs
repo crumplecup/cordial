@@ -119,3 +119,50 @@ fn homecoming_std_plugin_is_registered() {
     assert_eq!(plugins.len(), 1);
     assert_eq!(plugins[0].id(), HOMECOMING_STD_COVERAGE.id());
 }
+
+#[test]
+fn type_has_trait_impl_matches_bare_and_qualified_paths() {
+    use std::collections::HashSet;
+
+    use cordial::testing::type_has_trait_impl;
+
+    let impls: HashSet<String> = ["i32", "std::collections::HashMap"]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    assert!(type_has_trait_impl(&impls, "i32"));
+    assert!(type_has_trait_impl(&impls, "std::primitive::i32"));
+    assert!(type_has_trait_impl(&impls, "std::collections::HashMap"));
+    assert!(!type_has_trait_impl(&impls, "std::vec::Vec"));
+}
+
+#[test]
+fn type_has_trait_impl_does_not_cross_match_unrelated_types_sharing_a_bare_name() {
+    use std::collections::HashSet;
+
+    use cordial::testing::type_has_trait_impl;
+
+    let impls: HashSet<String> = HashSet::from(["core::fmt::Error".to_string()]);
+    assert!(type_has_trait_impl(&impls, "core::fmt::Error"));
+    assert!(!type_has_trait_impl(&impls, "std::io::Error"));
+}
+
+#[test]
+fn type_has_trait_impl_matches_across_a_std_core_reexport() {
+    use std::collections::HashSet;
+
+    use cordial::testing::type_has_trait_impl;
+
+    let impls: HashSet<String> = HashSet::from(["core::fmt::Alignment".to_string()]);
+    assert!(type_has_trait_impl(&impls, "std::fmt::Alignment"));
+}
+
+#[test]
+fn type_has_trait_impl_matches_representative_generic_instantiation() {
+    use std::collections::HashSet;
+
+    use cordial::testing::type_has_trait_impl;
+
+    let impls: HashSet<String> = HashSet::from(["std::sync::mpsc::Sender<i32>".to_string()]);
+    assert!(type_has_trait_impl(&impls, "std::sync::mpsc::Sender"));
+}

@@ -54,3 +54,25 @@ fn merged_std_inventory_excludes_unstable_simd_from_stable_scope() -> miette::Re
     );
     Ok(())
 }
+
+#[test]
+fn is_std_family_crate_recognizes_std_core_alloc() {
+    use cordial::is_std_family_crate;
+
+    assert!(is_std_family_crate("std"));
+    assert!(is_std_family_crate("core"));
+    assert!(is_std_family_crate("alloc"));
+    assert!(!is_std_family_crate("homecoming_core"));
+}
+
+#[test]
+fn resolve_sysroot_library_manifest_finds_std_when_nightly_installed() -> miette::Result<()> {
+    use cordial::resolve_sysroot_library_manifest;
+
+    let Ok(manifest) = resolve_sysroot_library_manifest("std") else {
+        return Ok(());
+    };
+    assert!(manifest.ends_with("library/std/Cargo.toml"));
+    assert!(manifest.is_file());
+    Ok(())
+}

@@ -71,3 +71,17 @@ fn find_item_id(ir: &cordial::CrateIr, path: &str, origin: &str) -> Option<cordi
         })
         .map(|node| node.id)
 }
+
+#[test]
+fn link_key_normalizes_crate_root_items() {
+    use cordial::testing::inventory_link_key;
+
+    assert_eq!(
+        inventory_link_key("Widget", "build_demo"),
+        "build_demo::Widget"
+    );
+    assert_eq!(
+        inventory_link_key("build_demo::Widget", "build_demo"),
+        "build_demo::Widget"
+    );
+}

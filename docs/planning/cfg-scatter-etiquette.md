@@ -65,9 +65,10 @@ triaged in one pass. Two repeatable fix patterns emerged, both cheaper than
 extracting a whole new file:
 
 1. **Inline mod-gated layer**: wrap the scattered items (structs, impls,
-   statics, free functions) in a private `mod foo { use super::*; ... }`
-   block gated once, and call back in through `foo::item(...)` — no new file
-   needed, and the mod declaration itself is never scanned. Used in
+   statics, free functions) in a private `mod foo { ... }` block gated
+   once, with explicit `use` lists (not `use super::*;`), and call back
+   in through `foo::item(...)` — no new file needed, and the mod
+   declaration itself is never scanned. Used in
    `src/etiquettes/framework_std/{mod.rs,types.rs}`, `src/framework_std/mod.rs`
    (etiquettes), `src/plugins/mod.rs`, `src/reporter/coverage_summary.rs`,
    `src/enricher/error/{mod.rs,inventory.rs,scan.rs}`.

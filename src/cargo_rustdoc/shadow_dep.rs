@@ -129,26 +129,3 @@ pub fn build_all_active_shadow_deps(
 ) -> CordialResult<Vec<BuildArtifact>> {
     build_active_shadow_deps(project_root, store, &RunAll, options)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn shadow_dep_cache_stem_matches_elicit_doc() {
-        assert_eq!(
-            StoreLayout::shadow_dep_cache_stem("elicit_url", "url"),
-            "shadow-dep-elicit_url-url"
-        );
-    }
-
-    #[test]
-    fn tracked_target_fallback_features_for_url_pair() {
-        let config = resolve_shadow_dep_build_config(
-            Path::new("tests/parity/workspaces/minimal-workspace"),
-            "elicit_url",
-            "url",
-        );
-        assert!(config.activated_features.contains(&"serde".to_string()));
-    }
-}

@@ -17,7 +17,11 @@ mod workspace;
 mod wrapper_query;
 
 #[cfg(feature = "rustdoc")]
-pub use attrs::*;
+pub use attrs::{
+    ATTR_ALIAS_TARGET, ATTR_ELICIT_COMPLETE, ATTR_ELICIT_COMPLETE_FACTORY, ATTR_IS_GENERIC,
+    ATTR_IS_PUBLIC, ATTR_IS_UNSTABLE, ATTR_ITEM_NAME, ATTR_PUBLIC_METHODS, ATTR_QUALIFIED_PATH,
+    ATTR_RUSTDOC_KIND, ATTR_TRAIT_IMPLS, ATTR_TRAIT_PREREQS, ATTR_WRAPS_FOREIGN,
+};
 
 #[cfg(feature = "rustdoc")]
 pub use crate_load::{load_crate_ir_if_missing, resolve_crate_root, shadow_dep_rustdoc_path};

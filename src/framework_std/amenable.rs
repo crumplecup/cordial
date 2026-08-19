@@ -234,7 +234,11 @@ pub fn amenable_gap_fields(entry: &AmenableStdEntry, impl_crate: &str) -> (Strin
 }
 
 #[instrument(level = "debug", skip(items))]
-fn resolve_alias_chain(items: &[StdInventoryItem], start: &str, max_hops: usize) -> String {
+pub fn resolve_alias_chain(
+    items: &[StdInventoryItem],
+    start: &str,
+    max_hops: usize,
+) -> String {
     let mut current = start.to_string();
     for _ in 0..max_hops {
         let Some(next_item) = items.iter().find(|candidate| {
@@ -330,38 +334,4 @@ fn gap_action(entry: &AmenableStdEntry, impl_crate: &str) -> String {
         parts.join(" + "),
         entry.evidence_name.as_deref().unwrap_or(&entry.type_path)
     )
-}
-
-#[cfg(test)]
-mod resolve_alias_chain_tests {
-    use super::*;
-    use crate::rustdoc::InventoryItemKind;
-
-    fn alias_item(path: &str, target: &str) -> StdInventoryItem {
-        StdInventoryItem {
-            path: path.to_string(),
-            kind: InventoryItemKind::TypeAlias,
-            is_generic: false,
-            is_unstable: false,
-            alias_target: Some(target.to_string()),
-        }
-    }
-
-    #[test]
-    fn follows_a_two_hop_alias_chain_to_the_concrete_target() {
-        let items = vec![alias_item(
-            "std::os::windows::raw::HANDLE",
-            "*mut crate::os::raw::c_void",
-        )];
-        assert_eq!(
-            resolve_alias_chain(&items, "raw::HANDLE", 5),
-            "*mut crate::os::raw::c_void"
-        );
-    }
-
-    #[test]
-    fn stops_on_a_self_referential_cycle() {
-        let items = vec![alias_item("a::b", "b")];
-        assert_eq!(resolve_alias_chain(&items, "b", 5), "b");
-    }
 }

@@ -104,16 +104,3 @@ fn digest_bytes(bytes: &[u8]) -> String {
     hasher.update(bytes);
     format!("{:x}", hasher.finalize())
 }
-
-#[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use super::*;
-
-    #[test]
-    fn digest_path_uses_crate_name() {
-        let path = IrCacheDigest::cache_path(Path::new("/tmp/cache"), "demo");
-        assert_eq!(path, PathBuf::from("/tmp/cache/demo.ir.digests.json"));
-    }
-}

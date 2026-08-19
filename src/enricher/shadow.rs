@@ -124,38 +124,3 @@ pub fn load_shadow_map(path: &Path) -> CordialResult<Vec<ShadowMapEntry>> {
     let bytes = std::fs::read(path)?;
     Ok(serde_json::from_slice(&bytes)?)
 }
-
-#[cfg(test)]
-mod tests {
-    use miette::{IntoDiagnostic, WrapErr};
-
-    use crate::RustdocLoadView;
-    use crate::ir::CrateIr;
-    use crate::rustdoc::parse_rustdoc_json;
-    use crate::rustdoc::{demo_shadow_crate, write_rustdoc_crate_json};
-
-    use super::*;
-
-    #[test]
-    fn discovers_widget_shadow_pair_without_map_file() -> miette::Result<()> {
-        let dir = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-        let json = dir.path().join("demo.json");
-        write_rustdoc_crate_json(&json, &demo_shadow_crate())
-            .into_diagnostic()
-            .wrap_err("write json")?;
-        let inventory = parse_rustdoc_json(&json, "demo")
-            .into_diagnostic()
-            .wrap_err("parse")?;
-        let view = RustdocLoadView::from_inventory(inventory);
-        let mut ir = CrateIr::new("demo");
-        view.populate_ir(&mut ir)
-            .into_diagnostic()
-            .wrap_err("populate")?;
-
-        let entries = discover_same_crate_shadow_pairs(&ir);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].target, "demo::Widget");
-        assert_eq!(entries[0].shadow, "demo::WidgetShadow");
-        Ok(())
-    }
-}

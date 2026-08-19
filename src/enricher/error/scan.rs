@@ -152,7 +152,8 @@ fn sort_sites(sites: &mut [ErrorSiteRecord]) {
 
 #[cfg(feature = "error_chain")]
 mod chain_sort {
-    use super::*;
+    use crate::etiquettes::error_chain::ErrorChainRecord;
+    use tracing::instrument;
 
     #[instrument(level = "debug", skip(chain))]
     pub(super) fn sort_chain(chain: &mut [ErrorChainRecord]) {
@@ -167,7 +168,8 @@ mod chain_sort {
 
 #[cfg(feature = "internal_error_chain")]
 mod compliance_sort {
-    use super::*;
+    use crate::etiquettes::internal_error_chain::InternalErrorComplianceFinding;
+    use tracing::instrument;
 
     #[instrument(level = "debug", skip(findings))]
     pub(super) fn sort_compliance(findings: &mut [InternalErrorComplianceFinding]) {

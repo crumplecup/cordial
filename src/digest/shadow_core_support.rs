@@ -78,11 +78,11 @@ pub struct ShadowCoreSupportDigest {
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-struct ImplCrateRollup {
-    types: usize,
-    our_traits_done: usize,
-    direct_elicit_complete: usize,
-    wrapper_covered_types: usize,
+pub struct ImplCrateRollup {
+    pub types: usize,
+    pub our_traits_done: usize,
+    pub direct_elicit_complete: usize,
+    pub wrapper_covered_types: usize,
 }
 
 /// Build the combined core + shadow support digest for the current workspace run.
@@ -147,7 +147,7 @@ pub fn build_shadow_core_support_digest(
 }
 
 #[instrument(level = "debug", skip(impl_rollup), err(level = "warn"))]
-fn build_shadow_core_support_summary(
+pub fn build_shadow_core_support_summary(
     upstream: &str,
     shadow: &str,
     elicitation_impl: bool,
@@ -444,37 +444,4 @@ fn percent(numerator: usize, denominator: usize) -> f64 {
 #[instrument(level = "debug")]
 fn yes_no(value: bool) -> &'static str {
     if value { "yes" } else { "no" }
-}
-
-#[cfg(test)]
-mod tests {
-    use miette::{IntoDiagnostic, WrapErr};
-
-    use super::*;
-
-    #[test]
-    fn impl_report_produces_core_tracked_summary() -> miette::Result<()> {
-        let rollup = ImplCrateRollup {
-            types: 1,
-            our_traits_done: 1,
-            direct_elicit_complete: 1,
-            wrapper_covered_types: 0,
-        };
-        let summary =
-            build_shadow_core_support_summary("url", "elicit_url", true, 1, true, Some(&rollup))
-                .into_diagnostic()
-                .wrap_err("summary")?;
-        assert_eq!(summary.status, ShadowCoreSupportStatus::CoreTracked);
-        assert_eq!(summary.our_traits_done, 1);
-        Ok(())
-    }
-
-    #[test]
-    fn inventory_without_impl_report_is_core_pending() -> miette::Result<()> {
-        let summary = build_shadow_core_support_summary("url", "elicit_url", true, 1, true, None)
-            .into_diagnostic()
-            .wrap_err("summary")?;
-        assert_eq!(summary.status, ShadowCoreSupportStatus::CorePending);
-        Ok(())
-    }
 }

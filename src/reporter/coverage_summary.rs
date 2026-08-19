@@ -195,7 +195,9 @@ pub fn coverage_plugins_for_run(
 /// two different id spaces), but the section bodies live here.
 #[cfg(feature = "homecoming_std")]
 mod homecoming_section {
-    use super::*;
+    use crate::error::CordialResult;
+    use crate::objects::Finding;
+    use tracing::instrument;
 
     #[instrument(level = "debug", skip(findings), err(level = "warn"))]
     pub(super) fn homecoming_std_section(findings: &[&dyn Finding]) -> CordialResult<String> {
@@ -212,7 +214,9 @@ mod homecoming_section {
 
 #[cfg(feature = "amenable_std")]
 mod amenable_section {
-    use super::*;
+    use crate::error::CordialResult;
+    use crate::objects::Finding;
+    use tracing::instrument;
 
     #[instrument(level = "debug", skip(findings), err(level = "warn"))]
     pub(super) fn amenable_std_section(findings: &[&dyn Finding]) -> CordialResult<String> {
@@ -229,7 +233,13 @@ mod amenable_section {
 
 #[cfg(feature = "elicitation")]
 mod elicitation_section_impl {
-    use super::*;
+    use crate::error::CordialResult;
+    use crate::ir::WorkspaceIr;
+    use crate::objects::Finding;
+    use crate::session::{RunFilter, SessionView};
+    use tracing::instrument;
+
+    use super::{CoveragePluginSummary, CoverageSection};
 
     #[instrument(
         level = "debug",

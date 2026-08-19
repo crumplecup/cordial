@@ -337,3 +337,34 @@ fn amenable_std_plugin_is_registered() -> miette::Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn follows_a_two_hop_alias_chain_to_the_concrete_target() {
+    use cordial::testing::{InventoryItemKind, StdInventoryItem, resolve_alias_chain};
+
+    let items = vec![StdInventoryItem {
+        path: "std::os::windows::raw::HANDLE".to_string(),
+        kind: InventoryItemKind::TypeAlias,
+        is_generic: false,
+        is_unstable: false,
+        alias_target: Some("*mut crate::os::raw::c_void".to_string()),
+    }];
+    assert_eq!(
+        resolve_alias_chain(&items, "raw::HANDLE", 5),
+        "*mut crate::os::raw::c_void"
+    );
+}
+
+#[test]
+fn stops_on_a_self_referential_cycle() {
+    use cordial::testing::{InventoryItemKind, StdInventoryItem, resolve_alias_chain};
+
+    let items = vec![StdInventoryItem {
+        path: "a::b".to_string(),
+        kind: InventoryItemKind::TypeAlias,
+        is_generic: false,
+        is_unstable: false,
+        alias_target: Some("b".to_string()),
+    }];
+    assert_eq!(resolve_alias_chain(&items, "b", 5), "b");
+}

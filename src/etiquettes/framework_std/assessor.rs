@@ -92,6 +92,7 @@ mod amenable {
     use super::super::amenable::{
         AmenableStdRowFinding, AmenableStdRule, amenable_row_disposition,
     };
+    use tracing::instrument;
 
     #[derive(Debug, Default, Clone, Copy)]
     pub struct AmenableStdAssessor;

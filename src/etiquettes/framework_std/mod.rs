@@ -63,8 +63,9 @@ pub static HOMECOMING_STD_ETIQUETTE: StaticEtiquette = StaticEtiquette {
 /// Workspace-scoped amenable std registry coverage reporter, gated as a
 /// whole unit — see `docs/planning/cfg-scatter-etiquette.md` for the pattern.
 #[cfg(feature = "amenable_std")]
-mod amenable {
-    use super::*;
+mod amenable_etiquette {
+    use super::{AmenableStdAssessor, AmenableStdReporter, AmenableStdScopeProbe};
+    use crate::etiquette::StaticEtiquette;
 
     static AMENABLE_STD_PROBE: AmenableStdScopeProbe = AmenableStdScopeProbe;
     static AMENABLE_STD_ASSESSOR: AmenableStdAssessor = AmenableStdAssessor;
@@ -87,4 +88,4 @@ mod amenable {
 }
 
 #[cfg(feature = "amenable_std")]
-pub use amenable::AMENABLE_STD_ETIQUETTE;
+pub use amenable_etiquette::AMENABLE_STD_ETIQUETTE;

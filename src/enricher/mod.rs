@@ -13,7 +13,9 @@ use tracing::instrument;
     feature = "antipatterns",
     feature = "cfg_scatter",
     feature = "visibility",
-    feature = "cli_layout"
+    feature = "cli_layout",
+    feature = "glob_imports",
+    feature = "inline_tests"
 ))]
 mod attribute;
 #[cfg(feature = "error_sites")]
@@ -29,7 +31,7 @@ mod proof_harness;
 mod rustdoc_structure;
 #[cfg(feature = "shadow")]
 mod shadow;
-mod syn_doc_link;
+pub(crate) mod syn_doc_link;
 #[cfg(feature = "impl_coverage")]
 mod trait_impl;
 #[cfg(feature = "trenchcoat")]
@@ -51,7 +53,9 @@ mod wrapper_coverage;
     feature = "antipatterns",
     feature = "cfg_scatter",
     feature = "visibility",
-    feature = "cli_layout"
+    feature = "cli_layout",
+    feature = "glob_imports",
+    feature = "inline_tests"
 ))]
 pub use attribute::AttributeEnricher;
 #[cfg(any(
@@ -68,7 +72,9 @@ pub use attribute::AttributeEnricher;
     feature = "antipatterns",
     feature = "cfg_scatter",
     feature = "visibility",
-    feature = "cli_layout"
+    feature = "cli_layout",
+    feature = "glob_imports",
+    feature = "inline_tests"
 ))]
 pub(crate) use attribute::{is_cfg_test, member_crate_root, resolve_parent, resolve_source_path};
 #[cfg(feature = "error_sites")]

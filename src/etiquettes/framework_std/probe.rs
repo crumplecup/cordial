@@ -84,8 +84,20 @@ impl Probe for HomecomingStdScopeProbe {
 
 #[cfg(feature = "amenable_std")]
 mod amenable {
-    use super::*;
-    use crate::framework_std::{AMENABLE_IMPL_CRATE, AmenableStdOptions};
+    use crate::error::CordialResult;
+    use crate::framework_std::{
+        AMENABLE_IMPL_CRATE, AmenableStdOptions, framework_std_type_items,
+        load_merged_std_inventory,
+    };
+    use crate::hooks::Probe;
+    use crate::ir::{IrView, Query};
+    use crate::objects::Marker;
+    use crate::session::SessionView;
+    use crate::store::SysrootCache;
+    use tracing::instrument;
+
+    use super::FrameworkStdScopeMarker;
+    use super::HUB_CRATE_QUERY;
 
     #[derive(Debug, Default, Clone, Copy)]
     pub struct AmenableStdScopeProbe;

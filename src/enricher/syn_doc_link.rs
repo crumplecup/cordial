@@ -103,28 +103,11 @@ pub fn syn_doc_peer(node: &dyn NodeView) -> Option<crate::ir::NodeId> {
 }
 
 #[instrument(level = "debug", skip(path))]
-fn inventory_link_key(path: &str, crate_name: &str) -> String {
+pub fn inventory_link_key(path: &str, crate_name: &str) -> String {
     let normalized = crate_name.replace('-', "_");
     if path.split("::").next() == Some(normalized.as_str()) {
         path.to_string()
     } else {
         format!("{normalized}::{path}")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::inventory_link_key;
-
-    #[test]
-    fn link_key_normalizes_crate_root_items() {
-        assert_eq!(
-            inventory_link_key("Widget", "build_demo"),
-            "build_demo::Widget"
-        );
-        assert_eq!(
-            inventory_link_key("build_demo::Widget", "build_demo"),
-            "build_demo::Widget"
-        );
     }
 }

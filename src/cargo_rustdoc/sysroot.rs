@@ -152,31 +152,3 @@ fn run_sysroot_rustdoc(sysroot: &SysrootCache, crate_name: &str) -> CordialResul
     tracing::debug!(path = %json_path.display(), "sysroot rustdoc JSON produced");
     Ok(json_path)
 }
-
-#[cfg(test)]
-mod tests {
-    use miette::{IntoDiagnostic, WrapErr};
-
-    use super::*;
-
-    #[test]
-    fn is_std_family_crate_recognizes_std_core_alloc() {
-        assert!(is_std_family_crate("std"));
-        assert!(is_std_family_crate("core"));
-        assert!(is_std_family_crate("alloc"));
-        assert!(!is_std_family_crate("homecoming_core"));
-    }
-
-    #[test]
-    fn resolve_sysroot_library_manifest_finds_std_when_nightly_installed() -> miette::Result<()> {
-        if resolve_nightly_cargo_binary().is_none() {
-            return Ok(());
-        }
-        let manifest = resolve_sysroot_library_manifest("std")
-            .into_diagnostic()
-            .wrap_err("std manifest")?;
-        assert!(manifest.ends_with("library/std/Cargo.toml"));
-        assert!(manifest.is_file());
-        Ok(())
-    }
-}

@@ -51,6 +51,7 @@ pub use crate::framework_std::{
     FrameworkTraitStatus, HOMECOMING_IMPL_CRATE, HOMECOMING_TRAIT, SkipMap, StdInventoryItem,
     assess_homecoming_std_coverage, build_framework_gaps, build_framework_trait_report,
     framework_std_type_items, load_merged_std_inventory, merge_std_inventory_items,
+    type_has_trait_impl,
 };
 
 #[cfg(feature = "amenable_std")]
@@ -58,8 +59,15 @@ pub use crate::framework_std::{
     AmenableStdOptions, AmenableStdReport, AmenableStdStatus, EvidenceLinkDump, ProofRecordDump,
     RegistryDump, VerifierSkipEntry, VerifierSkipMap, assess_amenable_std_coverage,
     build_amenable_std_gaps, build_amenable_std_report, evidence_for_std_type,
-    load_verifier_skip_map, parse_rust_std_standard_inner, witness_verifiers_for_std_type,
+    load_verifier_skip_map, parse_rust_std_standard_inner, resolve_alias_chain,
+    witness_verifiers_for_std_type,
 };
+
+#[cfg(feature = "rustdoc")]
+pub use crate::enricher::syn_doc_link::inventory_link_key;
+
+#[cfg(feature = "elicitation")]
+pub use crate::digest::{ImplCrateRollup, build_shadow_core_support_summary};
 
 #[cfg(feature = "rustdoc")]
 pub use crate::rustdoc::{

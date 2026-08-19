@@ -246,8 +246,12 @@ fn insert_error_site_node(
 /// `docs/planning/cfg-scatter-etiquette.md` for the pattern.
 #[cfg(feature = "error_chain")]
 mod chain {
-    use super::*;
+    use crate::enricher::resolve_parent;
+    use crate::error::CordialResult;
     use crate::etiquettes::error_chain::ErrorChainRecord;
+    use crate::ir::{EdgeKind, IrMut, NodeKind, NodeWeight};
+    use crate::objects::FileSpan;
+    use tracing::instrument;
 
     #[instrument(level = "debug", skip(ir, node, record), err(level = "warn"))]
     pub(super) fn apply_chain_attrs(

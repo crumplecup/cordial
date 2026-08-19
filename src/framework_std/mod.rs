@@ -21,6 +21,7 @@ mod registry;
 mod verifier_skip;
 
 pub use inventory::{FRAMEWORK_STD_SOURCES, load_merged_std_inventory};
+pub use match_impl::type_has_trait_impl;
 pub use render::{
     render_framework_checklist_md, render_framework_coverage_csv, render_framework_gaps_csv,
     render_framework_summary_md,
@@ -41,7 +42,7 @@ pub use self::{
     amenable::{
         AmenableStdEntry, AmenableStdGapEntry, AmenableStdReport, AmenableStdStatus,
         amenable_gap_fields, build_amenable_std_gaps, build_amenable_std_report,
-        classify_amenable_std_row,
+        classify_amenable_std_row, resolve_alias_chain,
     },
     amenable_render::{
         render_amenable_std_checklist_md, render_amenable_std_coverage_csv,
