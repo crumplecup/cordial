@@ -8,20 +8,24 @@ use crate::objects::Marker;
 use crate::session::SessionView;
 use crate::store::SysrootCache;
 
-use super::types::FrameworkStdScopeMarker;
+use super::homecoming::FrameworkStdScopeMarker;
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 struct HubCrateQuery;
 
 impl Query for HubCrateQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[crate::ir::NodeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, _node))]
     fn matches_node(&self, _node: &dyn crate::ir::NodeView) -> bool {
         true
     }
@@ -37,14 +41,17 @@ impl HomecomingStdScopeProbe {
 }
 
 impl Probe for HomecomingStdScopeProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &HUB_CRATE_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, ir, _session))]
     fn probe(
         &self,
         ir: &dyn IrView,
@@ -88,14 +95,17 @@ mod amenable {
     }
 
     impl Probe for AmenableStdScopeProbe {
+        #[instrument(level = "trace", skip(self))]
         fn id(&self) -> &str {
             Self::ID
         }
 
+        #[instrument(level = "trace", skip(self))]
         fn interests(&self) -> &dyn Query {
             &HUB_CRATE_QUERY
         }
 
+        #[instrument(level = "trace", skip(self, ir, _session))]
         fn probe(
             &self,
             ir: &dyn IrView,

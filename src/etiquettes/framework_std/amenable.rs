@@ -10,14 +10,17 @@ use tracing::instrument;
 pub struct AmenableStdRule;
 
 impl Rule for AmenableStdRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "AMENABLE-STD-ROW"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         AMENABLE_STD_CATEGORY
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Std inventory row assessed for amenable registry coverage"
     }
@@ -49,18 +52,22 @@ pub struct AmenableStdRowFinding {
 }
 
 impl Finding for AmenableStdRowFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("source_crate", &self.source_crate);
         sink.field("impl_crate", &self.impl_crate);
@@ -137,7 +144,7 @@ impl Finding for AmenableStdRowFinding {
     }
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(status))]
 pub fn amenable_row_disposition(status: AmenableStdStatus) -> Disposition {
     match status {
         AmenableStdStatus::Missing | AmenableStdStatus::Partial => Disposition::Open,

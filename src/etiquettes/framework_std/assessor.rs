@@ -9,8 +9,9 @@ use crate::objects::{Finding, Marker, NodeAnchor};
 use crate::session::SessionView;
 use crate::store::StoreLayout;
 
-use super::types::{FrameworkStdRowFinding, FrameworkStdRule, homecoming_row_disposition};
+use super::homecoming::{FrameworkStdRowFinding, FrameworkStdRule, homecoming_row_disposition};
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct HomecomingStdAssessor;
 
@@ -19,14 +20,17 @@ impl HomecomingStdAssessor {
 }
 
 impl Assessor for HomecomingStdAssessor {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
         &[super::probe::HomecomingStdScopeProbe::ID]
     }
 
+    #[instrument(level = "trace", skip(self, markers, ir, session))]
     fn assess(
         &self,
         markers: &[&dyn Marker],
@@ -85,7 +89,9 @@ mod amenable {
     use crate::session::SessionView;
     use crate::store::{StoreLayout, SysrootCache};
 
-    use super::super::types::{AmenableStdRowFinding, AmenableStdRule, amenable_row_disposition};
+    use super::super::amenable::{
+        AmenableStdRowFinding, AmenableStdRule, amenable_row_disposition,
+    };
 
     #[derive(Debug, Default, Clone, Copy)]
     pub struct AmenableStdAssessor;
@@ -95,14 +101,17 @@ mod amenable {
     }
 
     impl Assessor for AmenableStdAssessor {
+        #[instrument(level = "trace", skip(self))]
         fn id(&self) -> &str {
             Self::ID
         }
 
+        #[instrument(level = "trace", skip(self))]
         fn consumes(&self) -> &[&str] {
             &[super::super::probe::AmenableStdScopeProbe::ID]
         }
 
+        #[instrument(level = "trace", skip(self, markers, ir, session))]
         fn assess(
             &self,
             markers: &[&dyn Marker],

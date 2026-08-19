@@ -12,8 +12,9 @@ use crate::objects::{Artifact, Finding, TextArtifact};
 use crate::session::SessionView;
 use crate::store::StoreLayout;
 
-use super::types::{amenable_gaps_from_findings, amenable_report_from_findings};
+use super::amenable::{amenable_gaps_from_findings, amenable_report_from_findings};
 
+use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AmenableStdReporter;
 
@@ -22,10 +23,12 @@ impl AmenableStdReporter {
 }
 
 impl Reporter for AmenableStdReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, findings, _ir, session))]
     fn render(
         &self,
         findings: &[&dyn Finding],
@@ -64,6 +67,7 @@ impl Reporter for AmenableStdReporter {
     }
 }
 
+#[instrument(level = "debug")]
 fn artifact(name: &str, media_type: &str, body: String) -> Box<dyn Artifact> {
     Box::new(TextArtifact {
         name: name.to_string(),
