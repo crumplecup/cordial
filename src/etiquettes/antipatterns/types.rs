@@ -53,16 +53,9 @@ impl Display for AntipatternRuleId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct AntipatternRule {
-    pub rule_id: AntipatternRuleId,
-}
-
-impl AntipatternRule {
-    #[instrument(level = "debug", skip(rule_id), ret)]
-    pub fn new(rule_id: AntipatternRuleId) -> Self {
-        Self { rule_id }
-    }
+    rule_id: AntipatternRuleId,
 }
 
 impl Rule for AntipatternRule {
@@ -89,7 +82,9 @@ impl Rule for AntipatternRule {
                 "Function parameter bound with a leading underscore"
             }
             AntipatternRuleId::StructStaticRef001 => {
-                "ADT field typed as `&'static T` instead of an owning type"
+                "ADT field typed as `&'static T` instead of an owning type \
+                 (copy `file`/`line` out of `Location`; `&'static dyn` of a crate-local trait \
+                 is exempt; `&'static str` is allowed on types constructed only as `const`/`static`)"
             }
             AntipatternRuleId::UnnamedContractBound001 => {
                 "Requires/ensures clause matching no registered contract fragment"

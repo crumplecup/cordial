@@ -14,8 +14,9 @@ use crate::enricher::is_cfg_test;
 
 use super::preds::{
     box_dyn_error_snippet, box_dyn_error_trait_object, is_stringish_error_type, result_error_type,
-    result_string_error_snippet, static_ref_snippet, truncate_snippet,
-    type_contains_static_lifetime_ref, type_label, unused_argument_bindings,
+    result_string_error_snippet, static_ref_field_snippet, truncate_snippet,
+    type_contains_disallowed_static_ref, type_is_location_capture, type_label,
+    unused_argument_bindings,
 };
 use crate::etiquettes::antipatterns::types::{AntipatternRuleId, AntipatternSiteRecord};
 
@@ -29,6 +30,7 @@ pub(super) struct AntipatternScanVisitor<'a> {
     pub(super) in_trait_definition: bool,
     pub(super) in_foreign_trait_impl: bool,
     pub(super) local_trait_names: &'a HashSet<String>,
+    pub(super) const_placed_types: &'a HashSet<String>,
     pub(super) findings: Vec<AntipatternSiteRecord>,
 }
 
@@ -88,7 +90,11 @@ impl AntipatternScanVisitor<'_> {
 
     #[instrument(level = "debug", skip(self, ty))]
     fn check_adt_field(&mut self, owner: &str, field_name: &str, ty: &Type) {
-        if !type_contains_static_lifetime_ref(ty) {
+        if !type_contains_disallowed_static_ref(ty, self.local_trait_names) {
+            return;
+        }
+        let type_name = owner.split("::").next().unwrap_or(owner);
+        if !type_is_location_capture(ty) && self.const_placed_types.contains(type_name) {
             return;
         }
         self.findings.push(AntipatternSiteRecord {
@@ -96,7 +102,7 @@ impl AntipatternScanVisitor<'_> {
             context: self.adt_field_context(owner, field_name),
             file: self.rel_file(),
             line: ty.span().start().line as u32,
-            snippet: static_ref_snippet(ty),
+            snippet: static_ref_field_snippet(ty),
         });
     }
 

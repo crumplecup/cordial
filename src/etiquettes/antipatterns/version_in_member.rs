@@ -48,6 +48,16 @@ pub fn scan_workspace_version_in_member(
     let root_manifest = workspace_root.join("Cargo.toml");
     let root_content = std::fs::read_to_string(&root_manifest)?;
     let root_table = parse_manifest_table(&root_content, &root_manifest)?;
+    // Standalone packages are an implicit workspace of one. There is nothing
+    // to inherit from unless the manifest actually lists `workspace.members`.
+    if root_table
+        .get("workspace")
+        .and_then(Value::as_table)
+        .and_then(|workspace| workspace.get("members"))
+        .is_none()
+    {
+        return Ok(HashMap::new());
+    }
     let workspace_dep_names = workspace_dependency_names(&root_table);
     let workspace_has_package_version = workspace_package_has_version(&root_table);
 

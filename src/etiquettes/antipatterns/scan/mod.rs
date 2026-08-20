@@ -1,4 +1,4 @@
-//! syn-based scan for antipattern probes (`Box<dyn Error>`, `Result<_, String>`, `&'static` struct fields, …).
+//! syn-based scan for antipattern probes (`Box<dyn Error>`, `Result<_, String>`, `&'static` struct fields except crate-local `dyn Trait` and const/static-only tables, …).
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -11,9 +11,11 @@ use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_t
 use super::types::AntipatternSiteRecord;
 
 use tracing::instrument;
+mod constructions;
 mod preds;
 mod visitor;
 
+use constructions::{collect_constructions, types_only_constructed_in_const};
 use visitor::{AntipatternScanVisitor, collect_local_trait_names};
 
 pub(crate) use preds::truncate_snippet;
@@ -23,6 +25,8 @@ pub(crate) use preds::truncate_snippet;
 pub fn scan_crate_trees(crate_root: &Path) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let mut parsed = Vec::new();
     let mut local_trait_names = HashSet::new();
+    let mut const_constructed = HashSet::new();
+    let mut runtime_constructed = HashSet::new();
     for tree_root in quality_scan_trees(crate_root) {
         if !tree_root.is_dir() {
             continue;
@@ -32,9 +36,12 @@ pub fn scan_crate_trees(crate_root: &Path) -> CordialResult<Vec<AntipatternSiteR
                 crate::error::CordialError::syn_parse(path.display().to_string(), err)
             })?;
             local_trait_names.extend(collect_local_trait_names(&syntax));
+            collect_constructions(&syntax, &mut const_constructed, &mut runtime_constructed);
             parsed.push((syntax, path, tree_root.clone()));
         }
     }
+    let const_placed_types =
+        types_only_constructed_in_const(&const_constructed, &runtime_constructed);
 
     let mut findings = Vec::new();
     for (syntax, path, tree_root) in parsed {
@@ -44,6 +51,7 @@ pub fn scan_crate_trees(crate_root: &Path) -> CordialResult<Vec<AntipatternSiteR
             &tree_root,
             crate_root,
             &local_trait_names,
+            &const_placed_types,
         ));
     }
     Ok(findings)
@@ -59,22 +67,32 @@ pub fn scan_rust_source(
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
     let local_trait_names = collect_local_trait_names(&syntax);
+    let mut const_constructed = HashSet::new();
+    let mut runtime_constructed = HashSet::new();
+    collect_constructions(&syntax, &mut const_constructed, &mut runtime_constructed);
+    let const_placed_types =
+        types_only_constructed_in_const(&const_constructed, &runtime_constructed);
     Ok(scan_parsed(
         syntax,
         file,
         src_root,
         crate_root,
         &local_trait_names,
+        &const_placed_types,
     ))
 }
 
-#[instrument(level = "debug", skip(syntax, local_trait_names))]
+#[instrument(
+    level = "debug",
+    skip(syntax, local_trait_names, const_placed_types, file)
+)]
 fn scan_parsed(
     syntax: syn::File,
     file: &Path,
     src_root: &Path,
     crate_root: &Path,
     local_trait_names: &HashSet<String>,
+    const_placed_types: &HashSet<String>,
 ) -> Vec<AntipatternSiteRecord> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut visitor = AntipatternScanVisitor {
@@ -86,6 +104,7 @@ fn scan_parsed(
         in_trait_definition: false,
         in_foreign_trait_impl: false,
         local_trait_names,
+        const_placed_types,
         findings: Vec::new(),
     };
     visitor.visit_file(&syntax);

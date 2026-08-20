@@ -225,11 +225,17 @@ fn static_struct_fields_are_detected() -> miette::Result<()> {
         .iter()
         .filter(|f| f.rule_id == AntipatternRuleId::StructStaticRef001)
         .collect::<Vec<_>>();
-    assert_eq!(static_refs.len(), 8);
+    assert_eq!(static_refs.len(), 9);
     assert!(
         static_refs
             .iter()
             .any(|f| f.context.contains("BorrowsStatic") && f.context.ends_with("::name"))
+    );
+    assert!(
+        static_refs
+            .iter()
+            .any(|f| f.context.contains("CapturesLocation")
+                && f.snippet.contains("copy `file` and `line` from Location"))
     );
     assert!(
         static_refs
@@ -265,6 +271,70 @@ fn fn_signatures_with_static_refs_are_not_struct_fields() -> miette::Result<()> 
         f.rule_id == AntipatternRuleId::StructStaticRef001
             && (f.context.contains("accepts") || f.context.contains("returns"))
     }));
+    Ok(())
+}
+
+#[test]
+fn crate_local_dyn_trait_static_refs_are_exempt() -> miette::Result<()> {
+    let findings = scan_fixture("local_dyn_trait_static_refs.rs")?;
+    let static_refs: Vec<_> = findings
+        .iter()
+        .filter(|f| f.rule_id == AntipatternRuleId::StructStaticRef001)
+        .collect();
+    assert!(
+        !static_refs.iter().any(|f| {
+            f.context.contains("View")
+                || f.context.contains("Registry")
+                || f.context.contains("Plugin")
+                || f.context.ends_with("Mixed::probes")
+        }),
+        "local dyn trait tables must be exempt: {static_refs:?}"
+    );
+    assert!(
+        static_refs
+            .iter()
+            .any(|f| f.context.ends_with("Mixed::name")),
+        "{static_refs:?}"
+    );
+    assert!(
+        static_refs.iter().any(|f| f.context.contains("ForeignDyn")),
+        "{static_refs:?}"
+    );
+    assert_eq!(static_refs.len(), 2);
+    Ok(())
+}
+
+#[test]
+fn const_static_only_types_may_store_static_str() -> miette::Result<()> {
+    let findings = scan_fixture("const_table_static_refs.rs")?;
+    let static_refs: Vec<_> = findings
+        .iter()
+        .filter(|f| f.rule_id == AntipatternRuleId::StructStaticRef001)
+        .collect();
+    assert!(
+        !static_refs.iter().any(|f| f.context.contains("ConstRow")),
+        "const/static tables must be exempt: {static_refs:?}"
+    );
+    assert!(
+        static_refs
+            .iter()
+            .any(|f| f.context.ends_with("RuntimeRow::name")),
+        "{static_refs:?}"
+    );
+    assert!(
+        static_refs
+            .iter()
+            .any(|f| f.context.ends_with("MixedUse::name")),
+        "mixed const+runtime construction must own: {static_refs:?}"
+    );
+    assert!(
+        static_refs.iter().any(|f| {
+            f.context.contains("ConstLoc")
+                && f.snippet.contains("copy `file` and `line` from Location")
+        }),
+        "Location on a const type must still be copied out: {static_refs:?}"
+    );
+    assert_eq!(static_refs.len(), 3);
     Ok(())
 }
 

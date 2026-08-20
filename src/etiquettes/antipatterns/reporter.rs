@@ -141,7 +141,11 @@ impl Reporter for AntipatternChecklistReporter {
         body.push_str(
             "Probe-based inventory of known antipatterns in crate `src/` trees. \
              Struct and enum variant fields should own their data instead of storing `&'static` \
-             references in the ADT payload. Underscore-prefixed function parameters often indicate \
+             references in the ADT payload. Copy `file` and `line` out of `Location` rather than \
+             storing the reference; `&'static dyn Trait` is allowed when `Trait` is defined in this \
+             crate (plugin tables and view structs). `&'static str` (and other static refs) are \
+             allowed on types constructed only as `const`/`static` items; runtime ADTs should \
+             `to_owned`. Underscore-prefixed function parameters often indicate \
              ignored inputs; impls of traits defined outside this crate are skipped because the \
              signature is not ours to shrink. `Result<T, String>` (or `&str`) is an untyped \
              error carrier — wrap the payload in a newtype that implements `std::error::Error`. \

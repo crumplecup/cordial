@@ -9,6 +9,10 @@ struct BorrowsStatic {
 
 struct TupleStatic(&'static str);
 
+struct CapturesLocation {
+    location: &'static std::panic::Location<'static>,
+}
+
 enum Message {
     Unit,
     Inline(&'static str),

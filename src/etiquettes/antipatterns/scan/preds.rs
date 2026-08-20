@@ -1,5 +1,7 @@
 //! Type and pattern predicates for antipattern rules.
 
+use std::collections::HashSet;
+
 use syn::spanned::Spanned;
 use syn::{Pat, PathArguments, Type, TypeParamBound, TypePath, TypeTraitObject};
 
@@ -9,61 +11,150 @@ pub(super) struct UnusedArgBinding {
     pub(super) snippet: String,
 }
 
-#[instrument(level = "debug", skip(ty))]
-pub(super) fn type_contains_static_lifetime_ref(ty: &Type) -> bool {
+/// True when a field type contains a `&'static` that is not a crate-local `dyn Trait`.
+#[instrument(level = "debug", skip(ty, local_trait_names), ret)]
+pub(super) fn type_contains_disallowed_static_ref(
+    ty: &Type,
+    local_trait_names: &HashSet<String>,
+) -> bool {
     match ty {
+        Type::Reference(reference) => {
+            let is_static = reference
+                .lifetime
+                .as_ref()
+                .is_some_and(|lifetime| lifetime.ident == "static");
+            if is_static {
+                if pointee_is_local_dyn_spine(&reference.elem, local_trait_names) {
+                    type_contains_disallowed_static_ref(&reference.elem, local_trait_names)
+                } else {
+                    true
+                }
+            } else {
+                type_contains_disallowed_static_ref(&reference.elem, local_trait_names)
+            }
+        }
+        Type::Path(type_path) => {
+            type_path
+                .path
+                .segments
+                .iter()
+                .any(|segment| match &segment.arguments {
+                    PathArguments::AngleBracketed(args) => args.args.iter().any(|arg| {
+                        matches!(
+                            arg,
+                            syn::GenericArgument::Type(inner)
+                                if type_contains_disallowed_static_ref(inner, local_trait_names)
+                        )
+                    }),
+                    PathArguments::Parenthesized(args) => args
+                        .inputs
+                        .iter()
+                        .any(|inner| type_contains_disallowed_static_ref(inner, local_trait_names)),
+                    PathArguments::None => false,
+                })
+        }
+        Type::Array(array) => type_contains_disallowed_static_ref(&array.elem, local_trait_names),
+        Type::Slice(slice) => type_contains_disallowed_static_ref(&slice.elem, local_trait_names),
+        Type::Tuple(tuple) => tuple
+            .elems
+            .iter()
+            .any(|inner| type_contains_disallowed_static_ref(inner, local_trait_names)),
+        Type::Paren(paren) => type_contains_disallowed_static_ref(&paren.elem, local_trait_names),
+        Type::Group(group) => type_contains_disallowed_static_ref(&group.elem, local_trait_names),
+        Type::Ptr(pointer) => type_contains_disallowed_static_ref(&pointer.elem, local_trait_names),
+        Type::TraitObject(trait_obj) => {
+            trait_object_has_disallowed_static_ref(trait_obj, local_trait_names)
+        }
+        _ => false,
+    }
+}
+
+#[instrument(level = "trace", skip(trait_obj, local_trait_names), ret)]
+fn trait_object_has_disallowed_static_ref(
+    trait_obj: &TypeTraitObject,
+    local_trait_names: &HashSet<String>,
+) -> bool {
+    trait_obj.bounds.iter().any(|bound| match bound {
+        TypeParamBound::Trait(trait_bound) => {
+            trait_bound
+                .path
+                .segments
+                .iter()
+                .any(|segment| match &segment.arguments {
+                    PathArguments::AngleBracketed(args) => args.args.iter().any(|arg| {
+                        matches!(
+                            arg,
+                            syn::GenericArgument::Type(inner)
+                                if type_contains_disallowed_static_ref(inner, local_trait_names)
+                        )
+                    }),
+                    _ => false,
+                })
+        }
+        _ => false,
+    })
+}
+
+/// `&'static dyn LocalTrait`, slices/arrays of that, and nested static refs to the same.
+#[instrument(level = "trace", skip(ty, local_trait_names), ret)]
+fn pointee_is_local_dyn_spine(ty: &Type, local_trait_names: &HashSet<String>) -> bool {
+    match ty {
+        Type::Paren(paren) => pointee_is_local_dyn_spine(&paren.elem, local_trait_names),
+        Type::Group(group) => pointee_is_local_dyn_spine(&group.elem, local_trait_names),
+        Type::TraitObject(trait_obj) => trait_object_is_local(trait_obj, local_trait_names),
+        Type::Slice(slice) => pointee_is_local_dyn_spine(&slice.elem, local_trait_names),
+        Type::Array(array) => pointee_is_local_dyn_spine(&array.elem, local_trait_names),
         Type::Reference(reference) => {
             reference
                 .lifetime
                 .as_ref()
                 .is_some_and(|lifetime| lifetime.ident == "static")
-                || type_contains_static_lifetime_ref(&reference.elem)
+                && pointee_is_local_dyn_spine(&reference.elem, local_trait_names)
         }
+        _ => false,
+    }
+}
+
+#[instrument(level = "trace", skip(trait_obj, local_trait_names), ret)]
+fn trait_object_is_local(trait_obj: &TypeTraitObject, local_trait_names: &HashSet<String>) -> bool {
+    trait_obj.bounds.iter().any(|bound| {
+        let TypeParamBound::Trait(trait_bound) = bound else {
+            return false;
+        };
+        trait_bound
+            .path
+            .segments
+            .last()
+            .is_some_and(|segment| local_trait_names.contains(&segment.ident.to_string()))
+    })
+}
+
+#[instrument(level = "debug", skip(ty), ret)]
+pub(super) fn type_is_location_capture(ty: &Type) -> bool {
+    match ty {
+        Type::Reference(reference) => type_is_location_capture(&reference.elem),
+        Type::Paren(paren) => type_is_location_capture(&paren.elem),
+        Type::Group(group) => type_is_location_capture(&group.elem),
         Type::Path(type_path) => type_path
             .path
             .segments
-            .iter()
-            .any(|segment| match &segment.arguments {
-                PathArguments::AngleBracketed(args) => args.args.iter().any(|arg| {
-                    matches!(arg, syn::GenericArgument::Type(inner) if type_contains_static_lifetime_ref(inner))
-                }),
-                PathArguments::Parenthesized(args) => args
-                    .inputs
-                    .iter()
-                    .any(type_contains_static_lifetime_ref),
-                PathArguments::None => false,
-            }),
-        Type::Array(array) => type_contains_static_lifetime_ref(&array.elem),
-        Type::Slice(slice) => type_contains_static_lifetime_ref(&slice.elem),
-        Type::Tuple(tuple) => tuple
-            .elems
-            .iter()
-            .any(type_contains_static_lifetime_ref),
-        Type::Paren(paren) => type_contains_static_lifetime_ref(&paren.elem),
-        Type::Group(group) => type_contains_static_lifetime_ref(&group.elem),
-        Type::Ptr(pointer) => type_contains_static_lifetime_ref(&pointer.elem),
-        Type::TraitObject(trait_obj) => trait_obj
-            .bounds
-            .iter()
-            .any(|bound| match bound {
-                TypeParamBound::Trait(trait_bound) => trait_bound
-                    .path
-                    .segments
-                    .iter()
-                    .any(|segment| match &segment.arguments {
-                        PathArguments::AngleBracketed(args) => args.args.iter().any(|arg| {
-                            matches!(arg, syn::GenericArgument::Type(inner) if type_contains_static_lifetime_ref(inner))
-                        }),
-                        _ => false,
-                    }),
-                _ => false,
-            }),
+            .last()
+            .is_some_and(|segment| segment.ident == "Location"),
         _ => false,
     }
 }
 
 #[instrument(level = "debug", skip(ty))]
-pub(super) fn static_ref_snippet(ty: &Type) -> String {
+pub(super) fn static_ref_field_snippet(ty: &Type) -> String {
+    if type_is_location_capture(ty) {
+        "copy `file` and `line` from Location; do not store &'static Location".to_string()
+    } else {
+        static_ref_snippet(ty)
+    }
+}
+
+#[instrument(level = "debug", skip(ty))]
+fn static_ref_snippet(ty: &Type) -> String {
     truncate_snippet(&type_label_with_lifetime(ty), 96)
 }
 

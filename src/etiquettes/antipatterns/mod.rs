@@ -1,10 +1,13 @@
 //! Untyped error carriers and related source smells.
 //!
 //! **What.** Flags `Box<dyn Error>`, `Result<_, String>`, unused `_arg`
-//! parameters (except on impls of traits not defined in this crate), struct fields that are `&'static` references where an owned
-//! type would do, unnamed contract bounds (Kani / Creusot / Verus), and
-//! workspace members that pin a version in `[workspace.members]`-adjacent
-//! tables ([`AntipatternRuleId`]).
+//! parameters (except on impls of traits not defined in this crate), struct
+//! fields that are `&'static` references where an owned type would do
+//! (`Location` → copy `file`/`line`; `&'static dyn` of a crate-local trait is
+//! a view/registry exception; `&'static str` on types constructed only as
+//! `const`/`static` is a placement guarantee), unnamed contract bounds (Kani / Creusot /
+//! Verus), and workspace members that pin a version in
+//! `[workspace.members]`-adjacent tables ([`AntipatternRuleId`]).
 //!
 //! **Why.** These are quality problems adjacent to error handling that are
 //! not site/chain/foreign layers: they erase types, hide unused work, or
