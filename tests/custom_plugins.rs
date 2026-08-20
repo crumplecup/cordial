@@ -1,9 +1,17 @@
+#[path = "../examples/custom_plugins/coverage.rs"]
+mod coverage;
+#[path = "../examples/custom_plugins/error_handling.rs"]
+mod error_handling;
+#[path = "../examples/custom_plugins/quality.rs"]
+mod quality;
+
 use cordial::{
     NamedRunFilter, Plugin, PluginCategory, Session, SessionBuilder, plugins_in_category,
 };
+use coverage::ACME_API_COVERAGE;
+use error_handling::ACME_ERROR_HANDLING;
 use miette::{IntoDiagnostic, WrapErr};
-
-use cordial_custom_plugins::{ACME_API_COVERAGE, ACME_ERROR_HANDLING, ACME_STYLE};
+use quality::ACME_STYLE;
 
 #[test]
 fn three_plugin_kinds_register_and_quality_finds_todo() -> miette::Result<()> {
@@ -42,7 +50,7 @@ fn three_plugin_kinds_register_and_quality_finds_todo() -> miette::Result<()> {
 
     // Coverage reuses IMPL_COVERAGE_ETIQUETTE, which needs rustdoc JSON. A
     // fixture has none, so the run filters to the two source-scan families.
-    let filter = NamedRunFilter::plugins(&["acme-style", "acme-error-handling"]);
+    let filter = NamedRunFilter::plugins(["acme-style", "acme-error-handling"]);
     let outcome = session
         .run(&filter)
         .into_diagnostic()
