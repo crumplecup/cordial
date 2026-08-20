@@ -98,6 +98,66 @@ fn foreign_error_types_detect_chain_breaks() -> miette::Result<()> {
     Ok(())
 }
 
+const SYN_PARSE_SOURCE: &str = r#"
+pub fn expand(input: proc_macro2::TokenStream) -> syn::Result<proc_macro2::TokenStream> {
+    let item: syn::ItemFn = syn::parse2(input)?;
+    Ok(quote::quote!(#item))
+}
+"#;
+
+fn run_syn_parse_fixture(manifest: Option<&str>) -> miette::Result<String> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    fs::write(fixture.path().join("src/lib.rs"), SYN_PARSE_SOURCE)
+        .into_diagnostic()
+        .wrap_err("write fixture")?;
+    if let Some(manifest) = manifest {
+        fs::write(fixture.path().join("Cargo.toml"), manifest)
+            .into_diagnostic()
+            .wrap_err("write manifest")?;
+    }
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&FOREIGN_ERROR_TYPES_ETIQUETTE)
+        .build();
+    session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+
+    fs::read_to_string(store.path().join("findings/foreign-error-types.csv"))
+        .into_diagnostic()
+        .wrap_err("foreign-error-types csv")
+}
+
+#[test]
+fn proc_macro_crate_does_not_flag_syn_error_as_a_foreign_leak() -> miette::Result<()> {
+    let csv = run_syn_parse_fixture(Some(
+        "[package]\nname = \"fixture\"\nversion = \"0.1.0\"\n\n[lib]\nproc-macro = true\n",
+    ))?;
+    assert!(
+        !csv.contains("syn::Error"),
+        "syn::Error is the idiomatic proc-macro expansion currency, not a foreign leak: {csv}"
+    );
+    Ok(())
+}
+
+#[test]
+fn non_proc_macro_crate_still_flags_syn_error_as_a_foreign_leak() -> miette::Result<()> {
+    let csv = run_syn_parse_fixture(None)?;
+    assert!(
+        csv.contains("syn::Error"),
+        "an ordinary crate parsing syn should still surface the leak: {csv}"
+    );
+    Ok(())
+}
+
 #[test]
 fn foreign_error_types_session_produces_artifacts() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;

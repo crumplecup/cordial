@@ -1,8 +1,9 @@
 //! Partitions error-site nodes and links them to inferred origins via `ErrorFlow` edges.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use crate::enricher::member_crate_root;
 use crate::error::CordialResult;
 use crate::etiquettes::error_sites::{
     ErrorOriginClass, ErrorSiteKind, ErrorSiteScanRow, ForeignErrorRecordKind,
@@ -10,6 +11,7 @@ use crate::etiquettes::error_sites::{
 };
 use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{BasicQuery, EdgeKind, IrMut, NodeKind, NodeWeight};
+use crate::loader::SourceLoadView;
 
 use tracing::instrument;
 /// Partitions error-site expression nodes and materializes `ErrorFlow` origin links.
@@ -35,9 +37,15 @@ impl IrEnricher for ErrorFlowEnricher {
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
         let ir = view.ir;
+        let load = view.load;
+        let session = view.session;
 
         let crate_name = ir.crate_name().to_string();
         let crate_root = ir.root()?;
+        let is_proc_macro_crate = load
+            .as_any()
+            .downcast_ref::<SourceLoadView>()
+            .is_some_and(|source| crate_is_proc_macro(&member_crate_root(source, session)));
         let mut origin_nodes: BTreeMap<String, crate::ir::NodeId> = BTreeMap::new();
 
         let site_ids: Vec<_> = ir
@@ -49,11 +57,47 @@ impl IrEnricher for ErrorFlowEnricher {
             .collect();
 
         for site_id in site_ids {
-            enrich_error_site(ir, site_id, &crate_name, crate_root, &mut origin_nodes)?;
+            enrich_error_site(
+                ir,
+                site_id,
+                &crate_name,
+                crate_root,
+                is_proc_macro_crate,
+                &mut origin_nodes,
+            )?;
         }
 
         Ok(())
     }
+}
+
+/// Whether `crate_root`'s manifest declares `[lib] proc-macro = true`.
+///
+/// `syn::Error`/`syn::Result` are the idiomatic return-error currency for
+/// proc-macro expansion helpers industry-wide -- not a foreign leak that
+/// needs wrapping, since the only consumer is the compiler (the macro's
+/// public entry point returns a bare `TokenStream`, never a `Result`).
+#[instrument(level = "debug", skip(crate_root))]
+fn crate_is_proc_macro(crate_root: &Path) -> bool {
+    let Ok(manifest) = std::fs::read_to_string(crate_root.join("Cargo.toml")) else {
+        return false;
+    };
+    let mut in_lib_section = false;
+    for line in manifest.lines() {
+        let trimmed = line.trim();
+        if let Some(section) = trimmed.strip_prefix('[').and_then(|rest| rest.strip_suffix(']')) {
+            in_lib_section = section.trim() == "lib";
+            continue;
+        }
+        if in_lib_section
+            && let Some((key, value)) = trimmed.split_once('=')
+            && key.trim() == "proc-macro"
+            && value.trim().starts_with("true")
+        {
+            return true;
+        }
+    }
+    false
 }
 
 #[instrument(
@@ -66,6 +110,7 @@ fn enrich_error_site(
     site_id: crate::ir::NodeId,
     crate_name: &str,
     crate_root: crate::ir::NodeId,
+    is_proc_macro_crate: bool,
     origin_nodes: &mut BTreeMap<String, crate::ir::NodeId>,
 ) -> CordialResult<()> {
     let Some(scan_row) = scan_row_from_node(ir, site_id, crate_name) else {
@@ -93,7 +138,7 @@ fn enrich_error_site(
     let origin_id = origin_node(ir, origin_nodes, crate_root, &origin_key)?;
     ir.insert_edge(site_id, origin_id, EdgeKind::ErrorFlow)?;
 
-    apply_foreign_error_attrs(ir, site_id, &partitioned)?;
+    apply_foreign_error_attrs(ir, site_id, &partitioned, is_proc_macro_crate)?;
     Ok(())
 }
 
@@ -187,6 +232,7 @@ fn apply_foreign_error_attrs(
     ir: &mut dyn IrMut,
     site_id: crate::ir::NodeId,
     partitioned: &crate::etiquettes::error_sites::PartitionedErrorSiteRow,
+    is_proc_macro_crate: bool,
 ) -> CordialResult<()> {
     if partitioned.origin_class == ErrorOriginClass::Internal {
         return Ok(());
@@ -195,6 +241,10 @@ fn apply_foreign_error_attrs(
     if let Some((foreign_error_type, rule_id, confidence)) =
         infer_foreign_error_type(&partitioned.source_snippet)
     {
+        if is_proc_macro_crate && rule_id == "FOREIGN-ERROR-TYPE-SYN-PARSE-001" {
+            return Ok(());
+        }
+
         ir.set_attr(
             site_id,
             "foreign_error_record_kind",
