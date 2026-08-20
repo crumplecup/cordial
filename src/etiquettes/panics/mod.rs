@@ -19,6 +19,7 @@
 
 mod assessor;
 mod enricher;
+mod kani_reach;
 mod probe;
 mod reporter;
 mod scan;

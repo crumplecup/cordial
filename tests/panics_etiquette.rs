@@ -473,3 +473,184 @@ fn nested_parity_workspace_is_skipped_when_scanning_parent() -> miette::Result<(
     );
     Ok(())
 }
+
+#[test]
+fn unwrap_reachable_from_a_kani_proof_harness_is_not_flagged() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+struct Channel;
+
+impl Channel {
+    pub fn demonstrate_delivery(self, value: i32) -> Token {
+        self.send(value).unwrap();
+        Token
+    }
+
+    fn send(&self, _value: i32) -> Result<(), &'static str> {
+        Ok(())
+    }
+}
+
+struct Token;
+
+#[kani::proof]
+fn verify_delivery() {
+    let value: i32 = kani::any();
+    let channel = Channel;
+    let _token = channel.demonstrate_delivery(value);
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert!(
+        findings.is_empty(),
+        "unwrap() inside demonstrate_delivery is reachable from the #[kani::proof] harness \
+         that calls it -- Kani checks reachable panics, not Result return values, so this \
+         unwrap is the proof's own failure mechanism: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn unreachable_nested_under_cfg_kani_is_not_flagged() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+#[cfg(kani)]
+mod proofs {
+    fn from_index(index: u8) -> bool {
+        match index {
+            0 => false,
+            1 => true,
+            _ => unreachable!("bounded by kani::assume"),
+        }
+    }
+
+    #[kani::proof]
+    fn verify_from_index() {
+        let index: u8 = kani::any();
+        kani::assume(index <= 1);
+        from_index(index);
+    }
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert!(
+        findings.is_empty(),
+        "code nested under #[cfg(kani)] exists only during Kani verification, so its \
+         unreachable!() is part of the proof, not a library surface: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn unwrap_not_reachable_from_any_kani_proof_is_still_flagged() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+pub fn ordinary_helper(value: Option<i32>) -> i32 {
+    value.unwrap()
+}
+
+#[kani::proof]
+fn unrelated_proof() {
+    let _ = 1 + 1;
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert_eq!(
+        findings.len(),
+        1,
+        "ordinary_helper is never called by unrelated_proof -- its unwrap() is a real library \
+         surface panic, not exempt just because the crate has some #[kani::proof] harness \
+         somewhere: {findings:?}"
+    );
+    assert_eq!(findings[0].kind, PanicKind::Unwrap);
+    Ok(())
+}
+
+#[test]
+fn panic_outside_cfg_kani_is_still_flagged_even_with_a_cfg_not_kani_twin() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+fn symbolic_any() -> i32 {
+    #[cfg(kani)]
+    {
+        0
+    }
+
+    #[cfg(not(kani))]
+    {
+        panic!("symbolic construction is only available under cfg(kani)")
+    }
+}
+
+#[kani::proof]
+fn verify_something() {
+    let _ = symbolic_any();
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert_eq!(
+        findings.len(),
+        1,
+        "symbolic_any is called from a #[kani::proof] harness, but its panic!() lives in the \
+         #[cfg(not(kani))] branch -- that code never runs during Kani verification, so it must \
+         stay flagged rather than inherit its caller's kani-reachability: {findings:?}"
+    );
+    assert_eq!(findings[0].kind, PanicKind::Panic);
+    Ok(())
+}

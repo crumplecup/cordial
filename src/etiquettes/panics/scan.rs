@@ -8,17 +8,31 @@ use syn::{
     Expr, ExprLit, ExprMacro, ExprMethodCall, Item, ItemFn, ItemImpl, ItemMod, Lit, Macro, Type,
 };
 
+use super::kani_reach::{KaniReachability, build_kani_reachability};
 use super::types::{PanicKind, PanicSiteRecord};
 use crate::error::CordialResult;
 use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
 
 use tracing::instrument;
 /// Scan `src/` and `tests/` under `crate_root`, excluding `fixtures/` paths.
+///
+/// Parses every file in the crate once up front to build a
+/// `#[kani::proof]` reachability closure (see `kani_reach`'s own doc
+/// comment) before scanning any of them for panic sites, since a site
+/// that's part of a proof's own failure mechanism must never be flagged
+/// regardless of which file it's found in relative to which file
+/// declares the harness that reaches it.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_panics(crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord>> {
-    let mut findings = Vec::new();
+    let mut parsed = Vec::new();
     for tree_root in quality_scan_trees(crate_root) {
-        findings.extend(scan_source_tree(&tree_root, crate_root)?);
+        parsed.extend(parse_source_tree(&tree_root, crate_root)?);
+    }
+    let reachability = build_kani_reachability(parsed.iter().map(|file| &file.syntax));
+
+    let mut findings = Vec::new();
+    for file in &parsed {
+        findings.extend(scan_parsed_file(file, crate_root, &reachability));
     }
     findings.sort_by(|a, b| {
         a.file
@@ -32,9 +46,28 @@ pub fn scan_crate_panics(crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord
 
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_source_tree(src_root: &Path, crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord>> {
+    let parsed = parse_source_tree(src_root, crate_root)?;
+    let reachability = build_kani_reachability(parsed.iter().map(|file| &file.syntax));
     let mut findings = Vec::new();
+    for file in &parsed {
+        findings.extend(scan_parsed_file(file, crate_root, &reachability));
+    }
+    Ok(findings)
+}
+
+/// One parsed source file plus the tree root it was discovered under
+/// (needed to derive its crate-relative module path).
+struct ParsedFile {
+    path: PathBuf,
+    src_root: PathBuf,
+    syntax: syn::File,
+}
+
+#[instrument(level = "debug", err(level = "warn"))]
+fn parse_source_tree(src_root: &Path, crate_root: &Path) -> CordialResult<Vec<ParsedFile>> {
+    let mut parsed = Vec::new();
     if !src_root.is_dir() {
-        return Ok(findings);
+        return Ok(parsed);
     }
 
     for entry in walkdir::WalkDir::new(src_root)
@@ -47,10 +80,17 @@ pub fn scan_source_tree(src_root: &Path, crate_root: &Path) -> CordialResult<Vec
             continue;
         }
         let source = std::fs::read_to_string(path)?;
-        findings.extend(scan_rust_source(&source, path, src_root, crate_root)?);
+        let syntax = syn::parse_file(&source).map_err(|err| {
+            crate::error::CordialError::syn_parse(path.display().to_string(), err)
+        })?;
+        parsed.push(ParsedFile {
+            path: path.to_path_buf(),
+            src_root: src_root.to_path_buf(),
+            syntax,
+        });
     }
 
-    Ok(findings)
+    Ok(parsed)
 }
 
 #[instrument(level = "debug", skip(source, file), err(level = "warn"))]
@@ -62,31 +102,55 @@ pub fn scan_rust_source(
 ) -> CordialResult<Vec<PanicSiteRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    let module_prefix = module_path_from_src_file(src_root, file);
+    let reachability = build_kani_reachability(std::iter::once(&syntax));
+    let parsed = ParsedFile {
+        path: file.to_path_buf(),
+        src_root: src_root.to_path_buf(),
+        syntax,
+    };
+    Ok(scan_parsed_file(&parsed, crate_root, &reachability))
+}
+
+#[instrument(level = "debug", skip(file, reachability))]
+fn scan_parsed_file(
+    file: &ParsedFile,
+    crate_root: &Path,
+    reachability: &KaniReachability,
+) -> Vec<PanicSiteRecord> {
+    let module_prefix = module_path_from_src_file(&file.src_root, &file.path);
     let mut visitor = PanicScanVisitor {
-        file: file.to_path_buf(),
+        file: file.path.clone(),
         crate_root: crate_root.to_path_buf(),
         module_prefix,
         impl_type: None,
         fn_stack: Vec::new(),
         in_cfg_test: false,
+        in_cfg_not_kani: false,
+        reachability,
         findings: Vec::new(),
     };
-    visitor.visit_file(&syntax);
-    Ok(visitor.findings)
+    visitor.visit_file(&file.syntax);
+    visitor.findings
 }
 
-struct PanicScanVisitor {
+struct PanicScanVisitor<'a> {
     file: PathBuf,
     crate_root: PathBuf,
     module_prefix: Vec<String>,
     impl_type: Option<String>,
     fn_stack: Vec<String>,
     in_cfg_test: bool,
+    /// True inside a `#[cfg(not(kani))]` block -- overrides
+    /// `reachability`, since that code never runs during Kani
+    /// verification even when its enclosing function is otherwise
+    /// reachable from a `#[kani::proof]` harness (see e.g.
+    /// `symbolic_any`'s two-branch shape in amenable_kani::compose).
+    in_cfg_not_kani: bool,
+    reachability: &'a KaniReachability,
     findings: Vec<PanicSiteRecord>,
 }
 
-impl PanicScanVisitor {
+impl PanicScanVisitor<'_> {
     #[instrument(level = "debug", skip(self))]
     fn site_context(&self) -> String {
         let mut parts = self.module_prefix.clone();
@@ -103,6 +167,19 @@ impl PanicScanVisitor {
 
     #[instrument(level = "debug", skip(self, kind))]
     fn push_finding(&mut self, kind: PanicKind, line: u32, snippet: String) {
+        // A site only reachable from a #[kani::proof] harness (or nested
+        // inside #[cfg(kani)]) is that harness's own failure mechanism --
+        // Kani checks reachable panics/asserts, not a harness's return
+        // value, so routing this through Result would silently disable
+        // the check. See kani_reach's own doc comment.
+        if !self.in_cfg_not_kani
+            && self
+                .fn_stack
+                .last()
+                .is_some_and(|key| self.reachability.contains(key))
+        {
+            return;
+        }
         let mut file = self.file.clone();
         if let Ok(rel) = file.strip_prefix(&self.crate_root) {
             file = rel.to_path_buf();
@@ -176,7 +253,7 @@ impl PanicScanVisitor {
     }
 }
 
-impl<'ast> Visit<'ast> for PanicScanVisitor {
+impl<'ast> Visit<'ast> for PanicScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         self.visit_mod(node);
@@ -241,6 +318,18 @@ impl<'ast> Visit<'ast> for PanicScanVisitor {
         self.check_method_call(node);
         syn::visit::visit_expr_method_call(self, node);
     }
+
+    #[instrument(level = "debug", skip(self, node))]
+    fn visit_expr_block(&mut self, node: &'ast syn::ExprBlock) {
+        let prev = self.in_cfg_not_kani;
+        if has_cfg_not_flag(&node.attrs, "kani") {
+            self.in_cfg_not_kani = true;
+        } else if has_cfg_flag(&node.attrs, "kani") {
+            self.in_cfg_not_kani = false;
+        }
+        syn::visit::visit_expr_block(self, node);
+        self.in_cfg_not_kani = prev;
+    }
 }
 
 #[instrument(level = "trace", skip(call), ret)]
@@ -253,6 +342,13 @@ fn is_unwrap_variant(call: &ExprMethodCall) -> bool {
 
 #[instrument(level = "trace", skip(attrs))]
 fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
+    has_cfg_flag(attrs, "test")
+}
+
+/// Whether `attrs` carries a bare `#[cfg(flag)]` (no `not(..)`, no
+/// `all(..)`/`any(..)` combinators -- just the single flag name).
+#[instrument(level = "trace", skip(attrs, flag))]
+pub(super) fn has_cfg_flag(attrs: &[syn::Attribute], flag: &str) -> bool {
     attrs.iter().any(|attr| {
         let syn::Meta::List(list) = &attr.meta else {
             return false;
@@ -260,7 +356,21 @@ fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
         if !list.path.is_ident("cfg") {
             return false;
         }
-        list.tokens.to_string().replace(' ', "") == "test"
+        list.tokens.to_string().replace(' ', "") == flag
+    })
+}
+
+/// Whether `attrs` carries a bare `#[cfg(not(flag))]`.
+#[instrument(level = "trace", skip(attrs, flag))]
+pub(super) fn has_cfg_not_flag(attrs: &[syn::Attribute], flag: &str) -> bool {
+    attrs.iter().any(|attr| {
+        let syn::Meta::List(list) = &attr.meta else {
+            return false;
+        };
+        if !list.path.is_ident("cfg") {
+            return false;
+        }
+        list.tokens.to_string().replace(' ', "") == format!("not({flag})")
     })
 }
 
