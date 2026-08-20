@@ -8,7 +8,7 @@ use tracing::instrument;
 pub enum InternalErrorComplianceId {
     StringifyForeign001,
     DiscardTyped001,
-    /// Foreign-source wrapper missing `source` and/or file+line / `location`.
+    /// Foreign-source wrapper missing `source` and/or owned `file`+`line`.
     SourceShape001,
     /// Native source missing `#[track_caller] fn new` that calls `Location::caller()`, or a wrapper that would hide the call site.
     SourceTrackCaller001,

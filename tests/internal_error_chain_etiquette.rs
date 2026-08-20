@@ -463,7 +463,7 @@ pub enum ErrorKind {
 
 pub struct IoSource {
     source: io::Error,
-    file: &'static str,
+    file: String,
     line: u32,
 }
 
@@ -473,7 +473,7 @@ impl IoSource {
         let loc = Location::caller();
         Self {
             source,
-            file: loc.file(),
+            file: loc.file().to_string(),
             line: loc.line(),
         }
     }
@@ -636,20 +636,18 @@ fn well_formed_source_wrapper_is_not_a_compliance_violation() -> miette::Result<
 }
 
 #[test]
-fn location_field_is_accepted_instead_of_file_and_line() -> miette::Result<()> {
+fn location_field_is_rejected_in_favor_of_owned_file_and_line() -> miette::Result<()> {
     let fixture = write_error_crate(LOCATION_FIELD_SOURCE)?;
     let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
         .into_diagnostic()
         .wrap_err("scan")?;
     assert!(
-        !report.compliance.findings.iter().any(|finding| {
-            matches!(
-                finding.rule_id,
-                InternalErrorComplianceId::SourceShape001
-                    | InternalErrorComplianceId::SourceTrackCaller001
-            )
+        report.compliance.findings.iter().any(|finding| {
+            finding.rule_id == InternalErrorComplianceId::SourceShape001
+                && finding.context.contains("IoSource")
+                && finding.snippet.contains("copy owned `file` and `line`")
         }),
-        "location: &'static Location must satisfy the shape: {:?}",
+        "location: &'static Location must be SOURCE-SHAPE: {:?}",
         report.compliance.findings
     );
     Ok(())

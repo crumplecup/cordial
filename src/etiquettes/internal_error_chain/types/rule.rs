@@ -5,7 +5,7 @@ use super::{InternalErrorComplianceId, InternalErrorTypeProbeId};
 use tracing::instrument;
 #[derive(Debug, Clone)]
 pub struct InternalErrorChainRule {
-    pub rule_id: String,
+    rule_id: String,
 }
 
 impl InternalErrorChainRule {

@@ -4,7 +4,8 @@
 //! architecture. The catalog is every type that implements `Error` (or
 //! `#[derive(Error)]`) under `src/`: a parent error boxes an umbrella `*Kind`
 //! enum; every Kind variant holds a native source; native sources that wrap a
-//! foreign error keep it in `source` with file/line and `#[track_caller]`;
+//! foreign error keep it in `source` with owned `file`/`line` copied from
+//! `Location::caller()` and `#[track_caller]`;
 //! nested native sources may box another Kind and the same rules recurse.
 //! Native sources may live next to their call site.
 //!

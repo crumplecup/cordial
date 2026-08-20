@@ -246,9 +246,10 @@ impl Reporter for InternalErrorChainChecklistReporter {
             "Static inventory of crate error types (internal leaves vs links vs foreign bridges) \
              and call sites that stringify or discard typed foreign errors. \
              Source wrappers that hold a foreign error must keep it in `source` and \
-             carry `file`/`line` (or `location`). Capture that location in a custom \
-             `#[track_caller] fn new` via `Location::caller()` — do not pass file/line \
-             as arguments. Parent constructors that wrap a source must also be \
+             carry owned `file`/`line` copied from `Location::caller()` — do not store \
+             `&'static Location`. Capture that location in a custom \
+             `#[track_caller] fn new` — do not pass file/line as arguments. Parent \
+             constructors that wrap a source must also be \
              `#[track_caller]` so the call site is preserved. The parent error boxes a \
              `*Kind` enum; every Kind variant is a native source that implements `Error`. \
              Types that implement `Error` anywhere under `src/` are the catalog — \

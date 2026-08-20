@@ -42,7 +42,7 @@ impl Finding for InternalErrorChainFinding {
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("record_kind", &self.record_kind.as_str());
-        sink.field("rule_id", &self.rule.rule_id);
+        sink.field("rule_id", &self.rule.id());
         sink.field("context", &self.context);
         sink.field("file", &self.span.file.display().to_string());
         sink.field("line", &self.span.line.to_string());

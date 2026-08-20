@@ -44,7 +44,7 @@ pub(super) struct StructInfo {
 impl StructInfo {
     #[instrument(level = "trace", skip(self))]
     pub(super) fn location_complete(&self) -> bool {
-        (self.has_file && self.has_line) || self.has_location
+        self.has_file && self.has_line
     }
 }
 
@@ -224,6 +224,9 @@ impl CatalogVisitor<'_> {
                     let Some(name) = field.ident.as_ref().map(ToString::to_string) else {
                         continue;
                     };
+                    if type_is_location(&field.ty) {
+                        info.has_location = true;
+                    }
                     match name.as_str() {
                         "kind" => {
                             if let Some(inner) = box_inner(&field.ty) {
@@ -245,7 +248,6 @@ impl CatalogVisitor<'_> {
                         }
                         "file" => info.has_file = true,
                         "line" => info.has_line = true,
-                        "location" if type_is_location(&field.ty) => info.has_location = true,
                         _ => {}
                     }
                 }

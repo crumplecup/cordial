@@ -294,14 +294,28 @@ impl Catalog {
                     item.foreign_source.clone(),
                 ));
             }
-            if !item.location_complete() {
+            if item.has_location {
                 findings.push(self.finding(
                     InternalErrorComplianceId::SourceShape001,
                     item.type_path.clone(),
                     item.file.clone(),
                     item.line,
                     format!(
-                        "{} — native source needs `file`+`line` or `location`",
+                        "{} — copy owned `file` and `line` from `Location::caller()`; \
+                         do not store `&'static Location`",
+                        item.snippet
+                    ),
+                    item.foreign_source.clone(),
+                ));
+            } else if !item.location_complete() {
+                findings.push(self.finding(
+                    InternalErrorComplianceId::SourceShape001,
+                    item.type_path.clone(),
+                    item.file.clone(),
+                    item.line,
+                    format!(
+                        "{} — native source needs owned `file`+`line` copied from \
+                         `Location::caller()`",
                         item.snippet
                     ),
                     item.foreign_source.clone(),

@@ -150,15 +150,16 @@ ParentError { kind: Box<ErrorKind> }
    that implements `Error`. Not a foreign error, not `String`, not another
    Kind. Kind enums themselves need not implement `Error`; they are pulled
    in because an error type boxes them (or their payloads implement `Error`).
-3. **Native source (foreign origin)** — `source: ForeignError` plus `file`+`line`
-   (or `location`). Write a custom `#[track_caller] fn new` that takes the
-   error (and any extra context), then reads file/line from
-   `Location::caller()` in that body. Do not pass `file`/`line`/`location` as
-   arguments. `From::from`, if present, is `#[track_caller]` and delegates to
-   `new`; it need not call `Location::caller()` itself.
-4. **Native source (nested)** — `kind: Box<NestedKind>` plus location, same
-   `new` shape. Nested Kind variants follow the same rules. Parent `From` and
-   inherent constructors that return the parent must be `#[track_caller]` so
+3. **Native source (foreign origin)** — `source: ForeignError` plus owned
+   `file: String` and `line: u32`. Write a custom `#[track_caller] fn new` that
+   takes the error (and any extra context), then copies file/line from
+   `Location::caller()` in that body. Do not store `&'static Location`. Do not
+   pass `file`/`line`/`location` as arguments. `From::from`, if present, is
+   `#[track_caller]` and delegates to `new`; it need not call
+   `Location::caller()` itself.
+4. **Native source (nested)** — `kind: Box<NestedKind>` plus owned `file`+`line`,
+   same `new` shape. Nested Kind variants follow the same rules. Parent `From`
+   and inherent constructors that return the parent must be `#[track_caller]` so
    they do not hide the call site from source `new`.
 5. **Coverage** — every native source (every `Error`-implementing struct
    that is not the parent) appears as a Kind variant (no orphans).
@@ -169,7 +170,7 @@ ParentError { kind: Box<ErrorKind> }
 | `ERROR-CHAIN-COMPLIANCE-ARCH-KIND-BOX-001` | `kind` field is not `Box<_>` |
 | `ERROR-CHAIN-COMPLIANCE-ARCH-KIND-VARIANT-001` | Kind (or leftover `*Error` enum) variant is not a native source that implements `Error` |
 | `ERROR-CHAIN-COMPLIANCE-ARCH-ORPHAN-SOURCE-001` | Native source is not a Kind variant |
-| `ERROR-CHAIN-COMPLIANCE-SOURCE-SHAPE-001` | Native source missing `source` / file+line / `location` |
+| `ERROR-CHAIN-COMPLIANCE-SOURCE-SHAPE-001` | Native source missing `source` / owned `file`+`line`, or storing `&'static Location` instead of copying those fields |
 | `ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001` | Native source missing `#[track_caller] fn new` that calls `Location::caller()` (not a helper, not `From` alone); `new` takes file/line/location as args; or a parent/`From` wrapper lacks `#[track_caller]` |
 
 Call-site chain preservation (stringify / discard) remains a separate layer.
@@ -243,7 +244,7 @@ merge cross-cutting, feature-optional logic; prefer plain mod-level gating
 | Tests: harness abort sites → `miette::Result` + `into_diagnostic` / `ok_or_else` | done |
 | `IrView::root`, `IrMut::insert_node`, `rebuild_path_index` return `CordialResult` | done |
 | Dogfood panics: checklist **0**; tests **0** miette items; no inventory-only abort sites; abort-site action items **0** | done |
-| Source-wrapper shape (`source` + file/line + `#[track_caller] fn new` that calls `Location::caller()`) | done |
+| Source-wrapper shape (`source` + owned `file`/`line` copied from `Location::caller()`; do not store `Location`) | done |
 | Error architecture suite (`Error` impls under `src/`; parent boxes Kind; native sources; recurse) | done |
 | Dogfood: `CordialError` / `CliError` follow parent + boxed Kind + native sources; bin miette wrappers excluded | superseded — `CliError` folded into `CordialError` |
 | One crate: CLI native sources on `CordialErrorKind`; `Cli::act`; miette only in `main` | done |
