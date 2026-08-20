@@ -35,12 +35,51 @@
 
 use std::collections::{HashMap, HashSet};
 
+use proc_macro2::{Delimiter, TokenTree};
 use syn::visit::Visit;
-use syn::{Expr, ExprCall, ExprMethodCall, File, ImplItemFn, ItemFn, ItemImpl, ItemMod};
+use syn::{
+    Expr, ExprCall, ExprMethodCall, File, ImplItemFn, Item, ItemFn, ItemImpl, ItemMacro, ItemMod,
+};
 
 use tracing::instrument;
 
 use super::scan::has_cfg_flag;
+
+/// Best-effort recovery of real items wrapped inside an opaque macro
+/// invocation -- `syn::visit::Visit` never descends into a macro's own
+/// token stream, so a `#[kani::proof] fn ..` written as the argument to
+/// a wrapper macro (this codebase's own `amenable_derive::harness! {
+/// cfg_name, CONST_NAME, { item } }`, which exists specifically to
+/// capture the item's verbatim source into a sibling constant) is
+/// otherwise invisible to root/call-graph detection entirely. Tries the
+/// whole token stream as a sequence of items first (covers a
+/// `macro_rules!`-style body that's items outright), then falls back to
+/// the last brace-delimited group in the token stream (covers `macro!(
+/// args.., { item })`, `harness!`'s own shape) parsed as one item.
+/// Silently yields nothing if neither parses -- this is a best-effort
+/// widening of what counts as reachable, not a requirement.
+#[instrument(level = "trace", skip(tokens))]
+fn items_inside_macro(tokens: proc_macro2::TokenStream) -> Vec<Item> {
+    if let Ok(file) = syn::parse2::<File>(tokens.clone()) {
+        return file.items;
+    }
+
+    let last_brace_group = tokens
+        .into_iter()
+        .filter_map(|tree| match tree {
+            TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => Some(group),
+            _ => None,
+        })
+        .last();
+    let Some(group) = last_brace_group else {
+        return Vec::new();
+    };
+
+    syn::parse2::<Item>(group.stream())
+        .ok()
+        .into_iter()
+        .collect()
+}
 
 /// Crate-local function/method name reachable from a `#[kani::proof]`
 /// harness (or `#[cfg(kani)]`-only code), by fixed-point call-graph
@@ -193,5 +232,28 @@ impl<'ast> Visit<'ast> for GraphVisitor<'_> {
     fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
         self.record_call(node.method.to_string());
         syn::visit::visit_expr_method_call(self, node);
+    }
+
+    #[instrument(level = "trace", skip(self, node))]
+    fn visit_item_macro(&mut self, node: &'ast ItemMacro) {
+        for item in items_inside_macro(node.mac.tokens.clone()) {
+            syn::visit::visit_item(self, &item);
+        }
+    }
+
+    #[instrument(level = "trace", skip(self, node))]
+    fn visit_stmt_macro(&mut self, node: &'ast syn::StmtMacro) {
+        for item in items_inside_macro(node.mac.tokens.clone()) {
+            syn::visit::visit_item(self, &item);
+        }
+        syn::visit::visit_stmt_macro(self, node);
+    }
+
+    #[instrument(level = "trace", skip(self, node))]
+    fn visit_expr_macro(&mut self, node: &'ast syn::ExprMacro) {
+        for item in items_inside_macro(node.mac.tokens.clone()) {
+            syn::visit::visit_item(self, &item);
+        }
+        syn::visit::visit_expr_macro(self, node);
     }
 }

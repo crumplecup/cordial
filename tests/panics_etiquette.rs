@@ -525,6 +525,66 @@ fn verify_delivery() {
 }
 
 #[test]
+fn unwrap_reachable_from_a_harness_wrapped_in_another_macro_is_not_flagged() -> miette::Result<()> {
+    // amenable_derive::harness!(cfg_name, CONST_NAME, { item })'s own real
+    // shape: syn::visit::Visit never descends into a macro invocation's
+    // token stream on its own, so a #[kani::proof] fn written as a wrapper
+    // macro's argument is invisible to root detection unless the scanner
+    // goes looking for it -- this is the one real amenable_kani case that
+    // motivated that lookup (every #[kani::proof] harness in that crate is
+    // written this way, not as a bare item).
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+struct Channel;
+
+impl Channel {
+    pub fn demonstrate_delivery(self, value: i32) -> Token {
+        self.send(value).unwrap();
+        Token
+    }
+
+    fn send(&self, _value: i32) -> Result<(), &'static str> {
+        Ok(())
+    }
+}
+
+struct Token;
+
+some_crate::harness! {
+    kani, VERIFY_DELIVERY_SRC, {
+        #[kani::proof]
+        fn verify_delivery() {
+            let value: i32 = kani::any();
+            let channel = Channel;
+            let _token = channel.demonstrate_delivery(value);
+        }
+    }
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert!(
+        findings.is_empty(),
+        "the harness! wrapper macro's braced argument must still be looked into to find the \
+         #[kani::proof] fn inside it: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn unreachable_nested_under_cfg_kani_is_not_flagged() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
