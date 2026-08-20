@@ -48,16 +48,9 @@ impl Display for InlineTestRuleId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct InlineTestRule {
-    pub rule_id: InlineTestRuleId,
-}
-
-impl InlineTestRule {
-    #[instrument(level = "debug", skip(rule_id), ret)]
-    pub fn new(rule_id: InlineTestRuleId) -> Self {
-        Self { rule_id }
-    }
+    rule_id: InlineTestRuleId,
 }
 
 impl Rule for InlineTestRule {

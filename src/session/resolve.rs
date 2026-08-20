@@ -44,7 +44,7 @@ pub(super) fn resolved_etiquettes(
     match filter.etiquettes() {
         Some(ids) => merged
             .into_iter()
-            .filter(|etiquette| ids.contains(&etiquette.id()))
+            .filter(|etiquette| ids.iter().any(|id| id == etiquette.id()))
             .collect(),
         None => merged,
     }

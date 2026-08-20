@@ -31,7 +31,7 @@ impl Reporter for ModularitySummaryReporter {
 
         let rows = modularity_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
-        let thresholds = crate::config::load_session_config(session).modularity;
+        let thresholds = *crate::config::load_session_config(session).modularity();
         let inventory: Vec<_> = open
             .iter()
             .copied()
@@ -57,8 +57,8 @@ impl Reporter for ModularitySummaryReporter {
             .filter(|row| row.kind == "MODULARITY-MODULE-SIZE")
             .collect();
         sort_by_lines_desc(&mut modules);
-        let sigma = thresholds.module_size_sigma;
-        let min_lines = thresholds.min_module_lines;
+        let sigma = thresholds.module_size_sigma();
+        let min_lines = thresholds.min_module_lines();
         let sample_lines: Vec<u32> = modules
             .iter()
             .filter_map(|row| row.lines.parse::<u32>().ok())
@@ -123,8 +123,8 @@ impl Reporter for ModularitySummaryReporter {
                 min_lines,
                 stats.mean,
                 stats.stddev,
-                thresholds.file_inventory_min_lines,
-                if thresholds.module_size_ignore_lower_tail {
+                thresholds.file_inventory_min_lines(),
+                if thresholds.module_size_ignore_lower_tail() {
                     "; lower tail ignored"
                 } else {
                     "; two-tailed"

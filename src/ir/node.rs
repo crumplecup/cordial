@@ -69,25 +69,18 @@ impl NodeKind {
 }
 
 /// Weight stored at each graph node.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, derive_new::new)]
 pub struct NodeWeight {
     pub kind: NodeKind,
+    #[new(default)]
     pub name: Option<String>,
+    #[new(default)]
     pub span: Option<crate::objects::FileSpan>,
+    #[new(default)]
     pub attrs: Vec<(String, serde_json::Value)>,
 }
 
 impl NodeWeight {
-    #[instrument(level = "debug", skip(kind), ret)]
-    pub fn new(kind: NodeKind) -> Self {
-        Self {
-            kind,
-            name: None,
-            span: None,
-            attrs: Vec::new(),
-        }
-    }
-
     #[instrument(level = "trace", skip(self, name))]
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());

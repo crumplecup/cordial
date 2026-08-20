@@ -51,11 +51,11 @@ impl Cli {
             .unwrap_or_else(default_store_home)
             .join(&slug);
         let store = StoreLayout::from_root(store_root, slug);
-        self.command.act(ActCtx {
+        self.command.act(ActCtx::new(
             project_root,
             store,
-            crate_name: self.crate_name,
-            store_home: self.store_home,
-        })
+            self.crate_name,
+            self.store_home,
+        ))
     }
 }

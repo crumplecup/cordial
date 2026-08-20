@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use tracing::instrument;
 /// Kind of directed edge in the workspace IR graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EdgeKind {
@@ -19,15 +18,9 @@ pub enum EdgeKind {
 }
 
 /// Weight stored at each graph edge.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, derive_new::new)]
 pub struct EdgeWeight {
     pub kind: EdgeKind,
+    #[new(default)]
     pub label: Option<String>,
-}
-
-impl EdgeWeight {
-    #[instrument(level = "debug", skip(kind), ret)]
-    pub fn new(kind: EdgeKind) -> Self {
-        Self { kind, label: None }
-    }
 }

@@ -7,10 +7,11 @@ use tracing::instrument;
 use crate::error::{CordialError, CordialResult};
 
 /// How the reference workspace currently depends on an upstream crate.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub struct DepBuildConfig {
-    pub activated_features: Vec<String>,
-    pub uses_default_features: bool,
+    activated_features: Vec<String>,
+    #[getter(copy)]
+    uses_default_features: bool,
 }
 
 /// Resolve dependency features from a workspace member's `Cargo.toml`.
@@ -56,10 +57,10 @@ pub fn collect_member_dep_build_config(
     activated_features.sort();
     activated_features.dedup();
 
-    Ok(DepBuildConfig {
+    Ok(DepBuildConfig::new(
         activated_features,
-        uses_default_features: dep.uses_default_features,
-    })
+        dep.uses_default_features,
+    ))
 }
 
 /// Returns `(available_serde_features, expanded_activated_features)`.

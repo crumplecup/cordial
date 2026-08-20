@@ -183,7 +183,7 @@ pub fn coverage_plugins_for_run(
             plugin
                 .etiquettes()
                 .iter()
-                .any(|etiquette| ids.contains(&etiquette.id()))
+                .any(|etiquette| ids.iter().any(|id| id == etiquette.id()))
         });
     }
     coverage

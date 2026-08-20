@@ -14,16 +14,18 @@ use crate::session::SessionView;
 
 use tracing::instrument;
 /// All etiquette knobs loaded from `cordial.toml`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct CordialConfig {
     #[serde(default)]
-    pub visibility: VisibilityThresholds,
+    visibility: VisibilityThresholds,
     #[serde(default)]
-    pub modularity: ModularityThresholds,
+    modularity: ModularityThresholds,
     #[serde(default)]
-    pub cfg_scatter: CfgScatterThresholds,
+    cfg_scatter: CfgScatterThresholds,
     #[serde(default)]
-    pub tracing: TracingThresholds,
+    tracing: TracingThresholds,
+    #[serde(default)]
+    derives: DerivesThresholds,
 }
 
 impl Default for CordialConfig {
@@ -33,23 +35,38 @@ impl Default for CordialConfig {
             modularity: ModularityThresholds::default(),
             cfg_scatter: CfgScatterThresholds::default(),
             tracing: TracingThresholds::default(),
+            derives: DerivesThresholds::default(),
         }
     }
 }
 
 /// Visibility etiquette knobs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_new::new,
+    derive_getters::Getters,
+)]
 pub struct VisibilityThresholds {
     /// If the crate has fewer than this many externally reachable `pub` names,
     /// no `pub mod` is allowed on a public path.
     #[serde(default = "default_max_crate_names_for_flat")]
-    pub max_crate_names_for_flat: usize,
+    #[getter(copy)]
+    max_crate_names_for_flat: usize,
     /// A visible module must contain at least this many leaf names.
     #[serde(default = "default_min_module_names")]
-    pub min_module_names: usize,
+    #[getter(copy)]
+    min_module_names: usize,
     /// Prefer a fat root over modules smaller than [`Self::min_module_names`].
     #[serde(default = "default_prefer_root")]
-    pub prefer_root: bool,
+    #[new(value = "true")]
+    #[getter(copy)]
+    prefer_root: bool,
 }
 
 #[instrument(level = "debug")]
@@ -68,15 +85,6 @@ fn default_prefer_root() -> bool {
 }
 
 impl VisibilityThresholds {
-    #[instrument(level = "debug", ret)]
-    pub fn new(max_crate_names_for_flat: usize, min_module_names: usize) -> Self {
-        Self {
-            max_crate_names_for_flat,
-            min_module_names,
-            prefer_root: default_prefer_root(),
-        }
-    }
-
     #[instrument(level = "trace", skip(self))]
     pub fn with_prefer_root(mut self, prefer_root: bool) -> Self {
         self.prefer_root = prefer_root;
@@ -95,55 +103,77 @@ impl Default for VisibilityThresholds {
 }
 
 /// Modularity etiquette knobs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_new::new,
+    derive_getters::Getters,
+)]
 pub struct ModularityThresholds {
     /// File inventory floor, and the *upper-tail* MODULE-SIZE checklist
     /// floor. A large-side 2σ module below this many lines stays
     /// inventory-only. The lower tail is not gated by this number.
     #[serde(default = "default_file_inventory_min_lines")]
-    pub file_inventory_min_lines: u32,
+    #[getter(copy)]
+    file_inventory_min_lines: u32,
     /// Track function and method bodies at least this long (CSV inventory).
     #[serde(default = "default_function_inventory_min_lines")]
-    pub function_inventory_min_lines: u32,
+    #[getter(copy)]
+    function_inventory_min_lines: u32,
     /// On files already at the file-inventory floor, name bodies at least this
     /// long as extract-helpers on the hotspot. Does not lower CSV inventory.
     #[serde(default = "default_function_hotspot_min_lines")]
-    pub function_hotspot_min_lines: u32,
+    #[getter(copy)]
+    function_hotspot_min_lines: u32,
     #[serde(default = "default_file_checklist_min_lines")]
-    pub file_checklist_min_lines: u32,
+    #[getter(copy)]
+    file_checklist_min_lines: u32,
     /// Flag a function or method body this long as "split this body".
     #[serde(default = "default_function_checklist_min_lines")]
-    pub function_checklist_min_lines: u32,
+    #[getter(copy)]
+    function_checklist_min_lines: u32,
     /// Warn when a file defines more `struct`/`enum`/`union`/`trait` items than this.
     #[serde(default = "default_max_types_per_file")]
-    pub max_types_per_file: u32,
+    #[getter(copy)]
+    max_types_per_file: u32,
     /// Flag a module when its size is more than this many sample standard
     /// deviations from the crate's mean module size.
     #[serde(default = "default_module_size_sigma")]
-    pub module_size_sigma: u32,
+    #[getter(copy)]
+    module_size_sigma: u32,
     /// When true, only the upper tail (`z > σ`) is a MODULE-SIZE checklist
     /// item. The lower tail stays in the sample and the summary; it does
     /// not become an action item. Default is two-tailed.
     #[serde(default)]
-    pub module_size_ignore_lower_tail: bool,
+    #[getter(copy)]
+    module_size_ignore_lower_tail: bool,
     /// Exclude modules smaller than this from the 2σ sample. `0` includes all.
     /// This is a sample filter, not a checklist floor — do not use it to
     /// silence the lower tail.
     #[serde(default = "default_min_module_lines")]
-    pub min_module_lines: u32,
+    #[getter(copy)]
+    min_module_lines: u32,
     /// Checklist a parent that kept at least this percent of its subtree
     /// (`own * 100 / subtree`).
     #[serde(default = "default_top_heavy_min_percent")]
-    pub top_heavy_min_percent: u32,
+    #[getter(copy)]
+    top_heavy_min_percent: u32,
     /// Checklist when one child holds at least this percent of its siblings'
     /// combined subtree (siblings below `hierarchy_min_lines` are ignored).
     #[serde(default = "default_lopsided_min_percent")]
-    pub lopsided_min_percent: u32,
+    #[getter(copy)]
+    lopsided_min_percent: u32,
     /// Ignore hierarchy hits whose parent own-lines (top-heavy), dominant
     /// subtree (lopsided), or passthrough subtree (collapse) is smaller than
     /// this.
     #[serde(default = "default_hierarchy_min_lines")]
-    pub hierarchy_min_lines: u32,
+    #[getter(copy)]
+    hierarchy_min_lines: u32,
 }
 
 #[instrument(level = "debug")]
@@ -222,6 +252,14 @@ impl Default for ModularityThresholds {
 
 impl ModularityThresholds {
     #[instrument(level = "debug")]
+    pub fn with_module_size_ignore_lower_tail(self, ignore: bool) -> Self {
+        Self {
+            module_size_ignore_lower_tail: ignore,
+            ..self
+        }
+    }
+
+    #[instrument(level = "debug")]
     pub fn ratio_meets(numerator: u32, denominator: u32, percent: u32) -> bool {
         denominator > 0 && u64::from(numerator) * 100 >= u64::from(denominator) * u64::from(percent)
     }
@@ -284,12 +322,24 @@ impl ModularityThresholds {
 }
 
 /// cfg-scatter etiquette knobs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_new::new,
+    derive_getters::Getters,
+)]
 pub struct CfgScatterThresholds {
     #[serde(default = "default_min_distinct_kinds")]
-    pub min_distinct_kinds: usize,
+    #[getter(copy)]
+    min_distinct_kinds: usize,
     #[serde(default = "default_min_occurrences")]
-    pub min_occurrences: usize,
+    #[getter(copy)]
+    min_occurrences: usize,
 }
 
 #[instrument(level = "debug")]
@@ -311,12 +361,58 @@ impl Default for CfgScatterThresholds {
     }
 }
 
+/// Derive-pattern etiquette knobs.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_new::new,
+    derive_getters::Getters,
+)]
+pub struct DerivesThresholds {
+    /// `fn new` with more arguments than this should use a builder.
+    /// At or below this count, a trivial `new` may use `derive_new` instead.
+    #[serde(default = "default_max_constructor_args")]
+    #[getter(copy)]
+    max_constructor_args: usize,
+    /// Inherent `mut self` fluent setters at or above this count mean the
+    /// type is a hand-rolled builder and should `#[derive(Builder)]`.
+    #[serde(default = "default_min_fluent_setters")]
+    #[getter(copy)]
+    min_fluent_setters: usize,
+}
+
+#[instrument(level = "debug")]
+fn default_max_constructor_args() -> usize {
+    3
+}
+
+#[instrument(level = "debug")]
+fn default_min_fluent_setters() -> usize {
+    2
+}
+
+impl Default for DerivesThresholds {
+    fn default() -> Self {
+        Self {
+            max_constructor_args: default_max_constructor_args(),
+            min_fluent_setters: default_min_fluent_setters(),
+        }
+    }
+}
+
 /// Tracing etiquette knobs.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+)]
 pub struct TracingThresholds {
     /// Extra parameter names unioned with the built-in skip list.
     #[serde(default)]
-    pub extra_skip: Vec<String>,
+    extra_skip: Vec<String>,
 }
 
 impl Default for TracingThresholds {
@@ -358,6 +454,12 @@ pub fn load_visibility_thresholds(
     store_home: &Path,
 ) -> VisibilityThresholds {
     load_cordial_config(workspace_root, store_home).visibility
+}
+
+/// Convenience for the derives etiquette.
+#[instrument(level = "info")]
+pub fn load_derives_thresholds(workspace_root: &Path, store_home: &Path) -> DerivesThresholds {
+    load_cordial_config(workspace_root, store_home).derives
 }
 
 #[instrument(level = "debug", skip(builder, path))]

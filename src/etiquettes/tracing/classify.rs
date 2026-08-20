@@ -159,7 +159,7 @@ fn classify_complexity(
     returns_result: bool,
     peek: &BodyPeek,
 ) -> FunctionComplexity {
-    let hotspot_floor = ModularityThresholds::default().function_inventory_min_lines;
+    let hotspot_floor = ModularityThresholds::default().function_inventory_min_lines();
     if body_lines >= hotspot_floor {
         return FunctionComplexity::Hotspot;
     }

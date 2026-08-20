@@ -32,7 +32,7 @@ impl Reporter for ModularityChecklistReporter {
 
         let rows = modularity_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
-        let thresholds = crate::config::load_session_config(session).modularity;
+        let thresholds = *crate::config::load_session_config(session).modularity();
         let inventory_total = open
             .iter()
             .filter(|row| is_inventory_row(row, &thresholds))
@@ -53,24 +53,24 @@ impl Reporter for ModularityChecklistReporter {
              extract-helpers. File checklist >= {}, module size |z| > {} \
              (upper tail also lines >= {}; {}; modules below {} lines \
              ignored in the sample).\n\n",
-            thresholds.function_checklist_min_lines,
-            thresholds.max_types_per_file,
-            thresholds.top_heavy_min_percent,
-            thresholds.lopsided_min_percent,
-            thresholds.hierarchy_min_lines,
-            thresholds.hierarchy_min_lines,
-            thresholds.file_inventory_min_lines,
-            thresholds.function_inventory_min_lines,
-            thresholds.function_hotspot_min_lines,
-            thresholds.file_checklist_min_lines,
-            thresholds.module_size_sigma,
-            thresholds.file_inventory_min_lines,
-            if thresholds.module_size_ignore_lower_tail {
+            thresholds.function_checklist_min_lines(),
+            thresholds.max_types_per_file(),
+            thresholds.top_heavy_min_percent(),
+            thresholds.lopsided_min_percent(),
+            thresholds.hierarchy_min_lines(),
+            thresholds.hierarchy_min_lines(),
+            thresholds.file_inventory_min_lines(),
+            thresholds.function_inventory_min_lines(),
+            thresholds.function_hotspot_min_lines(),
+            thresholds.file_checklist_min_lines(),
+            thresholds.module_size_sigma(),
+            thresholds.file_inventory_min_lines(),
+            if thresholds.module_size_ignore_lower_tail() {
                 "lower tail ignored"
             } else {
                 "two-tailed"
             },
-            thresholds.min_module_lines,
+            thresholds.min_module_lines(),
         ));
 
         let mut open_items = 0usize;

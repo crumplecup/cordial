@@ -102,7 +102,7 @@ fn maybe_push_file_finding(
     findings: &mut Vec<ModularitySiteRecord>,
 ) -> CordialResult<()> {
     let lines = count_source_lines(source);
-    if lines < thresholds.file_inventory_min_lines {
+    if lines < thresholds.file_inventory_min_lines() {
         return Ok(());
     }
     findings.push(ModularitySiteRecord {
@@ -187,7 +187,7 @@ fn maybe_push_types_finding(
 ) {
     let names = file_type_names(&syntax.items);
     let types = u32::try_from(names.len()).unwrap_or(u32::MAX);
-    if types <= thresholds.max_types_per_file {
+    if types <= thresholds.max_types_per_file() {
         return;
     }
     findings.push(ModularitySiteRecord {

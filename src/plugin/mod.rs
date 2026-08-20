@@ -139,13 +139,13 @@ pub fn etiquettes_from_plugins(plugins: &[&'static dyn Plugin]) -> Vec<&'static 
 #[instrument(level = "debug", skip(registered))]
 pub fn selected_plugins(
     registered: &[&'static dyn Plugin],
-    filter: Option<&[&str]>,
+    filter: Option<&[String]>,
 ) -> Vec<&'static dyn Plugin> {
     match filter {
         Some(ids) => registered
             .iter()
             .copied()
-            .filter(|plugin| ids.contains(&plugin.id()))
+            .filter(|plugin| ids.iter().any(|id| id == plugin.id()))
             .collect(),
         None => registered.to_vec(),
     }

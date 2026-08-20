@@ -7,8 +7,7 @@ use tracing::instrument;
 use super::artifact::{BuildArtifact, DocFingerprint};
 use super::cargo::{nightly_cargo, nightly_host_target, resolve_nightly_cargo_binary};
 use super::{
-    BuildOptions, copy_rustdoc_json, hash_file, read_build_artifact, read_crate_version,
-    write_build_artifact,
+    copy_rustdoc_json, hash_file, read_build_artifact, read_crate_version, write_build_artifact,
 };
 use crate::error::{CordialError, CordialResult};
 use crate::framework_std::FRAMEWORK_STD_SOURCES;
@@ -50,11 +49,11 @@ pub fn resolve_sysroot_library_manifest(crate_name: &str) -> CordialResult<PathB
 }
 
 /// Build rustdoc JSON for std-family sysroot libraries and cache under [`SysrootCache`].
-#[instrument(level = "debug", skip(sysroot, options), err(level = "warn"))]
+#[instrument(level = "debug", skip(sysroot), err(level = "warn"))]
 pub fn build_sysroot_libraries(
     sysroot: &SysrootCache,
     only_crate: Option<&str>,
-    options: &BuildOptions,
+    force: bool,
 ) -> CordialResult<Vec<BuildArtifact>> {
     sysroot.ensure_dirs()?;
 
@@ -71,7 +70,7 @@ pub fn build_sysroot_libraries(
     let mut artifacts = Vec::new();
     for crate_name in sources {
         let artifact_path = sysroot.build_artifact_path(crate_name);
-        if !options.force
+        if !force
             && artifact_path.is_file()
             && let Ok(existing) = read_build_artifact(&artifact_path)
         {
@@ -89,14 +88,11 @@ pub fn build_sysroot_libraries(
         let rustdoc_sha256 = hash_file(&cached_json)?;
         let crate_version =
             read_crate_version(&cached_json).unwrap_or_else(|| "unknown".to_string());
-        let mut artifact = BuildArtifact::sysroot_library(
+        let artifact = BuildArtifact::sysroot_library(
             crate_name,
             PathBuf::from(format!("cache/rustdoc/{crate_name}.json")),
+            DocFingerprint::new(rustdoc_sha256, crate_version),
         );
-        artifact.fingerprint = Some(DocFingerprint {
-            rustdoc_sha256,
-            crate_version,
-        });
         write_build_artifact(&artifact_path, &artifact)?;
         artifacts.push(artifact);
     }

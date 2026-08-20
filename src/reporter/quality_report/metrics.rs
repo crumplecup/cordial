@@ -97,8 +97,11 @@ pub(super) fn panic_metrics(findings: &[&dyn Finding]) -> PanicMetrics {
 pub(super) struct DeriveMetrics {
     pub(super) total: usize,
     pub(super) builder: usize,
+    pub(super) use_builder: usize,
     pub(super) getter: usize,
     pub(super) setter: usize,
+    pub(super) as_ref: usize,
+    pub(super) as_str: usize,
     pub(super) new: usize,
     pub(super) pub_field: usize,
 }
@@ -113,8 +116,11 @@ pub(super) fn derive_metrics(findings: &[&dyn Finding]) -> DeriveMetrics {
         metrics.total += 1;
         match finding.rule().id() {
             "DERIVE-BUILDER-001" => metrics.builder += 1,
+            "DERIVE-USE-BUILDER-001" => metrics.use_builder += 1,
             "DERIVE-GETTER-001" => metrics.getter += 1,
             "DERIVE-SETTER-001" => metrics.setter += 1,
+            "DERIVE-ASREF-001" => metrics.as_ref += 1,
+            "DERIVE-ASSTR-001" => metrics.as_str += 1,
             "DERIVE-NEW-001" => metrics.new += 1,
             "DERIVE-PUB-FIELD-001" => metrics.pub_field += 1,
             _ => {}
@@ -214,7 +220,7 @@ pub(super) fn modularity_metrics(findings: &[&dyn Finding]) -> ModularityMetrics
             let lines = field(finding, "lines")
                 .and_then(|value| value.parse::<u32>().ok())
                 .unwrap_or(0);
-            if lines < crate::config::ModularityThresholds::default().function_inventory_min_lines {
+            if lines < crate::config::ModularityThresholds::default().function_inventory_min_lines() {
                 continue;
             }
         }

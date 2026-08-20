@@ -24,22 +24,14 @@ impl SourceSpan for () {
 }
 
 /// Concrete span used by built-in loaders and probes.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, derive_new::new,
+)]
 pub struct FileSpan {
+    #[new(into)]
     pub file: std::path::PathBuf,
     pub line: u32,
     pub column: u32,
-}
-
-impl FileSpan {
-    #[instrument(level = "debug", skip(file), ret)]
-    pub fn new(file: impl Into<std::path::PathBuf>, line: u32, column: u32) -> Self {
-        Self {
-            file: file.into(),
-            line,
-            column,
-        }
-    }
 }
 
 impl SourceSpan for FileSpan {

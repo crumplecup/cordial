@@ -116,16 +116,9 @@ impl Display for ErrorOriginClass {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct ErrorSiteRule {
-    pub kind: ErrorSiteKind,
-}
-
-impl ErrorSiteRule {
-    #[instrument(level = "debug", skip(kind), ret)]
-    pub fn new(kind: ErrorSiteKind) -> Self {
-        Self { kind }
-    }
+    kind: ErrorSiteKind,
 }
 
 impl Rule for ErrorSiteRule {

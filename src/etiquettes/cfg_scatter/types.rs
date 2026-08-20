@@ -142,21 +142,14 @@ impl CfgScatterGroup {
     pub fn is_scatter(&self, thresholds: &CfgScatterThresholds) -> bool {
         let distinct = self.distinct_non_field_kinds();
         !distinct.is_empty()
-            && (distinct.len() >= thresholds.min_distinct_kinds
-                || self.non_field_count() >= thresholds.min_occurrences)
+            && (distinct.len() >= thresholds.min_distinct_kinds()
+                || self.non_field_count() >= thresholds.min_occurrences())
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct CfgScatterRule {
-    pub rule_id: CfgScatterRuleId,
-}
-
-impl CfgScatterRule {
-    #[instrument(level = "debug", skip(rule_id), ret)]
-    pub fn new(rule_id: CfgScatterRuleId) -> Self {
-        Self { rule_id }
-    }
+    rule_id: CfgScatterRuleId,
 }
 
 impl Rule for CfgScatterRule {

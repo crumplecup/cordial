@@ -19,11 +19,11 @@ pub trait SessionView: Send + Sync {
 
 /// Filter for which plugins, etiquettes, and crates to run.
 pub trait RunFilter: Send + Sync {
-    fn plugins(&self) -> Option<&[&str]> {
+    fn plugins(&self) -> Option<&[String]> {
         None
     }
 
-    fn etiquettes(&self) -> Option<&[&str]>;
+    fn etiquettes(&self) -> Option<&[String]>;
     fn crates(&self) -> Option<&[&str]> {
         None
     }
@@ -176,12 +176,12 @@ pub struct RunAll;
 
 impl RunFilter for RunAll {
     #[instrument(level = "trace", skip(self))]
-    fn plugins(&self) -> Option<&[&str]> {
+    fn plugins(&self) -> Option<&[String]> {
         None
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn etiquettes(&self) -> Option<&[&str]> {
+    fn etiquettes(&self) -> Option<&[String]> {
         None
     }
 

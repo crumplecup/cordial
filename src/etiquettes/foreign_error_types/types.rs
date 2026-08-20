@@ -109,18 +109,10 @@ pub fn build_workspace_foreign_error_type_summary(
 /// (`foreign_error_types`) is itself enabled.
 pub use crate::etiquettes::error_sites::ForeignErrorRecordKind;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct ForeignErrorTypeRule {
-    pub rule_id: String,
-}
-
-impl ForeignErrorTypeRule {
-    #[instrument(level = "debug", skip(rule_id), ret)]
-    pub fn new(rule_id: impl Into<String>) -> Self {
-        Self {
-            rule_id: rule_id.into(),
-        }
-    }
+    #[new(into)]
+    rule_id: String,
 }
 
 impl Rule for ForeignErrorTypeRule {

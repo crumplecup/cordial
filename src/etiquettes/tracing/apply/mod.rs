@@ -116,16 +116,15 @@ pub fn run_tracing_instrument_apply(
                 crate_root.clone()
             }
         };
-        let extra_skip = crate::config::load_cordial_config(project_root, project_root)
-            .tracing
-            .extra_skip;
+        let config = crate::config::load_cordial_config(project_root, project_root);
+        let extra_skip = config.tracing().extra_skip();
         let records = match scan_rust_source(
             &source,
             &path,
             &src_root,
             crate_root,
             &crate_name,
-            &extra_skip,
+            extra_skip,
         ) {
             Ok(records) => records,
             Err(error) => {

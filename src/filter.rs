@@ -4,8 +4,8 @@ use tracing::instrument;
 /// Filter a session run to specific plugins, etiquettes, and/or one crate name.
 #[derive(Debug, Default, Clone)]
 pub struct NamedRunFilter {
-    plugins: Vec<&'static str>,
-    etiquettes: Vec<&'static str>,
+    plugins: Vec<String>,
+    etiquettes: Vec<String>,
     crate_name: Option<String>,
 }
 
@@ -20,20 +20,20 @@ impl NamedRunFilter {
         Self::default()
     }
 
-    #[instrument(level = "debug")]
-    pub fn plugins(ids: &'static [&'static str]) -> Self {
+    #[instrument(level = "debug", skip(ids))]
+    pub fn plugins(ids: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
         Self {
-            plugins: ids.to_vec(),
+            plugins: ids.into_iter().map(|id| id.as_ref().to_string()).collect(),
             etiquettes: Vec::new(),
             crate_name: None,
         }
     }
 
-    #[instrument(level = "debug")]
-    pub fn etiquettes(ids: &'static [&'static str]) -> Self {
+    #[instrument(level = "debug", skip(ids))]
+    pub fn etiquettes(ids: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
         Self {
             plugins: Vec::new(),
-            etiquettes: ids.to_vec(),
+            etiquettes: ids.into_iter().map(|id| id.as_ref().to_string()).collect(),
             crate_name: None,
         }
     }
@@ -52,7 +52,7 @@ impl NamedRunFilter {
 
 impl RunFilter for NamedRunFilter {
     #[instrument(level = "trace", skip(self))]
-    fn plugins(&self) -> Option<&[&str]> {
+    fn plugins(&self) -> Option<&[String]> {
         if self.plugins.is_empty() {
             None
         } else {
@@ -61,7 +61,7 @@ impl RunFilter for NamedRunFilter {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn etiquettes(&self) -> Option<&[&str]> {
+    fn etiquettes(&self) -> Option<&[String]> {
         if self.etiquettes.is_empty() {
             None
         } else {

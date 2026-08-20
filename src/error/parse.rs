@@ -5,25 +5,25 @@ use std::panic::Location;
 
 use tracing::instrument;
 
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct JsonSource {
+    #[getter(skip)]
     source: serde_json::Error,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl JsonSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source), ret)]
     pub fn new(source: serde_json::Error) -> Self {
+        let loc = Location::caller();
         Self {
             source,
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 
@@ -46,27 +46,28 @@ impl std::error::Error for JsonSource {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct JsonParseSource {
+    #[getter(skip)]
     source: serde_json::Error,
+    #[getter(skip)]
     path: String,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl JsonParseSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path, source), ret)]
     pub fn new(path: impl Into<String>, source: serde_json::Error) -> Self {
+        let loc = Location::caller();
         Self {
             source,
             path: path.into(),
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 
@@ -82,25 +83,25 @@ impl std::error::Error for JsonParseSource {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct ConfigSource {
+    #[getter(skip)]
     source: config::ConfigError,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl ConfigSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source), ret)]
     pub fn new(source: config::ConfigError) -> Self {
+        let loc = Location::caller();
         Self {
             source,
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 
@@ -123,27 +124,28 @@ impl std::error::Error for ConfigSource {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct SynParseSource {
+    #[getter(skip)]
     source: syn::Error,
+    #[getter(skip)]
     path: String,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl SynParseSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path, source), ret)]
     pub fn new(path: impl Into<String>, source: syn::Error) -> Self {
+        let loc = Location::caller();
         Self {
             source,
             path: path.into(),
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 
@@ -165,25 +167,25 @@ impl std::error::Error for SynParseSource {
 }
 
 /// Send/Sync stand-in for [`proc_macro2::LexError`], which is not Send.
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct TokenStreamParseError {
+    #[getter(skip)]
     source: String,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl TokenStreamParseError {
     #[track_caller]
     #[instrument(level = "debug", skip(source), ret)]
     pub fn new(source: impl Into<String>) -> Self {
+        let loc = Location::caller();
         Self {
             source: source.into(),
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 

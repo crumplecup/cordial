@@ -49,16 +49,9 @@ pub struct CliLayoutRecord {
     pub snippet: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct CliLayoutRule {
-    pub rule_id: CliLayoutId,
-}
-
-impl CliLayoutRule {
-    #[instrument(level = "debug", skip(rule_id), ret)]
-    pub fn new(rule_id: CliLayoutId) -> Self {
-        Self { rule_id }
-    }
+    rule_id: CliLayoutId,
 }
 
 impl Rule for CliLayoutRule {

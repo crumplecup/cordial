@@ -38,14 +38,13 @@ impl IrEnricher for FunctionInventoryEnricher {
         };
 
         let crate_root = member_crate_root(source, session);
-        let extra_skip = crate::config::load_session_config(session)
-            .tracing
-            .extra_skip;
+        let config = crate::config::load_session_config(session);
+        let extra_skip = config.tracing().extra_skip();
         let records = scan_source_tree(
             &source.src_root,
             &crate_root,
             &source.crate_name,
-            &extra_skip,
+            extra_skip,
         )?;
 
         for record in records {

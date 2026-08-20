@@ -163,14 +163,14 @@ fn append_top_heavy_parents(
         "Nested modules that kept at least {}% of their subtree in their own file \
          (and at least {} own lines). Action: peel remaining mass into children. \
          Hits are checklist items.\n\n",
-        thresholds.top_heavy_min_percent, thresholds.hierarchy_min_lines,
+        thresholds.top_heavy_min_percent(), thresholds.hierarchy_min_lines(),
     ));
     let mut rows = Vec::new();
     for crate_name in names {
         let tree = crate_tree(modules, crate_name);
         for node in top_heavy_parents(&tree) {
             if thresholds.is_top_heavy_hit(node.own_lines, node.subtree_lines)
-                || node.top_heavy() >= f64::from(thresholds.top_heavy_min_percent) / 100.0
+                || node.top_heavy() >= f64::from(thresholds.top_heavy_min_percent()) / 100.0
             {
                 rows.push((crate_name.clone(), node.clone()));
             }
@@ -221,14 +221,14 @@ fn append_lopsided(
         "One child holding at least {}% of the siblings' combined subtree \
          after dropping siblings below {} lines. Action: split the dominant \
          child. Hits are checklist items.\n\n",
-        thresholds.lopsided_min_percent, thresholds.hierarchy_min_lines,
+        thresholds.lopsided_min_percent(), thresholds.hierarchy_min_lines(),
     ));
     let mut rows = Vec::new();
     for crate_name in names {
         let tree = crate_tree(modules, crate_name);
-        for imbalance in lopsided_siblings(&tree, thresholds.hierarchy_min_lines) {
+        for imbalance in lopsided_siblings(&tree, thresholds.hierarchy_min_lines()) {
             if thresholds.is_lopsided_hit(imbalance.largest_subtree, imbalance.sibling_total)
-                || imbalance.share >= f64::from(thresholds.lopsided_min_percent) / 100.0
+                || imbalance.share >= f64::from(thresholds.lopsided_min_percent()) / 100.0
             {
                 rows.push((crate_name.clone(), imbalance));
             }
@@ -246,7 +246,7 @@ fn append_lopsided(
     if rows.is_empty() {
         body.push_str(&format!(
             "_No sibling group where one child holds {}%+ of the combined subtree._\n\n",
-            thresholds.lopsided_min_percent
+            thresholds.lopsided_min_percent()
         ));
         return;
     }
@@ -283,12 +283,12 @@ fn append_unary_nests(
         "A parent whose only child is itself a branch (subtree at least {} lines). \
          Action: collapse the extra directory and lift grandchildren into the parent. \
          A unary leaf is a peel, not this. Hits are checklist items.\n\n",
-        thresholds.hierarchy_min_lines,
+        thresholds.hierarchy_min_lines(),
     ));
     let mut rows = Vec::new();
     for crate_name in names {
         let tree = crate_tree(modules, crate_name);
-        for nest in unary_nests(&tree, thresholds.hierarchy_min_lines) {
+        for nest in unary_nests(&tree, thresholds.hierarchy_min_lines()) {
             if thresholds.is_collapse_hit(nest.passthrough_subtree) {
                 rows.push((crate_name.clone(), nest));
             }

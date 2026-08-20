@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 #[cfg(feature = "elicitation")]
 use crate::build_all_active_shadow_deps;
 #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
-use crate::{BuildOptions, build_workspace_members};
+use crate::build_workspace_members;
 use crate::{
     CordialError, CordialResult, CrateIr, Disposition, NamedRunFilter, Plugin, RunAll, RunFilter,
     RunOutcome, Session, SessionBuilder, StoreLayout, SurrealGraphExport, default_store_home,
@@ -25,25 +25,22 @@ pub(super) fn execute_build_rustdoc(
     crate_name: Option<&str>,
     force: bool,
 ) -> CordialResult<()> {
-    let artifacts =
-        build_workspace_members(project_root, store, crate_name, &BuildOptions { force })?;
+    let artifacts = build_workspace_members(project_root, store, crate_name, force)?;
     for artifact in artifacts {
         eprintln!(
             "built {} -> {}",
-            artifact.crate_name,
-            artifact.rustdoc_json.display()
+            artifact.crate_name(),
+            artifact.rustdoc_json().display()
         );
     }
     #[cfg(feature = "elicitation")]
-    if let Ok(shadow_dep_artifacts) =
-        build_all_active_shadow_deps(project_root, store, &BuildOptions { force })
-    {
+    if let Ok(shadow_dep_artifacts) = build_all_active_shadow_deps(project_root, store, force) {
         for artifact in shadow_dep_artifacts {
             eprintln!(
                 "built shadow-dep {} (via {}) -> {}",
-                artifact.crate_name,
-                artifact.reference_member.as_deref().unwrap_or("unknown"),
-                artifact.rustdoc_json.display()
+                artifact.crate_name(),
+                artifact.reference_member().as_deref().unwrap_or("unknown"),
+                artifact.rustdoc_json().display()
             );
         }
     }
@@ -59,12 +56,12 @@ pub(super) fn execute_build_sysroot(
 ) -> CordialResult<()> {
     let home = store_home.unwrap_or_else(default_store_home);
     let sysroot = SysrootCache::from_home(home);
-    let artifacts = build_sysroot_libraries(&sysroot, crate_name, &BuildOptions { force })?;
+    let artifacts = build_sysroot_libraries(&sysroot, crate_name, force)?;
     for artifact in artifacts {
         eprintln!(
             "built {} -> {}",
-            artifact.crate_name,
-            sysroot.rustdoc_cache_path(&artifact.crate_name).display()
+            artifact.crate_name(),
+            sysroot.rustdoc_cache_path(artifact.crate_name()).display()
         );
     }
     Ok(())

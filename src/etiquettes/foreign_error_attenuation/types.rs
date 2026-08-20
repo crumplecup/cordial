@@ -244,16 +244,9 @@ pub fn build_workspace_foreign_error_attenuation_summary(
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct ForeignErrorAttenuationRule {
-    pub handling_class: ForeignErrorHandlingClass,
-}
-
-impl ForeignErrorAttenuationRule {
-    #[instrument(level = "debug", skip(handling_class), ret)]
-    pub fn new(handling_class: ForeignErrorHandlingClass) -> Self {
-        Self { handling_class }
-    }
+    handling_class: ForeignErrorHandlingClass,
 }
 
 impl Rule for ForeignErrorAttenuationRule {

@@ -81,7 +81,7 @@ pub use etiquettes::cli_layout::{
 };
 #[cfg(feature = "derives")]
 pub use etiquettes::derives::{
-    DERIVES_ETIQUETTE, DeriveRuleId, scan_rust_source as scan_derives_rust_source,
+    DERIVES_ETIQUETTE, DeriveRuleId, DeriveSiteRecord, scan_rust_source as scan_derives_rust_source,
 };
 #[cfg(feature = "error_chain")]
 pub use etiquettes::error_chain::{
@@ -246,8 +246,9 @@ pub use cargo_rustdoc::{
     resolve_shadow_dep_build_config,
 };
 pub use config::{
-    CfgScatterThresholds, CordialConfig, ModularityThresholds, TracingThresholds,
-    VisibilityThresholds, load_cordial_config, load_session_config, load_visibility_thresholds,
+    CfgScatterThresholds, CordialConfig, DerivesThresholds, ModularityThresholds,
+    TracingThresholds, VisibilityThresholds, load_cordial_config, load_derives_thresholds,
+    load_session_config, load_visibility_thresholds,
 };
 pub use exceptions::{ExceptionEntry, ExceptionSet, apply_exception_sets, load_exceptions};
 pub use export::{SurrealEdge, SurrealGraphExport, SurrealNode, surreal_statements};
@@ -308,8 +309,8 @@ pub use targets::{discover_crate_targets, discover_run_crate_targets};
 #[cfg(feature = "rustdoc")]
 pub use {
     cargo_rustdoc::{
-        BuildArtifact, BuildKind, BuildOptions, DocFingerprint, build_workspace_members,
-        nightly_available, run_cargo_rustdoc,
+        BuildArtifact, BuildKind, DocFingerprint, build_workspace_members, nightly_available,
+        run_cargo_rustdoc,
     },
     enricher::RustdocStructureEnricher,
     ir::{

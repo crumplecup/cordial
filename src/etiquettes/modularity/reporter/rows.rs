@@ -68,7 +68,7 @@ pub(super) fn is_inventory_row(
     thresholds: &crate::config::ModularityThresholds,
 ) -> bool {
     if row.kind == "MODULARITY-FUNCTION" {
-        row.line_count() >= thresholds.function_inventory_min_lines
+        row.line_count() >= thresholds.function_inventory_min_lines()
     } else {
         true
     }

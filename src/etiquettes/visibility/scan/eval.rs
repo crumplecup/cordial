@@ -23,7 +23,7 @@ impl VisibilityEval {
     #[instrument(level = "debug", skip(self, thresholds))]
     pub(super) fn thin_floor(self, thresholds: VisibilityThresholds) -> usize {
         match self {
-            Self::Normal => thresholds.min_module_names,
+            Self::Normal => thresholds.min_module_names(),
             Self::Branching { floor } => floor,
         }
     }
@@ -35,7 +35,7 @@ pub(super) fn resolve_eval(
     thresholds: VisibilityThresholds,
     cached: Option<BranchingCache>,
 ) -> (VisibilityEval, Option<BranchingCache>) {
-    if thresholds.prefer_root {
+    if thresholds.prefer_root() {
         return (VisibilityEval::Normal, None);
     }
     let digest = tree_digest(root);
@@ -56,13 +56,13 @@ pub(super) fn resolve_eval(
 /// floor. The thin floor follows each peeled module's size (10 → 9 → 7 → 6).
 #[instrument(level = "debug", skip(root, thresholds))]
 fn peel_branching_floor(root: &ModuleNode, thresholds: VisibilityThresholds) -> usize {
-    let mut floor = thresholds.min_module_names;
+    let mut floor = thresholds.min_module_names();
     let mods = public_path_mods(root);
     let mut remaining = external_name_count(root);
     let mut reserved: Vec<&str> = Vec::new();
     for module in &mods {
         let size = external_name_count(module);
-        if size < thresholds.min_module_names {
+        if size < thresholds.min_module_names() {
             continue;
         }
         if reserved
@@ -74,7 +74,7 @@ fn peel_branching_floor(root: &ModuleNode, thresholds: VisibilityThresholds) -> 
         remaining = remaining.saturating_sub(size);
         reserved.push(&module.path);
     }
-    if remaining < thresholds.max_crate_names_for_flat {
+    if remaining < thresholds.max_crate_names_for_flat() {
         return floor;
     }
     let mut candidates: Vec<&ModuleNode> = mods
@@ -83,7 +83,7 @@ fn peel_branching_floor(root: &ModuleNode, thresholds: VisibilityThresholds) -> 
         .filter(|module| {
             let size = external_name_count(module);
             size > 0
-                && size < thresholds.min_module_names
+                && size < thresholds.min_module_names()
                 && !reserved
                     .iter()
                     .any(|parent| is_path_under(&module.path, parent))
@@ -95,7 +95,7 @@ fn peel_branching_floor(root: &ModuleNode, thresholds: VisibilityThresholds) -> 
             .then_with(|| left.path.cmp(&right.path))
     });
     for candidate in candidates {
-        if remaining < thresholds.max_crate_names_for_flat {
+        if remaining < thresholds.max_crate_names_for_flat() {
             break;
         }
         if reserved

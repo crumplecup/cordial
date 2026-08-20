@@ -5,25 +5,25 @@ use std::panic::Location;
 
 use tracing::instrument;
 
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct InvariantSource {
+    #[getter(skip)]
     message: String,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl InvariantSource {
     #[track_caller]
     #[instrument(level = "debug", skip(message), ret)]
     pub fn new(message: impl Into<String>) -> Self {
+        let loc = Location::caller();
         Self {
             message: message.into(),
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 
@@ -35,25 +35,25 @@ impl Display for InvariantSource {
 
 impl std::error::Error for InvariantSource {}
 
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct UnknownEtiquetteSource {
+    #[getter(skip)]
     id: String,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl UnknownEtiquetteSource {
     #[track_caller]
     #[instrument(level = "debug", skip(id), ret)]
     pub fn new(id: impl Into<String>) -> Self {
+        let loc = Location::caller();
         Self {
             id: id.into(),
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 
@@ -65,25 +65,25 @@ impl Display for UnknownEtiquetteSource {
 
 impl std::error::Error for UnknownEtiquetteSource {}
 
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct CargoMetadataSource {
+    #[getter(skip)]
     source: cargo_metadata::Error,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl CargoMetadataSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source), ret)]
     pub fn new(source: cargo_metadata::Error) -> Self {
+        let loc = Location::caller();
         Self {
             source,
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 
@@ -108,25 +108,25 @@ impl std::error::Error for CargoMetadataSource {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct NotFoundSource {
+    #[getter(skip)]
     path: std::path::PathBuf,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl NotFoundSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path), ret)]
     pub fn new(path: std::path::PathBuf) -> Self {
+        let loc = Location::caller();
         Self {
             path,
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 
@@ -138,27 +138,28 @@ impl Display for NotFoundSource {
 
 impl std::error::Error for NotFoundSource {}
 
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct NoExceptionsSource {
+    #[getter(skip)]
     etiquette: String,
+    #[getter(skip)]
     crate_name: String,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl NoExceptionsSource {
     #[track_caller]
     #[instrument(level = "debug", skip(etiquette, crate_name), ret)]
     pub fn new(etiquette: impl Into<String>, crate_name: impl Into<String>) -> Self {
+        let loc = Location::caller();
         Self {
             etiquette: etiquette.into(),
             crate_name: crate_name.into(),
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 
@@ -174,25 +175,25 @@ impl Display for NoExceptionsSource {
 
 impl std::error::Error for NoExceptionsSource {}
 
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct NoCachedIrSource {
+    #[getter(skip)]
     path: std::path::PathBuf,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl NoCachedIrSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path), ret)]
     pub fn new(path: std::path::PathBuf) -> Self {
+        let loc = Location::caller();
         Self {
             path,
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 

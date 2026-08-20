@@ -68,16 +68,9 @@ impl TracingRuleKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct TracingRule {
-    pub kind: TracingRuleKind,
-}
-
-impl TracingRule {
-    #[instrument(level = "debug", skip(kind), ret)]
-    pub fn new(kind: TracingRuleKind) -> Self {
-        Self { kind }
-    }
+    kind: TracingRuleKind,
 }
 
 impl Rule for TracingRule {
@@ -103,18 +96,18 @@ pub const RECIPE_DELTA_LABEL: &str = "recipe-delta";
 #[derive(Debug, Clone)]
 pub struct TracingMarker {
     pub anchor: crate::objects::NodeAnchor,
-    pub label: &'static str,
+    pub label: String,
 }
 
 impl Marker for TracingMarker {
     #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
-        self.label
+        &self.label
     }
 
     #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
-        self.label
+        &self.label
     }
 
     #[instrument(level = "trace", skip(self))]

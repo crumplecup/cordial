@@ -9,20 +9,7 @@ use cordial::{
 };
 
 fn test_thresholds() -> ModularityThresholds {
-    ModularityThresholds {
-        file_inventory_min_lines: 10,
-        function_inventory_min_lines: 5,
-        function_hotspot_min_lines: 5,
-        file_checklist_min_lines: 20,
-        function_checklist_min_lines: 15,
-        max_types_per_file: 1,
-        module_size_sigma: 2,
-        module_size_ignore_lower_tail: false,
-        min_module_lines: 0,
-        top_heavy_min_percent: 50,
-        lopsided_min_percent: 60,
-        hierarchy_min_lines: 0,
-    }
+    ModularityThresholds::new(10, 5, 5, 20, 15, 1, 2, false, 0, 50, 60, 0)
 }
 
 const HANDLERS_RS: &str =
@@ -237,18 +224,18 @@ fn function_length_counts_the_body_not_the_signature() -> miette::Result<()> {
 #[test]
 fn modularity_default_thresholds() {
     let thresholds = ModularityThresholds::default();
-    assert_eq!(thresholds.file_inventory_min_lines, 500);
-    assert_eq!(thresholds.function_inventory_min_lines, 150);
-    assert_eq!(thresholds.function_hotspot_min_lines, 80);
-    assert_eq!(thresholds.file_checklist_min_lines, 1000);
-    assert_eq!(thresholds.function_checklist_min_lines, 200);
-    assert_eq!(thresholds.max_types_per_file, 10);
-    assert_eq!(thresholds.module_size_sigma, 2);
-    assert!(!thresholds.module_size_ignore_lower_tail);
-    assert_eq!(thresholds.min_module_lines, 0);
-    assert_eq!(thresholds.top_heavy_min_percent, 50);
-    assert_eq!(thresholds.lopsided_min_percent, 75);
-    assert_eq!(thresholds.hierarchy_min_lines, 150);
+    assert_eq!(thresholds.file_inventory_min_lines(), 500);
+    assert_eq!(thresholds.function_inventory_min_lines(), 150);
+    assert_eq!(thresholds.function_hotspot_min_lines(), 80);
+    assert_eq!(thresholds.file_checklist_min_lines(), 1000);
+    assert_eq!(thresholds.function_checklist_min_lines(), 200);
+    assert_eq!(thresholds.max_types_per_file(), 10);
+    assert_eq!(thresholds.module_size_sigma(), 2);
+    assert!(!thresholds.module_size_ignore_lower_tail());
+    assert_eq!(thresholds.min_module_lines(), 0);
+    assert_eq!(thresholds.top_heavy_min_percent(), 50);
+    assert_eq!(thresholds.lopsided_min_percent(), 75);
+    assert_eq!(thresholds.hierarchy_min_lines(), 150);
 }
 
 fn scan_snippet(
@@ -332,8 +319,7 @@ fn types_per_file_counts_inline_module_types() -> miette::Result<()> {
 
 #[test]
 fn types_per_file_respects_higher_config_max() -> miette::Result<()> {
-    let mut thresholds = test_thresholds();
-    thresholds.max_types_per_file = 3;
+    let thresholds = ModularityThresholds::new(10, 5, 5, 20, 15, 3, 2, false, 0, 50, 60, 0);
     let findings = scan_snippet(
         "pub struct A;\npub enum B { X }\npub trait C {}\n",
         thresholds,
@@ -426,8 +412,7 @@ fn module_size_checklist_floor_is_upper_tail_only() {
         thresholds.is_module_size_checklist(5, Some(-2.1)),
         "lower tail must still checklist when the ignore flag is off"
     );
-    let mut ignore_lower = thresholds;
-    ignore_lower.module_size_ignore_lower_tail = true;
+    let ignore_lower = thresholds.with_module_size_ignore_lower_tail(true);
     assert!(
         !ignore_lower.is_module_size_checklist(5, Some(-2.1)),
         "lower tail must be silent when the ignore flag is on"

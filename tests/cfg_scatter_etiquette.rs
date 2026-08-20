@@ -7,10 +7,7 @@ use cordial::{
 };
 
 fn test_thresholds() -> CfgScatterThresholds {
-    CfgScatterThresholds {
-        min_distinct_kinds: 2,
-        min_occurrences: 4,
-    }
+    CfgScatterThresholds::new(2, 4)
 }
 
 const SCATTERED_SOURCE: &str = r#"
@@ -176,6 +173,6 @@ fn scan_cfg_scatter_rust_source_flags_trait_default_methods() -> miette::Result<
 #[test]
 fn cfg_scatter_default_thresholds() {
     let thresholds = CfgScatterThresholds::default();
-    assert_eq!(thresholds.min_distinct_kinds, 2);
-    assert_eq!(thresholds.min_occurrences, 5);
+    assert_eq!(thresholds.min_distinct_kinds(), 2);
+    assert_eq!(thresholds.min_occurrences(), 5);
 }

@@ -109,11 +109,12 @@ pub enum BuildCommands {
     },
 }
 
+#[derive(derive_new::new)]
 pub(super) struct ActCtx {
-    pub(super) project_root: PathBuf,
-    pub(super) store: StoreLayout,
-    pub(super) crate_name: Option<String>,
-    pub(super) store_home: Option<PathBuf>,
+    project_root: PathBuf,
+    store: StoreLayout,
+    crate_name: Option<String>,
+    store_home: Option<PathBuf>,
 }
 
 impl Commands {

@@ -139,7 +139,7 @@ fn test_into_diagnostic_is_miette_exemplar_not_pending_infra() {
             chain_break: false,
             kind: ErrorSiteKind::QuestionMark,
             context: "register::three_plugin_kinds_register_and_quality_finds_todo".to_string(),
-            file: PathBuf::from("examples/custom_plugins/tests/register.rs"),
+            file: PathBuf::from("tests/custom_plugins.rs"),
             line: 25,
             source_snippet: "std::fs::create_dir_all(…).into_diagnostic(…).wrap_err(…)".to_string(),
             site_snippet: "std::fs::create_dir_all(…).into_diagnostic(…).wrap_err(…)?".to_string(),

@@ -16,20 +16,12 @@ pub trait LoadView: Send + Sync {
 }
 
 /// Target workspace member to analyze.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct CrateTarget {
+    #[new(into)]
     pub crate_name: String,
+    #[new(into)]
     pub crate_root: PathBuf,
-}
-
-impl CrateTarget {
-    #[instrument(level = "debug", skip(crate_name, crate_root), ret)]
-    pub fn new(crate_name: impl Into<String>, crate_root: impl Into<PathBuf>) -> Self {
-        Self {
-            crate_name: crate_name.into(),
-            crate_root: crate_root.into(),
-        }
-    }
 }
 
 #[instrument(level = "debug", skip(file))]

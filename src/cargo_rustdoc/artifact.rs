@@ -4,19 +4,19 @@ use serde::{Deserialize, Serialize};
 
 use tracing::instrument;
 /// Metadata for one `cargo rustdoc` invocation (elicit_doc-compatible shape).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct BuildArtifact {
-    pub cache_key: String,
-    pub crate_name: String,
-    pub build_kind: BuildKind,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reference_member: Option<String>,
-    pub features: Vec<String>,
-    pub uses_default_features: bool,
-    pub rustdoc_json: PathBuf,
-    pub built_at: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fingerprint: Option<DocFingerprint>,
+    cache_key: String,
+    crate_name: String,
+    #[getter(copy)]
+    build_kind: BuildKind,
+    reference_member: Option<String>,
+    features: Vec<String>,
+    #[getter(copy)]
+    uses_default_features: bool,
+    rustdoc_json: PathBuf,
+    built_at: String,
+    fingerprint: Option<DocFingerprint>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,15 +29,19 @@ pub enum BuildKind {
 }
 
 /// Fingerprint recorded after a successful rustdoc build.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new)]
 pub struct DocFingerprint {
-    pub rustdoc_sha256: String,
-    pub crate_version: String,
+    rustdoc_sha256: String,
+    crate_version: String,
 }
 
 impl BuildArtifact {
     #[instrument(level = "debug", skip(crate_name))]
-    pub fn workspace_member(crate_name: impl Into<String>, rustdoc_json: PathBuf) -> Self {
+    pub fn workspace_member(
+        crate_name: impl Into<String>,
+        rustdoc_json: PathBuf,
+        fingerprint: DocFingerprint,
+    ) -> Self {
         let crate_name = crate_name.into();
         Self {
             cache_key: crate_name.clone(),
@@ -48,12 +52,16 @@ impl BuildArtifact {
             uses_default_features: true,
             rustdoc_json,
             built_at: chrono_like_timestamp(),
-            fingerprint: None,
+            fingerprint: Some(fingerprint),
         }
     }
 
     #[instrument(level = "debug", skip(crate_name))]
-    pub fn sysroot_library(crate_name: impl Into<String>, rustdoc_json: PathBuf) -> Self {
+    pub fn sysroot_library(
+        crate_name: impl Into<String>,
+        rustdoc_json: PathBuf,
+        fingerprint: DocFingerprint,
+    ) -> Self {
         let crate_name = crate_name.into();
         Self {
             cache_key: format!("impl-dep-{crate_name}"),
@@ -64,7 +72,7 @@ impl BuildArtifact {
             uses_default_features: true,
             rustdoc_json,
             built_at: chrono_like_timestamp(),
-            fingerprint: None,
+            fingerprint: Some(fingerprint),
         }
     }
 
@@ -75,6 +83,7 @@ impl BuildArtifact {
         rustdoc_json: PathBuf,
         features: Vec<String>,
         uses_default_features: bool,
+        fingerprint: DocFingerprint,
     ) -> Self {
         let shadow_crate = shadow_crate.into();
         let upstream_crate = upstream_crate.into();
@@ -89,7 +98,7 @@ impl BuildArtifact {
             uses_default_features,
             rustdoc_json,
             built_at: chrono_like_timestamp(),
-            fingerprint: None,
+            fingerprint: Some(fingerprint),
         }
     }
 }

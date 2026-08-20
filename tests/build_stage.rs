@@ -2,8 +2,7 @@ use miette::{IntoDiagnostic, WrapErr};
 use std::path::PathBuf;
 
 use cordial::{
-    BuildKind, BuildOptions, StoreLayout, build_shadow_dep_rustdoc, build_workspace_members,
-    nightly_available,
+    BuildKind, StoreLayout, build_shadow_dep_rustdoc, build_workspace_members, nightly_available,
 };
 
 #[test]
@@ -17,13 +16,12 @@ fn build_caches_rustdoc_json_for_workspace_member() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let store_layout = StoreLayout::from_root(store.path(), "build_demo".to_string());
 
-    let artifacts =
-        build_workspace_members(&fixture, &store_layout, None, &BuildOptions { force: true })
-            .into_diagnostic()
-            .wrap_err("build workspace member")?;
+    let artifacts = build_workspace_members(&fixture, &store_layout, None, true)
+        .into_diagnostic()
+        .wrap_err("build workspace member")?;
 
     assert_eq!(artifacts.len(), 1);
-    assert_eq!(artifacts[0].crate_name, "build_demo");
+    assert_eq!(artifacts[0].crate_name(), "build_demo");
     assert!(store_layout.rustdoc_cache_path("build_demo").is_file());
     assert!(store_layout.build_artifact_path("build_demo").is_file());
     assert!(fixture.join("doc/build_demo.json").is_file());
@@ -41,19 +39,13 @@ fn build_shadow_dep_caches_upstream_rustdoc_for_tracked_pair() -> miette::Result
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let store_layout = StoreLayout::from_root(store.path(), "minimal-workspace");
 
-    let artifact = build_shadow_dep_rustdoc(
-        &fixture,
-        &store_layout,
-        "elicit_url",
-        "url",
-        &BuildOptions { force: true },
-    )
-    .into_diagnostic()
-    .wrap_err("build shadow-dep rustdoc")?;
+    let artifact = build_shadow_dep_rustdoc(&fixture, &store_layout, "elicit_url", "url", true)
+        .into_diagnostic()
+        .wrap_err("build shadow-dep rustdoc")?;
 
-    assert_eq!(artifact.build_kind, BuildKind::MemberDependency);
-    assert_eq!(artifact.reference_member.as_deref(), Some("elicit_url"));
-    assert!(artifact.features.contains(&"serde".to_string()));
+    assert_eq!(artifact.build_kind(), BuildKind::MemberDependency);
+    assert_eq!(artifact.reference_member().as_deref(), Some("elicit_url"));
+    assert!(artifact.features().contains(&"serde".to_string()));
     assert!(
         store_layout
             .shadow_dep_rustdoc_cache_path("elicit_url", "url")

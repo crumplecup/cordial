@@ -16,7 +16,7 @@ pub(super) fn collect_findings(
 ) -> Vec<VisibilityRecord> {
     let external = external_name_count(root);
     let mut out = Vec::new();
-    if external < thresholds.max_crate_names_for_flat {
+    if external < thresholds.max_crate_names_for_flat() {
         for pub_mod in public_path_mods(root) {
             out.push(VisibilityRecord {
                 rule_id: VisibilityRuleId::CrateFlat001,

@@ -39,16 +39,9 @@ impl Display for AllowRuleId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct AllowRule {
-    pub rule_id: AllowRuleId,
-}
-
-impl AllowRule {
-    #[instrument(level = "debug", skip(rule_id), ret)]
-    pub fn new(rule_id: AllowRuleId) -> Self {
-        Self { rule_id }
-    }
+    rule_id: AllowRuleId,
 }
 
 impl Rule for AllowRule {

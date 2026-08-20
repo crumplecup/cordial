@@ -40,16 +40,9 @@ impl Display for GlobImportRuleId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct GlobImportRule {
-    pub rule_id: GlobImportRuleId,
-}
-
-impl GlobImportRule {
-    #[instrument(level = "debug", skip(rule_id), ret)]
-    pub fn new(rule_id: GlobImportRuleId) -> Self {
-        Self { rule_id }
-    }
+    rule_id: GlobImportRuleId,
 }
 
 impl Rule for GlobImportRule {

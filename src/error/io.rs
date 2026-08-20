@@ -5,25 +5,25 @@ use std::panic::Location;
 
 use tracing::instrument;
 
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct IoSource {
+    #[getter(skip)]
     source: std::io::Error,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl IoSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source), ret)]
     pub fn new(source: std::io::Error) -> Self {
+        let loc = Location::caller();
         Self {
             source,
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 
@@ -46,25 +46,25 @@ impl std::error::Error for IoSource {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct FmtSource {
+    #[getter(skip)]
     source: std::fmt::Error,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl FmtSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source), ret)]
     pub fn new(source: std::fmt::Error) -> Self {
+        let loc = Location::caller();
         Self {
             source,
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 
@@ -87,25 +87,25 @@ impl std::error::Error for FmtSource {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters)]
 pub struct PrefixSource {
+    #[getter(skip)]
     source: std::path::StripPrefixError,
-    location: &'static Location<'static>,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl PrefixSource {
     #[track_caller]
     #[instrument(level = "debug", skip(source), ret)]
     pub fn new(source: std::path::StripPrefixError) -> Self {
+        let loc = Location::caller();
         Self {
             source,
-            location: Location::caller(),
+            file: loc.file().to_string(),
+            line: loc.line(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn location(&self) -> &'static Location<'static> {
-        self.location
     }
 }
 

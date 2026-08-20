@@ -141,9 +141,9 @@ min_module_names = 100
     .wrap_err("config")?;
 
     let loaded = load_visibility_thresholds(fixture.path(), fixture.path());
-    assert_eq!(loaded.max_crate_names_for_flat, 0);
-    assert_eq!(loaded.min_module_names, 100);
-    assert!(loaded.prefer_root);
+    assert_eq!(loaded.max_crate_names_for_flat(), 0);
+    assert_eq!(loaded.min_module_names(), 100);
+    assert!(loaded.prefer_root());
 
     let records = scan_crate_visibility(fixture.path(), loaded)
         .into_diagnostic()
@@ -236,7 +236,7 @@ fn prefer_root_accepts_fat_root_and_still_flags_thin_modules() -> miette::Result
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_thin_overflow_crate(fixture.path(), 40)?;
     let thresholds = VisibilityThresholds::default();
-    assert!(thresholds.prefer_root);
+    assert!(thresholds.prefer_root());
     let records = scan_crate_visibility(fixture.path(), thresholds)
         .into_diagnostic()
         .wrap_err("scan")?;

@@ -57,16 +57,9 @@ impl Display for ErrorChainProbeId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct ErrorChainRule {
-    pub rule_id: ErrorChainProbeId,
-}
-
-impl ErrorChainRule {
-    #[instrument(level = "debug", skip(rule_id), ret)]
-    pub fn new(rule_id: ErrorChainProbeId) -> Self {
-        Self { rule_id }
-    }
+    rule_id: ErrorChainProbeId,
 }
 
 impl Rule for ErrorChainRule {

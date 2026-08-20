@@ -83,7 +83,7 @@ impl Probe for MissingInstrumentProbe {
         for node in ir.nodes_matching(&MISSING_INSTRUMENT_QUERY) {
             markers.push(Box::new(TracingMarker {
                 anchor: crate::objects::NodeAnchor(node.id),
-                label: MISSING_INSTRUMENT_LABEL,
+                label: MISSING_INSTRUMENT_LABEL.to_string(),
             }) as Box<dyn Marker>);
         }
         Ok(markers)
@@ -117,7 +117,7 @@ impl Probe for RecipeDeltaProbe {
         for node in ir.nodes_matching(&INSTRUMENTED_QUERY) {
             markers.push(Box::new(TracingMarker {
                 anchor: crate::objects::NodeAnchor(node.id),
-                label: RECIPE_DELTA_LABEL,
+                label: RECIPE_DELTA_LABEL.to_string(),
             }) as Box<dyn Marker>);
         }
         Ok(markers)

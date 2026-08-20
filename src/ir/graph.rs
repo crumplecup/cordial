@@ -21,9 +21,11 @@ pub struct CrateIrSnapshot {
 }
 
 /// One crate's append-only IR graph.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub struct CrateIr {
+    #[getter(skip)]
     pub crate_name: String,
+    #[getter(skip)]
     pub root: NodeId,
     graph: StableDiGraph<NodeWeight, EdgeWeight>,
     indexes: IrIndexes,
@@ -43,16 +45,6 @@ impl CrateIr {
             graph,
             indexes: IrIndexes::default(),
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn graph(&self) -> &StableDiGraph<NodeWeight, EdgeWeight> {
-        &self.graph
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub fn indexes(&self) -> &IrIndexes {
-        &self.indexes
     }
 
     #[instrument(level = "trace", skip(self, id))]

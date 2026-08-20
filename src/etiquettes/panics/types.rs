@@ -61,16 +61,9 @@ impl Display for PanicKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct PanicRule {
-    pub kind: PanicKind,
-}
-
-impl PanicRule {
-    #[instrument(level = "debug", skip(kind), ret)]
-    pub fn new(kind: PanicKind) -> Self {
-        Self { kind }
-    }
+    kind: PanicKind,
 }
 
 impl Rule for PanicRule {

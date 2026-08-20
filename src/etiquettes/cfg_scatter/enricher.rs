@@ -34,7 +34,7 @@ impl IrEnricher for CfgScatterInventoryEnricher {
         };
 
         let crate_root = member_crate_root(source, session);
-        let thresholds = crate::config::load_session_config(session).cfg_scatter;
+        let thresholds = *crate::config::load_session_config(session).cfg_scatter();
         let groups = scan_source_tree(&source.src_root, &crate_root, thresholds)?;
 
         for group in &groups {

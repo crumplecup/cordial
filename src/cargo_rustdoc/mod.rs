@@ -33,19 +33,13 @@ use crate::session::RunAll;
 use crate::store::StoreLayout;
 use crate::targets::discover_crate_targets;
 
-/// Options controlling build cache behaviour.
-#[derive(Debug, Clone, Default)]
-pub struct BuildOptions {
-    pub force: bool,
-}
-
 /// Build rustdoc JSON for workspace members and write elicit_doc-compatible cache artifacts.
-#[instrument(level = "debug", skip(store, options), err(level = "warn"))]
+#[instrument(level = "debug", skip(store), err(level = "warn"))]
 pub fn build_workspace_members(
     project_root: &Path,
     store: &StoreLayout,
     only_crate: Option<&str>,
-    options: &BuildOptions,
+    force: bool,
 ) -> CordialResult<Vec<BuildArtifact>> {
     store.ensure_dirs()?;
     std::fs::create_dir_all(store.builds_dir())?;
@@ -60,7 +54,7 @@ pub fn build_workspace_members(
     let mut artifacts = Vec::new();
     for target in targets {
         let artifact_path = store.build_artifact_path(&target.crate_name);
-        if !options.force
+        if !force
             && artifact_path.is_file()
             && let Ok(existing) = read_build_artifact(&artifact_path)
         {
@@ -85,14 +79,11 @@ pub fn build_workspace_members(
         let rustdoc_sha256 = hash_file(&cached_json)?;
         let crate_version =
             read_crate_version(&cached_json).unwrap_or_else(|| "unknown".to_string());
-        let mut artifact = BuildArtifact::workspace_member(
+        let artifact = BuildArtifact::workspace_member(
             &target.crate_name,
             PathBuf::from(format!("cache/rustdoc/{}.json", target.crate_name)),
+            DocFingerprint::new(rustdoc_sha256, crate_version),
         );
-        artifact.fingerprint = Some(DocFingerprint {
-            rustdoc_sha256,
-            crate_version,
-        });
         write_build_artifact(&artifact_path, &artifact)?;
         artifacts.push(artifact);
     }

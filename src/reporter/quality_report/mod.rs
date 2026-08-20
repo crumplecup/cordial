@@ -20,10 +20,10 @@ pub use render::{render_quality_report_markdown, render_quality_workspace_summar
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QualityAreaSummary {
     pub priority: u8,
-    pub title: &'static str,
+    pub title: String,
     pub open_items: usize,
-    pub checklist: &'static str,
-    pub summary: &'static str,
+    pub checklist: String,
+    pub summary: String,
     pub detail: String,
 }
 
@@ -69,8 +69,15 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
 
     let derives = derive_metrics(findings);
     let derive_detail = format!(
-        "builder **{}**, getter **{}**, setter **{}**, new **{}**, pub_field **{}**",
-        derives.builder, derives.getter, derives.setter, derives.new, derives.pub_field,
+        "builder **{}**, use_builder **{}**, getter **{}**, setter **{}**, as_ref **{}**, as_str **{}**, new **{}**, pub_field **{}**",
+        derives.builder,
+        derives.use_builder,
+        derives.getter,
+        derives.setter,
+        derives.as_ref,
+        derives.as_str,
+        derives.new,
+        derives.pub_field,
     );
 
     let unused_arg = count_open_rule(findings, "ANTIPATTERN-UNUSED-UNDERSCORE-ARG-001");
@@ -96,56 +103,56 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
     let cli_layout = cli_island + cli_act + cli_main;
 
     let areas = vec![
-        QualityAreaSummary {
-            priority: 1,
-            title: "Error handling",
-            open_items: error_open,
-            checklist: "panics.checklist.md",
-            summary: "foreign-error-attenuation-summary.md",
-            detail: error_detail,
-        },
-        QualityAreaSummary {
-            priority: 2,
-            title: "Antipatterns",
-            open_items: antipatterns,
-            checklist: "antipatterns.checklist.md",
-            summary: "antipatterns-summary.md",
-            detail: format!(
+        quality_area(
+            1,
+            "Error handling",
+            error_open,
+            "panics.checklist.md",
+            "foreign-error-attenuation-summary.md",
+            error_detail,
+        ),
+        quality_area(
+            2,
+            "Antipatterns",
+            antipatterns,
+            "antipatterns.checklist.md",
+            "antipatterns-summary.md",
+            format!(
                 "unused `_arg` **{unused_arg}**, static refs **{static_ref}**, \
                  version-in-member **{version_in_member}**, unnamed contract **{unnamed_contract}**"
             ),
-        },
-        QualityAreaSummary {
-            priority: 3,
-            title: "Derive patterns",
-            open_items: derives.total,
-            checklist: "derives.checklist.md",
-            summary: "derives-summary.md",
-            detail: derive_detail,
-        },
-        QualityAreaSummary {
-            priority: 4,
-            title: "Allow attributes",
-            open_items: allows,
-            checklist: "allows.checklist.md",
-            summary: "allows-summary.md",
-            detail: format!("allow attributes **{allows}**"),
-        },
-        QualityAreaSummary {
-            priority: 5,
-            title: "Tracing instrumentation",
-            open_items: tracing.gaps,
-            checklist: "tracing-instrument.checklist.md",
-            summary: "tracing-summary.md",
-            detail: format_tracing_detail(&tracing),
-        },
-        QualityAreaSummary {
-            priority: 6,
-            title: "Modularity",
-            open_items: modularity.checklist_total,
-            checklist: "modularity.checklist.md",
-            summary: "modularity-summary.md",
-            detail: format!(
+        ),
+        quality_area(
+            3,
+            "Derive patterns",
+            derives.total,
+            "derives.checklist.md",
+            "derives-summary.md",
+            derive_detail,
+        ),
+        quality_area(
+            4,
+            "Allow attributes",
+            allows,
+            "allows.checklist.md",
+            "allows-summary.md",
+            format!("allow attributes **{allows}**"),
+        ),
+        quality_area(
+            5,
+            "Tracing instrumentation",
+            tracing.gaps,
+            "tracing-instrument.checklist.md",
+            "tracing-summary.md",
+            format_tracing_detail(&tracing),
+        ),
+        quality_area(
+            6,
+            "Modularity",
+            modularity.checklist_total,
+            "modularity.checklist.md",
+            "modularity-summary.md",
+            format!(
                 "large files **{}**, large functions **{}**, types-per-file **{}**, \
                  module-size outliers **{}**, top-heavy **{}**, lopsided **{}**, \
                  collapse **{}** (checklist cutoffs; **{}** inventory rows tracked in CSV)",
@@ -158,50 +165,50 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
                 modularity.collapse,
                 modularity.inventory_total,
             ),
-        },
-        QualityAreaSummary {
-            priority: 7,
-            title: "Module visibility",
-            open_items: visibility,
-            checklist: "visibility.checklist.md",
-            summary: "visibility-summary.md",
-            detail: format!(
+        ),
+        quality_area(
+            7,
+            "Module visibility",
+            visibility,
+            "visibility.checklist.md",
+            "visibility-summary.md",
+            format!(
                 "crate-flat **{visibility_flat}**, thin-mod **{visibility_thin}**, \
                  vis-mismatch **{visibility_mismatch}**"
             ),
-        },
-        QualityAreaSummary {
-            priority: 8,
-            title: "Cfg scatter",
-            open_items: cfg_scatter,
-            checklist: "cfg-scatter.checklist.md",
-            summary: "cfg-scatter-summary.md",
-            detail: format!("scattered `#[cfg]` groups **{cfg_scatter}**"),
-        },
-        QualityAreaSummary {
-            priority: 9,
-            title: "CLI layout",
-            open_items: cli_layout,
-            checklist: "cli-layout.checklist.md",
-            summary: "cli-layout-summary.md",
-            detail: format!("island **{cli_island}**, act **{cli_act}**, main **{cli_main}**"),
-        },
-        QualityAreaSummary {
-            priority: 10,
-            title: "Glob imports",
-            open_items: glob_imports,
-            checklist: "glob-imports.checklist.md",
-            summary: "glob-imports-summary.md",
-            detail: format!("glob `use` sites **{glob_imports}**"),
-        },
-        QualityAreaSummary {
-            priority: 11,
-            title: "Inline tests",
-            open_items: inline_tests,
-            checklist: "inline-tests.checklist.md",
-            summary: "inline-tests-summary.md",
-            detail: format!("tests under `src/` **{inline_tests}**"),
-        },
+        ),
+        quality_area(
+            8,
+            "Cfg scatter",
+            cfg_scatter,
+            "cfg-scatter.checklist.md",
+            "cfg-scatter-summary.md",
+            format!("scattered `#[cfg]` groups **{cfg_scatter}**"),
+        ),
+        quality_area(
+            9,
+            "CLI layout",
+            cli_layout,
+            "cli-layout.checklist.md",
+            "cli-layout-summary.md",
+            format!("island **{cli_island}**, act **{cli_act}**, main **{cli_main}**"),
+        ),
+        quality_area(
+            10,
+            "Glob imports",
+            glob_imports,
+            "glob-imports.checklist.md",
+            "glob-imports-summary.md",
+            format!("glob `use` sites **{glob_imports}**"),
+        ),
+        quality_area(
+            11,
+            "Inline tests",
+            inline_tests,
+            "inline-tests.checklist.md",
+            "inline-tests-summary.md",
+            format!("tests under `src/` **{inline_tests}**"),
+        ),
     ];
 
     let total_open_items = areas.iter().map(|area| area.open_items).sum();
@@ -210,6 +217,25 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
         areas,
         total_open_items,
     })
+}
+
+#[instrument(level = "trace", skip(detail))]
+fn quality_area(
+    priority: u8,
+    title: &str,
+    open_items: usize,
+    checklist: &str,
+    summary: &str,
+    detail: String,
+) -> QualityAreaSummary {
+    QualityAreaSummary {
+        priority,
+        title: title.to_string(),
+        open_items,
+        checklist: checklist.to_string(),
+        summary: summary.to_string(),
+        detail,
+    }
 }
 
 /// Writes `quality-report.md` and `summary.md` after a quality session.

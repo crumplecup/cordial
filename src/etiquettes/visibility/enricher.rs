@@ -33,12 +33,12 @@ impl IrEnricher for VisibilityInventoryEnricher {
         };
 
         let crate_root = member_crate_root(source, session);
-        let thresholds = crate::config::load_session_config(session).visibility;
+        let thresholds = *crate::config::load_session_config(session).visibility();
         let cache_path = session
             .store_root()
             .join("cache")
             .join(format!("{}-visibility-branching.json", ir.crate_name()));
-        let cached = if thresholds.prefer_root {
+        let cached = if thresholds.prefer_root() {
             None
         } else {
             BranchingCache::load(&cache_path)

@@ -53,16 +53,9 @@ impl Display for VisibilityRuleId {
 /// Thresholds for the visibility etiquette. Numbers live in `cordial.toml`.
 pub use crate::config::{VisibilityThresholds, load_visibility_thresholds};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct VisibilityRule {
-    pub rule_id: VisibilityRuleId,
-}
-
-impl VisibilityRule {
-    #[instrument(level = "debug", skip(rule_id), ret)]
-    pub fn new(rule_id: VisibilityRuleId) -> Self {
-        Self { rule_id }
-    }
+    rule_id: VisibilityRuleId,
 }
 
 impl Rule for VisibilityRule {

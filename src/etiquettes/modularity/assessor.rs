@@ -48,7 +48,7 @@ impl Assessor for ModularityAssessor {
         let ir = view.ir;
         let session = view.session;
 
-        let thresholds = crate::config::load_session_config(session).modularity;
+        let thresholds = *crate::config::load_session_config(session).modularity();
         let mut pending = Vec::new();
         for marker in markers {
             let node_id = marker.anchor().node_id();
@@ -91,7 +91,7 @@ impl Assessor for ModularityAssessor {
         let module_lines: Vec<u32> = pending
             .iter()
             .filter(|site| {
-                site.kind == ModularityKind::ModuleSize && site.lines >= thresholds.min_module_lines
+                site.kind == ModularityKind::ModuleSize && site.lines >= thresholds.min_module_lines()
             })
             .map(|site| site.lines)
             .collect();
@@ -101,7 +101,7 @@ impl Assessor for ModularityAssessor {
         let mut findings = Vec::new();
         for site in &pending {
             let (checklist, zscore) = if site.kind == ModularityKind::ModuleSize {
-                let in_sample = site.lines >= thresholds.min_module_lines;
+                let in_sample = site.lines >= thresholds.min_module_lines();
                 if in_sample {
                     let zscore = stats.zscore(site.lines);
                     (
@@ -182,7 +182,7 @@ fn hierarchy_findings(
             detail,
         ));
     }
-    for imbalance in lopsided_siblings(&tree, thresholds.hierarchy_min_lines) {
+    for imbalance in lopsided_siblings(&tree, thresholds.hierarchy_min_lines()) {
         if !thresholds.is_lopsided_hit(imbalance.largest_subtree, imbalance.sibling_total) {
             continue;
         }
@@ -206,7 +206,7 @@ fn hierarchy_findings(
             detail,
         ));
     }
-    for nest in unary_nests(&tree, thresholds.hierarchy_min_lines) {
+    for nest in unary_nests(&tree, thresholds.hierarchy_min_lines()) {
         if !thresholds.is_collapse_hit(nest.passthrough_subtree) {
             continue;
         }

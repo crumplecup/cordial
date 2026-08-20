@@ -11,16 +11,16 @@ use crate::loader::{CrateTarget, SourceLoadView};
 /// Fingerprints recorded alongside a cached IR graph.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IrCacheDigest {
-    pub crate_name: String,
-    pub source_files: Vec<SourceFileDigest>,
-    pub rustdoc_json: Option<String>,
-    pub enrichers: Vec<String>,
+    crate_name: String,
+    source_files: Vec<SourceFileDigest>,
+    rustdoc_json: Option<String>,
+    enrichers: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new)]
 pub struct SourceFileDigest {
-    pub path: String,
-    pub sha256: String,
+    path: String,
+    sha256: String,
 }
 
 impl IrCacheDigest {
@@ -82,9 +82,11 @@ impl IrCacheDigest {
 fn digest_source_files(files: &[crate::loader::SourceFile]) -> Vec<SourceFileDigest> {
     let mut digests: Vec<SourceFileDigest> = files
         .iter()
-        .map(|file| SourceFileDigest {
-            path: file.path.display().to_string(),
-            sha256: digest_bytes(file.source.as_bytes()),
+        .map(|file| {
+            SourceFileDigest::new(
+                file.path.display().to_string(),
+                digest_bytes(file.source.as_bytes()),
+            )
         })
         .collect();
     digests.sort_by(|a, b| a.path.cmp(&b.path));

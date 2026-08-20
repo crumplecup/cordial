@@ -13,8 +13,7 @@ use crate::store::StoreLayout;
 use super::artifact::BuildArtifact;
 use super::cargo::run_cargo_rustdoc;
 use super::{
-    BuildOptions, copy_rustdoc_json, hash_file, read_build_artifact, read_crate_version,
-    write_build_artifact,
+    copy_rustdoc_json, hash_file, read_build_artifact, read_crate_version, write_build_artifact,
 };
 
 /// Resolve how to build upstream rustdoc for one shadow mirror pair.
@@ -31,25 +30,27 @@ pub fn resolve_shadow_dep_build_config(
 
     tracked_target_for_shadow(shadow_crate)
         .filter(|target| target.upstream == upstream_crate)
-        .map(|target| DepBuildConfig {
-            activated_features: target
-                .impl_dep_features
-                .iter()
-                .map(|feature| (*feature).to_string())
-                .collect(),
-            uses_default_features: true,
+        .map(|target| {
+            DepBuildConfig::new(
+                target
+                    .impl_dep_features
+                    .iter()
+                    .map(|feature| (*feature).to_string())
+                    .collect(),
+                true,
+            )
         })
         .unwrap_or_default()
 }
 
 /// Build and cache upstream rustdoc for one shadow ↔ upstream pair.
-#[instrument(level = "debug", skip(store, options), err(level = "warn"))]
+#[instrument(level = "debug", skip(store), err(level = "warn"))]
 pub fn build_shadow_dep_rustdoc(
     project_root: &Path,
     store: &StoreLayout,
     shadow_crate: &str,
     upstream_crate: &str,
-    options: &BuildOptions,
+    force: bool,
 ) -> CordialResult<BuildArtifact> {
     store.ensure_dirs()?;
     std::fs::create_dir_all(store.builds_dir())?;
@@ -58,7 +59,7 @@ pub fn build_shadow_dep_rustdoc(
     let artifact_path = store.shadow_dep_build_artifact_path(shadow_crate, upstream_crate);
     let cached_json = store.shadow_dep_rustdoc_cache_path(shadow_crate, upstream_crate);
 
-    if !options.force
+    if !force
         && artifact_path.is_file()
         && cached_json.is_file()
         && let Ok(existing) = read_build_artifact(&artifact_path)
@@ -68,7 +69,7 @@ pub fn build_shadow_dep_rustdoc(
 
     let dep_config = resolve_shadow_dep_build_config(project_root, shadow_crate, upstream_crate);
     let feature_refs: Vec<&str> = dep_config
-        .activated_features
+        .activated_features()
         .iter()
         .map(String::as_str)
         .collect();
@@ -81,33 +82,30 @@ pub fn build_shadow_dep_rustdoc(
         "cache/rustdoc/{}.json",
         StoreLayout::shadow_dep_cache_stem(shadow_crate, upstream_crate)
     ));
-    let mut artifact = BuildArtifact::shadow_dep(
+    let artifact = BuildArtifact::shadow_dep(
         shadow_crate,
         upstream_crate,
         relative_json,
-        dep_config.activated_features,
-        dep_config.uses_default_features,
+        dep_config.activated_features().clone(),
+        dep_config.uses_default_features(),
+        super::artifact::DocFingerprint::new(rustdoc_sha256, crate_version),
     );
-    artifact.fingerprint = Some(super::artifact::DocFingerprint {
-        rustdoc_sha256,
-        crate_version,
-    });
     write_build_artifact(&artifact_path, &artifact)?;
     Ok(artifact)
 }
 
 /// Build shadow-dep rustdoc for every active tracked pair in the workspace.
-#[instrument(level = "debug", skip(store, filter, options), err(level = "warn"))]
+#[instrument(level = "debug", skip(store, filter), err(level = "warn"))]
 pub fn build_active_shadow_deps(
     project_root: &Path,
     store: &StoreLayout,
     filter: &dyn RunFilter,
-    options: &BuildOptions,
+    force: bool,
 ) -> CordialResult<Vec<BuildArtifact>> {
     let pairs = discover_active_shadow_pairs(project_root, filter)?;
     let mut artifacts = Vec::new();
     for pair in pairs {
-        match build_shadow_dep_rustdoc(project_root, store, &pair.shadow, &pair.upstream, options) {
+        match build_shadow_dep_rustdoc(project_root, store, &pair.shadow, &pair.upstream, force) {
             Ok(artifact) => artifacts.push(artifact),
             Err(error) => tracing::warn!(
                 upstream = %pair.upstream,
@@ -121,11 +119,11 @@ pub fn build_active_shadow_deps(
 }
 
 /// Build shadow-dep rustdoc for all active pairs (no crate filter).
-#[instrument(level = "debug", skip(store, options), err(level = "warn"))]
+#[instrument(level = "debug", skip(store), err(level = "warn"))]
 pub fn build_all_active_shadow_deps(
     project_root: &Path,
     store: &StoreLayout,
-    options: &BuildOptions,
+    force: bool,
 ) -> CordialResult<Vec<BuildArtifact>> {
-    build_active_shadow_deps(project_root, store, &RunAll, options)
+    build_active_shadow_deps(project_root, store, &RunAll, force)
 }

@@ -63,9 +63,9 @@ min_module_names = 3
     .wrap_err("workspace config")?;
 
     let loaded = load_cordial_config(workspace.path(), store_home.path());
-    assert_eq!(loaded.visibility.max_crate_names_for_flat, 20);
-    assert_eq!(loaded.visibility.min_module_names, 3);
-    assert!(loaded.visibility.prefer_root);
+    assert_eq!(loaded.visibility().max_crate_names_for_flat(), 20);
+    assert_eq!(loaded.visibility().min_module_names(), 3);
+    assert!(loaded.visibility().prefer_root());
     Ok(())
 }
 
@@ -88,10 +88,10 @@ prefer_root = false
     .wrap_err("home config")?;
 
     let loaded = load_visibility_thresholds(workspace.path(), store_home.path());
-    assert!(!loaded.prefer_root);
+    assert!(!loaded.prefer_root());
     assert_eq!(
-        loaded.max_crate_names_for_flat,
-        VisibilityThresholds::default().max_crate_names_for_flat
+        loaded.max_crate_names_for_flat(),
+        VisibilityThresholds::default().max_crate_names_for_flat()
     );
     Ok(())
 }
@@ -116,8 +116,33 @@ extra_skip = ["payload", "blob"]
 
     let loaded = load_cordial_config(workspace.path(), store_home.path());
     assert_eq!(
-        loaded.tracing.extra_skip,
-        vec!["payload".to_string(), "blob".to_string()]
+        loaded.tracing().extra_skip().as_slice(),
+        ["payload".to_string(), "blob".to_string()]
     );
+    Ok(())
+}
+
+#[test]
+fn derives_toml_overrides_default() -> miette::Result<()> {
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store home")?;
+    fs::write(
+        workspace.path().join("cordial.toml"),
+        r#"
+[derives]
+max_constructor_args = 5
+min_fluent_setters = 3
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("workspace config")?;
+
+    let loaded = load_cordial_config(workspace.path(), store_home.path());
+    assert_eq!(loaded.derives().max_constructor_args(), 5);
+    assert_eq!(loaded.derives().min_fluent_setters(), 3);
     Ok(())
 }

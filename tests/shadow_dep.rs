@@ -19,5 +19,5 @@ fn tracked_target_fallback_features_for_url_pair() {
         "elicit_url",
         "url",
     );
-    assert!(config.activated_features.contains(&"serde".to_string()));
+    assert!(config.activated_features().contains(&"serde".to_string()));
 }

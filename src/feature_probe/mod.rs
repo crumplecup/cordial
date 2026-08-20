@@ -48,7 +48,7 @@ pub fn load_crate_feature_probes(
         collect_member_dep_build_config(project_root, hub_member, report_crate).unwrap_or_default();
 
     let activated_refs: Vec<&str> = dep_config
-        .activated_features
+        .activated_features()
         .iter()
         .map(String::as_str)
         .collect();
@@ -56,7 +56,7 @@ pub fn load_crate_feature_probes(
         project_root,
         report_crate,
         &activated_refs,
-        dep_config.uses_default_features,
+        dep_config.uses_default_features(),
     )?;
     let expanded_activated: BTreeSet<String> = expanded_activated_features.into_iter().collect();
     let candidate_unlock_features: Vec<String> = available_features
@@ -69,9 +69,9 @@ pub fn load_crate_feature_probes(
         store_root,
         report_crate,
         type_paths,
-        &dep_config.activated_features,
+        dep_config.activated_features(),
         &candidate_unlock_features,
-        dep_config.uses_default_features,
+        dep_config.uses_default_features(),
     )
 }
 

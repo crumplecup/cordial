@@ -65,8 +65,8 @@ impl ModularityThresholds {
     #[instrument(level = "trace", skip(self, kind))]
     pub fn is_checklist_item(&self, kind: ModularityKind, lines: u32) -> bool {
         match kind {
-            ModularityKind::File => lines >= self.file_checklist_min_lines,
-            ModularityKind::Function => lines >= self.function_checklist_min_lines,
+            ModularityKind::File => lines >= self.file_checklist_min_lines(),
+            ModularityKind::Function => lines >= self.function_checklist_min_lines(),
             ModularityKind::TypesPerFile => true,
             ModularityKind::TopHeavy | ModularityKind::Lopsided | ModularityKind::Collapse => true,
             // Signed z-score in the assessor: upper tail also needs the
@@ -76,16 +76,9 @@ impl ModularityThresholds {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct ModularityRule {
-    pub kind: ModularityKind,
-}
-
-impl ModularityRule {
-    #[instrument(level = "debug", skip(kind), ret)]
-    pub fn new(kind: ModularityKind) -> Self {
-        Self { kind }
-    }
+    kind: ModularityKind,
 }
 
 impl Rule for ModularityRule {
