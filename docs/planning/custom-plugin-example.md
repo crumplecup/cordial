@@ -4,7 +4,7 @@ User-facing extension story: a plugin is a **named family of related
 etiquettes**, not a bag of hooks and not a kitchen-sink `CustomPlugin`.
 
 Worked templates live in [`examples/custom_plugins`](../../examples/custom_plugins).
-That crate depends on `cordial` from outside the first-party feature matrix.
+That directory is a Cargo example (`cargo run --example custom_plugins --features impl_coverage`), not a second package.
 
 ---
 
@@ -55,9 +55,9 @@ let session = SessionBuilder::new(root)
 
 ---
 
-## Example crate
+## Example
 
-[`examples/custom_plugins`](../../examples/custom_plugins):
+[`examples/custom_plugins`](../../examples/custom_plugins) (`cargo run --example custom_plugins --features impl_coverage`):
 
 - **`AcmeStyle`** — leftover `todo!()` sites; `StaticPlugin` at id
   `acme-style`.
@@ -67,14 +67,15 @@ let session = SessionBuilder::new(root)
   only; `etiquettes()` reuses `ERROR_SITES_ETIQUETTE` and
   `ERROR_CHAIN_ETIQUETTE`.
 
-`tests/register.rs` asserts category routing for all three and runs the
-source-scan families against a planted `todo!()`. The coverage plugin is
-not executed in that fixture — `IMPL_COVERAGE_ETIQUETTE` needs rustdoc JSON.
+`tests/custom_plugins.rs` asserts category routing for all three and runs
+the source-scan families against a planted `todo!()`. The coverage plugin
+is not executed in that fixture — `IMPL_COVERAGE_ETIQUETTE` needs rustdoc
+JSON.
 
 Out of scope: CLI flags for third-party plugins; relaxing `'static` on
 `SessionBuilder::register_plugin`.
 
 ## Status
 
-Implemented. `StaticPlugin` is in core; the example crate compiles and its
-registration test passes.
+Implemented. `StaticPlugin` is in core; the example compiles and
+`tests/custom_plugins.rs` passes.

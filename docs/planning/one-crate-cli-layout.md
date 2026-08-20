@@ -2,8 +2,9 @@
 
 Cordial is a single package: library + binary. First-party `cordial_*`
 satellites (`_cli`, `_elicitation`, `_homecoming`, `_amenable`) are rolled
-up. Downstream plugin crates and `examples/custom_plugins` stay separate.
-Parity fixture workspaces are tests, not product crates.
+up. Downstream plugin authors copy `examples/custom_plugins` (a Cargo
+example, not a second package). Parity fixture workspaces are tests, not
+product crates.
 
 Complements [error-handling-as-plugin.md](error-handling-as-plugin.md) and
 [CORDIAL_PLAN.md](../../CORDIAL_PLAN.md).
@@ -13,12 +14,13 @@ Complements [error-handling-as-plugin.md](error-handling-as-plugin.md) and
 ## Layout
 
 ```
-cordial/                 # lib + bin `cordial`
+cordial/                          # lib + bin `cordial`
+src/                              # all product code
 src/lib.rs
-src/main.rs              # parse + act + miette only
-src/cli.rs               # Cli, Commands, Cli::act
-src/error.rs             # one parent: CordialError
-examples/custom_plugins/ # downstream template
+src/main.rs                       # parse + act + miette only
+src/cli.rs                        # Cli, Commands, Cli::act
+src/error.rs                      # one parent: CordialError
+examples/custom_plugins/          # Cargo example (`cargo run --example custom_plugins`)
 ```
 
 `clap` and `miette` are optional on the `cli` feature. The binary requires
@@ -77,6 +79,7 @@ Not part of `internal_error_chain`.
 | Task | Detail |
 | --- | --- |
 | One-crate rollup (drop first-party `cordial_*`) | done |
+| Example is a Cargo `examples/` binary, not a workspace member | done |
 | CLI errors on `CordialErrorKind`; delete `BinaryError` | done |
 | `Cli::act` + thin `main` | done |
 | CLI layout lints | done |
