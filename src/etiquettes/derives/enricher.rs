@@ -33,7 +33,8 @@ impl IrEnricher for DeriveInventoryEnricher {
         };
 
         let crate_root = member_crate_root(source, session);
-        let records = scan_source_tree(&source.src_root, &crate_root)?;
+        let thresholds = *crate::config::load_session_config(session).derives();
+        let records = scan_source_tree(&source.src_root, &crate_root, thresholds)?;
 
         for record in records {
             let parent = resolve_parent(ir, &record.qualified_name)?;

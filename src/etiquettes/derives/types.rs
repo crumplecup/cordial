@@ -12,8 +12,11 @@ use tracing::instrument;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DeriveRuleId {
     Builder001,
+    UseBuilder001,
     Getter001,
     Setter001,
+    AsRef001,
+    AsStr001,
     New001,
     PubField001,
 }
@@ -23,8 +26,11 @@ impl DeriveRuleId {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Builder001 => "DERIVE-BUILDER-001",
+            Self::UseBuilder001 => "DERIVE-USE-BUILDER-001",
             Self::Getter001 => "DERIVE-GETTER-001",
             Self::Setter001 => "DERIVE-SETTER-001",
+            Self::AsRef001 => "DERIVE-ASREF-001",
+            Self::AsStr001 => "DERIVE-ASSTR-001",
             Self::New001 => "DERIVE-NEW-001",
             Self::PubField001 => "DERIVE-PUB-FIELD-001",
         }
@@ -34,8 +40,11 @@ impl DeriveRuleId {
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "DERIVE-BUILDER-001" => Some(Self::Builder001),
+            "DERIVE-USE-BUILDER-001" => Some(Self::UseBuilder001),
             "DERIVE-GETTER-001" => Some(Self::Getter001),
             "DERIVE-SETTER-001" => Some(Self::Setter001),
+            "DERIVE-ASREF-001" => Some(Self::AsRef001),
+            "DERIVE-ASSTR-001" => Some(Self::AsStr001),
             "DERIVE-NEW-001" => Some(Self::New001),
             "DERIVE-PUB-FIELD-001" => Some(Self::PubField001),
             _ => None,
@@ -50,16 +59,9 @@ impl Display for DeriveRuleId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct DeriveRule {
-    pub rule_id: DeriveRuleId,
-}
-
-impl DeriveRule {
-    #[instrument(level = "debug", skip(rule_id), ret)]
-    pub fn new(rule_id: DeriveRuleId) -> Self {
-        Self { rule_id }
-    }
+    rule_id: DeriveRuleId,
 }
 
 impl Rule for DeriveRule {
@@ -75,7 +77,7 @@ impl Rule for DeriveRule {
 
     #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
-        "Manual builder, getter, setter, new(), or public struct field"
+        "Manual builder, constructor arity, getter, setter, AsRef/as_str, new(), or public struct field"
     }
 }
 

@@ -2,7 +2,8 @@ use miette::{IntoDiagnostic, WrapErr};
 use std::fs;
 
 use cordial::{
-    DERIVES_ETIQUETTE, DeriveRuleId, RunAll, Session, SessionBuilder, scan_derives_rust_source,
+    DERIVES_ETIQUETTE, DeriveRuleId, DeriveSiteRecord, DerivesThresholds, RunAll, Session,
+    SessionBuilder, scan_derives_rust_source,
 };
 
 const TRIVIAL_GETTER: &str = r#"struct Widget {
@@ -79,6 +80,7 @@ fn scan_derives_rust_source_flags_trivial_getters() -> miette::Result<()> {
         &file,
         fixture.path(),
         fixture.path(),
+        DerivesThresholds::default(),
     )
     .into_diagnostic()
     .wrap_err("scan")?;
@@ -88,6 +90,518 @@ fn scan_derives_rust_source_flags_trivial_getters() -> miette::Result<()> {
             .filter(|record| record.rule_id == DeriveRuleId::Getter001)
             .count(),
         2
+    );
+    Ok(())
+}
+
+fn scan_rules(source: &str, thresholds: DerivesThresholds) -> miette::Result<Vec<DeriveRuleId>> {
+    Ok(scan_findings(source, thresholds)?
+        .into_iter()
+        .map(|record| record.rule_id)
+        .collect())
+}
+
+fn scan_findings(
+    source: &str,
+    thresholds: DerivesThresholds,
+) -> miette::Result<Vec<DeriveSiteRecord>> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(&file, source)
+        .into_diagnostic()
+        .wrap_err("write sample")?;
+    scan_derives_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+        thresholds,
+    )
+    .into_diagnostic()
+    .wrap_err("scan")
+}
+
+#[test]
+fn error_type_new_is_exempt_from_derive_new() -> miette::Result<()> {
+    let source = r#"
+#[derive(Debug)]
+struct IoSource {
+    message: String,
+}
+
+impl IoSource {
+    pub fn new(message: String) -> Self {
+        Self { message }
+    }
+}
+
+impl std::error::Error for IoSource {}
+impl std::fmt::Display for IoSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings
+            .iter()
+            .all(|rule_id| *rule_id != DeriveRuleId::New001),
+        "error types skip derive_new: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn track_caller_new_is_exempt_from_derive_new() -> miette::Result<()> {
+    let source = r#"
+struct Located {
+    file: String,
+}
+
+impl Located {
+    #[track_caller]
+    pub fn new(file: String) -> Self {
+        Self { file }
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings.iter().all(|rule_id| {
+            *rule_id != DeriveRuleId::New001 && *rule_id != DeriveRuleId::UseBuilder001
+        }),
+        "track_caller constructors skip new/builder arity: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn new_above_max_args_requires_a_builder() -> miette::Result<()> {
+    let source = r#"
+struct Point {
+    a: u8,
+    b: u8,
+    c: u8,
+    d: u8,
+}
+
+impl Point {
+    pub fn new(a: u8, b: u8, c: u8, d: u8) -> Self {
+        Self { a, b, c, d }
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert_eq!(
+        findings
+            .iter()
+            .filter(|rule_id| **rule_id == DeriveRuleId::UseBuilder001)
+            .count(),
+        1
+    );
+    assert!(
+        findings
+            .iter()
+            .all(|rule_id| *rule_id != DeriveRuleId::New001)
+    );
+    Ok(())
+}
+
+#[test]
+fn trivial_new_at_max_args_suggests_derive_new() -> miette::Result<()> {
+    let source = r#"
+struct Point {
+    a: u8,
+    b: u8,
+    c: u8,
+}
+
+impl Point {
+    pub fn new(a: u8, b: u8, c: u8) -> Self {
+        Self { a, b, c }
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert_eq!(
+        findings
+            .iter()
+            .filter(|rule_id| **rule_id == DeriveRuleId::New001)
+            .count(),
+        1
+    );
+    assert!(
+        findings
+            .iter()
+            .all(|rule_id| *rule_id != DeriveRuleId::UseBuilder001)
+    );
+    Ok(())
+}
+
+#[test]
+fn hand_rolled_builder_type_is_still_derive_builder() -> miette::Result<()> {
+    let source = r#"
+struct WidgetBuilder {
+    name: String,
+}
+
+impl WidgetBuilder {
+    pub fn name(mut self, name: String) -> Self {
+        self.name = name;
+        self
+    }
+
+    pub fn build(self) -> WidgetBuilder {
+        self
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings
+            .iter()
+            .any(|rule_id| *rule_id == DeriveRuleId::Builder001),
+        "expected DERIVE-BUILDER-001: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn max_constructor_args_override_keeps_fat_new_as_derive_new() -> miette::Result<()> {
+    let source = r#"
+struct Point {
+    a: u8,
+    b: u8,
+    c: u8,
+    d: u8,
+}
+
+impl Point {
+    pub fn new(a: u8, b: u8, c: u8, d: u8) -> Self {
+        Self { a, b, c, d }
+    }
+}
+"#;
+    let thresholds = DerivesThresholds::new(4, 2);
+    let findings = scan_rules(source, thresholds)?;
+    assert_eq!(
+        findings
+            .iter()
+            .filter(|rule_id| **rule_id == DeriveRuleId::New001)
+            .count(),
+        1
+    );
+    assert!(
+        findings
+            .iter()
+            .all(|rule_id| *rule_id != DeriveRuleId::UseBuilder001)
+    );
+    Ok(())
+}
+
+#[test]
+fn clone_getter_recommends_copy_getters() -> miette::Result<()> {
+    let source = r#"
+struct Widget {
+    name: String,
+}
+
+impl Widget {
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+}
+"#;
+    let findings = scan_findings(source, DerivesThresholds::default())?;
+    let getter = findings
+        .iter()
+        .find(|record| record.rule_id == DeriveRuleId::Getter001)
+        .expect("clone getter should flag DERIVE-GETTER-001");
+    assert!(
+        getter.recommendation.contains("getter(copy)"),
+        "owned getter should steer to #[getter(copy)]: {}",
+        getter.recommendation
+    );
+    Ok(())
+}
+
+#[test]
+fn trivial_setter_is_flagged() -> miette::Result<()> {
+    let source = r#"
+struct Point {
+    x: u32,
+}
+
+impl Point {
+    pub fn with_x(mut self, x: u32) -> Self {
+        self.x = x;
+        self
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert_eq!(
+        findings
+            .iter()
+            .filter(|rule_id| **rule_id == DeriveRuleId::Setter001)
+            .count(),
+        1,
+        "expected DERIVE-SETTER-001: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn into_only_setter_is_still_flagged() -> miette::Result<()> {
+    let source = r#"
+struct Widget {
+    name: String,
+}
+
+impl Widget {
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = name.into();
+        self
+    }
+}
+"#;
+    let findings = scan_findings(source, DerivesThresholds::default())?;
+    let setter = findings
+        .iter()
+        .find(|record| record.rule_id == DeriveRuleId::Setter001)
+        .expect("into setter should flag DERIVE-SETTER-001");
+    assert!(
+        setter.recommendation.contains("into"),
+        "into() should steer to #[setters(into)]: {}",
+        setter.recommendation
+    );
+    Ok(())
+}
+
+#[test]
+fn wrapping_some_setter_recommends_strip_option() -> miette::Result<()> {
+    let source = r#"
+struct Node {
+    name: Option<String>,
+}
+
+impl Node {
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = Some(name);
+        self
+    }
+}
+"#;
+    let findings = scan_findings(source, DerivesThresholds::default())?;
+    let setter = findings
+        .iter()
+        .find(|record| record.rule_id == DeriveRuleId::Setter001)
+        .expect("Some(arg) should flag DERIVE-SETTER-001");
+    assert!(
+        setter.recommendation.contains("strip_option"),
+        "Some(arg) should steer to #[setters(strip_option)]: {}",
+        setter.recommendation
+    );
+    Ok(())
+}
+
+#[test]
+fn two_wrapping_fluents_are_a_builder() -> miette::Result<()> {
+    let source = r#"
+struct Node {
+    name: Option<String>,
+    span: Option<u32>,
+}
+
+impl Node {
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = Some(name);
+        self
+    }
+
+    pub fn with_span(mut self, span: u32) -> Self {
+        self.span = Some(span);
+        self
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings
+            .iter()
+            .any(|rule_id| *rule_id == DeriveRuleId::Builder001),
+        "strip_option fluents count toward min_fluent_setters: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn two_trivial_fluents_are_a_builder() -> miette::Result<()> {
+    let source = r#"
+struct Point {
+    x: u32,
+    y: u32,
+}
+
+impl Point {
+    pub fn with_x(mut self, x: u32) -> Self {
+        self.x = x;
+        self
+    }
+
+    pub fn with_y(mut self, y: u32) -> Self {
+        self.y = y;
+        self
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings
+            .iter()
+            .any(|rule_id| *rule_id == DeriveRuleId::Builder001),
+        "expected DERIVE-BUILDER-001 from two trivial fluents: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn some_into_setter_recommends_both_options() -> miette::Result<()> {
+    let source = r#"
+struct Node {
+    name: Option<String>,
+}
+
+impl Node {
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+}
+"#;
+    let findings = scan_findings(source, DerivesThresholds::default())?;
+    let setter = findings
+        .iter()
+        .find(|record| record.rule_id == DeriveRuleId::Setter001)
+        .expect("Some(arg.into()) should flag DERIVE-SETTER-001");
+    assert!(
+        setter.recommendation.contains("strip_option") && setter.recommendation.contains("into"),
+        "expected strip_option and into: {}",
+        setter.recommendation
+    );
+    Ok(())
+}
+
+#[test]
+fn as_str_forwards_to_derive_more_as_ref() -> miette::Result<()> {
+    let source = r#"
+struct Widget {
+    name: String,
+}
+
+impl Widget {
+    pub fn as_str(&self) -> &str {
+        self.name.as_str()
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings
+            .iter()
+            .any(|rule_id| *rule_id == DeriveRuleId::AsStr001),
+        "expected DERIVE-ASSTR-001: {findings:?}"
+    );
+    assert!(
+        findings
+            .iter()
+            .all(|rule_id| *rule_id != DeriveRuleId::Getter001),
+        "as_str is not a getters derive: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn as_ref_forwards_to_derive_more_as_ref() -> miette::Result<()> {
+    let source = r#"
+struct Widget {
+    name: String,
+}
+
+impl Widget {
+    pub fn as_ref(&self) -> &str {
+        self.name.as_ref()
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings
+            .iter()
+            .any(|rule_id| *rule_id == DeriveRuleId::AsRef001),
+        "expected DERIVE-ASREF-001: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn existing_as_ref_derive_skips_as_str() -> miette::Result<()> {
+    let source = r#"
+#[derive(derive_more::AsRef)]
+struct Widget {
+    name: String,
+}
+
+impl Widget {
+    pub fn as_str(&self) -> &str {
+        self.name.as_str()
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings
+            .iter()
+            .all(|rule_id| *rule_id != DeriveRuleId::AsStr001),
+        "AsRef derive skips as_str: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn clap_schema_skips_pub_field() -> miette::Result<()> {
+    let source = r#"
+#[derive(Parser)]
+pub struct Cli {
+    pub project: Option<String>,
+    pub force: bool,
+}
+
+#[derive(Args)]
+pub struct QualityArgs {
+    pub apply: bool,
+}
+
+pub struct Record {
+    pub name: String,
+}
+"#;
+    let findings = scan_findings(source, DerivesThresholds::default())?;
+    let pub_fields: Vec<&str> = findings
+        .iter()
+        .filter(|record| record.rule_id == DeriveRuleId::PubField001)
+        .map(|record| record.struct_name.as_str())
+        .collect();
+    assert!(
+        !pub_fields
+            .iter()
+            .any(|name| *name == "Cli" || *name == "QualityArgs"),
+        "clap Parser/Args skip DERIVE-PUB-FIELD-001: {pub_fields:?}"
+    );
+    assert!(
+        pub_fields.contains(&"Record"),
+        "non-clap pub fields still flag: {pub_fields:?}"
     );
     Ok(())
 }

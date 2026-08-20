@@ -1,28 +1,29 @@
 //! syn-based scan for manual builders, getters, setters, and `new()`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
-use syn::visit::Visit;
 use syn::{Fields, FieldsNamed, Item, ItemImpl, ItemMod, ItemStruct};
 
+use crate::config::DerivesThresholds;
 use crate::error::CordialResult;
 use crate::loader::module_path_from_src_file;
 
 use super::syntax::{
-    body_is_struct_literal, body_is_trivial_field_access, consumes_self, field_is_exposed,
-    has_derive, is_cfg_test, is_fluent_setter, type_label,
+    FieldRead, body_is_struct_literal, classify_field_read, classify_setter_body,
+    constructor_arg_count, consumes_self, error_impl_target, field_is_exposed, has_derive,
+    has_track_caller, is_cfg_test, is_clap_schema, is_fluent_setter, type_label,
 };
 use super::types::{DeriveRuleId, DeriveSiteRecord};
 
 use tracing::instrument;
-const MAX_NEW_PARAMS: usize = 4;
 
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_source_tree(
     src_root: &Path,
     crate_root: &Path,
+    thresholds: DerivesThresholds,
 ) -> CordialResult<Vec<DeriveSiteRecord>> {
     let mut findings = Vec::new();
     if !src_root.is_dir() {
@@ -39,7 +40,9 @@ pub fn scan_source_tree(
             continue;
         }
         let source = std::fs::read_to_string(path)?;
-        findings.extend(scan_rust_source(&source, path, src_root, crate_root)?);
+        findings.extend(scan_rust_source(
+            &source, path, src_root, crate_root, thresholds,
+        )?);
     }
 
     findings.sort_by(|a, b| {
@@ -58,6 +61,7 @@ pub fn scan_rust_source(
     file: &Path,
     src_root: &Path,
     crate_root: &Path,
+    thresholds: DerivesThresholds,
 ) -> CordialResult<Vec<DeriveSiteRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
@@ -67,9 +71,11 @@ pub fn scan_rust_source(
         crate_root: crate_root.to_path_buf(),
         module_prefix,
         structs: HashMap::new(),
+        error_types: HashSet::new(),
+        thresholds,
         findings: Vec::new(),
     };
-    visitor.visit_file(&syntax);
+    visitor.walk_items(&syntax.items);
     Ok(visitor.findings)
 }
 
@@ -89,6 +95,8 @@ struct DeriveScanVisitor {
     crate_root: PathBuf,
     module_prefix: Vec<String>,
     structs: HashMap<String, StructInfo>,
+    error_types: HashSet<String>,
+    thresholds: DerivesThresholds,
     findings: Vec<DeriveSiteRecord>,
 }
 
@@ -137,27 +145,30 @@ impl DeriveScanVisitor {
     }
 
     #[instrument(level = "debug", skip(self, items))]
-    fn visit_module_items(&mut self, items: &[Item], module_prefix: &[String]) {
-        let prev_prefix = self.module_prefix.clone();
-        self.module_prefix = module_prefix.to_vec();
+    fn walk_items(&mut self, items: &[Item]) {
         for item in items {
-            self.visit_item(item);
+            match item {
+                Item::Struct(item_struct) => self.register_struct(item_struct),
+                Item::Impl(item_impl) => {
+                    if let Some(name) = error_impl_target(item_impl) {
+                        self.error_types.insert(name);
+                    }
+                }
+                Item::Mod(item_mod) => self.walk_mod(item_mod),
+                _ => {}
+            }
         }
-        self.module_prefix = prev_prefix;
-    }
-
-    #[instrument(level = "debug", skip(self, item))]
-    fn visit_item(&mut self, item: &Item) {
-        match item {
-            Item::Struct(item_struct) => self.register_struct(item_struct),
-            Item::Mod(item_mod) => self.visit_mod(item_mod),
-            Item::Impl(item_impl) => self.visit_impl(item_impl),
-            _ => {}
+        for item in items {
+            if let Item::Impl(item_impl) = item
+                && item_impl.trait_.is_none()
+            {
+                self.visit_impl(item_impl);
+            }
         }
     }
 
     #[instrument(level = "debug", skip(self, item_mod))]
-    fn visit_mod(&mut self, item_mod: &ItemMod) {
+    fn walk_mod(&mut self, item_mod: &ItemMod) {
         if is_cfg_test(&item_mod.attrs) {
             return;
         }
@@ -166,7 +177,9 @@ impl DeriveScanVisitor {
         };
         let mut nested = self.module_prefix.clone();
         nested.push(item_mod.ident.to_string());
-        self.visit_module_items(items, &nested);
+        let previous = std::mem::replace(&mut self.module_prefix, nested);
+        self.walk_items(items);
+        self.module_prefix = previous;
     }
 
     #[instrument(level = "debug", skip(self, item_struct))]
@@ -180,7 +193,7 @@ impl DeriveScanVisitor {
                 fields,
             },
         );
-        if exposed_fields.is_empty() {
+        if exposed_fields.is_empty() || is_clap_schema(&item_struct.attrs) {
             return;
         }
         let field_list = exposed_fields
@@ -203,9 +216,6 @@ impl DeriveScanVisitor {
 
     #[instrument(level = "debug", skip(self, item_impl))]
     fn visit_impl(&mut self, item_impl: &ItemImpl) {
-        if item_impl.trait_.is_some() {
-            return;
-        }
         let self_ty = type_label(&item_impl.self_ty);
         let struct_info = self.structs.get(&self_ty).cloned();
         if struct_info
@@ -246,7 +256,14 @@ impl DeriveScanVisitor {
         if method_name == "build" && consumes_self(&method.sig) {
             *build_line = Some(line);
         }
-        if is_fluent_setter(&method.sig) {
+        if is_fluent_setter(&method.sig)
+            && classify_setter_body(
+                &method.block,
+                setter_target_field(&method_name),
+                &method.sig,
+            )
+            .is_some()
+        {
             fluent_setters.push((method_name.clone(), line));
         }
         if method_name == "new" {
@@ -256,6 +273,7 @@ impl DeriveScanVisitor {
             self.check_setter_candidate(self_ty, struct_info, method, &method_name);
         }
         self.check_getter_candidate(self_ty, struct_info, method, &method_name);
+        self.check_as_ref_candidate(self_ty, struct_info, method, &method_name);
     }
 
     #[instrument(level = "debug", skip(self, item_impl))]
@@ -293,7 +311,8 @@ impl DeriveScanVisitor {
             self.push_finding(record);
             return;
         }
-        if fluent_setters.len() >= 2 {
+        if !fluent_setters.is_empty() && fluent_setters.len() >= self.thresholds.min_fluent_setters()
+        {
             let (name, line) = &fluent_setters[0];
             let record = self.site(
                 DeriveRuleId::Builder001,
@@ -337,18 +356,77 @@ impl DeriveScanVisitor {
         if recv.mutability.is_some() || recv.reference.is_none() {
             return;
         }
-        if !body_is_trivial_field_access(&method.block, method_name) {
+        let Some((field_name, read)) = classify_field_read(&method.block) else {
+            return;
+        };
+        if field_name != method_name {
             return;
         }
+        let recommendation = match read {
+            FieldRead::Direct => "Use #[derive(derive_getters::Getters)] and delete manual getter",
+            FieldRead::Clone => {
+                "Use #[derive(derive_getters::Getters)] with #[getter(copy)] for Copy fields"
+            }
+            FieldRead::AsStr | FieldRead::AsRef => return,
+        };
 
         let record = self.site(
             DeriveRuleId::Getter001,
             self_ty,
             Some(method_name.to_string()),
             format!("{self_ty}::{method_name}"),
-            "Use #[derive(derive_getters::Getters)] and delete manual getter",
+            recommendation,
             method.span().start().line as u32,
             format!("`fn {method_name}(&self)` returns private field `{method_name}`"),
+        );
+        self.push_finding(record);
+    }
+
+    #[instrument(level = "debug", skip(self, struct_info, method))]
+    fn check_as_ref_candidate(
+        &mut self,
+        self_ty: &str,
+        struct_info: Option<&StructInfo>,
+        method: &syn::ImplItemFn,
+        method_name: &str,
+    ) {
+        let Some(info) = struct_info else {
+            return;
+        };
+        if has_derive(&info.attrs, "AsRef") {
+            return;
+        }
+        let Some(recv) = method.sig.receiver() else {
+            return;
+        };
+        if recv.mutability.is_some() || recv.reference.is_none() {
+            return;
+        }
+        let Some((field_name, read)) = classify_field_read(&method.block) else {
+            return;
+        };
+        let (rule_id, recommendation, evidence) = match read {
+            FieldRead::AsRef => (
+                DeriveRuleId::AsRef001,
+                "Use #[derive(derive_more::AsRef)] and delete the manual as_ref()",
+                format!("`fn {method_name}(&self)` forwards `{field_name}.as_ref()`"),
+            ),
+            FieldRead::AsStr => (
+                DeriveRuleId::AsStr001,
+                "Use #[derive(derive_more::AsRef)] with #[as_ref] so AsRef<str> replaces as_str()",
+                format!("`fn {method_name}(&self)` forwards `{field_name}.as_str()`"),
+            ),
+            FieldRead::Direct | FieldRead::Clone => return,
+        };
+
+        let record = self.site(
+            rule_id,
+            self_ty,
+            Some(method_name.to_string()),
+            format!("{self_ty}::{method_name}"),
+            recommendation,
+            method.span().start().line as u32,
+            evidence,
         );
         self.push_finding(record);
     }
@@ -382,13 +460,16 @@ impl DeriveScanVisitor {
         if recv.mutability.is_none() {
             return;
         }
+        let Some(shape) = classify_setter_body(&method.block, field_name, &method.sig) else {
+            return;
+        };
 
         let record = self.site(
             DeriveRuleId::Setter001,
             self_ty,
             Some(method_name.to_string()),
             format!("{self_ty}::{method_name}"),
-            "Use #[derive(derive_setters::Setters)] with #[setters(prefix = \"with_\")]",
+            shape.recommendation(),
             method.span().start().line as u32,
             format!("manual setter `{method_name}` on `{self_ty}`"),
         );
@@ -403,13 +484,41 @@ impl DeriveScanVisitor {
         method: &syn::ImplItemFn,
         method_name: &str,
     ) {
+        if self.is_error_constructor(self_ty, method) {
+            return;
+        }
+        if self_ty.ends_with("Builder") {
+            return;
+        }
         let Some(info) = struct_info else {
             return;
         };
-        if has_derive(&info.attrs, "new") {
+        if has_derive(&info.attrs, "Builder") {
             return;
         }
-        if method.sig.inputs.len() > MAX_NEW_PARAMS + 1 {
+
+        let args = constructor_arg_count(&method.sig);
+        if args > self.thresholds.max_constructor_args() {
+            let record = self.site(
+                DeriveRuleId::UseBuilder001,
+                self_ty,
+                Some(method_name.to_string()),
+                format!("{self_ty}::{method_name}"),
+                format!(
+                    "`new` has more than {} arguments; use a builder",
+                    self.thresholds.max_constructor_args()
+                ),
+                method.span().start().line as u32,
+                format!(
+                    "`fn new` takes {args} arguments (max {})",
+                    self.thresholds.max_constructor_args()
+                ),
+            );
+            self.push_finding(record);
+            return;
+        }
+
+        if has_derive(&info.attrs, "new") {
             return;
         }
         if !matches!(method.sig.output, syn::ReturnType::Type(_, _)) {
@@ -426,9 +535,17 @@ impl DeriveScanVisitor {
             format!("{self_ty}::{method_name}"),
             "Consider #[derive(derive_new::new)] if no validation logic is required",
             method.span().start().line as u32,
-            format!("`fn new(…)` fills `{self_ty}` via struct literal (≤{MAX_NEW_PARAMS} params)"),
+            format!(
+                "`fn new(…)` fills `{self_ty}` via struct literal (≤{} params)",
+                self.thresholds.max_constructor_args()
+            ),
         );
         self.push_finding(record);
+    }
+
+    #[instrument(level = "debug", skip(self, method))]
+    fn is_error_constructor(&self, self_ty: &str, method: &syn::ImplItemFn) -> bool {
+        self.error_types.contains(self_ty) || has_track_caller(&method.attrs)
     }
 }
 
@@ -469,19 +586,7 @@ fn setter_field_name(method_name: &str) -> Option<&str> {
         .or_else(|| method_name.strip_prefix("set_"))
 }
 
-impl<'ast> Visit<'ast> for DeriveScanVisitor {
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_item_struct(&mut self, node: &'ast ItemStruct) {
-        self.register_struct(node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_item_mod(&mut self, node: &'ast ItemMod) {
-        self.visit_mod(node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
-        self.visit_impl(node);
-    }
+#[instrument(level = "debug")]
+fn setter_target_field(method_name: &str) -> &str {
+    setter_field_name(method_name).unwrap_or(method_name)
 }

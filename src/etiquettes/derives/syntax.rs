@@ -1,9 +1,36 @@
-use syn::{Attribute, Block, Expr, ReturnType, Signature, Stmt, Type, Visibility};
+use syn::{
+    Attribute, Block, Expr, FnArg, ItemImpl, Pat, ReturnType, Signature, Stmt, Type, Visibility,
+};
 
 use tracing::instrument;
 #[instrument(level = "debug", skip(vis))]
 pub(super) fn field_is_exposed(vis: &Visibility) -> bool {
     !matches!(vis, Visibility::Inherited)
+}
+
+#[instrument(level = "trace", skip(attrs), ret)]
+pub(super) fn has_track_caller(attrs: &[Attribute]) -> bool {
+    attrs
+        .iter()
+        .any(|attr| attr.path().is_ident("track_caller"))
+}
+
+#[instrument(level = "debug", skip(sig))]
+pub(super) fn constructor_arg_count(sig: &Signature) -> usize {
+    sig.inputs
+        .iter()
+        .filter(|arg| !matches!(arg, FnArg::Receiver(_)))
+        .count()
+}
+
+#[instrument(level = "debug", skip(item_impl))]
+pub(super) fn error_impl_target(item_impl: &ItemImpl) -> Option<String> {
+    let (_, trait_path, _) = item_impl.trait_.as_ref()?;
+    let last = trait_path.segments.last()?;
+    if last.ident != "Error" {
+        return None;
+    }
+    Some(type_label(&item_impl.self_ty))
 }
 
 #[instrument(level = "trace", skip(attrs))]
@@ -19,6 +46,12 @@ pub(super) fn is_cfg_test(attrs: &[Attribute]) -> bool {
     })
 }
 
+/// Clap schema types: each field is a CLI argument, not an encapsulated record.
+#[instrument(level = "trace", skip(attrs), ret)]
+pub(super) fn is_clap_schema(attrs: &[Attribute]) -> bool {
+    has_derive(attrs, "Parser") || has_derive(attrs, "Args") || has_derive(attrs, "Subcommand")
+}
+
 #[instrument(level = "trace", skip(attrs))]
 pub(super) fn has_derive(attrs: &[Attribute], needle: &str) -> bool {
     attrs.iter().any(|attr| {
@@ -30,10 +63,10 @@ pub(super) fn has_derive(attrs: &[Attribute], needle: &str) -> bool {
         }
         let tokens = list.tokens.to_string();
         tokens.split(',').any(|part| {
-            let trimmed = part.trim();
-            trimmed == needle
-                || trimmed.ends_with(&format!("::{needle}"))
-                || trimmed.contains(&format!("::{needle}::"))
+            let compact = part.replace(' ', "");
+            compact == needle
+                || compact.ends_with(&format!("::{needle}"))
+                || compact.contains(&format!("::{needle}::"))
         })
     })
 }
@@ -57,16 +90,220 @@ pub(super) fn is_fluent_setter(sig: &Signature) -> bool {
     recv.mutability.is_some() && sig.inputs.len() >= 2
 }
 
-#[instrument(level = "debug", skip(block))]
-pub(super) fn body_is_trivial_field_access(block: &Block, field_name: &str) -> bool {
+/// How a getter body reads a field — each maps to a derive option.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum FieldRead {
+    Direct,
+    Clone,
+    AsStr,
+    AsRef,
+}
+
+#[instrument(level = "debug", skip(block), ret)]
+pub(super) fn classify_field_read(block: &Block) -> Option<(String, FieldRead)> {
     let stmts = non_item_stmts(block);
     if stmts.len() != 1 {
-        return false;
+        return None;
     }
-    let Some(expr) = stmt_tail_expr(stmts[0]) else {
+    expr_field_read(stmt_tail_expr(stmts[0])?)
+}
+
+/// Setter body that `derive_setters` can emit, including `into` and `strip_option`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum SetterShape {
+    Assign,
+    Into,
+    StripOption,
+    StripOptionInto,
+}
+
+impl SetterShape {
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn recommendation(self) -> &'static str {
+        match self {
+            Self::Assign => {
+                "Use #[derive(derive_setters::Setters)] with #[setters(prefix = \"with_\")]"
+            }
+            Self::Into => {
+                "Use #[derive(derive_setters::Setters)] with #[setters(prefix = \"with_\", into)]"
+            }
+            Self::StripOption => {
+                "Use #[derive(derive_setters::Setters)] with #[setters(prefix = \"with_\", strip_option)]"
+            }
+            Self::StripOptionInto => {
+                "Use #[derive(derive_setters::Setters)] with #[setters(prefix = \"with_\", strip_option, into)]"
+            }
+        }
+    }
+}
+
+#[instrument(level = "debug", skip(block, sig), ret)]
+pub(super) fn classify_setter_body(
+    block: &Block,
+    field_name: &str,
+    sig: &Signature,
+) -> Option<SetterShape> {
+    let params = value_param_names(sig);
+    if params.len() != 1 {
+        return None;
+    }
+    let stmts = non_item_stmts(block);
+    let assign = match stmts.as_slice() {
+        [assign] => *assign,
+        [assign, ret] if stmt_is_return_self(ret) => *assign,
+        _ => return None,
+    };
+    stmt_setter_shape(assign, field_name, &params)
+}
+
+#[instrument(level = "debug", skip(sig))]
+fn value_param_names(sig: &Signature) -> Vec<String> {
+    sig.inputs
+        .iter()
+        .filter_map(|arg| {
+            let FnArg::Typed(pat_type) = arg else {
+                return None;
+            };
+            let Pat::Ident(ident) = &*pat_type.pat else {
+                return None;
+            };
+            Some(ident.ident.to_string())
+        })
+        .collect()
+}
+
+#[instrument(level = "debug", skip(stmt, params), ret)]
+fn stmt_setter_shape(stmt: &Stmt, field_name: &str, params: &[String]) -> Option<SetterShape> {
+    let Expr::Assign(assign) = stmt_tail_expr(stmt)? else {
+        return None;
+    };
+    if !expr_is_self_field(&assign.left, field_name) {
+        return None;
+    }
+    classify_setter_rhs(&assign.right, params)
+}
+
+#[instrument(level = "debug", skip(stmt), ret)]
+fn stmt_is_return_self(stmt: &Stmt) -> bool {
+    let Some(expr) = stmt_tail_expr(stmt) else {
         return false;
     };
-    expr_is_field_access(expr, field_name)
+    match expr {
+        Expr::Return(return_expr) => return_expr
+            .expr
+            .as_ref()
+            .is_some_and(|inner| expr_is_self(inner)),
+        other => expr_is_self(other),
+    }
+}
+
+#[instrument(level = "debug", skip(expr, params), ret)]
+fn classify_setter_rhs(expr: &Expr, params: &[String]) -> Option<SetterShape> {
+    match expr {
+        Expr::Call(call) if expr_is_some_ctor(&call.func) && call.args.len() == 1 => {
+            match classify_owned_input(&call.args[0], params)? {
+                OwnedInput::Direct => Some(SetterShape::StripOption),
+                OwnedInput::Into => Some(SetterShape::StripOptionInto),
+            }
+        }
+        Expr::Paren(paren) => classify_setter_rhs(&paren.expr, params),
+        Expr::Group(group) => classify_setter_rhs(&group.expr, params),
+        other => match classify_owned_input(other, params)? {
+            OwnedInput::Direct => Some(SetterShape::Assign),
+            OwnedInput::Into => Some(SetterShape::Into),
+        },
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OwnedInput {
+    Direct,
+    Into,
+}
+
+#[instrument(level = "debug", skip(expr, params), ret)]
+fn classify_owned_input(expr: &Expr, params: &[String]) -> Option<OwnedInput> {
+    match expr {
+        Expr::Path(path) => path
+            .path
+            .get_ident()
+            .is_some_and(|ident| params.iter().any(|param| ident == param))
+            .then_some(OwnedInput::Direct),
+        Expr::MethodCall(call)
+            if call.args.is_empty()
+                && matches!(
+                    call.method.to_string().as_str(),
+                    "into" | "clone" | "to_owned" | "to_string"
+                ) =>
+        {
+            classify_owned_input(&call.receiver, params).map(|_| OwnedInput::Into)
+        }
+        Expr::Paren(paren) => classify_owned_input(&paren.expr, params),
+        Expr::Group(group) => classify_owned_input(&group.expr, params),
+        _ => None,
+    }
+}
+
+#[instrument(level = "debug", skip(expr), ret)]
+fn expr_is_some_ctor(expr: &Expr) -> bool {
+    let Expr::Path(path) = expr else {
+        return false;
+    };
+    path.path
+        .segments
+        .last()
+        .is_some_and(|segment| segment.ident == "Some")
+}
+
+#[instrument(level = "debug", skip(expr), ret)]
+fn expr_field_read(expr: &Expr) -> Option<(String, FieldRead)> {
+    match expr {
+        Expr::Reference(reference) => expr_field_read(&reference.expr),
+        Expr::Return(return_expr) => return_expr
+            .expr
+            .as_ref()
+            .and_then(|inner| expr_field_read(inner)),
+        Expr::Paren(paren) => expr_field_read(&paren.expr),
+        Expr::Group(group) => expr_field_read(&group.expr),
+        Expr::Field(field) => {
+            let name = field_member_name(&field.member)?;
+            expr_is_self(&field.base).then_some((name, FieldRead::Direct))
+        }
+        Expr::MethodCall(call) if call.args.is_empty() => {
+            let kind = match call.method.to_string().as_str() {
+                "clone" | "to_owned" => FieldRead::Clone,
+                "as_str" => FieldRead::AsStr,
+                "as_ref" => FieldRead::AsRef,
+                _ => return None,
+            };
+            let (field, inner) = expr_field_read(&call.receiver)?;
+            matches!(inner, FieldRead::Direct).then_some((field, kind))
+        }
+        _ => None,
+    }
+}
+
+#[instrument(level = "debug", skip(expr), ret)]
+fn expr_is_self_field(expr: &Expr, field_name: &str) -> bool {
+    match expr {
+        Expr::Field(field) => {
+            field_member_name(&field.member).as_deref() == Some(field_name)
+                && expr_is_self(&field.base)
+        }
+        Expr::Paren(paren) => expr_is_self_field(&paren.expr, field_name),
+        Expr::Group(group) => expr_is_self_field(&group.expr, field_name),
+        _ => false,
+    }
+}
+
+#[instrument(level = "debug", skip(expr), ret)]
+fn expr_is_self(expr: &Expr) -> bool {
+    match expr {
+        Expr::Path(path) => path.path.is_ident("self"),
+        Expr::Paren(paren) => expr_is_self(&paren.expr),
+        Expr::Group(group) => expr_is_self(&group.expr),
+        _ => false,
+    }
 }
 
 #[instrument(level = "debug", skip(block))]
@@ -94,22 +331,6 @@ fn stmt_tail_expr(stmt: &Stmt) -> Option<&Expr> {
     match stmt {
         Stmt::Expr(expr, _) => Some(expr),
         _ => None,
-    }
-}
-
-#[instrument(level = "debug", skip(expr))]
-fn expr_is_field_access(expr: &Expr, field_name: &str) -> bool {
-    match expr {
-        Expr::Field(field) => field_member_name(&field.member).as_deref() == Some(field_name),
-        Expr::Reference(reference) => expr_is_field_access(&reference.expr, field_name),
-        Expr::MethodCall(call) if call.method == "clone" => {
-            expr_is_field_access(&call.receiver, field_name)
-        }
-        Expr::Return(return_expr) => return_expr
-            .expr
-            .as_ref()
-            .is_some_and(|inner| expr_is_field_access(inner, field_name)),
-        _ => false,
     }
 }
 

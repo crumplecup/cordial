@@ -124,9 +124,13 @@ impl Reporter for DeriveChecklistReporter {
         body.push_str("# Derive patterns checklist\n\n");
         body.push_str(&format!("**Open items:** {}\n\n", open.len()));
         body.push_str(
-            "Replace manual builders, getters, setters, simple `new()`, and public \
-             struct fields with `derive_builder`, `derive_getters`, `derive_setters`, \
-             or `derive_new`.\n\n",
+            "Replace hand-rolled builders with `derive_builder`, introduce a \
+             builder when `new` has more arguments than `[derives].max_constructor_args`, \
+             and replace trivial getters, setters, `new()`, and public struct fields \
+             with `derive_getters`, `derive_setters`, or `derive_new`. `Some(arg)` \
+             setters use `#[setters(strip_option)]`; `arg.into()` uses `#[setters(into)]`. \
+             `as_ref()` / `as_str()` use `#[derive(derive_more::AsRef)]`. Error types \
+             (and `#[track_caller]` constructors) skip `derive_new`.\n\n",
         );
         body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
 
@@ -183,16 +187,22 @@ impl Reporter for DeriveSummaryReporter {
         let open: Vec<_> = open_rows(&rows).collect();
         let total = open.len();
         let mut builder = 0usize;
+        let mut use_builder = 0usize;
         let mut getter = 0usize;
         let mut setter = 0usize;
+        let mut as_ref = 0usize;
+        let mut as_str = 0usize;
         let mut new = 0usize;
         let mut pub_field = 0usize;
 
         for row in &open {
             match row.rule_id.as_str() {
                 "DERIVE-BUILDER-001" => builder += 1,
+                "DERIVE-USE-BUILDER-001" => use_builder += 1,
                 "DERIVE-GETTER-001" => getter += 1,
                 "DERIVE-SETTER-001" => setter += 1,
+                "DERIVE-ASREF-001" => as_ref += 1,
+                "DERIVE-ASSTR-001" => as_str += 1,
                 "DERIVE-NEW-001" => new += 1,
                 "DERIVE-PUB-FIELD-001" => pub_field += 1,
                 _ => {}
@@ -203,17 +213,21 @@ impl Reporter for DeriveSummaryReporter {
         body.push_str("# Derive patterns summary\n\n");
         body.push_str("---\n\n");
         body.push_str(&format!(
-            "Workspace totals: **{total}** findings — builder **{builder}**, getter **{getter}**, \
-             setter **{setter}**, new **{new}**, pub field **{pub_field}**.\n\n"
+            "Workspace totals: **{total}** findings — builder **{builder}**, \
+             use builder **{use_builder}**, getter **{getter}**, \
+             setter **{setter}**, as_ref **{as_ref}**, as_str **{as_str}**, \
+             new **{new}**, pub field **{pub_field}**.\n\n"
         ));
-        body.push_str("| Crate | Total | Builder | Getter | Setter | New | Pub field |\n");
-        body.push_str("| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n");
+        body.push_str(
+            "| Crate | Total | Builder | Use builder | Getter | Setter | AsRef | AsStr | New | Pub field |\n",
+        );
+        body.push_str("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
         body.push_str(&format!(
-            "| `{}` | {total} | {builder} | {getter} | {setter} | {new} | {pub_field} |\n",
+            "| `{}` | {total} | {builder} | {use_builder} | {getter} | {setter} | {as_ref} | {as_str} | {new} | {pub_field} |\n",
             ir.crate_name()
         ));
         body.push_str(&format!(
-            "\n| **Total** | **{total}** | **{builder}** | **{getter}** | **{setter}** | **{new}** | **{pub_field}** |\n"
+            "\n| **Total** | **{total}** | **{builder}** | **{use_builder}** | **{getter}** | **{setter}** | **{as_ref}** | **{as_str}** | **{new}** | **{pub_field}** |\n"
         ));
 
         Ok(vec![Box::new(TextArtifact {

@@ -39,6 +39,10 @@ hierarchy_min_lines = 150
 min_distinct_kinds = 2
 min_occurrences = 5
 
+[derives]
+max_constructor_args = 3
+min_fluent_setters = 2
+
 [tracing]
 # extra_skip = ["inventory"]
 ```
@@ -50,6 +54,7 @@ in code until dogfood needs a project override.
 
 Implemented (`tests/cordial_config.rs`). Visibility, modularity (including
 types-per-file, module-size 2σ, lower-tail ignore, hotspot diagnosis, and
-hierarchy lints: top-heavy, lopsided, unary-nest collapse), cfg_scatter, and
-tracing (`extra_skip`) read through `load_session_config`.
+hierarchy lints: top-heavy, lopsided, unary-nest collapse), cfg_scatter,
+derives (`max_constructor_args`, `min_fluent_setters`), and tracing
+(`extra_skip`) read through `load_session_config`.
 Role→level maps stay in code.
