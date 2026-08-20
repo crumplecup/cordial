@@ -276,22 +276,3 @@ fn collect_items_from_where_predicate(
         rustdoc_types::WherePredicate::LifetimePredicate { .. } => {}
     }
 }
-#[instrument(level = "debug", skip(ty))]
-pub(super) fn type_kind_name(ty: &rustdoc_types::Type) -> &'static str {
-    match ty {
-        rustdoc_types::Type::ResolvedPath(_) => "ResolvedPath",
-        rustdoc_types::Type::DynTrait(_) => "DynTrait",
-        rustdoc_types::Type::Generic(_) => "Generic",
-        rustdoc_types::Type::Primitive(_) => "Primitive",
-        rustdoc_types::Type::FunctionPointer(_) => "FunctionPointer",
-        rustdoc_types::Type::Tuple(_) => "Tuple",
-        rustdoc_types::Type::Slice(_) => "Slice",
-        rustdoc_types::Type::Array { .. } => "Array",
-        rustdoc_types::Type::ImplTrait(_) => "ImplTrait",
-        rustdoc_types::Type::Infer => "Infer",
-        rustdoc_types::Type::RawPointer { .. } => "RawPointer",
-        rustdoc_types::Type::BorrowedRef { .. } => "BorrowedRef",
-        rustdoc_types::Type::QualifiedPath { .. } => "QualifiedPath",
-        _ => "Other",
-    }
-}
