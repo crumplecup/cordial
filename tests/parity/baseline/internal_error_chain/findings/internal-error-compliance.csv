@@ -1,5 +1,0 @@
-crate,rule_id,foreign_error_type,internal_constructor,context,file,line,snippet
-internal_error_chain,ERROR-CHAIN-COMPLIANCE-STRINGIFY-001,std::io::Error,,compliance::stringify_foreign,/home/erik/repos/cordial/tests/parity/workspaces/internal_error_chain/src/compliance.rs,4,std::fs::read_to_string(…).map_err(…)
-internal_error_chain,ERROR-CHAIN-COMPLIANCE-DISCARD-TYPED-001,std::io::Error,CordialError::invariant,compliance::discard_typed,/home/erik/repos/cordial/tests/parity/workspaces/internal_error_chain/src/compliance.rs,11,std::fs::read_to_string(…).map_err(…)
-internal_error_chain,ERROR-CHAIN-COMPLIANCE-DISCARD-TYPED-001,foreign-bound,CordialError::invariant,compliance::if_let_discard,/home/erik/repos/cordial/tests/parity/workspaces/internal_error_chain/src/compliance.rs,16,if let Err(…) = …
-internal_error_chain,ERROR-CHAIN-COMPLIANCE-DISCARD-TYPED-001,foreign-bound,CordialError::invariant,compliance::if_let_discard,/home/erik/repos/cordial/tests/parity/workspaces/internal_error_chain/src/compliance.rs,17,return Err(…)

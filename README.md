@@ -102,7 +102,7 @@ the only quality path that rewrites source.
 Register a built-in bundle or your own [`Etiquette`](src/etiquette.rs) on a
 session. Plugins group related etiquettes; see
 [docs/planning/custom-plugin-example.md](docs/planning/custom-plugin-example.md)
-and `examples/custom_plugins`.
+and `cargo run --example custom_plugins --features impl_coverage`.
 
 ```rust,ignore
 use cordial::{PANICS_ETIQUETTE, SessionBuilder};
@@ -118,8 +118,10 @@ Built-in plugins are feature-gated on the `cordial` crate (`panics`, `tracing`,
 ## Status
 
 Phases 0–6 of [CORDIAL_PLAN.md](CORDIAL_PLAN.md) are on `main`. Output parity
-with `elicit_doc` is tracked in
-[docs/planning/elicit-doc-parity.md](docs/planning/elicit-doc-parity.md).
+with `elicit_doc` is retired -- see
+[docs/planning/elicit-doc-parity.md](docs/planning/elicit-doc-parity.md) for
+the historical record; cordial's own etiquettes now exceed what elicit_doc
+could detect.
 
 ## License
 

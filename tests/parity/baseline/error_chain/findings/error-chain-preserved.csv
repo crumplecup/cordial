@@ -1,8 +1,0 @@
-crate,rule_id,foreign_error_type,context,file,line,snippet
-error_chain,ERROR-CHAIN-WRAPPER-SOURCE-001,io::Error,<crate>,/home/erik/repos/cordial/tests/parity/workspaces/error_chain/src/lib.rs,5,struct IoSource { source: io::Error }
-error_chain,ERROR-CHAIN-KIND-WRAPPER-PAYLOAD-001,IoSource,<crate>,/home/erik/repos/cordial/tests/parity/workspaces/error_chain/src/lib.rs,10,enum UmbrellaKind { Io(IoSource) }
-error_chain,ERROR-CHAIN-FROM-BRIDGE-001,io::Error,<crate>,/home/erik/repos/cordial/tests/parity/workspaces/error_chain/src/lib.rs,13,impl From<io::Error> for IoSource
-error_chain,ERROR-CHAIN-PRESERVED-QUESTION-MARK-001,std::io::Error,preserved_direct,/home/erik/repos/cordial/tests/parity/workspaces/error_chain/src/lib.rs,26,std::fs::read_to_string(…)?
-error_chain,ERROR-CHAIN-PRESERVED-MAP-ERR-001,std::io::Error,preserved_map_err_from,/home/erik/repos/cordial/tests/parity/workspaces/error_chain/src/lib.rs,31,std::fs::read_to_string(…).map_err(…)?
-error_chain,ERROR-CHAIN-PRESERVED-MAP-ERR-001,std::io::Error,preserved_map_err_into,/home/erik/repos/cordial/tests/parity/workspaces/error_chain/src/lib.rs,36,std::fs::read_to_string(…).map_err(…)?
-error_chain,ERROR-CHAIN-PRESERVED-MAP-ERR-001,std::io::Error,preserved_map_err_closure,/home/erik/repos/cordial/tests/parity/workspaces/error_chain/src/lib.rs,41,std::fs::read_to_string(…).map_err(…)?

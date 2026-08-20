@@ -5,7 +5,7 @@ Active implementation plans for `cordial`.
 | Document | Status | Summary |
 | --- | --- | --- |
 | [CORDIAL_PLAN.md](CORDIAL_PLAN.md) | **Active** | Architecture: etiquettes, graph IR, hook seams, build phases |
-| [elicit_doc parity](docs/planning/elicit-doc-parity.md) | **Active** | Output parity vs elicit_doc cache/reports; baseline comparison tests |
+| [elicit_doc parity](docs/planning/elicit-doc-parity.md) | **Retired** | Output parity vs elicit_doc cache/reports; baseline comparison tests -- no longer chased, cordial's own etiquettes now exceed elicit_doc's coverage |
 | [Coverage as plugin](docs/planning/coverage-as-plugin.md) | **Active** | Plugin / Coverage supertrait model; elicitation, homecoming, amenable profiles |
 | [Post-parity alignment](docs/planning/post-parity-alignment.md) | **Complete** | Strangler map: elicit_doc straight ports extracted onto hook seams + IR (R0–R8) |
 | [IR enrichment](docs/planning/ir-enrichment.md) | **Complete** | Graph IR one-stop shop; inventory side caches retired (I1–I5) |
@@ -13,6 +13,7 @@ Active implementation plans for `cordial`.
 | [One crate, CLI in the library](docs/planning/one-crate-cli-layout.md) | **Active** | One `CordialError`; `cli_layout` etiquette; clap dispatch in the library |
 | [cfg_scatter etiquette](docs/planning/cfg-scatter-etiquette.md) | **Active** | Static lint for `#[cfg(feature = "...")]` scattered across item kinds vs. mod-gated |
 | [Custom plugin example](docs/planning/custom-plugin-example.md) | **Active** | Downstream templates: `StaticPlugin`, `Coverage`, `ErrorHandling` |
+| [Derive patterns etiquette](docs/planning/derives-etiquette.md) | **Active** | `derive_*` vs hand-rolled accessors; constructor arity → builder |
 | [Visibility etiquette](docs/planning/visibility-etiquette.md) | **Active** | `pub mod` paths must earn their existence; `prefer_root` vs branching peel |
 | [cordial.toml config](docs/planning/cordial-config.md) | **Active** | Layered `cordial.toml` via the `config` crate; canonical etiquette thresholds |
 | [Modularity etiquette](docs/planning/modularity-etiquette.md) | **Active** | Combined modularity plugin: size, packing, hierarchy lints |
@@ -25,3 +26,4 @@ Active implementation plans for `cordial`.
 | Document | Summary |
 | --- | --- |
 | [Post-parity alignment](docs/planning/post-parity-alignment.md) | R0–R7 migration complete; `collect/` removed; profile crates + shrunk public API |
+| [elicit_doc parity](docs/planning/elicit-doc-parity.md) | Retired -- cordial's own etiquettes (e.g. the parent/Kind/native-source error architecture rules) now find real violations elicit_doc never could; there is no longer a frozen reference to stay in lockstep with. `tests/parity.rs`/`parity_refresh.rs`/`quality_parity.rs`/`coverage_parity.rs`/`coverage_parity_refresh.rs`/`elicitation_parity.rs`/`elicitation_parity_refresh.rs` and the frozen `tests/parity/baseline/` CSVs removed; `tests/parity/workspaces/` kept (shared fixtures for many ordinary etiquette tests, independent of baseline comparison). |

@@ -100,14 +100,6 @@ name = "amenable_registry"
 required-features = ["amenable_std"]
 
 [[test]]
-name = "coverage_parity"
-required-features = ["full"]
-
-[[test]]
-name = "coverage_parity_refresh"
-required-features = ["full"]
-
-[[test]]
 name = "coverage_etiquette"
 required-features = ["elicitation"]
 
@@ -212,10 +204,6 @@ name = "workspace"
 required-features = ["panics"]
 
 [[test]]
-name = "parity"
-required-features = ["quality"]
-
-[[test]]
 name = "coverage_summary"
 required-features = ["homecoming_std"]
 
@@ -267,27 +255,10 @@ required-features = ["impl_coverage"]
 name = "syn_doc_link"
 required-features = ["rustdoc"]
 
-[[test]]
-name = "elicitation_parity"
-required-features = ["elicitation"]
-
-[[test]]
-name = "elicitation_parity_refresh"
-required-features = ["elicitation"]
-
-[[test]]
-name = "quality_parity"
-required-features = ["antipatterns"]
-
-[[test]]
-name = "parity_refresh"
-required-features = ["quality"]
-
 [dev-dependencies]
 tempfile = "3"
 csv = "1"
 rustdoc-types = "0.57"
-elicit_doc = { path = "../elicit_doc" }
 miette = { version = "7", features = ["fancy"] }
 
 [lints.rust]

@@ -1,2 +1,0 @@
-crate,foreign_error_type,rule_id,confidence,chain_break,site_kind,context,file,line,source_snippet,site_snippet
-error_sites,std::io::Error,FOREIGN-ERROR-TYPE-STD-IO-FS-001,FOREIGN-TYPE-CONFIDENCE-HIGH,false,ERROR-SITE-MAP-ERR,foreign_map_err,/home/erik/repos/cordial/tests/parity/workspaces/error_sites/src/lib.rs,6,std::fs::read_to_string(…),std::fs::read_to_string(…).map_err(…)

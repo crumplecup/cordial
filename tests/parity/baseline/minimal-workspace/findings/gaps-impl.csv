@@ -1,2 +1,0 @@
-crate,type_path,gap_kind,missing_our_traits,missing_external_traits,elicit_complete_gap
-url,url::Widget,MissingOurTraits,Elicitation; ElicitIntrospect; ElicitSpec; ElicitPromptTree; ToCodeLiteral,Serialize; Deserialize; JsonSchema,false

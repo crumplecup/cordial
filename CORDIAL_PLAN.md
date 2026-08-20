@@ -29,9 +29,10 @@ Phases 0–6 implemented on `main`. Built-in etiquettes cover panics, tracing,
 and elicitation coverage (impl / trenchcoat / shadow). The `cordial` binary
 drives session runs against local and workspace projects.
 
-Output parity with `elicit_doc` is tracked in
-[docs/planning/elicit-doc-parity.md](docs/planning/elicit-doc-parity.md).
-Post-parity structural alignment onto hook seams is tracked in
+Output parity with `elicit_doc` is retired -- see
+[docs/planning/elicit-doc-parity.md](docs/planning/elicit-doc-parity.md) for
+the historical record. Post-parity structural alignment onto hook seams is
+tracked in
 [docs/planning/post-parity-alignment.md](docs/planning/post-parity-alignment.md).
 
 ## Relationship to elicit_doc
@@ -627,7 +628,8 @@ reverse.
 
 ```
 cordial/                  # one package: library + `cordial` binary
-examples/custom_plugins/  # downstream plugin template
+src/                      # all product code
+examples/custom_plugins/  # Cargo example (downstream plugin template)
 ```
 
 Users depend on `cordial` and may publish their own plugin crates. First-party

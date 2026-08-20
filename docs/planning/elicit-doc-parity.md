@@ -1,5 +1,16 @@
 # elicit_doc feature parity
 
+**Retired.** No longer chased, by direct decision: cordial's own etiquettes
+(e.g. the parent/Kind/native-source error architecture rules) now find real
+violations elicit_doc never could -- there is no longer a frozen reference
+worth staying in lockstep with. `tests/parity.rs`/`parity_refresh.rs`/
+`quality_parity.rs`/`coverage_parity.rs`/`coverage_parity_refresh.rs`/
+`elicitation_parity.rs`/`elicitation_parity_refresh.rs` and the frozen
+`tests/parity/baseline/` CSVs are removed. `tests/parity/workspaces/` stays
+-- it's a shared fixture directory many ordinary etiquette tests depend on,
+independent of baseline comparison. Kept below as the historical record of
+what parity meant and how it was measured, not as a live plan.
+
 Planning document for reaching **output parity** with [`elicit_doc`](../../../elicit_doc):
 every analysis `elicit_doc` produces today should have a cordial etiquette (or
 deliberate superset) whose artifacts are **as good or better** when compared
