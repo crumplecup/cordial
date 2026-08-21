@@ -186,6 +186,104 @@ fn verus_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::Re
 }
 
 #[test]
+fn verus_named_call_with_final_argument_is_not_flagged() -> miette::Result<()> {
+    let source = r#"
+use verus_builtin_macros::verus;
+use vstd::prelude::*;
+
+pub struct VerusCellModel {
+    value: i32,
+}
+
+verus! {
+
+impl VerusCellModel {
+    pub fn set(&mut self, new_value: i32)
+        ensures
+            write_stores_new_value(new_value as int, final(self).value as int),
+    {
+        self.value = new_value;
+    }
+}
+
+} // verus!
+"#;
+    let path = fixtures_root().join("inline_verus_final_call.rs");
+    let registry = vec![logic_fn_record(
+        "verus",
+        "ensures",
+        "write_stores_new_value",
+    )];
+    let findings = scan_verus_contract_bounds_source(
+        source,
+        &path,
+        path.parent().ok_or_else(|| miette::miette!("parent"))?,
+        &registry,
+    )
+    .into_diagnostic()
+    .wrap_err("scan inline verus final-arg call")?;
+
+    assert!(findings.is_empty());
+    Ok(())
+}
+
+#[test]
+fn verus_assume_specification_semicolon_terminator_does_not_leak_into_the_next_item()
+-> miette::Result<()> {
+    // `assume_specification` (and any other body-less Verus declaration)
+    // ends its `ensures`/`requires` list with a bare `;`, not a brace
+    // group. Without a `;` stop case in the clause-list scanner, the scan
+    // runs past the semicolon and swallows the next item's doc-comment
+    // attributes and signature as if they were more of the same clause
+    // list, manufacturing a phantom finding out of unrelated tokens.
+    let source = r#"
+use verus_builtin_macros::verus;
+use vstd::prelude::*;
+
+verus! {
+
+pub assume_specification<'a, B: ToOwned + ?Sized> [Cow::<'a, B>::into_owned] (cow: Cow<'a, B>) -> (result: <B as ToOwned>::Owned)
+    ensures
+        cow_into_owned_preserves_variant_value(cow, result),
+;
+
+/// Unrelated doc comment on the next item -- must never be folded into
+/// the `assume_specification` above's clause list.
+pub fn verify_something(value: i32) -> (result: i32)
+    ensures
+        result == value,
+{
+    value
+}
+
+} // verus!
+"#;
+    let path = fixtures_root().join("inline_verus_assume_spec.rs");
+    let registry = vec![logic_fn_record(
+        "verus",
+        "ensures",
+        "cow_into_owned_preserves_variant_value",
+    )];
+    let findings = scan_verus_contract_bounds_source(
+        source,
+        &path,
+        path.parent().ok_or_else(|| miette::miette!("parent"))?,
+        &registry,
+    )
+    .into_diagnostic()
+    .wrap_err("scan inline verus assume_specification")?;
+
+    // `cow_into_owned_preserves_variant_value(cow, result)` is a real
+    // registered call, silenced. The only real finding left is
+    // `verify_something`'s own `result == value` -- never a phantom
+    // "clause" made of the semicolon, doc comment, and next signature.
+    assert_eq!(findings.len(), 1);
+    assert!(findings[0].context.contains("verify_something"));
+    assert!(findings[0].snippet.contains("result == value"));
+    Ok(())
+}
+
+#[test]
 fn kani_named_call_matching_a_registered_type_is_not_flagged() -> miette::Result<()> {
     let name = "contract_bounds_kani.rs";
     let src_root = fixtures_root();

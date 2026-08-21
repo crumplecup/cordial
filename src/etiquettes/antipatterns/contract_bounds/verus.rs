@@ -67,9 +67,17 @@ pub(super) fn scan_verus_source(
 /// into every nested `Group` (function bodies, parenthesized expressions,
 /// ...) since a whole `verus!{}` file may contain many functions. For each
 /// keyword found, the clause list runs from the token right after it up to
-/// the next top-level brace group (the function body starting) or the next
-/// `requires`/`ensures` keyword, split on top-level commas into individual
-/// clauses.
+/// whichever comes first: the next top-level brace group (an ordinary
+/// function's body starting), a top-level bare `;` (an `assume_specification`
+/// or other body-less declaration ending — these have no brace group at
+/// all), or the next `requires`/`ensures` keyword. Split on top-level commas
+/// into individual clauses.
+///
+/// The `;` stop case matters: without it, an `assume_specification`'s
+/// clause list runs straight through its terminating semicolon and keeps
+/// consuming whatever comes next (the following item's doc-comment
+/// attributes, then its own signature) as if it were more of the same
+/// clause list, manufacturing a garbage "clause" out of unrelated tokens.
 ///
 /// Also tracks the enclosing `fn`'s name at the current nesting level (a
 /// `requires`/`ensures` clause always sits directly after its own
@@ -99,6 +107,7 @@ fn walk_verus_tokens(tokens: TokenStream, out: &mut Vec<(&'static str, TokenStre
                 while j < items.len() {
                     match &items[j] {
                         TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => break,
+                        TokenTree::Punct(punct) if punct.as_char() == ';' => break,
                         TokenTree::Ident(next) if next == "requires" || next == "ensures" => break,
                         _ => j += 1,
                     }

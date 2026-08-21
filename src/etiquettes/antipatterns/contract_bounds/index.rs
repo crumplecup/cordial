@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use proc_macro2::{TokenStream, TokenTree};
+use proc_macro2::{Delimiter, TokenStream, TokenTree};
 use quote::ToTokens;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -71,10 +71,17 @@ impl ContractIndex {
     ///   was never really using a named contract, only passing the old
     ///   text-equality check by coincidence.
     ///
-    /// Anything that doesn't parse as a call at all (most Pearlite,
-    /// which isn't valid Rust expression syntax) never matches — the
-    /// caller's `is_trivial` check is the only other way a clause is
-    /// allowed to go unnamed.
+    /// Kani still relies on real Rust-expression parsing, because its
+    /// named-call shape needs a typed path prefix (`Type::ensures(...)`)
+    /// rather than just a bare function name. Creusot/Verus can be more
+    /// permissive: a top-level `name(...)` or `!name(...)` is recognized
+    /// directly from tokens, so Verus-specific argument syntax like
+    /// `final(self)` doesn't block a genuine named call from matching.
+    ///
+    /// Anything else that isn't a whole call at the clause boundary
+    /// (most Pearlite, or expressions that merely *contain* a call)
+    /// never matches — the caller's `is_trivial` check is the only other
+    /// way a clause is allowed to go unnamed.
     /// A leading `!` is stripped before matching either shape:
     /// `assert!(!Type::ensures(value), "message")` is the idiomatic way
     /// to write a rejection-precondition check — still a real call to the
@@ -86,6 +93,18 @@ impl ContractIndex {
         kind: &str,
         clause: TokenStream,
     ) -> bool {
+        let Some(known) = self.records.get(&(verifier.to_string(), kind.to_string())) else {
+            return false;
+        };
+
+        if verifier != "kani"
+            && let Some(name) = bare_named_call_name(clause.clone())
+        {
+            return known
+                .iter()
+                .any(|(_, fragment)| fragment_fn_name(fragment).as_deref() == Some(name.as_str()));
+        }
+
         let Ok(expr) = syn::parse2::<syn::Expr>(clause) else {
             return false;
         };
@@ -104,9 +123,6 @@ impl ContractIndex {
         };
         let segments = &func_path.path.segments;
         let Some(last) = segments.last() else {
-            return false;
-        };
-        let Some(known) = self.records.get(&(verifier.to_string(), kind.to_string())) else {
             return false;
         };
 
@@ -165,6 +181,28 @@ fn fragment_fn_name(fragment: &str) -> Option<String> {
         };
         (keyword == "fn").then(|| name.to_string())
     })
+}
+
+/// Recognize a whole-clause bare call `name(...)` or `!name(...)`
+/// directly from tokens without requiring the argument list to parse as
+/// plain Rust syntax. This is the Creusot/Verus call shape; Kani uses a
+/// separate typed-path form handled through `syn::Expr`.
+#[instrument(level = "debug", skip(clause))]
+fn bare_named_call_name(clause: TokenStream) -> Option<String> {
+    let items: Vec<TokenTree> = clause.into_iter().collect();
+    let items = match items.as_slice() {
+        [TokenTree::Punct(punct), rest @ ..] if punct.as_char() == '!' => rest,
+        rest => rest,
+    };
+
+    match items {
+        [TokenTree::Ident(name), TokenTree::Group(group)]
+            if group.delimiter() == Delimiter::Parenthesis =>
+        {
+            Some(name.to_string())
+        }
+        _ => None,
+    }
 }
 
 /// Which verifier a crate name maps to, if any — the only crates this rule
