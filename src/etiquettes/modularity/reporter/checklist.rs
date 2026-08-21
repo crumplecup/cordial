@@ -291,8 +291,8 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
     level = "debug",
     skip(open, nested_top_heavy, nested_lopsided, nested_collapse)
 )]
-fn render_rebalance<'a>(
-    open: &[&'a ModularityRow],
+fn render_rebalance(
+    open: &[&ModularityRow],
     nested_top_heavy: &BTreeSet<&str>,
     nested_lopsided: &BTreeSet<&str>,
     nested_collapse: &BTreeSet<&str>,

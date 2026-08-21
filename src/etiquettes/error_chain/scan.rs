@@ -59,13 +59,11 @@ pub(crate) fn scan_rust_syntax(
     src_root: &Path,
     crate_root: &Path,
 ) -> Vec<ErrorChainRecord> {
-    let error_root = src_root.join("error");
     crate::etiquettes::scan_rust_file_syntax(
         syntax,
         file,
         src_root,
         src_root,
-        &error_root,
         crate_root,
         "",
         crate::etiquettes::ErrorIrScanLayers::CHAIN_ONLY,

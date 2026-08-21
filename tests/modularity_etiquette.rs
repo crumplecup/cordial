@@ -9,7 +9,15 @@ use cordial::{
 };
 
 fn test_thresholds() -> ModularityThresholds {
-    ModularityThresholds::new(10, 5, 5, 20, 15, 1, 2, false, 0, 50, 60, 0)
+    ModularityThresholds::default()
+        .with_file_inventory_min_lines(10)
+        .with_function_inventory_min_lines(5)
+        .with_function_hotspot_min_lines(5)
+        .with_file_checklist_min_lines(20)
+        .with_function_checklist_min_lines(15)
+        .with_max_types_per_file(1)
+        .with_lopsided_min_percent(60)
+        .with_hierarchy_min_lines(0)
 }
 
 const HANDLERS_RS: &str =
@@ -43,7 +51,7 @@ fn modularity_etiquette_detects_large_functions() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
-    fs::write(fixture.path().join("src/lib.rs"), &large_function_fixture())
+    fs::write(fixture.path().join("src/lib.rs"), large_function_fixture())
         .into_diagnostic()
         .wrap_err("write lib")?;
 
@@ -319,7 +327,7 @@ fn types_per_file_counts_inline_module_types() -> miette::Result<()> {
 
 #[test]
 fn types_per_file_respects_higher_config_max() -> miette::Result<()> {
-    let thresholds = ModularityThresholds::new(10, 5, 5, 20, 15, 3, 2, false, 0, 50, 60, 0);
+    let thresholds = test_thresholds().with_max_types_per_file(3);
     let findings = scan_snippet(
         "pub struct A;\npub enum B { X }\npub trait C {}\n",
         thresholds,

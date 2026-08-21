@@ -77,9 +77,9 @@ impl Assessor for HomecomingStdAssessor {
 mod amenable {
     use crate::error::CordialResult;
     use crate::framework_std::{
-        AMENABLE_IMPL_CRATE, AMENABLE_PATCH_SET, AmenableStdOptions, amenable_gap_fields,
-        classify_amenable_std_row, collect_proof_chain_subjects, ensure_registry_dump_for_assessor,
-        load_merged_std_inventory, load_verifier_skip_map,
+        AMENABLE_IMPL_CRATE, AMENABLE_PATCH_SET, AmenableStdOptions, ClassifyRowArgs,
+        amenable_gap_fields, classify_amenable_std_row, collect_proof_chain_subjects,
+        ensure_registry_dump_for_assessor, load_merged_std_inventory, load_verifier_skip_map,
     };
     use crate::hooks::{AssessView, Assessor};
     use crate::objects::{Finding, NodeAnchor};
@@ -139,13 +139,15 @@ mod amenable {
                 let item = merged_items.iter().find(|item| item.path == type_path);
                 let entry = classify_amenable_std_row(
                     type_path,
-                    marker.field("type_kind").unwrap_or(""),
-                    marker.field("is_generic") == Some("true"),
-                    item.and_then(|item| item.alias_target.as_deref()),
-                    &merged_items,
-                    &registry,
-                    &skip_map,
-                    &proof_chain_subjects,
+                    ClassifyRowArgs {
+                        type_kind: marker.field("type_kind").unwrap_or(""),
+                        is_generic: marker.field("is_generic") == Some("true"),
+                        alias_target: item.and_then(|item| item.alias_target.as_deref()),
+                        items: &merged_items,
+                        registry: &registry,
+                        skip_map: &skip_map,
+                        proof_chain_subjects: &proof_chain_subjects,
+                    },
                 );
                 let (missing_layers, action) = amenable_gap_fields(&entry, AMENABLE_IMPL_CRATE);
                 findings.push(Box::new(AmenableStdRowFinding {

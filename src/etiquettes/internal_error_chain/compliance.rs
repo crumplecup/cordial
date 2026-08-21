@@ -78,13 +78,11 @@ pub fn scan_compliance_rust_syntax(
     src_root: &Path,
     crate_name: &str,
 ) -> Vec<InternalErrorComplianceFinding> {
-    let error_root = src_root.join("error");
     crate::etiquettes::scan_rust_file_syntax(
         syntax,
         file,
         src_root,
         src_root,
-        &error_root,
         src_root.parent().unwrap_or(src_root),
         crate_name,
         crate::etiquettes::ErrorIrScanLayers::COMPLIANCE_ONLY,

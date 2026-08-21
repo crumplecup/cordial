@@ -106,24 +106,25 @@ pub(super) fn dedupe_enrichers(
 
 #[instrument(level = "debug", skip(loaders))]
 fn loaders_include_source_and_rustdoc(loaders: &[&'static dyn Loader]) -> bool {
-    let mut has_source = false;
-    #[cfg_attr(not(feature = "rustdoc"), allow(unused_mut))]
-    let mut has_rustdoc = false;
-    for loader in loaders {
-        if loader.id() == SourceLoader::ID {
-            has_source = true;
-        }
-        #[cfg(feature = "rustdoc")]
-        if loader.id() == RustdocLoader::ID {
-            has_rustdoc = true;
-        }
-    }
     #[cfg(feature = "rustdoc")]
     {
+        let mut has_source = false;
+        let mut has_rustdoc = false;
+        for loader in loaders {
+            if loader.id() == SourceLoader::ID {
+                has_source = true;
+            }
+            if loader.id() == RustdocLoader::ID {
+                has_rustdoc = true;
+            }
+        }
         has_source && has_rustdoc
     }
     #[cfg(not(feature = "rustdoc"))]
     {
+        // Without `rustdoc`, there's no dual-inventory case to detect --
+        // `loaders` is real input but genuinely unneeded in this branch.
+        let _ = loaders;
         false
     }
 }

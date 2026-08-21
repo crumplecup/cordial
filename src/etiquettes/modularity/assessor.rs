@@ -91,7 +91,8 @@ impl Assessor for ModularityAssessor {
         let module_lines: Vec<u32> = pending
             .iter()
             .filter(|site| {
-                site.kind == ModularityKind::ModuleSize && site.lines >= thresholds.min_module_lines()
+                site.kind == ModularityKind::ModuleSize
+                    && site.lines >= thresholds.min_module_lines()
             })
             .map(|site| site.lines)
             .collect();
@@ -116,14 +117,16 @@ impl Assessor for ModularityAssessor {
             };
             findings.push(finding_from_site(
                 site,
-                site.kind,
-                &crate_name,
-                site.context.clone(),
-                site.lines,
-                checklist,
-                zscore,
-                None,
-                String::new(),
+                FindingArgs {
+                    kind: site.kind,
+                    crate_name: &crate_name,
+                    context: site.context.clone(),
+                    lines: site.lines,
+                    checklist,
+                    zscore,
+                    share: None,
+                    detail: String::new(),
+                },
             ));
         }
         findings.extend(hierarchy_findings(&pending, &crate_name, thresholds));
@@ -172,14 +175,16 @@ fn hierarchy_findings(
         };
         findings.push(finding_from_site(
             site,
-            ModularityKind::TopHeavy,
-            crate_name,
-            node.path.clone(),
-            node.own_lines,
-            true,
-            None,
-            Some(node.top_heavy()),
-            detail,
+            FindingArgs {
+                kind: ModularityKind::TopHeavy,
+                crate_name,
+                context: node.path.clone(),
+                lines: node.own_lines,
+                checklist: true,
+                zscore: None,
+                share: Some(node.top_heavy()),
+                detail,
+            },
         ));
     }
     for imbalance in lopsided_siblings(&tree, thresholds.hierarchy_min_lines()) {
@@ -196,14 +201,16 @@ fn hierarchy_findings(
         );
         findings.push(finding_from_site(
             site,
-            ModularityKind::Lopsided,
-            crate_name,
-            imbalance.largest.clone(),
-            imbalance.largest_subtree,
-            true,
-            None,
-            Some(imbalance.share),
-            detail,
+            FindingArgs {
+                kind: ModularityKind::Lopsided,
+                crate_name,
+                context: imbalance.largest.clone(),
+                lines: imbalance.largest_subtree,
+                checklist: true,
+                zscore: None,
+                share: Some(imbalance.share),
+                detail,
+            },
         ));
     }
     for nest in unary_nests(&tree, thresholds.hierarchy_min_lines()) {
@@ -220,43 +227,50 @@ fn hierarchy_findings(
         );
         findings.push(finding_from_site(
             site,
-            ModularityKind::Collapse,
-            crate_name,
-            nest.passthrough.clone(),
-            nest.passthrough_subtree,
-            true,
-            None,
-            None,
-            detail,
+            FindingArgs {
+                kind: ModularityKind::Collapse,
+                crate_name,
+                context: nest.passthrough.clone(),
+                lines: nest.passthrough_subtree,
+                checklist: true,
+                zscore: None,
+                share: None,
+                detail,
+            },
         ));
     }
     findings
 }
 
-#[instrument(level = "debug", skip(site, kind))]
-fn finding_from_site(
-    site: &PendingSite,
+/// Every fact needed to build one finding from a [`PendingSite`], bundled
+/// so [`finding_from_site`] takes one argument instead of eight -- named
+/// fields also replace the original 9-position call's ambiguity (`true,
+/// None, None` told a reader nothing about which knob was which).
+struct FindingArgs<'a> {
     kind: ModularityKind,
-    crate_name: &str,
+    crate_name: &'a str,
     context: String,
     lines: u32,
     checklist: bool,
     zscore: Option<f64>,
     share: Option<f64>,
     detail: String,
-) -> Box<dyn Finding> {
+}
+
+#[instrument(level = "debug", skip(site, args))]
+fn finding_from_site(site: &PendingSite, args: FindingArgs<'_>) -> Box<dyn Finding> {
     Box::new(ModularityFinding {
-        rule: ModularityRule::new(kind),
+        rule: ModularityRule::new(args.kind),
         disposition: Disposition::Open,
         anchor: crate::objects::NodeAnchor(site.node_id),
-        crate_name: crate_name.to_string(),
-        context,
+        crate_name: args.crate_name.to_string(),
+        context: args.context,
         span: FileSpan::new(site.file.clone(), site.line, 1),
-        lines,
-        checklist,
-        zscore,
+        lines: args.lines,
+        checklist: args.checklist,
+        zscore: args.zscore,
         inline: site.inline,
-        share,
-        detail,
+        share: args.share,
+        detail: args.detail,
     })
 }

@@ -64,7 +64,13 @@ pub fn discover_run_crate_targets(
             .into_iter()
             .collect();
     #[cfg(not(feature = "rustdoc"))]
-    let coverage_crate_names: HashSet<String> = HashSet::new();
+    let coverage_crate_names: HashSet<String> = {
+        // Without `rustdoc`, coverage-plugin crate names come from IR this
+        // build can't load -- `session` is real input but genuinely
+        // unneeded in this branch.
+        let _ = session;
+        HashSet::new()
+    };
 
     let mut crate_names = coverage_crate_names;
     if !plugins_in_category(&active_plugins, PluginCategory::Quality).is_empty()

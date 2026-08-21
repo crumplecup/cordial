@@ -95,11 +95,9 @@ fn scan_fixture() -> miette::Result<Vec<cordial::ErrorChainRecord>> {
     fs::write(&file, PRESERVED_FIXTURE)
         .into_diagnostic()
         .wrap_err("write fixture")?;
-    Ok(
-        scan_error_chain_rust_source(PRESERVED_FIXTURE, &file, fixture.path(), fixture.path())
-            .into_diagnostic()
-            .wrap_err("scan")?,
-    )
+    scan_error_chain_rust_source(PRESERVED_FIXTURE, &file, fixture.path(), fixture.path())
+        .into_diagnostic()
+        .wrap_err("scan")
 }
 
 #[test]

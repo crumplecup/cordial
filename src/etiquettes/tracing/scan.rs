@@ -92,6 +92,18 @@ struct FileScanVisitor<'a> {
     records: Vec<FunctionRecord>,
 }
 
+/// Every fact needed to record one function, bundled so
+/// [`FileScanVisitor::record_fn`] takes one argument instead of seven.
+struct RecordFnArgs<'a> {
+    sig: &'a syn::Signature,
+    attrs: &'a [Attribute],
+    visibility: &'a Visibility,
+    span: proc_macro2::Span,
+    kind: FunctionKind,
+    local_name: &'a str,
+    body: Option<&'a syn::Block>,
+}
+
 impl FileScanVisitor<'_> {
     #[instrument(level = "debug", skip(self))]
     fn qualify(&self, local: &str) -> String {
@@ -102,28 +114,19 @@ impl FileScanVisitor<'_> {
         }
     }
 
-    #[instrument(level = "debug", skip(self, sig, attrs, visibility, span, kind, body))]
-    fn record_fn(
-        &mut self,
-        sig: &syn::Signature,
-        attrs: &[Attribute],
-        visibility: &Visibility,
-        span: proc_macro2::Span,
-        kind: FunctionKind,
-        local_name: &str,
-        body: Option<&syn::Block>,
-    ) {
-        let line = span.start().line as u32;
-        let ctx = classify(&sig.ident.to_string(), sig, kind, body);
+    #[instrument(level = "debug", skip(self, args))]
+    fn record_fn(&mut self, args: RecordFnArgs<'_>) {
+        let line = args.span.start().line as u32;
+        let ctx = classify(&args.sig.ident.to_string(), args.sig, args.kind, args.body);
         let recipe = instrument_recipe(&ctx, self.extra_skip);
         self.records.push(FunctionRecord {
             crate_name: self.crate_name.clone(),
-            qualified_name: self.qualify(local_name),
-            kind,
-            visibility: visibility_label(visibility),
+            qualified_name: self.qualify(args.local_name),
+            kind: args.kind,
+            visibility: visibility_label(args.visibility),
             file: self.rel_file.clone(),
             line,
-            instrumented: is_instrumented(attrs),
+            instrumented: is_instrumented(args.attrs),
             has_error_path_event: ctx.has_error_path_event,
             param_names: ctx.param_names.clone(),
             role: ctx.role,
@@ -146,15 +149,15 @@ impl FileScanVisitor<'_> {
     fn visit_item(&mut self, item: &Item) {
         match item {
             Item::Fn(item_fn) => {
-                self.record_fn(
-                    &item_fn.sig,
-                    &item_fn.attrs,
-                    &item_fn.vis,
-                    item_fn.span(),
-                    FunctionKind::Free,
-                    &item_fn.sig.ident.to_string(),
-                    Some(&item_fn.block),
-                );
+                self.record_fn(RecordFnArgs {
+                    sig: &item_fn.sig,
+                    attrs: &item_fn.attrs,
+                    visibility: &item_fn.vis,
+                    span: item_fn.span(),
+                    kind: FunctionKind::Free,
+                    local_name: &item_fn.sig.ident.to_string(),
+                    body: Some(&item_fn.block),
+                });
             }
             Item::Mod(item_mod) => self.visit_mod(item_mod),
             Item::Impl(item_impl) => self.visit_impl(item_impl),
@@ -196,15 +199,15 @@ impl FileScanVisitor<'_> {
             } else {
                 FunctionKind::InherentMethod
             };
-            self.record_fn(
-                &method.sig,
-                &method.attrs,
-                &method.vis,
-                method.span(),
+            self.record_fn(RecordFnArgs {
+                sig: &method.sig,
+                attrs: &method.attrs,
+                visibility: &method.vis,
+                span: method.span(),
                 kind,
-                &local,
-                Some(&method.block),
-            );
+                local_name: &local,
+                body: Some(&method.block),
+            });
         }
     }
 }
@@ -212,15 +215,15 @@ impl FileScanVisitor<'_> {
 impl<'ast> Visit<'ast> for FileScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
-        self.record_fn(
-            &node.sig,
-            &node.attrs,
-            &node.vis,
-            node.span(),
-            FunctionKind::Free,
-            &node.sig.ident.to_string(),
-            Some(&node.block),
-        );
+        self.record_fn(RecordFnArgs {
+            sig: &node.sig,
+            attrs: &node.attrs,
+            visibility: &node.vis,
+            span: node.span(),
+            kind: FunctionKind::Free,
+            local_name: &node.sig.ident.to_string(),
+            body: Some(&node.block),
+        });
     }
 
     #[instrument(level = "debug", skip(self, node))]

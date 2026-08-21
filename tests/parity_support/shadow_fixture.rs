@@ -1,15 +1,126 @@
 //! Seed rustdoc for minimal-workspace shadow mirror tests.
+//!
+//! Self-contained (own copy of `write_minimal_rustdoc`/`write_minimal_rustdoc_file`,
+//! not shared with `minimal_fixture.rs`): each `#[path]`-included consumer
+//! compiles only the fixture module(s) it actually calls, so this doesn't
+//! carry a shared re-export surface that leaves some consumers' unused
+//! half flagged as dead code. `shadow_coverage.rs` holds the coverage-
+//! running helpers built on top of this file's fixtures, kept separate
+//! since not every consumer of `seed_minimal_shadow_fixture` needs them.
 
 use miette::{IntoDiagnostic, WrapErr};
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use cordial::{NamedRunFilter, SHADOW_ETIQUETTE, Session, SessionBuilder};
+use rustdoc_types::{
+    Crate, Generics, Id, Item, ItemEnum, ItemKind, ItemSummary, Module, Struct, StructKind, Target,
+    Visibility,
+};
 
-use super::CsvTable;
+/// Write a public unit struct into `{workspace}/target/doc/{crate}.json`.
+pub fn write_minimal_rustdoc(
+    workspace: &Path,
+    crate_name: &str,
+    type_name: &str,
+) -> miette::Result<PathBuf> {
+    let doc_dir = workspace.join("target/doc");
+    fs::create_dir_all(&doc_dir)
+        .into_diagnostic()
+        .wrap_err("doc dir")?;
+    let path = doc_dir.join(format!("{crate_name}.json"));
+    write_minimal_rustdoc_file(&path, crate_name, type_name)?;
+    Ok(path)
+}
 
-pub use super::minimal_fixture::write_minimal_rustdoc;
+pub fn write_minimal_rustdoc_file(path: &Path, crate_name: &str, type_name: &str) -> miette::Result<()> {
+    let root_id = Id(1);
+    let struct_id = Id(2);
+    let crate_key = crate_name.replace('-', "_");
+
+    let mut index = HashMap::new();
+    index.insert(
+        root_id,
+        Item {
+            id: root_id,
+            crate_id: 0,
+            name: Some(crate_key.clone()),
+            span: None,
+            visibility: Visibility::Public,
+            docs: None,
+            links: HashMap::new(),
+            attrs: Vec::new(),
+            deprecation: None,
+            inner: ItemEnum::Module(Module {
+                is_crate: true,
+                items: vec![struct_id],
+                is_stripped: false,
+            }),
+        },
+    );
+    index.insert(
+        struct_id,
+        Item {
+            id: struct_id,
+            crate_id: 0,
+            name: Some(type_name.to_string()),
+            span: None,
+            visibility: Visibility::Public,
+            docs: None,
+            links: HashMap::new(),
+            attrs: Vec::new(),
+            deprecation: None,
+            inner: ItemEnum::Struct(Struct {
+                kind: StructKind::Unit,
+                impls: Vec::new(),
+                generics: Generics {
+                    params: Vec::new(),
+                    where_predicates: Vec::new(),
+                },
+            }),
+        },
+    );
+
+    let mut paths = HashMap::new();
+    paths.insert(
+        root_id,
+        ItemSummary {
+            crate_id: 0,
+            path: vec![crate_key.clone()],
+            kind: ItemKind::Module,
+        },
+    );
+    paths.insert(
+        struct_id,
+        ItemSummary {
+            crate_id: 0,
+            path: vec![crate_key, type_name.to_string()],
+            kind: ItemKind::Struct,
+        },
+    );
+
+    let krate = Crate {
+        root: root_id,
+        crate_version: Some("0.1.0".to_string()),
+        includes_private: false,
+        index,
+        paths,
+        external_crates: HashMap::new(),
+        target: Target {
+            triple: "x86_64-unknown-linux-gnu".to_string(),
+            target_features: Vec::new(),
+        },
+        format_version: rustdoc_types::FORMAT_VERSION,
+    };
+
+    let body = serde_json::to_string_pretty(&krate)
+        .into_diagnostic()
+        .wrap_err("serialize rustdoc")?;
+    fs::write(path, body)
+        .into_diagnostic()
+        .wrap_err("write rustdoc json")?;
+    Ok(())
+}
 
 /// Seed upstream and shadow rustdoc for the url ↔ elicit_url pair.
 pub fn seed_minimal_shadow_fixture(workspace: &Path, store_root: &Path) -> miette::Result<()> {
@@ -41,81 +152,4 @@ pub fn seed_minimal_shadow_fixture(workspace: &Path, store_root: &Path) -> miett
         .wrap_err("copy store rustdoc")?;
     }
     Ok(())
-}
-
-/// Seed upstream rustdoc for one shadow ↔ upstream pair (`shadow-dep-{shadow}-{upstream}.json`).
-pub fn seed_shadow_dep_rustdoc(
-    store_root: &Path,
-    shadow_crate: &str,
-    upstream_crate: &str,
-    type_name: &str,
-) -> miette::Result<()> {
-    let cache_dir = store_root.join("cache/rustdoc");
-    fs::create_dir_all(&cache_dir)
-        .into_diagnostic()
-        .wrap_err("store rustdoc dir")?;
-    let path = cache_dir.join(format!("shadow-dep-{shadow_crate}-{upstream_crate}.json"));
-    super::minimal_fixture::write_minimal_rustdoc_file(&path, upstream_crate, type_name)
-}
-
-/// Run cross-crate shadow coverage on the minimal-workspace fixture.
-pub fn run_cordial_shadow_coverage(
-    workspace: &Path,
-    store_root: &Path,
-    upstream_crate: Option<&str>,
-) -> miette::Result<()> {
-    seed_minimal_shadow_fixture(workspace, store_root)?;
-
-    let session = SessionBuilder::new(workspace)
-        .with_store_root(store_root)
-        .register(&SHADOW_ETIQUETTE)
-        .build();
-
-    let filter = match upstream_crate {
-        Some(name) => NamedRunFilter::etiquettes(&["shadow"]).with_crate(name.to_string()),
-        None => NamedRunFilter::etiquettes(&["shadow"]),
-    };
-    session
-        .run(&filter)
-        .into_diagnostic()
-        .wrap_err("cordial shadow run")?;
-    Ok(())
-}
-
-pub const SHADOW_GAPS_KEY_COLUMNS: &[&str] = &["item_path", "gap_kind"];
-
-pub const SHADOW_PAIR_KEY_COLUMNS: &[&str] = &[
-    "item_path",
-    "status",
-    "verification_gap",
-    "shadow_elicit_impl",
-];
-
-pub fn shadow_gaps_open(row: &HashMap<String, String>) -> bool {
-    row.get("gap_kind").is_some_and(|kind| !kind.is_empty())
-}
-
-pub fn filter_shadow_gaps_by_target(table: &CsvTable, target_crate: &str) -> CsvTable {
-    CsvTable {
-        rows: table
-            .rows
-            .iter()
-            .filter(|row| {
-                row.get("target_crate")
-                    .is_some_and(|name| name == target_crate)
-            })
-            .cloned()
-            .collect(),
-    }
-}
-
-pub fn filter_shadow_pair_by_item_path(table: &CsvTable, item_path: &str) -> CsvTable {
-    CsvTable {
-        rows: table
-            .rows
-            .iter()
-            .filter(|row| row.get("item_path").is_some_and(|path| path == item_path))
-            .cloned()
-            .collect(),
-    }
 }

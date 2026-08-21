@@ -3,11 +3,12 @@ use std::fs;
 use std::path::PathBuf;
 
 use cordial::{
-    ErrorSiteKind, ErrorSiteScanRow, FOREIGN_ERROR_ATTENUATION_ETIQUETTE, ForeignErrorHandlingClass,
-    ForeignErrorTypeRecord, ForeignErrorTypeReport, ForeignTypeConfidence, RunAll, Session,
-    SessionBuilder, build_error_site_partition_report, build_foreign_error_attenuation_report,
-    build_foreign_error_type_report, partition_error_site_records, scan_crate_error_chain,
-    scan_error_chain_rust_source, scan_error_sites_rust_source,
+    ErrorSiteKind, ErrorSiteScanRow, FOREIGN_ERROR_ATTENUATION_ETIQUETTE,
+    ForeignErrorHandlingClass, ForeignErrorTypeRecord, ForeignErrorTypeReport,
+    ForeignTypeConfidence, RunAll, Session, SessionBuilder, build_error_site_partition_report,
+    build_foreign_error_attenuation_report, build_foreign_error_type_report,
+    partition_error_site_records, scan_crate_error_chain, scan_error_chain_rust_source,
+    scan_error_sites_rust_source,
 };
 
 const PRESERVED_FIXTURE: &str = r#"
@@ -94,11 +95,9 @@ fn scan_chain_fixture() -> miette::Result<Vec<cordial::ErrorChainRecord>> {
     fs::write(&file, PRESERVED_FIXTURE)
         .into_diagnostic()
         .wrap_err("write fixture")?;
-    Ok(
-        scan_error_chain_rust_source(PRESERVED_FIXTURE, &file, fixture.path(), fixture.path())
-            .into_diagnostic()
-            .wrap_err("scan")?,
-    )
+    scan_error_chain_rust_source(PRESERVED_FIXTURE, &file, fixture.path(), fixture.path())
+        .into_diagnostic()
+        .wrap_err("scan")
 }
 
 #[test]
@@ -143,6 +142,32 @@ fn test_into_diagnostic_is_miette_exemplar_not_pending_infra() {
             line: 25,
             source_snippet: "std::fs::create_dir_all(…).into_diagnostic(…).wrap_err(…)".to_string(),
             site_snippet: "std::fs::create_dir_all(…).into_diagnostic(…).wrap_err(…)?".to_string(),
+        }],
+    };
+    let report = build_foreign_error_attenuation_report(&foreign, &[]);
+    assert_eq!(report.findings.len(), 1);
+    assert_eq!(
+        report.findings[0].handling_class,
+        ForeignErrorHandlingClass::ChainPreserved
+    );
+}
+
+#[test]
+fn display_fmt_question_mark_is_exemplar_not_pending_infra() {
+    let foreign = ForeignErrorTypeReport {
+        crate_name: "example".to_string(),
+        findings: vec![ForeignErrorTypeRecord {
+            crate_name: "example".to_string(),
+            foreign_error_type: "std::fmt::Error".to_string(),
+            rule_id: "FOREIGN-ERROR-TYPE-STD-FMT-001".to_string(),
+            confidence: ForeignTypeConfidence::High,
+            chain_break: false,
+            kind: ErrorSiteKind::QuestionMark,
+            context: "provenance_test::ManualCertificate::fmt".to_string(),
+            file: PathBuf::from("tests/provenance_test.rs"),
+            line: 71,
+            source_snippet: "write!(…)".to_string(),
+            site_snippet: "write!(…)?".to_string(),
         }],
     };
     let report = build_foreign_error_attenuation_report(&foreign, &[]);

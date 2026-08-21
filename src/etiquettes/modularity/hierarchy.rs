@@ -68,10 +68,7 @@ fn nearest_parent(path: &str, existing: &BTreeSet<String>) -> Option<String> {
         if existing.contains(&current) {
             return Some(current);
         }
-        match parent_path(&current) {
-            Some(next) => current = next,
-            None => return None,
-        }
+        current = parent_path(&current)?;
     }
 }
 

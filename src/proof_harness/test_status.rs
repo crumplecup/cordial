@@ -20,13 +20,7 @@ impl TestStatus {
         match self {
             Self::Covered => "Covered",
             Self::Missing => "Missing",
-            Self::CoveredConcrete { instantiation } => {
-                if instantiation.is_empty() {
-                    "CoveredConcrete"
-                } else {
-                    "CoveredConcrete"
-                }
-            }
+            Self::CoveredConcrete { .. } => "CoveredConcrete",
         }
     }
 
@@ -58,18 +52,17 @@ pub fn test_status_for_type_path(
         );
     }
 
-    if has_factory_impl {
-        if let Some(instantiation) = harness
+    if has_factory_impl
+        && let Some(instantiation) = harness
             .non_empty_types
             .iter()
             .find(|t| t.starts_with(bare_name) && t.contains('<'))
             .cloned()
-        {
-            return (
-                TestStatus::CoveredConcrete { instantiation },
-                composition_test_status(bare_name, harness),
-            );
-        }
+    {
+        return (
+            TestStatus::CoveredConcrete { instantiation },
+            composition_test_status(bare_name, harness),
+        );
     }
 
     let qualified_match = harness

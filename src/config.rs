@@ -14,7 +14,9 @@ use crate::session::SessionView;
 
 use tracing::instrument;
 /// All etiquette knobs loaded from `cordial.toml`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters,
+)]
 pub struct CordialConfig {
     #[serde(default)]
     visibility: VisibilityThresholds,
@@ -26,18 +28,6 @@ pub struct CordialConfig {
     tracing: TracingThresholds,
     #[serde(default)]
     derives: DerivesThresholds,
-}
-
-impl Default for CordialConfig {
-    fn default() -> Self {
-        Self {
-            visibility: VisibilityThresholds::default(),
-            modularity: ModularityThresholds::default(),
-            cfg_scatter: CfgScatterThresholds::default(),
-            tracing: TracingThresholds::default(),
-            derives: DerivesThresholds::default(),
-        }
-    }
 }
 
 /// Visibility etiquette knobs.
@@ -103,17 +93,7 @@ impl Default for VisibilityThresholds {
 }
 
 /// Modularity etiquette knobs.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    derive_new::new,
-    derive_getters::Getters,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct ModularityThresholds {
     /// File inventory floor, and the *upper-tail* MODULE-SIZE checklist
     /// floor. A large-side 2σ module below this many lines stays
@@ -255,6 +235,70 @@ impl ModularityThresholds {
     pub fn with_module_size_ignore_lower_tail(self, ignore: bool) -> Self {
         Self {
             module_size_ignore_lower_tail: ignore,
+            ..self
+        }
+    }
+
+    #[instrument(level = "debug")]
+    pub fn with_file_inventory_min_lines(self, value: u32) -> Self {
+        Self {
+            file_inventory_min_lines: value,
+            ..self
+        }
+    }
+
+    #[instrument(level = "debug")]
+    pub fn with_function_inventory_min_lines(self, value: u32) -> Self {
+        Self {
+            function_inventory_min_lines: value,
+            ..self
+        }
+    }
+
+    #[instrument(level = "debug")]
+    pub fn with_function_hotspot_min_lines(self, value: u32) -> Self {
+        Self {
+            function_hotspot_min_lines: value,
+            ..self
+        }
+    }
+
+    #[instrument(level = "debug")]
+    pub fn with_file_checklist_min_lines(self, value: u32) -> Self {
+        Self {
+            file_checklist_min_lines: value,
+            ..self
+        }
+    }
+
+    #[instrument(level = "debug")]
+    pub fn with_function_checklist_min_lines(self, value: u32) -> Self {
+        Self {
+            function_checklist_min_lines: value,
+            ..self
+        }
+    }
+
+    #[instrument(level = "debug")]
+    pub fn with_max_types_per_file(self, value: u32) -> Self {
+        Self {
+            max_types_per_file: value,
+            ..self
+        }
+    }
+
+    #[instrument(level = "debug")]
+    pub fn with_lopsided_min_percent(self, value: u32) -> Self {
+        Self {
+            lopsided_min_percent: value,
+            ..self
+        }
+    }
+
+    #[instrument(level = "debug")]
+    pub fn with_hierarchy_min_lines(self, value: u32) -> Self {
+        Self {
+            hierarchy_min_lines: value,
             ..self
         }
     }

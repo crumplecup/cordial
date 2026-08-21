@@ -111,13 +111,15 @@ pub fn build_amenable_std_report(
     for item in framework_std_type_items(items, include_nightly) {
         let entry = classify_amenable_std_row(
             &item.path,
-            item.kind.as_str(),
-            item.is_generic,
-            item.alias_target.as_deref(),
-            items,
-            registry,
-            skip_map,
-            proof_chain_subjects,
+            ClassifyRowArgs {
+                type_kind: item.kind.as_str(),
+                is_generic: item.is_generic,
+                alias_target: item.alias_target.as_deref(),
+                items,
+                registry,
+                skip_map,
+                proof_chain_subjects,
+            },
         );
         match entry.status {
             AmenableStdStatus::Complete => complete_count += 1,
@@ -140,18 +142,31 @@ pub fn build_amenable_std_report(
     }
 }
 
+/// Everything [`classify_amenable_std_row`] needs beyond the row's own
+/// `type_path`, bundled so the function takes two arguments instead of
+/// eight.
+pub struct ClassifyRowArgs<'a> {
+    pub type_kind: &'a str,
+    pub is_generic: bool,
+    pub alias_target: Option<&'a str>,
+    pub items: &'a [StdInventoryItem],
+    pub registry: &'a RegistryDump,
+    pub skip_map: &'a VerifierSkipMap,
+    pub proof_chain_subjects: &'a HashSet<String>,
+}
+
 /// Classify one std inventory row for amenable registry coverage.
-#[instrument(level = "debug", skip(items, registry, skip_map, proof_chain_subjects))]
-pub fn classify_amenable_std_row(
-    type_path: &str,
-    type_kind: &str,
-    is_generic: bool,
-    alias_target: Option<&str>,
-    items: &[StdInventoryItem],
-    registry: &RegistryDump,
-    skip_map: &VerifierSkipMap,
-    proof_chain_subjects: &HashSet<String>,
-) -> AmenableStdEntry {
+#[instrument(level = "debug", skip(args))]
+pub fn classify_amenable_std_row(type_path: &str, args: ClassifyRowArgs<'_>) -> AmenableStdEntry {
+    let ClassifyRowArgs {
+        type_kind,
+        is_generic,
+        alias_target,
+        items,
+        registry,
+        skip_map,
+        proof_chain_subjects,
+    } = args;
     let exception = skip_map.get(type_path);
 
     if let Some(exception) = exception

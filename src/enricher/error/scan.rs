@@ -90,7 +90,6 @@ pub fn scan_crate_error_ir(
                 path,
                 &tree_root,
                 &src_root,
-                &src_root,
                 crate_root,
                 crate_name,
                 ErrorIrScanLayers::for_unified_file(under_src),

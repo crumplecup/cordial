@@ -140,7 +140,10 @@ pub(super) fn run_session(
     let loaded = load_and_probe(
         session, filter, &store, &targets, &loaders, &enrichers, &probes,
     )?;
+    #[cfg(feature = "shadow")]
     let mut workspace = loaded.workspace;
+    #[cfg(not(feature = "shadow"))]
+    let workspace = loaded.workspace;
 
     let etiquette_ids: Vec<&str> = etiquettes.iter().map(|etiquette| etiquette.id()).collect();
     let mut all_findings = assess_targets(

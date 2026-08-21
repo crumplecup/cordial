@@ -83,60 +83,68 @@ impl Assessor for ImplGapAssessor {
                 };
                 findings.push(coverage_finding(
                     node_id,
-                    ir.crate_name(),
-                    &type_path,
-                    None,
-                    assessment,
-                    &proof_test,
-                    &composition_test,
-                    disposition,
+                    CoverageFindingArgs {
+                        crate_name: ir.crate_name(),
+                        type_path: &type_path,
+                        gap_kind: None,
+                        assessment,
+                        proof_test: &proof_test,
+                        composition_test: &composition_test,
+                        disposition,
+                    },
                 ));
                 continue;
             };
 
             findings.push(coverage_finding(
                 node_id,
-                ir.crate_name(),
-                &type_path,
-                Some(gap_kind),
-                assessment,
-                &proof_test,
-                &composition_test,
-                Disposition::Open,
+                CoverageFindingArgs {
+                    crate_name: ir.crate_name(),
+                    type_path: &type_path,
+                    gap_kind: Some(gap_kind),
+                    assessment,
+                    proof_test: &proof_test,
+                    composition_test: &composition_test,
+                    disposition: Disposition::Open,
+                },
             ));
         }
         Ok(findings)
     }
 }
 
-#[instrument(level = "debug", skip(node_id, gap_kind, assessment, disposition))]
-fn coverage_finding(
-    node_id: crate::ir::NodeId,
-    crate_name: &str,
-    type_path: &str,
+/// Every fact needed to build one coverage finding, bundled so
+/// [`coverage_finding`] takes one argument (plus the node identity)
+/// instead of eight.
+struct CoverageFindingArgs<'a> {
+    crate_name: &'a str,
+    type_path: &'a str,
     gap_kind: Option<super::types::ImplGapKind>,
     assessment: super::gap_classify::ImplGapAssessment,
-    proof_test: &str,
-    composition_test: &str,
+    proof_test: &'a str,
+    composition_test: &'a str,
     disposition: Disposition,
-) -> Box<dyn Finding> {
+}
+
+#[instrument(level = "debug", skip(node_id, args))]
+fn coverage_finding(node_id: crate::ir::NodeId, args: CoverageFindingArgs<'_>) -> Box<dyn Finding> {
     Box::new(ImplGapFinding {
         rule: CoverageRule,
-        disposition,
+        disposition: args.disposition,
         anchor: crate::objects::NodeAnchor(node_id),
-        crate_name: crate_name.to_string(),
-        type_path: type_path.to_string(),
-        gap_kind,
-        missing_our_traits: assessment.missing_our_traits,
-        missing_external_traits: assessment.missing_external_traits,
-        elicit_complete_gap: assessment.elicit_complete_gap,
-        proof_test: proof_test.to_string(),
-        composition_test: composition_test.to_string(),
-        feature_gated_external: assessment.feature_gated_external,
-        feature_owner_crate: assessment.feature_owner_crate,
-        candidate_unlock_features: assessment.candidate_unlock_features,
-        coverage_provider: assessment.coverage_provider,
-        wrapper_paths: assessment.wrapper_paths,
-        covered_indirectly: assessment.covered_indirectly,
+        crate_name: args.crate_name.to_string(),
+        type_path: args.type_path.to_string(),
+        gap_kind: args.gap_kind,
+        missing_our_traits: args.assessment.missing_our_traits,
+        missing_external_traits: args.assessment.missing_external_traits,
+        elicit_complete_gap: args.assessment.elicit_complete_gap,
+        proof_test: args.proof_test.to_string(),
+        composition_test: args.composition_test.to_string(),
+        feature_gated_external: args.assessment.feature_gated_external,
+        feature_owner_crate: args.assessment.feature_owner_crate,
+        candidate_unlock_features: args.assessment.candidate_unlock_features,
+        coverage_provider: args.assessment.coverage_provider,
+        wrapper_paths: args.assessment.wrapper_paths,
+        covered_indirectly: args.assessment.covered_indirectly,
     })
 }

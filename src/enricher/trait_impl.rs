@@ -47,9 +47,7 @@ impl IrEnricher for TraitImplEnricher {
                 if !matches!(node.kind(), NodeKind::Item(_)) {
                     return None;
                 }
-                if node.attr(ATTR_QUALIFIED_PATH).is_none() {
-                    return None;
-                }
+                node.attr(ATTR_QUALIFIED_PATH)?;
                 let trait_shorts: Vec<String> = node
                     .attr(ATTR_TRAIT_IMPLS)
                     .and_then(|value| value.as_array())

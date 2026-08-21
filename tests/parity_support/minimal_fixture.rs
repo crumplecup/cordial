@@ -10,8 +10,6 @@ use rustdoc_types::{
     Visibility,
 };
 
-use super::CsvTable;
-
 /// Write a public unit struct into `{workspace}/target/doc/{crate}.json`.
 pub fn write_minimal_rustdoc(
     workspace: &Path,
@@ -167,61 +165,12 @@ pub fn run_cordial_impl_coverage(
         .build();
 
     let filter = match crate_name {
-        Some(name) => NamedRunFilter::etiquettes(&["impl-coverage"]).with_crate(name.to_string()),
-        None => NamedRunFilter::etiquettes(&["impl-coverage"]),
+        Some(name) => NamedRunFilter::etiquettes(["impl-coverage"]).with_crate(name.to_string()),
+        None => NamedRunFilter::etiquettes(["impl-coverage"]),
     };
     session
         .run(&filter)
         .into_diagnostic()
         .wrap_err("cordial impl coverage run")?;
     Ok(())
-}
-
-pub const IMPL_GAPS_KEY_COLUMNS: &[&str] = &["type_path", "gap_kind"];
-
-pub fn impl_gaps_open(row: &HashMap<String, String>) -> bool {
-    row.get("gap_kind").is_some_and(|kind| !kind.is_empty())
-}
-
-/// Map elicit_doc `gaps-impl.csv` columns to cordial's shape for comparison.
-pub fn normalize_elicit_impl_gaps(table: &CsvTable) -> CsvTable {
-    CsvTable {
-        rows: table
-            .rows
-            .iter()
-            .map(|row| {
-                let mut out = HashMap::new();
-                if let Some(crate_name) = row.get("source_crate") {
-                    out.insert("crate".to_string(), crate_name.clone());
-                }
-                for key in [
-                    "type_path",
-                    "gap_kind",
-                    "missing_our_traits",
-                    "missing_external_traits",
-                ] {
-                    if let Some(value) = row.get(key) {
-                        out.insert(key.to_string(), value.clone());
-                    }
-                }
-                out
-            })
-            .collect(),
-    }
-}
-
-/// Keep only impl-gap rows for one source crate (elicit `source_crate` / cordial `crate`).
-pub fn filter_impl_gaps_by_crate(table: &CsvTable, crate_name: &str) -> CsvTable {
-    CsvTable {
-        rows: table
-            .rows
-            .iter()
-            .filter(|row| {
-                row.get("crate")
-                    .or_else(|| row.get("source_crate"))
-                    .is_some_and(|name| name == crate_name)
-            })
-            .cloned()
-            .collect(),
-    }
 }

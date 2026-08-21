@@ -41,7 +41,7 @@ pub use types::{
 pub use self::{
     amenable::{
         AmenableStdEntry, AmenableStdGapEntry, AmenableStdReport, AmenableStdStatus,
-        amenable_gap_fields, build_amenable_std_gaps, build_amenable_std_report,
+        ClassifyRowArgs, amenable_gap_fields, build_amenable_std_gaps, build_amenable_std_report,
         classify_amenable_std_row, resolve_alias_chain,
     },
     amenable_render::{

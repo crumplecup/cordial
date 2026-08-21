@@ -139,14 +139,15 @@ impl<'ast> Visit<'ast> for InlineTestVisitor {
         let prev_prefix = self.module_prefix.clone();
         self.module_prefix.push(node.ident.to_string());
         let cfg_test = is_cfg_test(&node.attrs);
-        if cfg_test && self.cfg_test_depth == 0 {
-            if let Some(attr) = cfg_test_attr(&node.attrs) {
-                self.push(
-                    InlineTestRuleId::Mod001,
-                    format!("#[cfg(test)] mod {}", node.ident),
-                    attr,
-                );
-            }
+        if cfg_test
+            && self.cfg_test_depth == 0
+            && let Some(attr) = cfg_test_attr(&node.attrs)
+        {
+            self.push(
+                InlineTestRuleId::Mod001,
+                format!("#[cfg(test)] mod {}", node.ident),
+                attr,
+            );
         }
         if cfg_test {
             self.cfg_test_depth += 1;
@@ -163,10 +164,11 @@ impl<'ast> Visit<'ast> for InlineTestVisitor {
         let ident = node.sig.ident.to_string();
         self.module_prefix.push(ident.clone());
         let flagged_cfg = self.maybe_cfg_item(&node.attrs, "fn", &ident);
-        if !flagged_cfg && self.cfg_test_depth == 0 {
-            if let Some(attr) = test_fn_attr(&node.attrs) {
-                self.push(InlineTestRuleId::Fn001, format!("#[test] fn {ident}"), attr);
-            }
+        if !flagged_cfg
+            && self.cfg_test_depth == 0
+            && let Some(attr) = test_fn_attr(&node.attrs)
+        {
+            self.push(InlineTestRuleId::Fn001, format!("#[test] fn {ident}"), attr);
         }
         syn::visit::visit_item_fn(self, node);
         self.module_prefix.pop();
@@ -176,10 +178,11 @@ impl<'ast> Visit<'ast> for InlineTestVisitor {
     fn visit_impl_item_fn(&mut self, node: &'ast ImplItemFn) {
         let ident = node.sig.ident.to_string();
         let flagged_cfg = self.maybe_cfg_item(&node.attrs, "fn", &ident);
-        if !flagged_cfg && self.cfg_test_depth == 0 {
-            if let Some(attr) = test_fn_attr(&node.attrs) {
-                self.push(InlineTestRuleId::Fn001, format!("#[test] fn {ident}"), attr);
-            }
+        if !flagged_cfg
+            && self.cfg_test_depth == 0
+            && let Some(attr) = test_fn_attr(&node.attrs)
+        {
+            self.push(InlineTestRuleId::Fn001, format!("#[test] fn {ident}"), attr);
         }
         syn::visit::visit_impl_item_fn(self, node);
     }

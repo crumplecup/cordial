@@ -3,9 +3,13 @@
 use cordial::{IMPL_COVERAGE_ETIQUETTE, IrView, NamedRunFilter, Session, SessionBuilder};
 use miette::{IntoDiagnostic, WrapErr};
 
-mod parity_support;
+#[path = "parity_support/minimal_fixture.rs"]
+mod minimal_fixture;
+#[path = "parity_support/workspace.rs"]
+mod workspace_support;
 
-use parity_support::{run_cordial_impl_coverage, workspace_path};
+use minimal_fixture::run_cordial_impl_coverage;
+use workspace_support::workspace_path;
 
 #[test]
 fn path_index_resolves_type_nodes_after_rustdoc_load() -> miette::Result<()> {
@@ -17,7 +21,7 @@ fn path_index_resolves_type_nodes_after_rustdoc_load() -> miette::Result<()> {
         .with_store_root(store.path())
         .register(&IMPL_COVERAGE_ETIQUETTE)
         .build();
-    let filter = NamedRunFilter::etiquettes(&["impl-coverage"]).with_crate("url".to_string());
+    let filter = NamedRunFilter::etiquettes(["impl-coverage"]).with_crate("url".to_string());
     session.run(&filter).into_diagnostic().wrap_err("run")?;
 
     let cache_path = store.path().join("cache").join("url.ir.json");

@@ -6,9 +6,13 @@ use std::path::Path;
 
 use cordial::testing::{ShadowStatus, build_shadow_report_from_inventories, parse_rustdoc_json};
 
-mod parity_support;
+#[path = "parity_support/shadow_fixture.rs"]
+mod shadow_fixture;
+#[path = "parity_support/shadow_coverage.rs"]
+mod shadow_coverage;
 
-use parity_support::{run_cordial_shadow_coverage, seed_shadow_dep_rustdoc, write_minimal_rustdoc};
+use shadow_coverage::{run_cordial_shadow_coverage, seed_shadow_dep_rustdoc};
+use shadow_fixture::write_minimal_rustdoc;
 
 #[test]
 fn cross_crate_shadow_covers_widget_in_minimal_workspace() -> miette::Result<()> {

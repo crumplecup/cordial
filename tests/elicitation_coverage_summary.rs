@@ -1,7 +1,12 @@
 //! Elicitation coverage summary metric parity with elicit_doc `summary.md`.
 
 use miette::{IntoDiagnostic, WrapErr};
-mod parity_support;
+#[path = "parity_support/minimal_fixture.rs"]
+mod minimal_fixture;
+#[path = "parity_support/shadow_fixture.rs"]
+mod shadow_fixture;
+#[path = "parity_support/workspace.rs"]
+mod workspace_support;
 
 use std::fs;
 use std::path::Path;
@@ -11,7 +16,9 @@ use cordial::{
     Session, SessionBuilder,
 };
 
-use parity_support::{run_cordial_impl_coverage, seed_minimal_shadow_fixture, workspace_path};
+use minimal_fixture::run_cordial_impl_coverage;
+use shadow_fixture::seed_minimal_shadow_fixture;
+use workspace_support::workspace_path;
 
 #[test]
 fn elicitation_summary_impl_table_has_elicit_doc_columns() -> miette::Result<()> {
@@ -23,7 +30,7 @@ fn elicitation_summary_impl_table_has_elicit_doc_columns() -> miette::Result<()>
         .with_store_root(store.path())
         .register_plugin(&ELICITATION_COVERAGE)
         .build();
-    let filter = NamedRunFilter::etiquettes(&["impl-coverage"]).with_crate("url".to_string());
+    let filter = NamedRunFilter::etiquettes(["impl-coverage"]).with_crate("url".to_string());
     session.run(&filter).into_diagnostic().wrap_err("run")?;
 
     let body = fs::read_to_string(store.path().join("findings/summary.md"))
@@ -48,7 +55,7 @@ fn elicitation_summary_includes_shadow_section_for_minimal_workspace() -> miette
         .register(&IMPL_COVERAGE_ETIQUETTE)
         .build();
     let filter =
-        NamedRunFilter::etiquettes(&["shadow", "impl-coverage"]).with_crate("url".to_string());
+        NamedRunFilter::etiquettes(["shadow", "impl-coverage"]).with_crate("url".to_string());
     session.run(&filter).into_diagnostic().wrap_err("run")?;
 
     let body = fs::read_to_string(store.path().join("findings/summary.md"))

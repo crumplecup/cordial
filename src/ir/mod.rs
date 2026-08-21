@@ -10,6 +10,7 @@ mod origin;
 mod query;
 #[cfg(feature = "rustdoc")]
 mod rustdoc_query;
+#[cfg(feature = "homecoming_std")]
 mod trait_impls;
 mod view;
 mod workspace;
@@ -36,6 +37,7 @@ pub use rustdoc_query::{
     count_type_nodes, mirror_target, rustdoc_item_nodes, type_elicit_complete, type_public_methods,
     type_trait_impls, type_trait_prereqs, type_wraps_foreign,
 };
+#[cfg(feature = "homecoming_std")]
 pub use trait_impls::collect_trait_impl_type_paths_from_ir;
 pub use view::{IrMut, IrView, NodeRef, NodeView};
 pub use workspace::{CrateView, CrateViewMut, WorkspaceIr};

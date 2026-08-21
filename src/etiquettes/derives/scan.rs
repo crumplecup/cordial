@@ -79,6 +79,23 @@ pub fn scan_rust_source(
     Ok(visitor.findings)
 }
 
+/// Every fact needed to build one [`DeriveSiteRecord`], bundled so
+/// [`DeriveScanVisitor::site`] takes one argument instead of seven.
+#[derive(derive_new::new)]
+struct SiteArgs {
+    rule_id: DeriveRuleId,
+    #[new(into)]
+    struct_name: String,
+    method_name: Option<String>,
+    #[new(into)]
+    qualified_local: String,
+    #[new(into)]
+    recommendation: String,
+    line: u32,
+    #[new(into)]
+    evidence: String,
+}
+
 #[derive(Debug, Clone)]
 struct StructInfo {
     attrs: Vec<syn::Attribute>,
@@ -110,29 +127,17 @@ impl DeriveScanVisitor {
         }
     }
 
-    #[instrument(
-        level = "trace",
-        skip(self, rule_id, struct_name, recommendation, evidence)
-    )]
-    fn site(
-        &self,
-        rule_id: DeriveRuleId,
-        struct_name: impl Into<String>,
-        method_name: Option<String>,
-        qualified_local: String,
-        recommendation: impl Into<String>,
-        line: u32,
-        evidence: impl Into<String>,
-    ) -> DeriveSiteRecord {
+    #[instrument(level = "trace", skip(self, args))]
+    fn site(&self, args: SiteArgs) -> DeriveSiteRecord {
         DeriveSiteRecord {
-            rule_id,
-            struct_name: struct_name.into(),
-            method_name,
-            qualified_name: self.qualify(&qualified_local),
-            recommendation: recommendation.into(),
+            rule_id: args.rule_id,
+            struct_name: args.struct_name,
+            method_name: args.method_name,
+            qualified_name: self.qualify(&args.qualified_local),
+            recommendation: args.recommendation,
             file: self.file.clone(),
-            line,
-            evidence: evidence.into(),
+            line: args.line,
+            evidence: args.evidence,
         }
     }
 
@@ -201,7 +206,7 @@ impl DeriveScanVisitor {
             .map(|field| format!("`{field}`"))
             .collect::<Vec<_>>()
             .join(", ");
-        let record = self.site(
+        let record = self.site(SiteArgs::new(
             DeriveRuleId::PubField001,
             name.clone(),
             None,
@@ -210,7 +215,7 @@ impl DeriveScanVisitor {
              derive_new, or derive_builder instead of struct literals",
             item_struct.span().start().line as u32,
             format!("non-private fields: {field_list}"),
-        );
+        ));
         self.push_finding(record);
     }
 
@@ -286,7 +291,7 @@ impl DeriveScanVisitor {
     ) {
         let recommendation = "Use #[derive(derive_builder::Builder)] on the built type";
         if self_ty.ends_with("Builder") {
-            let record = self.site(
+            let record = self.site(SiteArgs::new(
                 DeriveRuleId::Builder001,
                 self_ty,
                 None,
@@ -294,12 +299,12 @@ impl DeriveScanVisitor {
                 recommendation,
                 item_impl.span().start().line as u32,
                 format!("type `{self_ty}` ends with `Builder`"),
-            );
+            ));
             self.push_finding(record);
             return;
         }
         if let Some(line) = build_line {
-            let record = self.site(
+            let record = self.site(SiteArgs::new(
                 DeriveRuleId::Builder001,
                 self_ty,
                 Some("build".to_string()),
@@ -307,14 +312,15 @@ impl DeriveScanVisitor {
                 recommendation,
                 line,
                 format!("`{self_ty}::build(self) -> …`"),
-            );
+            ));
             self.push_finding(record);
             return;
         }
-        if !fluent_setters.is_empty() && fluent_setters.len() >= self.thresholds.min_fluent_setters()
+        if !fluent_setters.is_empty()
+            && fluent_setters.len() >= self.thresholds.min_fluent_setters()
         {
             let (name, line) = &fluent_setters[0];
-            let record = self.site(
+            let record = self.site(SiteArgs::new(
                 DeriveRuleId::Builder001,
                 self_ty,
                 Some(name.clone()),
@@ -325,7 +331,7 @@ impl DeriveScanVisitor {
                     "`{self_ty}` has {} fluent setter methods (e.g. `{name}`)",
                     fluent_setters.len()
                 ),
-            );
+            ));
             self.push_finding(record);
         }
     }
@@ -370,7 +376,7 @@ impl DeriveScanVisitor {
             FieldRead::AsStr | FieldRead::AsRef => return,
         };
 
-        let record = self.site(
+        let record = self.site(SiteArgs::new(
             DeriveRuleId::Getter001,
             self_ty,
             Some(method_name.to_string()),
@@ -378,7 +384,7 @@ impl DeriveScanVisitor {
             recommendation,
             method.span().start().line as u32,
             format!("`fn {method_name}(&self)` returns private field `{method_name}`"),
-        );
+        ));
         self.push_finding(record);
     }
 
@@ -419,7 +425,7 @@ impl DeriveScanVisitor {
             FieldRead::Direct | FieldRead::Clone => return,
         };
 
-        let record = self.site(
+        let record = self.site(SiteArgs::new(
             rule_id,
             self_ty,
             Some(method_name.to_string()),
@@ -427,7 +433,7 @@ impl DeriveScanVisitor {
             recommendation,
             method.span().start().line as u32,
             evidence,
-        );
+        ));
         self.push_finding(record);
     }
 
@@ -464,7 +470,7 @@ impl DeriveScanVisitor {
             return;
         };
 
-        let record = self.site(
+        let record = self.site(SiteArgs::new(
             DeriveRuleId::Setter001,
             self_ty,
             Some(method_name.to_string()),
@@ -472,7 +478,7 @@ impl DeriveScanVisitor {
             shape.recommendation(),
             method.span().start().line as u32,
             format!("manual setter `{method_name}` on `{self_ty}`"),
-        );
+        ));
         self.push_finding(record);
     }
 
@@ -499,7 +505,7 @@ impl DeriveScanVisitor {
 
         let args = constructor_arg_count(&method.sig);
         if args > self.thresholds.max_constructor_args() {
-            let record = self.site(
+            let record = self.site(SiteArgs::new(
                 DeriveRuleId::UseBuilder001,
                 self_ty,
                 Some(method_name.to_string()),
@@ -513,7 +519,7 @@ impl DeriveScanVisitor {
                     "`fn new` takes {args} arguments (max {})",
                     self.thresholds.max_constructor_args()
                 ),
-            );
+            ));
             self.push_finding(record);
             return;
         }
@@ -528,7 +534,7 @@ impl DeriveScanVisitor {
             return;
         }
 
-        let record = self.site(
+        let record = self.site(SiteArgs::new(
             DeriveRuleId::New001,
             self_ty,
             Some(method_name.to_string()),
@@ -539,7 +545,7 @@ impl DeriveScanVisitor {
                 "`fn new(…)` fills `{self_ty}` via struct literal (≤{} params)",
                 self.thresholds.max_constructor_args()
             ),
-        );
+        ));
         self.push_finding(record);
     }
 

@@ -31,7 +31,7 @@ pub fn quiet() {}
         .register(&TRACING_ETIQUETTE)
         .build();
 
-    let filter = NamedRunFilter::etiquettes(&["panics", "tracing"]);
+    let filter = NamedRunFilter::etiquettes(["panics", "tracing"]);
     let outcome = session
         .run(&filter)
         .into_diagnostic()
@@ -68,7 +68,7 @@ fn rollup_summary_lists_open_findings_by_etiquette() -> miette::Result<()> {
         .build();
 
     session
-        .run(&NamedRunFilter::etiquettes(&["panics"]))
+        .run(&NamedRunFilter::etiquettes(["panics"]))
         .into_diagnostic()
         .wrap_err("session run")?;
 

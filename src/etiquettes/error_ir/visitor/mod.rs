@@ -102,12 +102,10 @@ pub fn scan_rust_file_syntax(
     file: &Path,
     tree_root: &Path,
     src_root: &Path,
-    error_root: &Path,
     crate_root: &Path,
     crate_name: &str,
     layers: ErrorIrScanLayers,
 ) -> ErrorIrFileScan {
-    let _ = error_root;
     let module_prefix = module_path_from_src_file(tree_root, file);
     let mut visitor = ErrorIrUnifiedVisitor {
         layers,

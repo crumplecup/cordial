@@ -259,9 +259,7 @@ impl WidgetBuilder {
 "#;
     let findings = scan_rules(source, DerivesThresholds::default())?;
     assert!(
-        findings
-            .iter()
-            .any(|rule_id| *rule_id == DeriveRuleId::Builder001),
+        findings.contains(&DeriveRuleId::Builder001),
         "expected DERIVE-BUILDER-001: {findings:?}"
     );
     Ok(())
@@ -428,9 +426,7 @@ impl Node {
 "#;
     let findings = scan_rules(source, DerivesThresholds::default())?;
     assert!(
-        findings
-            .iter()
-            .any(|rule_id| *rule_id == DeriveRuleId::Builder001),
+        findings.contains(&DeriveRuleId::Builder001),
         "strip_option fluents count toward min_fluent_setters: {findings:?}"
     );
     Ok(())
@@ -458,9 +454,7 @@ impl Point {
 "#;
     let findings = scan_rules(source, DerivesThresholds::default())?;
     assert!(
-        findings
-            .iter()
-            .any(|rule_id| *rule_id == DeriveRuleId::Builder001),
+        findings.contains(&DeriveRuleId::Builder001),
         "expected DERIVE-BUILDER-001 from two trivial fluents: {findings:?}"
     );
     Ok(())
@@ -508,9 +502,7 @@ impl Widget {
 "#;
     let findings = scan_rules(source, DerivesThresholds::default())?;
     assert!(
-        findings
-            .iter()
-            .any(|rule_id| *rule_id == DeriveRuleId::AsStr001),
+        findings.contains(&DeriveRuleId::AsStr001),
         "expected DERIVE-ASSTR-001: {findings:?}"
     );
     assert!(
@@ -537,9 +529,7 @@ impl Widget {
 "#;
     let findings = scan_rules(source, DerivesThresholds::default())?;
     assert!(
-        findings
-            .iter()
-            .any(|rule_id| *rule_id == DeriveRuleId::AsRef001),
+        findings.contains(&DeriveRuleId::AsRef001),
         "expected DERIVE-ASREF-001: {findings:?}"
     );
     Ok(())

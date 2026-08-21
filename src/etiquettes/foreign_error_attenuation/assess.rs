@@ -158,6 +158,9 @@ fn classify_foreign_site(
         if foreign.source_snippet.contains(".ok(") || foreign.site_snippet.contains(".ok(") {
             return option_ok_neutral_record(foreign);
         }
+        if foreign.foreign_error_type == "std::fmt::Error" {
+            return fmt_error_exemplar_record(foreign);
+        }
         if is_miette_surface_site(foreign) {
             return miette_surface_record(foreign);
         }
@@ -259,6 +262,40 @@ fn miette_surface_record(foreign: &ForeignErrorTypeRecord) -> ForeignErrorAttenu
         source_snippet: foreign.source_snippet.clone(),
         site_snippet: foreign.site_snippet.clone(),
         good_pattern: foreign.site_snippet.clone(),
+        bad_pattern: String::new(),
+    }
+}
+
+/// `std::fmt::Error` carries no diagnostic detail worth wrapping (unlike
+/// `io::Error`/`serde_json::Error`, it has no message, no os error code,
+/// nothing a crate newtype's `source` would preserve beyond what `?`
+/// already keeps), and its only real producers -- `write!`/`writeln!`
+/// against a `Formatter` or any other `std::fmt::Write` sink -- live
+/// inside functions whose signature is fixed by that contract (most
+/// commonly `Display`/`Debug::fmt`, mandated to return `fmt::Result`
+/// exactly). There is no newtype to add: `?` is already the complete,
+/// correct, final handling every time.
+#[instrument(level = "debug", skip(foreign))]
+fn fmt_error_exemplar_record(foreign: &ForeignErrorTypeRecord) -> ForeignErrorAttenuationRecord {
+    ForeignErrorAttenuationRecord {
+        crate_name: foreign.crate_name.clone(),
+        foreign_error_type: foreign.foreign_error_type.clone(),
+        inference_rule_id: foreign.rule_id.clone(),
+        confidence: foreign.confidence,
+        handling_class: ForeignErrorHandlingClass::ChainPreserved,
+        resolution_id: ErrorHandlingResolutionId::MaintainExemplar,
+        resolution: "Reference pattern — std::fmt::Error carries no diagnostic detail to \
+                      preserve, and its producers (write!/writeln! against a Formatter or other \
+                      fmt::Write sink) live in functions whose return type the fmt::Write/Display/\
+                      Debug contract already fixes, so `?` is the complete, correct handling."
+            .to_string(),
+        kind: foreign.kind,
+        context: foreign.context.clone(),
+        file: foreign.file.clone(),
+        line: foreign.line,
+        source_snippet: foreign.source_snippet.clone(),
+        site_snippet: foreign.site_snippet.clone(),
+        good_pattern: format!("{}?", foreign.source_snippet),
         bad_pattern: String::new(),
     }
 }
