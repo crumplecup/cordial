@@ -163,7 +163,8 @@ fn append_top_heavy_parents(
         "Nested modules that kept at least {}% of their subtree in their own file \
          (and at least {} own lines). Action: peel remaining mass into children. \
          Hits are checklist items.\n\n",
-        thresholds.top_heavy_min_percent(), thresholds.hierarchy_min_lines(),
+        thresholds.top_heavy_min_percent(),
+        thresholds.hierarchy_min_lines(),
     ));
     let mut rows = Vec::new();
     for crate_name in names {
@@ -221,7 +222,8 @@ fn append_lopsided(
         "One child holding at least {}% of the siblings' combined subtree \
          after dropping siblings below {} lines. Action: split the dominant \
          child. Hits are checklist items.\n\n",
-        thresholds.lopsided_min_percent(), thresholds.hierarchy_min_lines(),
+        thresholds.lopsided_min_percent(),
+        thresholds.hierarchy_min_lines(),
     ));
     let mut rows = Vec::new();
     for crate_name in names {

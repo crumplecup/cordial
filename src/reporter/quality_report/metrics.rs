@@ -220,7 +220,8 @@ pub(super) fn modularity_metrics(findings: &[&dyn Finding]) -> ModularityMetrics
             let lines = field(finding, "lines")
                 .and_then(|value| value.parse::<u32>().ok())
                 .unwrap_or(0);
-            if lines < crate::config::ModularityThresholds::default().function_inventory_min_lines() {
+            if lines < crate::config::ModularityThresholds::default().function_inventory_min_lines()
+            {
                 continue;
             }
         }

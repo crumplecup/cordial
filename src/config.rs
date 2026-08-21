@@ -14,9 +14,7 @@ use crate::session::SessionView;
 
 use tracing::instrument;
 /// All etiquette knobs loaded from `cordial.toml`.
-#[derive(
-    Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters,
-)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct CordialConfig {
     #[serde(default)]
     visibility: VisibilityThresholds,

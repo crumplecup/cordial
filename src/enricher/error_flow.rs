@@ -85,7 +85,10 @@ fn crate_is_proc_macro(crate_root: &Path) -> bool {
     let mut in_lib_section = false;
     for line in manifest.lines() {
         let trimmed = line.trim();
-        if let Some(section) = trimmed.strip_prefix('[').and_then(|rest| rest.strip_suffix(']')) {
+        if let Some(section) = trimmed
+            .strip_prefix('[')
+            .and_then(|rest| rest.strip_suffix(']'))
+        {
             in_lib_section = section.trim() == "lib";
             continue;
         }

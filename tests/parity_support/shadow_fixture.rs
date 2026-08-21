@@ -33,7 +33,11 @@ pub fn write_minimal_rustdoc(
     Ok(path)
 }
 
-pub fn write_minimal_rustdoc_file(path: &Path, crate_name: &str, type_name: &str) -> miette::Result<()> {
+pub fn write_minimal_rustdoc_file(
+    path: &Path,
+    crate_name: &str,
+    type_name: &str,
+) -> miette::Result<()> {
     let root_id = Id(1);
     let struct_id = Id(2);
     let crate_key = crate_name.replace('-', "_");
