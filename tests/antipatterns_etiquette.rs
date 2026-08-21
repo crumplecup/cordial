@@ -199,6 +199,48 @@ fn proc_macro_abi_and_creusot_opaque_stub_unused_args_are_skipped() -> miette::R
 }
 
 #[test]
+fn cfg_sibling_unused_args_are_skipped_when_a_sibling_reads_them() -> miette::Result<()> {
+    let findings = scan_fixture("unused_underscore_args_cfg_siblings.rs")?;
+    let unused = findings
+        .iter()
+        .filter(|f| f.rule_id == AntipatternRuleId::UnusedUnderscoreArg001)
+        .collect::<Vec<_>>();
+
+    // Exempt: a cfg sibling (free fn and impl method) genuinely reads
+    // the same-named parameter.
+    assert!(
+        !unused
+            .iter()
+            .any(|f| f.context.contains("decide") && f.snippet == "_bytes"),
+        "{unused:?}"
+    );
+    assert!(
+        !unused
+            .iter()
+            .any(|f| f.context.contains("read") && f.snippet == "_source"),
+        "{unused:?}"
+    );
+
+    // Not exempt: neither cfg sibling reads `extra`, and `solo` has no
+    // same-named sibling at all -- both still flagged.
+    assert!(
+        unused
+            .iter()
+            .filter(|f| f.context.contains("unrelated") && f.snippet == "_extra")
+            .count()
+            == 2,
+        "{unused:?}"
+    );
+    assert!(
+        unused
+            .iter()
+            .any(|f| f.context.contains("solo") && f.snippet == "_alone"),
+        "{unused:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn crate_local_traits_apply_across_files() -> miette::Result<()> {
     let tmp = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let src = tmp.path().join("src");

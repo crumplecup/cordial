@@ -1,6 +1,6 @@
 //! Walk a parsed file and emit antipattern site records.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
@@ -13,11 +13,11 @@ use syn::{
 use crate::enricher::is_cfg_test;
 
 use super::preds::{
-    box_dyn_error_snippet, box_dyn_error_trait_object, has_proc_macro_abi_attr,
-    is_creusot_opaque_logic_stub, is_stringish_error_type, result_error_type,
-    result_string_error_snippet, static_ref_field_snippet, truncate_snippet,
-    type_contains_disallowed_static_ref, type_is_location_capture, type_label,
-    unused_argument_bindings,
+    box_dyn_error_snippet, box_dyn_error_trait_object, cfg_sibling_real_param_names_in_impl_items,
+    cfg_sibling_real_param_names_in_items, has_proc_macro_abi_attr, is_creusot_opaque_logic_stub,
+    is_stringish_error_type, result_error_type, result_string_error_snippet,
+    static_ref_field_snippet, truncate_snippet, type_contains_disallowed_static_ref,
+    type_is_location_capture, type_label, unused_argument_bindings,
 };
 use crate::etiquettes::antipatterns::types::{AntipatternRuleId, AntipatternSiteRecord};
 
@@ -32,6 +32,7 @@ pub(super) struct AntipatternScanVisitor<'a> {
     pub(super) in_foreign_trait_impl: bool,
     pub(super) local_trait_names: &'a HashSet<String>,
     pub(super) const_placed_types: &'a HashSet<String>,
+    pub(super) cfg_sibling_real_params: HashMap<String, HashSet<String>>,
     pub(super) findings: Vec<AntipatternSiteRecord>,
 }
 
@@ -152,11 +153,20 @@ impl AntipatternScanVisitor<'_> {
         if has_proc_macro_abi_attr(attrs) || is_creusot_opaque_logic_stub(attrs, block) {
             return;
         }
+        let real_names_elsewhere = self
+            .fn_stack
+            .last()
+            .and_then(|name| self.cfg_sibling_real_params.get(name));
         for arg in &sig.inputs {
             let FnArg::Typed(pat_type) = arg else {
                 continue;
             };
             for binding in unused_argument_bindings(&pat_type.pat) {
+                if let Some(unprefixed) = binding.snippet.strip_prefix('_')
+                    && real_names_elsewhere.is_some_and(|names| names.contains(unprefixed))
+                {
+                    continue;
+                }
                 self.findings.push(AntipatternSiteRecord {
                     rule_id: AntipatternRuleId::UnusedUnderscoreArg001,
                     context: self.site_context(),
@@ -172,9 +182,14 @@ impl AntipatternScanVisitor<'_> {
     fn visit_module_items(&mut self, items: &[syn::Item], module_prefix: &[String]) {
         let prev_prefix = self.module_prefix.clone();
         self.module_prefix = module_prefix.to_vec();
+        let prev_siblings = std::mem::replace(
+            &mut self.cfg_sibling_real_params,
+            cfg_sibling_real_param_names_in_items(items),
+        );
         for item in items {
             syn::visit::visit_item(self, item);
         }
+        self.cfg_sibling_real_params = prev_siblings;
         self.module_prefix = prev_prefix;
     }
 
@@ -193,6 +208,12 @@ impl AntipatternScanVisitor<'_> {
 }
 
 impl<'ast> Visit<'ast> for AntipatternScanVisitor<'_> {
+    #[instrument(level = "debug", skip(self, node))]
+    fn visit_file(&mut self, node: &'ast syn::File) {
+        let module_prefix = self.module_prefix.clone();
+        self.visit_module_items(&node.items, &module_prefix);
+    }
+
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         self.visit_mod(node);
@@ -250,11 +271,16 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor<'_> {
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
         let prev_type = self.impl_type.clone();
         let prev_foreign = self.in_foreign_trait_impl;
+        let prev_siblings = std::mem::replace(
+            &mut self.cfg_sibling_real_params,
+            cfg_sibling_real_param_names_in_impl_items(&node.items),
+        );
         self.impl_type = Some(type_label(&node.self_ty));
         self.in_foreign_trait_impl = is_foreign_trait_impl(node, self.local_trait_names);
         syn::visit::visit_item_impl(self, node);
         self.impl_type = prev_type;
         self.in_foreign_trait_impl = prev_foreign;
+        self.cfg_sibling_real_params = prev_siblings;
     }
 
     #[instrument(level = "debug", skip(self, node))]

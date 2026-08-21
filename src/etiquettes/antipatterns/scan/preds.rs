@@ -1,9 +1,12 @@
 //! Type and pattern predicates for antipattern rules.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use syn::spanned::Spanned;
-use syn::{Pat, PathArguments, Type, TypeParamBound, TypePath, TypeTraitObject};
+use syn::{
+    Attribute, FnArg, ImplItem, ImplItemFn, Item, ItemFn, Pat, PathArguments, Signature, Type,
+    TypeParamBound, TypePath, TypeTraitObject,
+};
 
 use tracing::instrument;
 pub(super) struct UnusedArgBinding {
@@ -303,6 +306,89 @@ pub(super) fn is_creusot_opaque_logic_stub(attrs: &[syn::Attribute], block: &syn
         block.stmts.as_slice(),
         [syn::Stmt::Expr(syn::Expr::Path(expr_path), None)] if expr_path.path.is_ident("dead")
     )
+}
+
+#[instrument(level = "trace", skip(attrs), ret)]
+fn has_cfg_attr(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| attr.path().is_ident("cfg"))
+}
+
+/// The non-underscore-prefixed top-level named parameters in `sig` --
+/// tuple/struct-destructured params are skipped, since a name-based
+/// cfg-sibling match (below) only makes sense against a plain identifier.
+#[instrument(level = "trace", skip(sig))]
+fn real_param_names(sig: &Signature) -> impl Iterator<Item = String> + '_ {
+    sig.inputs.iter().filter_map(|arg| {
+        let FnArg::Typed(pat_type) = arg else {
+            return None;
+        };
+        let Pat::Ident(pat_ident) = pat_type.pat.as_ref() else {
+            return None;
+        };
+        let name = pat_ident.ident.to_string();
+        (!name.starts_with('_')).then_some(name)
+    })
+}
+
+/// For each function name appearing more than once among `items`, where
+/// *every* occurrence carries some `#[cfg(...)]` attribute, the union of
+/// every non-underscore-prefixed parameter name used by any occurrence.
+///
+/// Rust requires same-named items in one scope to have disjoint `cfg`
+/// gates to coexist at all -- finding ≥2 cfg-gated occurrences of one
+/// name in the same item list is already proof they're deliberate
+/// variants of "the same" function (e.g. one body for `#[cfg(kani)]`,
+/// another for `#[cfg(not(kani))]`), not a chance name collision. A
+/// parameter underscore-prefixed in one variant but present, unprefixed,
+/// under the same name in a sibling is genuinely read there -- the
+/// underscore only reflects that one branch's own body, not the
+/// function's real shape across every branch.
+#[instrument(level = "debug", skip(items), ret)]
+pub(super) fn cfg_sibling_real_param_names_in_items(
+    items: &[Item],
+) -> HashMap<String, HashSet<String>> {
+    let mut groups: HashMap<String, Vec<&ItemFn>> = HashMap::new();
+    for item in items {
+        if let Item::Fn(item_fn) = item {
+            groups
+                .entry(item_fn.sig.ident.to_string())
+                .or_default()
+                .push(item_fn);
+        }
+    }
+    groups
+        .into_iter()
+        .filter(|(_, fns)| fns.len() >= 2 && fns.iter().all(|f| has_cfg_attr(&f.attrs)))
+        .map(|(name, fns)| {
+            let real_names = fns.iter().flat_map(|f| real_param_names(&f.sig)).collect();
+            (name, real_names)
+        })
+        .collect()
+}
+
+/// [`cfg_sibling_real_param_names_in_items`], for one `impl` block's
+/// associated functions instead of a module's free functions.
+#[instrument(level = "debug", skip(items), ret)]
+pub(super) fn cfg_sibling_real_param_names_in_impl_items(
+    items: &[ImplItem],
+) -> HashMap<String, HashSet<String>> {
+    let mut groups: HashMap<String, Vec<&ImplItemFn>> = HashMap::new();
+    for item in items {
+        if let ImplItem::Fn(item_fn) = item {
+            groups
+                .entry(item_fn.sig.ident.to_string())
+                .or_default()
+                .push(item_fn);
+        }
+    }
+    groups
+        .into_iter()
+        .filter(|(_, fns)| fns.len() >= 2 && fns.iter().all(|f| has_cfg_attr(&f.attrs)))
+        .map(|(name, fns)| {
+            let real_names = fns.iter().flat_map(|f| real_param_names(&f.sig)).collect();
+            (name, real_names)
+        })
+        .collect()
 }
 
 #[instrument(level = "debug", skip(ty))]

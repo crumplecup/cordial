@@ -1,6 +1,6 @@
 //! syn-based scan for antipattern probes (`Box<dyn Error>`, `Result<_, String>`, `&'static` struct fields except crate-local `dyn Trait` and const/static-only tables, …).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use syn::visit::Visit;
@@ -105,6 +105,7 @@ fn scan_parsed(
         in_foreign_trait_impl: false,
         local_trait_names,
         const_placed_types,
+        cfg_sibling_real_params: HashMap::new(),
         findings: Vec::new(),
     };
     visitor.visit_file(&syntax);
