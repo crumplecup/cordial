@@ -264,6 +264,47 @@ fn is_unused_argument_ident(ident: &syn::Ident) -> bool {
     ident.to_string().starts_with('_')
 }
 
+/// Whether `attrs` marks a function whose parameter list is a compiler-
+/// mandated ABI, not a shape its author chose: `#[proc_macro_attribute]`
+/// (always exactly `(TokenStream, TokenStream)`), `#[proc_macro_derive]`,
+/// or `#[proc_macro]`. Same reasoning as skipping a foreign trait impl's
+/// signature -- the parameter list isn't this function's own to shrink --
+/// just enforced by the macro system instead of a trait declaration.
+#[instrument(level = "debug", skip(attrs), ret)]
+pub(super) fn has_proc_macro_abi_attr(attrs: &[syn::Attribute]) -> bool {
+    ["proc_macro_attribute", "proc_macro_derive", "proc_macro"]
+        .iter()
+        .any(|name| attrs.iter().any(|attr| attr.path().is_ident(name)))
+}
+
+/// Whether `attrs` + `block` together mark a Creusot `#[trusted]
+/// #[logic(opaque)]` axiom stub: an uninterpreted logic function whose
+/// parameters exist only to make the axiom parametric across call sites
+/// (Pearlite substitutes the caller's own expression for each one), never
+/// to be read by the body -- `dead` is Creusot's own sentinel body for
+/// exactly this idiom, confirmed against real sites in both this
+/// workspace and `elicitation_creusot::logic_fns.rs`. Checking both the
+/// attribute and the body shape (not either alone) keeps this narrow:
+/// `#[logic(opaque)]` alone doesn't guarantee a `dead` body, and a
+/// function that merely happens to reference an identifier named `dead`
+/// without the attribute isn't this pattern.
+#[instrument(level = "debug", skip(attrs, block), ret)]
+pub(super) fn is_creusot_opaque_logic_stub(attrs: &[syn::Attribute], block: &syn::Block) -> bool {
+    let has_logic_opaque = attrs.iter().any(|attr| {
+        let syn::Meta::List(list) = &attr.meta else {
+            return false;
+        };
+        list.path.is_ident("logic") && list.tokens.to_string().replace(' ', "") == "opaque"
+    });
+    if !has_logic_opaque {
+        return false;
+    }
+    matches!(
+        block.stmts.as_slice(),
+        [syn::Stmt::Expr(syn::Expr::Path(expr_path), None)] if expr_path.path.is_ident("dead")
+    )
+}
+
 #[instrument(level = "debug", skip(ty))]
 pub(super) fn result_error_type(ty: &Type) -> Option<&Type> {
     let Type::Path(TypePath { path, .. }) = ty else {

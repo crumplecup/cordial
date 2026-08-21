@@ -152,6 +152,53 @@ fn foreign_trait_impl_unused_args_are_skipped() -> miette::Result<()> {
 }
 
 #[test]
+fn proc_macro_abi_and_creusot_opaque_stub_unused_args_are_skipped() -> miette::Result<()> {
+    let findings = scan_fixture("unused_underscore_args_exempt_signatures.rs")?;
+    let unused = findings
+        .iter()
+        .filter(|f| f.rule_id == AntipatternRuleId::UnusedUnderscoreArg001)
+        .collect::<Vec<_>>();
+
+    // Exempt: proc-macro ABI functions and the real #[logic(opaque)] +
+    // `dead`-body Creusot idiom.
+    assert!(
+        !unused.iter().any(|f| f.context.contains("my_attr")),
+        "{unused:?}"
+    );
+    assert!(
+        !unused.iter().any(|f| f.context.contains("my_derive")),
+        "{unused:?}"
+    );
+    assert!(
+        !unused.iter().any(|f| f.context.contains("my_macro")),
+        "{unused:?}"
+    );
+    assert!(
+        !unused
+            .iter()
+            .any(|f| f.context.contains("opaque_len") && !f.context.contains("real_body")),
+        "{unused:?}"
+    );
+
+    // Not exempt: #[logic(opaque)] without a bare `dead` body, and a
+    // bare `dead` body without #[logic(opaque)] -- both still flagged,
+    // proving the check requires both signals together, not either alone.
+    assert!(
+        unused
+            .iter()
+            .any(|f| f.context.contains("opaque_len_with_real_body")),
+        "{unused:?}"
+    );
+    assert!(
+        unused
+            .iter()
+            .any(|f| f.context.contains("looks_like_dead_but_is_not")),
+        "{unused:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn crate_local_traits_apply_across_files() -> miette::Result<()> {
     let tmp = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let src = tmp.path().join("src");

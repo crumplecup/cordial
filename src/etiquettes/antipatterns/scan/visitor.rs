@@ -6,14 +6,15 @@ use std::path::{Path, PathBuf};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{
-    Fields, FnArg, ItemEnum, ItemFn, ItemImpl, ItemMod, ItemStruct, ItemTrait, ItemType, Signature,
-    TraitItem, Type,
+    Attribute, Block, Fields, FnArg, ItemEnum, ItemFn, ItemImpl, ItemMod, ItemStruct, ItemTrait,
+    ItemType, Signature, TraitItem, Type,
 };
 
 use crate::enricher::is_cfg_test;
 
 use super::preds::{
-    box_dyn_error_snippet, box_dyn_error_trait_object, is_stringish_error_type, result_error_type,
+    box_dyn_error_snippet, box_dyn_error_trait_object, has_proc_macro_abi_attr,
+    is_creusot_opaque_logic_stub, is_stringish_error_type, result_error_type,
     result_string_error_snippet, static_ref_field_snippet, truncate_snippet,
     type_contains_disallowed_static_ref, type_is_location_capture, type_label,
     unused_argument_bindings,
@@ -143,9 +144,12 @@ impl AntipatternScanVisitor<'_> {
         }
     }
 
-    #[instrument(level = "debug", skip(self, sig))]
-    fn check_fn_sig(&mut self, sig: &Signature) {
+    #[instrument(level = "debug", skip(self, attrs, sig, block))]
+    fn check_fn_sig(&mut self, attrs: &[Attribute], sig: &Signature, block: &Block) {
         if self.in_trait_definition || self.in_foreign_trait_impl {
+            return;
+        }
+        if has_proc_macro_abi_attr(attrs) || is_creusot_opaque_logic_stub(attrs, block) {
             return;
         }
         for arg in &sig.inputs {
@@ -217,7 +221,7 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         self.fn_stack.push(node.sig.ident.to_string());
-        self.check_fn_sig(&node.sig);
+        self.check_fn_sig(&node.attrs, &node.sig, &node.block);
         syn::visit::visit_item_fn(self, node);
         self.fn_stack.pop();
     }
@@ -256,7 +260,7 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, node))]
     fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
         self.fn_stack.push(node.sig.ident.to_string());
-        self.check_fn_sig(&node.sig);
+        self.check_fn_sig(&node.attrs, &node.sig, &node.block);
         syn::visit::visit_impl_item_fn(self, node);
         self.fn_stack.pop();
     }
