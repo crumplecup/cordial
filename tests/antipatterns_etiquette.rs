@@ -428,6 +428,29 @@ fn const_static_only_types_may_store_static_str() -> miette::Result<()> {
 }
 
 #[test]
+fn inventory_collect_registered_types_may_store_static_str() -> miette::Result<()> {
+    let findings = scan_fixture("inventory_collect_static_refs.rs")?;
+    let static_refs: Vec<_> = findings
+        .iter()
+        .filter(|f| f.rule_id == AntipatternRuleId::StructStaticRef001)
+        .collect();
+    assert!(
+        !static_refs
+            .iter()
+            .any(|f| f.context.ends_with("::Registered::name")),
+        "inventory::collect!'d types must be exempt: {static_refs:?}"
+    );
+    assert!(
+        static_refs
+            .iter()
+            .any(|f| f.context.ends_with("::NotRegistered::name")),
+        "types with no inventory::collect! and real runtime construction must still be flagged: {static_refs:?}"
+    );
+    assert_eq!(static_refs.len(), 1);
+    Ok(())
+}
+
+#[test]
 fn antipatterns_etiquette_emits_reports() -> miette::Result<()> {
     let workspace =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/parity/workspaces/box_dyn_error");
