@@ -158,7 +158,7 @@ cargo test -p cordial --features full --test parity
 | `quality/` | `findings/` (quality etiquettes) | Cordial flattens; use etiquette prefix or subdirs later if needed |
 | `cache/builds/`, `inventories/`, `extracts/`, `assessed/` | `cache/{crate}.ir.json`, `{crate}.ir.digests.json` | Cordial IR cache replaces many intermediate JSONs; parity tests compare **derived reports**, not 1:1 cache files |
 | `cache/quality/{crate}.*.scan.json` | _(future)_ `{crate}.{etiquette}.scan.json` | Optional scan cache per etiquette |
-| `patches/`, `quality/patches/` | `exceptions/` | JSON patch format already ported; verify path conventions |
+| `patches/`, `quality/patches/` | `exceptions/`, `quality/patches/`, `patches/` | Load/backup copies all three; elicit_doc registries load without renaming |
 | `snapshots/` | _(not yet)_ | Drift digests — defer or port as `cordial snapshot` |
 
 ---

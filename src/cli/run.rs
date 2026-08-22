@@ -9,9 +9,11 @@ use crate::build_all_active_shadow_deps;
 #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
 use crate::build_workspace_members;
 use crate::{
-    CordialError, CordialResult, CrateIr, Disposition, NamedRunFilter, Plugin, RunAll, RunFilter,
-    RunOutcome, Session, SessionBuilder, StoreLayout, SurrealGraphExport, default_store_home,
-    load_exceptions, run_tracing_instrument_apply,
+    AddExceptionOutcome, CordialError, CordialResult, CoverageSkipEntry, CrateIr, Disposition,
+    ExceptionEntry, NamedRunFilter, Plugin, RunAll, RunFilter, RunOutcome, Session, SessionBuilder,
+    StoreLayout, SurrealGraphExport, add_coverage_skip, add_exception, backup_exception_files,
+    default_store_home, load_exception_files, load_exceptions, resolve_exceptions_root,
+    run_tracing_instrument_apply,
 };
 #[cfg(feature = "homecoming_std")]
 use crate::{SysrootCache, build_sysroot_libraries};
@@ -171,21 +173,91 @@ pub(super) fn view_store_file(store: &StoreLayout, path: &Path) -> CordialResult
 }
 
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+pub(super) fn execute_backup_exceptions(
+    project_root: &Path,
+    store: &StoreLayout,
+    root: &Path,
+) -> CordialResult<()> {
+    let backup_root = resolve_exceptions_root(project_root, root);
+    let copied = backup_exception_files(store, &backup_root)?;
+    println!(
+        "backed up {copied} exception files to {}",
+        backup_root.join(&store.project_slug).display()
+    );
+    Ok(())
+}
+
+#[instrument(level = "debug", skip(store), err(level = "warn"))]
+pub(super) fn execute_load_exceptions(
+    project_root: &Path,
+    store: &StoreLayout,
+    root: &Path,
+) -> CordialResult<()> {
+    let backup_root = resolve_exceptions_root(project_root, root);
+    let copied = load_exception_files(store, &backup_root)?;
+    println!(
+        "loaded {copied} exception files from {}",
+        backup_root.join(&store.project_slug).display()
+    );
+    Ok(())
+}
+
+#[instrument(level = "debug", skip(store, entry), err(level = "warn"))]
+pub(super) fn execute_add_exception(
+    store: &StoreLayout,
+    etiquette: &str,
+    crate_name: &str,
+    entry: ExceptionEntry,
+) -> CordialResult<()> {
+    print_add_outcome(add_exception(store, etiquette, crate_name, entry)?)
+}
+
+#[instrument(level = "debug", skip(store, entry), err(level = "warn"))]
+pub(super) fn execute_add_coverage_skip(
+    store: &StoreLayout,
+    patch_set: &str,
+    entry: CoverageSkipEntry,
+) -> CordialResult<()> {
+    print_add_outcome(add_coverage_skip(store, patch_set, entry)?)
+}
+
+#[instrument(level = "debug", skip(outcome))]
+fn print_add_outcome(outcome: AddExceptionOutcome) -> CordialResult<()> {
+    let verb = if outcome.inserted() {
+        "added"
+    } else {
+        "already present"
+    };
+    println!("{verb} {}", outcome.path().display());
+    Ok(())
+}
+
+#[instrument(level = "debug", skip(store), err(level = "warn"))]
 pub(super) fn list_exceptions(store: &StoreLayout) -> CordialResult<()> {
     let mut files = Vec::new();
     let exceptions_dir = store.exceptions_dir();
     if exceptions_dir.is_dir() {
         collect_files(&exceptions_dir, &exceptions_dir, &mut files, "exceptions")?;
     }
-    let patches_dir = store.quality_patches_dir();
+    let quality_patches_dir = store.quality_patches_dir();
+    if quality_patches_dir.is_dir() {
+        collect_files(
+            &quality_patches_dir,
+            &quality_patches_dir,
+            &mut files,
+            "quality/patches",
+        )?;
+    }
+    let patches_dir = store.patches_dir();
     if patches_dir.is_dir() {
-        collect_files(&patches_dir, &patches_dir, &mut files, "quality/patches")?;
+        collect_files(&patches_dir, &patches_dir, &mut files, "patches")?;
     }
     files.sort();
     if files.is_empty() {
         eprintln!(
-            "no exception files under {} or {}",
+            "no exception files under {}, {}, or {}",
             exceptions_dir.display(),
+            quality_patches_dir.display(),
             patches_dir.display()
         );
         return Ok(());

@@ -577,7 +577,13 @@ cordial explore  →  materialize into SurrealDB  →  interactive / agent queri
 ├── cache/{crate}/ir.json          ← serialized graph + indexes
 ├── cache/{crate}/ir.digests       ← source + rustdoc + enricher fingerprints
 ├── findings/                      ← per-etiquette outputs
-└── exceptions/                    ← JSON patch suppressions (ported from elicit_doc)
+├── exceptions/                    ← quality suppressions (`{etiquette}/{crate}.json`)
+├── quality/patches/               ← elicit_doc alias for the same quality files
+└── patches/                       ← coverage skip lists (`{crate}.json`)
+
+Repo-side registry (checked into CI): `{project}/.cordial-exceptions/{slug}/`
+mirrors those three subtrees. `cordial exceptions load [path]` copies into
+the store; `cordial exceptions backup [path]` writes the store back out.
 ```
 
 Cache key includes:
@@ -685,7 +691,7 @@ Refactor to **Plugin + Coverage** model tracked in
 
 ### Phase 5 — CLI + polish
 
-- [x] `cordial_cli`: `run`, `quality`, `coverage`, `view`, `exceptions`
+- [x] `cordial_cli`: `run`, `quality`, `coverage`, `view`, `exceptions` (`list` / `show` / `add` / `load` / `backup`)
 - [x] Rollup reporter (executive summary across etiquettes)
 - [x] Optional SurrealDB export for agent integration
 

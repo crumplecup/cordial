@@ -36,6 +36,9 @@ cordial coverage                      # impl / trenchcoat / shadow (and std if e
 cordial run                           # quality + coverage
 cordial exceptions list
 cordial exceptions show <etiquette>
+cordial exceptions add <etiquette> --file src/lib.rs --reason "..."
+cordial exceptions load                  # copy repo registry into ~/.cordial
+cordial exceptions backup                # copy store exceptions back into the repo
 cordial view findings/rollup-summary.md
 ```
 
@@ -52,8 +55,44 @@ Thresholds load later-wins from `CordialConfig::default`, then
 back to defaults. Canonical knobs: committed [`cordial.toml`](cordial.toml) and
 [docs/planning/cordial-config.md](docs/planning/cordial-config.md).
 
-Documented exceptions are JSON patches under the project store
-(`cordial exceptions`).
+Hand-audited exceptions live in the target repo (CI) and copy into the
+store before a run:
+
+```sh
+# From the target repo root, after cloning or cleaning ~/.cordial
+cordial exceptions load
+# After editing store patches, write them back for review
+cordial exceptions backup
+```
+
+Default registry path is `{project}/.cordial-exceptions`. Relative paths
+join the project root, so `cordial -p /repos/elicitation exceptions load
+.elicit_doc-exceptions` works from any cwd. The slug-scoped tree is:
+
+```text
+.cordial-exceptions/
+  {slug}/
+    exceptions/          # quality suppressions: {etiquette}/{crate}.json
+    quality/patches/     # elicit_doc alias for the same files
+    patches/             # coverage skip lists: {crate}.json, {crate}-shadow.json
+```
+
+`load` replaces those store subtrees (stale files are deleted). Missing
+`{root}/{slug}` is an error. `cordial exceptions list` / `show` inspect
+what is in the store after load.
+
+Create one store row at a time with flags (scripts / CSV loops):
+
+```sh
+cordial exceptions add panics --file src/lib.rs --rule-id PANIC-SOURCE-PANIC --reason "intentional"
+cordial exceptions add panics --file src/lib.rs --line 12 --context demo::boom --reason "fixture"
+cordial exceptions add --patch-set chrono --path chrono::DateTime --reason "upstream skip"
+```
+
+`--crate-name` selects the quality JSON stem (default: global `--crate-name`
+or the project directory). Then `cordial exceptions backup` writes the
+store back into the repo registry. The same append lives on the library
+as `add_exception` / `add_coverage_skip`.
 
 ## Quality etiquettes
 
