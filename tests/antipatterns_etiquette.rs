@@ -451,6 +451,30 @@ fn inventory_collect_registered_types_may_store_static_str() -> miette::Result<(
 }
 
 #[test]
+fn trait_static_slice_or_ref_return_types_may_store_static_str() -> miette::Result<()> {
+    let findings = scan_fixture("trait_static_slice_return_static_refs.rs")?;
+    let static_refs: Vec<_> = findings
+        .iter()
+        .filter(|f| f.rule_id == AntipatternRuleId::StructStaticRef001)
+        .collect();
+    assert!(
+        !static_refs
+            .iter()
+            .any(|f| f.context.ends_with("::Transition::name")),
+        "a type promised by a trait's own -> &'static [Type]/&'static Type \
+         return signature must be exempt: {static_refs:?}"
+    );
+    assert!(
+        static_refs
+            .iter()
+            .any(|f| f.context.ends_with("::NotPromised::name")),
+        "{static_refs:?}"
+    );
+    assert_eq!(static_refs.len(), 1);
+    Ok(())
+}
+
+#[test]
 fn antipatterns_etiquette_emits_reports() -> miette::Result<()> {
     let workspace =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/parity/workspaces/box_dyn_error");

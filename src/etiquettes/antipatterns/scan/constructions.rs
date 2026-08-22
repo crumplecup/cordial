@@ -3,7 +3,10 @@
 use std::collections::HashSet;
 
 use syn::visit::Visit;
-use syn::{ExprCall, ExprStruct, ImplItemConst, ItemConst, ItemMacro, ItemMod, ItemStatic};
+use syn::{
+    ExprCall, ExprStruct, ImplItemConst, ItemConst, ItemMacro, ItemMod, ItemStatic, ItemTrait,
+    ReturnType, TraitItem, Type,
+};
 
 use crate::enricher::is_cfg_test;
 
@@ -96,7 +99,46 @@ fn inventory_collect_target(mac: &syn::Macro) -> Option<String> {
     }
     syn::parse2::<syn::Path>(mac.tokens.clone())
         .ok()
-        .and_then(|path| path.segments.last().map(|segment| segment.ident.to_string()))
+        .and_then(|path| {
+            path.segments
+                .last()
+                .map(|segment| segment.ident.to_string())
+        })
+}
+
+/// A trait method declaring `-> &'static [TypeName]` (or `&'static
+/// TypeName`) commits every real implementor, in every crate, to produce
+/// a `&'static`-lifetime value of `TypeName` -- the same class of
+/// same-crate-visible, hard signal `inventory::collect!` is, just
+/// expressed through a trait contract instead of a registration macro.
+/// Matches a method with a default body too (e.g. `fn root_entries() ->
+/// &'static [RootEntry] { &[] }`): a default can still be overridden, and
+/// the signature itself is what binds every implementor, body or not.
+#[instrument(level = "trace", ret)]
+fn static_slice_or_ref_return_type(sig: &syn::Signature) -> Option<String> {
+    let ReturnType::Type(_, ty) = &sig.output else {
+        return None;
+    };
+    let Type::Reference(reference) = ty.as_ref() else {
+        return None;
+    };
+    let is_static = reference
+        .lifetime
+        .as_ref()
+        .is_some_and(|lifetime| lifetime.ident == "static");
+    if !is_static {
+        return None;
+    }
+    let inner = match reference.elem.as_ref() {
+        Type::Slice(slice) => slice.elem.as_ref(),
+        other => other,
+    };
+    let Type::Path(type_path) = inner else {
+        return None;
+    };
+    let last = type_path.path.segments.last()?;
+    let name = last.ident.to_string();
+    is_type_ident(&name).then_some(name)
 }
 
 impl<'ast> Visit<'ast> for ConstructionCollector<'_> {
@@ -136,6 +178,18 @@ impl<'ast> Visit<'ast> for ConstructionCollector<'_> {
         self.in_const += 1;
         syn::visit::visit_impl_item_const(self, node);
         self.in_const -= 1;
+    }
+
+    #[instrument(level = "debug", skip(self, node))]
+    fn visit_item_trait(&mut self, node: &'ast ItemTrait) {
+        for item in &node.items {
+            if let TraitItem::Fn(method) = item
+                && let Some(type_name) = static_slice_or_ref_return_type(&method.sig)
+            {
+                self.const_constructed.insert(type_name);
+            }
+        }
+        syn::visit::visit_item_trait(self, node);
     }
 
     #[instrument(level = "debug", skip(self, node))]
