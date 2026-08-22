@@ -40,7 +40,7 @@ struct RawVerifierSkipEntry {
 #[instrument(level = "info", skip(store))]
 pub fn load_verifier_skip_map(store: &StoreLayout, patch_set: &str) -> VerifierSkipMap {
     let candidates = [
-        store.root.join("patches").join(format!("{patch_set}.json")),
+        store.patches_dir().join(format!("{patch_set}.json")),
         store.exceptions_dir().join(format!("{patch_set}.json")),
     ];
     for path in candidates {

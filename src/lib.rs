@@ -250,7 +250,12 @@ pub use config::{
     TracingThresholds, VisibilityThresholds, load_cordial_config, load_derives_thresholds,
     load_session_config, load_visibility_thresholds,
 };
-pub use exceptions::{ExceptionEntry, ExceptionSet, apply_exception_sets, load_exceptions};
+pub use exceptions::{
+    AddExceptionOutcome, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,
+    ExceptionSet, add_coverage_skip, add_exception, apply_exception_sets, backup_exception_files,
+    coverage_skip_file_path, exception_file_path, load_exception_files, load_exceptions,
+    resolve_exceptions_root,
+};
 pub use export::{SurrealEdge, SurrealGraphExport, SurrealNode, surreal_statements};
 pub use filter::NamedRunFilter;
 pub use hooks::{

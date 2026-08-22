@@ -1,10 +1,11 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::error::CordialResult;
+use crate::error::{CordialError, CordialResult};
 use crate::objects::{Disposition, Finding, MapFindingSink, Rule};
 use crate::store::StoreLayout;
 
@@ -53,6 +54,41 @@ impl ExceptionSet {
 }
 
 impl ExceptionEntry {
+    #[instrument(level = "debug", skip(file, reason), ret)]
+    pub fn new(file: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self {
+            file: file.into(),
+            line: None,
+            rule_id: None,
+            context: None,
+            reason: reason.into(),
+        }
+    }
+
+    #[instrument(level = "debug", skip(self), ret)]
+    pub fn with_line(self, line: u32) -> Self {
+        Self {
+            line: Some(line),
+            ..self
+        }
+    }
+
+    #[instrument(level = "debug", skip(self, rule_id), ret)]
+    pub fn with_rule_id(self, rule_id: impl Into<String>) -> Self {
+        Self {
+            rule_id: Some(rule_id.into()),
+            ..self
+        }
+    }
+
+    #[instrument(level = "debug", skip(self, context), ret)]
+    pub fn with_context(self, context: impl Into<String>) -> Self {
+        Self {
+            context: Some(context.into()),
+            ..self
+        }
+    }
+
     #[instrument(level = "debug", skip(self, finding))]
     fn matches(&self, finding: &dyn Finding) -> bool {
         let mut sink = MapFindingSink::default();
@@ -162,6 +198,136 @@ pub fn load_exceptions(
     Ok(ExceptionSet { entries })
 }
 
+/// Canonical quality exception file: `{store}/exceptions/{etiquette}/{crate}.json`.
+#[instrument(level = "trace", skip(store))]
+pub fn exception_file_path(store: &StoreLayout, etiquette_id: &str, crate_name: &str) -> PathBuf {
+    store
+        .exceptions_dir()
+        .join(etiquette_id)
+        .join(format!("{crate_name}.json"))
+}
+
+/// Canonical coverage skip list: `{store}/patches/{patch_set}.json`.
+#[instrument(level = "trace", skip(store))]
+pub fn coverage_skip_file_path(store: &StoreLayout, patch_set: &str) -> PathBuf {
+    store.patches_dir().join(format!("{patch_set}.json"))
+}
+
+/// One coverage skip-list row in `{store}/patches/{patch_set}.json`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoverageSkipEntry {
+    /// Qualified path or type name to skip.
+    pub path: String,
+    /// Human-readable explanation shown in reports.
+    pub reason: String,
+}
+
+impl CoverageSkipEntry {
+    #[instrument(level = "debug", skip(path, reason), ret)]
+    pub fn new(path: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            reason: reason.into(),
+        }
+    }
+}
+
+/// Result of appending one exception row to a store file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AddExceptionOutcome {
+    /// The row was written to `path`.
+    Inserted { path: PathBuf },
+    /// An identical row was already present at `path`.
+    AlreadyPresent { path: PathBuf },
+}
+
+impl AddExceptionOutcome {
+    #[instrument(level = "trace", skip(self))]
+    pub fn path(&self) -> &Path {
+        match self {
+            Self::Inserted { path } | Self::AlreadyPresent { path } => path,
+        }
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    pub fn inserted(&self) -> bool {
+        matches!(self, Self::Inserted { .. })
+    }
+}
+
+/// Append a quality exception to `{store}/exceptions/{etiquette}/{crate}.json`.
+///
+/// Creates the file when missing. An identical row is a no-op. Rows that
+/// already live in the elicit_doc alias are left there and not duplicated.
+#[instrument(level = "info", skip(store, entry), fields(crate_name = crate_name), err(level = "warn"))]
+pub fn add_exception(
+    store: &StoreLayout,
+    etiquette_id: &str,
+    crate_name: &str,
+    entry: ExceptionEntry,
+) -> CordialResult<AddExceptionOutcome> {
+    require_nonempty("etiquette", etiquette_id)?;
+    require_nonempty("crate_name", crate_name)?;
+    let entry = normalize_quality_entry(entry)?;
+    let canonical = exception_file_path(store, etiquette_id, crate_name);
+    let alias = store
+        .quality_patches_dir()
+        .join(etiquette_id)
+        .join(format!("{crate_name}.json"));
+
+    let mut entries = if canonical.is_file() {
+        parse_exception_file(&canonical)?
+    } else {
+        Vec::new()
+    };
+    if entries.contains(&entry) {
+        return Ok(AddExceptionOutcome::AlreadyPresent { path: canonical });
+    }
+    if alias.is_file() {
+        let alias_entries = parse_exception_file(&alias)?;
+        if alias_entries.contains(&entry) {
+            return Ok(AddExceptionOutcome::AlreadyPresent { path: alias });
+        }
+    }
+
+    entries.push(entry);
+    write_pretty_json(&canonical, &entries)?;
+    Ok(AddExceptionOutcome::Inserted { path: canonical })
+}
+
+/// Append a coverage skip to `{store}/patches/{patch_set}.json`.
+///
+/// Existing objects keep unknown fields (for example `verifiers`). An
+/// identical `path` in the canonical file or the `exceptions/` alias is a
+/// no-op.
+#[instrument(level = "info", skip(store, entry), err(level = "warn"))]
+pub fn add_coverage_skip(
+    store: &StoreLayout,
+    patch_set: &str,
+    entry: CoverageSkipEntry,
+) -> CordialResult<AddExceptionOutcome> {
+    require_nonempty("patch_set", patch_set)?;
+    let entry = normalize_coverage_entry(entry)?;
+    let canonical = coverage_skip_file_path(store, patch_set);
+    let alias = store.exceptions_dir().join(format!("{patch_set}.json"));
+
+    let mut rows = if canonical.is_file() {
+        parse_json_array(&canonical)?
+    } else {
+        Vec::new()
+    };
+    if json_rows_contain_path(&rows, &entry.path) {
+        return Ok(AddExceptionOutcome::AlreadyPresent { path: canonical });
+    }
+    if alias.is_file() && json_rows_contain_path(&parse_json_array(&alias)?, &entry.path) {
+        return Ok(AddExceptionOutcome::AlreadyPresent { path: alias });
+    }
+
+    rows.push(serde_json::to_value(&entry)?);
+    write_pretty_json(&canonical, &rows)?;
+    Ok(AddExceptionOutcome::Inserted { path: canonical })
+}
+
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
 fn parse_exception_file(path: &Path) -> CordialResult<Vec<ExceptionEntry>> {
     let bytes = std::fs::read(path)?;
@@ -214,7 +380,190 @@ fn paths_match(patch_path: &str, finding_path: &str) -> bool {
     patch == finding || finding.ends_with(&patch) || finding.ends_with(&format!("/{patch}"))
 }
 
+/// Default repo-side registry directory name, relative to the project root.
+pub const DEFAULT_EXCEPTIONS_REGISTRY: &str = ".cordial-exceptions";
+
+/// Resolve a load/backup registry root against the project.
+///
+/// Absolute paths stay as given. Relative paths join the project root so
+/// `cordial -p /repo exceptions load .elicit_doc-exceptions` works from any cwd.
+#[instrument(level = "debug")]
+pub fn resolve_exceptions_root(project_root: &Path, root: &Path) -> PathBuf {
+    if root.is_absolute() {
+        root.to_path_buf()
+    } else {
+        project_root.join(root)
+    }
+}
+
+/// Backup curated exception files into `{backup_root}/{slug}/...`.
+///
+/// Writes `exceptions/`, `quality/patches/`, and `patches/` (coverage skip
+/// lists). The last two keep elicit_doc's registry layout so a checkout like
+/// elicitation's `.elicit_doc-exceptions/` loads without renaming.
+#[instrument(level = "info", skip(store), err(level = "warn"))]
+pub fn backup_exception_files(store: &StoreLayout, backup_root: &Path) -> CordialResult<usize> {
+    store.ensure_dirs()?;
+    let backup_slug_root = backup_root.join(&store.project_slug);
+    let mut copied = 0usize;
+    for (relative, from) in exception_subtrees(store) {
+        copied += sync_exception_subtree(&from, &backup_slug_root.join(relative))?;
+    }
+    prune_empty_dirs_up_to(&backup_slug_root, backup_root)?;
+    Ok(copied)
+}
+
+/// Load curated exception files from `{backup_root}/{slug}/...` into the store.
+///
+/// Replaces the matching store subtrees. Missing backup subtrees clear the
+/// corresponding store dirs so the registry is the source of truth.
+#[instrument(level = "info", skip(store), err(level = "warn"))]
+pub fn load_exception_files(store: &StoreLayout, backup_root: &Path) -> CordialResult<usize> {
+    let backup_slug_root = backup_root.join(&store.project_slug);
+    if !backup_slug_root.is_dir() {
+        return Err(CordialError::not_found(backup_slug_root));
+    }
+    store.ensure_dirs()?;
+    let mut copied = 0usize;
+    for (relative, to) in exception_subtrees(store) {
+        copied += sync_exception_subtree(&backup_slug_root.join(relative), &to)?;
+    }
+    Ok(copied)
+}
+
+#[instrument(level = "trace", skip(store))]
+fn exception_subtrees(store: &StoreLayout) -> [(&'static str, PathBuf); 3] {
+    [
+        ("exceptions", store.exceptions_dir()),
+        ("quality/patches", store.quality_patches_dir()),
+        ("patches", store.patches_dir()),
+    ]
+}
+
+#[instrument(level = "debug", skip(from, to), err(level = "warn"))]
+fn sync_exception_subtree(from: &Path, to: &Path) -> CordialResult<usize> {
+    if to.exists() {
+        fs::remove_dir_all(to)?;
+    }
+    if !from.exists() || (from.is_dir() && dir_is_empty(from)?) {
+        return Ok(0);
+    }
+    fs::create_dir_all(to)?;
+    copy_tree_overwrite(from, to)
+}
+
+#[instrument(level = "debug", skip(from, to), err(level = "warn"))]
+fn copy_tree_overwrite(from: &Path, to: &Path) -> CordialResult<usize> {
+    let mut copied = 0usize;
+    for entry in fs::read_dir(from)? {
+        let entry = entry?;
+        let src = entry.path();
+        let dest = to.join(entry.file_name());
+        if src.is_dir() {
+            fs::create_dir_all(&dest)?;
+            copied += copy_tree_overwrite(&src, &dest)?;
+        } else if src.is_file() {
+            if let Some(parent) = dest.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(&src, &dest)?;
+            copied += 1;
+        }
+    }
+    Ok(copied)
+}
+
+#[instrument(level = "debug", skip(start, stop), err(level = "warn"))]
+fn prune_empty_dirs_up_to(start: &Path, stop: &Path) -> CordialResult<()> {
+    let mut current = start.to_path_buf();
+    while current.starts_with(stop) && current != stop {
+        if !current.exists() || !dir_is_empty(&current)? {
+            break;
+        }
+        fs::remove_dir(&current)?;
+        let Some(parent) = current.parent() else {
+            break;
+        };
+        current = parent.to_path_buf();
+    }
+    Ok(())
+}
+
+#[instrument(level = "trace", skip(path), err(level = "warn"))]
+fn dir_is_empty(path: &Path) -> CordialResult<bool> {
+    Ok(fs::read_dir(path)?.next().transpose()?.is_none())
+}
+
 #[instrument(level = "debug", skip(path))]
 fn normalize_rel_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+#[instrument(level = "debug")]
+fn require_nonempty(label: &str, value: &str) -> CordialResult<()> {
+    if value.trim().is_empty() {
+        return Err(CordialError::invariant(format!(
+            "{label} must not be empty"
+        )));
+    }
+    Ok(())
+}
+
+#[instrument(level = "debug", skip(entry), err(level = "warn"))]
+fn normalize_quality_entry(mut entry: ExceptionEntry) -> CordialResult<ExceptionEntry> {
+    entry.file = normalize_rel_path(Path::new(entry.file.trim()));
+    entry.reason = entry.reason.trim().to_string();
+    if let Some(rule_id) = entry.rule_id.as_mut() {
+        *rule_id = rule_id.trim().to_string();
+        if rule_id.is_empty() {
+            entry.rule_id = None;
+        }
+    }
+    if let Some(context) = entry.context.as_mut() {
+        *context = context.trim().to_string();
+        if context.is_empty() {
+            entry.context = None;
+        }
+    }
+    require_nonempty("file", &entry.file)?;
+    require_nonempty("reason", &entry.reason)?;
+    Ok(entry)
+}
+
+#[instrument(level = "debug", skip(entry), err(level = "warn"))]
+fn normalize_coverage_entry(mut entry: CoverageSkipEntry) -> CordialResult<CoverageSkipEntry> {
+    entry.path = entry.path.trim().to_string();
+    entry.reason = entry.reason.trim().to_string();
+    require_nonempty("path", &entry.path)?;
+    require_nonempty("reason", &entry.reason)?;
+    Ok(entry)
+}
+
+#[instrument(level = "debug", skip(path), err(level = "warn"))]
+fn parse_json_array(path: &Path) -> CordialResult<Vec<serde_json::Value>> {
+    let bytes = fs::read(path)?;
+    serde_json::from_slice::<Vec<serde_json::Value>>(&bytes)
+        .map_err(|err| CordialError::json_parse(path.display().to_string(), err))
+}
+
+#[instrument(level = "trace", skip(rows))]
+fn json_rows_contain_path(rows: &[serde_json::Value], path: &str) -> bool {
+    rows.iter().any(|row| {
+        row.get("path")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| value == path)
+    })
+}
+
+#[instrument(level = "debug", skip(path, value), err(level = "warn"))]
+fn write_pretty_json(path: &Path, value: &impl Serialize) -> CordialResult<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut body = serde_json::to_string_pretty(value)?;
+    if !body.ends_with('\n') {
+        body.push('\n');
+    }
+    fs::write(path, body)?;
+    Ok(())
 }

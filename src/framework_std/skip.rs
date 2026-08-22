@@ -18,7 +18,7 @@ struct SkipEntry {
 #[instrument(level = "info", skip(store))]
 pub fn load_framework_skip_map(store: &StoreLayout, patch_set: &str) -> SkipMap {
     let candidates = [
-        store.root.join("patches").join(format!("{patch_set}.json")),
+        store.patches_dir().join(format!("{patch_set}.json")),
         store.exceptions_dir().join(format!("{patch_set}.json")),
     ];
     for path in candidates {

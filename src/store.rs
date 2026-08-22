@@ -61,6 +61,11 @@ impl StoreLayout {
         self.config_dir().join(format!("{etiquette_id}.json"))
     }
 
+    #[instrument(level = "trace", skip(self))]
+    pub fn patches_dir(&self) -> PathBuf {
+        self.root.join("patches")
+    }
+
     /// elicit_doc-compatible patch layout: `{store}/quality/patches/{etiquette}/{crate}.json`.
     #[instrument(level = "trace", skip(self))]
     pub fn quality_patches_dir(&self) -> PathBuf {
