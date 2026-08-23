@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use cordial::{VerusFnMode, VerusPublish, scan_verus_rust_source};
+use cordial::{VerusFnMode, VerusPanicKind, VerusPublish, scan_verus_rust_source};
 
 /// Reproduces `cstr_carrier.rs::verify_cstr_excludes_the_terminating_nul_from_to_bytes`
 /// -- the exact function whose real `@` view-operator usage broke the
@@ -70,6 +70,14 @@ fn parses_a_function_whose_body_uses_the_view_operator() {
     assert!(!exec_fn.uses_assume);
     assert!(!exec_fn.uses_admit);
     assert!(!exec_fn.is_external_body);
+
+    // The real completion of panics::verus_recover's own motivating gap:
+    // this exact function's real .unwrap() call (invisible to that
+    // best-effort recovery because a *later* line in the same body uses
+    // the `@` view operator, failing the whole block's syn::Block parse)
+    // is found here via a real, complete parse.
+    assert_eq!(exec_fn.panic_sites.len(), 1, "{:?}", exec_fn.panic_sites);
+    assert_eq!(exec_fn.panic_sites[0].kind, VerusPanicKind::Unwrap);
 }
 
 const ASSUME_AND_AXIOM_SOURCE: &str = r#"
@@ -142,5 +150,66 @@ fn detects_real_soundness_escape_hatches() {
         4,
         "expected every one of the 4 real escape hatches to be flagged: {:?}",
         ir.functions
+    );
+}
+
+const SIGNATURE_FACTS_SOURCE: &str = r#"
+use verus_builtin_macros::verus;
+
+verus! {
+
+pub broadcast proof fn lemma_applies_everywhere(tracked cred: Cred)
+    recommends
+        cred.is_valid(),
+    ensures
+        true,
+{
+}
+
+pub fn matches_on_result(x: i32) -> (result: bool)
+{
+    match x {
+        0 => panic!("zero"),
+        1 => unreachable!(),
+        _ => x.checked_div(2).expect("nonzero"),
+    };
+    x.checked_div(2).unwrap_err().is_some()
+}
+
+}
+"#;
+
+#[test]
+fn extracts_signature_level_facts_and_every_panic_site_kind() {
+    let ir = scan_verus_rust_source(
+        SIGNATURE_FACTS_SOURCE,
+        Path::new("signature_sample.rs"),
+        "gallery::signature_sample",
+    );
+
+    let find = |name: &str| {
+        ir.functions
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("{name} not found in {:?}", ir.functions))
+    };
+
+    let lemma = find("lemma_applies_everywhere");
+    assert!(lemma.is_broadcast);
+    assert_eq!(lemma.tracked_params, vec!["cred"]);
+    assert_eq!(lemma.recommends, vec!["cred . is_valid ()"]);
+
+    let matcher = find("matches_on_result");
+    let kinds: Vec<VerusPanicKind> = matcher.panic_sites.iter().map(|s| s.kind).collect();
+    assert_eq!(
+        kinds,
+        vec![
+            VerusPanicKind::Panic,
+            VerusPanicKind::Unreachable,
+            VerusPanicKind::Expect,
+            VerusPanicKind::Unwrap,
+        ],
+        "{:?}",
+        matcher.panic_sites
     );
 }

@@ -53,6 +53,29 @@ pub enum VerusPublish {
     Default,
 }
 
+/// Category of abort site found inside a `verus! { .. }` function body --
+/// the same four categories `crate::etiquettes::panics` tracks, found
+/// here via a real, complete parse instead of the best-effort token
+/// recovery `panics::verus_recover` falls back to for a body real
+/// `verus_syn` can't make sense of either (there is no such body for
+/// `verus_syn` in practice -- it understands the whole grammar, not just
+/// ordinary-looking fragments of it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum VerusPanicKind {
+    Panic,
+    Unreachable,
+    Expect,
+    Unwrap,
+}
+
+/// One abort site found inside a function's body.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerusPanicSite {
+    pub kind: VerusPanicKind,
+    pub line: u32,
+    pub snippet: String,
+}
+
 /// Real facts extracted from one `fn`/`spec fn`/`proof fn` found inside a
 /// `verus! { .. }` block, via `verus_syn`'s own real Verus-aware parser
 /// -- not best-effort token recovery (see `crate::etiquettes::panics::
@@ -95,6 +118,29 @@ pub struct VerusFnFacts {
     /// the `ensures` clause is trusted based on the (unverified) exec
     /// code alone.
     pub is_external_body: bool,
+    /// Every `panic!`/`unreachable!`/`.expect(..)`/`.unwrap()` site found
+    /// in the body -- the direct completion of this module's own
+    /// motivating gap (`panics::verus_recover`'s best-effort recovery
+    /// found 7 of the 13 real sites known to exist in `amenable_verus`;
+    /// a real parse finds all of them).
+    pub panic_sites: Vec<VerusPanicSite>,
+    /// Every `requires`/`ensures`-mode `tracked` parameter's own name --
+    /// a parameter Verus threads through as ghost-but-linear state
+    /// rather than an ordinary value, real signal for what this
+    /// function's own proof obligation actually depends on carrying.
+    pub tracked_params: Vec<String>,
+    /// Every `recommends` clause, rendered back to text -- a
+    /// well-formedness condition Verus checks (and reports separately
+    /// from `requires` failures) but doesn't require the caller to
+    /// discharge; distinguishing "recommended" from "required" callers
+    /// is itself a real proof-design choice worth being able to see.
+    pub recommends: Vec<String>,
+    /// Whether the function is declared `broadcast` -- a lemma Verus
+    /// applies automatically to every proof in scope (via `use`) rather
+    /// than one a caller must invoke by name; real signal for how much
+    /// of a codebase's total proof burden one function actually
+    /// contributes to, invisibly.
+    pub is_broadcast: bool,
 }
 
 impl VerusFnFacts {
@@ -125,5 +171,22 @@ impl VerusCrateIr {
     #[instrument(level = "debug", skip(self))]
     pub fn trusted_not_proven(&self) -> impl Iterator<Item = &VerusFnFacts> {
         self.functions.iter().filter(|f| f.is_trusted_not_proven())
+    }
+
+    /// Every `(function, panic site)` pair across the whole crate -- the
+    /// complete replacement for `panics::verus_recover`'s best-effort
+    /// 7-of-13 recovery, once a consumer wires this in.
+    #[instrument(level = "debug", skip(self))]
+    pub fn panic_sites(&self) -> impl Iterator<Item = (&VerusFnFacts, &VerusPanicSite)> {
+        self.functions
+            .iter()
+            .flat_map(|f| f.panic_sites.iter().map(move |site| (f, site)))
+    }
+
+    /// Every function declared `broadcast` -- see
+    /// [`VerusFnFacts::is_broadcast`].
+    #[instrument(level = "debug", skip(self))]
+    pub fn broadcasts(&self) -> impl Iterator<Item = &VerusFnFacts> {
+        self.functions.iter().filter(|f| f.is_broadcast)
     }
 }

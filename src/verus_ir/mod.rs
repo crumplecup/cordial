@@ -31,7 +31,9 @@ mod facts;
 mod parse;
 mod types;
 
-pub use types::{VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPublish};
+pub use types::{
+    VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPanicKind, VerusPanicSite, VerusPublish,
+};
 
 use std::path::Path;
 

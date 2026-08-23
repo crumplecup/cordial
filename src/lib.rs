@@ -156,8 +156,8 @@ pub use etiquettes::verus_warnings::{
 };
 #[cfg(feature = "verus_ir")]
 pub use verus_ir::{
-    VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPublish, scan_crate_verus_ir,
-    scan_verus_rust_source,
+    VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPanicKind, VerusPanicSite, VerusPublish,
+    scan_crate_verus_ir, scan_verus_rust_source,
 };
 #[cfg(feature = "visibility")]
 pub use etiquettes::visibility::{

@@ -5,7 +5,9 @@ use verus_syn::visit::Visit;
 use crate::objects::FileSpan;
 
 use super::parse::VerusBlock;
-use super::types::{VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPublish};
+use super::types::{
+    VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPanicKind, VerusPanicSite, VerusPublish,
+};
 
 use tracing::instrument;
 
@@ -59,8 +61,13 @@ impl FactsVisitor {
             .as_ref()
             .map(|d| render_specification(&d.decreases.exprs).join(", "))
             .filter(|text| !text.is_empty());
+        let recommends = spec
+            .recommends
+            .as_ref()
+            .map(|r| render_specification(&r.exprs))
+            .unwrap_or_default();
 
-        let (uses_assume, uses_admit) = scan_body_for_escape_hatches(block);
+        let body = scan_body(block);
 
         self.functions.push(VerusFnFacts {
             name: sig.ident.to_string(),
@@ -71,9 +78,13 @@ impl FactsVisitor {
             requires,
             ensures,
             decreases,
-            uses_assume,
-            uses_admit,
+            uses_assume: body.uses_assume,
+            uses_admit: body.uses_admit,
             is_external_body: has_external_body(attrs),
+            panic_sites: body.panic_sites,
+            tracked_params: tracked_param_names(sig),
+            recommends,
+            is_broadcast: sig.broadcast.is_some(),
         });
     }
 }
@@ -154,25 +165,64 @@ fn has_external_body(attrs: &[verus_syn::Attribute]) -> bool {
     })
 }
 
-/// Whether `block`'s body calls `assume(..)` (real, dedicated Verus
-/// syntax) or `admit()` (an ordinary call to a well-known Verus builtin
-/// -- no dedicated syntax of its own) anywhere within it.
-#[instrument(level = "trace", skip(block), ret)]
-fn scan_body_for_escape_hatches(block: &verus_syn::Block) -> (bool, bool) {
-    let mut visitor = EscapeHatchVisitor {
-        uses_assume: false,
-        uses_admit: false,
-    };
-    visitor.visit_block(block);
-    (visitor.uses_assume, visitor.uses_admit)
+/// Every name a `tracked` parameter is bound to -- see
+/// [`VerusFnFacts::tracked_params`]'s own doc comment.
+#[instrument(level = "trace", skip(sig), ret)]
+fn tracked_param_names(sig: &verus_syn::Signature) -> Vec<String> {
+    sig.inputs
+        .iter()
+        .filter(|arg| arg.tracked.is_some())
+        .filter_map(|arg| match &arg.kind {
+            verus_syn::FnArgKind::Typed(pat_type) => param_name(&pat_type.pat),
+            verus_syn::FnArgKind::Receiver(_) => None,
+        })
+        .collect()
 }
 
-struct EscapeHatchVisitor {
+/// The bound identifier a simple `pat` names, if it's a plain identifier
+/// pattern (not a tuple/struct destructure).
+#[instrument(level = "trace", skip(pat), ret)]
+fn param_name(pat: &verus_syn::Pat) -> Option<String> {
+    match pat {
+        verus_syn::Pat::Ident(pat_ident) => Some(pat_ident.ident.to_string()),
+        _ => None,
+    }
+}
+
+struct BodyFacts {
     uses_assume: bool,
     uses_admit: bool,
+    panic_sites: Vec<VerusPanicSite>,
 }
 
-impl<'ast> Visit<'ast> for EscapeHatchVisitor {
+/// Walk `block` once for every real, local fact its body carries: real
+/// `assume(..)`/`admit()` soundness escape hatches (see
+/// [`VerusFnFacts::uses_assume`]/[`VerusFnFacts::uses_admit`]'s own doc
+/// comments), and every `panic!`/`unreachable!`/`.expect(..)`/
+/// `.unwrap()` abort site -- the direct completion of this module's own
+/// motivating gap.
+#[instrument(level = "trace", skip(block))]
+fn scan_body(block: &verus_syn::Block) -> BodyFacts {
+    let mut visitor = BodyVisitor {
+        uses_assume: false,
+        uses_admit: false,
+        panic_sites: Vec::new(),
+    };
+    visitor.visit_block(block);
+    BodyFacts {
+        uses_assume: visitor.uses_assume,
+        uses_admit: visitor.uses_admit,
+        panic_sites: visitor.panic_sites,
+    }
+}
+
+struct BodyVisitor {
+    uses_assume: bool,
+    uses_admit: bool,
+    panic_sites: Vec<VerusPanicSite>,
+}
+
+impl<'ast> Visit<'ast> for BodyVisitor {
     #[instrument(level = "trace", skip(self, node))]
     fn visit_expr(&mut self, node: &'ast verus_syn::Expr) {
         if matches!(node, verus_syn::Expr::Assume(_)) {
@@ -193,5 +243,42 @@ impl<'ast> Visit<'ast> for EscapeHatchVisitor {
             self.uses_admit = true;
         }
         verus_syn::visit::visit_expr_call(self, node);
+    }
+
+    #[instrument(level = "trace", skip(self, node))]
+    fn visit_expr_macro(&mut self, node: &'ast verus_syn::ExprMacro) {
+        use verus_syn::spanned::Spanned;
+        let kind = node.mac.path.segments.last().and_then(|segment| {
+            match segment.ident.to_string().as_str() {
+                "panic" => Some(VerusPanicKind::Panic),
+                "unreachable" => Some(VerusPanicKind::Unreachable),
+                _ => None,
+            }
+        });
+        if let Some(kind) = kind {
+            self.panic_sites.push(VerusPanicSite {
+                kind,
+                line: node.mac.span().start().line as u32,
+                snippet: format!("{}!(..)", node.mac.path.segments.last().unwrap().ident),
+            });
+        }
+        verus_syn::visit::visit_expr_macro(self, node);
+    }
+
+    #[instrument(level = "trace", skip(self, node))]
+    fn visit_expr_method_call(&mut self, node: &'ast verus_syn::ExprMethodCall) {
+        let kind = match node.method.to_string().as_str() {
+            "expect" => Some(VerusPanicKind::Expect),
+            "unwrap" | "unwrap_err" => Some(VerusPanicKind::Unwrap),
+            _ => None,
+        };
+        if let Some(kind) = kind {
+            self.panic_sites.push(VerusPanicSite {
+                kind,
+                line: node.method.span().start().line as u32,
+                snippet: format!(".{}(..)", node.method),
+            });
+        }
+        verus_syn::visit::visit_expr_method_call(self, node);
     }
 }
