@@ -43,11 +43,16 @@ impl Parse for Items {
 }
 
 /// One `verus! { .. }` block found in one source file: its real parsed
-/// items, plus enough context (the source file and crate-relative
-/// module path) to attribute facts extracted from it correctly.
+/// items, plus enough context (the source file, crate-relative module
+/// path, and whether the macro invocation itself sits inside a
+/// `#[cfg(test)]` module) to attribute facts extracted from it
+/// correctly -- matching `crate::etiquettes::panics::scan`'s own
+/// `cfg_test` tracking, since a real consumer needs the same test-vs-
+/// library routing this codebase's panics policy already uses.
 pub(super) struct VerusBlock {
     pub(super) file: PathBuf,
     pub(super) module_path: String,
+    pub(super) cfg_test: bool,
     pub(super) items: Vec<verus_syn::Item>,
 }
 
@@ -97,38 +102,61 @@ pub(super) fn blocks_in_source(source: &str, file: &Path, module_path: &str) -> 
     let mut finder = VerusMacroFinder::default();
     finder.visit_file(&syntax);
     finder
-        .macro_tokens
+        .macros
         .into_iter()
-        .filter_map(|tokens| {
-            let parsed = verus_syn::parse2::<Items>(tokens).ok()?;
+        .filter_map(|found| {
+            let parsed = verus_syn::parse2::<Items>(found.tokens).ok()?;
             Some(VerusBlock {
                 file: file.to_path_buf(),
                 module_path: module_path.to_owned(),
+                cfg_test: found.cfg_test,
                 items: parsed.items,
             })
         })
         .collect()
 }
 
-/// Collects the raw token streams of every `verus! { .. }` macro
-/// invocation in a file, at item, statement, or expression position (in
-/// practice always item position in this codebase, but all three are
-/// real, valid places a macro invocation can appear).
+/// One `verus! { .. }` macro invocation found, with whether it sits
+/// inside a `#[cfg(test)]` module.
+struct FoundMacro {
+    tokens: proc_macro2::TokenStream,
+    cfg_test: bool,
+}
+
+/// Collects every `verus! { .. }` macro invocation in a file, at item,
+/// statement, or expression position (in practice always item position
+/// in this codebase, but all three are real, valid places a macro
+/// invocation can appear), tracking `#[cfg(test)]` module nesting the
+/// same way `panics::scan::PanicScanVisitor` does.
 #[derive(Default)]
 struct VerusMacroFinder {
-    macro_tokens: Vec<proc_macro2::TokenStream>,
+    in_cfg_test: bool,
+    macros: Vec<FoundMacro>,
 }
 
 impl VerusMacroFinder {
     #[instrument(level = "trace", skip(self, mac))]
     fn check(&mut self, mac: &syn::Macro) {
         if mac.path.is_ident("verus") {
-            self.macro_tokens.push(mac.tokens.clone());
+            self.macros.push(FoundMacro {
+                tokens: mac.tokens.clone(),
+                cfg_test: self.in_cfg_test,
+            });
         }
     }
 }
 
 impl<'ast> Visit<'ast> for VerusMacroFinder {
+    #[instrument(level = "trace", skip(self, node))]
+    fn visit_item_mod(&mut self, node: &'ast syn::ItemMod) {
+        let prev = self.in_cfg_test;
+        if is_cfg_test(&node.attrs) {
+            self.in_cfg_test = true;
+        }
+        syn::visit::visit_item_mod(self, node);
+        self.in_cfg_test = prev;
+    }
+
     #[instrument(level = "trace", skip(self, node))]
     fn visit_item_macro(&mut self, node: &'ast syn::ItemMacro) {
         self.check(&node.mac);
@@ -145,4 +173,15 @@ impl<'ast> Visit<'ast> for VerusMacroFinder {
         self.check(&node.mac);
         syn::visit::visit_expr_macro(self, node);
     }
+}
+
+/// Whether `attrs` carries a bare `#[cfg(test)]`.
+#[instrument(level = "trace", skip(attrs), ret)]
+fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        let syn::Meta::List(list) = &attr.meta else {
+            return false;
+        };
+        list.path.is_ident("cfg") && list.tokens.to_string().replace(' ', "") == "test"
+    })
 }

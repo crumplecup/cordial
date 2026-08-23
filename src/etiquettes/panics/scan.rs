@@ -10,6 +10,7 @@ use syn::{
 
 use super::kani_reach::{KaniReachability, build_kani_reachability};
 use super::types::{PanicKind, PanicSiteRecord};
+#[cfg(not(feature = "verus_ir"))]
 use super::verus_recover::{VerusFunctionChunk, collect_verus_functions};
 use crate::error::CordialResult;
 use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
@@ -34,6 +35,11 @@ pub fn scan_crate_panics(crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord
     let mut findings = Vec::new();
     for file in &parsed {
         findings.extend(scan_parsed_file(file, crate_root, &reachability));
+    }
+    #[cfg(feature = "verus_ir")]
+    {
+        let verus_ir = crate::verus_ir::scan_crate_verus_ir(crate_root)?;
+        findings.extend(verus_ir_findings(&verus_ir, crate_root));
     }
     findings.sort_by(|a, b| {
         a.file
@@ -109,7 +115,64 @@ pub fn scan_rust_source(
         src_root: src_root.to_path_buf(),
         syntax,
     };
-    Ok(scan_parsed_file(&parsed, crate_root, &reachability))
+    let findings = scan_parsed_file(&parsed, crate_root, &reachability);
+    #[cfg(feature = "verus_ir")]
+    let findings = {
+        let mut findings = findings;
+        let module_path = module_path_from_src_file(src_root, file).join("::");
+        let verus_ir = crate::verus_ir::scan_verus_rust_source(source, file, &module_path);
+        findings.extend(verus_ir_findings(&verus_ir, crate_root));
+        findings
+    };
+    Ok(findings)
+}
+
+/// Convert every panic site [`crate::verus_ir::scan_crate_verus_ir`]/
+/// [`crate::verus_ir::scan_verus_rust_source`] found -- a real, complete
+/// parse -- into this etiquette's own [`PanicSiteRecord`] shape, so a
+/// real consumer can't tell whether a given finding came from the
+/// ordinary `syn`-based walk or from `verus_syn`. Kani-reachability
+/// exemption doesn't apply here: `amenable_verus`-shaped crates never
+/// mix Kani proof harnesses into the same crate as `verus!` content
+/// (verifier backends never depend on each other), so there is nothing
+/// for a `verus!` site to be reachable *from* in the sense `kani_reach`
+/// checks.
+#[cfg(feature = "verus_ir")]
+#[instrument(level = "debug", skip(ir))]
+fn verus_ir_findings(ir: &crate::verus_ir::VerusCrateIr, crate_root: &Path) -> Vec<PanicSiteRecord> {
+    ir.functions
+        .iter()
+        .flat_map(|function| {
+            let context = format!("{}::{}", function.module_path, function.name);
+            let file = function
+                .span
+                .file
+                .strip_prefix(crate_root)
+                .unwrap_or(&function.span.file)
+                .to_path_buf();
+            let cfg_test = function.cfg_test;
+            function.panic_sites.iter().map(move |site| PanicSiteRecord {
+                kind: verus_panic_kind(site.kind),
+                context: context.clone(),
+                file: file.clone(),
+                line: site.line,
+                snippet: site.snippet.clone(),
+                cfg_test,
+            })
+        })
+        .collect()
+}
+
+#[cfg(feature = "verus_ir")]
+#[instrument(level = "trace", ret)]
+fn verus_panic_kind(kind: crate::verus_ir::VerusPanicKind) -> PanicKind {
+    match kind {
+        crate::verus_ir::VerusPanicKind::Panic => PanicKind::Panic,
+        crate::verus_ir::VerusPanicKind::Unreachable => PanicKind::Unreachable,
+        crate::verus_ir::VerusPanicKind::Expect => PanicKind::Expect,
+        crate::verus_ir::VerusPanicKind::Unwrap => PanicKind::Unwrap,
+        crate::verus_ir::VerusPanicKind::CompileError => PanicKind::CompileError,
+    }
 }
 
 #[instrument(level = "debug", skip(file, reachability))]
@@ -205,6 +268,12 @@ impl PanicScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, mac))]
     fn check_macro(&mut self, mac: &Macro) {
         if mac.path.is_ident("verus") {
+            // When the `verus_ir` feature is available, `scan_crate_panics`/
+            // `scan_rust_source` already merge in real, complete findings
+            // from a genuine `verus_syn` parse (see this module's own
+            // `verus_ir_findings`) -- skip the best-effort recovery here
+            // entirely rather than double-count.
+            #[cfg(not(feature = "verus_ir"))]
             self.scan_verus_chunks(collect_verus_functions(mac.tokens.clone()));
             return;
         }
@@ -223,7 +292,9 @@ impl PanicScanVisitor<'_> {
     /// `verus_recover`'s own doc comment) is retried one level deeper
     /// via `collect_verus_functions` on its own body tokens, to still
     /// opportunistically find a nested `fn` even inside an outer shell
-    /// this scanner can't fully make sense of.
+    /// this scanner can't fully make sense of. Only compiled in when
+    /// `verus_ir` (a genuinely complete parse) isn't available.
+    #[cfg(not(feature = "verus_ir"))]
     #[instrument(level = "debug", skip(self, chunks))]
     fn scan_verus_chunks(&mut self, chunks: Vec<VerusFunctionChunk>) {
         for chunk in chunks {

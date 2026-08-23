@@ -213,3 +213,59 @@ fn extracts_signature_level_facts_and_every_panic_site_kind() {
         matcher.panic_sites
     );
 }
+
+const CFG_TEST_AND_COMPILE_ERROR_SOURCE: &str = r#"
+use verus_builtin_macros::verus;
+
+verus! {
+
+pub fn in_library_code() -> (result: bool)
+{
+    compile_error!("should never reach exec");
+    true
+}
+
+}
+
+#[cfg(test)]
+mod tests {
+    use verus_builtin_macros::verus;
+
+    verus! {
+
+    pub fn in_test_code() -> (result: bool)
+    {
+        true
+    }
+
+    }
+}
+"#;
+
+#[test]
+fn tracks_cfg_test_module_nesting_and_detects_compile_error() {
+    let ir = scan_verus_rust_source(
+        CFG_TEST_AND_COMPILE_ERROR_SOURCE,
+        Path::new("cfg_test_sample.rs"),
+        "gallery::cfg_test_sample",
+    );
+
+    let find = |name: &str| {
+        ir.functions
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("{name} not found in {:?}", ir.functions))
+    };
+
+    let library_fn = find("in_library_code");
+    assert!(!library_fn.cfg_test);
+    assert_eq!(
+        library_fn.panic_sites[0].kind,
+        VerusPanicKind::CompileError,
+        "{:?}",
+        library_fn.panic_sites
+    );
+
+    let test_fn = find("in_test_code");
+    assert!(test_fn.cfg_test);
+}

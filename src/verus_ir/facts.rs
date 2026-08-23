@@ -20,6 +20,7 @@ pub(super) fn build_crate_ir(blocks: Vec<VerusBlock>) -> VerusCrateIr {
         let mut visitor = FactsVisitor {
             file: block.file,
             module_path: block.module_path,
+            cfg_test: block.cfg_test,
             functions: Vec::new(),
         };
         for item in &block.items {
@@ -33,6 +34,7 @@ pub(super) fn build_crate_ir(blocks: Vec<VerusBlock>) -> VerusCrateIr {
 struct FactsVisitor {
     file: std::path::PathBuf,
     module_path: String,
+    cfg_test: bool,
     functions: Vec<VerusFnFacts>,
 }
 
@@ -73,6 +75,7 @@ impl FactsVisitor {
             name: sig.ident.to_string(),
             module_path: self.module_path.clone(),
             span: FileSpan::new(self.file.clone(), line, 0),
+            cfg_test: self.cfg_test,
             mode: fn_mode(&sig.mode),
             publish: publish_kind(&sig.publish),
             requires,
@@ -222,6 +225,29 @@ struct BodyVisitor {
     panic_sites: Vec<VerusPanicSite>,
 }
 
+impl BodyVisitor {
+    #[instrument(level = "trace", skip(self, mac))]
+    fn record_macro(&mut self, mac: &verus_syn::Macro) {
+        use verus_syn::spanned::Spanned;
+        let Some(segment) = mac.path.segments.last() else {
+            return;
+        };
+        let kind = match segment.ident.to_string().as_str() {
+            "panic" => Some(VerusPanicKind::Panic),
+            "unreachable" => Some(VerusPanicKind::Unreachable),
+            "compile_error" => Some(VerusPanicKind::CompileError),
+            _ => None,
+        };
+        if let Some(kind) = kind {
+            self.panic_sites.push(VerusPanicSite {
+                kind,
+                line: mac.span().start().line as u32,
+                snippet: format!("{}!(..)", segment.ident),
+            });
+        }
+    }
+}
+
 impl<'ast> Visit<'ast> for BodyVisitor {
     #[instrument(level = "trace", skip(self, node))]
     fn visit_expr(&mut self, node: &'ast verus_syn::Expr) {
@@ -247,22 +273,14 @@ impl<'ast> Visit<'ast> for BodyVisitor {
 
     #[instrument(level = "trace", skip(self, node))]
     fn visit_expr_macro(&mut self, node: &'ast verus_syn::ExprMacro) {
-        use verus_syn::spanned::Spanned;
-        let kind = node.mac.path.segments.last().and_then(|segment| {
-            match segment.ident.to_string().as_str() {
-                "panic" => Some(VerusPanicKind::Panic),
-                "unreachable" => Some(VerusPanicKind::Unreachable),
-                _ => None,
-            }
-        });
-        if let Some(kind) = kind {
-            self.panic_sites.push(VerusPanicSite {
-                kind,
-                line: node.mac.span().start().line as u32,
-                snippet: format!("{}!(..)", node.mac.path.segments.last().unwrap().ident),
-            });
-        }
+        self.record_macro(&node.mac);
         verus_syn::visit::visit_expr_macro(self, node);
+    }
+
+    #[instrument(level = "trace", skip(self, node))]
+    fn visit_stmt_macro(&mut self, node: &'ast verus_syn::StmtMacro) {
+        self.record_macro(&node.mac);
+        verus_syn::visit::visit_stmt_macro(self, node);
     }
 
     #[instrument(level = "trace", skip(self, node))]

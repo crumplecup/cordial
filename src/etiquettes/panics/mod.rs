@@ -24,6 +24,7 @@ mod probe;
 mod reporter;
 mod scan;
 mod types;
+#[cfg(not(feature = "verus_ir"))]
 mod verus_recover;
 
 pub use assessor::PanicAssessor;

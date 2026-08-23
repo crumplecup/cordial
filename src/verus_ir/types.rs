@@ -54,7 +54,7 @@ pub enum VerusPublish {
 }
 
 /// Category of abort site found inside a `verus! { .. }` function body --
-/// the same four categories `crate::etiquettes::panics` tracks, found
+/// the same five categories `crate::etiquettes::panics` tracks, found
 /// here via a real, complete parse instead of the best-effort token
 /// recovery `panics::verus_recover` falls back to for a body real
 /// `verus_syn` can't make sense of either (there is no such body for
@@ -66,6 +66,7 @@ pub enum VerusPanicKind {
     Unreachable,
     Expect,
     Unwrap,
+    CompileError,
 }
 
 /// One abort site found inside a function's body.
@@ -93,6 +94,11 @@ pub struct VerusFnFacts {
     pub module_path: String,
     /// Where this function is declared.
     pub span: FileSpan,
+    /// Whether the enclosing `verus! { .. }` invocation sits inside a
+    /// `#[cfg(test)]` module -- matching `panics::scan`'s own tracking,
+    /// so a real consumer can apply the same test-vs-library routing
+    /// policy.
+    pub cfg_test: bool,
     /// The function's own declared mode (`spec`/`proof`/`exec`/...).
     pub mode: VerusFnMode,
     /// The function's own declared publish visibility (spec fns only;
