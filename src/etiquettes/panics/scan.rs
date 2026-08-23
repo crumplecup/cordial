@@ -246,15 +246,15 @@ impl PanicScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, call))]
     fn check_method_call(&mut self, call: &ExprMethodCall) {
         match call.method.to_string().as_str() {
-            "expect" => self.push_finding(
+            "expect" | "expect_err" => self.push_finding(
                 PanicKind::Expect,
                 call.span().start().line as u32,
                 expect_snippet(call),
             ),
-            "unwrap" if !is_unwrap_variant(call) => self.push_finding(
+            "unwrap" | "unwrap_err" if !is_unwrap_variant(call) => self.push_finding(
                 PanicKind::Unwrap,
                 call.span().start().line as u32,
-                ".unwrap()".to_string(),
+                format!(".{}()", call.method),
             ),
             _ => {}
         }
@@ -433,9 +433,9 @@ fn expect_snippet(call: &ExprMethodCall) -> String {
         lit: Lit::Str(lit), ..
     })) = call.args.first()
     {
-        return format!(".expect(\"{}\")", lit.value());
+        return format!(".{}(\"{}\")", call.method, lit.value());
     }
-    ".expect(…)".to_string()
+    format!(".{}(…)", call.method)
 }
 
 #[instrument(level = "debug")]

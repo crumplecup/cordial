@@ -494,6 +494,57 @@ fn chained_unwrap_on_one_line_is_one_site() -> miette::Result<()> {
 }
 
 #[test]
+fn unwrap_err_and_expect_err_are_flagged_the_same_as_their_ok_counterparts() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"fn take(res: Result<i32, i32>) -> i32 {
+    res.unwrap_err()
+}
+
+fn take2(res: Result<i32, i32>) -> i32 {
+    res.expect_err("must be an error")
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+
+    let unwraps = findings
+        .iter()
+        .filter(|row| row.kind == PanicKind::Unwrap)
+        .count();
+    let expects = findings
+        .iter()
+        .filter(|row| row.kind == PanicKind::Expect)
+        .count();
+    assert_eq!(unwraps, 1, "{findings:?}");
+    assert_eq!(expects, 1, "{findings:?}");
+    assert!(
+        findings
+            .iter()
+            .any(|row| row.snippet == ".unwrap_err()"),
+        "{findings:?}"
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|row| row.snippet == ".expect_err(\"must be an error\")"),
+        "{findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn nested_parity_workspace_is_skipped_when_scanning_parent() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
