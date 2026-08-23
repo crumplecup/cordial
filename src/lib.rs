@@ -14,7 +14,7 @@
 //!
 //! Built-in plugins are feature-gated:
 //!
-//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `glob_imports`, `inline_tests`, `verus_warnings` — source-quality scanners
+//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `glob_imports`, `inline_tests`, `verus_warnings`, `proof_patterns` — source-quality scanners
 //!   (the `quality` umbrella is enabled by default)
 //! - `cli` — clap binary (`cordial`); enabled by default
 //! - `impl_coverage`, `trenchcoat`, `shadow` — rustdoc coverage scanners
@@ -141,6 +141,10 @@ pub use etiquettes::modularity::{
 pub use etiquettes::panics::{
     PANICS_ETIQUETTE, PanicKind, scan_crate_panics, scan_rust_source, scan_source_tree,
 };
+#[cfg(feature = "proof_patterns")]
+pub use etiquettes::proof_patterns::{
+    PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, scan_crate_proof_patterns,
+};
 #[cfg(feature = "tracing")]
 pub use etiquettes::tracing::{
     InstrumentApplySummary, InstrumentGap, TRACING_ETIQUETTE, parse_tracing_instrument_checklist,
@@ -192,7 +196,8 @@ pub use digest::{
     feature = "cli_layout",
     feature = "glob_imports",
     feature = "inline_tests",
-    feature = "verus_warnings"
+    feature = "verus_warnings",
+    feature = "proof_patterns"
 ))]
 pub use enricher::AttributeEnricher;
 pub use enricher::ScopeEnricher;

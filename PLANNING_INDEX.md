@@ -21,6 +21,7 @@ Active implementation plans for `cordial`.
 | [Glob imports](docs/planning/glob-imports-etiquette.md) | **Active** | Flag `use …::*`; replace with explicit names |
 | [Inline tests](docs/planning/inline-tests-etiquette.md) | **Active** | `#[cfg(test)]` / `#[test]` under `src/` belong in `tests/` |
 | [Verus compiler warnings](docs/planning/verus-warnings-etiquette.md) | **Active** | Post-process `verus` output; rustc never sees these diagnostics |
+| [Proof patterns etiquette](docs/planning/proof-patterns-etiquette.md) | **Active** | `assume`/`admit`/`external_body`/`uninterp`/`axiom`/`broadcast` via `verus_ir` |
 
 ## Completed / archived
 

@@ -33,6 +33,7 @@
 //! | `glob_imports` | `glob_imports` | Are there glob `use` trees (`foo::*`, including `super::*`)? |
 //! | `inline_tests` | `inline_tests` | Are tests mixed into `src/` instead of `tests/`? |
 //! | `verus_warnings` | `verus_warnings` | Does the Verus rustc fork emit warnings this crate's rustc never sees? |
+//! | `proof_patterns` | `proof_patterns` | Which `verus!` functions are trusted rather than proven, or apply themselves invisibly (`broadcast`)? |
 //!
 //! # Coverage
 //!
@@ -87,6 +88,8 @@ pub(crate) mod internal_error_chain;
 pub(crate) mod modularity;
 #[cfg(feature = "panics")]
 pub(crate) mod panics;
+#[cfg(feature = "proof_patterns")]
+pub(crate) mod proof_patterns;
 #[cfg(feature = "shadow")]
 pub(crate) mod shadow;
 #[cfg(feature = "tracing")]
@@ -97,7 +100,7 @@ pub(crate) mod trenchcoat;
 /// Built-in source-quality etiquettes enabled in the current feature set.
 #[::tracing::instrument(level = "debug")]
 pub fn quality_etiquettes() -> Vec<&'static dyn crate::Etiquette> {
-    let items: [Option<&'static dyn crate::Etiquette>; 17] = [
+    let items: [Option<&'static dyn crate::Etiquette>; 18] = [
         #[cfg(feature = "panics")]
         Some(&panics::PANICS_ETIQUETTE as &dyn crate::Etiquette),
         #[cfg(not(feature = "panics"))]
@@ -168,6 +171,10 @@ pub fn quality_etiquettes() -> Vec<&'static dyn crate::Etiquette> {
         #[cfg(feature = "verus_warnings")]
         Some(&verus_warnings::VERUS_WARNINGS_ETIQUETTE as &dyn crate::Etiquette),
         #[cfg(not(feature = "verus_warnings"))]
+        None,
+        #[cfg(feature = "proof_patterns")]
+        Some(&proof_patterns::PROOF_PATTERNS_ETIQUETTE as &dyn crate::Etiquette),
+        #[cfg(not(feature = "proof_patterns"))]
         None,
     ];
     items.into_iter().flatten().collect()

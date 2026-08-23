@@ -71,11 +71,14 @@ verus_warnings = []
 # Real verus_syn-based parsing of verus! { .. } blocks into first-class
 # Verus AST facts (mode, publish, requires/ensures/decreases, assume/
 # admit/external_body usage) -- foundational infrastructure other
-# etiquettes (panics, and eventually a soundness/proof-pattern etiquette)
-# build on, not itself a source of findings yet, so not folded into
-# `quality` until a real consumer etiquette exists.
+# etiquettes (panics, proof_patterns) build on.
 verus_ir = ["dep:verus_syn", "dep:quote"]
-quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "glob_imports", "inline_tests", "verus_warnings"]
+# Soundness/proof-visibility signals inside verus! { .. } blocks: assume,
+# admit, external_body, uninterp, axiom (VerusFnFacts::
+# is_trusted_not_proven()), and broadcast. The real consumer verus_ir was
+# built for.
+proof_patterns = ["verus_ir"]
+quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "glob_imports", "inline_tests", "verus_warnings", "proof_patterns"]
 # Shared rustdoc JSON support for coverage plugins.
 rustdoc = ["dep:rustdoc-types", "dep:nom"]
 # Elicitation coverage plugins (each requires rustdoc).
@@ -165,6 +168,10 @@ required-features = ["inline_tests"]
 [[test]]
 name = "verus_warnings_etiquette"
 required-features = ["verus_warnings"]
+
+[[test]]
+name = "proof_patterns_etiquette"
+required-features = ["proof_patterns"]
 
 [[test]]
 name = "derives_etiquette"

@@ -119,6 +119,7 @@ scanners you want.
 | `glob_imports` | Are there glob `use` trees (`foo::*`, including `super::*`)? Replace them with explicit names. |
 | `inline_tests` | Are `#[cfg(test)]` modules or `#[test]` functions mixed into `src/`? Move them to `tests/`. |
 | `verus_warnings` | Does the Verus rustc fork emit `warning:` diagnostics rustc never sees? Invokes `verus` on `*_verus` / `vstd` crates. |
+| `proof_patterns` | Which `verus!` functions are trusted rather than proven (`assume`/`admit`/`external_body`/`uninterp`/`axiom`), or apply themselves invisibly to every proof in scope (`broadcast`)? |
 
 Error-handling etiquettes share one source scan (`error_ir`). Tracing apply is
 the only quality path that rewrites source.
