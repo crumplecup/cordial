@@ -24,6 +24,7 @@ mod probe;
 mod reporter;
 mod scan;
 mod types;
+mod verus_recover;
 
 pub use assessor::PanicAssessor;
 pub use enricher::PanicInventoryEnricher;

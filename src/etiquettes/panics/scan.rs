@@ -10,6 +10,7 @@ use syn::{
 
 use super::kani_reach::{KaniReachability, build_kani_reachability};
 use super::types::{PanicKind, PanicSiteRecord};
+use super::verus_recover::{VerusFunctionChunk, collect_verus_functions};
 use crate::error::CordialResult;
 use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
 
@@ -203,10 +204,43 @@ impl PanicScanVisitor<'_> {
 
     #[instrument(level = "debug", skip(self, mac))]
     fn check_macro(&mut self, mac: &Macro) {
+        if mac.path.is_ident("verus") {
+            self.scan_verus_chunks(collect_verus_functions(mac.tokens.clone()));
+            return;
+        }
         let Some(kind) = macro_panic_kind(&mac.path) else {
             return;
         };
         self.push_finding(kind, mac.span().start().line as u32, macro_snippet(mac));
+    }
+
+    /// Parse each recovered `verus! { .. }` function chunk as a real
+    /// `syn::Block` and visit it with this same visitor -- `fn_stack`
+    /// gets the chunk's real name pushed first, so findings inside get
+    /// the same accurate context (and the same Kani-reachability/
+    /// cfg(test) handling) as an ordinary function would. A chunk that
+    /// fails to parse (genuine Verus-only expression syntax -- see
+    /// `verus_recover`'s own doc comment) is retried one level deeper
+    /// via `collect_verus_functions` on its own body tokens, to still
+    /// opportunistically find a nested `fn` even inside an outer shell
+    /// this scanner can't fully make sense of.
+    #[instrument(level = "debug", skip(self, chunks))]
+    fn scan_verus_chunks(&mut self, chunks: Vec<VerusFunctionChunk>) {
+        for chunk in chunks {
+            let braced = proc_macro2::TokenStream::from(proc_macro2::TokenTree::Group(
+                proc_macro2::Group::new(proc_macro2::Delimiter::Brace, chunk.body.clone()),
+            ));
+            match syn::parse2::<syn::Block>(braced) {
+                Ok(block) => {
+                    self.fn_stack.push(chunk.name);
+                    syn::visit::visit_block(self, &block);
+                    self.fn_stack.pop();
+                }
+                Err(_) => {
+                    self.scan_verus_chunks(collect_verus_functions(chunk.body));
+                }
+            }
+        }
     }
 
     #[instrument(level = "debug", skip(self, call))]

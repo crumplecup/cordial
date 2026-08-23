@@ -79,6 +79,70 @@ pub fn never() -> ! {
 }
 
 #[test]
+fn scan_rust_source_finds_panics_inside_a_verus_block() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+use verus_builtin_macros::verus;
+
+verus! {
+
+pub fn verify_try_from_int_error_occurs_exactly_when_out_of_range(value: i32) -> (result: bool)
+    ensures
+        result,
+{
+    match <u8 as std::convert::TryFrom<i32>>::try_from(value) {
+        Ok(converted) => (0 <= value && value <= u8::MAX as i32) && converted as i32 == value,
+        Err(_) => value < 0 || value > u8::MAX as i32,
+    }
+}
+
+pub fn verify_int_error_kind_classifies_parse_failures(s: &str) -> (result: bool)
+    requires
+        s@.len() == 0,
+    ensures
+        result,
+{
+    match <i32 as std::str::FromStr>::from_str(s) {
+        Ok(_) => unreachable!(),
+        Err(_) => true,
+    }
+}
+
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+
+    assert_eq!(
+        findings.len(),
+        1,
+        "expected exactly the one real unreachable!() site: {findings:?}"
+    );
+    assert_eq!(findings[0].kind, PanicKind::Unreachable);
+    assert!(
+        findings[0]
+            .context
+            .ends_with("verify_int_error_kind_classifies_parse_failures"),
+        "{:?}",
+        findings[0].context
+    );
+    Ok(())
+}
+
+#[test]
 fn scan_rust_source_finds_compile_error() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
