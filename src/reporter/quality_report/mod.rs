@@ -92,6 +92,7 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
 
     let glob_imports = count_open_category(findings, "glob_imports");
     let inline_tests = count_open_category(findings, "inline_tests");
+    let verus_warnings = count_open_category(findings, "verus_warnings");
     let visibility_flat = count_open_rule(findings, "VIS-CRATE-FLAT-001");
     let visibility_thin = count_open_rule(findings, "VIS-MOD-THIN-001");
     let visibility_mismatch = count_open_rule(findings, "VIS-MOD-MISMATCH-001");
@@ -208,6 +209,14 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
             "inline-tests.checklist.md",
             "inline-tests-summary.md",
             format!("tests under `src/` **{inline_tests}**"),
+        ),
+        quality_area(
+            12,
+            "Verus compiler warnings",
+            verus_warnings,
+            "verus-warnings.checklist.md",
+            "verus-warnings-summary.md",
+            format!("Verus compiler warnings **{verus_warnings}**"),
         ),
     ];
 

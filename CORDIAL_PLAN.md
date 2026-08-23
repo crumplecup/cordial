@@ -74,8 +74,9 @@ framework itself.
 | `tracing` | `#[instrument]` coverage → classified recipes ([tracing-etiquette.md](docs/planning/tracing-etiquette.md)) |
 | `derives` | Manual builder/getter/setter/new patterns |
 | `allows` | `#[allow(...)]` inventory |
+| `verus_warnings` | Verus rustc-fork compiler warnings ([verus-warnings-etiquette.md](docs/planning/verus-warnings-etiquette.md)) |
 | `modularity` | File/function size, types-per-file, module-size σ, hierarchy lints |
-| `quality` (default) | All source-quality scanners (panics, tracing, error stack, derives, allows, modularity, antipatterns, cfg_scatter, visibility, cli_layout, glob_imports, inline_tests) |
+| `quality` (default) | All source-quality scanners (panics, tracing, error stack, derives, allows, modularity, antipatterns, cfg_scatter, visibility, cli_layout, glob_imports, inline_tests, verus_warnings) |
 | `impl_coverage` | Trait impl coverage (requires `rustdoc`) |
 | `trenchcoat` | Trenchcoat wrapper coverage |
 | `shadow` | Shadow mirror coverage |

@@ -104,7 +104,7 @@ scanners you want.
 | --- | --- |
 | `panics` | Where does this crate abort (`panic!`, `unwrap`, `expect`, `unreachable!`, `compile_error!`)? Libraries should return typed internal errors; binaries and tests should surface through miette. |
 | `tracing` | Are functions instrumented with the recipe for their role? `cordial quality --apply` writes the recipe from the checklist. Volume is a subscriber `level` problem. `[tracing]` in `cordial.toml`. |
-| `allows` | Which `#[allow]` / `#![allow]` attributes are in force? |
+| `allows` | Which `#[allow]` / `#![allow]` attributes are in force? Verus `vstd` imports need `reason = "..."`. |
 | `modularity` | Which files, functions, and modules are too large, overpacked, top-heavy, lopsided, or a unary nest? `[modularity]` in `cordial.toml`. |
 | `derives` | Which manual builders, getters, setters, `new`, or pub fields could be derive crates? |
 | `error_sites` | Where are `?`, `map_err`, and related error sites? Census for the layers below. |
@@ -118,6 +118,7 @@ scanners you want.
 | `cli_layout` | Do clap types live in the library and dispatch with `act`? Is `main` only parse + `act` + miette? |
 | `glob_imports` | Are there glob `use` trees (`foo::*`, including `super::*`)? Replace them with explicit names. |
 | `inline_tests` | Are `#[cfg(test)]` modules or `#[test]` functions mixed into `src/`? Move them to `tests/`. |
+| `verus_warnings` | Does the Verus rustc fork emit `warning:` diagnostics rustc never sees? Invokes `verus` on `*_verus` / `vstd` crates. |
 
 Error-handling etiquettes share one source scan (`error_ir`). Tracing apply is
 the only quality path that rewrites source.

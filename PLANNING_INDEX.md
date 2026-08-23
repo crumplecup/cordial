@@ -20,6 +20,7 @@ Active implementation plans for `cordial`.
 | [Tracing etiquette](docs/planning/tracing-etiquette.md) | **Active** | Classify by role; every function; recipe deltas; apply writes the recipe |
 | [Glob imports](docs/planning/glob-imports-etiquette.md) | **Active** | Flag `use …::*`; replace with explicit names |
 | [Inline tests](docs/planning/inline-tests-etiquette.md) | **Active** | `#[cfg(test)]` / `#[test]` under `src/` belong in `tests/` |
+| [Verus compiler warnings](docs/planning/verus-warnings-etiquette.md) | **Active** | Post-process `verus` output; rustc never sees these diagnostics |
 
 ## Completed / archived
 

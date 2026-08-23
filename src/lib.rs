@@ -14,7 +14,7 @@
 //!
 //! Built-in plugins are feature-gated:
 //!
-//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `glob_imports`, `inline_tests` — source-quality scanners
+//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `glob_imports`, `inline_tests`, `verus_warnings` — source-quality scanners
 //!   (the `quality` umbrella is enabled by default)
 //! - `cli` — clap binary (`cordial`); enabled by default
 //! - `impl_coverage`, `trenchcoat`, `shadow` — rustdoc coverage scanners
@@ -62,7 +62,8 @@ pub mod testing;
 
 #[cfg(feature = "allows")]
 pub use etiquettes::allows::{
-    ALLOWS_ETIQUETTE, AllowRuleId, scan_crate_allows, scan_rust_source as scan_allows_rust_source,
+    ALLOWS_ETIQUETTE, AllowRuleId, AllowSiteRecord, scan_crate_allows,
+    scan_rust_source as scan_allows_rust_source,
 };
 #[cfg(feature = "antipatterns")]
 pub use etiquettes::antipatterns::{
@@ -146,6 +147,11 @@ pub use etiquettes::tracing::{
 };
 #[cfg(feature = "trenchcoat")]
 pub use etiquettes::trenchcoat::TRENCHCOAT_ETIQUETTE;
+#[cfg(feature = "verus_warnings")]
+pub use etiquettes::verus_warnings::{
+    VERUS_WARNINGS_ETIQUETTE, VerusWarningRecord, VerusWarningRuleId, crate_is_verus_target,
+    parse_verus_compiler_output, scan_crate_verus_warnings,
+};
 #[cfg(feature = "visibility")]
 pub use etiquettes::visibility::{
     BranchingCache, VISIBILITY_ETIQUETTE, VisibilityRecord, VisibilityRuleId,
@@ -178,7 +184,8 @@ pub use digest::{
     feature = "visibility",
     feature = "cli_layout",
     feature = "glob_imports",
-    feature = "inline_tests"
+    feature = "inline_tests",
+    feature = "verus_warnings"
 ))]
 pub use enricher::AttributeEnricher;
 pub use enricher::ScopeEnricher;

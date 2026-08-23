@@ -230,7 +230,7 @@ pub fn coverage_only_plugins() -> Vec<&'static dyn Plugin> {
 /// Static quality plugins wrapping each enabled etiquette.
 #[instrument(level = "debug")]
 fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
-    let items: [Option<&'static EtiquettePlugin>; 10] = [
+    let items: [Option<&'static EtiquettePlugin>; 11] = [
         #[cfg(feature = "tracing")]
         Some(tracing_plugin()),
         #[cfg(not(feature = "tracing"))]
@@ -270,6 +270,10 @@ fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
         #[cfg(feature = "inline_tests")]
         Some(inline_tests_plugin()),
         #[cfg(not(feature = "inline_tests"))]
+        None,
+        #[cfg(feature = "verus_warnings")]
+        Some(verus_warnings_plugin()),
+        #[cfg(not(feature = "verus_warnings"))]
         None,
     ];
     items.into_iter().flatten().collect()
@@ -330,6 +334,11 @@ etiquette_plugin_fn!(
 etiquette_plugin_fn!(
     inline_tests_plugin,
     &crate::etiquettes::inline_tests::INLINE_TESTS_ETIQUETTE
+);
+#[cfg(feature = "verus_warnings")]
+etiquette_plugin_fn!(
+    verus_warnings_plugin,
+    &crate::etiquettes::verus_warnings::VERUS_WARNINGS_ETIQUETTE
 );
 
 /// Legacy etiquette list — flatten of all registered quality + coverage plugins.

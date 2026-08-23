@@ -1,0 +1,26 @@
+warning: unused macro definition: `impl_tuple_evidence`
+   --> crates/amenable_verus/src/../../amenable_core/src/evidence.rs:132:14
+    |
+132 | macro_rules! impl_tuple_evidence {
+    |              ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_macros)]` (part of `#[warn(unused)]`) on by default
+
+warning: Verus does not (yet) support autoderive Clone impl when the clone is not a copy; continuing, but without adding a specification for the derived Clone impl
+   --> crates/amenable_verus/src/gallery/ledger_exchange.rs:446:10
+    |
+446 | #[derive(Clone)]
+    |          ^^^^^
+
+verification results:: 491 verified, 0 errors
+warning: 2 warnings emitted
+
+warning: unused macro definition: `impl_tuple_evidence`
+   --> crates/amenable_verus/src/../../amenable_core/src/evidence.rs:132:14
+    |
+132 | macro_rules! impl_tuple_evidence {
+    |              ^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_macros)]` (part of `#[warn(unused)]`) on by default
+
+warning: 1 warning emitted

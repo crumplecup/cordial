@@ -15,7 +15,8 @@ use tracing::instrument;
     feature = "visibility",
     feature = "cli_layout",
     feature = "glob_imports",
-    feature = "inline_tests"
+    feature = "inline_tests",
+    feature = "verus_warnings"
 ))]
 mod attribute;
 #[cfg(feature = "error_sites")]
@@ -55,7 +56,8 @@ mod wrapper_coverage;
     feature = "visibility",
     feature = "cli_layout",
     feature = "glob_imports",
-    feature = "inline_tests"
+    feature = "inline_tests",
+    feature = "verus_warnings"
 ))]
 pub use attribute::AttributeEnricher;
 #[cfg(any(
@@ -74,7 +76,8 @@ pub use attribute::AttributeEnricher;
     feature = "visibility",
     feature = "cli_layout",
     feature = "glob_imports",
-    feature = "inline_tests"
+    feature = "inline_tests",
+    feature = "verus_warnings"
 ))]
 pub(crate) use attribute::{is_cfg_test, member_crate_root, resolve_parent, resolve_source_path};
 #[cfg(feature = "error_sites")]

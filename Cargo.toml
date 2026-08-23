@@ -66,7 +66,8 @@ visibility = []
 cli_layout = []
 glob_imports = []
 inline_tests = []
-quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "glob_imports", "inline_tests"]
+verus_warnings = []
+quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "glob_imports", "inline_tests", "verus_warnings"]
 # Shared rustdoc JSON support for coverage plugins.
 rustdoc = ["dep:rustdoc-types", "dep:nom"]
 # Elicitation coverage plugins (each requires rustdoc).
@@ -152,6 +153,10 @@ required-features = ["glob_imports"]
 [[test]]
 name = "inline_tests_etiquette"
 required-features = ["inline_tests"]
+
+[[test]]
+name = "verus_warnings_etiquette"
+required-features = ["verus_warnings"]
 
 [[test]]
 name = "derives_etiquette"
@@ -272,5 +277,5 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(creusot)',
   'cfg(prusti)',
   'cfg(verus)',
-  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "glob_imports", "inline_tests", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
+  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "glob_imports", "inline_tests", "verus_warnings", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
 ] }
