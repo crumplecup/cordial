@@ -57,6 +57,8 @@ mod rustdoc_loader;
 mod session;
 mod store;
 mod targets;
+#[cfg(feature = "verus_ir")]
+mod verus_ir;
 #[doc(hidden)]
 pub mod testing;
 
@@ -151,6 +153,11 @@ pub use etiquettes::trenchcoat::TRENCHCOAT_ETIQUETTE;
 pub use etiquettes::verus_warnings::{
     VERUS_WARNINGS_ETIQUETTE, VerusWarningRecord, VerusWarningRuleId, crate_is_verus_target,
     parse_verus_compiler_output, scan_crate_verus_warnings,
+};
+#[cfg(feature = "verus_ir")]
+pub use verus_ir::{
+    VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPublish, scan_crate_verus_ir,
+    scan_verus_rust_source,
 };
 #[cfg(feature = "visibility")]
 pub use etiquettes::visibility::{

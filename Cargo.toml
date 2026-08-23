@@ -33,6 +33,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 syn = { version = "2", features = ["full", "visit", "extra-traits"] }
+verus_syn = { version = "0.0.0-2026-08-02-0125", features = ["visit", "extra-traits"], optional = true }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 tracing = "0.1"
 rustdoc-types = { version = "0.57", optional = true }
@@ -67,6 +68,13 @@ cli_layout = []
 glob_imports = []
 inline_tests = []
 verus_warnings = []
+# Real verus_syn-based parsing of verus! { .. } blocks into first-class
+# Verus AST facts (mode, publish, requires/ensures/decreases, assume/
+# admit/external_body usage) -- foundational infrastructure other
+# etiquettes (panics, and eventually a soundness/proof-pattern etiquette)
+# build on, not itself a source of findings yet, so not folded into
+# `quality` until a real consumer etiquette exists.
+verus_ir = ["dep:verus_syn", "dep:quote"]
 quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "glob_imports", "inline_tests", "verus_warnings"]
 # Shared rustdoc JSON support for coverage plugins.
 rustdoc = ["dep:rustdoc-types", "dep:nom"]
@@ -80,7 +88,7 @@ amenable_std = ["homecoming_std"]
 # Umbrella: all elicitation coverage plugins.
 elicitation = ["impl_coverage", "trenchcoat", "shadow"]
 # Every built-in plugin (integration tests, full builds).
-full = ["quality", "elicitation", "homecoming_std", "amenable_std", "cli"]
+full = ["quality", "elicitation", "homecoming_std", "amenable_std", "cli", "verus_ir"]
 
 [[test]]
 name = "custom_plugins"
@@ -277,5 +285,5 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(creusot)',
   'cfg(prusti)',
   'cfg(verus)',
-  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "glob_imports", "inline_tests", "verus_warnings", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
+  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "glob_imports", "inline_tests", "verus_warnings", "verus_ir", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
 ] }
