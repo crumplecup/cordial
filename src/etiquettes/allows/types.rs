@@ -13,6 +13,8 @@ use tracing::instrument;
 pub enum AllowRuleId {
     /// Any `#[allow(...)]` or `#![allow(...)]` attribute.
     Attr001,
+    /// Verus `vstd` / `verus_builtin` import allow missing `reason = "..."`.
+    VerusReason001,
 }
 
 impl AllowRuleId {
@@ -20,6 +22,7 @@ impl AllowRuleId {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Attr001 => "ALLOW-ATTR-001",
+            Self::VerusReason001 => "ALLOW-VERUS-REASON-001",
         }
     }
 
@@ -27,6 +30,7 @@ impl AllowRuleId {
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "ALLOW-ATTR-001" => Some(Self::Attr001),
+            "ALLOW-VERUS-REASON-001" => Some(Self::VerusReason001),
             _ => None,
         }
     }
@@ -57,7 +61,14 @@ impl Rule for AllowRule {
 
     #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
-        "`#[allow(...)]` or `#![allow(...)]` attribute suppressing compiler warnings"
+        match self.rule_id {
+            AllowRuleId::Attr001 => {
+                "`#[allow(...)]` or `#![allow(...)]` attribute suppressing compiler warnings"
+            }
+            AllowRuleId::VerusReason001 => {
+                "Verus `vstd`/`verus_builtin` import `#[allow]` must include `reason = \"...\"`"
+            }
+        }
     }
 }
 

@@ -2,10 +2,12 @@
 
 use std::path::{Path, PathBuf};
 
+use syn::parse::Parser;
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{
-    Attribute, Expr, Field, File, ImplItemFn, ItemFn, ItemImpl, ItemMod, Meta, Type, Variant,
+    Attribute, Expr, ImplItemFn, ItemFn, ItemImpl, ItemMod, ItemUse, Meta, Token, Type, UseTree,
 };
 
 use crate::error::CordialResult;
@@ -107,24 +109,25 @@ impl AllowScanVisitor {
         }
     }
 
-    #[instrument(level = "debug", skip(self, attrs))]
-    fn check_attrs(&mut self, attrs: &[Attribute]) {
-        for attr in attrs {
-            let Some(snippet) = allow_snippet(attr) else {
-                continue;
-            };
-            let mut file = self.file.clone();
-            if let Ok(rel) = file.strip_prefix(&self.crate_root) {
-                file = rel.to_path_buf();
-            }
-            self.findings.push(AllowSiteRecord {
-                rule_id: AllowRuleId::Attr001,
-                context: self.site_context(),
-                file,
-                line: attr.span().start().line as u32,
-                snippet,
-            });
+    #[instrument(level = "debug", skip(self, attr))]
+    fn record_allow(&mut self, attr: &Attribute, use_targets: &[String]) {
+        let Some(parsed) = parse_allow_attr(attr) else {
+            return;
+        };
+        let Some(rule_id) = classify_allow(&parsed, use_targets) else {
+            return;
+        };
+        let mut file = self.file.clone();
+        if let Ok(rel) = file.strip_prefix(&self.crate_root) {
+            file = rel.to_path_buf();
         }
+        self.findings.push(AllowSiteRecord {
+            rule_id,
+            context: self.site_context(),
+            file,
+            line: attr.span().start().line as u32,
+            snippet: parsed.snippet,
+        });
     }
 
     #[instrument(level = "debug", skip(self, items))]
@@ -139,7 +142,9 @@ impl AllowScanVisitor {
 
     #[instrument(level = "debug", skip(self, item_mod))]
     fn visit_mod(&mut self, item_mod: &ItemMod) {
-        self.check_attrs(&item_mod.attrs);
+        for attr in &item_mod.attrs {
+            self.record_allow(attr, &[]);
+        }
         if is_cfg_test(&item_mod.attrs) {
             return;
         }
@@ -154,9 +159,17 @@ impl AllowScanVisitor {
 
 impl<'ast> Visit<'ast> for AllowScanVisitor {
     #[instrument(level = "debug", skip(self, node))]
-    fn visit_file(&mut self, node: &'ast File) {
-        self.check_attrs(&node.attrs);
-        syn::visit::visit_file(self, node);
+    fn visit_attribute(&mut self, node: &'ast Attribute) {
+        self.record_allow(node, &[]);
+    }
+
+    #[instrument(level = "debug", skip(self, node))]
+    fn visit_item_use(&mut self, node: &'ast ItemUse) {
+        let targets = use_tree_paths(&node.tree);
+        for attr in &node.attrs {
+            self.record_allow(attr, &targets);
+        }
+        syn::visit::visit_use_tree(self, &node.tree);
     }
 
     #[instrument(level = "debug", skip(self, node))]
@@ -167,50 +180,12 @@ impl<'ast> Visit<'ast> for AllowScanVisitor {
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         self.fn_stack.push(node.sig.ident.to_string());
-        self.check_attrs(&node.attrs);
         syn::visit::visit_item_fn(self, node);
         self.fn_stack.pop();
     }
 
     #[instrument(level = "debug", skip(self, node))]
-    fn visit_item_struct(&mut self, node: &'ast syn::ItemStruct) {
-        self.check_attrs(&node.attrs);
-        syn::visit::visit_item_struct(self, node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_item_enum(&mut self, node: &'ast syn::ItemEnum) {
-        self.check_attrs(&node.attrs);
-        syn::visit::visit_item_enum(self, node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_item_trait(&mut self, node: &'ast syn::ItemTrait) {
-        self.check_attrs(&node.attrs);
-        syn::visit::visit_item_trait(self, node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_item_const(&mut self, node: &'ast syn::ItemConst) {
-        self.check_attrs(&node.attrs);
-        syn::visit::visit_item_const(self, node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_item_static(&mut self, node: &'ast syn::ItemStatic) {
-        self.check_attrs(&node.attrs);
-        syn::visit::visit_item_static(self, node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_item_type(&mut self, node: &'ast syn::ItemType) {
-        self.check_attrs(&node.attrs);
-        syn::visit::visit_item_type(self, node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
-        self.check_attrs(&node.attrs);
         let prev = self.impl_type.clone();
         self.impl_type = Some(type_label(&node.self_ty));
         syn::visit::visit_item_impl(self, node);
@@ -220,40 +195,101 @@ impl<'ast> Visit<'ast> for AllowScanVisitor {
     #[instrument(level = "debug", skip(self, node))]
     fn visit_impl_item_fn(&mut self, node: &'ast ImplItemFn) {
         self.fn_stack.push(node.sig.ident.to_string());
-        self.check_attrs(&node.attrs);
         syn::visit::visit_impl_item_fn(self, node);
         self.fn_stack.pop();
     }
+}
 
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_field(&mut self, node: &'ast Field) {
-        self.check_attrs(&node.attrs);
-        syn::visit::visit_field(self, node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_variant(&mut self, node: &'ast Variant) {
-        self.check_attrs(&node.attrs);
-        syn::visit::visit_variant(self, node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_expr(&mut self, node: &'ast Expr) {
-        if let Expr::Closure(closure) = node {
-            self.check_attrs(&closure.attrs);
-        }
-        syn::visit::visit_expr(self, node);
-    }
+struct ParsedAllow {
+    snippet: String,
+    reason: Option<String>,
 }
 
 #[instrument(level = "debug", skip(attr))]
-fn allow_snippet(attr: &Attribute) -> Option<String> {
-    match &attr.meta {
-        Meta::List(list) if list.path.is_ident("allow") => Some(truncate_snippet(
-            &normalize_allow_tokens(&list.tokens.to_string()),
-            96,
-        )),
-        _ => None,
+fn parse_allow_attr(attr: &Attribute) -> Option<ParsedAllow> {
+    let Meta::List(list) = &attr.meta else {
+        return None;
+    };
+    if !list.path.is_ident("allow") {
+        return None;
+    }
+    let snippet = truncate_snippet(&normalize_allow_tokens(&list.tokens.to_string()), 96);
+    let metas = Punctuated::<Meta, Token![,]>::parse_terminated
+        .parse2(list.tokens.clone())
+        .ok()?;
+    let mut reason = None;
+    for meta in metas {
+        let Meta::NameValue(name_value) = meta else {
+            continue;
+        };
+        if !name_value.path.is_ident("reason") {
+            continue;
+        }
+        let Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Str(text),
+            ..
+        }) = name_value.value
+        else {
+            continue;
+        };
+        reason = Some(text.value());
+    }
+    Some(ParsedAllow { snippet, reason })
+}
+
+#[instrument(level = "debug", skip(parsed, use_targets))]
+fn classify_allow(parsed: &ParsedAllow, use_targets: &[String]) -> Option<AllowRuleId> {
+    if !use_targets.iter().any(|path| is_verus_import(path)) {
+        return Some(AllowRuleId::Attr001);
+    }
+    if parsed
+        .reason
+        .as_deref()
+        .is_some_and(|reason| !reason.trim().is_empty())
+    {
+        return None;
+    }
+    Some(AllowRuleId::VerusReason001)
+}
+
+#[instrument(level = "debug")]
+fn is_verus_import(path: &str) -> bool {
+    path.split("::")
+        .next()
+        .is_some_and(|root| matches!(root, "vstd" | "verus_builtin" | "verus_builtin_macros"))
+}
+
+#[instrument(level = "debug", skip(tree))]
+fn use_tree_paths(tree: &UseTree) -> Vec<String> {
+    let mut paths = Vec::new();
+    collect_use_tree_paths(tree, "", &mut paths);
+    paths
+}
+
+#[instrument(level = "trace", skip(tree, out))]
+fn collect_use_tree_paths(tree: &UseTree, prefix: &str, out: &mut Vec<String>) {
+    match tree {
+        UseTree::Path(path) => {
+            let next = join_use_path(prefix, &path.ident.to_string());
+            collect_use_tree_paths(&path.tree, &next, out);
+        }
+        UseTree::Name(name) => out.push(join_use_path(prefix, &name.ident.to_string())),
+        UseTree::Rename(rename) => out.push(join_use_path(prefix, &rename.ident.to_string())),
+        UseTree::Glob(_) => out.push(join_use_path(prefix, "*")),
+        UseTree::Group(group) => {
+            for item in &group.items {
+                collect_use_tree_paths(item, prefix, out);
+            }
+        }
+    }
+}
+
+#[instrument(level = "trace")]
+fn join_use_path(prefix: &str, segment: &str) -> String {
+    if prefix.is_empty() {
+        segment.to_string()
+    } else {
+        format!("{prefix}::{segment}")
     }
 }
 

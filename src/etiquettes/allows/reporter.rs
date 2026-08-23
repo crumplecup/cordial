@@ -115,7 +115,9 @@ impl Reporter for AllowChecklistReporter {
         body.push_str(
             "Inventory of `#[allow(...)]` and `#![allow(...)]` attributes in crate \
              `src/` and `tests/` trees. Project policy: fix root causes instead of \
-             suppressing rustc or clippy warnings.\n\n",
+             suppressing rustc or clippy warnings. Verus `vstd` / `verus_builtin` \
+             imports that are unused under plain rustc must carry \
+             `reason = \"...\"`; a reasoned Verus allow is not an action item.\n\n",
         );
         body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
 

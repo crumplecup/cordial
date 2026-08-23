@@ -1,11 +1,16 @@
 //! Inventory of `#[allow]` / `#![allow]` attributes.
 //!
 //! **What.** Records every `#[allow(...)]` and inner `#![allow(...)]`
-//! (`ALLOW-ATTR-001`). It does not decide whether the lint is justified.
+//! (`ALLOW-ATTR-001`). Verus is the one judged case: an allow on a
+//! `vstd` / `verus_builtin` import must carry rustc's `reason = "..."`
+//! (`ALLOW-VERUS-REASON-001`). A reasoned Verus allow is not an action
+//! item — the prelude is unused under plain rustc because `verus! {}`
+//! erases spec content.
 //!
 //! **Why.** Allows hide compiler and Clippy signal. A regeneratable catalog
 //! makes each suppression reviewable, exceptionable, and comparable across
-//! crates instead of disappearing into the source.
+//! crates instead of disappearing into the source. Verus globs are the
+//! accepted exception; they still have to say why.
 //!
 //! **How to use.** Run `cordial quality` (feature `allows`, part of
 //! `quality`). Artifacts: `{store}/findings/allows.checklist.md`,
@@ -24,7 +29,7 @@ pub use enricher::AllowInventoryEnricher;
 pub use probe::AllowSiteProbe;
 pub use reporter::{AllowChecklistReporter, AllowCsvReporter, AllowSummaryReporter};
 pub use scan::{scan_crate_allows, scan_rust_source};
-pub use types::AllowRuleId;
+pub use types::{AllowRuleId, AllowSiteRecord};
 
 use crate::etiquette::StaticEtiquette;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
