@@ -81,6 +81,32 @@ fn items_inside_macro(tokens: proc_macro2::TokenStream) -> Vec<Item> {
         .collect()
 }
 
+/// Real calls inside an assertion macro's own argument list --
+/// `assert_eq!(some_fn(x), other, "msg")`'s first argument is a real
+/// call expression, but `syn::visit::Visit` never descends into ANY
+/// macro's token stream (assertion macros included), so that call's
+/// edge into the graph was silently never recorded: confirmed against a
+/// real false positive (`os_windows_model::kani_encode_wide_bmp_char`,
+/// whose only real caller is exactly this shape inside a `#[kani::proof]`
+/// harness's own `assert_eq!`). Parses the macro's tokens as a bare
+/// comma-separated expression list -- valid for `assert!`/`assert_eq!`/
+/// `assert_ne!`/their `debug_` twins, and harmless for any other macro
+/// whose tokens happen to parse the same way (a real call is a real
+/// call regardless of which macro's arguments it sits in); silently
+/// yields nothing for a macro whose tokens don't parse this way (most
+/// won't, e.g. `format!`'s leading string-literal-plus-braces shape
+/// still parses as an expr list fine, `vec![1, 2, 3]` too) -- best-effort
+/// widening, not a requirement.
+#[instrument(level = "trace", skip(tokens))]
+fn exprs_inside_macro(tokens: proc_macro2::TokenStream) -> Vec<Expr> {
+    syn::parse::Parser::parse2(
+        syn::punctuated::Punctuated::<Expr, syn::Token![,]>::parse_terminated,
+        tokens,
+    )
+    .map(|exprs| exprs.into_iter().collect())
+    .unwrap_or_default()
+}
+
 /// Crate-local function/method name reachable from a `#[kani::proof]`
 /// harness (or `#[cfg(kani)]`-only code), by fixed-point call-graph
 /// closure. Bare identifiers, not qualified paths -- see module doc.
@@ -246,6 +272,9 @@ impl<'ast> Visit<'ast> for GraphVisitor<'_> {
         for item in items_inside_macro(node.mac.tokens.clone()) {
             syn::visit::visit_item(self, &item);
         }
+        for expr in exprs_inside_macro(node.mac.tokens.clone()) {
+            self.visit_expr(&expr);
+        }
         syn::visit::visit_stmt_macro(self, node);
     }
 
@@ -253,6 +282,9 @@ impl<'ast> Visit<'ast> for GraphVisitor<'_> {
     fn visit_expr_macro(&mut self, node: &'ast syn::ExprMacro) {
         for item in items_inside_macro(node.mac.tokens.clone()) {
             syn::visit::visit_item(self, &item);
+        }
+        for expr in exprs_inside_macro(node.mac.tokens.clone()) {
+            self.visit_expr(&expr);
         }
         syn::visit::visit_expr_macro(self, node);
     }

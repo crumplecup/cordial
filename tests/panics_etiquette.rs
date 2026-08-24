@@ -766,6 +766,50 @@ some_crate::harness! {
 }
 
 #[test]
+fn expect_reachable_only_via_an_assert_eq_argument_is_not_flagged() -> miette::Result<()> {
+    // Real amenable_kani shape: os_windows_model::kani_encode_wide_bmp_char's
+    // only real caller passes it as assert_eq!'s own first argument, not as
+    // a bare statement -- syn::visit::Visit never descends into ANY macro's
+    // token stream on its own (assertion macros included), so this real
+    // call edge was silently invisible to the reachability graph before the
+    // fix that added exprs_inside_macro's fallback.
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+pub fn encode_bmp(c: char) -> u16 {
+    (c as u32).try_into().expect("c is a BMP scalar value by this fn's own precondition")
+}
+
+#[kani::proof]
+fn verify_encode_bmp() {
+    let c: char = kani::any();
+    kani::assume((c as u32) < 0x10000);
+    assert_eq!(encode_bmp(c), c as u32 as u16, "message");
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert!(
+        findings.is_empty(),
+        "encode_bmp's real call site inside assert_eq!'s own arguments must still register a \
+         reachability edge: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn unreachable_nested_under_cfg_kani_is_not_flagged() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
