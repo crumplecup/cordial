@@ -703,6 +703,178 @@ fn take2(res: Result<i32, i32>) -> i32 {
 }
 
 #[test]
+fn expect_err_asserted_against_directly_is_exempt() -> miette::Result<()> {
+    // Real amenable_kani::ledger_test shape: the whole point of the call
+    // is to extract the error value and assert a fact about it, not to
+    // discard or propagate a setup failure.
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+fn validate_rejects_a_negative_amount(res: Result<i32, TransferError>) {
+    let error = res.expect_err("negative amount");
+    assert_eq!(error, TransferError::NegativeAmount(-1));
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert!(
+        findings.is_empty(),
+        "error is bound then asserted on directly -- must be exempt: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn expect_err_exemption_matches_even_with_a_multiline_receiver() -> miette::Result<()> {
+    // Real amenable main.rs shape: check_method_call computes its own
+    // exempt-lookup line from the whole call expression's span, which
+    // starts at the *receiver*'s own beginning for a multi-line
+    // receiver -- not the .expect_err( call's own line. Both line
+    // computations must agree, or the lookup silently misses (confirmed
+    // the hard way: this exact fixture's real-world counterpart stayed
+    // flagged until error_assertion_binding's own line computation was
+    // fixed to match).
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+fn clap_rejects_a_single_proof_combined_with_a_retry_selector(res: Result<Cli, ClapError>) {
+    let error = build_cli([
+        "amenable",
+        "verify",
+        "kani",
+    ])
+    .expect_err("conflicting selectors must be rejected");
+
+    assert_eq!(error.kind(), ErrorKind::ArgumentConflict);
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert!(
+        findings.is_empty(),
+        "error is bound then asserted on directly, receiver just spans several lines first -- \
+         must still be exempt: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn unwrap_err_asserted_against_one_hop_later_is_exempt() -> miette::Result<()> {
+    // Real assessment_error_chain_test shape: the bound error feeds a
+    // further `let`, and THAT is what's asserted on.
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+fn load_on_malformed_json_preserves_the_real_serde_error_in_the_chain(res: Result<(), AmenableError>) {
+    let error = res.unwrap_err();
+    let rendered = error.to_string();
+    assert!(rendered.contains("line 1"));
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert!(
+        findings.is_empty(),
+        "error flows into rendered one hop later, which IS asserted on -- must be exempt: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn expect_err_with_no_later_use_still_flagged() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+fn discards_the_error(res: Result<i32, i32>) {
+    let _error = res.expect_err("must fail");
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert_eq!(
+        findings.len(),
+        1,
+        "bound but never used again -- not an assertion pattern, must still be flagged: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn expect_err_bound_and_used_but_never_asserted_still_flagged() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+fn logs_the_error(res: Result<i32, i32>) {
+    let error = res.expect_err("must fail");
+    println!("{error}");
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert_eq!(
+        findings.len(),
+        1,
+        "used, but never inside a real assert*! -- must still be flagged: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn nested_parity_workspace_is_skipped_when_scanning_parent() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))

@@ -8,6 +8,7 @@ use syn::{
     Expr, ExprLit, ExprMacro, ExprMethodCall, Item, ItemFn, ItemImpl, ItemMod, Lit, Macro, Type,
 };
 
+use super::error_assertion;
 use super::kani_reach::{KaniReachability, build_kani_reachability};
 use super::types::{PanicKind, PanicSiteRecord};
 #[cfg(not(feature = "verus_ir"))]
@@ -210,6 +211,7 @@ fn scan_parsed_file(
         in_cfg_not_kani: false,
         reachability,
         findings: Vec::new(),
+        exempt_error_assertion_lines: std::collections::HashSet::new(),
     };
     visitor.visit_file(&file.syntax);
     visitor.findings
@@ -230,6 +232,14 @@ struct PanicScanVisitor<'a> {
     in_cfg_not_kani: bool,
     reachability: &'a KaniReachability,
     findings: Vec<PanicSiteRecord>,
+    /// Line numbers of `.expect_err(..)`/`.unwrap_err()` calls that
+    /// assert a fact against the extracted error value rather than
+    /// discarding/propagating it -- see `error_assertion`'s own doc
+    /// comment. Accumulates across every `Block` visited in the file
+    /// (line numbers are unique within one file), populated by
+    /// `visit_block` before it descends into that block's own
+    /// statements.
+    exempt_error_assertion_lines: std::collections::HashSet<u32>,
 }
 
 impl PanicScanVisitor<'_> {
@@ -334,17 +344,24 @@ impl PanicScanVisitor<'_> {
 
     #[instrument(level = "debug", skip(self, call))]
     fn check_method_call(&mut self, call: &ExprMethodCall) {
-        match call.method.to_string().as_str() {
-            "expect" | "expect_err" => self.push_finding(
-                PanicKind::Expect,
-                call.span().start().line as u32,
-                expect_snippet(call),
-            ),
-            "unwrap" | "unwrap_err" if !is_unwrap_variant(call) => self.push_finding(
-                PanicKind::Unwrap,
-                call.span().start().line as u32,
-                format!(".{}()", call.method),
-            ),
+        let method = call.method.to_string();
+        let line = call.span().start().line as u32;
+        // Asserting a fact against the extracted error value (`let error
+        // = ...expect_err(..); assert_eq!(error, ..)`) is that
+        // assertion's own mechanism, not a discarded/propagated setup
+        // failure -- see error_assertion's own doc comment. Only applies
+        // to the `_err` methods: `.expect(..)`/`.unwrap()` assert the Ok
+        // case succeeded, an entirely different situation this pattern
+        // doesn't cover.
+        let is_error_assertion = matches!(method.as_str(), "expect_err" | "unwrap_err")
+            && self.exempt_error_assertion_lines.contains(&line);
+        match method.as_str() {
+            "expect" | "expect_err" if !is_error_assertion => {
+                self.push_finding(PanicKind::Expect, line, expect_snippet(call))
+            }
+            "unwrap" | "unwrap_err" if !is_unwrap_variant(call) && !is_error_assertion => {
+                self.push_finding(PanicKind::Unwrap, line, format!(".{}()", call.method))
+            }
             _ => {}
         }
     }
@@ -452,6 +469,13 @@ impl<'ast> Visit<'ast> for PanicScanVisitor<'_> {
         }
         syn::visit::visit_expr_block(self, node);
         self.in_cfg_not_kani = prev;
+    }
+
+    #[instrument(level = "debug", skip(self, node))]
+    fn visit_block(&mut self, node: &'ast syn::Block) {
+        self.exempt_error_assertion_lines
+            .extend(error_assertion::error_assertion_lines(node));
+        syn::visit::visit_block(self, node);
     }
 }
 
