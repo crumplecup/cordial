@@ -103,6 +103,19 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
     let cli_main = count_open_rule(findings, "CLI-MAIN-001");
     let cli_layout = cli_island + cli_act + cli_main;
 
+    let proof_pattern_assume = count_open_rule(findings, "PROOF-PATTERN-ASSUME");
+    let proof_pattern_admit = count_open_rule(findings, "PROOF-PATTERN-ADMIT");
+    let proof_pattern_external_body = count_open_rule(findings, "PROOF-PATTERN-EXTERNAL-BODY");
+    let proof_pattern_uninterp = count_open_rule(findings, "PROOF-PATTERN-UNINTERP");
+    let proof_pattern_axiom = count_open_rule(findings, "PROOF-PATTERN-AXIOM");
+    let proof_pattern_broadcast = count_open_rule(findings, "PROOF-PATTERN-BROADCAST");
+    let proof_patterns = proof_pattern_assume
+        + proof_pattern_admit
+        + proof_pattern_external_body
+        + proof_pattern_uninterp
+        + proof_pattern_axiom
+        + proof_pattern_broadcast;
+
     let areas = vec![
         quality_area(
             1,
@@ -217,6 +230,19 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
             "verus-warnings.checklist.md",
             "verus-warnings-summary.md",
             format!("Verus compiler warnings **{verus_warnings}**"),
+        ),
+        quality_area(
+            13,
+            "Proof patterns",
+            proof_patterns,
+            "proof-patterns.checklist.md",
+            "proof-patterns-summary.md",
+            format!(
+                "assume **{proof_pattern_assume}**, admit **{proof_pattern_admit}**, \
+                 external_body **{proof_pattern_external_body}**, \
+                 uninterp **{proof_pattern_uninterp}**, axiom **{proof_pattern_axiom}**, \
+                 broadcast **{proof_pattern_broadcast}**"
+            ),
         ),
     ];
 

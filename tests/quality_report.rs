@@ -4,7 +4,7 @@ use miette::{IntoDiagnostic, WrapErr};
 #[test]
 fn quality_report_lists_resolution_order() -> miette::Result<()> {
     let report = build_quality_report(&[]).into_diagnostic()?;
-    assert_eq!(report.areas.len(), 12);
+    assert_eq!(report.areas.len(), 13);
     assert_eq!(report.areas[0].title, "Error handling");
     assert_eq!(report.areas[1].title, "Antipatterns");
     assert_eq!(report.areas[2].title, "Derive patterns");
@@ -16,6 +16,7 @@ fn quality_report_lists_resolution_order() -> miette::Result<()> {
     assert_eq!(report.areas[9].title, "Glob imports");
     assert_eq!(report.areas[10].title, "Inline tests");
     assert_eq!(report.areas[11].title, "Verus compiler warnings");
+    assert_eq!(report.areas[12].title, "Proof patterns");
 
     let body = cordial::render_quality_report_markdown(&report).into_diagnostic()?;
     assert!(body.contains("## Resolution order"));
