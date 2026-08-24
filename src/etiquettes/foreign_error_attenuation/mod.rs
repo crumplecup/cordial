@@ -41,7 +41,7 @@ pub use types::{
 
 use crate::SourceLoader;
 use crate::enricher::ERROR_IR_ENRICHERS;
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{StaticEtiquette, StaticQualityEtiquette};
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static FOREIGN_ERROR_ATTENUATION_PROBE: ForeignErrorAttenuationProbe = ForeignErrorAttenuationProbe;
@@ -65,14 +65,20 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in foreign error attenuation etiquette bundle.
-pub static FOREIGN_ERROR_ATTENUATION_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "foreign_error_attenuation",
-    name: "Foreign error attenuation",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static FOREIGN_ERROR_ATTENUATION_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "foreign_error_attenuation",
+        name: "Foreign error attenuation",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    // Declines a dedicated row on purpose: its migration-backlog
+    // (chain-break + pending-infra) counts feed the hand-composed
+    // "Error handling" area instead (see reporter::quality_report).
+    quality_area: None,
 };

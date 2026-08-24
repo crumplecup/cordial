@@ -28,8 +28,13 @@ pub use reporter::{GlobImportChecklistReporter, GlobImportCsvReporter, GlobImpor
 pub use scan::{scan_crate_glob_imports, scan_rust_source};
 pub use types::GlobImportRuleId;
 
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{
+    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_category,
+};
+use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
+
+use tracing::instrument;
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
@@ -53,14 +58,28 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in glob-imports etiquette bundle.
-pub static GLOB_IMPORTS_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "glob_imports",
-    name: "Glob imports",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static GLOB_IMPORTS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "glob_imports",
+        name: "Glob imports",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    quality_area: Some(QualityAreaSpec {
+        title: "Glob imports",
+        checklist: "glob-imports.checklist.md",
+        summary: "glob-imports-summary.md",
+        compute: quality_area_compute,
+    }),
 };
+
+#[instrument(level = "debug", skip(findings))]
+fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
+    let glob_imports = count_open_category(findings, "glob_imports");
+    (glob_imports, format!("glob `use` sites **{glob_imports}**"))
+}

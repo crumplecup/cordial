@@ -36,8 +36,13 @@ pub use reporter::{DeriveChecklistReporter, DeriveCsvReporter, DeriveSummaryRepo
 pub use scan::scan_rust_source;
 pub use types::{DeriveRuleId, DeriveSiteRecord};
 
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{
+    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule,
+};
+use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
+
+use tracing::instrument;
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
@@ -58,14 +63,41 @@ static REPORTERS: &[&'static dyn crate::Reporter] =
     &[&DERIVE_CSV, &DERIVE_CHECKLIST, &DERIVE_SUMMARY];
 
 /// Built-in derives etiquette bundle.
-pub static DERIVES_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "derives",
-    name: "Derive patterns",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static DERIVES_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "derives",
+        name: "Derive patterns",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    quality_area: Some(QualityAreaSpec {
+        title: "Derive patterns",
+        checklist: "derives.checklist.md",
+        summary: "derives-summary.md",
+        compute: quality_area_compute,
+    }),
 };
+
+#[instrument(level = "debug", skip(findings))]
+fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
+    let builder = count_open_rule(findings, "DERIVE-BUILDER-001");
+    let use_builder = count_open_rule(findings, "DERIVE-USE-BUILDER-001");
+    let getter = count_open_rule(findings, "DERIVE-GETTER-001");
+    let setter = count_open_rule(findings, "DERIVE-SETTER-001");
+    let as_ref = count_open_rule(findings, "DERIVE-ASREF-001");
+    let as_str = count_open_rule(findings, "DERIVE-ASSTR-001");
+    let new = count_open_rule(findings, "DERIVE-NEW-001");
+    let pub_field = count_open_rule(findings, "DERIVE-PUB-FIELD-001");
+    let total = builder + use_builder + getter + setter + as_ref + as_str + new + pub_field;
+    let detail = format!(
+        "builder **{builder}**, use_builder **{use_builder}**, getter **{getter}**, \
+         setter **{setter}**, as_ref **{as_ref}**, as_str **{as_str}**, new **{new}**, \
+         pub_field **{pub_field}**"
+    );
+    (total, detail)
+}

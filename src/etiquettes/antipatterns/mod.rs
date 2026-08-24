@@ -46,8 +46,13 @@ pub use version_reporter::{
     VersionInMemberChecklistReporter, VersionInMemberCsvReporter, VersionInMemberSummaryReporter,
 };
 
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{
+    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule,
+};
+use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
+
+use tracing::instrument;
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
@@ -78,14 +83,41 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in antipatterns etiquette bundle.
-pub static ANTIPATTERNS_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "antipatterns",
-    name: "Antipatterns",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static ANTIPATTERNS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "antipatterns",
+        name: "Antipatterns",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    quality_area: Some(QualityAreaSpec {
+        title: "Antipatterns",
+        checklist: "antipatterns.checklist.md",
+        summary: "antipatterns-summary.md",
+        compute: quality_area_compute,
+    }),
 };
+
+/// `Box<dyn Error>`/`Result<_, String>` (`ANTIPATTERN-BOX-DYN-ERROR-001`/
+/// `ANTIPATTERN-STRING-ERROR-001`) are deliberately excluded here -- they
+/// feed the hand-composed "Error handling" area instead (see
+/// `reporter::quality_report`), since they're specifically about untyped
+/// error carriers, not this etiquette's other, unrelated smells.
+#[instrument(level = "debug", skip(findings))]
+fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
+    let unused_arg = count_open_rule(findings, "ANTIPATTERN-UNUSED-UNDERSCORE-ARG-001");
+    let static_ref = count_open_rule(findings, "ANTIPATTERN-STRUCT-STATIC-REF-001");
+    let version_in_member = count_open_rule(findings, "ANTIPATTERN-VERSION-IN-MEMBER-001");
+    let unnamed_contract = count_open_rule(findings, "ANTIPATTERN-UNNAMED-CONTRACT-BOUND-001");
+    let total = unused_arg + static_ref + version_in_member + unnamed_contract;
+    let detail = format!(
+        "unused `_arg` **{unused_arg}**, static refs **{static_ref}**, \
+         version-in-member **{version_in_member}**, unnamed contract **{unnamed_contract}**"
+    );
+    (total, detail)
+}

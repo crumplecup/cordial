@@ -31,6 +31,7 @@ mod delta;
 mod enricher;
 mod present;
 mod probe;
+mod quality_area;
 mod recipe;
 mod recordable;
 mod reporter;
@@ -48,7 +49,7 @@ pub use probe::{MissingInstrumentProbe, RecipeDeltaProbe};
 pub use reporter::{TracingChecklistReporter, TracingCsvReporter, TracingSummaryReporter};
 pub use scan::scan_rust_source;
 
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette};
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
@@ -71,14 +72,22 @@ static REPORTERS: &[&'static dyn crate::Reporter] =
     &[&TRACING_CSV, &TRACING_CHECKLIST, &TRACING_SUMMARY];
 
 /// Built-in tracing instrument etiquette bundle.
-pub static TRACING_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "tracing",
-    name: "Tracing instrument",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static TRACING_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "tracing",
+        name: "Tracing instrument",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    quality_area: Some(QualityAreaSpec {
+        title: "Tracing instrumentation",
+        checklist: "tracing-instrument.checklist.md",
+        summary: "tracing-summary.md",
+        compute: quality_area::quality_area_compute,
+    }),
 };

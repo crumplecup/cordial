@@ -219,7 +219,10 @@ pub use enricher::{
     resolve_shadow_entries,
 };
 pub use error::{CordialError, CordialErrorKind, CordialResult, TokenStreamParseError};
-pub use etiquette::{Etiquette, StaticEtiquette};
+pub use etiquette::{
+    Etiquette, QualityAreaSpec, QualityEtiquette, QualityReportArea, StaticEtiquette,
+    StaticQualityEtiquette,
+};
 #[cfg(feature = "elicitation")]
 pub use etiquettes::coverage_etiquettes;
 #[cfg(feature = "amenable_std")]

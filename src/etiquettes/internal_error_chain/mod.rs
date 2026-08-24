@@ -52,7 +52,7 @@ pub use types::{
 
 use crate::SourceLoader;
 use crate::enricher::ERROR_IR_ENRICHERS;
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{StaticEtiquette, StaticQualityEtiquette};
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static INTERNAL_ERROR_CHAIN_PROBE: InternalErrorChainProbe = InternalErrorChainProbe;
@@ -78,14 +78,20 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in internal error chain etiquette bundle.
-pub static INTERNAL_ERROR_CHAIN_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "internal_error_chain",
-    name: "Internal error chain",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static INTERNAL_ERROR_CHAIN_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "internal_error_chain",
+        name: "Internal error chain",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    // Declines a dedicated row on purpose: its COMPLIANCE violation
+    // count feeds the hand-composed "Error handling" area instead (see
+    // reporter::quality_report).
+    quality_area: None,
 };

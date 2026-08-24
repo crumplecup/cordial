@@ -37,7 +37,12 @@ pub use types::{
 
 use crate::SourceLoader;
 use crate::enricher::ERROR_IR_ENRICHERS;
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{
+    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, finding_field, open_findings,
+};
+use crate::objects::Finding;
+
+use tracing::instrument;
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static FOREIGN_ERROR_TYPE_PROBE: ForeignErrorTypeProbe = ForeignErrorTypeProbe;
@@ -61,14 +66,41 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in foreign error types etiquette bundle.
-pub static FOREIGN_ERROR_TYPES_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "foreign_error_types",
-    name: "Foreign error types",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static FOREIGN_ERROR_TYPES_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "foreign_error_types",
+        name: "Foreign error types",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    quality_area: Some(QualityAreaSpec {
+        title: "Foreign error types",
+        checklist: "foreign-error-types.checklist.md",
+        summary: "foreign-error-types-summary.md",
+        compute: quality_area_compute,
+    }),
 };
+
+/// Chain breaks: a typed (not merely candidate) foreign error record
+/// whose `.map_err` drops or stringifies the source, matching
+/// `ForeignErrorTypesChecklistReporter`'s own filter -- previously never
+/// referenced anywhere in the workspace rollup at all (silent since it
+/// happened to always be zero; the same shape of gap `proof_patterns`
+/// had).
+#[instrument(level = "debug", skip(findings))]
+fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
+    let chain_breaks = open_findings(findings)
+        .filter(|finding| finding.rule().category() == "foreign_error_types")
+        .filter(|finding| {
+            finding_field(*finding, "record_kind").as_deref()
+                == Some(ForeignErrorRecordKind::Typed.as_attr())
+        })
+        .filter(|finding| finding_field(*finding, "chain_break").as_deref() == Some("true"))
+        .count();
+    (chain_breaks, format!("chain breaks **{chain_breaks}**"))
+}

@@ -20,6 +20,7 @@ mod assessor;
 mod enricher;
 mod hierarchy;
 mod probe;
+mod quality_area;
 mod reporter;
 mod scan;
 mod types;
@@ -36,7 +37,7 @@ pub use reporter::{ModularityChecklistReporter, ModularityCsvReporter, Modularit
 pub use scan::scan_rust_source;
 pub use types::{ModularityKind, ModuleSizeStats};
 
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette};
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
@@ -58,14 +59,22 @@ static REPORTERS: &[&'static dyn crate::Reporter] =
     &[&MODULARITY_CSV, &MODULARITY_CHECKLIST, &MODULARITY_SUMMARY];
 
 /// Built-in modularity etiquette bundle.
-pub static MODULARITY_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "modularity",
-    name: "Modularity",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static MODULARITY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "modularity",
+        name: "Modularity",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    quality_area: Some(QualityAreaSpec {
+        title: "Modularity",
+        checklist: "modularity.checklist.md",
+        summary: "modularity-summary.md",
+        compute: quality_area::quality_area_compute,
+    }),
 };

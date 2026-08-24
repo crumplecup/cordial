@@ -34,7 +34,7 @@ pub use reporter::{PanicChecklistReporter, PanicCsvReporter, PanicSummaryReporte
 pub use scan::{scan_crate_panics, scan_rust_source, scan_source_tree};
 pub use types::PanicKind;
 
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{StaticEtiquette, StaticQualityEtiquette};
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
@@ -55,14 +55,23 @@ static ASSESSORS: &[&'static dyn crate::Assessor] = &[&PANIC_ASSESSOR];
 static REPORTERS: &[&'static dyn crate::Reporter] = &[&PANIC_CSV, &PANIC_CHECKLIST, &PANIC_SUMMARY];
 
 /// Built-in panics etiquette bundle.
-pub static PANICS_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "panics",
-    name: "Panic sources",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static PANICS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "panics",
+        name: "Panic sources",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    // Declines a dedicated row on purpose: its own checklist_total feeds
+    // the hand-composed "Error handling" area instead (see
+    // reporter::quality_report), which also pulls from
+    // foreign_error_attenuation/internal_error_chain/antipatterns --
+    // genuinely a merge of several etiquettes into one area, not
+    // representable as any single etiquette's own contribution.
+    quality_area: None,
 };

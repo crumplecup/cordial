@@ -29,8 +29,13 @@ pub use reporter::{InlineTestChecklistReporter, InlineTestCsvReporter, InlineTes
 pub use scan::{scan_crate_inline_tests, scan_rust_source};
 pub use types::InlineTestRuleId;
 
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{
+    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_category,
+};
+use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
+
+use tracing::instrument;
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
@@ -54,14 +59,28 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in inline-tests etiquette bundle.
-pub static INLINE_TESTS_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "inline_tests",
-    name: "Inline tests",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static INLINE_TESTS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "inline_tests",
+        name: "Inline tests",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    quality_area: Some(QualityAreaSpec {
+        title: "Inline tests",
+        checklist: "inline-tests.checklist.md",
+        summary: "inline-tests-summary.md",
+        compute: quality_area_compute,
+    }),
 };
+
+#[instrument(level = "debug", skip(findings))]
+fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
+    let inline_tests = count_open_category(findings, "inline_tests");
+    (inline_tests, format!("tests under `src/` **{inline_tests}**"))
+}

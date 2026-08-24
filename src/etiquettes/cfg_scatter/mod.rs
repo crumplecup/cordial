@@ -31,8 +31,13 @@ pub use reporter::{CfgScatterChecklistReporter, CfgScatterCsvReporter, CfgScatte
 pub use scan::scan_rust_source;
 pub use types::CfgSiteKind;
 
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{
+    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_category,
+};
+use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
+
+use tracing::instrument;
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
@@ -59,14 +64,28 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 /// repeated across multiple item kinds in one file (functions, impls,
 /// imports, …) that would be clearer as a single `#[cfg]`-gated `mod`.
 /// Field/variant-only gating is never flagged — see [`CfgSiteKind`] docs.
-pub static CFG_SCATTER_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "cfg_scatter",
-    name: "Scattered cfg predicates",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static CFG_SCATTER_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "cfg_scatter",
+        name: "Scattered cfg predicates",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    quality_area: Some(QualityAreaSpec {
+        title: "Cfg scatter",
+        checklist: "cfg-scatter.checklist.md",
+        summary: "cfg-scatter-summary.md",
+        compute: quality_area_compute,
+    }),
 };
+
+#[instrument(level = "debug", skip(findings))]
+fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
+    let cfg_scatter = count_open_category(findings, "cfg_scatter");
+    (cfg_scatter, format!("scattered `#[cfg]` groups **{cfg_scatter}**"))
+}

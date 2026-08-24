@@ -29,7 +29,7 @@ pub use types::{ErrorChainProbeId, ErrorChainRecord, probe_counts};
 
 use crate::SourceLoader;
 use crate::enricher::ERROR_IR_ENRICHERS;
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{StaticEtiquette, StaticQualityEtiquette};
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static ERROR_CHAIN_PROBE: ErrorChainProbe = ErrorChainProbe;
@@ -49,14 +49,20 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in error chain preservation etiquette bundle.
-pub static ERROR_CHAIN_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "error_chain",
-    name: "Error chain preservation",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static ERROR_CHAIN_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "error_chain",
+        name: "Error chain preservation",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    // Declines a dedicated row on purpose: reference patterns (already-
+    // preserved chains), not open action items -- its own doc comment:
+    // "these are reference patterns for error-chain preservation."
+    quality_area: None,
 };

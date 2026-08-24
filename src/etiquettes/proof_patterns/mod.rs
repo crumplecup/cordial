@@ -42,8 +42,13 @@ pub use reporter::{
 pub use scan::scan_crate_proof_patterns;
 pub use types::ProofPatternKind;
 
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{
+    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule,
+};
+use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
+
+use tracing::instrument;
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
@@ -70,14 +75,38 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in proof-patterns etiquette bundle.
-pub static PROOF_PATTERNS_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "proof_patterns",
-    name: "Proof patterns",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static PROOF_PATTERNS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "proof_patterns",
+        name: "Proof patterns",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    quality_area: Some(QualityAreaSpec {
+        title: "Proof patterns",
+        checklist: "proof-patterns.checklist.md",
+        summary: "proof-patterns-summary.md",
+        compute: quality_area_compute,
+    }),
 };
+
+#[instrument(level = "debug", skip(findings))]
+fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
+    let assume = count_open_rule(findings, "PROOF-PATTERN-ASSUME");
+    let admit = count_open_rule(findings, "PROOF-PATTERN-ADMIT");
+    let external_body = count_open_rule(findings, "PROOF-PATTERN-EXTERNAL-BODY");
+    let uninterp = count_open_rule(findings, "PROOF-PATTERN-UNINTERP");
+    let axiom = count_open_rule(findings, "PROOF-PATTERN-AXIOM");
+    let broadcast = count_open_rule(findings, "PROOF-PATTERN-BROADCAST");
+    let total = assume + admit + external_body + uninterp + axiom + broadcast;
+    let detail = format!(
+        "assume **{assume}**, admit **{admit}**, external_body **{external_body}**, \
+         uninterp **{uninterp}**, axiom **{axiom}**, broadcast **{broadcast}**"
+    );
+    (total, detail)
+}

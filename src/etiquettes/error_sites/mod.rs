@@ -40,7 +40,7 @@ pub use types::{
 
 use crate::SourceLoader;
 use crate::enricher::ERROR_IR_ENRICHERS;
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{StaticEtiquette, StaticQualityEtiquette};
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static ERROR_SITE_PROBE: ErrorSiteProbe = ErrorSiteProbe;
@@ -66,14 +66,21 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in error sites etiquette bundle.
-pub static ERROR_SITES_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "error_sites",
-    name: "Error sites",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static ERROR_SITES_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "error_sites",
+        name: "Error sites",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    // Declines a dedicated row on purpose: an intermediate census (its
+    // own doc comment: "Resolution strategies are out of scope"),
+    // feeding error_chain/foreign_error_types/foreign_error_attenuation
+    // rather than being itself an action-item area.
+    quality_area: None,
 };

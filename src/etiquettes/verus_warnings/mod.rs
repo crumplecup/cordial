@@ -35,8 +35,13 @@ pub use reporter::{
 pub use scan::{crate_is_verus_target, parse_verus_compiler_output, scan_crate_verus_warnings};
 pub use types::{VerusWarningRecord, VerusWarningRuleId};
 
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{
+    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_category,
+};
+use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
+
+use tracing::instrument;
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
@@ -63,14 +68,28 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in Verus compiler-warning etiquette bundle.
-pub static VERUS_WARNINGS_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "verus_warnings",
-    name: "Verus compiler warnings",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static VERUS_WARNINGS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "verus_warnings",
+        name: "Verus compiler warnings",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    quality_area: Some(QualityAreaSpec {
+        title: "Verus compiler warnings",
+        checklist: "verus-warnings.checklist.md",
+        summary: "verus-warnings-summary.md",
+        compute: quality_area_compute,
+    }),
 };
+
+#[instrument(level = "debug", skip(findings))]
+fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
+    let verus_warnings = count_open_category(findings, "verus_warnings");
+    (verus_warnings, format!("Verus compiler warnings **{verus_warnings}**"))
+}

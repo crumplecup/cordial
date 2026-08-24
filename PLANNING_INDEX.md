@@ -22,6 +22,7 @@ Active implementation plans for `cordial`.
 | [Inline tests](docs/planning/inline-tests-etiquette.md) | **Active** | `#[cfg(test)]` / `#[test]` under `src/` belong in `tests/` |
 | [Verus compiler warnings](docs/planning/verus-warnings-etiquette.md) | **Active** | Post-process `verus` output; rustc never sees these diagnostics |
 | [Proof patterns etiquette](docs/planning/proof-patterns-etiquette.md) | **Active** | `assume`/`admit`/`external_body`/`uninterp`/`axiom`/`broadcast` via `verus_ir` |
+| [Quality-report feeder trait](docs/planning/quality-report-feeder-trait.md) | **Complete** | `QualityReportArea`/`StaticQualityEtiquette` -- compiler-enforced rollup coverage, closes the `proof_patterns`/`foreign_error_types` silent-gap class |
 
 ## Completed / archived
 

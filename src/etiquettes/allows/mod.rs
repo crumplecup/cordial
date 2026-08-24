@@ -31,8 +31,13 @@ pub use reporter::{AllowChecklistReporter, AllowCsvReporter, AllowSummaryReporte
 pub use scan::{scan_crate_allows, scan_rust_source};
 pub use types::{AllowRuleId, AllowSiteRecord};
 
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{
+    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_category,
+};
+use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
+
+use tracing::instrument;
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
@@ -52,14 +57,28 @@ static ASSESSORS: &[&'static dyn crate::Assessor] = &[&ALLOW_ASSESSOR];
 static REPORTERS: &[&'static dyn crate::Reporter] = &[&ALLOW_CSV, &ALLOW_CHECKLIST, &ALLOW_SUMMARY];
 
 /// Built-in allows etiquette bundle.
-pub static ALLOWS_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "allows",
-    name: "Allow attributes",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static ALLOWS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "allows",
+        name: "Allow attributes",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    quality_area: Some(QualityAreaSpec {
+        title: "Allow attributes",
+        checklist: "allows.checklist.md",
+        summary: "allows-summary.md",
+        compute: quality_area_compute,
+    }),
 };
+
+#[instrument(level = "debug", skip(findings))]
+fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
+    let allows = count_open_category(findings, "allows");
+    (allows, format!("allow attributes **{allows}**"))
+}

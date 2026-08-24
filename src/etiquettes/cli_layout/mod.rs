@@ -33,7 +33,12 @@ pub use types::{CliLayoutId, CliLayoutRecord};
 
 use crate::SourceLoader;
 use crate::enricher::{AttributeEnricher, ScopeEnricher};
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{
+    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule,
+};
+use crate::objects::Finding;
+
+use tracing::instrument;
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
@@ -54,14 +59,32 @@ static REPORTERS: &[&'static dyn crate::Reporter] =
     &[&CLI_LAYOUT_CSV, &CLI_LAYOUT_CHECKLIST, &CLI_LAYOUT_SUMMARY];
 
 /// Built-in CLI-layout etiquette: clap types dispatch in the library; `main` is thin.
-pub static CLI_LAYOUT_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "cli_layout",
-    name: "CLI layout",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
+pub static CLI_LAYOUT_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
+    etiquette: StaticEtiquette {
+        id: "cli_layout",
+        name: "CLI layout",
+        loaders: LOADERS,
+        enrichers: ENRICHERS,
+        probes: PROBES,
+        assessors: ASSESSORS,
+        workspace_assessors: None,
+        reporters: REPORTERS,
+        is_coverage: false,
+    },
+    quality_area: Some(QualityAreaSpec {
+        title: "CLI layout",
+        checklist: "cli-layout.checklist.md",
+        summary: "cli-layout-summary.md",
+        compute: quality_area_compute,
+    }),
 };
+
+#[instrument(level = "debug", skip(findings))]
+fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
+    let cli_island = count_open_rule(findings, "CLI-ISLAND-001");
+    let cli_act = count_open_rule(findings, "CLI-ACT-001");
+    let cli_main = count_open_rule(findings, "CLI-MAIN-001");
+    let total = cli_island + cli_act + cli_main;
+    let detail = format!("island **{cli_island}**, act **{cli_act}**, main **{cli_main}**");
+    (total, detail)
+}
