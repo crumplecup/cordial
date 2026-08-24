@@ -75,6 +75,18 @@ pub struct VerusPanicSite {
     pub kind: VerusPanicKind,
     pub line: u32,
     pub snippet: String,
+    /// True when this site sits in a `match` arm gated
+    /// `#[cfg(not(verus_keep_ghost))]` whose sibling arm -- same
+    /// pattern, gated `#[cfg(verus_keep_ghost)]` -- calls `unreached()`
+    /// instead. That sibling only compiles under the real `verus`
+    /// toolchain, where the branch is proven impossible by the SMT
+    /// solver (typically backed by a `requires` clause on the enclosing
+    /// function); this site is the same branch's ordinary-rustc
+    /// fallback, needed because `unreached()` requires `vstd`. A real,
+    /// raw structural fact -- whether a consumer treats it as exempt
+    /// from a panic-inventory policy is that consumer's own call, not
+    /// this parse's.
+    pub proven_unreachable_by_ghost_sibling: bool,
 }
 
 /// Real facts extracted from one `fn`/`spec fn`/`proof fn` found inside a

@@ -210,6 +210,7 @@ fn scan_body(block: &verus_syn::Block) -> BodyFacts {
         uses_assume: false,
         uses_admit: false,
         panic_sites: Vec::new(),
+        in_proven_unreachable_arm: false,
     };
     visitor.visit_block(block);
     BodyFacts {
@@ -223,6 +224,11 @@ struct BodyVisitor {
     uses_assume: bool,
     uses_admit: bool,
     panic_sites: Vec<VerusPanicSite>,
+    /// Set for the duration of visiting a `match` arm's guard/body when
+    /// that arm is `#[cfg(not(verus_keep_ghost))]`-gated and a sibling
+    /// arm -- same pattern, `#[cfg(verus_keep_ghost)]`-gated -- calls
+    /// `unreached()`. See [`VerusPanicSite::proven_unreachable_by_ghost_sibling`].
+    in_proven_unreachable_arm: bool,
 }
 
 impl BodyVisitor {
@@ -243,6 +249,7 @@ impl BodyVisitor {
                 kind,
                 line: mac.span().start().line as u32,
                 snippet: format!("{}!(..)", segment.ident),
+                proven_unreachable_by_ghost_sibling: self.in_proven_unreachable_arm,
             });
         }
     }
@@ -295,8 +302,100 @@ impl<'ast> Visit<'ast> for BodyVisitor {
                 kind,
                 line: node.method.span().start().line as u32,
                 snippet: format!(".{}(..)", node.method),
+                proven_unreachable_by_ghost_sibling: self.in_proven_unreachable_arm,
             });
         }
         verus_syn::visit::visit_expr_method_call(self, node);
     }
+
+    /// Overrides the default traversal (rather than delegating to
+    /// `verus_syn::visit::visit_expr_match`) so the ghost/exec sibling
+    /// pairing can be computed once, up front, from every arm before any
+    /// arm's own body is visited -- a per-arm override alone has no way
+    /// to see its siblings.
+    #[instrument(level = "trace", skip(self, node))]
+    fn visit_expr_match(&mut self, node: &'ast verus_syn::ExprMatch) {
+        for attr in &node.attrs {
+            self.visit_attribute(attr);
+        }
+        self.visit_expr(&node.expr);
+
+        let ghost_unreached_patterns: std::collections::HashSet<String> = node
+            .arms
+            .iter()
+            .filter(|arm| {
+                has_cfg_flag(&arm.attrs, "verus_keep_ghost") && is_bare_unreached_call(&arm.body)
+            })
+            .map(|arm| pattern_key(&arm.pat))
+            .collect();
+
+        for arm in &node.arms {
+            for attr in &arm.attrs {
+                self.visit_attribute(attr);
+            }
+            self.visit_pat(&arm.pat);
+            if let Some((_, guard)) = &arm.guard {
+                self.visit_expr(guard);
+            }
+            let exempt = has_cfg_not_flag(&arm.attrs, "verus_keep_ghost")
+                && ghost_unreached_patterns.contains(&pattern_key(&arm.pat));
+            let prev = self.in_proven_unreachable_arm;
+            if exempt {
+                self.in_proven_unreachable_arm = true;
+            }
+            self.visit_expr(&arm.body);
+            self.in_proven_unreachable_arm = prev;
+        }
+    }
+}
+
+/// Whether `attrs` carries a bare `#[cfg(flag)]` (no `not(..)`, no
+/// `all(..)`/`any(..)` combinators -- just the single flag name).
+#[instrument(level = "trace", skip(attrs, flag))]
+fn has_cfg_flag(attrs: &[verus_syn::Attribute], flag: &str) -> bool {
+    attrs.iter().any(|attr| {
+        let verus_syn::Meta::List(list) = &attr.meta else {
+            return false;
+        };
+        list.path.is_ident("cfg") && list.tokens.to_string().replace(' ', "") == flag
+    })
+}
+
+/// Whether `attrs` carries a bare `#[cfg(not(flag))]`.
+#[instrument(level = "trace", skip(attrs, flag))]
+fn has_cfg_not_flag(attrs: &[verus_syn::Attribute], flag: &str) -> bool {
+    attrs.iter().any(|attr| {
+        let verus_syn::Meta::List(list) = &attr.meta else {
+            return false;
+        };
+        list.path.is_ident("cfg") && list.tokens.to_string().replace(' ', "") == format!("not({flag})")
+    })
+}
+
+/// Whether `expr` is a bare `unreached()` call -- deliberately narrow
+/// (no block-wrapped/nested-call recognition): the only real shape this
+/// codebase's own `verus_keep_ghost` split uses, and the safe direction
+/// for a pattern feeding an exemption is to under-match (a real ghost
+/// sibling goes unrecognized, so its exec fallback just stays flagged a
+/// little longer) rather than over-match (which could wrongly mark a
+/// real panic site as proven-impossible).
+#[instrument(level = "trace", skip(expr), ret)]
+fn is_bare_unreached_call(expr: &verus_syn::Expr) -> bool {
+    let verus_syn::Expr::Call(call) = expr else {
+        return false;
+    };
+    let verus_syn::Expr::Path(path) = call.func.as_ref() else {
+        return false;
+    };
+    path.path
+        .segments
+        .last()
+        .is_some_and(|segment| segment.ident == "unreached")
+}
+
+/// Textual key for comparing two arms' patterns for equality (`Ok(_)` ==
+/// `Ok(_)`) without needing real semantic pattern equality.
+#[instrument(level = "trace", skip(pat), ret)]
+fn pattern_key(pat: &verus_syn::Pat) -> String {
+    quote::quote!(#pat).to_string()
 }

@@ -136,7 +136,14 @@ pub fn scan_rust_source(
 /// mix Kani proof harnesses into the same crate as `verus!` content
 /// (verifier backends never depend on each other), so there is nothing
 /// for a `verus!` site to be reachable *from* in the sense `kani_reach`
-/// checks.
+/// checks. The Verus-side analog does apply, though: a site
+/// `verus_ir` marked [`proven_unreachable_by_ghost_sibling`](
+/// crate::verus_ir::VerusPanicSite::proven_unreachable_by_ghost_sibling)
+/// is that branch's own real, SMT-checked failure mechanism seen only
+/// by the ordinary-rustc fallback arm -- the exact same "must never be
+/// flagged" reasoning `kani_reach` applies to a Kani harness's own
+/// panic, just keyed on a structural ghost/exec arm pairing instead of
+/// call-graph reachability.
 #[cfg(feature = "verus_ir")]
 #[instrument(level = "debug", skip(ir))]
 fn verus_ir_findings(ir: &crate::verus_ir::VerusCrateIr, crate_root: &Path) -> Vec<PanicSiteRecord> {
@@ -151,14 +158,18 @@ fn verus_ir_findings(ir: &crate::verus_ir::VerusCrateIr, crate_root: &Path) -> V
                 .unwrap_or(&function.span.file)
                 .to_path_buf();
             let cfg_test = function.cfg_test;
-            function.panic_sites.iter().map(move |site| PanicSiteRecord {
-                kind: verus_panic_kind(site.kind),
-                context: context.clone(),
-                file: file.clone(),
-                line: site.line,
-                snippet: site.snippet.clone(),
-                cfg_test,
-            })
+            function
+                .panic_sites
+                .iter()
+                .filter(|site| !site.proven_unreachable_by_ghost_sibling)
+                .map(move |site| PanicSiteRecord {
+                    kind: verus_panic_kind(site.kind),
+                    context: context.clone(),
+                    file: file.clone(),
+                    line: site.line,
+                    snippet: site.snippet.clone(),
+                    cfg_test,
+                })
         })
         .collect()
 }

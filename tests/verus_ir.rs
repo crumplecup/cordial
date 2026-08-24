@@ -269,3 +269,62 @@ fn tracks_cfg_test_module_nesting_and_detects_compile_error() {
     let test_fn = find("in_test_code");
     assert!(test_fn.cfg_test);
 }
+
+const GHOST_EXEC_UNREACHABLE_SOURCE: &str = r#"
+use verus_builtin_macros::verus;
+
+verus! {
+
+pub fn matches_int_error_kind_carriers_own_shape(s: &str) -> (result: bool)
+{
+    match <i32 as std::str::FromStr>::from_str(s) {
+        #[cfg(verus_keep_ghost)]
+        Ok(_) => unreached(),
+        #[cfg(not(verus_keep_ghost))]
+        Ok(_) => unreachable!(),
+        Err(_) => true,
+    }
+}
+
+pub fn ordinary_unreachable_with_no_ghost_sibling(x: u32) -> (result: u32)
+{
+    match x {
+        0 => 0,
+        _ => unreachable!("no ghost sibling backs this one"),
+    }
+}
+
+}
+"#;
+
+#[test]
+fn marks_only_the_unreachable_arm_with_a_real_ghost_sibling() {
+    let ir = scan_verus_rust_source(
+        GHOST_EXEC_UNREACHABLE_SOURCE,
+        Path::new("ghost_exec_sample.rs"),
+        "gallery::ghost_exec_sample",
+    );
+
+    let find = |name: &str| {
+        ir.functions
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("{name} not found in {:?}", ir.functions))
+    };
+
+    let paired = find("matches_int_error_kind_carriers_own_shape");
+    assert_eq!(paired.panic_sites.len(), 1, "{:?}", paired.panic_sites);
+    assert!(
+        paired.panic_sites[0].proven_unreachable_by_ghost_sibling,
+        "{:?}",
+        paired.panic_sites
+    );
+
+    let unpaired = find("ordinary_unreachable_with_no_ghost_sibling");
+    assert_eq!(unpaired.panic_sites.len(), 1, "{:?}", unpaired.panic_sites);
+    assert!(
+        !unpaired.panic_sites[0].proven_unreachable_by_ghost_sibling,
+        "{:?}",
+        unpaired.panic_sites
+    );
+}

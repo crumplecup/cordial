@@ -142,6 +142,72 @@ pub fn verify_int_error_kind_classifies_parse_failures(s: &str) -> (result: bool
     Ok(())
 }
 
+#[cfg(feature = "verus_ir")]
+#[test]
+fn scan_rust_source_exempts_a_ghost_proven_unreachable_arm() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+use verus_builtin_macros::verus;
+
+verus! {
+
+pub fn verify_int_error_kind_classifies_parse_failures(s: &str) -> (result: bool)
+    requires
+        s@.len() == 0,
+    ensures
+        result,
+{
+    match <i32 as std::str::FromStr>::from_str(s) {
+        #[cfg(verus_keep_ghost)]
+        Ok(_) => unreached(),
+        #[cfg(not(verus_keep_ghost))]
+        Ok(_) => unreachable!(),
+        Err(_) => true,
+    }
+}
+
+pub fn matches_on_result_with_no_ghost_sibling(x: i32) -> (result: bool)
+{
+    match x {
+        0 => true,
+        _ => unreachable!("no ghost sibling backs this one"),
+    }
+}
+
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+
+    assert_eq!(
+        findings.len(),
+        1,
+        "the ghost-proven-unreachable site must be exempt, leaving only the unpaired one: {findings:?}"
+    );
+    assert_eq!(findings[0].kind, PanicKind::Unreachable);
+    assert!(
+        findings[0]
+            .context
+            .ends_with("matches_on_result_with_no_ghost_sibling"),
+        "{:?}",
+        findings[0].context
+    );
+    Ok(())
+}
+
 #[test]
 fn scan_rust_source_finds_compile_error() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
