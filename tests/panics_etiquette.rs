@@ -111,6 +111,14 @@ pub fn verify_int_error_kind_classifies_parse_failures(s: &str) -> (result: bool
     }
 }
 
+// A real caller: without one, this fn is an ensures-bearing verification
+// leaf (see verus_reach), correctly exempt on its own -- this fixture's
+// own point is that panics ARE still found inside verus! blocks, so it
+// needs a non-leaf example.
+pub fn calls_the_classifier(s: &str) -> bool {
+    verify_int_error_kind_classifies_parse_failures(s)
+}
+
 }
 "#,
     )
@@ -204,6 +212,90 @@ pub fn matches_on_result_with_no_ghost_sibling(x: i32) -> (result: bool)
             .ends_with("matches_on_result_with_no_ghost_sibling"),
         "{:?}",
         findings[0].context
+    );
+    Ok(())
+}
+
+#[cfg(feature = "verus_ir")]
+#[test]
+fn scan_rust_source_exempts_a_verification_leaf_but_not_a_helper_or_a_real_callee(
+) -> miette::Result<()> {
+    // Real amenable_verus shape: a `pub fn verify_*` with a real `ensures`
+    // clause, called by nothing else in the crate, is itself the checked
+    // claim -- its own .expect()/.unwrap() sites are that verification's
+    // failure mechanism, not library API surface. Three functions here
+    // isolate each condition: `leaf` (ensures + uncalled -> exempt),
+    // `has_a_real_caller` (ensures, but called by `caller` -> NOT exempt),
+    // and `no_ensures_uncalled` (uncalled, but no ensures -> NOT exempt).
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("sample.rs");
+    fs::write(
+        &file,
+        r#"
+use verus_builtin_macros::verus;
+
+verus! {
+
+pub fn leaf(x: i32) -> (result: i32)
+    ensures
+        result == x,
+{
+    let single_result = <char as std::str::FromStr>::from_str("a");
+    let single_char = single_result.unwrap();
+    let _ = single_char;
+    x
+}
+
+pub fn has_a_real_caller(x: i32) -> (result: i32)
+    ensures
+        result == x,
+{
+    let single_result = <char as std::str::FromStr>::from_str("a");
+    let single_char = single_result.unwrap();
+    let _ = single_char;
+    x
+}
+
+pub fn caller(x: i32) -> (result: i32)
+{
+    has_a_real_caller(x)
+}
+
+pub fn no_ensures_uncalled(x: i32) -> (result: i32)
+{
+    let single_result = <char as std::str::FromStr>::from_str("a");
+    let single_char = single_result.unwrap();
+    let _ = single_char;
+    x
+}
+
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write sample")?;
+
+    let findings = cordial::scan_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+
+    let contexts: Vec<&str> = findings.iter().map(|f| f.context.as_str()).collect();
+    assert!(
+        !contexts.iter().any(|c| c.ends_with("::leaf")),
+        "leaf has ensures and no caller -- must be exempt: {contexts:?}"
+    );
+    assert!(
+        contexts.iter().any(|c| c.ends_with("::has_a_real_caller")),
+        "has_a_real_caller has ensures but IS called by caller -- must still be flagged: {contexts:?}"
+    );
+    assert!(
+        contexts.iter().any(|c| c.ends_with("::no_ensures_uncalled")),
+        "no_ensures_uncalled has no ensures clause -- must still be flagged: {contexts:?}"
     );
     Ok(())
 }

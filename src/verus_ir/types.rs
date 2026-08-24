@@ -159,6 +159,14 @@ pub struct VerusFnFacts {
     /// of a codebase's total proof burden one function actually
     /// contributes to, invisibly.
     pub is_broadcast: bool,
+    /// The bare name of every function/method this body calls -- a raw,
+    /// local fact (what this one function's own body contains), not a
+    /// crate-wide reachability judgment; a consumer wanting "is this
+    /// function ever called by another local function" builds that from
+    /// every function's own `calls` list, the same two-layer split
+    /// `panics::kani_reach` already uses for the analogous Kani
+    /// question.
+    pub calls: Vec<String>,
 }
 
 impl VerusFnFacts {

@@ -12,6 +12,8 @@ use super::kani_reach::{KaniReachability, build_kani_reachability};
 use super::types::{PanicKind, PanicSiteRecord};
 #[cfg(not(feature = "verus_ir"))]
 use super::verus_recover::{VerusFunctionChunk, collect_verus_functions};
+#[cfg(feature = "verus_ir")]
+use super::verus_reach;
 use crate::error::CordialResult;
 use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
 
@@ -136,19 +138,24 @@ pub fn scan_rust_source(
 /// mix Kani proof harnesses into the same crate as `verus!` content
 /// (verifier backends never depend on each other), so there is nothing
 /// for a `verus!` site to be reachable *from* in the sense `kani_reach`
-/// checks. The Verus-side analog does apply, though: a site
-/// `verus_ir` marked [`proven_unreachable_by_ghost_sibling`](
+/// checks. Two Verus-side analogs do apply, though: a site `verus_ir`
+/// marked [`proven_unreachable_by_ghost_sibling`](
 /// crate::verus_ir::VerusPanicSite::proven_unreachable_by_ghost_sibling)
 /// is that branch's own real, SMT-checked failure mechanism seen only
-/// by the ordinary-rustc fallback arm -- the exact same "must never be
-/// flagged" reasoning `kani_reach` applies to a Kani harness's own
-/// panic, just keyed on a structural ghost/exec arm pairing instead of
-/// call-graph reachability.
+/// by the ordinary-rustc fallback arm; and a whole function
+/// [`verus_reach`] determines is a verification leaf (a real `ensures`
+/// clause, called by nothing else locally) is itself the checked claim,
+/// not library API surface -- the exact same "must never be flagged"
+/// reasoning `kani_reach` applies to a Kani harness's own panic, just
+/// keyed on structural facts Verus's own grammar makes visible instead
+/// of call-graph reachability from a `#[kani::proof]` root.
 #[cfg(feature = "verus_ir")]
 #[instrument(level = "debug", skip(ir))]
 fn verus_ir_findings(ir: &crate::verus_ir::VerusCrateIr, crate_root: &Path) -> Vec<PanicSiteRecord> {
+    let reachability = verus_reach::build_verus_reachability(ir);
     ir.functions
         .iter()
+        .filter(|function| !reachability.is_verification_leaf(&function.name))
         .flat_map(|function| {
             let context = format!("{}::{}", function.module_path, function.name);
             let file = function

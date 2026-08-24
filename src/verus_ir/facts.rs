@@ -88,6 +88,7 @@ impl FactsVisitor {
             tracked_params: tracked_param_names(sig),
             recommends,
             is_broadcast: sig.broadcast.is_some(),
+            calls: body.calls,
         });
     }
 }
@@ -196,14 +197,15 @@ struct BodyFacts {
     uses_assume: bool,
     uses_admit: bool,
     panic_sites: Vec<VerusPanicSite>,
+    calls: Vec<String>,
 }
 
 /// Walk `block` once for every real, local fact its body carries: real
 /// `assume(..)`/`admit()` soundness escape hatches (see
 /// [`VerusFnFacts::uses_assume`]/[`VerusFnFacts::uses_admit`]'s own doc
-/// comments), and every `panic!`/`unreachable!`/`.expect(..)`/
-/// `.unwrap()` abort site -- the direct completion of this module's own
-/// motivating gap.
+/// comments), every `panic!`/`unreachable!`/`.expect(..)`/`.unwrap()`
+/// abort site, and every local call's bare target name (see
+/// [`VerusFnFacts::calls`]).
 #[instrument(level = "trace", skip(block))]
 fn scan_body(block: &verus_syn::Block) -> BodyFacts {
     let mut visitor = BodyVisitor {
@@ -211,12 +213,14 @@ fn scan_body(block: &verus_syn::Block) -> BodyFacts {
         uses_admit: false,
         panic_sites: Vec::new(),
         in_proven_unreachable_arm: false,
+        calls: Vec::new(),
     };
     visitor.visit_block(block);
     BodyFacts {
         uses_assume: visitor.uses_assume,
         uses_admit: visitor.uses_admit,
         panic_sites: visitor.panic_sites,
+        calls: visitor.calls,
     }
 }
 
@@ -229,6 +233,9 @@ struct BodyVisitor {
     /// arm -- same pattern, `#[cfg(verus_keep_ghost)]`-gated -- calls
     /// `unreached()`. See [`VerusPanicSite::proven_unreachable_by_ghost_sibling`].
     in_proven_unreachable_arm: bool,
+    /// The bare name of every function/method call this body makes --
+    /// see [`VerusFnFacts::calls`].
+    calls: Vec<String>,
 }
 
 impl BodyVisitor {
@@ -267,13 +274,12 @@ impl<'ast> Visit<'ast> for BodyVisitor {
     #[instrument(level = "trace", skip(self, node))]
     fn visit_expr_call(&mut self, node: &'ast verus_syn::ExprCall) {
         if let verus_syn::Expr::Path(path) = node.func.as_ref()
-            && path
-                .path
-                .segments
-                .last()
-                .is_some_and(|segment| segment.ident == "admit")
+            && let Some(segment) = path.path.segments.last()
         {
-            self.uses_admit = true;
+            if segment.ident == "admit" {
+                self.uses_admit = true;
+            }
+            self.calls.push(segment.ident.to_string());
         }
         verus_syn::visit::visit_expr_call(self, node);
     }
@@ -292,6 +298,7 @@ impl<'ast> Visit<'ast> for BodyVisitor {
 
     #[instrument(level = "trace", skip(self, node))]
     fn visit_expr_method_call(&mut self, node: &'ast verus_syn::ExprMethodCall) {
+        self.calls.push(node.method.to_string());
         let kind = match node.method.to_string().as_str() {
             "expect" => Some(VerusPanicKind::Expect),
             "unwrap" | "unwrap_err" => Some(VerusPanicKind::Unwrap),

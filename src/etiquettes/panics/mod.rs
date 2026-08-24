@@ -26,6 +26,8 @@ mod scan;
 mod types;
 #[cfg(not(feature = "verus_ir"))]
 mod verus_recover;
+#[cfg(feature = "verus_ir")]
+mod verus_reach;
 
 pub use assessor::PanicAssessor;
 pub use enricher::PanicInventoryEnricher;
