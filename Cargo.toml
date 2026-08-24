@@ -92,6 +92,15 @@ amenable_std = ["homecoming_std"]
 elicitation = ["impl_coverage", "trenchcoat", "shadow"]
 # Every built-in plugin (integration tests, full builds).
 full = ["quality", "elicitation", "homecoming_std", "amenable_std", "cli", "verus_ir"]
+# Opt-in gate for tests too expensive/environment-dependent for routine
+# `cargo test`/`cargo test --features full` runs -- deliberately NOT
+# part of `full` (or any other bundle), so it's off by default even
+# under a broad feature set. `--all-features` still enables it, same as
+# every other feature; that's inherent to what --all-features means, not
+# something a feature declaration can opt out of -- routine verification
+# should use `--features full` instead, reserving `--all-features` for a
+# deliberate, occasional full pass. See `just test-slow`.
+slow_tests = []
 
 [[test]]
 name = "custom_plugins"

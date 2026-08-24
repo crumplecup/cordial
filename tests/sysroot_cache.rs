@@ -1,6 +1,7 @@
 #![cfg(feature = "homecoming_std")]
 
 use cordial::{SysrootCache, default_store_home};
+#[cfg(feature = "slow_tests")]
 use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
@@ -20,6 +21,14 @@ fn sysroot_cache_default_matches_from_home() {
     assert_eq!(SysrootCache::default().root, expected.root);
 }
 
+// Expensive and environment-dependent: when a real local rustdoc-JSON
+// sysroot cache for `core` exists, this parses and processes the whole
+// thing (100+MB in practice) -- confirmed the hard way, over 60s pinning
+// a core at ~100% CPU under a plain `cargo test --all-features` run,
+// with zero opt-in signal. Gated behind `slow_tests` (see Cargo.toml's
+// own comment on that feature) so routine verification doesn't pay this
+// cost. Run explicitly with `just test-slow`.
+#[cfg(feature = "slow_tests")]
 #[test]
 fn merged_std_inventory_excludes_unstable_simd_from_stable_scope() -> miette::Result<()> {
     use cordial::SysrootCache;

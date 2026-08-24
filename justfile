@@ -29,3 +29,17 @@ default:
 # Install the release binary to ~/.cargo/bin (`cordial` on PATH).
 install:
     {{cargo}} install --path {{justfile_directory()}} --bin cordial --force --locked --features {{features}}
+
+# Routine test run. Deliberately `--features full`, not `--all-features`:
+# `--all-features` unconditionally enables `slow_tests` too (inherent to
+# what --all-features means -- no feature declaration can opt out of it),
+# which pulls in tests too expensive/environment-dependent for routine
+# verification (see Cargo.toml's own comment on that feature).
+test:
+    {{cargo}} test --features {{features}}
+
+# Full run including `slow_tests` -- real subprocess/heavy-parse tests,
+# minutes not seconds. Run deliberately, not as part of routine
+# verification.
+test-slow:
+    {{cargo}} test --features {{features}},slow_tests
