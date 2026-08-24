@@ -536,6 +536,83 @@ impl Widget {
 }
 
 #[test]
+fn const_fn_new_getter_setter_and_as_ref_are_all_exempt() -> miette::Result<()> {
+    let source = r#"
+struct Widget {
+    name: String,
+    count: u32,
+}
+
+impl Widget {
+    pub const fn new(name: String, count: u32) -> Self {
+        Self { name, count }
+    }
+
+    pub const fn count(&self) -> u32 {
+        self.count
+    }
+
+    pub const fn set_count(&mut self, count: u32) {
+        self.count = count;
+    }
+
+    pub const fn as_ref(&self) -> &str {
+        self.name.as_ref()
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings.is_empty(),
+        "const fn constructor/getter/setter/as_ref have no const-preserving \
+         derive to recommend: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn non_const_counterpart_still_flags_all_four() -> miette::Result<()> {
+    let source = r#"
+struct Widget {
+    name: String,
+    count: u32,
+}
+
+impl Widget {
+    pub fn new(name: String, count: u32) -> Self {
+        Self { name, count }
+    }
+
+    pub fn count(&self) -> u32 {
+        self.count
+    }
+
+    pub fn set_count(&mut self, count: u32) {
+        self.count = count;
+    }
+
+    pub fn as_ref(&self) -> &str {
+        self.name.as_ref()
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    for expected in [
+        DeriveRuleId::New001,
+        DeriveRuleId::Getter001,
+        DeriveRuleId::Setter001,
+        DeriveRuleId::AsRef001,
+    ] {
+        assert!(
+            findings.contains(&expected),
+            "dropping `const` should be the only difference from the exempt \
+             fixture, so the non-const version must still flag {expected:?}: {findings:?}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn existing_as_ref_derive_skips_as_str() -> miette::Result<()> {
     let source = r#"
 #[derive(derive_more::AsRef)]

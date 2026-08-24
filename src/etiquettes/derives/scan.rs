@@ -344,6 +344,9 @@ impl DeriveScanVisitor {
         method: &syn::ImplItemFn,
         method_name: &str,
     ) {
+        if method.sig.constness.is_some() {
+            return;
+        }
         let Some(info) = struct_info else {
             return;
         };
@@ -396,6 +399,9 @@ impl DeriveScanVisitor {
         method: &syn::ImplItemFn,
         method_name: &str,
     ) {
+        if method.sig.constness.is_some() {
+            return;
+        }
         let Some(info) = struct_info else {
             return;
         };
@@ -445,6 +451,9 @@ impl DeriveScanVisitor {
         method: &syn::ImplItemFn,
         method_name: &str,
     ) {
+        if method.sig.constness.is_some() {
+            return;
+        }
         let Some(info) = struct_info else {
             return;
         };
@@ -490,6 +499,9 @@ impl DeriveScanVisitor {
         method: &syn::ImplItemFn,
         method_name: &str,
     ) {
+        if method.sig.constness.is_some() {
+            return;
+        }
         if self.is_error_constructor(self_ty, method) {
             return;
         }

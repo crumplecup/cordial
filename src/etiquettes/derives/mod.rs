@@ -10,7 +10,16 @@
 //! visibility have to classify. Error types are exempt from `derive_new`
 //! because their constructors use `#[track_caller]`. Clap `Parser` /
 //! `Args` / `Subcommand` types skip public-field linting (CLI schema).
-//! This etiquette asks
+//! `const fn` constructors, getters, setters, and `as_ref`/`as_str`
+//! forwarders are exempt from their respective rules: none of
+//! `derive_new::new`, `derive_getters::Getters`, `derive_setters::Setters`,
+//! or `derive_more::AsRef` generate `const fn` output (confirmed against
+//! each crate's own docs, not assumed), so recommending one of them would
+//! recommend a lossy change -- silently dropping const-evaluability with
+//! no compiler warning, since nothing forces a call site to already need
+//! it. `DERIVE-USE-BUILDER-001` gets the same exemption for the same
+//! reason: `derive_builder::Builder`'s generated `build()` isn't const
+//! either. This etiquette asks
 //! *could this be a derive?* (or *should this constructor be a builder?*);
 //! tracing asks *is this function instrumented for its role?* `Some(arg)`
 //! and `arg.into()` are `derive_setters` options, not exemptions. `as_str`
