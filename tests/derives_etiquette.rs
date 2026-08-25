@@ -275,6 +275,74 @@ impl Ordered {
 }
 
 #[test]
+fn field_from_a_differently_named_param_is_not_a_derive_new_candidate() -> miette::Result<()> {
+    let source = r#"
+struct Widget {
+    path: String,
+}
+
+impl Widget {
+    pub fn new(dir: String, file_name: String) -> Self {
+        Self { path: format!("{dir}/{file_name}") }
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings.is_empty(),
+        "the field is computed from two differently-named parameters, \
+         not a trivial pass-through of a same-named one -- derive_new \
+         can't replicate this: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn field_wrapping_its_param_in_another_call_is_not_a_derive_new_candidate() -> miette::Result<()> {
+    let source = r#"
+struct Widget {
+    value: Option<u32>,
+}
+
+impl Widget {
+    pub fn new(value: u32) -> Self {
+        Self { value: Some(value) }
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings.is_empty(),
+        "the field wraps its param in Some(..), not a bare/into/clone \
+         pass-through -- derive_new can't replicate this: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn hardcoded_extra_field_is_not_a_derive_new_candidate() -> miette::Result<()> {
+    let source = r#"
+struct Widget {
+    items: u32,
+    cursor: usize,
+}
+
+impl Widget {
+    pub fn new(items: u32) -> Self {
+        Self { items, cursor: 0 }
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings.is_empty(),
+        "`cursor: 0` has no corresponding parameter at all -- derive_new \
+         can't replicate a hardcoded field: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn trivial_new_at_max_args_suggests_derive_new() -> miette::Result<()> {
     let source = r#"
 struct Point {

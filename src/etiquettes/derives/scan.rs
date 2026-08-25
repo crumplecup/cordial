@@ -13,8 +13,9 @@ use crate::loader::module_path_from_src_file;
 use super::path_inclusion::PathInclusionFacts;
 use super::syntax::{
     FieldRead, body_is_struct_literal, classify_field_read, classify_setter_body,
-    constructor_arg_count, consumes_self, error_impl_target, field_is_exposed, has_derive,
-    has_track_caller, is_cfg_test, is_clap_schema, is_fluent_setter, type_label,
+    constructor_arg_count, constructor_fields_match_params, consumes_self, error_impl_target,
+    field_is_exposed, has_derive, has_track_caller, is_cfg_test, is_clap_schema, is_fluent_setter,
+    type_label,
 };
 use super::types::{DeriveRuleId, DeriveSiteRecord};
 
@@ -567,6 +568,13 @@ impl DeriveScanVisitor<'_> {
         // don't map onto its 3 fields at all -- it joins path segments
         // to *compute* them.
         if !body_is_struct_literal(&method.block, self_ty) {
+            return;
+        }
+        // A tail expression can syntactically be `Self { .. }` while still
+        // computing a field from unrelated parameters, wrapping a param in
+        // another call, or hardcoding a field no parameter names at all --
+        // none of which `derive_new`'s param-per-field model can replicate.
+        if !constructor_fields_match_params(&method.sig, &method.block) {
             return;
         }
 
