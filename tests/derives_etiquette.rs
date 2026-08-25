@@ -211,6 +211,70 @@ impl Point {
 }
 
 #[test]
+fn fat_new_with_computed_fields_is_not_a_builder_candidate() -> miette::Result<()> {
+    let source = r#"
+struct Segment {
+    first_ancestor: u8,
+    second_ancestor: u8,
+    leaf: u8,
+}
+
+impl Segment {
+    pub fn new(base: u8, first: u8, second: u8, delta: u8) -> Self {
+        let first_ancestor = base + first;
+        let second_ancestor = first_ancestor + second;
+        let leaf = second_ancestor + delta;
+        Self {
+            first_ancestor,
+            second_ancestor,
+            leaf,
+        }
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings.is_empty(),
+        "a >3-arg constructor whose fields are computed, not passed \
+         straight through, can't be replicated by derive_builder (its \
+         setters just assign the struct's own fields) -- must not \
+         recommend DERIVE-USE-BUILDER-001 on arg count alone: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn fat_new_with_a_conditional_is_not_a_builder_candidate() -> miette::Result<()> {
+    let source = r#"
+struct Ordered {
+    low: u8,
+    high: u8,
+    a: u8,
+    b: u8,
+}
+
+impl Ordered {
+    pub fn new(first: u8, second: u8, a: u8, b: u8) -> Self {
+        if first <= second {
+            Self { low: first, high: second, a, b }
+        } else {
+            Self { low: second, high: first, a, b }
+        }
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings.is_empty(),
+        "a >3-arg constructor whose tail expression is a conditional, not \
+         a bare struct literal, can't be replicated by derive_builder --\
+         must not recommend DERIVE-USE-BUILDER-001 on arg count alone: \
+         {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn trivial_new_at_max_args_suggests_derive_new() -> miette::Result<()> {
     let source = r#"
 struct Point {

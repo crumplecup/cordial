@@ -554,6 +554,22 @@ impl DeriveScanVisitor<'_> {
             return;
         }
 
+        if !matches!(method.sig.output, syn::ReturnType::Type(_, _)) {
+            return;
+        }
+        // Both DERIVE-NEW-001 and DERIVE-USE-BUILDER-001 recommend a
+        // derive that fills the struct's own fields directly from the
+        // constructor's arguments -- a body with real logic (computed
+        // fields, a conditional, more than a `let` or two before the
+        // literal) can't be replicated by either, regardless of arg
+        // count. Real case that would otherwise slip through the arity-
+        // only check: `KaniRecursiveDirObservation::new`'s 4 arguments
+        // don't map onto its 3 fields at all -- it joins path segments
+        // to *compute* them.
+        if !body_is_struct_literal(&method.block, self_ty) {
+            return;
+        }
+
         let args = constructor_arg_count(&method.sig);
         if args > self.thresholds.max_constructor_args() {
             if self.blocked_by_path_inclusion("derive_builder") {
@@ -579,12 +595,6 @@ impl DeriveScanVisitor<'_> {
         }
 
         if has_derive(&info.attrs, "new") {
-            return;
-        }
-        if !matches!(method.sig.output, syn::ReturnType::Type(_, _)) {
-            return;
-        }
-        if !body_is_struct_literal(&method.block, self_ty) {
             return;
         }
         if self.blocked_by_path_inclusion("derive_new") {
