@@ -433,7 +433,7 @@ impl Point {
 }
 
 #[test]
-fn clone_getter_recommends_copy_getters() -> miette::Result<()> {
+fn clone_getter_on_a_non_copy_field_has_no_derive_getters_equivalent() -> miette::Result<()> {
     let source = r#"
 struct Widget {
     name: String,
@@ -446,14 +446,13 @@ impl Widget {
 }
 "#;
     let findings = scan_findings(source, DerivesThresholds::default())?;
-    let getter = findings
-        .iter()
-        .find(|record| record.rule_id == DeriveRuleId::Getter001)
-        .expect("clone getter should flag DERIVE-GETTER-001");
     assert!(
-        getter.recommendation.contains("getter(copy)"),
-        "owned getter should steer to #[getter(copy)]: {}",
-        getter.recommendation
+        findings.iter().all(|record| record.rule_id != DeriveRuleId::Getter001),
+        "`self.field.clone()` proves nothing about Copy, and derive_getters \
+         has no action that returns an owned clone of a non-Copy field \
+         (only skip/rename/copy exist, confirmed against its own source) \
+         -- must not recommend #[getter(copy)], which would fail to \
+         compile for a String field: {findings:?}"
     );
     Ok(())
 }

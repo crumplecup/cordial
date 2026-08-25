@@ -415,10 +415,23 @@ impl DeriveScanVisitor<'_> {
         }
         let recommendation = match read {
             FieldRead::Direct => "Use #[derive(derive_getters::Getters)] and delete manual getter",
-            FieldRead::DirectOwned | FieldRead::Clone => {
+            // Bare `self.field` (no `.clone()`) only compiles when the
+            // field is genuinely Copy -- the type system already proved
+            // it, so #[getter(copy)] (derive_getters' only owned-return
+            // action; confirmed against its own source, no "clone"
+            // variant exists) is a safe recommendation here.
+            FieldRead::DirectOwned => {
                 "Use #[derive(derive_getters::Getters)] with #[getter(copy)] for Copy fields"
             }
-            FieldRead::AsStr | FieldRead::AsRef => return,
+            // `self.field.clone()` proves nothing about Copy -- and in a
+            // codebase clean under clippy::clone_on_copy (warn-by-
+            // default), an explicit `.clone()` essentially never appears
+            // on a genuinely Copy field, so #[getter(copy)] would almost
+            // always fail to compile here. No other derive_getters
+            // action replicates an owned-clone-returning getter for a
+            // non-Copy field (confirmed against its source: only
+            // skip/rename/copy exist), so there's no derive to recommend.
+            FieldRead::Clone | FieldRead::AsStr | FieldRead::AsRef => return,
         };
 
         let record = self.site(SiteArgs::new(
