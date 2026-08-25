@@ -327,6 +327,62 @@ impl Widget {
 }
 
 #[test]
+fn bare_field_return_recommends_copy_getters() -> miette::Result<()> {
+    let source = r#"
+struct Widget {
+    id: u32,
+}
+
+impl Widget {
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+}
+"#;
+    let findings = scan_findings(source, DerivesThresholds::default())?;
+    let getter = findings
+        .iter()
+        .find(|record| record.rule_id == DeriveRuleId::Getter001)
+        .expect("bare self.field return should flag DERIVE-GETTER-001");
+    assert!(
+        getter.recommendation.contains("getter(copy)"),
+        "returning the field by value (not `&self.field`) only compiles \
+         because it's Copy, and a plain #[derive(Getters)] would return a \
+         reference instead -- must steer to #[getter(copy)]: {}",
+        getter.recommendation
+    );
+    Ok(())
+}
+
+#[test]
+fn reference_field_return_does_not_recommend_copy_getters() -> miette::Result<()> {
+    let source = r#"
+struct Widget {
+    id: u32,
+}
+
+impl Widget {
+    pub fn id(&self) -> &u32 {
+        &self.id
+    }
+}
+"#;
+    let findings = scan_findings(source, DerivesThresholds::default())?;
+    let getter = findings
+        .iter()
+        .find(|record| record.rule_id == DeriveRuleId::Getter001)
+        .expect("&self.field return should flag DERIVE-GETTER-001");
+    assert!(
+        !getter.recommendation.contains("getter(copy)"),
+        "returning `&self.field` is exactly what a plain #[derive(Getters)] \
+         already produces -- must NOT steer to #[getter(copy)], which would \
+         change the return type from &u32 to u32: {}",
+        getter.recommendation
+    );
+    Ok(())
+}
+
+#[test]
 fn trivial_setter_is_flagged() -> miette::Result<()> {
     let source = r#"
 struct Point {

@@ -93,7 +93,12 @@ pub(super) fn is_fluent_setter(sig: &Signature) -> bool {
 /// How a getter body reads a field — each maps to a derive option.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum FieldRead {
+    /// `&self.field` — a plain `#[derive(Getters)]` returns exactly this.
     Direct,
+    /// Bare `self.field` — only compiles when the field is `Copy`, and
+    /// needs `#[getter(copy)]` since a plain `#[derive(Getters)]`
+    /// generates a reference-returning getter, not a copy-out one.
+    DirectOwned,
     Clone,
     AsStr,
     AsRef,
@@ -258,7 +263,16 @@ fn expr_is_some_ctor(expr: &Expr) -> bool {
 #[instrument(level = "debug", skip(expr), ret)]
 fn expr_field_read(expr: &Expr) -> Option<(String, FieldRead)> {
     match expr {
-        Expr::Reference(reference) => expr_field_read(&reference.expr),
+        // `&self.field` and bare `self.field` parse to the same
+        // `Expr::Field` once unwrapped, but they aren't the same getter:
+        // the former borrows (a plain `#[derive(Getters)]` matches it),
+        // the latter moves the field out by value, which only compiles
+        // when the field is `Copy` and needs `#[getter(copy)]` -- so the
+        // `&` has to be read *before* recursing, not discarded.
+        Expr::Reference(reference) => {
+            let (name, _) = expr_field_read(&reference.expr)?;
+            Some((name, FieldRead::Direct))
+        }
         Expr::Return(return_expr) => return_expr
             .expr
             .as_ref()
@@ -267,7 +281,7 @@ fn expr_field_read(expr: &Expr) -> Option<(String, FieldRead)> {
         Expr::Group(group) => expr_field_read(&group.expr),
         Expr::Field(field) => {
             let name = field_member_name(&field.member)?;
-            expr_is_self(&field.base).then_some((name, FieldRead::Direct))
+            expr_is_self(&field.base).then_some((name, FieldRead::DirectOwned))
         }
         Expr::MethodCall(call) if call.args.is_empty() => {
             let kind = match call.method.to_string().as_str() {
@@ -277,7 +291,7 @@ fn expr_field_read(expr: &Expr) -> Option<(String, FieldRead)> {
                 _ => return None,
             };
             let (field, inner) = expr_field_read(&call.receiver)?;
-            matches!(inner, FieldRead::Direct).then_some((field, kind))
+            matches!(inner, FieldRead::Direct | FieldRead::DirectOwned).then_some((field, kind))
         }
         _ => None,
     }

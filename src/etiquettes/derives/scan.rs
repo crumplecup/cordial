@@ -406,7 +406,7 @@ impl DeriveScanVisitor<'_> {
         }
         let recommendation = match read {
             FieldRead::Direct => "Use #[derive(derive_getters::Getters)] and delete manual getter",
-            FieldRead::Clone => {
+            FieldRead::DirectOwned | FieldRead::Clone => {
                 "Use #[derive(derive_getters::Getters)] with #[getter(copy)] for Copy fields"
             }
             FieldRead::AsStr | FieldRead::AsRef => return,
@@ -464,7 +464,7 @@ impl DeriveScanVisitor<'_> {
                 "Use #[derive(derive_more::AsRef)] with #[as_ref] so AsRef<str> replaces as_str()",
                 format!("`fn {method_name}(&self)` forwards `{field_name}.as_str()`"),
             ),
-            FieldRead::Direct | FieldRead::Clone => return,
+            FieldRead::Direct | FieldRead::DirectOwned | FieldRead::Clone => return,
         };
 
         let record = self.site(SiteArgs::new(
