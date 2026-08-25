@@ -726,6 +726,30 @@ impl Widget {
 }
 
 #[test]
+fn option_as_ref_is_not_an_as_ref_trait_candidate() -> miette::Result<()> {
+    let source = r#"
+struct Widget {
+    low_value: Option<u32>,
+}
+
+impl Widget {
+    pub fn first_item(&self) -> Option<&u32> {
+        self.low_value.as_ref()
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings.is_empty(),
+        "Option<T>::as_ref (&Option<T> -> Option<&T>) is a real, \
+         distinct std method -- not a derive_more::AsRef-style field \
+         forward (&Self -> &FieldType), which returns a completely \
+         different shape: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn const_fn_new_getter_setter_and_as_ref_are_all_exempt() -> miette::Result<()> {
     let source = r#"
 struct Widget {

@@ -115,6 +115,14 @@ struct StructInfo {
 #[derive(Debug, Clone)]
 struct FieldMeta {
     is_public: bool,
+    is_option: bool,
+}
+
+impl FieldMeta {
+    #[instrument(level = "trace", skip(self), ret)]
+    fn is_option(&self) -> bool {
+        self.is_option
+    }
 }
 
 struct DeriveScanVisitor<'a> {
@@ -454,6 +462,16 @@ impl DeriveScanVisitor<'_> {
         let Some((field_name, read)) = classify_field_read(&method.block) else {
             return;
         };
+        // `Option<T>::as_ref()` (`&Option<T> -> Option<&T>`) is a real,
+        // distinct std method with a completely different shape from a
+        // field-forwarding `derive_more::AsRef` (`&Self -> &FieldType`).
+        // Method name doesn't distinguish them (both idioms exist under
+        // any name), but the field's own declared type does: only a
+        // literal `AsRef`-trait forward can ever be replaced by the
+        // derive, and `Option<T>` fields never carry that meaning here.
+        if matches!(read, FieldRead::AsRef) && info.fields.get(&field_name).is_some_and(FieldMeta::is_option) {
+            return;
+        }
         let (rule_id, recommendation, evidence) = match read {
             FieldRead::AsRef => (
                 DeriveRuleId::AsRef001,
@@ -642,7 +660,13 @@ fn collect_struct_fields(item_struct: &ItemStruct) -> (HashMap<String, FieldMeta
                 };
                 let field_name = ident.to_string();
                 let exposed = field_is_exposed(&field.vis);
-                fields.insert(field_name.clone(), FieldMeta { is_public: exposed });
+                fields.insert(
+                    field_name.clone(),
+                    FieldMeta {
+                        is_public: exposed,
+                        is_option: type_is_option(&field.ty),
+                    },
+                );
                 if exposed {
                     exposed_fields.push(field_name);
                 }
@@ -658,6 +682,18 @@ fn collect_struct_fields(item_struct: &ItemStruct) -> (HashMap<String, FieldMeta
         Fields::Unit => {}
     }
     (fields, exposed_fields)
+}
+
+#[instrument(level = "debug", skip(ty), ret)]
+fn type_is_option(ty: &syn::Type) -> bool {
+    let syn::Type::Path(type_path) = ty else {
+        return false;
+    };
+    type_path
+        .path
+        .segments
+        .last()
+        .is_some_and(|segment| segment.ident == "Option")
 }
 
 #[instrument(level = "debug")]
