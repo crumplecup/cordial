@@ -84,7 +84,8 @@ pub use etiquettes::cli_layout::{
 };
 #[cfg(feature = "derives")]
 pub use etiquettes::derives::{
-    DERIVES_ETIQUETTE, DeriveRuleId, DeriveSiteRecord, scan_rust_source as scan_derives_rust_source,
+    DERIVES_ETIQUETTE, DeriveRuleId, DeriveSiteRecord, PathInclusionFacts,
+    scan_rust_source as scan_derives_rust_source, workspace_path_inclusions,
 };
 #[cfg(feature = "error_chain")]
 pub use etiquettes::error_chain::{

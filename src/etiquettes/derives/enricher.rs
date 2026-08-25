@@ -5,6 +5,7 @@ use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 
+use super::path_inclusion::workspace_path_inclusions;
 use super::scan::scan_source_tree;
 
 use tracing::instrument;
@@ -34,7 +35,8 @@ impl IrEnricher for DeriveInventoryEnricher {
 
         let crate_root = member_crate_root(source, session);
         let thresholds = *crate::config::load_session_config(session).derives();
-        let records = scan_source_tree(&source.src_root, &crate_root, thresholds)?;
+        let path_inclusions = workspace_path_inclusions(session.project_root());
+        let records = scan_source_tree(&source.src_root, &crate_root, thresholds, &path_inclusions)?;
 
         for record in records {
             let parent = resolve_parent(ir, &record.qualified_name)?;

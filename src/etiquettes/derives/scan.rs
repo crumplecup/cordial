@@ -10,6 +10,7 @@ use crate::config::DerivesThresholds;
 use crate::error::CordialResult;
 use crate::loader::module_path_from_src_file;
 
+use super::path_inclusion::PathInclusionFacts;
 use super::syntax::{
     FieldRead, body_is_struct_literal, classify_field_read, classify_setter_body,
     constructor_arg_count, consumes_self, error_impl_target, field_is_exposed, has_derive,
@@ -19,11 +20,12 @@ use super::types::{DeriveRuleId, DeriveSiteRecord};
 
 use tracing::instrument;
 
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(path_inclusions), err(level = "warn"))]
 pub fn scan_source_tree(
     src_root: &Path,
     crate_root: &Path,
     thresholds: DerivesThresholds,
+    path_inclusions: &PathInclusionFacts,
 ) -> CordialResult<Vec<DeriveSiteRecord>> {
     let mut findings = Vec::new();
     if !src_root.is_dir() {
@@ -41,7 +43,12 @@ pub fn scan_source_tree(
         }
         let source = std::fs::read_to_string(path)?;
         findings.extend(scan_rust_source(
-            &source, path, src_root, crate_root, thresholds,
+            &source,
+            path,
+            src_root,
+            crate_root,
+            thresholds,
+            path_inclusions,
         )?);
     }
 
@@ -55,13 +62,14 @@ pub fn scan_source_tree(
     Ok(findings)
 }
 
-#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, file, path_inclusions), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,
     src_root: &Path,
     crate_root: &Path,
     thresholds: DerivesThresholds,
+    path_inclusions: &PathInclusionFacts,
 ) -> CordialResult<Vec<DeriveSiteRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
@@ -73,6 +81,7 @@ pub fn scan_rust_source(
         structs: HashMap::new(),
         error_types: HashSet::new(),
         thresholds,
+        path_inclusions,
         findings: Vec::new(),
     };
     visitor.walk_items(&syntax.items);
@@ -107,17 +116,38 @@ struct FieldMeta {
     is_public: bool,
 }
 
-struct DeriveScanVisitor {
+struct DeriveScanVisitor<'a> {
     file: PathBuf,
     crate_root: PathBuf,
     module_prefix: Vec<String>,
     structs: HashMap<String, StructInfo>,
     error_types: HashSet<String>,
     thresholds: DerivesThresholds,
+    path_inclusions: &'a PathInclusionFacts,
     findings: Vec<DeriveSiteRecord>,
 }
 
-impl DeriveScanVisitor {
+impl DeriveScanVisitor<'_> {
+    /// True when some *other* crate splices this file in via `#[path]`
+    /// without `needed_dep` -- the recommended derive wouldn't actually
+    /// compile everywhere this file's content lands.
+    #[instrument(level = "trace", skip(self))]
+    fn blocked_by_path_inclusion(&self, needed_dep: &str) -> bool {
+        if let Some(blocker) =
+            self.path_inclusions
+                .blocking_consumer(&self.file, &self.crate_root, needed_dep)
+        {
+            tracing::debug!(
+                blocker,
+                needed_dep,
+                file = %self.file.display(),
+                "derive recommendation blocked: consuming crate lacks the dependency"
+            );
+            return true;
+        }
+        false
+    }
+
     #[instrument(level = "debug", skip(self))]
     fn qualify(&self, local: &str) -> String {
         if self.module_prefix.is_empty() {
@@ -347,6 +377,9 @@ impl DeriveScanVisitor {
         if method.sig.constness.is_some() {
             return;
         }
+        if self.blocked_by_path_inclusion("derive_getters") {
+            return;
+        }
         let Some(info) = struct_info else {
             return;
         };
@@ -402,6 +435,9 @@ impl DeriveScanVisitor {
         if method.sig.constness.is_some() {
             return;
         }
+        if self.blocked_by_path_inclusion("derive_more") {
+            return;
+        }
         let Some(info) = struct_info else {
             return;
         };
@@ -452,6 +488,9 @@ impl DeriveScanVisitor {
         method_name: &str,
     ) {
         if method.sig.constness.is_some() {
+            return;
+        }
+        if self.blocked_by_path_inclusion("derive_setters") {
             return;
         }
         let Some(info) = struct_info else {
@@ -517,6 +556,9 @@ impl DeriveScanVisitor {
 
         let args = constructor_arg_count(&method.sig);
         if args > self.thresholds.max_constructor_args() {
+            if self.blocked_by_path_inclusion("derive_builder") {
+                return;
+            }
             let record = self.site(SiteArgs::new(
                 DeriveRuleId::UseBuilder001,
                 self_ty,
@@ -543,6 +585,9 @@ impl DeriveScanVisitor {
             return;
         }
         if !body_is_struct_literal(&method.block, self_ty) {
+            return;
+        }
+        if self.blocked_by_path_inclusion("derive_new") {
             return;
         }
 

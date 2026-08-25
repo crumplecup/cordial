@@ -2,8 +2,8 @@ use miette::{IntoDiagnostic, WrapErr};
 use std::fs;
 
 use cordial::{
-    DERIVES_ETIQUETTE, DeriveRuleId, DeriveSiteRecord, DerivesThresholds, RunAll, Session,
-    SessionBuilder, scan_derives_rust_source,
+    DERIVES_ETIQUETTE, DeriveRuleId, DeriveSiteRecord, DerivesThresholds, PathInclusionFacts,
+    RunAll, Session, SessionBuilder, scan_derives_rust_source,
 };
 
 const TRIVIAL_GETTER: &str = r#"struct Widget {
@@ -81,6 +81,7 @@ fn scan_derives_rust_source_flags_trivial_getters() -> miette::Result<()> {
         fixture.path(),
         fixture.path(),
         DerivesThresholds::default(),
+        &PathInclusionFacts::default(),
     )
     .into_diagnostic()
     .wrap_err("scan")?;
@@ -116,6 +117,7 @@ fn scan_findings(
         fixture.path(),
         fixture.path(),
         thresholds,
+        &PathInclusionFacts::default(),
     )
     .into_diagnostic()
     .wrap_err("scan")
@@ -609,6 +611,158 @@ impl Widget {
              fixture, so the non-const version must still flag {expected:?}: {findings:?}"
         );
     }
+    Ok(())
+}
+
+/// Real two-crate workspace: `owner` defines a struct with a manual
+/// getter; `consumer` splices `owner`'s file in via `#[path]` (the real
+/// `amenable_verus`/`amenable_core` pattern this whole mechanism exists
+/// for). Returns the workspace root and `owner`'s crate root/src root/
+/// file path, so a test can run the real `scan_derives_rust_source` scan
+/// against them.
+fn write_path_spliced_fixture(
+    consumer_has_getters_dep: bool,
+) -> miette::Result<(tempfile::TempDir, std::path::PathBuf, std::path::PathBuf)> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let root = fixture.path();
+
+    fs::write(
+        root.join("Cargo.toml"),
+        r#"
+[workspace]
+members = ["crates/owner", "crates/consumer", "fake_deps/derive_getters"]
+resolver = "2"
+"#,
+    )
+    .into_diagnostic()?;
+
+    fs::create_dir_all(root.join("fake_deps/derive_getters/src")).into_diagnostic()?;
+    fs::write(
+        root.join("fake_deps/derive_getters/Cargo.toml"),
+        r#"
+[package]
+name = "derive_getters"
+version = "0.1.0"
+edition = "2024"
+"#,
+    )
+    .into_diagnostic()?;
+    fs::write(
+        root.join("fake_deps/derive_getters/src/lib.rs"),
+        "// stand-in for the real derive_getters crate",
+    )
+    .into_diagnostic()?;
+
+    let owner_root = root.join("crates/owner");
+    fs::create_dir_all(owner_root.join("src")).into_diagnostic()?;
+    fs::write(
+        owner_root.join("Cargo.toml"),
+        r#"
+[package]
+name = "owner"
+version = "0.1.0"
+edition = "2024"
+"#,
+    )
+    .into_diagnostic()?;
+    let owner_file = owner_root.join("src/shared.rs");
+    fs::write(
+        &owner_file,
+        r#"pub struct Widget {
+    name: String,
+}
+
+impl Widget {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+"#,
+    )
+    .into_diagnostic()?;
+    fs::write(owner_root.join("src/lib.rs"), "mod shared;\n").into_diagnostic()?;
+
+    let consumer_root = root.join("crates/consumer");
+    fs::create_dir_all(consumer_root.join("src")).into_diagnostic()?;
+    let consumer_dep = if consumer_has_getters_dep {
+        r#"derive_getters = { path = "../../fake_deps/derive_getters" }"#
+    } else {
+        ""
+    };
+    fs::write(
+        consumer_root.join("Cargo.toml"),
+        format!(
+            r#"
+[package]
+name = "consumer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+{consumer_dep}
+"#
+        ),
+    )
+    .into_diagnostic()?;
+    fs::write(
+        consumer_root.join("src/lib.rs"),
+        r#"#[path = "../../owner/src/shared.rs"]
+mod shared;
+"#,
+    )
+    .into_diagnostic()?;
+
+    Ok((fixture, owner_root, owner_file))
+}
+
+#[test]
+fn path_spliced_file_without_the_dependency_is_exempt() -> miette::Result<()> {
+    let (fixture, owner_root, owner_file) = write_path_spliced_fixture(false)?;
+    let path_inclusions = cordial::workspace_path_inclusions(fixture.path());
+    let source = fs::read_to_string(&owner_file).into_diagnostic()?;
+    let findings = scan_derives_rust_source(
+        &source,
+        &owner_file,
+        &owner_root.join("src"),
+        &owner_root,
+        DerivesThresholds::default(),
+        &path_inclusions,
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert!(
+        findings
+            .iter()
+            .all(|record| record.rule_id != DeriveRuleId::Getter001),
+        "consumer splices this file in without derive_getters, so the \
+         recommendation isn't actually satisfiable everywhere: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn path_spliced_file_with_the_dependency_is_still_flagged() -> miette::Result<()> {
+    let (fixture, owner_root, owner_file) = write_path_spliced_fixture(true)?;
+    let path_inclusions = cordial::workspace_path_inclusions(fixture.path());
+    let source = fs::read_to_string(&owner_file).into_diagnostic()?;
+    let findings = scan_derives_rust_source(
+        &source,
+        &owner_file,
+        &owner_root.join("src"),
+        &owner_root,
+        DerivesThresholds::default(),
+        &path_inclusions,
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert!(
+        findings
+            .iter()
+            .any(|record| record.rule_id == DeriveRuleId::Getter001),
+        "consumer has derive_getters available, so adding the dependency \
+         should be the only difference from the exempt fixture and the \
+         finding should still fire: {findings:?}"
+    );
     Ok(())
 }
 
