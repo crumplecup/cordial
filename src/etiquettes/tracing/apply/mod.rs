@@ -25,14 +25,13 @@ use super::call_graph::workspace_call_graph;
 use super::scan::scan_rust_source;
 use instrument::{
     GapApplyOutcome, InstrumentAttrStyle, apply_gap, attr_style, ensure_use_instrument,
-    recipe_for_gap,
+    recipe_for_gap, strip_instrument,
 };
 
 pub use parse::{parse_tracing_instrument_checklist, parse_tracing_instrument_checklist_text};
 pub use verifier_policy::TracingApplyPolicy;
 
-pub(super) use verifier_policy::crate_gate_cfgs;
-use verifier_policy::resolve_tracing_apply_policy;
+pub(super) use verifier_policy::{crate_gate_cfgs, resolve_tracing_apply_policy};
 
 use crate::{PathInclusionFacts, workspace_path_inclusions};
 
@@ -167,12 +166,32 @@ pub fn run_tracing_instrument_apply(
             tracing::info!(
                 path = %path.display(),
                 crate_name = %crate_name,
-                "skipping file: verifier policy forbids #[instrument] here"
+                "skip-policy file: apply strips existing #[instrument], never writes one"
             );
         }
 
         let mut file_changed = false;
         for gap in file_gaps {
+            let strip = never_instrument.contains(&gap.qualified_name)
+                || policy == TracingApplyPolicy::Skip;
+            if strip {
+                match strip_instrument(&mut lines, &gap) {
+                    GapApplyOutcome::Applied => {
+                        summary.changed_functions += 1;
+                        file_changed = true;
+                    }
+                    GapApplyOutcome::AlreadyInstrumented => {
+                        summary.skipped_existing += 1;
+                    }
+                    GapApplyOutcome::Unresolved => {
+                        summary.unresolved += 1;
+                    }
+                    GapApplyOutcome::SkippedPolicy => {
+                        summary.skipped_policy += 1;
+                    }
+                }
+                continue;
+            }
             let Some(recipe) = recipe_for_gap(&records, &gap) else {
                 tracing::warn!(
                     path = %gap.rel_path.display(),

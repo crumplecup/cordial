@@ -19,6 +19,14 @@ pub struct FunctionRecord {
     pub file: String,
     pub line: u32,
     pub instrumented: bool,
+    /// Function is reachable only from proof-only entry points. Uninstrumented
+    /// proof-only functions are not recorded; instrumented ones are, so
+    /// attenuation can tell the user to remove the span.
+    pub proof_only: bool,
+    /// At least one `#[instrument]` is *not* wrapped in
+    /// `#[cfg_attr(not(<gate>), …)]` — a prover that sets that cfg will
+    /// still expand it.
+    pub prover_visible_instrument: bool,
     pub has_error_path_event: bool,
     pub param_names: Vec<String>,
     pub role: FunctionRole,
@@ -34,6 +42,12 @@ pub enum TracingRuleKind {
     ErrMissing,
     ErrorPathSilent,
     FieldsMissing,
+    /// Proof-only function already has `#[instrument]` (bare or gated).
+    ProofInstrument,
+    /// Ordinary function in a gate-policy file has bare `#[instrument]`.
+    UngatedInstrument,
+    /// Skip-policy file (Verus / Creusot) already has `#[instrument]`.
+    SkipInstrument,
 }
 
 impl TracingRuleKind {
@@ -46,6 +60,9 @@ impl TracingRuleKind {
             Self::ErrMissing => "TRACING-ERR-MISSING",
             Self::ErrorPathSilent => "TRACING-ERROR-PATH-SILENT",
             Self::FieldsMissing => "TRACING-FIELDS-MISSING",
+            Self::ProofInstrument => "TRACING-PROOF-INSTRUMENT",
+            Self::UngatedInstrument => "TRACING-UNGATED-INSTRUMENT",
+            Self::SkipInstrument => "TRACING-SKIP-INSTRUMENT",
         }
     }
 
@@ -64,13 +81,22 @@ impl TracingRuleKind {
                 "Recipe wants `err` and the body has neither `err` nor `warn!`/`error!`"
             }
             Self::FieldsMissing => "Recipe identity `fields` are missing from `fields(...)`",
+            Self::ProofInstrument => {
+                "Proof-only function has `#[instrument]` (including a `not(<gate>)` wrap that never fires)"
+            }
+            Self::UngatedInstrument => {
+                "Bare `#[instrument]` on a function a verifier build will compile; wrap with `cfg_attr(not(<gate>), …)`"
+            }
+            Self::SkipInstrument => {
+                "Skip-policy file (Verus / Creusot) has `#[instrument]`; remove it"
+            }
         }
     }
 }
 
 #[derive(Debug, Clone, derive_new::new)]
 pub struct TracingRule {
-    kind: TracingRuleKind,
+    pub(super) kind: TracingRuleKind,
 }
 
 impl Rule for TracingRule {
@@ -92,6 +118,7 @@ impl Rule for TracingRule {
 
 pub const MISSING_INSTRUMENT_LABEL: &str = "missing-instrument";
 pub const RECIPE_DELTA_LABEL: &str = "recipe-delta";
+pub const FORBIDDEN_INSTRUMENT_LABEL: &str = "forbidden-instrument";
 
 #[derive(Debug, Clone)]
 pub struct TracingMarker {
@@ -162,7 +189,7 @@ impl Finding for TracingFinding {
         sink.field("function_kind", &self.kind);
         sink.field("role", &self.role);
         sink.field("complexity", &self.complexity);
-        sink.field("recipe", &self.recipe.as_attribute());
+        sink.field("recipe", &self.recipe_field());
         sink.field("level", &self.recipe.level);
         sink.field("skip", &self.recipe.skip.join(","));
         sink.field(
@@ -177,5 +204,17 @@ impl Finding for TracingFinding {
         sink.field("visibility", &self.visibility);
         sink.field("file", &self.span.file.display().to_string());
         sink.field("line", &self.span.line.to_string());
+    }
+}
+
+impl TracingFinding {
+    #[instrument(level = "trace", skip(self))]
+    fn recipe_field(&self) -> String {
+        match self.rule.kind {
+            TracingRuleKind::ProofInstrument | TracingRuleKind::SkipInstrument => {
+                "remove #[instrument]".to_string()
+            }
+            _ => self.recipe.as_attribute(),
+        }
     }
 }

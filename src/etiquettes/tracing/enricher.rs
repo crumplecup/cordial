@@ -50,8 +50,29 @@ impl IrEnricher for FunctionInventoryEnricher {
             extra_skip,
             never_instrument,
         )?;
+        let facts = crate::workspace_path_inclusions(session.project_root());
+        let mut policy_by_file: std::collections::HashMap<std::path::PathBuf, &'static str> =
+            std::collections::HashMap::new();
 
         for record in records {
+            let file_path = crate_root.join(&record.file);
+            let policy = *policy_by_file.entry(file_path.clone()).or_insert_with(|| {
+                match super::apply::resolve_tracing_apply_policy(
+                    &source.crate_name,
+                    &file_path,
+                    &crate_root,
+                    config.tracing(),
+                    &facts,
+                ) {
+                    super::apply::TracingApplyPolicy::Skip => "skip",
+                    super::apply::TracingApplyPolicy::Gated(_) => "gated",
+                    super::apply::TracingApplyPolicy::Bare => "bare",
+                }
+            });
+            if policy == "skip" && !record.instrumented {
+                continue;
+            }
+
             let parent = resolve_parent(ir, &module_context(&record.qualified_name))?;
             let span = FileSpan::new(crate_root.join(&record.file), record.line, 1);
 
@@ -146,6 +167,21 @@ impl IrEnricher for FunctionInventoryEnricher {
                 node,
                 "param_names",
                 serde_json::Value::String(record.param_names.join(",")),
+            )?;
+            ir.set_attr(
+                node,
+                "proof_only",
+                serde_json::Value::Bool(record.proof_only),
+            )?;
+            ir.set_attr(
+                node,
+                "prover_visible_instrument",
+                serde_json::Value::Bool(record.prover_visible_instrument),
+            )?;
+            ir.set_attr(
+                node,
+                "tracing_apply_policy",
+                serde_json::Value::String(policy.to_string()),
             )?;
         }
         Ok(())

@@ -80,7 +80,8 @@ pub use attribute::AttributeEnricher;
     feature = "verus_warnings"
 ))]
 pub(crate) use attribute::{
-    is_cfg_test, is_instrument_attr, member_crate_root, resolve_parent, resolve_source_path,
+    is_cfg_test, is_gated_instrument_attr, is_instrument_attr, member_crate_root, resolve_parent,
+    resolve_source_path,
 };
 #[cfg(feature = "error_sites")]
 pub use error::{

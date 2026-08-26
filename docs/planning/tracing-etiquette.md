@@ -165,16 +165,24 @@ Do not omit getters from the inventory. Filter at the subscriber
 
 ## Rules
 
-Findings are **recipe deltas**, not a second census of every function.
+Findings are **recipe deltas**, not a second census of every function, plus
+**attenuation** rules that fire when `#[instrument]` is already present
+where a verifier backend cannot (or must not) see it. Missing-instrument
+alone pushes only toward more spans; without the counter-lints a crate
+can accumulate tracing on proof-only `Requires`/`Ensures` impls, or leave
+bare `#[instrument]` on Kani-reachable production code.
 
 | Rule | When |
 | --- | --- |
-| `TRACING-MISSING-INSTRUMENT` | Function with no `#[instrument]`. Carry the recipe so apply knows what to write. |
+| `TRACING-MISSING-INSTRUMENT` | Function with no `#[instrument]`. Carry the recipe so apply knows what to write. Not raised for proof-only functions or skip-policy files. |
 | `TRACING-LEVEL-MISMATCH` | Span present, recorded `level` (default **info**) is higher-volume than the recipe (e.g. getter at info). |
 | `TRACING-SKIP-MISSING` | Recipe `skip` names are live params and absent from `skip(...)`. |
 | `TRACING-ERR-MISSING` | Recipe wants `err` (fallible / `Result`) and the attribute has neither `err` nor `err(level = ...)`. |
 | `TRACING-ERROR-PATH-SILENT` | Recipe wants `err`, the attr has no `err`, and the body has no `warn!`/`error!`. Not fired for `Option` lookups or non-Result error-site joins. |
 | `TRACING-FIELDS-MISSING` | Recipe `fields` empty on an `Entry`/`Constructor` that has a clear identity param. |
+| `TRACING-PROOF-INSTRUMENT` | Function is proof-only (nested in `#[cfg(<gate>)]` / `#[<gate>::…]`, or every known in-workspace caller is) **and** already has `#[instrument]` — including `#[cfg_attr(not(kani), …)]`. Gating is not a fix: the function never runs outside the prover, so the span never fires. Apply **removes** the attribute. |
+| `TRACING-UNGATED-INSTRUMENT` | File compiles under a gate-policy crate (Kani, etc.), the function is ordinary (not proof-only), and the attribute is **bare** `#[instrument]`. The prover will expand it. Apply rewrites to `#[cfg_attr(not(<cfg>), tracing::instrument(..))]`. |
+| `TRACING-SKIP-INSTRUMENT` | File is skip-policy (Verus bare compiler / Creusot translator, including `#[path]` splices) **and** already has `#[instrument]`. Apply **removes** it. Uninstrumented skip-policy functions are silent (no missing-instrument push). |
 
 Private, `pub(super)`, `pub(crate)`, and `pub` are all on the checklist.
 `TraitSurface` is in so inherited vis on trait impls still gets a `trace`
@@ -245,7 +253,9 @@ removes. Filter at the subscriber (`RUST_LOG=info` vs `trace`).
 `err()` is only recommended when the `Err` type is known `Display` from
 the same file (or is a well-known `String`/`Error`). Functions nested in
 an ancestor `#[cfg(<gate>)]` / `#[<gate>::…]` (and functions whose every
-known in-workspace caller is already in that set) are never recorded.
+known in-workspace caller is already in that set) are **proof-only**:
+never recommended for a span, and `TRACING-PROOF-INSTRUMENT` if one is
+already there — including a `not(kani)` gate, which would never fire.
 
 ---
 
@@ -290,10 +300,13 @@ than weakening fixture recall.
 
 ## Status
 
-**Phase 4 complete.** Classify + recipe on every finding; delta rules vs present
-`#[instrument]`; apply writes the recipe. `[tracing]` knobs (`extra_skip`,
-`apply_gate_crates`, `apply_skip_crates`) load through `cordial.toml`. The
-quality report blurb is open gaps **by role**.
+**Phase 4 complete**, plus verifier **attenuation**. Classify + recipe on
+every finding; delta rules vs present `#[instrument]`; apply writes the
+recipe. Counter-lints (`TRACING-PROOF-INSTRUMENT`,
+`TRACING-UNGATED-INSTRUMENT`, `TRACING-SKIP-INSTRUMENT`) fire when a span
+is already present where the backend cannot use it. `[tracing]` knobs
+(`extra_skip`, `apply_gate_crates`, `apply_skip_crates`) load through
+`cordial.toml`. The quality report blurb is open gaps **by role**.
 
 Every function is on the checklist. Visibility is recorded on the finding;
 it does not suppress a gap. Role recipes pick `trace` / `debug` / `info` so

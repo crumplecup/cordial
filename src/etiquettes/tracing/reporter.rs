@@ -153,7 +153,11 @@ impl Reporter for TracingChecklistReporter {
         body.push_str("# Tracing instrument checklist\n\n");
         body.push_str(&format!("**Open gaps:** {}\n\n", open.len()));
         body.push_str(
-            "Apply writes the listed recipe (`level`, `skip`, `err`, `ret`, `fields`). \
+            "Apply writes the listed recipe (`level`, `skip`, `err`, `ret`, `fields`) \
+             for missing/delta rows. `TRACING-PROOF-INSTRUMENT` and \
+             `TRACING-SKIP-INSTRUMENT` mean **remove** `#[instrument]` (including a \
+             `not(<gate>)` wrap on proof-only code — that span never fires). \
+             `TRACING-UNGATED-INSTRUMENT` means wrap with `cfg_attr(not(<gate>), …)`. \
              Do not skip getters — filter at the subscriber. \
              `TRACING-ERROR-PATH-SILENT` only fires when the recipe wants `err` and the body \
              has neither `err` nor `warn!`/`error!`.\n\n",

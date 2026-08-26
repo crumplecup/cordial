@@ -984,3 +984,277 @@ pub fn scan_tree() {}
     );
     Ok(())
 }
+
+fn open_rule_ids(outcome: &dyn cordial::RunOutcome) -> Vec<String> {
+    outcome
+        .findings()
+        .filter(|finding| finding.disposition() == cordial::Disposition::Open)
+        .map(|finding| finding.rule().id().to_string())
+        .collect()
+}
+
+#[test]
+fn tracing_proof_only_method_with_instrument_is_flagged() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        r#"
+pub trait Ensures<T> {
+    fn ensures(input: T) -> bool;
+}
+
+pub struct Checker;
+
+impl Ensures<u32> for Checker {
+    #[tracing::instrument(level = "trace")]
+    fn ensures(input: u32) -> bool {
+        input > 0
+    }
+}
+
+#[cfg(kani)]
+mod proofs {
+    use super::{Checker, Ensures};
+
+    pub fn harness() {
+        assert!(Checker::ensures(1));
+    }
+}
+
+pub fn traced_ordinary_fn() {}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .with_store_home(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    let outcome = session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+    let rules = open_rule_ids(outcome.as_ref());
+    assert!(
+        rules.iter().any(|id| id == "TRACING-PROOF-INSTRUMENT"),
+        "Ensures::ensures is only called from a kani harness — the span \
+         must come off, not stay as a missing-instrument or gated recipe: {rules:?}"
+    );
+    assert!(
+        rules.iter().any(|id| id == "TRACING-MISSING-INSTRUMENT"),
+        "ordinary traced_ordinary_fn still wants a span: {rules:?}"
+    );
+    assert_eq!(rules.len(), 2, "{rules:?}");
+    Ok(())
+}
+
+#[test]
+fn tracing_proof_only_gated_instrument_never_fires_so_it_is_flagged() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        r#"
+pub trait Ensures<T> {
+    fn ensures(input: T) -> bool;
+}
+
+pub struct Checker;
+
+impl Ensures<u32> for Checker {
+    #[cfg_attr(not(kani), tracing::instrument(level = "trace"))]
+    fn ensures(input: T) -> bool {
+        input > 0
+    }
+}
+
+#[cfg(kani)]
+mod proofs {
+    use super::{Checker, Ensures};
+
+    pub fn harness() {
+        assert!(Checker::ensures(1));
+    }
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .with_store_home(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    let outcome = session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+    let rules = open_rule_ids(outcome.as_ref());
+    assert_eq!(
+        rules.as_slice(),
+        ["TRACING-PROOF-INSTRUMENT"],
+        "gating not(kani) on a proof-only Ensures impl is a dead span — \
+         the method never runs outside the prover: {rules:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn tracing_ungated_instrument_on_ordinary_fn_in_gate_crate() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        r#"
+#[tracing::instrument(level = "debug")]
+pub fn scan_tree() {}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .with_store_home(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    let outcome = session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+    let rules = open_rule_ids(outcome.as_ref());
+    assert_eq!(
+        rules.as_slice(),
+        ["TRACING-UNGATED-INSTRUMENT"],
+        "bare #[instrument] on ordinary code in a kani crate is visible \
+         to the prover; attenuation is gate, not remove: {rules:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn tracing_skip_crate_with_instrument_is_flagged() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[tracing]\napply_skip_crates = [\"fixture_crate\"]\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        r#"
+#[tracing::instrument(level = "debug")]
+pub fn scan_tree() {}
+
+pub fn other_fn() {}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .with_store_home(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    let outcome = session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+    let rules = open_rule_ids(outcome.as_ref());
+    assert_eq!(
+        rules.as_slice(),
+        ["TRACING-SKIP-INSTRUMENT"],
+        "skip-policy (Verus/Creusot) must not keep #[instrument]; \
+         uninstrumented other_fn must not get a missing-instrument push: {rules:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn tracing_skip_crate_uninstrumented_is_silent() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[tracing]\napply_skip_crates = [\"fixture_crate\"]\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        "\npub fn scan_tree() {}\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .with_store_home(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    let outcome = session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+    let rules = open_rule_ids(outcome.as_ref());
+    assert!(
+        rules.is_empty(),
+        "skip-policy with no span: do not push toward adding one: {rules:?}"
+    );
+    Ok(())
+}

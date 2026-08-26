@@ -1,9 +1,11 @@
 //! Classified `tracing::instrument` coverage.
 //!
 //! **What.** Every function gets a use-class (`FunctionRole`), a complexity,
-//! and a target `InstrumentRecipe`. Probes flag a missing attribute or a
-//! recipe delta (`level`, `err`, `ret`, `fields`, `skip`). Apply writes the
-//! recipe onto source. Visibility does not exempt a function.
+//! and a target `InstrumentRecipe`. Probes flag a missing attribute, a recipe
+//! delta (`level`, `err`, `ret`, `fields`, `skip`), or **attenuation**:
+//! `#[instrument]` already present on proof-only code, skip-policy files, or
+//! ungated on a prover-reachable function. Apply writes, gates, or removes
+//! to match. Visibility does not exempt a function.
 //!
 //! **Why.** A missing-span census treats constructors, getters, scanners, and
 //! entry points the same. Skipping private helpers creates blind spots in the
@@ -48,7 +50,7 @@ pub use apply::{
 
 pub use assessor::TracingAssessor;
 pub use enricher::FunctionInventoryEnricher;
-pub use probe::{MissingInstrumentProbe, RecipeDeltaProbe};
+pub use probe::{ForbiddenInstrumentProbe, MissingInstrumentProbe, RecipeDeltaProbe};
 pub use reporter::{TracingChecklistReporter, TracingCsvReporter, TracingSummaryReporter};
 pub use scan::scan_rust_source;
 
@@ -61,6 +63,7 @@ static FUNCTION_INVENTORY: FunctionInventoryEnricher = FunctionInventoryEnricher
 static ATTRIBUTE_ENRICHER: AttributeEnricher = AttributeEnricher;
 static MISSING_INSTRUMENT_PROBE: MissingInstrumentProbe = MissingInstrumentProbe;
 static RECIPE_DELTA_PROBE: RecipeDeltaProbe = RecipeDeltaProbe;
+static FORBIDDEN_INSTRUMENT_PROBE: ForbiddenInstrumentProbe = ForbiddenInstrumentProbe;
 static TRACING_ASSESSOR: TracingAssessor = TracingAssessor;
 static TRACING_CSV: TracingCsvReporter = TracingCsvReporter;
 static TRACING_CHECKLIST: TracingChecklistReporter = TracingChecklistReporter;
@@ -69,7 +72,11 @@ static TRACING_SUMMARY: TracingSummaryReporter = TracingSummaryReporter;
 static LOADERS: &[&'static dyn crate::Loader] = &[&SOURCE_LOADER];
 static ENRICHERS: &[&'static dyn crate::IrEnricher] =
     &[&SCOPE_ENRICHER, &FUNCTION_INVENTORY, &ATTRIBUTE_ENRICHER];
-static PROBES: &[&'static dyn crate::Probe] = &[&MISSING_INSTRUMENT_PROBE, &RECIPE_DELTA_PROBE];
+static PROBES: &[&'static dyn crate::Probe] = &[
+    &MISSING_INSTRUMENT_PROBE,
+    &RECIPE_DELTA_PROBE,
+    &FORBIDDEN_INSTRUMENT_PROBE,
+];
 static ASSESSORS: &[&'static dyn crate::Assessor] = &[&TRACING_ASSESSOR];
 static REPORTERS: &[&'static dyn crate::Reporter] =
     &[&TRACING_CSV, &TRACING_CHECKLIST, &TRACING_SUMMARY];

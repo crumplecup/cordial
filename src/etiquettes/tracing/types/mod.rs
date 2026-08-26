@@ -6,6 +6,6 @@ pub use class::{
     VisibilityLabel,
 };
 pub use finding::{
-    FunctionRecord, MISSING_INSTRUMENT_LABEL, RECIPE_DELTA_LABEL, TracingFinding, TracingMarker,
-    TracingRule, TracingRuleKind,
+    FORBIDDEN_INSTRUMENT_LABEL, FunctionRecord, MISSING_INSTRUMENT_LABEL, RECIPE_DELTA_LABEL,
+    TracingFinding, TracingMarker, TracingRule, TracingRuleKind,
 };

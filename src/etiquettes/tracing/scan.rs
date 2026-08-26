@@ -142,9 +142,17 @@ impl FileScanVisitor<'_> {
             return;
         }
         let qualified_name = self.qualify(args.local_name);
-        if self.never_instrument.contains(&qualified_name) {
+        let instrumented = args.attrs.iter().any(crate::enricher::is_instrument_attr);
+        let proof_only = self.never_instrument.contains(&qualified_name);
+        if proof_only && !instrumented {
+            // Proof-only and no span: attenuation has nothing to remove,
+            // and missing-instrument must not push toward adding one.
             return;
         }
+        let prover_visible_instrument = args.attrs.iter().any(|attr| {
+            crate::enricher::is_instrument_attr(attr)
+                && !crate::enricher::is_gated_instrument_attr(attr)
+        });
         let line = args.span.start().line as u32;
         let ctx = classify(
             &args.sig.ident.to_string(),
@@ -161,7 +169,9 @@ impl FileScanVisitor<'_> {
             visibility: visibility_label(args.visibility),
             file: self.rel_file.clone(),
             line,
-            instrumented: args.attrs.iter().any(crate::enricher::is_instrument_attr),
+            instrumented,
+            proof_only,
+            prover_visible_instrument,
             has_error_path_event: ctx.has_error_path_event,
             param_names: ctx.param_names.clone(),
             role: ctx.role,

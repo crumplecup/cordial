@@ -14,7 +14,7 @@ pub(super) enum GapApplyOutcome {
     /// Left untouched on purpose: the real verifier toolchain for every
     /// crate that compiles this file can't tolerate `#[instrument]` at
     /// all, gated or not (see [`TracingApplyPolicy::Skip`]). The
-    /// checklist item stays open.
+    /// checklist item stays open when there was nothing to strip.
     SkippedPolicy,
 }
 
@@ -98,6 +98,26 @@ pub(super) fn apply_gap(
         .unwrap_or(indent);
     let insert_at = insert_after_track_caller(lines, &attr_indices).unwrap_or(fn_idx);
     lines.insert(insert_at, format!("{indent}{attr}"));
+    GapApplyOutcome::Applied
+}
+
+/// Remove an existing `#[instrument]` / `#[cfg_attr(.., instrument)]` from
+/// `gap` — attenuation for proof-only functions and skip-policy files.
+#[instrument(level = "debug", skip(lines, gap))]
+pub(super) fn strip_instrument(lines: &mut Vec<String>, gap: &InstrumentGap) -> GapApplyOutcome {
+    let Some(fn_idx) = find_fn_line(lines, gap.line, &gap.qualified_name) else {
+        tracing::warn!(
+            path = %gap.rel_path.display(),
+            line = gap.line,
+            qualified_name = %gap.qualified_name,
+            "no fn near checklist line"
+        );
+        return GapApplyOutcome::Unresolved;
+    };
+    let Some((start, end)) = instrument_attr_range(lines, fn_idx) else {
+        return GapApplyOutcome::SkippedPolicy;
+    };
+    lines.drain(start..=end);
     GapApplyOutcome::Applied
 }
 

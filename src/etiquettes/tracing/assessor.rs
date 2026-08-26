@@ -9,9 +9,9 @@ use crate::session::SessionView;
 use super::delta::{DeltaContext, recipe_deltas};
 use super::present::present_instrument;
 use super::types::{
-    FunctionComplexity, FunctionKind, FunctionRole, InstrumentLevel, InstrumentRecipe,
-    MISSING_INSTRUMENT_LABEL, RECIPE_DELTA_LABEL, TracingFinding, TracingRule, TracingRuleKind,
-    VisibilityLabel,
+    FORBIDDEN_INSTRUMENT_LABEL, FunctionComplexity, FunctionKind, FunctionRole, InstrumentLevel,
+    InstrumentRecipe, MISSING_INSTRUMENT_LABEL, RECIPE_DELTA_LABEL, TracingFinding, TracingRule,
+    TracingRuleKind, VisibilityLabel,
 };
 
 use tracing::instrument;
@@ -31,7 +31,11 @@ impl Assessor for TracingAssessor {
 
     #[instrument(level = "trace", skip(self))]
     fn consumes(&self) -> &[&str] {
-        &[MISSING_INSTRUMENT_LABEL, RECIPE_DELTA_LABEL]
+        &[
+            MISSING_INSTRUMENT_LABEL,
+            RECIPE_DELTA_LABEL,
+            FORBIDDEN_INSTRUMENT_LABEL,
+        ]
     }
 
     #[instrument(level = "trace", skip(self, view))]
@@ -64,6 +68,10 @@ impl Assessor for TracingAssessor {
                         findings.push(parsed.clone().into_finding(kind));
                     }
                 }
+                FORBIDDEN_INSTRUMENT_LABEL => {
+                    let kind = parsed.forbidden_kind();
+                    findings.push(parsed.into_finding(kind));
+                }
                 _ => {}
             }
         }
@@ -84,6 +92,8 @@ struct ParsedFn {
     span: FileSpan,
     param_names: Vec<String>,
     has_error_path_event: bool,
+    proof_only: bool,
+    apply_policy: String,
 }
 
 impl ParsedFn {
@@ -144,7 +154,23 @@ impl ParsedFn {
                 .attr("has_error_path_event")
                 .and_then(|value| value.as_bool())
                 .unwrap_or(false),
+            proof_only: node
+                .attr("proof_only")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false),
+            apply_policy: attr("tracing_apply_policy").to_string(),
         })
+    }
+
+    #[instrument(level = "debug", skip(self))]
+    fn forbidden_kind(&self) -> TracingRuleKind {
+        if self.proof_only {
+            TracingRuleKind::ProofInstrument
+        } else if self.apply_policy == "skip" {
+            TracingRuleKind::SkipInstrument
+        } else {
+            TracingRuleKind::UngatedInstrument
+        }
     }
 
     #[instrument(level = "debug", skip(self, kind))]
