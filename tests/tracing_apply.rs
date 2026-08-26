@@ -47,15 +47,94 @@ fn write_apply_fixture(source: &str, checklist: &str) -> miette::Result<ApplyFix
 }
 
 fn checklist_for(items: &[(&str, u32)]) -> String {
-    let mut body = String::from(
-        "# Tracing instrument checklist\n\n**Open gaps:** n\n\n## `fixture_crate`\n\n",
-    );
+    checklist_for_crate("fixture_crate", items)
+}
+
+fn checklist_for_crate(crate_name: &str, items: &[(&str, u32)]) -> String {
+    let mut body =
+        format!("# Tracing instrument checklist\n\n**Open gaps:** n\n\n## `{crate_name}`\n\n");
     for (qualified_name, line) in items {
         body.push_str(&format!(
             "- [ ] `{qualified_name}` — `src/lib.rs:{line}` (pub)\n"
         ));
     }
     body
+}
+
+/// A workspace with one or more crates, its own `cordial.toml`, and a
+/// checklist -- for verifier-policy tests, where a single synthetic
+/// crate (as [`write_apply_fixture`] builds) isn't enough to exercise
+/// dependency-graph or `#[path]`-splice propagation.
+struct PolicyFixture {
+    workspace: PathBuf,
+    checklist: PathBuf,
+    _temp: tempfile::TempDir,
+}
+
+/// Write one workspace member crate. `deps` are `(dependency crate
+/// name, relative path to it from this crate's own directory)` pairs,
+/// written as real Cargo path dependencies.
+fn write_policy_crate(
+    workspace: &Path,
+    name: &str,
+    source: &str,
+    deps: &[(&str, &str)],
+) -> miette::Result<()> {
+    let crate_root = workspace.join(name);
+    let src_root = crate_root.join("src");
+    fs::create_dir_all(&src_root)
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    fs::write(src_root.join("lib.rs"), source)
+        .into_diagnostic()
+        .wrap_err("write source")?;
+    let mut manifest =
+        format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n");
+    if !deps.is_empty() {
+        manifest.push_str("\n[dependencies]\n");
+        for (dep_name, dep_rel_path) in deps {
+            manifest.push_str(&format!("{dep_name} = {{ path = \"{dep_rel_path}\" }}\n"));
+        }
+    }
+    fs::write(crate_root.join("Cargo.toml"), manifest)
+        .into_diagnostic()
+        .wrap_err("crate manifest")?;
+    Ok(())
+}
+
+fn write_policy_fixture(
+    members: &[&str],
+    cordial_toml: &str,
+    checklist: &str,
+) -> miette::Result<PolicyFixture> {
+    let temp = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let workspace = temp.path().join("workspace");
+    fs::create_dir_all(&workspace)
+        .into_diagnostic()
+        .wrap_err("workspace dir")?;
+    let members_list = members
+        .iter()
+        .map(|member| format!("\"{member}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    fs::write(
+        workspace.join("Cargo.toml"),
+        format!("[workspace]\nmembers = [{members_list}]\nresolver = \"2\"\n"),
+    )
+    .into_diagnostic()
+    .wrap_err("workspace manifest")?;
+    fs::write(workspace.join("cordial.toml"), cordial_toml)
+        .into_diagnostic()
+        .wrap_err("cordial.toml")?;
+    let checklist_path = temp.path().join("tracing-instrument.checklist.md");
+    fs::write(&checklist_path, checklist)
+        .into_diagnostic()
+        .wrap_err("write checklist")?;
+    Ok(PolicyFixture {
+        workspace,
+        checklist: checklist_path,
+        _temp: temp,
+    })
 }
 
 #[test]
@@ -640,5 +719,276 @@ pub fn scan_tree() {}
         "{updated}"
     );
     assert!(!updated.contains("use tracing::instrument;"), "{updated}");
+    Ok(())
+}
+
+#[test]
+fn apply_gates_instrument_for_configured_crate() -> miette::Result<()> {
+    let fixture = write_policy_fixture(
+        &["fixture_crate"],
+        "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
+        &checklist_for_crate("fixture_crate", &[("scan_tree", 2)]),
+    )?;
+    write_policy_crate(
+        &fixture.workspace,
+        "fixture_crate",
+        "\npub fn scan_tree() {}\n",
+        &[],
+    )?;
+
+    let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
+        .into_diagnostic()
+        .wrap_err("apply tracing")?;
+    assert_eq!(summary.changed_functions, 1);
+    assert_eq!(summary.skipped_policy, 0);
+
+    let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert!(
+        updated.contains("#[cfg_attr(not(kani), tracing::instrument(level = \"debug\"))]"),
+        "{updated}"
+    );
+    assert!(
+        !updated.contains("use tracing::instrument;"),
+        "a gated attribute is always fully qualified, so the plain import \
+         would go unused whenever every applied gap in the file is gated \
+         -- real precedent: amenable_kani has Kani-proof-only files where \
+         this exact import went `unused_imports`-flagged: {updated}"
+    );
+    Ok(())
+}
+
+#[test]
+fn apply_skips_configured_crate_leaving_checklist_open() -> miette::Result<()> {
+    let fixture = write_policy_fixture(
+        &["fixture_crate"],
+        "[tracing]\napply_skip_crates = [\"fixture_crate\"]\n",
+        &checklist_for_crate("fixture_crate", &[("scan_tree", 2)]),
+    )?;
+    let source = "\npub fn scan_tree() {}\n";
+    write_policy_crate(&fixture.workspace, "fixture_crate", source, &[])?;
+
+    let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
+        .into_diagnostic()
+        .wrap_err("apply tracing")?;
+    assert_eq!(summary.changed_functions, 0);
+    assert_eq!(summary.changed_files, 0);
+    assert_eq!(summary.skipped_policy, 1);
+
+    let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert_eq!(updated, source, "skipped file must be left byte-identical");
+    Ok(())
+}
+
+#[test]
+fn apply_gates_dependency_crate_via_transitive_dependent() -> miette::Result<()> {
+    let fixture = write_policy_fixture(
+        &["fixture_core", "fixture_kani"],
+        "[tracing]\napply_gate_crates = { fixture_kani = \"kani\" }\n",
+        &checklist_for_crate("fixture_core", &[("scan_tree", 2)]),
+    )?;
+    write_policy_crate(
+        &fixture.workspace,
+        "fixture_core",
+        "\npub fn scan_tree() {}\n",
+        &[],
+    )?;
+    write_policy_crate(
+        &fixture.workspace,
+        "fixture_kani",
+        "\npub fn noop() {}\n",
+        &[("fixture_core", "../fixture_core")],
+    )?;
+
+    let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
+        .into_diagnostic()
+        .wrap_err("apply tracing")?;
+    assert_eq!(summary.changed_functions, 1);
+
+    let updated = fs::read_to_string(fixture.workspace.join("fixture_core/src/lib.rs"))
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert!(
+        updated.contains("#[cfg_attr(not(kani), tracing::instrument(level = \"debug\"))]"),
+        "fixture_core compiles as part of fixture_kani's own `cargo kani` build, so it needs \
+         the same gate even though nothing in fixture_core's own config names it: {updated}"
+    );
+    Ok(())
+}
+
+#[test]
+fn apply_skips_file_spliced_into_skip_configured_crate() -> miette::Result<()> {
+    let fixture = write_policy_fixture(
+        &["fixture_owner", "fixture_verus"],
+        "[tracing]\napply_skip_crates = [\"fixture_verus\"]\n",
+        &checklist_for_crate("fixture_owner", &[("scan_tree", 2)]),
+    )?;
+    let owner_source = "\npub fn scan_tree() {}\n";
+    write_policy_crate(&fixture.workspace, "fixture_owner", owner_source, &[])?;
+    write_policy_crate(
+        &fixture.workspace,
+        "fixture_verus",
+        "#[path = \"../../fixture_owner/src/lib.rs\"]\nmod owner_impl;\n",
+        &[],
+    )?;
+
+    let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
+        .into_diagnostic()
+        .wrap_err("apply tracing")?;
+    assert_eq!(summary.changed_functions, 0);
+    assert_eq!(summary.skipped_policy, 1);
+
+    let updated = fs::read_to_string(fixture.workspace.join("fixture_owner/src/lib.rs"))
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert_eq!(
+        updated, owner_source,
+        "fixture_verus splices this exact file in via #[path], so it must stay untouched \
+         even though fixture_owner itself isn't in apply_skip_crates: {updated}"
+    );
+    Ok(())
+}
+
+#[test]
+fn apply_skips_function_nested_in_ancestor_gate_cfg() -> miette::Result<()> {
+    let fixture = write_policy_fixture(
+        &["fixture_crate"],
+        "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
+        &checklist_for_crate("fixture_crate", &[("proof_harness", 4)]),
+    )?;
+    let source = r#"
+#[cfg(kani)]
+mod proofs {
+    pub fn proof_harness() {}
+}
+"#;
+    write_policy_crate(&fixture.workspace, "fixture_crate", source, &[])?;
+
+    let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
+        .into_diagnostic()
+        .wrap_err("apply tracing")?;
+    assert_eq!(
+        summary.changed_functions, 0,
+        "proof_harness only exists at all under `#[cfg(kani)]`, and Gated \
+         policy already suppresses `#[instrument]` whenever `kani` *is* \
+         active -- so #[instrument] can never fire in any real build; the \
+         checklist row can't be resolved to a recorded function at all \
+         (the scanner never records it in the first place), not merely \
+         applied with a qualified path"
+    );
+    assert_eq!(summary.unresolved, 1);
+
+    let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert_eq!(updated, source, "{updated}");
+    Ok(())
+}
+
+#[test]
+fn apply_skips_function_called_only_from_proof_context() -> miette::Result<()> {
+    let fixture = write_policy_fixture(
+        &["fixture_crate"],
+        "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
+        &checklist_for_crate("fixture_crate", &[("Ensures::ensures", 8)]),
+    )?;
+    let source = r#"
+pub trait Ensures<T> {
+    fn ensures(input: T) -> bool;
+}
+
+pub struct Checker;
+
+impl Ensures<u32> for Checker {
+    fn ensures(input: u32) -> bool {
+        input > 0
+    }
+}
+
+#[cfg(kani)]
+mod proofs {
+    use super::{Checker, Ensures};
+
+    pub fn harness() {
+        assert!(Checker::ensures(1));
+    }
+}
+"#;
+    write_policy_crate(&fixture.workspace, "fixture_crate", source, &[])?;
+
+    let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
+        .into_diagnostic()
+        .wrap_err("apply tracing")?;
+    assert_eq!(
+        summary.changed_functions, 0,
+        "Checker::ensures's only known caller is proofs::harness, itself \
+         nested in #[cfg(kani)] -- every path that could ever call it \
+         bottoms out in a proof-only entry point, the same as \
+         amenable_core::Ensures/Requires impls in the real workspace this \
+         was built against, but discovered here via call-graph \
+         reachability, not a hardcoded trait name"
+    );
+    assert_eq!(summary.unresolved, 1);
+
+    let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert_eq!(updated, source, "{updated}");
+    Ok(())
+}
+
+#[test]
+fn apply_finds_calls_inside_a_harness_style_macro_invocation() -> miette::Result<()> {
+    let fixture = write_policy_fixture(
+        &["fixture_crate"],
+        "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
+        &checklist_for_crate("fixture_crate", &[("Ensures::ensures", 6)]),
+    )?;
+    let source = r#"
+pub trait Ensures<T> {
+    fn ensures(input: T) -> bool;
+}
+
+pub struct Checker;
+
+impl Ensures<u32> for Checker {
+    fn ensures(input: u32) -> bool {
+        input > 0
+    }
+}
+
+fake_harness_macro::harness! {
+    kani, VERIFY_CHECKER_SRC, {
+        #[kani::proof]
+        fn verify_checker() {
+            assert!(Checker::ensures(1));
+        }
+    }
+}
+"#;
+    write_policy_crate(&fixture.workspace, "fixture_crate", source, &[])?;
+
+    let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
+        .into_diagnostic()
+        .wrap_err("apply tracing")?;
+    assert_eq!(
+        summary.changed_functions, 0,
+        "syn never expands macros -- `fake_harness_macro::harness! {{ .. }}` \
+         parses as an opaque Item::Macro, so without extracting its \
+         trailing brace-block of real items, the call graph would never \
+         see `#[kani::proof] fn verify_checker` at all, let alone the \
+         `Checker::ensures` call inside it; the real `amenable_derive::\
+         harness!` macro this is modeled on wraps almost every Kani proof \
+         harness in amenable_kani the same way"
+    );
+    assert_eq!(summary.unresolved, 1);
+
+    let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert_eq!(updated, source, "{updated}");
     Ok(())
 }

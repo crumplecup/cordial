@@ -79,7 +79,9 @@ pub use attribute::AttributeEnricher;
     feature = "inline_tests",
     feature = "verus_warnings"
 ))]
-pub(crate) use attribute::{is_cfg_test, member_crate_root, resolve_parent, resolve_source_path};
+pub(crate) use attribute::{
+    is_cfg_test, is_instrument_attr, member_crate_root, resolve_parent, resolve_source_path,
+};
 #[cfg(feature = "error_sites")]
 pub use error::{
     ERROR_IR_ENRICHERS, ErrorIrScanEnricher, ErrorIrScanReport, error_ir_enricher_ids,

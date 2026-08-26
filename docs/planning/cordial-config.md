@@ -45,7 +45,16 @@ min_fluent_setters = 2
 
 [tracing]
 # extra_skip = ["inventory"]
+# apply_gate_crates = { amenable_kani = "kani" }
+# apply_skip_crates = ["amenable_verus", "amenable_creusot"]
 ```
+
+`apply_gate_crates` wraps `--apply`'s `#[instrument]` as
+`#[cfg_attr(not(<cfg>), tracing::instrument(...))]` for that crate and
+anything that compiles under the same graph-wide flag (transitive Cargo
+dependents, plus `#[path]` splice consumers). `apply_skip_crates` never
+writes `#[instrument]` (Verus bare compiler / Creusot translator);
+skip does not follow ordinary deps, but does follow a `#[path]` splice.
 
 Add a table per etiquette as new knobs appear. Tracing role→level maps stay
 in code until dogfood needs a project override.
@@ -56,5 +65,5 @@ Implemented (`tests/cordial_config.rs`). Visibility, modularity (including
 types-per-file, module-size 2σ, lower-tail ignore, hotspot diagnosis, and
 hierarchy lints: top-heavy, lopsided, unary-nest collapse), cfg_scatter,
 derives (`max_constructor_args`, `min_fluent_setters`), and tracing
-(`extra_skip`) read through `load_session_config`.
-Role→level maps stay in code.
+(`extra_skip`, `apply_gate_crates`, `apply_skip_crates`) read through
+`load_session_config`. Role→level maps stay in code.

@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 
+use syn::visit::Visit;
 use syn::{FnArg, GenericArgument, Pat, PathArguments, ReturnType, Signature, Type, TypePath};
 
 use tracing::instrument;
@@ -12,19 +13,79 @@ pub(super) fn unrecordable_params(sig: &Signature) -> Vec<String> {
     sig.inputs
         .iter()
         .filter_map(|arg| match arg {
-            FnArg::Typed(pat) => {
-                let Pat::Ident(ident) = &*pat.pat else {
-                    return None;
-                };
-                if type_is_unrecordable(&pat.ty) || type_is_generic_param(&pat.ty, &generics) {
-                    Some(ident.ident.to_string())
-                } else {
-                    None
-                }
-            }
+            FnArg::Typed(pat) => Some(pat),
             FnArg::Receiver(_) => None,
         })
+        .flat_map(|pat| pattern_bindings(&pat.pat, Some(&pat.ty)))
+        .filter_map(|(name, ty)| {
+            let unrecordable = match ty {
+                Some(ty) => type_is_unrecordable(ty) || type_is_generic_param(ty, &generics),
+                // Couldn't correlate this binding to a sub-type (a
+                // struct/slice/or-pattern, or a tuple/reference pattern
+                // whose shape doesn't match its type) -- conservatively
+                // unrecordable rather than silently missing it.
+                None => true,
+            };
+            unrecordable.then_some(name)
+        })
         .collect()
+}
+
+/// Every binding name `pat` introduces, paired with the sub-type of `ty`
+/// it structurally corresponds to when that's determinable -- `None`
+/// when the shapes don't line up. Real motivating case: `fn ensures(
+/// (actual, expected): (T, T)) -> bool` destructures one tuple-typed
+/// parameter into two bindings; `tracing::instrument`'s real expansion
+/// records `actual`/`expected` individually via `Debug`, not "the
+/// parameter" as one opaque unit -- unrecordability has to be decided
+/// per binding, zipping the tuple pattern against the tuple type
+/// element-wise, not just against the top-level `Pat::Ident` case this
+/// used to handle alone.
+#[instrument(level = "trace", skip(pat, ty))]
+pub(super) fn pattern_bindings<'a>(
+    pat: &'a Pat,
+    ty: Option<&'a Type>,
+) -> Vec<(String, Option<&'a Type>)> {
+    match (pat, ty) {
+        (Pat::Ident(ident), _) => vec![(ident.ident.to_string(), ty)],
+        (Pat::Tuple(pat_tuple), Some(Type::Tuple(ty_tuple)))
+            if pat_tuple.elems.len() == ty_tuple.elems.len() =>
+        {
+            pat_tuple
+                .elems
+                .iter()
+                .zip(ty_tuple.elems.iter())
+                .flat_map(|(p, t)| pattern_bindings(p, Some(t)))
+                .collect()
+        }
+        (Pat::Reference(pat_ref), Some(Type::Reference(ty_ref))) => {
+            pattern_bindings(&pat_ref.pat, Some(&ty_ref.elem))
+        }
+        (Pat::Paren(pat_paren), _) => pattern_bindings(&pat_paren.pat, ty),
+        _ => collect_all_idents(pat)
+            .into_iter()
+            .map(|name| (name, None))
+            .collect(),
+    }
+}
+
+/// Every `Pat::Ident` binding anywhere inside `pat`, regardless of
+/// nesting shape -- the conservative fallback for pattern/type
+/// combinations [`pattern_bindings`] doesn't specifically correlate
+/// (struct patterns need field-type lookup this module doesn't have;
+/// slice and or-patterns don't zip one-to-one with a single type at
+/// all).
+#[instrument(level = "trace", skip(pat))]
+fn collect_all_idents(pat: &Pat) -> Vec<String> {
+    struct IdentCollector(Vec<String>);
+    impl<'ast> Visit<'ast> for IdentCollector {
+        fn visit_pat_ident(&mut self, node: &'ast syn::PatIdent) {
+            self.0.push(node.ident.to_string());
+        }
+    }
+    let mut collector = IdentCollector(Vec::new());
+    collector.visit_pat(pat);
+    collector.0
 }
 
 #[instrument(level = "debug", skip(sig))]

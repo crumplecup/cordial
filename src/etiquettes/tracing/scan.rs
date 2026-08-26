@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use syn::spanned::Spanned;
@@ -8,17 +9,23 @@ use crate::error::CordialResult;
 use crate::loader::module_path_from_src_file;
 
 use super::classify::classify;
+use super::display_types::{DisplayTypeFacts, collect_display_type_facts};
 use super::recipe::recipe as instrument_recipe;
 use super::types::{FunctionKind, FunctionRecord, VisibilityLabel};
 
 use tracing::instrument;
-/// Scan every `src/**/*.rs` file under `src_root`.
-#[instrument(level = "debug", err(level = "warn"))]
+
+/// Scan every `src/**/*.rs` file under `src_root`. `never_instrument`
+/// names (already scoped to `crate_name`, qualified the same way
+/// [`FunctionRecord::qualified_name`] is) never get recorded at all --
+/// see [`super::call_graph::CallGraphFacts`] for how that set is computed.
+#[instrument(level = "debug", skip(never_instrument), err(level = "warn"))]
 pub fn scan_source_tree(
     src_root: &Path,
     project_root: &Path,
     crate_name: &str,
     extra_skip: &[String],
+    never_instrument: &HashSet<String>,
 ) -> CordialResult<Vec<FunctionRecord>> {
     if !src_root.is_dir() {
         return Ok(Vec::new());
@@ -42,6 +49,7 @@ pub fn scan_source_tree(
             project_root,
             crate_name,
             extra_skip,
+            never_instrument,
         )?;
         records.append(&mut file_records);
     }
@@ -56,7 +64,11 @@ pub fn scan_source_tree(
 }
 
 /// Parse one source file and return discovered functions (used by tests).
-#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[instrument(
+    level = "debug",
+    skip(source, file, never_instrument),
+    err(level = "warn")
+)]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,
@@ -64,6 +76,7 @@ pub fn scan_rust_source(
     project_root: &Path,
     crate_name: &str,
     extra_skip: &[String],
+    never_instrument: &HashSet<String>,
 ) -> CordialResult<Vec<FunctionRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
@@ -73,11 +86,14 @@ pub fn scan_rust_source(
         .unwrap_or(file)
         .to_string_lossy()
         .replace('\\', "/");
+    let display_types = collect_display_type_facts(&syntax.items);
     let mut visitor = FileScanVisitor {
         crate_name: crate_name.to_string(),
         rel_file,
         module_prefix,
         extra_skip,
+        display_types,
+        never_instrument,
         records: Vec::new(),
     };
     visitor.visit_file(&syntax);
@@ -89,6 +105,8 @@ struct FileScanVisitor<'a> {
     rel_file: String,
     module_prefix: Vec<String>,
     extra_skip: &'a [String],
+    display_types: DisplayTypeFacts,
+    never_instrument: &'a HashSet<String>,
     records: Vec<FunctionRecord>,
 }
 
@@ -116,17 +134,34 @@ impl FileScanVisitor<'_> {
 
     #[instrument(level = "debug", skip(self, args))]
     fn record_fn(&mut self, args: RecordFnArgs<'_>) {
+        if args.sig.constness.is_some() {
+            // `tracing::instrument` categorically rejects `const fn`
+            // (`error: the #[instrument] attribute may not be used with
+            // const fns`) -- never record one as needing instrumentation,
+            // so neither the checklist nor `--apply` ever proposes it.
+            return;
+        }
+        let qualified_name = self.qualify(args.local_name);
+        if self.never_instrument.contains(&qualified_name) {
+            return;
+        }
         let line = args.span.start().line as u32;
-        let ctx = classify(&args.sig.ident.to_string(), args.sig, args.kind, args.body);
+        let ctx = classify(
+            &args.sig.ident.to_string(),
+            args.sig,
+            args.kind,
+            args.body,
+            &self.display_types,
+        );
         let recipe = instrument_recipe(&ctx, self.extra_skip);
         self.records.push(FunctionRecord {
             crate_name: self.crate_name.clone(),
-            qualified_name: self.qualify(args.local_name),
+            qualified_name,
             kind: args.kind,
             visibility: visibility_label(args.visibility),
             file: self.rel_file.clone(),
             line,
-            instrumented: is_instrumented(args.attrs),
+            instrumented: args.attrs.iter().any(crate::enricher::is_instrument_attr),
             has_error_path_event: ctx.has_error_path_event,
             param_names: ctx.param_names.clone(),
             role: ctx.role,
@@ -189,11 +224,7 @@ impl FileScanVisitor<'_> {
             let ImplItem::Fn(method) = impl_item else {
                 continue;
             };
-            let local = if let Some(trait_name) = trait_name.clone() {
-                format!("{trait_name}::{}", method.sig.ident)
-            } else {
-                format!("{self_ty}::{}", method.sig.ident)
-            };
+            let local = impl_method_local_name(&self_ty, trait_name.as_deref(), &method.sig.ident);
             let kind = if trait_name.is_some() {
                 FunctionKind::TraitImplMethod
             } else {
@@ -237,17 +268,6 @@ impl<'ast> Visit<'ast> for FileScanVisitor<'_> {
     }
 }
 
-#[instrument(level = "trace", skip(attrs), ret)]
-fn is_instrumented(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(|attr| {
-        let path = attr.path();
-        path.is_ident("instrument")
-            || (path.segments.len() == 2
-                && path.segments[0].ident == "tracing"
-                && path.segments[1].ident == "instrument")
-    })
-}
-
 #[instrument(level = "debug", skip(vis))]
 fn visibility_label(vis: &Visibility) -> VisibilityLabel {
     match vis {
@@ -266,7 +286,7 @@ fn visibility_label(vis: &Visibility) -> VisibilityLabel {
 }
 
 #[instrument(level = "debug", skip(ty))]
-fn type_label(ty: &Type) -> String {
+pub(super) fn type_label(ty: &Type) -> String {
     match ty {
         Type::Path(type_path) => syn_path_label(&type_path.path),
         Type::Reference(reference) => type_label(&reference.elem),
@@ -277,9 +297,30 @@ fn type_label(ty: &Type) -> String {
 }
 
 #[instrument(level = "debug", skip(path))]
-fn syn_path_label(path: &syn::Path) -> String {
+pub(super) fn syn_path_label(path: &syn::Path) -> String {
     path.segments
         .last()
         .map(|segment| segment.ident.to_string())
         .unwrap_or_else(|| "?".to_string())
+}
+
+/// The qualified local name (module prefix not included) an impl
+/// method is recorded under -- trait-qualified for a trait impl
+/// (`{trait_name}::{method}`, e.g. `Ensures::ensures`, grouping every
+/// type's impl of the same trait together in the checklist), self-type
+/// qualified otherwise (`{self_ty}::{method}`). Shared with
+/// [`super::call_graph::CallGraphFacts`] so a call written as `Type::method(..)`
+/// (the real syntactic form a trait impl method is actually *called*
+/// with -- UFCS through the type, not the trait) can still be resolved
+/// back to the same key this function is recorded under.
+#[instrument(level = "trace", skip(method_ident))]
+pub(super) fn impl_method_local_name(
+    self_ty: &str,
+    trait_name: Option<&str>,
+    method_ident: &syn::Ident,
+) -> String {
+    match trait_name {
+        Some(trait_name) => format!("{trait_name}::{method_ident}"),
+        None => format!("{self_ty}::{method_ident}"),
+    }
 }

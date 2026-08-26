@@ -1,7 +1,21 @@
 use miette::{IntoDiagnostic, WrapErr};
 use std::fs;
+use std::path::Path;
 
 use cordial::{RunAll, Session, SessionBuilder, TRACING_ETIQUETTE};
+
+/// A minimal real `Cargo.toml` -- needed by any test whose fixture
+/// relies on workspace-wide crate discovery via `cargo_metadata` (e.g.
+/// `CallGraphFacts`'s own crate walk), which a bare directory with no
+/// manifest at all is invisible to.
+fn write_minimal_crate_manifest(root: &Path, crate_name: &str) -> miette::Result<()> {
+    fs::write(
+        root.join("Cargo.toml"),
+        format!("[package]\nname = \"{crate_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n"),
+    )
+    .into_diagnostic()
+    .wrap_err("crate manifest")
+}
 
 #[test]
 fn tracing_etiquette_detects_missing_instrument() -> miette::Result<()> {
@@ -507,6 +521,466 @@ fn tracing_extra_skip_from_config() -> miette::Result<()> {
     assert!(
         checklist.contains("skip(payload)"),
         "extra_skip should land in the recipe: {checklist}"
+    );
+    Ok(())
+}
+
+#[test]
+fn tracing_const_fn_is_never_flagged() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        r#"
+pub struct Registration;
+
+impl Registration {
+    pub const fn new(id: u32) -> Self {
+        let _ = id;
+        Self
+    }
+}
+
+pub fn traced_ordinary_fn() {}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    let outcome = session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+    let open: Vec<_> = outcome
+        .findings()
+        .filter(|finding| finding.disposition() == cordial::Disposition::Open)
+        .collect();
+    assert_eq!(
+        open.len(),
+        1,
+        "only traced_ordinary_fn should be flagged -- `#[instrument]` can never \
+         be written on `const fn new`, so it must never be proposed"
+    );
+
+    let checklist = fs::read_to_string(
+        store
+            .path()
+            .join("findings")
+            .join("tracing-instrument.checklist.md"),
+    )
+    .into_diagnostic()
+    .wrap_err("checklist")?;
+    assert!(checklist.contains("traced_ordinary_fn"), "{checklist}");
+    assert!(
+        !checklist.contains("Registration::new"),
+        "const fn must never appear in the checklist: {checklist}"
+    );
+    Ok(())
+}
+
+#[test]
+fn tracing_err_recipe_requires_confirmed_display() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        r#"
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotDisplayable {
+    offending_path: String,
+}
+
+#[derive(Debug, Clone, derive_more::Display)]
+#[display("displayable error: {message}")]
+pub struct DisplayableError {
+    message: String,
+}
+
+pub fn returns_non_displayable_err() -> Result<(), NotDisplayable> {
+    Ok(())
+}
+
+pub fn returns_displayable_err() -> Result<(), DisplayableError> {
+    Ok(())
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+
+    let csv = fs::read_to_string(store.path().join("findings").join("tracing-instrument.csv"))
+        .into_diagnostic()
+        .wrap_err("csv")?;
+    let non_displayable: Vec<_> = csv
+        .lines()
+        .filter(|line| line.contains("returns_non_displayable_err"))
+        .collect();
+    assert_eq!(non_displayable.len(), 1, "{non_displayable:?}");
+    assert!(
+        !non_displayable[0].contains("err("),
+        "NotDisplayable has no Display impl -- err() would propose code \
+         that can't compile: {}",
+        non_displayable[0]
+    );
+
+    let displayable: Vec<_> = csv
+        .lines()
+        .filter(|line| line.contains("returns_displayable_err"))
+        .collect();
+    assert_eq!(displayable.len(), 1, "{displayable:?}");
+    assert!(
+        displayable[0].contains("err("),
+        "DisplayableError derives derive_more::Display -- err() is safe: {}",
+        displayable[0]
+    );
+    Ok(())
+}
+
+#[test]
+fn tracing_skip_covers_tuple_destructured_generic_params() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        r#"
+pub trait Check<T> {
+    fn ensures(pair: (T, T)) -> bool;
+}
+
+pub struct Checker<T>(std::marker::PhantomData<T>);
+
+impl<T: PartialEq> Check<T> for Checker<T> {
+    fn ensures((actual, expected): (T, T)) -> bool {
+        actual == expected
+    }
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+
+    let csv = fs::read_to_string(store.path().join("findings").join("tracing-instrument.csv"))
+        .into_diagnostic()
+        .wrap_err("csv")?;
+    let ensures: Vec<_> = csv
+        .lines()
+        .filter(|line| line.contains("ensures"))
+        .collect();
+    assert_eq!(ensures.len(), 1, "{ensures:?}");
+    assert!(
+        ensures[0].contains("skip(actual, expected)"),
+        "a generic `T` destructured out of a tuple parameter needs to be \
+         skipped individually -- tracing::instrument records each binding \
+         found in a pattern via Debug, not the pattern's own top-level \
+         type, and bare `T` has no Debug bound here: {}",
+        ensures[0]
+    );
+    Ok(())
+}
+
+#[test]
+fn tracing_never_flags_function_nested_in_configured_gate_cfg() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        r#"
+#[cfg(kani)]
+mod proofs {
+    pub fn proof_harness() {}
+}
+
+pub fn traced_ordinary_fn() {}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .with_store_home(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    let outcome = session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+    let open: Vec<_> = outcome
+        .findings()
+        .filter(|finding| finding.disposition() == cordial::Disposition::Open)
+        .collect();
+    assert_eq!(
+        open.len(),
+        1,
+        "proof_harness only exists under #[cfg(kani)], the same cfg name \
+         this crate's own apply_gate_crates entry names -- #[instrument] \
+         can never fire there in any real build, so it must never become \
+         an open checklist item at all, only traced_ordinary_fn should"
+    );
+
+    let checklist = fs::read_to_string(
+        store
+            .path()
+            .join("findings")
+            .join("tracing-instrument.checklist.md"),
+    )
+    .into_diagnostic()
+    .wrap_err("checklist")?;
+    assert!(checklist.contains("traced_ordinary_fn"), "{checklist}");
+    assert!(!checklist.contains("proof_harness"), "{checklist}");
+    Ok(())
+}
+
+#[test]
+fn tracing_never_flags_function_called_only_from_proof_context() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        r#"
+pub trait Ensures<T> {
+    fn ensures(input: T) -> bool;
+}
+
+pub struct Checker;
+
+impl Ensures<u32> for Checker {
+    fn ensures(input: u32) -> bool {
+        input > 0
+    }
+}
+
+#[cfg(kani)]
+mod proofs {
+    use super::{Checker, Ensures};
+
+    pub fn harness() {
+        assert!(Checker::ensures(1));
+    }
+}
+
+pub fn traced_ordinary_fn() {}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .with_store_home(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    let outcome = session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+    let open: Vec<_> = outcome
+        .findings()
+        .filter(|finding| finding.disposition() == cordial::Disposition::Open)
+        .collect();
+    assert_eq!(
+        open.len(),
+        1,
+        "Checker::ensures's only known caller is proofs::harness, itself \
+         nested in #[cfg(kani)] -- neither is ever recorded as needing \
+         #[instrument], discovered via call-graph reachability rather \
+         than a hardcoded trait name; only traced_ordinary_fn should be \
+         open"
+    );
+
+    let checklist = fs::read_to_string(
+        store
+            .path()
+            .join("findings")
+            .join("tracing-instrument.checklist.md"),
+    )
+    .into_diagnostic()
+    .wrap_err("checklist")?;
+    assert!(checklist.contains("traced_ordinary_fn"), "{checklist}");
+    assert!(!checklist.contains("Checker"), "{checklist}");
+    assert!(!checklist.contains("harness"), "{checklist}");
+    Ok(())
+}
+
+#[test]
+fn tracing_still_flags_function_with_an_ordinary_caller_too() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        r#"
+pub trait Ensures<T> {
+    fn ensures(input: T) -> bool;
+}
+
+pub struct Checker;
+
+impl Ensures<u32> for Checker {
+    fn ensures(input: u32) -> bool {
+        input > 0
+    }
+}
+
+#[cfg(kani)]
+mod proofs {
+    use super::{Checker, Ensures};
+
+    pub fn harness() {
+        assert!(Checker::ensures(1));
+    }
+}
+
+pub fn validate(value: u32) -> bool {
+    Checker::ensures(value)
+}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .with_store_home(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    let outcome = session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+    let open: Vec<_> = outcome
+        .findings()
+        .filter(|finding| finding.disposition() == cordial::Disposition::Open)
+        .collect();
+    assert_eq!(
+        open.len(),
+        2,
+        "Checker::ensures also has a real, ordinary caller (validate), \
+         so it must stay open (Gated) even though it also happens to be \
+         called from proofs::harness -- a function is only ever excluded \
+         once ALL its known callers are proof-only, never merely SOME of \
+         them"
+    );
+    Ok(())
+}
+
+#[test]
+fn tracing_treats_cfg_attr_gated_instrument_as_present() -> miette::Result<()> {
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        r#"
+#[cfg_attr(not(kani), tracing::instrument(level = "debug"))]
+pub fn scan_tree() {}
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .with_store_home(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    let outcome = session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+    let open: Vec<_> = outcome
+        .findings()
+        .filter(|finding| finding.disposition() == cordial::Disposition::Open)
+        .collect();
+    assert_eq!(
+        open.len(),
+        0,
+        "apply writes #[cfg_attr(not(kani), tracing::instrument(..))] for \
+         gated crates; a later quality run must treat that as present, not \
+         as a missing-instrument (or recipe-delta) gap"
     );
     Ok(())
 }

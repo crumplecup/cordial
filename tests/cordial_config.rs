@@ -109,6 +109,8 @@ fn tracing_toml_overrides_default() -> miette::Result<()> {
         r#"
 [tracing]
 extra_skip = ["payload", "blob"]
+apply_gate_crates = { fixture_kani = "kani" }
+apply_skip_crates = ["fixture_verus"]
 "#,
     )
     .into_diagnostic()
@@ -118,6 +120,18 @@ extra_skip = ["payload", "blob"]
     assert_eq!(
         loaded.tracing().extra_skip().as_slice(),
         ["payload".to_string(), "blob".to_string()]
+    );
+    assert_eq!(
+        loaded
+            .tracing()
+            .apply_gate_crates()
+            .get("fixture_kani")
+            .map(String::as_str),
+        Some("kani")
+    );
+    assert_eq!(
+        loaded.tracing().apply_skip_crates().as_slice(),
+        ["fixture_verus".to_string()]
     );
     Ok(())
 }

@@ -173,6 +173,13 @@ pub struct FnContext {
     /// `true` when the return type (or a `Result`/`Option` payload) borrows.
     /// `#[instrument(err)]` wraps the body in a closure and cannot return those.
     pub return_borrowed: bool,
+    /// `true` when `returns_result` is set and the `Err` payload's type is
+    /// positively known to implement `Display` -- `#[instrument(err)]`
+    /// renders it via `tracing_core::field::display`, which requires that
+    /// bound. `false` (not just "unresolved") whenever this can't be
+    /// confirmed from the file's own text, so a missing `Display` never
+    /// gets a proposed `err()` that can't compile.
+    pub err_is_displayable: bool,
     pub has_error_path_event: bool,
 }
 

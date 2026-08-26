@@ -82,10 +82,11 @@ pub(super) fn execute_tracing_apply(
         .unwrap_or_else(|| store.findings_dir().join("tracing-instrument.checklist.md"));
     let summary = run_tracing_instrument_apply(project_root, &checklist_path, crate_name, dry_run)?;
     eprintln!(
-        "tracing apply: {} functions in {} files ({} skipped, {} unresolved)",
+        "tracing apply: {} functions in {} files ({} already instrumented, {} skipped by verifier policy, {} unresolved)",
         summary.changed_functions,
         summary.changed_files,
         summary.skipped_existing,
+        summary.skipped_policy,
         summary.unresolved,
     );
     Ok(())

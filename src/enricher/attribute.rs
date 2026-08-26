@@ -298,11 +298,16 @@ fn attr_meta_string(attr: &Attribute) -> String {
     }
 }
 
+/// `true` for `#[instrument]`, `#[tracing::instrument]`, and the same
+/// wrapped in `#[cfg_attr(<predicate>, ...)]` -- apply writes the gated
+/// form for verifier crates (`not(kani)`, etc.), and a later quality
+/// run has to treat that as already instrumented or every gated
+/// function stays an open missing-instrument finding forever.
 #[instrument(level = "trace", skip(attr))]
 pub(crate) fn is_instrument_attr(attr: &Attribute) -> bool {
     match &attr.meta {
         Meta::Path(path) => path_is_instrument(path),
-        Meta::List(list) => path_is_instrument(&list.path),
+        Meta::List(list) => path_is_instrument(&list.path) || cfg_attr_inner_is_instrument(list),
         Meta::NameValue(value) => path_is_instrument(&value.path),
     }
 }
@@ -315,6 +320,39 @@ fn path_is_instrument(path: &SynPath) -> bool {
     path.segments.len() == 2
         && path.segments[0].ident == "tracing"
         && path.segments[1].ident == "instrument"
+}
+
+#[instrument(level = "trace", skip(list), ret)]
+fn cfg_attr_inner_is_instrument(list: &syn::MetaList) -> bool {
+    if !list.path.is_ident("cfg_attr") {
+        return false;
+    }
+    cfg_attr_inner_path(&list.tokens).is_some_and(|path| path_is_instrument(&path))
+}
+
+/// Path of `cfg_attr`'s inner attribute (`tracing::instrument` in
+/// `cfg_attr(not(kani), tracing::instrument(level = "debug"))`).
+#[instrument(level = "trace", skip(tokens))]
+fn cfg_attr_inner_path(tokens: &proc_macro2::TokenStream) -> Option<SynPath> {
+    let mut seen_comma = false;
+    let mut inner = Vec::new();
+    for tree in tokens.clone() {
+        match &tree {
+            proc_macro2::TokenTree::Punct(punct) if punct.as_char() == ',' && !seen_comma => {
+                seen_comma = true;
+            }
+            _ if seen_comma => inner.push(tree),
+            _ => {}
+        }
+    }
+    if !seen_comma {
+        return None;
+    }
+    let path_tokens: proc_macro2::TokenStream = inner
+        .into_iter()
+        .take_while(|tree| !matches!(tree, proc_macro2::TokenTree::Group(_)))
+        .collect();
+    syn::parse2(path_tokens).ok()
 }
 
 #[instrument(level = "trace", skip(attrs))]

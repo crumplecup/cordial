@@ -199,7 +199,7 @@ fn is_skip_param(name: &str, extra_skip: &[String], unrecordable: &[String]) -> 
 
 #[instrument(level = "debug", skip(ctx))]
 fn fallible_err(ctx: &FnContext) -> Option<InstrumentLevel> {
-    if ctx.returns_result && !ctx.return_borrowed {
+    if ctx.returns_result && !ctx.return_borrowed && ctx.err_is_displayable {
         Some(InstrumentLevel::Warn)
     } else {
         None

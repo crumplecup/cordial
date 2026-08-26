@@ -41,21 +41,53 @@ pub fn present_instrument(ir: &dyn IrView, node_id: NodeId) -> Option<PresentIns
             .attr("attr_path")
             .and_then(|value| value.as_str())
             .unwrap_or("");
-        if !is_instrument_path(path) {
-            continue;
-        }
         let meta = child
             .attr("meta")
             .and_then(|value| value.as_str())
             .unwrap_or("");
-        return Some(parse_instrument_meta(meta));
+        if let Some(present) = present_from_attr(path, meta) {
+            return Some(present);
+        }
     }
     None
+}
+
+#[instrument(level = "trace", skip(path, meta))]
+fn present_from_attr(path: &str, meta: &str) -> Option<PresentInstrument> {
+    if is_instrument_path(path) {
+        return Some(parse_instrument_meta(meta));
+    }
+    if path != "cfg_attr" {
+        return None;
+    }
+    let inner = cfg_attr_inner_attr(meta)?;
+    let compact: String = inner.split_whitespace().collect();
+    let rest = compact.strip_prefix("::").unwrap_or(compact.as_str());
+    let rest = rest.strip_prefix("tracing::").unwrap_or(rest);
+    rest.starts_with("instrument")
+        .then(|| parse_instrument_meta(rest))
 }
 
 #[instrument(level = "trace", skip(path), ret)]
 fn is_instrument_path(path: &str) -> bool {
     path == "instrument" || path.ends_with("::instrument")
+}
+
+/// Second argument of `cfg_attr(<predicate>, <inner>)` as stored by the
+/// attribute enricher (`cfg_attr(not(kani), tracing::instrument(...))`).
+#[instrument(level = "trace")]
+fn cfg_attr_inner_attr(meta: &str) -> Option<&str> {
+    let rest = meta.trim().strip_prefix("cfg_attr(")?.strip_suffix(')')?;
+    let mut depth: u32 = 0;
+    for (idx, ch) in rest.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => return Some(rest[idx + 1..].trim()),
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Parse `instrument` or `instrument(...)` meta rendered by the attribute enricher.

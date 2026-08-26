@@ -231,12 +231,21 @@ input to the recipe, not the only knob.
 [tracing]
 # Default skip param names (union with built-in list).
 # extra_skip = ["inventory"]
+# Crate -> cfg: --apply writes #[cfg_attr(not(<cfg>), tracing::instrument(..))]
+# apply_gate_crates = { amenable_kani = "kani" }
+# Never write #[instrument] (bare Verus / Creusot translator).
+# apply_skip_crates = ["amenable_verus", "amenable_creusot"]
 ```
 
 Role→level maps stay in code for v1 (the enum is the policy). Promote to
 TOML only if dogfood needs a project override. Do not add a visibility
 filter or an “ignore getters” flag; those are the hatchets this upgrade
 removes. Filter at the subscriber (`RUST_LOG=info` vs `trace`).
+
+`err()` is only recommended when the `Err` type is known `Display` from
+the same file (or is a well-known `String`/`Error`). Functions nested in
+an ancestor `#[cfg(<gate>)]` / `#[<gate>::…]` (and functions whose every
+known in-workspace caller is already in that set) are never recorded.
 
 ---
 
@@ -282,8 +291,9 @@ than weakening fixture recall.
 ## Status
 
 **Phase 4 complete.** Classify + recipe on every finding; delta rules vs present
-`#[instrument]`; apply writes the recipe. `[tracing]` knobs (`extra_skip`) load
-through `cordial.toml`. The quality report blurb is open gaps **by role**.
+`#[instrument]`; apply writes the recipe. `[tracing]` knobs (`extra_skip`,
+`apply_gate_crates`, `apply_skip_crates`) load through `cordial.toml`. The
+quality report blurb is open gaps **by role**.
 
 Every function is on the checklist. Visibility is recorded on the finding;
 it does not suppress a gap. Role recipes pick `trace` / `debug` / `info` so

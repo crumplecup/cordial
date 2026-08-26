@@ -64,7 +64,9 @@ impl PathInclusionFacts {
         needed_dep: &str,
     ) -> Option<&str> {
         let file = canonical_or(file);
-        let owning_name = self.crate_name_by_root.get(&canonical_or(owning_crate_root));
+        let owning_name = self
+            .crate_name_by_root
+            .get(&canonical_or(owning_crate_root));
         let consumers = self.included_by.get(&file)?;
         let needed_dep = normalize(needed_dep);
         consumers
@@ -77,6 +79,58 @@ impl PathInclusionFacts {
                         .is_some_and(|deps| deps.contains(&needed_dep))
             })
             .map(String::as_str)
+    }
+
+    /// Every crate that splices `file` in via `#[path]`, excluding
+    /// whichever crate natively owns it -- the set of *other*
+    /// compilation units this file's real content also compiles under.
+    #[instrument(level = "trace", skip(self))]
+    pub fn splice_consumers(&self, file: &Path, owning_crate_root: &Path) -> Vec<&str> {
+        let file = canonical_or(file);
+        let owning_name = self
+            .crate_name_by_root
+            .get(&canonical_or(owning_crate_root));
+        let Some(consumers) = self.included_by.get(&file) else {
+            return Vec::new();
+        };
+        consumers
+            .iter()
+            .filter(|consumer| Some(consumer.as_str()) != owning_name.map(String::as_str))
+            .map(String::as_str)
+            .collect()
+    }
+
+    /// Every crate that depends on `crate_name`, directly or
+    /// transitively (a real Cargo dependency edge, not a `#[path]`
+    /// splice) -- the set of crates whose own compilation pulls
+    /// `crate_name`'s source into the same build, and so under the same
+    /// compiler flags (e.g. `cargo kani`'s `--cfg kani`, set for the
+    /// *whole* dependency graph it compiles, not just the top-level
+    /// target crate).
+    #[instrument(level = "trace", skip(self))]
+    pub fn transitive_dependents(&self, crate_name: &str) -> HashSet<String> {
+        let mut dependents = HashSet::new();
+        let mut frontier = vec![normalize(crate_name)];
+        while let Some(current) = frontier.pop() {
+            for (candidate, deps) in &self.crate_dependencies {
+                if deps.contains(&current) && dependents.insert(candidate.clone()) {
+                    frontier.push(normalize(candidate));
+                }
+            }
+        }
+        dependents
+    }
+
+    /// Every workspace member's name and crate root, as already
+    /// resolved via `cargo_metadata` -- lets a caller that needs to walk
+    /// every crate's own source (e.g. a workspace-wide call graph) reuse
+    /// this struct's own crate discovery instead of invoking
+    /// `cargo_metadata` a second time.
+    #[instrument(level = "trace", skip(self))]
+    pub fn crate_roots(&self) -> impl Iterator<Item = (&str, &Path)> {
+        self.crate_name_by_root
+            .iter()
+            .map(|(root, name)| (name.as_str(), root.as_path()))
     }
 }
 

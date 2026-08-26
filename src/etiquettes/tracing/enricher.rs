@@ -5,6 +5,7 @@ use crate::ir::{ItemKind, NodeKind, NodeWeight};
 use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 
+use super::call_graph::workspace_call_graph;
 use super::scan::scan_source_tree;
 
 use tracing::instrument;
@@ -40,11 +41,14 @@ impl IrEnricher for FunctionInventoryEnricher {
         let crate_root = member_crate_root(source, session);
         let config = crate::config::load_session_config(session);
         let extra_skip = config.tracing().extra_skip();
+        let call_graph = workspace_call_graph(session.project_root(), config.tracing());
+        let never_instrument = call_graph.never_instrument(&source.crate_name);
         let records = scan_source_tree(
             &source.src_root,
             &crate_root,
             &source.crate_name,
             extra_skip,
+            never_instrument,
         )?;
 
         for record in records {

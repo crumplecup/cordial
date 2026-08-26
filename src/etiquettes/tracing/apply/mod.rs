@@ -6,7 +6,8 @@
 //! writing. Path-qualified forms (`#[tracing::instrument]`) are used when
 //! `instrument` would clash with a module name. Unrecordable parameters
 //! (`impl Trait`, `dyn`, generics) are skipped as fields; `err` is only
-//! applied when the function returns `Result` or a `*Result` alias.
+//! applied when the function returns `Result` (or a `*Result` alias)
+//! whose `Err` type is known to implement `Display`.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -18,7 +19,9 @@ use crate::targets::discover_crate_targets;
 
 mod instrument;
 mod parse;
+mod verifier_policy;
 
+use super::call_graph::workspace_call_graph;
 use super::scan::scan_rust_source;
 use instrument::{
     GapApplyOutcome, InstrumentAttrStyle, apply_gap, attr_style, ensure_use_instrument,
@@ -26,6 +29,12 @@ use instrument::{
 };
 
 pub use parse::{parse_tracing_instrument_checklist, parse_tracing_instrument_checklist_text};
+pub use verifier_policy::TracingApplyPolicy;
+
+pub(super) use verifier_policy::crate_gate_cfgs;
+use verifier_policy::resolve_tracing_apply_policy;
+
+use crate::{PathInclusionFacts, workspace_path_inclusions};
 
 /// One open checklist row targeting a function or method.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +51,10 @@ pub struct InstrumentApplySummary {
     pub changed_functions: usize,
     pub changed_files: usize,
     pub skipped_existing: usize,
+    /// Left untouched because the real verifier toolchain for every
+    /// crate that compiles the file can't tolerate `#[instrument]`,
+    /// gated or not -- see [`TracingApplyPolicy::Skip`].
+    pub skipped_policy: usize,
     pub unresolved: usize,
 }
 
@@ -89,8 +102,13 @@ pub fn run_tracing_instrument_apply(
         changed_functions: 0,
         changed_files: 0,
         skipped_existing: 0,
+        skipped_policy: 0,
         unresolved: 0,
     };
+
+    let facts: PathInclusionFacts = workspace_path_inclusions(project_root);
+    let config = crate::config::load_cordial_config(project_root, project_root);
+    let call_graph = workspace_call_graph(project_root, config.tracing());
 
     for ((crate_name, rel_path), mut file_gaps) in by_file {
         let Some(crate_root) = crate_roots.get(&crate_name) else {
@@ -116,8 +134,8 @@ pub fn run_tracing_instrument_apply(
                 crate_root.clone()
             }
         };
-        let config = crate::config::load_cordial_config(project_root, project_root);
         let extra_skip = config.tracing().extra_skip();
+        let never_instrument = call_graph.never_instrument(&crate_name);
         let records = match scan_rust_source(
             &source,
             &path,
@@ -125,6 +143,7 @@ pub fn run_tracing_instrument_apply(
             crate_root,
             &crate_name,
             extra_skip,
+            never_instrument,
         ) {
             Ok(records) => records,
             Err(error) => {
@@ -142,6 +161,15 @@ pub fn run_tracing_instrument_apply(
         dedupe_gaps(&mut file_gaps);
         file_gaps.sort_by_key(|right| std::cmp::Reverse(right.line));
         let style = attr_style(&lines);
+        let policy =
+            resolve_tracing_apply_policy(&crate_name, &path, crate_root, config.tracing(), &facts);
+        if policy == TracingApplyPolicy::Skip {
+            tracing::info!(
+                path = %path.display(),
+                crate_name = %crate_name,
+                "skipping file: verifier policy forbids #[instrument] here"
+            );
+        }
 
         let mut file_changed = false;
         for gap in file_gaps {
@@ -155,7 +183,7 @@ pub fn run_tracing_instrument_apply(
                 summary.unresolved += 1;
                 continue;
             };
-            match apply_gap(&mut lines, &gap, recipe, style) {
+            match apply_gap(&mut lines, &gap, recipe, style, &policy) {
                 GapApplyOutcome::Applied => {
                     summary.changed_functions += 1;
                     file_changed = true;
@@ -166,11 +194,19 @@ pub fn run_tracing_instrument_apply(
                 GapApplyOutcome::Unresolved => {
                     summary.unresolved += 1;
                 }
+                GapApplyOutcome::SkippedPolicy => {
+                    summary.skipped_policy += 1;
+                }
             }
         }
 
         if file_changed {
-            if style == InstrumentAttrStyle::Short {
+            // Only `Bare` ever writes the short `instrument(..)` form
+            // that needs this import -- `Gated` always renders fully
+            // qualified (see `apply_gap`), so inserting it regardless
+            // of `policy` would leave a real `unused_imports` warning
+            // in any file where every applied gap was `Gated`.
+            if style == InstrumentAttrStyle::Short && policy == TracingApplyPolicy::Bare {
                 lines = ensure_use_instrument(lines);
             }
             if dry_run {
@@ -186,6 +222,7 @@ pub fn run_tracing_instrument_apply(
         changed_functions = summary.changed_functions,
         changed_files = summary.changed_files,
         skipped_existing = summary.skipped_existing,
+        skipped_policy = summary.skipped_policy,
         unresolved = summary.unresolved,
         dry_run,
         "tracing instrument apply complete"

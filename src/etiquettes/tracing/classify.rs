@@ -2,21 +2,25 @@
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Block, ExprIf, ExprMatch, FnArg, Pat, ReturnType, Signature, Stmt, Type, TypePath};
+use syn::{Block, ExprIf, ExprMatch, FnArg, ReturnType, Signature, Stmt, Type, TypePath};
 
 use crate::config::ModularityThresholds;
 
-use super::recordable::{return_type_borrowed, return_type_unrecordable, unrecordable_params};
+use super::display_types::DisplayTypeFacts;
+use super::recordable::{
+    pattern_bindings, return_type_borrowed, return_type_unrecordable, unrecordable_params,
+};
 use super::types::{FnContext, FunctionComplexity, FunctionKind, FunctionRole};
 
 use tracing::instrument;
 /// Classify `ident` (unqualified) from its signature, kind, and optional body.
-#[instrument(level = "debug", skip(sig, kind, body))]
+#[instrument(level = "debug", skip(sig, kind, body, display_types))]
 pub fn classify(
     ident: &str,
     sig: &Signature,
     kind: FunctionKind,
     body: Option<&Block>,
+    display_types: &DisplayTypeFacts,
 ) -> FnContext {
     let peek = body.map(peek_body).unwrap_or_default();
     let body_lines = body.map(block_lines).unwrap_or(1);
@@ -33,6 +37,7 @@ pub fn classify(
         returns_result,
     );
     let complexity = classify_complexity(body_lines, returns_result, &peek);
+    let err_is_displayable = returns_result && err_type_is_displayable(sig, display_types);
     FnContext {
         role,
         complexity,
@@ -41,7 +46,16 @@ pub fn classify(
         returns_result,
         return_unrecordable: return_type_unrecordable(sig),
         return_borrowed: return_type_borrowed(sig),
+        err_is_displayable,
         has_error_path_event: peek.has_error_path_event,
+    }
+}
+
+#[instrument(level = "debug", skip(sig, display_types))]
+fn err_type_is_displayable(sig: &Signature, display_types: &DisplayTypeFacts) -> bool {
+    match &sig.output {
+        ReturnType::Type(_, ty) => display_types.err_type_is_displayable(ty),
+        ReturnType::Default => false,
     }
 }
 
@@ -179,12 +193,12 @@ fn classify_complexity(
 fn param_names(sig: &Signature) -> Vec<String> {
     sig.inputs
         .iter()
-        .filter_map(|arg| match arg {
-            FnArg::Receiver(_) => Some("self".to_string()),
-            FnArg::Typed(pat) => match &*pat.pat {
-                Pat::Ident(ident) => Some(ident.ident.to_string()),
-                _ => None,
-            },
+        .flat_map(|arg| match arg {
+            FnArg::Receiver(_) => vec!["self".to_string()],
+            FnArg::Typed(pat) => pattern_bindings(&pat.pat, Some(&pat.ty))
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect(),
         })
         .collect()
 }

@@ -455,6 +455,36 @@ pub struct TracingThresholds {
     /// Extra parameter names unioned with the built-in skip list.
     #[serde(default)]
     extra_skip: Vec<String>,
+    /// Crate name -> cfg name. `--apply` wraps `#[instrument(..)]` as
+    /// `#[cfg_attr(not(#cfg), instrument(..))]` for every function in
+    /// this crate (and any crate that transitively depends on it, since
+    /// e.g. `cargo kani`'s `--cfg kani` applies to the whole dependency
+    /// graph it compiles, not just the top-level target crate) --
+    /// real precedent: a bare `#[instrument]` on any function reachable
+    /// from a `#[kani::proof]` harness causes real CBMC symbolic-
+    /// closure-capture timeouts (confirmed via a real gallery
+    /// experiment in a sibling project's own prior art), not just risks
+    /// one.
+    #[serde(default)]
+    apply_gate_crates: std::collections::HashMap<String, String>,
+    /// Crate names `--apply` never writes `#[instrument]` into at all,
+    /// leaving the checklist item open -- for a crate whose real
+    /// toolchain either can't resolve the `tracing` crate at all (a
+    /// bare-compiler invocation that never reads `Cargo.toml`, real
+    /// precedent: `verus --crate-type=lib`), or hard-fails compilation
+    /// on `#[instrument]`'s own expansion (real precedent: Creusot's
+    /// translator can't handle the static `DefaultCallsite` reference
+    /// `tracing::span!` embeds, confirmed via a real `cargo creusot`
+    /// run, not assumed from a milder "generated companions only" read
+    /// of the failure). Unlike `apply_gate_crates`, this does **not**
+    /// propagate through the ordinary dependency graph -- a translator
+    /// that only sweeps a crate's own local items has no reason to
+    /// touch an ordinary dependency's source at all (real precedent:
+    /// `creusot-rustc`) -- but it does propagate through a `#[path]`
+    /// splice, since that copies the physical file's real content into
+    /// the splicing crate's own compilation unit.
+    #[serde(default)]
+    apply_skip_crates: Vec<String>,
 }
 
 impl Default for TracingThresholds {
@@ -462,6 +492,8 @@ impl Default for TracingThresholds {
     fn default() -> Self {
         Self {
             extra_skip: Vec::new(),
+            apply_gate_crates: std::collections::HashMap::new(),
+            apply_skip_crates: Vec::new(),
         }
     }
 }

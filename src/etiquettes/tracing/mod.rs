@@ -18,16 +18,19 @@
 //! 2. `cordial quality --apply` (or `--dry-run`) patches open checklist rows.
 //!    Re-run quality after apply.
 //!
-//! Knobs live under `[tracing]` in `cordial.toml` (`extra_skip`). Role→level
-//! maps stay in code. Feature `tracing` is on by default. Register
+//! Knobs live under `[tracing]` in `cordial.toml` (`extra_skip`,
+//! `apply_gate_crates`, `apply_skip_crates`). Role→level maps stay in
+//! code. Feature `tracing` is on by default. Register
 //! [`TRACING_ETIQUETTE`] on a [`crate::Session`].
 //!
 //! Policy: `docs/planning/tracing-etiquette.md`.
 
 mod apply;
 mod assessor;
+mod call_graph;
 mod classify;
 mod delta;
+mod display_types;
 mod enricher;
 mod present;
 mod probe;

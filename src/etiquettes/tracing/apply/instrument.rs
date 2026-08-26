@@ -4,12 +4,18 @@ use tracing::instrument;
 
 use super::super::types::{FunctionRecord, InstrumentRecipe};
 use super::InstrumentGap;
+use super::verifier_policy::{TracingApplyPolicy, gate_predicate};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum GapApplyOutcome {
     Applied,
     AlreadyInstrumented,
     Unresolved,
+    /// Left untouched on purpose: the real verifier toolchain for every
+    /// crate that compiles this file can't tolerate `#[instrument]` at
+    /// all, gated or not (see [`TracingApplyPolicy::Skip`]). The
+    /// checklist item stays open.
+    SkippedPolicy,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,13 +36,18 @@ pub(super) fn attr_style(lines: &[String]) -> InstrumentAttrStyle {
     }
 }
 
-#[instrument(level = "debug", skip(gap, recipe, style))]
+#[instrument(level = "debug", skip(gap, recipe, style, policy))]
 pub(super) fn apply_gap(
     lines: &mut Vec<String>,
     gap: &InstrumentGap,
     recipe: &InstrumentRecipe,
     style: InstrumentAttrStyle,
+    policy: &TracingApplyPolicy,
 ) -> GapApplyOutcome {
+    if *policy == TracingApplyPolicy::Skip {
+        return GapApplyOutcome::SkippedPolicy;
+    }
+
     let Some(fn_idx) = find_fn_line(lines, gap.line, &gap.qualified_name) else {
         tracing::warn!(
             path = %gap.rel_path.display(),
@@ -47,7 +58,28 @@ pub(super) fn apply_gap(
         return GapApplyOutcome::Unresolved;
     };
 
-    let attr = recipe_attr(recipe, style);
+    let attr = match policy {
+        TracingApplyPolicy::Bare => recipe_attr(recipe, style),
+        TracingApplyPolicy::Gated(cfgs) => {
+            // Always fully qualified (`tracing::instrument`, or
+            // `::tracing::instrument` when `tracing` itself is
+            // shadowed), never the short form -- a gated function is
+            // often nested inside an outer `#[cfg(<verifier>)]` item
+            // (a real Kani proof harness/contract wrapper, say), so
+            // it's never reachable under an ordinary build at all;
+            // relying on a plain `use tracing::instrument;` for it
+            // would make that import `unused_imports`-flagged in any
+            // file where nothing else needs the short form. The
+            // qualified form never depends on that import existing.
+            let qualified = if style == InstrumentAttrStyle::CratePath {
+                recipe.as_crate_path_attribute()
+            } else {
+                recipe.as_path_attribute()
+            };
+            gate_attr(&qualified, &gate_predicate(cfgs))
+        }
+        TracingApplyPolicy::Skip => unreachable!("handled above"),
+    };
     if let Some((start, end)) = instrument_attr_range(lines, fn_idx) {
         if attrs_match_recipe(&lines[start..=end], &attr) {
             return GapApplyOutcome::AlreadyInstrumented;
@@ -67,6 +99,21 @@ pub(super) fn apply_gap(
     let insert_at = insert_after_track_caller(lines, &attr_indices).unwrap_or(fn_idx);
     lines.insert(insert_at, format!("{indent}{attr}"));
     GapApplyOutcome::Applied
+}
+
+/// Wrap a rendered `#[instrument(..)]` (or path-qualified equivalent) as
+/// `#[cfg_attr(not(#predicate), ..)]` -- the real toolchain still never
+/// sees `#[instrument]` under the gated cfg (e.g. `cargo kani`'s
+/// `--cfg kani`), because `cfg_attr`'s condition is evaluated before its
+/// inner attribute is ever expanded.
+#[instrument(level = "trace")]
+fn gate_attr(attr: &str, predicate: &str) -> String {
+    let inner = attr
+        .strip_prefix('#')
+        .and_then(|rest| rest.strip_prefix('['))
+        .and_then(|rest| rest.strip_suffix(']'))
+        .unwrap_or(attr);
+    format!("#[cfg_attr(not({predicate}), {inner})]")
 }
 
 #[instrument(level = "debug", skip(recipe, style))]
