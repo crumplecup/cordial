@@ -44,7 +44,12 @@ pub fn scan_crate_tracing_subscriber(
 ) -> CordialResult<Vec<SubscriberSiteRecord>> {
     let mut sites = Vec::new();
     for tree_root in quality_scan_trees(crate_root) {
-        sites.extend(collect_tree(&tree_root, crate_root, crate_name)?);
+        sites.extend(collect_tree(
+            &tree_root,
+            crate_root,
+            crate_name,
+            policy.known_helper_paths(),
+        )?);
     }
 
     let has_lib = crate_root.join("src").join("lib.rs").is_file();
@@ -63,7 +68,7 @@ pub fn scan_crate_tracing_subscriber(
             && !skip_program_lints
             && has_bin
             && site.is_main
-            && !site.facts.calls_install
+            && !site.facts.installs_or_delegates()
             && !site.facts.calls_helper(&helper_names)
         {
             findings.push(record(
@@ -75,7 +80,7 @@ pub fn scan_crate_tracing_subscriber(
         if policy.init_in_tests()
             && !skip_program_lints
             && site.is_test
-            && !site.facts.calls_install
+            && !site.facts.installs_or_delegates()
             && !site.facts.calls_helper(&helper_names)
         {
             findings.push(record(
@@ -132,11 +137,12 @@ fn record(rule_id: SubscriberRuleId, site: &FnSite, snippet: &str) -> Subscriber
     }
 }
 
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(known_helper_paths), err(level = "warn"))]
 fn collect_tree(
     tree_root: &Path,
     crate_root: &Path,
     crate_name: &str,
+    known_helper_paths: &[String],
 ) -> CordialResult<Vec<FnSite>> {
     let mut sites = Vec::new();
     if !tree_root.is_dir() {
@@ -155,17 +161,24 @@ fn collect_tree(
             continue;
         }
         let source = std::fs::read_to_string(path)?;
-        sites.extend(scan_file(&source, path, crate_root, crate_name)?);
+        sites.extend(scan_file(
+            &source,
+            path,
+            crate_root,
+            crate_name,
+            known_helper_paths,
+        )?);
     }
     Ok(sites)
 }
 
-#[instrument(level = "debug", skip(source), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, known_helper_paths), err(level = "warn"))]
 fn scan_file(
     source: &str,
     file: &Path,
     crate_root: &Path,
     crate_name: &str,
+    known_helper_paths: &[String],
 ) -> CordialResult<Vec<FnSite>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
@@ -180,6 +193,7 @@ fn scan_file(
         kind,
         module_prefix: Vec::new(),
         sites: Vec::new(),
+        known_helper_paths: known_helper_paths.to_vec(),
     };
     visitor.visit_file(&syntax);
     Ok(visitor.sites)
@@ -210,6 +224,7 @@ struct SiteVisitor {
     kind: FileKind,
     module_prefix: Vec<String>,
     sites: Vec<FnSite>,
+    known_helper_paths: Vec<String>,
 }
 
 impl SiteVisitor {
@@ -235,7 +250,7 @@ impl SiteVisitor {
             is_test: self.kind == FileKind::Test && is_test_fn(attrs),
             file: self.file.clone(),
             line,
-            facts: InitBodyFacts::from_block(block),
+            facts: InitBodyFacts::from_block(block, &self.known_helper_paths),
             context: self.context(name),
         });
     }

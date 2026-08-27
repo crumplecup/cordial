@@ -531,15 +531,7 @@ pub struct TracingThresholds {
 
 /// Whether each tracing-subscriber init rule is armed.
 #[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    derive_new::new,
-    derive_getters::Getters,
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
 )]
 pub struct TracingSubscriberPolicy {
     /// `fn main` in a binary must call the crate's init helper.
@@ -562,6 +554,17 @@ pub struct TracingSubscriberPolicy {
     #[serde(default = "default_true")]
     #[getter(copy)]
     idempotent: bool,
+    /// Fully-qualified paths (e.g. `amenable_core::init_tracing`) of a
+    /// shared helper defined in one crate and called from a sibling
+    /// crate's `main`/`#[test]` -- a real, common shape in a multi-crate
+    /// workspace that a single-crate scan can never verify on its own
+    /// (the helper's *defining* crate is scanned separately, and its own
+    /// body is checked there via `helper_in_lib`/`rust_log_fallback`/
+    /// `idempotent`). A call matching one of these is trusted as a
+    /// complete, compliant install; empty by default (inert until a
+    /// project actually has a cross-crate helper).
+    #[serde(default)]
+    known_helper_paths: Vec<String>,
 }
 
 #[instrument(level = "debug")]
@@ -578,6 +581,7 @@ impl Default for TracingSubscriberPolicy {
             helper_in_lib: true,
             rust_log_fallback: true,
             idempotent: true,
+            known_helper_paths: Vec::new(),
         }
     }
 }
