@@ -11,10 +11,10 @@ use syn::{
 use super::error_assertion;
 use super::kani_reach::{KaniReachability, build_kani_reachability};
 use super::types::{PanicKind, PanicSiteRecord};
-#[cfg(not(feature = "verus_ir"))]
-use super::verus_recover::{VerusFunctionChunk, collect_verus_functions};
 #[cfg(feature = "verus_ir")]
 use super::verus_reach;
+#[cfg(not(feature = "verus_ir"))]
+use super::verus_recover::{VerusFunctionChunk, collect_verus_functions};
 use crate::error::CordialResult;
 use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
 
@@ -152,7 +152,10 @@ pub fn scan_rust_source(
 /// of call-graph reachability from a `#[kani::proof]` root.
 #[cfg(feature = "verus_ir")]
 #[instrument(level = "debug", skip(ir))]
-fn verus_ir_findings(ir: &crate::verus_ir::VerusCrateIr, crate_root: &Path) -> Vec<PanicSiteRecord> {
+fn verus_ir_findings(
+    ir: &crate::verus_ir::VerusCrateIr,
+    crate_root: &Path,
+) -> Vec<PanicSiteRecord> {
     let reachability = verus_reach::build_verus_reachability(ir);
     ir.functions
         .iter()

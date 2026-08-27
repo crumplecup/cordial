@@ -461,7 +461,9 @@ impl Widget {
 "#;
     let findings = scan_findings(source, DerivesThresholds::default())?;
     assert!(
-        findings.iter().all(|record| record.rule_id != DeriveRuleId::Getter001),
+        findings
+            .iter()
+            .all(|record| record.rule_id != DeriveRuleId::Getter001),
         "`self.field.clone()` proves nothing about Copy, and derive_getters \
          has no action that returns an owned clone of a non-Copy field \
          (only skip/rename/copy exist, confirmed against its own source) \

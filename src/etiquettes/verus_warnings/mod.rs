@@ -91,5 +91,8 @@ pub static VERUS_WARNINGS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiqu
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let verus_warnings = count_open_category(findings, "verus_warnings");
-    (verus_warnings, format!("Verus compiler warnings **{verus_warnings}**"))
+    (
+        verus_warnings,
+        format!("Verus compiler warnings **{verus_warnings}**"),
+    )
 }

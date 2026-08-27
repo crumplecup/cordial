@@ -86,7 +86,11 @@ fn scan_crate_finds_every_real_escape_hatch_and_broadcast() -> miette::Result<()
     assert!(kinds.contains(&ProofPatternKind::Admit), "{kinds:?}");
     assert!(kinds.contains(&ProofPatternKind::ExternalBody), "{kinds:?}");
     assert!(kinds.contains(&ProofPatternKind::Broadcast), "{kinds:?}");
-    assert_eq!(kinds.len(), 6, "ordinary_fn must not be flagged: {records:?}");
+    assert_eq!(
+        kinds.len(),
+        6,
+        "ordinary_fn must not be flagged: {records:?}"
+    );
 
     let broadcast = records
         .iter()

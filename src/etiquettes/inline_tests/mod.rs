@@ -82,5 +82,8 @@ pub static INLINE_TESTS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquet
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let inline_tests = count_open_category(findings, "inline_tests");
-    (inline_tests, format!("tests under `src/` **{inline_tests}**"))
+    (
+        inline_tests,
+        format!("tests under `src/` **{inline_tests}**"),
+    )
 }

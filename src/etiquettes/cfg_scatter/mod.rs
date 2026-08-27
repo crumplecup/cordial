@@ -87,5 +87,8 @@ pub static CFG_SCATTER_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquett
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let cfg_scatter = count_open_category(findings, "cfg_scatter");
-    (cfg_scatter, format!("scattered `#[cfg]` groups **{cfg_scatter}**"))
+    (
+        cfg_scatter,
+        format!("scattered `#[cfg]` groups **{cfg_scatter}**"),
+    )
 }

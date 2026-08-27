@@ -63,7 +63,11 @@ pub fn scan_source_tree(
     Ok(findings)
 }
 
-#[instrument(level = "debug", skip(source, file, path_inclusions), err(level = "warn"))]
+#[instrument(
+    level = "debug",
+    skip(source, file, path_inclusions),
+    err(level = "warn")
+)]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,
@@ -482,7 +486,12 @@ impl DeriveScanVisitor<'_> {
         // any name), but the field's own declared type does: only a
         // literal `AsRef`-trait forward can ever be replaced by the
         // derive, and `Option<T>` fields never carry that meaning here.
-        if matches!(read, FieldRead::AsRef) && info.fields.get(&field_name).is_some_and(FieldMeta::is_option) {
+        if matches!(read, FieldRead::AsRef)
+            && info
+                .fields
+                .get(&field_name)
+                .is_some_and(FieldMeta::is_option)
+        {
             return;
         }
         let (rule_id, recommendation, evidence) = match read {

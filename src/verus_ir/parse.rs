@@ -65,7 +65,9 @@ pub(super) struct VerusBlock {
 /// posture `verus_carrier::find_fn` already takes for the identical
 /// reason (a partial, real answer beats none).
 #[instrument(level = "debug", err(level = "warn"))]
-pub(super) fn collect_verus_blocks(crate_root: &Path) -> crate::error::CordialResult<Vec<VerusBlock>> {
+pub(super) fn collect_verus_blocks(
+    crate_root: &Path,
+) -> crate::error::CordialResult<Vec<VerusBlock>> {
     let mut blocks = Vec::new();
     for src_root in quality_scan_trees(crate_root) {
         if !src_root.is_dir() {
@@ -77,8 +79,7 @@ pub(super) fn collect_verus_blocks(crate_root: &Path) -> crate::error::CordialRe
             .filter(|entry| entry.file_type().is_file())
         {
             let path = entry.path();
-            if path.extension().is_none_or(|ext| ext != "rs")
-                || path_has_fixtures(path, crate_root)
+            if path.extension().is_none_or(|ext| ext != "rs") || path_has_fixtures(path, crate_root)
             {
                 continue;
             }

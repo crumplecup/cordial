@@ -221,8 +221,8 @@ pub fn matches_on_result_with_no_ghost_sibling(x: i32) -> (result: bool)
 
 #[cfg(feature = "verus_ir")]
 #[test]
-fn scan_rust_source_exempts_a_verification_leaf_but_not_a_helper_or_a_real_callee(
-) -> miette::Result<()> {
+fn scan_rust_source_exempts_a_verification_leaf_but_not_a_helper_or_a_real_callee()
+-> miette::Result<()> {
     cordial::init_tracing();
     // Real amenable_verus shape: a `pub fn verify_*` with a real `ensures`
     // clause, called by nothing else in the crate, is itself the checked
@@ -298,7 +298,9 @@ pub fn no_ensures_uncalled(x: i32) -> (result: i32)
         "has_a_real_caller has ensures but IS called by caller -- must still be flagged: {contexts:?}"
     );
     assert!(
-        contexts.iter().any(|c| c.ends_with("::no_ensures_uncalled")),
+        contexts
+            .iter()
+            .any(|c| c.ends_with("::no_ensures_uncalled")),
         "no_ensures_uncalled has no ensures clause -- must still be flagged: {contexts:?}"
     );
     Ok(())
@@ -703,9 +705,7 @@ fn take2(res: Result<i32, i32>) -> i32 {
     assert_eq!(unwraps, 1, "{findings:?}");
     assert_eq!(expects, 1, "{findings:?}");
     assert!(
-        findings
-            .iter()
-            .any(|row| row.snippet == ".unwrap_err()"),
+        findings.iter().any(|row| row.snippet == ".unwrap_err()"),
         "{findings:?}"
     );
     assert!(

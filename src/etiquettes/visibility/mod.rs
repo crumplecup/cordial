@@ -32,9 +32,7 @@ pub use reporter::{VisibilityChecklistReporter, VisibilityCsvReporter, Visibilit
 pub use scan::{BranchingCache, scan_crate_visibility, scan_crate_visibility_with_cache};
 pub use types::{VisibilityRecord, VisibilityRuleId};
 
-use crate::etiquette::{
-    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule,
-};
+use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule};
 use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 

@@ -42,9 +42,7 @@ pub use reporter::{
 pub use scan::scan_crate_proof_patterns;
 pub use types::ProofPatternKind;
 
-use crate::etiquette::{
-    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule,
-};
+use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule};
 use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 

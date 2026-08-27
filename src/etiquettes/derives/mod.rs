@@ -47,9 +47,7 @@ pub use reporter::{DeriveChecklistReporter, DeriveCsvReporter, DeriveSummaryRepo
 pub use scan::scan_rust_source;
 pub use types::{DeriveRuleId, DeriveSiteRecord};
 
-use crate::etiquette::{
-    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule,
-};
+use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule};
 use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 

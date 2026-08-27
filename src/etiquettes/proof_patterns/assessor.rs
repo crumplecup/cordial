@@ -38,8 +38,7 @@ impl Assessor for ProofPatternAssessor {
             let Some(node) = ir.node(node_id) else {
                 continue;
             };
-            let Some(kind_value) = node.attr("proof_pattern_kind").and_then(|v| v.as_str())
-            else {
+            let Some(kind_value) = node.attr("proof_pattern_kind").and_then(|v| v.as_str()) else {
                 continue;
             };
             let Some(kind) = ProofPatternKind::from_attr(kind_value) else {

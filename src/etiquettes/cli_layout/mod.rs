@@ -33,9 +33,7 @@ pub use types::{CliLayoutId, CliLayoutRecord};
 
 use crate::SourceLoader;
 use crate::enricher::{AttributeEnricher, ScopeEnricher};
-use crate::etiquette::{
-    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule,
-};
+use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule};
 use crate::objects::Finding;
 
 use tracing::instrument;

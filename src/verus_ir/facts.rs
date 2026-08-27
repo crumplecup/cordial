@@ -375,7 +375,8 @@ fn has_cfg_not_flag(attrs: &[verus_syn::Attribute], flag: &str) -> bool {
         let verus_syn::Meta::List(list) = &attr.meta else {
             return false;
         };
-        list.path.is_ident("cfg") && list.tokens.to_string().replace(' ', "") == format!("not({flag})")
+        list.path.is_ident("cfg")
+            && list.tokens.to_string().replace(' ', "") == format!("not({flag})")
     })
 }
 

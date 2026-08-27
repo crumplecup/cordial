@@ -128,7 +128,11 @@ fn is_assert_macro(mac: &Macro) -> bool {
     mac.path.segments.last().is_some_and(|segment| {
         matches!(
             segment.ident.to_string().as_str(),
-            "assert" | "assert_eq" | "assert_ne" | "debug_assert" | "debug_assert_eq"
+            "assert"
+                | "assert_eq"
+                | "assert_ne"
+                | "debug_assert"
+                | "debug_assert_eq"
                 | "debug_assert_ne"
         )
     })

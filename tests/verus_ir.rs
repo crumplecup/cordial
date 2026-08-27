@@ -52,7 +52,10 @@ fn parses_a_function_whose_body_uses_the_view_operator() {
         names.contains(&"verify_cstr_excludes_the_terminating_nul_from_to_bytes"),
         "{names:?}"
     );
-    assert!(names.contains(&"non_nul_byte_value_is_nonzero"), "{names:?}");
+    assert!(
+        names.contains(&"non_nul_byte_value_is_nonzero"),
+        "{names:?}"
+    );
 
     let spec_fn = ir
         .functions
@@ -67,7 +70,10 @@ fn parses_a_function_whose_body_uses_the_view_operator() {
         .iter()
         .find(|f| f.name == "verify_cstr_excludes_the_terminating_nul_from_to_bytes")
         .expect("exec fn present");
-    assert_eq!(exec_fn.requires, vec!["non_nul_byte_value_is_nonzero (byte)"]);
+    assert_eq!(
+        exec_fn.requires,
+        vec!["non_nul_byte_value_is_nonzero (byte)"]
+    );
     assert!(!exec_fn.uses_assume);
     assert!(!exec_fn.uses_admit);
     assert!(!exec_fn.is_external_body);
@@ -376,8 +382,16 @@ fn records_local_call_target_names() {
     };
 
     let caller = find("caller");
-    assert!(caller.calls.contains(&"helper".to_string()), "{:?}", caller.calls);
-    assert!(caller.calls.contains(&"from_str".to_string()), "{:?}", caller.calls);
+    assert!(
+        caller.calls.contains(&"helper".to_string()),
+        "{:?}",
+        caller.calls
+    );
+    assert!(
+        caller.calls.contains(&"from_str".to_string()),
+        "{:?}",
+        caller.calls
+    );
 
     let helper = find("helper");
     assert!(helper.calls.is_empty(), "{:?}", helper.calls);
