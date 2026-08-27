@@ -208,6 +208,60 @@ fn main() -> Result<(), std::io::Error> {
 }
 
 #[test]
+fn tracing_helper_call_in_main_is_not_a_violation() -> miette::Result<()> {
+    let fixture = write_cli_crate(
+        r#"
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
+    Run,
+}
+
+impl Cli {
+    pub fn act(self) -> Result<(), std::io::Error> {
+        self.command.act()
+    }
+}
+
+impl Commands {
+    pub fn act(self) -> Result<(), std::io::Error> {
+        Ok(())
+    }
+}
+
+pub fn init_tracing() {}
+"#,
+        r#"
+fn main() -> Result<(), std::io::Error> {
+    init_tracing();
+    Cli::parse().act()
+}
+"#,
+    )?;
+    let findings = scan_crate_cli_layout(fixture.path(), "fixture")
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    assert!(
+        !findings.iter().any(|finding| {
+            matches!(
+                finding.rule_id,
+                CliLayoutId::Island001 | CliLayoutId::Act001 | CliLayoutId::Main001
+            )
+        }),
+        "main may call the library tracing helper once: {:?}",
+        findings
+    );
+    Ok(())
+}
+
+#[test]
 fn subcommand_without_act_is_a_violation() -> miette::Result<()> {
     let fixture = write_cli_crate(
         r#"

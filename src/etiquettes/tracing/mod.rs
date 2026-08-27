@@ -16,13 +16,14 @@
 //!
 //! **How to use.**
 //! 1. `cordial quality` writes `{store}/findings/tracing-instrument.checklist.md`
-//!    and `tracing-summary.md`.
-//! 2. `cordial quality --apply` (or `--dry-run`) patches open checklist rows.
-//!    Re-run quality after apply.
+//!    and `tracing-summary.md`. Subscriber-init rows go to
+//!    `tracing-subscriber.checklist.md` (`--apply` does not patch those).
+//! 2. `cordial quality --apply` (or `--dry-run`) patches open instrument
+//!    checklist rows. Re-run quality after apply.
 //!
 //! Knobs live under `[tracing]` in `cordial.toml` (`extra_skip`,
-//! `apply_gate_crates`, `apply_skip_crates`). Role→level maps stay in
-//! code. Feature `tracing` is on by default. Register
+//! `apply_gate_crates`, `apply_skip_crates`, `[tracing.subscriber]`).
+//! Role→level maps stay in code. Feature `tracing` is on by default. Register
 //! [`TRACING_ETIQUETTE`] on a [`crate::Session`].
 //!
 //! Policy: `docs/planning/tracing-etiquette.md`.
@@ -41,6 +42,7 @@ mod recipe;
 mod recordable;
 mod reporter;
 mod scan;
+mod subscriber;
 mod types;
 
 pub use apply::{
@@ -53,6 +55,7 @@ pub use enricher::FunctionInventoryEnricher;
 pub use probe::{ForbiddenInstrumentProbe, MissingInstrumentProbe, RecipeDeltaProbe};
 pub use reporter::{TracingChecklistReporter, TracingCsvReporter, TracingSummaryReporter};
 pub use scan::scan_rust_source;
+pub use subscriber::{SubscriberRuleId, SubscriberSiteRecord, scan_crate_tracing_subscriber};
 
 use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette};
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
@@ -60,26 +63,46 @@ use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
 static FUNCTION_INVENTORY: FunctionInventoryEnricher = FunctionInventoryEnricher;
+static SUBSCRIBER_INVENTORY: subscriber::SubscriberInventoryEnricher =
+    subscriber::SubscriberInventoryEnricher;
 static ATTRIBUTE_ENRICHER: AttributeEnricher = AttributeEnricher;
 static MISSING_INSTRUMENT_PROBE: MissingInstrumentProbe = MissingInstrumentProbe;
 static RECIPE_DELTA_PROBE: RecipeDeltaProbe = RecipeDeltaProbe;
 static FORBIDDEN_INSTRUMENT_PROBE: ForbiddenInstrumentProbe = ForbiddenInstrumentProbe;
+static SUBSCRIBER_PROBE: subscriber::SubscriberSiteProbe = subscriber::SubscriberSiteProbe;
 static TRACING_ASSESSOR: TracingAssessor = TracingAssessor;
+static SUBSCRIBER_ASSESSOR: subscriber::SubscriberAssessor = subscriber::SubscriberAssessor;
 static TRACING_CSV: TracingCsvReporter = TracingCsvReporter;
 static TRACING_CHECKLIST: TracingChecklistReporter = TracingChecklistReporter;
 static TRACING_SUMMARY: TracingSummaryReporter = TracingSummaryReporter;
+static SUBSCRIBER_CSV: subscriber::SubscriberCsvReporter = subscriber::SubscriberCsvReporter;
+static SUBSCRIBER_CHECKLIST: subscriber::SubscriberChecklistReporter =
+    subscriber::SubscriberChecklistReporter;
+static SUBSCRIBER_SUMMARY: subscriber::SubscriberSummaryReporter =
+    subscriber::SubscriberSummaryReporter;
 
 static LOADERS: &[&'static dyn crate::Loader] = &[&SOURCE_LOADER];
-static ENRICHERS: &[&'static dyn crate::IrEnricher] =
-    &[&SCOPE_ENRICHER, &FUNCTION_INVENTORY, &ATTRIBUTE_ENRICHER];
+static ENRICHERS: &[&'static dyn crate::IrEnricher] = &[
+    &SCOPE_ENRICHER,
+    &FUNCTION_INVENTORY,
+    &SUBSCRIBER_INVENTORY,
+    &ATTRIBUTE_ENRICHER,
+];
 static PROBES: &[&'static dyn crate::Probe] = &[
     &MISSING_INSTRUMENT_PROBE,
     &RECIPE_DELTA_PROBE,
     &FORBIDDEN_INSTRUMENT_PROBE,
+    &SUBSCRIBER_PROBE,
 ];
-static ASSESSORS: &[&'static dyn crate::Assessor] = &[&TRACING_ASSESSOR];
-static REPORTERS: &[&'static dyn crate::Reporter] =
-    &[&TRACING_CSV, &TRACING_CHECKLIST, &TRACING_SUMMARY];
+static ASSESSORS: &[&'static dyn crate::Assessor] = &[&TRACING_ASSESSOR, &SUBSCRIBER_ASSESSOR];
+static REPORTERS: &[&'static dyn crate::Reporter] = &[
+    &TRACING_CSV,
+    &TRACING_CHECKLIST,
+    &TRACING_SUMMARY,
+    &SUBSCRIBER_CSV,
+    &SUBSCRIBER_CHECKLIST,
+    &SUBSCRIBER_SUMMARY,
+];
 
 /// Built-in tracing instrument etiquette bundle.
 pub static TRACING_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {

@@ -47,6 +47,14 @@ min_fluent_setters = 2
 # extra_skip = ["inventory"]
 # apply_gate_crates = { amenable_kani = "kani" }
 # apply_skip_crates = ["amenable_verus", "amenable_creusot"]
+
+[tracing.subscriber]
+# All default true.
+# init_in_main = true
+# init_in_tests = true
+# helper_in_lib = true
+# rust_log_fallback = true
+# idempotent = true
 ```
 
 `apply_gate_crates` wraps `--apply`'s `#[instrument]` as
@@ -65,5 +73,6 @@ Implemented (`tests/cordial_config.rs`). Visibility, modularity (including
 types-per-file, module-size 2σ, lower-tail ignore, hotspot diagnosis, and
 hierarchy lints: top-heavy, lopsided, unary-nest collapse), cfg_scatter,
 derives (`max_constructor_args`, `min_fluent_setters`), and tracing
-(`extra_skip`, `apply_gate_crates`, `apply_skip_crates`) read through
-`load_session_config`. Role→level maps stay in code.
+(`extra_skip`, `apply_gate_crates`, `apply_skip_crates`, nested
+`[tracing.subscriber]`) read through `load_session_config`. Role→level
+maps stay in code.

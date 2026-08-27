@@ -57,10 +57,10 @@ mod rustdoc_loader;
 mod session;
 mod store;
 mod targets;
-#[cfg(feature = "verus_ir")]
-mod verus_ir;
 #[doc(hidden)]
 pub mod testing;
+#[cfg(feature = "verus_ir")]
+mod verus_ir;
 
 #[cfg(feature = "allows")]
 pub use etiquettes::allows::{
@@ -148,8 +148,9 @@ pub use etiquettes::proof_patterns::{
 };
 #[cfg(feature = "tracing")]
 pub use etiquettes::tracing::{
-    InstrumentApplySummary, InstrumentGap, TRACING_ETIQUETTE, parse_tracing_instrument_checklist,
-    parse_tracing_instrument_checklist_text, run_tracing_instrument_apply,
+    InstrumentApplySummary, InstrumentGap, SubscriberRuleId, SubscriberSiteRecord,
+    TRACING_ETIQUETTE, parse_tracing_instrument_checklist, parse_tracing_instrument_checklist_text,
+    run_tracing_instrument_apply, scan_crate_tracing_subscriber,
     scan_rust_source as scan_tracing_rust_source,
 };
 #[cfg(feature = "trenchcoat")]
@@ -159,15 +160,15 @@ pub use etiquettes::verus_warnings::{
     VERUS_WARNINGS_ETIQUETTE, VerusWarningRecord, VerusWarningRuleId, crate_is_verus_target,
     parse_verus_compiler_output, scan_crate_verus_warnings,
 };
-#[cfg(feature = "verus_ir")]
-pub use verus_ir::{
-    VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPanicKind, VerusPanicSite, VerusPublish,
-    scan_crate_verus_ir, scan_verus_rust_source,
-};
 #[cfg(feature = "visibility")]
 pub use etiquettes::visibility::{
     BranchingCache, VISIBILITY_ETIQUETTE, VisibilityRecord, VisibilityRuleId,
     scan_crate_visibility, scan_crate_visibility_with_cache,
+};
+#[cfg(feature = "verus_ir")]
+pub use verus_ir::{
+    VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPanicKind, VerusPanicSite, VerusPublish,
+    scan_crate_verus_ir, scan_verus_rust_source,
 };
 #[cfg(feature = "shadow")]
 mod shadow;
@@ -270,8 +271,8 @@ pub use cargo_rustdoc::{
 };
 pub use config::{
     CfgScatterThresholds, CordialConfig, DerivesThresholds, ModularityThresholds,
-    TracingThresholds, VisibilityThresholds, load_cordial_config, load_derives_thresholds,
-    load_session_config, load_visibility_thresholds,
+    TracingSubscriberPolicy, TracingThresholds, VisibilityThresholds, load_cordial_config,
+    load_derives_thresholds, load_session_config, load_visibility_thresholds,
 };
 pub use exceptions::{
     AddExceptionOutcome, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,

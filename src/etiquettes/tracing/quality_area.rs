@@ -3,6 +3,8 @@
 use crate::etiquette::finding_field;
 use crate::objects::{Disposition, Finding};
 
+use super::subscriber::SubscriberRuleId;
+
 use tracing::instrument;
 
 const ROLE_ORDER: [&str; 10] = [
@@ -21,6 +23,7 @@ const ROLE_ORDER: [&str; 10] = [
 #[derive(Debug, Default, Clone)]
 struct Metrics {
     gaps: usize,
+    subscriber: usize,
     suppressed: usize,
     by_role: [usize; ROLE_ORDER.len()],
 }
@@ -30,6 +33,17 @@ fn metrics(findings: &[&dyn Finding]) -> Metrics {
     let mut metrics = Metrics::default();
     for finding in findings {
         if finding.rule().category() != "tracing" {
+            continue;
+        }
+        if SubscriberRuleId::is_subscriber_rule(finding.rule().id()) {
+            match finding.disposition() {
+                Disposition::Open => {
+                    metrics.gaps += 1;
+                    metrics.subscriber += 1;
+                }
+                Disposition::Suppressed => metrics.suppressed += 1,
+                Disposition::Exemplar => {}
+            }
             continue;
         }
         match finding.disposition() {
@@ -52,13 +66,16 @@ fn metrics(findings: &[&dyn Finding]) -> Metrics {
 #[instrument(level = "debug", skip(findings))]
 pub(super) fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let metrics = metrics(findings);
-    let roles = ROLE_ORDER
+    let mut parts: Vec<String> = ROLE_ORDER
         .iter()
         .zip(metrics.by_role)
         .filter(|(_, count)| *count > 0)
         .map(|(role, count)| format!("{role} **{count}**"))
-        .collect::<Vec<_>>();
-    let detail = if roles.is_empty() {
+        .collect();
+    if metrics.subscriber > 0 {
+        parts.push(format!("subscriber **{}**", metrics.subscriber));
+    }
+    let detail = if parts.is_empty() {
         format!(
             "**{}** open gaps, **{}** documented exceptions",
             metrics.gaps, metrics.suppressed
@@ -67,7 +84,7 @@ pub(super) fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String)
         format!(
             "**{}** open gaps ({}), **{}** documented exceptions",
             metrics.gaps,
-            roles.join(", "),
+            parts.join(", "),
             metrics.suppressed
         )
     };

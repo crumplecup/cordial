@@ -275,6 +275,8 @@ fn lint_main_fn(crate_name: &str, file: &Path, func: &ItemFn, findings: &mut Vec
         has_act: false,
     };
     hunt.visit_block(&func.block);
+    // Extra calls are allowed so `main` can invoke the library tracing-subscriber
+    // helper once before `parse` / `act`. Extra *items* in this file still fail.
     if hunt.has_match {
         findings.push(finding(
             crate_name,

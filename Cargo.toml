@@ -147,6 +147,10 @@ name = "tracing_apply"
 required-features = ["tracing"]
 
 [[test]]
+name = "tracing_subscriber"
+required-features = ["tracing"]
+
+[[test]]
 name = "allows_etiquette"
 required-features = ["allows"]
 

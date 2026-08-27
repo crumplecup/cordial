@@ -17,7 +17,7 @@
 //! | Id | Module | Question |
 //! | --- | --- | --- |
 //! | `panics` | `panics` | Where does this crate abort? |
-//! | `tracing` | `tracing` | Are functions instrumented with the recipe for their role? |
+//! | `tracing` | `tracing` | Are functions instrumented with the recipe for their role, and is a subscriber installed? |
 //! | `allows` | `allows` | Which `#[allow]` attributes are in force? |
 //! | `modularity` | `modularity` | Which files, functions, and modules are too large, overpacked, top-heavy, lopsided, or a unary nest? |
 //! | `derives` | `derives` | Which manual builders/getters/setters/`new`/pub fields could be derives? |

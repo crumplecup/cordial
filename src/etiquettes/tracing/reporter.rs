@@ -56,7 +56,10 @@ impl TracingRow {
 fn tracing_rows(findings: &[&dyn Finding]) -> Vec<TracingRow> {
     findings
         .iter()
-        .filter(|finding| finding.rule().category() == "tracing")
+        .filter(|finding| {
+            finding.rule().category() == "tracing"
+                && !super::subscriber::SubscriberRuleId::is_subscriber_rule(finding.rule().id())
+        })
         .map(|finding| TracingRow::from_finding(*finding))
         .collect()
 }

@@ -243,6 +243,14 @@ input to the recipe, not the only knob.
 # apply_gate_crates = { amenable_kani = "kani" }
 # Never write #[instrument] (bare Verus / Creusot translator).
 # apply_skip_crates = ["amenable_verus", "amenable_creusot"]
+
+[tracing.subscriber]
+# All default true. Turn a knob off to silence that rule.
+# init_in_main = true
+# init_in_tests = true
+# helper_in_lib = true
+# rust_log_fallback = true
+# idempotent = true
 ```
 
 Role→level maps stay in code for v1 (the enum is the policy). Promote to
@@ -256,6 +264,49 @@ an ancestor `#[cfg(<gate>)]` / `#[<gate>::…]` (and functions whose every
 known in-workspace caller is already in that set) are **proof-only**:
 never recommended for a span, and `TRACING-PROOF-INSTRUMENT` if one is
 already there — including a `not(kani)` gate, which would never fire.
+
+---
+
+## Subscriber init
+
+Instrument coverage is useless if nothing installs a subscriber. Five
+rules, default **on**, each a boolean under `[tracing.subscriber]`. Same
+`tracing` feature and etiquette; **separate artifacts**
+(`tracing-subscriber.checklist.md`) so `--apply` never rewrites these
+rows.
+
+Recognize an install (syn, no rustc): a call whose path ends in `init` /
+`try_init` / `set_global_default`, or a crate-local helper whose body
+contains one of those. `main` / `#[test]` in `tests/` should **call** that
+helper by name. `from_default_env()` alone does not count as a `RUST_LOG`
+fallback (it panics if the var is unset); use
+`EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))`
+or `env::var("RUST_LOG")` plus a default.
+
+| Rule | When | Fix |
+| --- | --- | --- |
+| `TRACING-SUBSCRIBER-MAIN` | Bin has `fn main` that never calls an init helper | Call the lib helper from `main` |
+| `TRACING-SUBSCRIBER-TEST` | A `#[test]` in `tests/` never calls that helper | Call the same helper |
+| `TRACING-SUBSCRIBER-LIB` | The fn that builds/installs the subscriber lives in `main.rs` / `src/bin/` / `tests/`, not the lib | One documented helper in the library |
+| `TRACING-SUBSCRIBER-RUST-LOG` | That helper does not read `RUST_LOG` **and** have a fallback | `try_from_default_env` + `unwrap_or*` (or `env::var("RUST_LOG")` plus a default) |
+| `TRACING-SUBSCRIBER-IDEMPOTENT` | Helper uses `init()` without `Once` / `OnceLock` | `try_init()` (ignore already-set) or wrap in `Once` |
+
+Scope:
+
+- Lib-only crates: MAIN is N/A.
+- Bin-only (no lib): LIB is N/A.
+- Skip/gate verifier crates (`apply_skip_crates` / `apply_gate_crates` on
+  **that crate's name**): skip MAIN/TEST — not logging programs.
+- Tests: per `#[test]` in `tests/`, not “file called init once.” `src/`
+  unit tests stay the inline-tests etiquette’s problem.
+
+Attenuation among the five: inline `fmt().init()` in `main` satisfies MAIN
+and fails LIB. Helper in lib that `main` never calls fails MAIN. Helper
+copied in main and tests fails LIB.
+
+`CLI-MAIN-001` allows `main` to call that library helper once, then
+parse / `act` / miette. Extra items in `main.rs` (a local `fn init_tracing`)
+are still a fat main.
 
 ---
 
@@ -273,6 +324,7 @@ src/etiquettes/tracing/
   assessor.rs       compare recipe vs present
   reporter.rs       crate → role grouping; relative paths
   apply/            classify + recipe match; write attribute
+  subscriber/       init-helper policy (MAIN/TEST/LIB/RUST-LOG/IDEMPOTENT)
 ```
 
 If `recipe.rs` grows past the modularity file floor, peel
@@ -300,14 +352,17 @@ than weakening fixture recall.
 
 ## Status
 
-**Phase 4 complete**, plus verifier **attenuation**. Classify + recipe on
-every finding; delta rules vs present `#[instrument]`; apply writes the
-recipe. Counter-lints (`TRACING-PROOF-INSTRUMENT`,
-`TRACING-UNGATED-INSTRUMENT`, `TRACING-SKIP-INSTRUMENT`) fire when a span
-is already present where the backend cannot use it. `[tracing]` knobs
-(`extra_skip`, `apply_gate_crates`, `apply_skip_crates`) load through
-`cordial.toml`. The quality report blurb is open gaps **by role**.
+**Phase 4 complete**, plus verifier **attenuation** and **subscriber
+init**. Classify + recipe on every finding; delta rules vs present
+`#[instrument]`; apply writes the recipe. Counter-lints
+(`TRACING-PROOF-INSTRUMENT`, `TRACING-UNGATED-INSTRUMENT`,
+`TRACING-SKIP-INSTRUMENT`) fire when a span is already present where the
+backend cannot use it. Subscriber rules (`TRACING-SUBSCRIBER-*`) live on
+the same etiquette with their own checklist. `[tracing]` knobs
+(`extra_skip`, `apply_gate_crates`, `apply_skip_crates`,
+`[tracing.subscriber]`) load through `cordial.toml`. The quality report
+blurb is open gaps **by role**, plus a subscriber count.
 
-Every function is on the checklist. Visibility is recorded on the finding;
-it does not suppress a gap. Role recipes pick `trace` / `debug` / `info` so
-subscribers control volume.
+Every function is on the instrument checklist. Visibility is recorded on
+the finding; it does not suppress a gap. Role recipes pick `trace` /
+`debug` / `info` so subscribers control volume.

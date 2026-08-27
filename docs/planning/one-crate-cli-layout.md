@@ -17,7 +17,7 @@ Complements [error-handling-as-plugin.md](error-handling-as-plugin.md) and
 cordial/                          # lib + bin `cordial`
 src/                              # all product code
 src/lib.rs
-src/main.rs                       # parse + act + miette only
+src/main.rs                       # optional tracing helper, then parse + act + miette
 src/cli.rs                        # Cli, Commands, Cli::act
 src/error.rs                      # one parent: CordialError
 examples/custom_plugins/          # Cargo example (`cargo run --example custom_plugins`)
@@ -38,9 +38,13 @@ umbrella at the edge:
 
 ```rust
 fn main() -> miette::Result<()> {
+    init_tracing();
     Cli::parse().act().into_diagnostic()
 }
 ```
+
+`init_tracing` is a **library** helper (see tracing subscriber policy).
+`main` may call it once; it must not define the helper.
 
 ## Dispatch
 
@@ -49,8 +53,9 @@ fn main() -> miette::Result<()> {
 its `act` calls `act` on **each** nested clap value — `Cli::act` hands
 off to `Commands::act`, which hands off to `ExceptionCommands::act` and
 `ExportCommands::act`, and so on. Free functions do not take clap types
-(including behind `Option` / `Box` / `Vec`). `main` only parses, calls
-`act`, and converts with miette.
+(including behind `Option` / `Box` / `Vec`). `main` may call the library
+tracing-subscriber helper once, then parses, calls `act`, and converts
+with miette.
 
 ## Surfaces
 
@@ -69,7 +74,7 @@ Do not lint other people’s `_cli` crate names. That is cordial’s layout.
 | --- | --- |
 | `CLI-ISLAND-001` | `Parser` / `Subcommand` types, or `Error` types, exist only on the binary side (`main.rs`, `src/bin`, modules only `main` includes) |
 | `CLI-ACT-001` | Clap type in the library has no inherent `act(self) -> Result`; `act` does not call `act` on each nested clap type; or a free function takes a clap type (including behind `Option` / `Box`) |
-| `CLI-MAIN-001` | `main` is more than parse + `act` + miette, or it does not call `parse` and `act` |
+| `CLI-MAIN-001` | `main` is more than an optional tracing-init helper call + parse + `act` + miette, or it does not call `parse` and `act`. Extra items in the bin file (a local `fn init_tracing`) still count as a fat main. |
 
 Implementation: `src/etiquettes/cli_layout/` (feature `cli_layout`, in `quality`).
 Not part of `internal_error_chain`.

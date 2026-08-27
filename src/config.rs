@@ -485,6 +485,63 @@ pub struct TracingThresholds {
     /// the splicing crate's own compilation unit.
     #[serde(default)]
     apply_skip_crates: Vec<String>,
+    /// Subscriber-init policy knobs. Each defaults **on**.
+    #[serde(default)]
+    #[new(default)]
+    subscriber: TracingSubscriberPolicy,
+}
+
+/// Whether each tracing-subscriber init rule is armed.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_new::new,
+    derive_getters::Getters,
+)]
+pub struct TracingSubscriberPolicy {
+    /// `fn main` in a binary must call the crate's init helper.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    init_in_main: bool,
+    /// Each `#[test]` under `tests/` must call the same helper.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    init_in_tests: bool,
+    /// The function that builds/installs the subscriber lives in the library.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    helper_in_lib: bool,
+    /// That helper reads `RUST_LOG` and has a fallback (not `from_default_env()` alone).
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    rust_log_fallback: bool,
+    /// That helper uses `try_init()` or wraps `init()` in `Once` / `OnceLock`.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    idempotent: bool,
+}
+
+#[instrument(level = "debug")]
+fn default_true() -> bool {
+    true
+}
+
+impl Default for TracingSubscriberPolicy {
+    #[instrument(level = "debug", ret)]
+    fn default() -> Self {
+        Self {
+            init_in_main: true,
+            init_in_tests: true,
+            helper_in_lib: true,
+            rust_log_fallback: true,
+            idempotent: true,
+        }
+    }
 }
 
 impl Default for TracingThresholds {
@@ -494,6 +551,7 @@ impl Default for TracingThresholds {
             extra_skip: Vec::new(),
             apply_gate_crates: std::collections::HashMap::new(),
             apply_skip_crates: Vec::new(),
+            subscriber: TracingSubscriberPolicy::default(),
         }
     }
 }
