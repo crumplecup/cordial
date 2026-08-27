@@ -57,6 +57,7 @@ fn file_uses_parse_rustdoc(body: &str) -> bool {
 
 #[test]
 fn parse_rustdoc_json_confined_to_allowlist_in_src() -> miette::Result<()> {
+    cordial::init_tracing();
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let src_root = manifest_dir.join("src");
     let mut files = Vec::new();

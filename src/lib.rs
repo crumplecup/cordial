@@ -59,6 +59,7 @@ mod store;
 mod targets;
 #[doc(hidden)]
 pub mod testing;
+mod tracing_init;
 #[cfg(feature = "verus_ir")]
 mod verus_ir;
 
@@ -262,6 +263,7 @@ pub use plugins::{
     all_etiquettes_from_plugins, all_plugins, coverage_only_plugins, coverage_plugins,
     quality_only_plugins, quality_plugins,
 };
+pub use tracing_init::init_tracing;
 // `homecoming_std` re-exports live in one block (see docs/planning/cfg-scatter-etiquette.md)
 // even though they source from several internal modules.
 #[cfg(all(feature = "rustdoc", feature = "shadow"))]

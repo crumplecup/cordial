@@ -8,6 +8,7 @@ use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
 fn trait_impl_enricher_builds_edges_from_graph_attrs() -> miette::Result<()> {
+    cordial::init_tracing();
     let temp = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let json_path = temp.path().join("demo.json");
     write_rustdoc_crate_json(&json_path, &demo_impl_coverage_crate())
@@ -62,6 +63,7 @@ fn trait_impl_enricher_builds_edges_from_graph_attrs() -> miette::Result<()> {
 
 #[test]
 fn trenchcoat_enricher_builds_wraps_edges_from_graph_attrs() -> miette::Result<()> {
+    cordial::init_tracing();
     let temp = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let json_path = temp.path().join("demo.json");
     write_rustdoc_crate_json(&json_path, &demo_trenchcoat_crate())

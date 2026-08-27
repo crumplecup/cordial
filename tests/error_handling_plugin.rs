@@ -7,6 +7,7 @@ use cordial::{
 
 #[test]
 fn standard_error_handling_registers_full_stack() {
+    cordial::init_tracing();
     assert_eq!(STANDARD_ERROR_HANDLING.id(), "error-handling");
     assert_eq!(
         STANDARD_ERROR_HANDLING.category(),
@@ -35,6 +36,7 @@ fn standard_error_handling_registers_full_stack() {
 
 #[test]
 fn quality_plugins_register_error_handling_once() {
+    cordial::init_tracing();
     let plugins = quality_plugins();
     let error_handling = plugins
         .iter()
@@ -50,6 +52,7 @@ fn quality_plugins_register_error_handling_once() {
 #[cfg(feature = "error_sites")]
 #[test]
 fn error_ir_enrichers_include_full_stack_layers() {
+    cordial::init_tracing();
     assert!(!ERROR_IR_ENRICHERS.is_empty());
     assert!(
         ERROR_IR_ENRICHERS
@@ -71,6 +74,7 @@ fn error_ir_enrichers_include_full_stack_layers() {
 #[cfg(feature = "foreign_error_attenuation")]
 #[test]
 fn full_quality_feature_includes_attenuation_layer() {
+    cordial::init_tracing();
     let ids: Vec<&str> = standard_error_handling_etiquettes()
         .into_iter()
         .map(|etiquette| etiquette.id())

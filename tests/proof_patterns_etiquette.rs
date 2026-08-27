@@ -71,6 +71,7 @@ fn write_fixture(fixture: &std::path::Path) -> miette::Result<()> {
 
 #[test]
 fn scan_crate_finds_every_real_escape_hatch_and_broadcast() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_fixture(fixture.path())?;
 
@@ -98,6 +99,7 @@ fn scan_crate_finds_every_real_escape_hatch_and_broadcast() -> miette::Result<()
 
 #[test]
 fn scan_skips_a_crate_with_no_verus_blocks() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -115,6 +117,7 @@ fn scan_skips_a_crate_with_no_verus_blocks() -> miette::Result<()> {
 
 #[test]
 fn session_writes_checklist_from_real_fixture() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_fixture(fixture.path())?;
 

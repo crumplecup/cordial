@@ -5,6 +5,7 @@ use cordial::{PANICS_ETIQUETTE, RunAll, Session, SessionBuilder, TRACING_ETIQUET
 
 #[test]
 fn multiple_etiquettes_share_loader_and_emit_both_reports() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()

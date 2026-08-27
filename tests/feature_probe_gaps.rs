@@ -21,6 +21,7 @@ fn prereqs_with_missing_external() -> TraitPrereqs {
 
 #[test]
 fn flags_feature_gated_external_when_probe_unlocks_direct_impl() {
+    cordial::init_tracing();
     let prereqs = prereqs_with_missing_external();
     let probe = TypeFeatureProbe {
         feature_crate: "reqwest".to_string(),
@@ -43,6 +44,7 @@ fn flags_feature_gated_external_when_probe_unlocks_direct_impl() {
 
 #[test]
 fn classifies_pure_feature_gated_external_when_our_traits_complete() {
+    cordial::init_tracing();
     let prereqs = TraitPrereqs {
         serialize: false,
         deserialize: false,
@@ -73,6 +75,7 @@ fn classifies_pure_feature_gated_external_when_our_traits_complete() {
 
 #[test]
 fn marks_externally_blocked_when_no_probe_unlock() {
+    cordial::init_tracing();
     let prereqs = TraitPrereqs {
         serialize: false,
         deserialize: false,
@@ -93,6 +96,7 @@ fn marks_externally_blocked_when_no_probe_unlock() {
 
 #[test]
 fn collect_dep_serde_features_finds_unlock_candidates_for_url_fixture() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/parity/workspaces/minimal-workspace");
     let (available, expanded) =

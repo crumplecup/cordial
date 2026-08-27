@@ -42,6 +42,7 @@ struct Gadget {
 
 #[test]
 fn scan_cfg_scatter_rust_source_flags_scattered_predicate_not_fields() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("lib.rs");
     fs::write(&file, SCATTERED_SOURCE)
@@ -76,6 +77,7 @@ fn scan_cfg_scatter_rust_source_flags_scattered_predicate_not_fields() -> miette
 
 #[test]
 fn cfg_scatter_etiquette_detects_scattered_predicate() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -138,6 +140,7 @@ impl Reporter for Impl {
 
 #[test]
 fn scan_cfg_scatter_rust_source_flags_trait_default_methods() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("lib.rs");
     fs::write(&file, TRAIT_SCATTERED_SOURCE)
@@ -172,6 +175,7 @@ fn scan_cfg_scatter_rust_source_flags_trait_default_methods() -> miette::Result<
 
 #[test]
 fn cfg_scatter_default_thresholds() {
+    cordial::init_tracing();
     let thresholds = CfgScatterThresholds::default();
     assert_eq!(thresholds.min_distinct_kinds(), 2);
     assert_eq!(thresholds.min_occurrences(), 5);

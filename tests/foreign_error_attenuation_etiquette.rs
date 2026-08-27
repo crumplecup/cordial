@@ -102,6 +102,7 @@ fn scan_chain_fixture() -> miette::Result<Vec<cordial::ErrorChainRecord>> {
 
 #[test]
 fn attenuator_pairs_preserved_and_chain_break_sites() -> miette::Result<()> {
+    cordial::init_tracing();
     let scan_rows = scan_sites_fixture()?;
     let partition_rows = partition_error_site_records(&scan_rows, "fixture");
     let partition = build_error_site_partition_report("fixture", partition_rows);
@@ -128,6 +129,7 @@ fn attenuator_pairs_preserved_and_chain_break_sites() -> miette::Result<()> {
 
 #[test]
 fn test_into_diagnostic_is_miette_exemplar_not_pending_infra() {
+    cordial::init_tracing();
     let foreign = ForeignErrorTypeReport {
         crate_name: "example".to_string(),
         findings: vec![ForeignErrorTypeRecord {
@@ -154,6 +156,7 @@ fn test_into_diagnostic_is_miette_exemplar_not_pending_infra() {
 
 #[test]
 fn display_fmt_question_mark_is_exemplar_not_pending_infra() {
+    cordial::init_tracing();
     let foreign = ForeignErrorTypeReport {
         crate_name: "example".to_string(),
         findings: vec![ForeignErrorTypeRecord {
@@ -180,6 +183,7 @@ fn display_fmt_question_mark_is_exemplar_not_pending_infra() {
 
 #[test]
 fn library_into_diagnostic_without_bridge_is_still_pending_infra() {
+    cordial::init_tracing();
     let foreign = ForeignErrorTypeReport {
         crate_name: "example".to_string(),
         findings: vec![ForeignErrorTypeRecord {
@@ -205,6 +209,7 @@ fn library_into_diagnostic_without_bridge_is_still_pending_infra() {
 
 #[test]
 fn chain_break_rows_carry_baked_in_resolution() -> miette::Result<()> {
+    cordial::init_tracing();
     let scan_rows = scan_sites_fixture()?;
     let partition_rows = partition_error_site_records(&scan_rows, "fixture");
     let partition = build_error_site_partition_report("fixture", partition_rows);
@@ -227,6 +232,7 @@ fn chain_break_rows_carry_baked_in_resolution() -> miette::Result<()> {
 
 #[test]
 fn foreign_error_attenuation_session_produces_csv() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -271,6 +277,7 @@ fn foreign_error_attenuation_session_produces_csv() -> miette::Result<()> {
 
 #[test]
 fn scan_crate_error_chain_accepts_fixture_root() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()

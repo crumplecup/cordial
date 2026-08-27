@@ -3,6 +3,7 @@ use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
 fn quality_report_lists_resolution_order() -> miette::Result<()> {
+    cordial::init_tracing();
     let report = build_quality_report(&[]).into_diagnostic()?;
     assert_eq!(report.areas.len(), 14);
     assert_eq!(report.areas[0].title, "Error handling");
@@ -41,6 +42,7 @@ fn quality_report_lists_resolution_order() -> miette::Result<()> {
 
 #[test]
 fn quality_session_writes_quality_report_and_summary() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     std::fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()

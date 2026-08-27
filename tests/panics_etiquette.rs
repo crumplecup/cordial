@@ -8,6 +8,7 @@ use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
 fn panics_etiquette_detects_panic_expect_and_unreachable() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -80,6 +81,7 @@ pub fn never() -> ! {
 
 #[test]
 fn scan_rust_source_finds_panics_inside_a_verus_block() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
     fs::write(
@@ -153,6 +155,7 @@ pub fn calls_the_classifier(s: &str) -> bool {
 #[cfg(feature = "verus_ir")]
 #[test]
 fn scan_rust_source_exempts_a_ghost_proven_unreachable_arm() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
     fs::write(
@@ -220,6 +223,7 @@ pub fn matches_on_result_with_no_ghost_sibling(x: i32) -> (result: bool)
 #[test]
 fn scan_rust_source_exempts_a_verification_leaf_but_not_a_helper_or_a_real_callee(
 ) -> miette::Result<()> {
+    cordial::init_tracing();
     // Real amenable_verus shape: a `pub fn verify_*` with a real `ensures`
     // clause, called by nothing else in the crate, is itself the checked
     // claim -- its own .expect()/.unwrap() sites are that verification's
@@ -302,6 +306,7 @@ pub fn no_ensures_uncalled(x: i32) -> (result: i32)
 
 #[test]
 fn scan_rust_source_finds_compile_error() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
     fs::write(&file, r#"fn bad() { compile_error!("stop"); }"#)
@@ -323,6 +328,7 @@ fn scan_rust_source_finds_compile_error() -> miette::Result<()> {
 
 #[test]
 fn error_surface_classifies_library_binary_and_tests() {
+    cordial::init_tracing();
     assert_eq!(
         ErrorSurface::from_path(std::path::Path::new("src/lib.rs")),
         ErrorSurface::Library
@@ -368,6 +374,7 @@ fn error_surface_classifies_library_binary_and_tests() {
 
 #[test]
 fn panics_in_tests_ask_for_miette() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("tests")).into_diagnostic()?;
@@ -400,6 +407,7 @@ fn panics_in_tests_ask_for_miette() -> miette::Result<()> {
 
 #[test]
 fn panics_in_binaries_ask_for_miette() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -436,6 +444,7 @@ fn panics_in_binaries_ask_for_miette() -> miette::Result<()> {
 
 #[test]
 fn test_expect_asks_for_miette() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("tests")).into_diagnostic()?;
@@ -469,6 +478,7 @@ fn test_expect_asks_for_miette() -> miette::Result<()> {
 
 #[test]
 fn test_unwrap_asks_for_miette() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("tests")).into_diagnostic()?;
@@ -502,6 +512,7 @@ fn test_unwrap_asks_for_miette() -> miette::Result<()> {
 
 #[test]
 fn cfg_test_module_in_src_asks_for_miette() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
     fs::write(
@@ -537,6 +548,7 @@ fn cfg_test_module_in_src_asks_for_miette() -> miette::Result<()> {
 
 #[test]
 fn library_writeln_expect_is_checklist() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -577,6 +589,7 @@ fn library_writeln_expect_is_checklist() -> miette::Result<()> {
 
 #[test]
 fn library_tokenstream_parse_expect_is_checklist() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -621,6 +634,7 @@ fn library_tokenstream_parse_expect_is_checklist() -> miette::Result<()> {
 
 #[test]
 fn chained_unwrap_on_one_line_is_one_site() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
     fs::write(
@@ -653,6 +667,7 @@ fn chained_unwrap_on_one_line_is_one_site() -> miette::Result<()> {
 
 #[test]
 fn unwrap_err_and_expect_err_are_flagged_the_same_as_their_ok_counterparts() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
     fs::write(
@@ -704,6 +719,7 @@ fn take2(res: Result<i32, i32>) -> i32 {
 
 #[test]
 fn expect_err_asserted_against_directly_is_exempt() -> miette::Result<()> {
+    cordial::init_tracing();
     // Real amenable_kani::ledger_test shape: the whole point of the call
     // is to extract the error value and assert a fact about it, not to
     // discard or propagate a setup failure.
@@ -737,6 +753,7 @@ fn validate_rejects_a_negative_amount(res: Result<i32, TransferError>) {
 
 #[test]
 fn expect_err_exemption_matches_even_with_a_multiline_receiver() -> miette::Result<()> {
+    cordial::init_tracing();
     // Real amenable main.rs shape: check_method_call computes its own
     // exempt-lookup line from the whole call expression's span, which
     // starts at the *receiver*'s own beginning for a multi-line
@@ -782,6 +799,7 @@ fn clap_rejects_a_single_proof_combined_with_a_retry_selector(res: Result<Cli, C
 
 #[test]
 fn unwrap_err_asserted_against_one_hop_later_is_exempt() -> miette::Result<()> {
+    cordial::init_tracing();
     // Real assessment_error_chain_test shape: the bound error feeds a
     // further `let`, and THAT is what's asserted on.
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
@@ -815,6 +833,7 @@ fn load_on_malformed_json_preserves_the_real_serde_error_in_the_chain(res: Resul
 
 #[test]
 fn expect_err_with_no_later_use_still_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
     fs::write(
@@ -845,6 +864,7 @@ fn discards_the_error(res: Result<i32, i32>) {
 
 #[test]
 fn expect_err_bound_and_used_but_never_asserted_still_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
     fs::write(
@@ -876,6 +896,7 @@ fn logs_the_error(res: Result<i32, i32>) {
 
 #[test]
 fn nested_parity_workspace_is_skipped_when_scanning_parent() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -921,6 +942,7 @@ fn nested_parity_workspace_is_skipped_when_scanning_parent() -> miette::Result<(
 
 #[test]
 fn unwrap_reachable_from_a_kani_proof_harness_is_not_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
     fs::write(
@@ -971,6 +993,7 @@ fn verify_delivery() {
 
 #[test]
 fn unwrap_reachable_from_a_harness_wrapped_in_another_macro_is_not_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     // amenable_derive::harness!(cfg_name, CONST_NAME, { item })'s own real
     // shape: syn::visit::Visit never descends into a macro invocation's
     // token stream on its own, so a #[kani::proof] fn written as a wrapper
@@ -1031,6 +1054,7 @@ some_crate::harness! {
 
 #[test]
 fn expect_reachable_only_via_an_assert_eq_argument_is_not_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     // Real amenable_kani shape: os_windows_model::kani_encode_wide_bmp_char's
     // only real caller passes it as assert_eq!'s own first argument, not as
     // a bare statement -- syn::visit::Visit never descends into ANY macro's
@@ -1075,6 +1099,7 @@ fn verify_encode_bmp() {
 
 #[test]
 fn unreachable_nested_under_cfg_kani_is_not_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
     fs::write(
@@ -1120,6 +1145,7 @@ mod proofs {
 
 #[test]
 fn unwrap_not_reachable_from_any_kani_proof_is_still_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
     fs::write(
@@ -1159,6 +1185,7 @@ fn unrelated_proof() {
 
 #[test]
 fn panic_outside_cfg_kani_is_still_flagged_even_with_a_cfg_not_kani_twin() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sample.rs");
     fs::write(

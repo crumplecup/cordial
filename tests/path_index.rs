@@ -13,6 +13,7 @@ use workspace_support::workspace_path;
 
 #[test]
 fn path_index_resolves_type_nodes_after_rustdoc_load() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = workspace_path("minimal-workspace");
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     run_cordial_impl_coverage(&workspace, store.path(), Some("url"))?;

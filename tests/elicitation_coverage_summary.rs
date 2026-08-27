@@ -22,6 +22,7 @@ use workspace_support::workspace_path;
 
 #[test]
 fn elicitation_summary_impl_table_has_elicit_doc_columns() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = workspace_path("minimal-workspace");
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     run_cordial_impl_coverage(&workspace, store.path(), Some("url"))?;
@@ -45,6 +46,7 @@ fn elicitation_summary_impl_table_has_elicit_doc_columns() -> miette::Result<()>
 
 #[test]
 fn elicitation_summary_includes_shadow_section_for_minimal_workspace() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = workspace_path("minimal-workspace");
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     seed_minimal_shadow_fixture(&workspace, store.path())?;
@@ -71,6 +73,7 @@ fn elicitation_summary_includes_shadow_section_for_minimal_workspace() -> miette
 
 #[test]
 fn full_elicitation_run_writes_summary_md() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/parity/workspaces/minimal-workspace");
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;

@@ -11,6 +11,7 @@ use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
 fn workspace_ir_shadow_report_matches_inventory_oracle() -> miette::Result<()> {
+    cordial::init_tracing();
     let temp = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let json_path = temp.path().join("demo.json");
     write_rustdoc_crate_json(&json_path, &demo_shadow_crate())

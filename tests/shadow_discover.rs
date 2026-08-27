@@ -7,6 +7,7 @@ use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
 fn discovers_widget_shadow_pair_without_map_file() -> miette::Result<()> {
+    cordial::init_tracing();
     let dir = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let json = dir.path().join("demo.json");
     write_rustdoc_crate_json(&json, &demo_shadow_crate())

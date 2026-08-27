@@ -16,6 +16,7 @@ use shadow_fixture::write_minimal_rustdoc;
 
 #[test]
 fn cross_crate_shadow_covers_widget_in_minimal_workspace() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/parity/workspaces/minimal-workspace");
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
@@ -39,6 +40,7 @@ fn cross_crate_shadow_covers_widget_in_minimal_workspace() -> miette::Result<()>
 
 #[test]
 fn method_checklist_artifact_emitted_when_maps_differ() -> miette::Result<()> {
+    cordial::init_tracing();
     use std::collections::{BTreeSet, HashMap};
 
     use cordial::testing::{
@@ -94,6 +96,7 @@ fn method_checklist_artifact_emitted_when_maps_differ() -> miette::Result<()> {
 
 #[test]
 fn build_shadow_report_unit_exact_match() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("workspace")?;
@@ -117,6 +120,7 @@ fn build_shadow_report_unit_exact_match() -> miette::Result<()> {
 
 #[test]
 fn prefix_rename_is_missing_not_drift() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("workspace")?;
@@ -141,6 +145,7 @@ fn prefix_rename_is_missing_not_drift() -> miette::Result<()> {
 
 #[test]
 fn method_coverage_diffs_matched_types() -> miette::Result<()> {
+    cordial::init_tracing();
     use std::collections::{BTreeSet, HashMap};
 
     use cordial::testing::{ShadowBuildMaps, build_shadow_report_from_inventories_with_maps};
@@ -193,6 +198,7 @@ fn method_coverage_diffs_matched_types() -> miette::Result<()> {
 
 #[test]
 fn upstream_inventory_prefers_shadow_dep_cache() -> miette::Result<()> {
+    cordial::init_tracing();
     use cordial::SessionBuilder;
     use cordial::testing::build_shadow_pair_report;
 

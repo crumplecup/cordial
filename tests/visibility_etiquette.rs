@@ -30,6 +30,7 @@ fn write_crate(root: &std::path::Path, lib: &str, extra: &[(&str, &str)]) -> mie
 
 #[test]
 fn small_crate_with_pub_mod_flags_flat_and_thin_when_thresholds_say_so() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_crate(
         fixture.path(),
@@ -60,6 +61,7 @@ fn small_crate_with_pub_mod_flags_flat_and_thin_when_thresholds_say_so() -> miet
 
 #[test]
 fn call_site_thresholds_can_silence_the_same_tree() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_crate(
         fixture.path(),
@@ -80,6 +82,7 @@ fn call_site_thresholds_can_silence_the_same_tree() -> miette::Result<()> {
 
 #[test]
 fn pub_mod_under_private_mod_is_mismatch() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_crate(
         fixture.path(),
@@ -104,6 +107,7 @@ fn pub_mod_under_private_mod_is_mismatch() -> miette::Result<()> {
 
 #[test]
 fn private_mod_with_reexport_is_not_a_path() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_crate(
         fixture.path(),
@@ -123,6 +127,7 @@ fn private_mod_with_reexport_is_not_a_path() -> miette::Result<()> {
 
 #[test]
 fn project_config_overrides_default_thresholds() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_crate(
         fixture.path(),
@@ -165,6 +170,7 @@ min_module_names = 100
 
 #[test]
 fn visibility_etiquette_session_reads_project_config() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_crate(
         fixture.path(),
@@ -233,6 +239,7 @@ fn thin_paths(records: &[VisibilityRecord]) -> Vec<&str> {
 
 #[test]
 fn prefer_root_accepts_fat_root_and_still_flags_thin_modules() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_thin_overflow_crate(fixture.path(), 40)?;
     let thresholds = VisibilityThresholds::default();
@@ -253,6 +260,7 @@ fn prefer_root_accepts_fat_root_and_still_flags_thin_modules() -> miette::Result
 
 #[test]
 fn prefer_root_false_peels_biggest_mods_and_lowers_thin_floor() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_thin_overflow_crate(fixture.path(), 40)?;
     let thresholds = VisibilityThresholds::default().with_prefer_root(false);
@@ -270,6 +278,7 @@ fn prefer_root_false_peels_biggest_mods_and_lowers_thin_floor() -> miette::Resul
 
 #[test]
 fn prefer_root_false_peels_until_root_is_under_max() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_thin_overflow_crate(fixture.path(), 44)?;
     let thresholds = VisibilityThresholds::default().with_prefer_root(false);
@@ -285,6 +294,7 @@ fn prefer_root_false_peels_until_root_is_under_max() -> miette::Result<()> {
 
 #[test]
 fn branching_cache_reuses_floor_until_sources_change() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_thin_overflow_crate(fixture.path(), 40)?;
     let thresholds = VisibilityThresholds::default().with_prefer_root(false);

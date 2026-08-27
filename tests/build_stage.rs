@@ -7,6 +7,7 @@ use cordial::{
 
 #[test]
 fn build_caches_rustdoc_json_for_workspace_member() -> miette::Result<()> {
+    cordial::init_tracing();
     if !nightly_available() {
         eprintln!("skipping build test: nightly toolchain required for rustdoc JSON");
         return Ok(());
@@ -30,6 +31,7 @@ fn build_caches_rustdoc_json_for_workspace_member() -> miette::Result<()> {
 
 #[test]
 fn build_shadow_dep_caches_upstream_rustdoc_for_tracked_pair() -> miette::Result<()> {
+    cordial::init_tracing();
     if !nightly_available() {
         eprintln!("skipping shadow-dep build test: nightly toolchain required for rustdoc JSON");
         return Ok(());
@@ -61,6 +63,7 @@ fn build_shadow_dep_caches_upstream_rustdoc_for_tracked_pair() -> miette::Result
 
 #[test]
 fn collect_trait_prereqs_reads_supertrait_impls() -> miette::Result<()> {
+    cordial::init_tracing();
     use cordial::rustdoc::{
         collect_trait_prereqs_for_inventory, demo_impl_coverage_crate, write_rustdoc_crate_json,
     };

@@ -139,6 +139,7 @@ fn write_policy_fixture(
 
 #[test]
 fn parse_tracing_checklist_groups_by_crate_section() -> miette::Result<()> {
+    cordial::init_tracing();
     let body = fs::read_to_string("tests/fixtures/quality/apply_checklist.md")
         .into_diagnostic()
         .wrap_err("read apply checklist fixture")?;
@@ -153,6 +154,7 @@ fn parse_tracing_checklist_groups_by_crate_section() -> miette::Result<()> {
 
 #[test]
 fn apply_inserts_instrument_from_checklist() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = fs::read_to_string("tests/fixtures/quality/apply_target/src/lib.rs")
         .into_diagnostic()
         .wrap_err("read apply target")?;
@@ -184,6 +186,7 @@ fn apply_inserts_instrument_from_checklist() -> miette::Result<()> {
 
 #[test]
 fn apply_writes_getter_trace_recipe() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 pub struct Store {
@@ -221,6 +224,7 @@ impl Store {
 
 #[test]
 fn apply_writes_io_err_recipe() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 pub fn load_session_config() -> Result<(), String> {
@@ -252,6 +256,7 @@ pub fn load_session_config() -> Result<(), String> {
 
 #[test]
 fn apply_writes_entry_recipe_for_run_prefix() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 pub fn run_apply_patches() {}
@@ -280,6 +285,7 @@ pub fn run_apply_patches() {}
 
 #[test]
 fn apply_does_not_treat_free_path_fn_as_getter() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 pub fn trait_impls_for_path(key: &str) -> Option<u8> {
@@ -311,6 +317,7 @@ pub fn trait_impls_for_path(key: &str) -> Option<u8> {
 
 #[test]
 fn apply_writes_err_for_result_alias() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 pub type CordialResult<T> = Result<T, String>;
@@ -343,6 +350,7 @@ pub fn load_session_config() -> CordialResult<()> {
 
 #[test]
 fn apply_rewrites_existing_instrument_to_recipe() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 pub struct Store {
@@ -387,6 +395,7 @@ impl Store {
 
 #[test]
 fn apply_skips_when_recipe_already_present() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 use tracing::instrument;
@@ -414,6 +423,7 @@ pub fn load_session_config() -> Result<(), String> {
 
 #[test]
 fn apply_dedupes_multiple_checklist_rows_for_one_fn() -> miette::Result<()> {
+    cordial::init_tracing();
     let mut checklist = checklist_for(&[("load_session_config", 2)]);
     checklist.push_str("- [ ] `load_session_config` — `src/lib.rs:2` (pub)\n");
     let fixture = write_apply_fixture(
@@ -445,6 +455,7 @@ pub fn load_session_config() -> Result<(), String> {
 
 #[test]
 fn apply_does_not_split_doc_from_item() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 /// A documented helper.
@@ -481,6 +492,7 @@ pub fn scan_tree() {}
 
 #[test]
 fn apply_does_not_put_err_on_option() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 pub fn scan_first() -> Option<u8> {
@@ -513,6 +525,7 @@ pub fn scan_first() -> Option<u8> {
 
 #[test]
 fn apply_matches_fn_name_not_nearest_fn() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 pub fn fmt() {}
@@ -547,6 +560,7 @@ pub fn scan_tree() {}
 
 #[test]
 fn apply_uses_crate_path_when_tracing_is_a_module() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 mod tracing;
@@ -578,6 +592,7 @@ pub fn scan_tree() {}
 
 #[test]
 fn apply_does_not_split_derive_from_item() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 #[derive(Debug)]
@@ -621,6 +636,7 @@ pub fn load_config() -> Result<(), Boom> {
 
 #[test]
 fn apply_skips_impl_trait_params() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 pub struct Artifact;
@@ -660,6 +676,7 @@ impl Artifact {
 
 #[test]
 fn apply_does_not_duplicate_grouped_tracing_import() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 use tracing::{debug, instrument};
@@ -693,6 +710,7 @@ pub fn scan_tree() {
 
 #[test]
 fn apply_uses_path_form_when_instrument_is_a_module() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_apply_fixture(
         r#"
 mod instrument;
@@ -724,6 +742,7 @@ pub fn scan_tree() {}
 
 #[test]
 fn apply_gates_instrument_for_configured_crate() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_policy_fixture(
         &["fixture_crate"],
         "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
@@ -761,6 +780,7 @@ fn apply_gates_instrument_for_configured_crate() -> miette::Result<()> {
 
 #[test]
 fn apply_skips_configured_crate_leaving_checklist_open() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_policy_fixture(
         &["fixture_crate"],
         "[tracing]\napply_skip_crates = [\"fixture_crate\"]\n",
@@ -785,6 +805,7 @@ fn apply_skips_configured_crate_leaving_checklist_open() -> miette::Result<()> {
 
 #[test]
 fn apply_gates_dependency_crate_via_transitive_dependent() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_policy_fixture(
         &["fixture_core", "fixture_kani"],
         "[tracing]\napply_gate_crates = { fixture_kani = \"kani\" }\n",
@@ -821,6 +842,7 @@ fn apply_gates_dependency_crate_via_transitive_dependent() -> miette::Result<()>
 
 #[test]
 fn apply_skips_file_spliced_into_skip_configured_crate() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_policy_fixture(
         &["fixture_owner", "fixture_verus"],
         "[tracing]\napply_skip_crates = [\"fixture_verus\"]\n",
@@ -854,6 +876,7 @@ fn apply_skips_file_spliced_into_skip_configured_crate() -> miette::Result<()> {
 
 #[test]
 fn apply_skips_function_nested_in_ancestor_gate_cfg() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_policy_fixture(
         &["fixture_crate"],
         "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
@@ -890,6 +913,7 @@ mod proofs {
 
 #[test]
 fn apply_skips_function_called_only_from_proof_context() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_policy_fixture(
         &["fixture_crate"],
         "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
@@ -940,6 +964,7 @@ mod proofs {
 
 #[test]
 fn apply_finds_calls_inside_a_harness_style_macro_invocation() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_policy_fixture(
         &["fixture_crate"],
         "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
@@ -995,6 +1020,7 @@ fake_harness_macro::harness! {
 
 #[test]
 fn apply_strips_instrument_from_proof_only_method() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_policy_fixture(
         &["fixture_crate"],
         "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
@@ -1045,6 +1071,7 @@ mod proofs {
 
 #[test]
 fn apply_strips_gated_instrument_from_proof_only_method() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_policy_fixture(
         &["fixture_crate"],
         "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
@@ -1092,6 +1119,7 @@ mod proofs {
 
 #[test]
 fn apply_strips_instrument_from_skip_crate() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_policy_fixture(
         &["fixture_crate"],
         "[tracing]\napply_skip_crates = [\"fixture_crate\"]\n",
@@ -1123,6 +1151,7 @@ fn apply_strips_instrument_from_skip_crate() -> miette::Result<()> {
 
 #[test]
 fn apply_gates_bare_instrument_on_ordinary_fn() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_policy_fixture(
         &["fixture_crate"],
         "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",

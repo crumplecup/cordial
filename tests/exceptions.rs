@@ -10,6 +10,7 @@ use cordial::{
 
 #[test]
 fn exception_patch_suppresses_matching_panic_finding() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -83,6 +84,7 @@ pub fn fragile() -> u32 {
 
 #[test]
 fn quality_patches_alias_suppresses_matching_finding() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -136,6 +138,7 @@ pub fn boom() {
 
 #[test]
 fn backup_exception_files_writes_slug_scoped_registry_tree() -> miette::Result<()> {
+    cordial::init_tracing();
     let store_root = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("store tempdir")?;
@@ -203,6 +206,7 @@ fn backup_exception_files_writes_slug_scoped_registry_tree() -> miette::Result<(
 
 #[test]
 fn load_exception_files_restores_slug_scoped_registry_tree() -> miette::Result<()> {
+    cordial::init_tracing();
     let store_root = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("store tempdir")?;
@@ -314,6 +318,7 @@ fn load_exception_files_restores_slug_scoped_registry_tree() -> miette::Result<(
 
 #[test]
 fn load_exception_files_accepts_elicit_doc_registry_layout() -> miette::Result<()> {
+    cordial::init_tracing();
     let store_root = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("store tempdir")?;
@@ -363,6 +368,7 @@ fn load_exception_files_accepts_elicit_doc_registry_layout() -> miette::Result<(
 
 #[test]
 fn load_exception_files_errors_when_slug_tree_is_missing() -> miette::Result<()> {
+    cordial::init_tracing();
     let store_root = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("store tempdir")?;
@@ -378,6 +384,7 @@ fn load_exception_files_errors_when_slug_tree_is_missing() -> miette::Result<()>
 
 #[test]
 fn resolve_exceptions_root_joins_relative_paths_to_the_project() {
+    cordial::init_tracing();
     let project = PathBuf::from("/repos/elicitation");
     assert_eq!(
         resolve_exceptions_root(&project, std::path::Path::new(".elicit_doc-exceptions")),
@@ -389,6 +396,7 @@ fn resolve_exceptions_root_joins_relative_paths_to_the_project() {
 
 #[test]
 fn add_exception_writes_and_appends_canonical_quality_file() -> miette::Result<()> {
+    cordial::init_tracing();
     let store_root = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("store tempdir")?;
@@ -428,6 +436,7 @@ fn add_exception_writes_and_appends_canonical_quality_file() -> miette::Result<(
 
 #[test]
 fn add_exception_is_idempotent_for_identical_rows() -> miette::Result<()> {
+    cordial::init_tracing();
     let store_root = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("store tempdir")?;
@@ -449,6 +458,7 @@ fn add_exception_is_idempotent_for_identical_rows() -> miette::Result<()> {
 
 #[test]
 fn add_exception_rejects_empty_file() {
+    cordial::init_tracing();
     let store = StoreLayout::from_root("/tmp/unused-exceptions-store", "demo");
     let err = add_exception(
         &store,
@@ -462,6 +472,7 @@ fn add_exception_rejects_empty_file() {
 
 #[test]
 fn add_coverage_skip_preserves_existing_extra_fields() -> miette::Result<()> {
+    cordial::init_tracing();
     let store_root = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("store tempdir")?;

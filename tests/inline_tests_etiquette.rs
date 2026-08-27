@@ -31,6 +31,7 @@ fn production_only() {}
 
 #[test]
 fn scan_inline_tests_skips_inner_tests_of_cfg_mod() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("lib.rs");
     fs::write(&file, INLINE_SRC)
@@ -91,6 +92,7 @@ fn scan_inline_tests_skips_inner_tests_of_cfg_mod() -> miette::Result<()> {
 
 #[test]
 fn inline_tests_ignore_crate_tests_directory() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -117,6 +119,7 @@ fn inline_tests_ignore_crate_tests_directory() -> miette::Result<()> {
 
 #[test]
 fn inline_tests_etiquette_writes_checklist() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()

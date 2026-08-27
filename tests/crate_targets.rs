@@ -6,6 +6,7 @@ use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
 fn non_cargo_project_uses_directory_slug() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let targets = discover_crate_targets(fixture.path(), &NamedRunFilter::all_etiquettes())
         .into_diagnostic()
@@ -20,6 +21,7 @@ fn non_cargo_project_uses_directory_slug() -> miette::Result<()> {
 
 #[test]
 fn workspace_members_discovered_from_manifest() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_workspace(
         fixture.path(),
@@ -43,6 +45,7 @@ resolver = "2"
 
 #[test]
 fn crate_name_filter_selects_one_member() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_workspace(
         fixture.path(),
@@ -68,6 +71,7 @@ resolver = "2"
 #[cfg(feature = "elicitation")]
 fn coverage_plugin_shadow_pair_includes_both_crates_when_filtered_to_upstream() -> miette::Result<()>
 {
+    cordial::init_tracing();
     use std::collections::HashSet;
     use std::path::PathBuf;
 

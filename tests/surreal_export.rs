@@ -3,6 +3,7 @@ use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
 fn export_includes_root_node() -> miette::Result<()> {
+    cordial::init_tracing();
     let ir = CrateIr::new("demo");
     let export = SurrealGraphExport::from_crate_ir(&ir)
         .into_diagnostic()
@@ -15,6 +16,7 @@ fn export_includes_root_node() -> miette::Result<()> {
 
 #[test]
 fn surreal_statements_non_empty() -> miette::Result<()> {
+    cordial::init_tracing();
     let ir = CrateIr::new("demo");
     let export = SurrealGraphExport::from_crate_ir(&ir)
         .into_diagnostic()

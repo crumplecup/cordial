@@ -24,6 +24,7 @@ static SOURCE_ETIQUETTE: StaticEtiquette = StaticEtiquette {
 
 #[test]
 fn source_loader_builds_ir_and_cache() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     std::fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()

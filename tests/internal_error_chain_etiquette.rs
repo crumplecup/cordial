@@ -99,6 +99,7 @@ fn stringify_via_format() -> CordialResult<()> {
 
 #[test]
 fn internal_leaf_is_detected_in_type_graph() -> miette::Result<()> {
+    cordial::init_tracing();
     let error_root = Path::new("tests/fixtures/internal_error_chain");
     let file = error_root.join("type_graph.rs");
     fs::create_dir_all(error_root)
@@ -120,6 +121,7 @@ fn internal_leaf_is_detected_in_type_graph() -> miette::Result<()> {
 
 #[test]
 fn foreign_bridge_is_detected_in_type_graph() -> miette::Result<()> {
+    cordial::init_tracing();
     let error_root = Path::new("tests/fixtures/internal_error_chain");
     let file = error_root.join("type_graph.rs");
     fs::create_dir_all(error_root)
@@ -140,6 +142,7 @@ fn foreign_bridge_is_detected_in_type_graph() -> miette::Result<()> {
 
 #[test]
 fn nested_source_impl_is_detected() -> miette::Result<()> {
+    cordial::init_tracing();
     let error_root = Path::new("tests/fixtures/internal_error_chain");
     let file = error_root.join("type_graph.rs");
     fs::create_dir_all(error_root)
@@ -160,6 +163,7 @@ fn nested_source_impl_is_detected() -> miette::Result<()> {
 
 #[test]
 fn stringify_map_err_is_compliance_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let src_root = Path::new("tests/fixtures/internal_error_chain");
     let file = src_root.join("compliance.rs");
     fs::create_dir_all(src_root)
@@ -180,6 +184,7 @@ fn stringify_map_err_is_compliance_violation() -> miette::Result<()> {
 
 #[test]
 fn discard_typed_error_is_compliance_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let src_root = Path::new("tests/fixtures/internal_error_chain");
     let file = src_root.join("compliance.rs");
     fs::create_dir_all(src_root)
@@ -204,6 +209,7 @@ fn discard_typed_error_is_compliance_violation() -> miette::Result<()> {
 
 #[test]
 fn preserved_foreign_propagation_is_not_compliance_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let src_root = Path::new("tests/fixtures/internal_error_chain");
     let file = src_root.join("compliance.rs");
     fs::create_dir_all(src_root)
@@ -225,6 +231,7 @@ fn preserved_foreign_propagation_is_not_compliance_violation() -> miette::Result
 
 #[test]
 fn syn_parse_and_from_wrappers_are_not_compliance_violations() -> miette::Result<()> {
+    cordial::init_tracing();
     let src_root = Path::new("tests/fixtures/internal_error_chain");
     let file = src_root.join("compliance.rs");
     fs::create_dir_all(src_root)
@@ -250,6 +257,7 @@ fn syn_parse_and_from_wrappers_are_not_compliance_violations() -> miette::Result
 
 #[test]
 fn format_interpolation_of_error_binding_is_compliance_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let src_root = Path::new("tests/fixtures/internal_error_chain");
     let file = src_root.join("compliance.rs");
     fs::create_dir_all(src_root)
@@ -302,6 +310,7 @@ impl Error for CordialError {
 
 #[test]
 fn type_graph_scans_src_error_rs() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -364,6 +373,7 @@ fn type_graph_scans_src_error_rs() -> miette::Result<()> {
 
 #[test]
 fn session_produces_all_four_artifacts() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src/error"))
         .into_diagnostic()
@@ -427,6 +437,7 @@ fn session_produces_all_four_artifacts() -> miette::Result<()> {
 
 #[test]
 fn scan_crate_internal_error_chain_combines_both_scans() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src/error"))
         .into_diagnostic()
@@ -564,6 +575,7 @@ fn write_error_crate(src: &str) -> miette::Result<tempfile::TempDir> {
 
 #[test]
 fn incomplete_source_wrapper_is_shape_and_track_caller_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src/error"))
         .into_diagnostic()
@@ -599,6 +611,7 @@ fn incomplete_source_wrapper_is_shape_and_track_caller_violation() -> miette::Re
 
 #[test]
 fn well_formed_source_wrapper_is_not_a_compliance_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_error_crate(WELL_FORMED_SOURCE)?;
     let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
         .into_diagnostic()
@@ -637,6 +650,7 @@ fn well_formed_source_wrapper_is_not_a_compliance_violation() -> miette::Result<
 
 #[test]
 fn location_field_is_rejected_in_favor_of_owned_file_and_line() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_error_crate(LOCATION_FIELD_SOURCE)?;
     let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
         .into_diagnostic()
@@ -655,6 +669,7 @@ fn location_field_is_rejected_in_favor_of_owned_file_and_line() -> miette::Resul
 
 #[test]
 fn constructor_without_track_caller_is_a_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_error_crate(MISSING_TRACK_CALLER_SOURCE)?;
     let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
         .into_diagnostic()
@@ -681,6 +696,7 @@ fn constructor_without_track_caller_is_a_violation() -> miette::Result<()> {
 
 #[test]
 fn from_impl_without_track_caller_is_a_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let src = r#"
 use std::io;
 use std::panic::Location;
@@ -736,6 +752,7 @@ impl std::error::Error for IoSource {}
 
 #[test]
 fn from_alone_is_not_a_substitute_for_new() -> miette::Result<()> {
+    cordial::init_tracing();
     let src = r#"
 use std::io;
 use std::panic::Location;
@@ -783,6 +800,7 @@ impl std::error::Error for IoSource {}
 
 #[test]
 fn new_must_not_take_file_and_line_args() -> miette::Result<()> {
+    cordial::init_tracing();
     let src = r#"
 use std::io;
 use std::panic::Location;
@@ -833,6 +851,7 @@ impl std::error::Error for IoSource {}
 
 #[test]
 fn parent_from_without_track_caller_is_a_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let src = r#"
 use std::io;
 use std::panic::Location;
@@ -889,6 +908,7 @@ impl std::error::Error for IoSource {}
 
 #[test]
 fn error_enum_is_not_a_parent() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_error_crate(ERROR_RS_FIXTURE)?;
     let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
         .into_diagnostic()
@@ -917,6 +937,7 @@ fn error_enum_is_not_a_parent() -> miette::Result<()> {
 
 #[test]
 fn unboxed_kind_field_is_a_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let src = r#"
 use std::io;
 use std::panic::Location;
@@ -964,6 +985,7 @@ impl std::error::Error for IoSource {}
 
 #[test]
 fn nested_kind_on_native_source_is_accepted() -> miette::Result<()> {
+    cordial::init_tracing();
     let src = r#"
 use std::io;
 use std::panic::Location;
@@ -1041,6 +1063,7 @@ impl std::error::Error for IoSource {}
 
 #[test]
 fn native_source_beside_call_site_is_connected() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -1131,6 +1154,7 @@ impl std::error::Error for IoSource {}
 
 #[test]
 fn type_without_error_impl_is_not_a_native_source() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_error_crate(
         r#"
 use std::io;
@@ -1185,6 +1209,7 @@ impl std::error::Error for IoSource {}
 
 #[test]
 fn dogfood_cordial_follows_error_architecture() -> miette::Result<()> {
+    cordial::init_tracing();
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let report = scan_crate_internal_error_chain(root, "cordial")
         .into_diagnostic()

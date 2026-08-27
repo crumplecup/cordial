@@ -9,6 +9,7 @@ use miette::IntoDiagnostic;
 
 #[test]
 fn render_empty_coverage_summary_notes_no_plugins() -> miette::Result<()> {
+    cordial::init_tracing();
     let body = render_coverage_summary_markdown(&CoverageSummary {
         plugins: vec![],
         extra_artifacts: Vec::new(),
@@ -21,6 +22,7 @@ fn render_empty_coverage_summary_notes_no_plugins() -> miette::Result<()> {
 
 #[test]
 fn render_coverage_summary_includes_plugin_sections() -> miette::Result<()> {
+    cordial::init_tracing();
     let summary = CoverageSummary {
         plugins: vec![
             CoveragePluginSummary {

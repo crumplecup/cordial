@@ -26,6 +26,7 @@ fn sample_unstable_item(path: &str) -> StdInventoryItem {
 
 #[test]
 fn merge_std_inventories_dedupes_concrete_types() {
+    cordial::init_tracing();
     let std_inv = vec![sample_item("std::collections::HashMap")];
     let core_inv = vec![
         sample_item("core::fmt::Debug"),
@@ -37,6 +38,7 @@ fn merge_std_inventories_dedupes_concrete_types() {
 
 #[test]
 fn build_framework_trait_report_classifies_complete_missing_and_skipped() {
+    cordial::init_tracing();
     let source = vec![
         sample_item("std::primitive::i32"),
         sample_item("std::string::String"),
@@ -82,6 +84,7 @@ fn build_framework_trait_report_classifies_complete_missing_and_skipped() {
 
 #[test]
 fn stable_only_scope_excludes_nightly_std_types() {
+    cordial::init_tracing();
     let source = vec![
         sample_item("std::string::String"),
         sample_unstable_item("std::f16"),
@@ -113,6 +116,7 @@ fn stable_only_scope_excludes_nightly_std_types() {
 
 #[test]
 fn homecoming_std_plugin_is_registered() {
+    cordial::init_tracing();
     use cordial::{HOMECOMING_STD_COVERAGE, Plugin, WorkspaceHub, coverage_plugins_for_hub};
 
     let plugins = coverage_plugins_for_hub(WorkspaceHub::Homecoming);
@@ -122,6 +126,7 @@ fn homecoming_std_plugin_is_registered() {
 
 #[test]
 fn type_has_trait_impl_matches_bare_and_qualified_paths() {
+    cordial::init_tracing();
     use std::collections::HashSet;
 
     use cordial::testing::type_has_trait_impl;
@@ -138,6 +143,7 @@ fn type_has_trait_impl_matches_bare_and_qualified_paths() {
 
 #[test]
 fn type_has_trait_impl_does_not_cross_match_unrelated_types_sharing_a_bare_name() {
+    cordial::init_tracing();
     use std::collections::HashSet;
 
     use cordial::testing::type_has_trait_impl;
@@ -149,6 +155,7 @@ fn type_has_trait_impl_does_not_cross_match_unrelated_types_sharing_a_bare_name(
 
 #[test]
 fn type_has_trait_impl_matches_across_a_std_core_reexport() {
+    cordial::init_tracing();
     use std::collections::HashSet;
 
     use cordial::testing::type_has_trait_impl;
@@ -159,6 +166,7 @@ fn type_has_trait_impl_matches_across_a_std_core_reexport() {
 
 #[test]
 fn type_has_trait_impl_matches_representative_generic_instantiation() {
+    cordial::init_tracing();
     use std::collections::HashSet;
 
     use cordial::testing::type_has_trait_impl;

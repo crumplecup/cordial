@@ -12,6 +12,7 @@ const ALLOW_ONLY: &str = "#[allow(non_camel_case_types)]";
 
 #[test]
 fn parse_stability_unstable_block() {
+    cordial::init_tracing();
     assert_eq!(
         parse_stability_attr_text(UNSTABLE_SIMD),
         StabilityLevel::Unstable
@@ -20,6 +21,7 @@ fn parse_stability_unstable_block() {
 
 #[test]
 fn parse_stability_stable_block() {
+    cordial::init_tracing();
     assert_eq!(
         parse_stability_attr_text(STABLE_DEBUG),
         StabilityLevel::Stable
@@ -28,6 +30,7 @@ fn parse_stability_stable_block() {
 
 #[test]
 fn parse_stability_unknown_without_marker() {
+    cordial::init_tracing();
     assert_eq!(
         parse_stability_attr_text(ALLOW_ONLY),
         StabilityLevel::Unknown
@@ -36,6 +39,7 @@ fn parse_stability_unknown_without_marker() {
 
 #[test]
 fn parse_stability_legacy_unstable_substring() {
+    cordial::init_tracing();
     assert_eq!(
         parse_stability_attr_text("level: Unstable"),
         StabilityLevel::Unstable
@@ -44,6 +48,7 @@ fn parse_stability_legacy_unstable_substring() {
 
 #[test]
 fn stability_from_attrs_prefers_unstable_over_stable() {
+    cordial::init_tracing();
     let attrs = vec![
         rustdoc_types::Attribute::Other(STABLE_DEBUG.to_string()),
         rustdoc_types::Attribute::Other(UNSTABLE_SIMD.to_string()),
@@ -53,6 +58,7 @@ fn stability_from_attrs_prefers_unstable_over_stable() {
 
 #[test]
 fn stability_from_attrs_non_other_attributes_are_ignored() {
+    cordial::init_tracing();
     let attrs = vec![rustdoc_types::Attribute::NonExhaustive];
     assert_eq!(stability_from_attrs(&attrs), StabilityLevel::Unknown);
 }

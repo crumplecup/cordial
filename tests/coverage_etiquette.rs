@@ -25,6 +25,7 @@ fn write_fixture(
 
 #[test]
 fn impl_coverage_etiquette_finds_missing_traits() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let crate_root = write_fixture(fixture.path(), demo_impl_coverage_crate())?;
 
@@ -52,6 +53,7 @@ fn impl_coverage_etiquette_finds_missing_traits() -> miette::Result<()> {
 
 #[test]
 fn trenchcoat_etiquette_finds_unwrapped_foreign_type() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let crate_root = write_fixture(fixture.path(), demo_trenchcoat_crate())?;
 
@@ -78,6 +80,7 @@ fn trenchcoat_etiquette_finds_unwrapped_foreign_type() -> miette::Result<()> {
 
 #[test]
 fn shadow_etiquette_links_mapped_items() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let crate_root = write_fixture(fixture.path(), demo_shadow_crate())?;
 
@@ -108,6 +111,7 @@ fn shadow_etiquette_links_mapped_items() -> miette::Result<()> {
 
 #[test]
 fn elicitation_tracked_targets_roster_is_non_empty() {
+    cordial::init_tracing();
     assert!(!cordial::ELICITATION_TRACKED_TARGETS.is_empty());
     assert!(
         cordial::ELICITATION_TRACKED_TARGETS
@@ -118,6 +122,7 @@ fn elicitation_tracked_targets_roster_is_non_empty() {
 
 #[test]
 fn elicitation_coverage_plugin_wires_three_etiquettes() {
+    cordial::init_tracing();
     let plugin = &cordial::ELICITATION_COVERAGE;
     assert_eq!(plugin.id(), "elicitation-coverage");
     assert_eq!(plugin.etiquettes().len(), 3);

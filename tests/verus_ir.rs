@@ -40,6 +40,7 @@ pub fn verify_cstr_excludes_the_terminating_nul_from_to_bytes(byte: u8) -> (resu
 
 #[test]
 fn parses_a_function_whose_body_uses_the_view_operator() {
+    cordial::init_tracing();
     let ir = scan_verus_rust_source(
         VIEW_OPERATOR_SOURCE,
         Path::new("cstr_carrier.rs"),
@@ -116,6 +117,7 @@ fn calls_admit_directly()
 
 #[test]
 fn detects_real_soundness_escape_hatches() {
+    cordial::init_tracing();
     let ir = scan_verus_rust_source(
         ASSUME_AND_AXIOM_SOURCE,
         Path::new("soundness_sample.rs"),
@@ -181,6 +183,7 @@ pub fn matches_on_result(x: i32) -> (result: bool)
 
 #[test]
 fn extracts_signature_level_facts_and_every_panic_site_kind() {
+    cordial::init_tracing();
     let ir = scan_verus_rust_source(
         SIGNATURE_FACTS_SOURCE,
         Path::new("signature_sample.rs"),
@@ -244,6 +247,7 @@ mod tests {
 
 #[test]
 fn tracks_cfg_test_module_nesting_and_detects_compile_error() {
+    cordial::init_tracing();
     let ir = scan_verus_rust_source(
         CFG_TEST_AND_COMPILE_ERROR_SOURCE,
         Path::new("cfg_test_sample.rs"),
@@ -299,6 +303,7 @@ pub fn ordinary_unreachable_with_no_ghost_sibling(x: u32) -> (result: u32)
 
 #[test]
 fn marks_only_the_unreachable_arm_with_a_real_ghost_sibling() {
+    cordial::init_tracing();
     let ir = scan_verus_rust_source(
         GHOST_EXEC_UNREACHABLE_SOURCE,
         Path::new("ghost_exec_sample.rs"),
@@ -356,6 +361,7 @@ pub fn caller(x: i32) -> (result: i32)
 
 #[test]
 fn records_local_call_target_names() {
+    cordial::init_tracing();
     let ir = scan_verus_rust_source(
         LOCAL_CALL_SOURCE,
         Path::new("local_call_sample.rs"),

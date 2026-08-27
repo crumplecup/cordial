@@ -27,6 +27,7 @@ static DUAL_INVENTORY_ETIQUETTE: StaticEtiquette = StaticEtiquette {
 
 #[test]
 fn syn_doc_link_connects_widget_source_and_rustdoc_nodes() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/build_demo");
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(&fixture)
@@ -74,6 +75,7 @@ fn find_item_id(ir: &cordial::CrateIr, path: &str, origin: &str) -> Option<cordi
 
 #[test]
 fn link_key_normalizes_crate_root_items() {
+    cordial::init_tracing();
     use cordial::testing::inventory_link_key;
 
     assert_eq!(

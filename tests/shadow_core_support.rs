@@ -6,6 +6,7 @@ use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
 fn impl_report_produces_core_tracked_summary() -> miette::Result<()> {
+    cordial::init_tracing();
     let rollup = ImplCrateRollup {
         types: 1,
         our_traits_done: 1,
@@ -23,6 +24,7 @@ fn impl_report_produces_core_tracked_summary() -> miette::Result<()> {
 
 #[test]
 fn inventory_without_impl_report_is_core_pending() -> miette::Result<()> {
+    cordial::init_tracing();
     let summary = build_shadow_core_support_summary("url", "elicit_url", true, 1, true, None)
         .into_diagnostic()
         .wrap_err("summary")?;

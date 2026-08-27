@@ -24,6 +24,7 @@ impl Widget {
 
 #[test]
 fn derives_etiquette_detects_trivial_getters() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -69,6 +70,7 @@ fn derives_etiquette_detects_trivial_getters() -> miette::Result<()> {
 
 #[test]
 fn scan_derives_rust_source_flags_trivial_getters() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("trivial_getter.rs");
     fs::write(&file, TRIVIAL_GETTER)
@@ -125,6 +127,7 @@ fn scan_findings(
 
 #[test]
 fn error_type_new_is_exempt_from_derive_new() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 #[derive(Debug)]
 struct IoSource {
@@ -156,6 +159,7 @@ impl std::fmt::Display for IoSource {
 
 #[test]
 fn track_caller_new_is_exempt_from_derive_new() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Located {
     file: String,
@@ -180,6 +184,7 @@ impl Located {
 
 #[test]
 fn new_above_max_args_requires_a_builder() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Point {
     a: u8,
@@ -212,6 +217,7 @@ impl Point {
 
 #[test]
 fn fat_new_with_computed_fields_is_not_a_builder_candidate() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Segment {
     first_ancestor: u8,
@@ -245,6 +251,7 @@ impl Segment {
 
 #[test]
 fn fat_new_with_a_conditional_is_not_a_builder_candidate() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Ordered {
     low: u8,
@@ -276,6 +283,7 @@ impl Ordered {
 
 #[test]
 fn field_from_a_differently_named_param_is_not_a_derive_new_candidate() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Widget {
     path: String,
@@ -299,6 +307,7 @@ impl Widget {
 
 #[test]
 fn field_wrapping_its_param_in_another_call_is_not_a_derive_new_candidate() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Widget {
     value: Option<u32>,
@@ -321,6 +330,7 @@ impl Widget {
 
 #[test]
 fn hardcoded_extra_field_is_not_a_derive_new_candidate() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Widget {
     items: u32,
@@ -344,6 +354,7 @@ impl Widget {
 
 #[test]
 fn trivial_new_at_max_args_suggests_derive_new() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Point {
     a: u8,
@@ -375,6 +386,7 @@ impl Point {
 
 #[test]
 fn hand_rolled_builder_type_is_still_derive_builder() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct WidgetBuilder {
     name: String,
@@ -401,6 +413,7 @@ impl WidgetBuilder {
 
 #[test]
 fn max_constructor_args_override_keeps_fat_new_as_derive_new() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Point {
     a: u8,
@@ -434,6 +447,7 @@ impl Point {
 
 #[test]
 fn clone_getter_on_a_non_copy_field_has_no_derive_getters_equivalent() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Widget {
     name: String,
@@ -459,6 +473,7 @@ impl Widget {
 
 #[test]
 fn bare_field_return_recommends_copy_getters() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Widget {
     id: u32,
@@ -487,6 +502,7 @@ impl Widget {
 
 #[test]
 fn reference_field_return_does_not_recommend_copy_getters() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Widget {
     id: u32,
@@ -515,6 +531,7 @@ impl Widget {
 
 #[test]
 fn trivial_setter_is_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Point {
     x: u32,
@@ -541,6 +558,7 @@ impl Point {
 
 #[test]
 fn into_only_setter_is_still_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Widget {
     name: String,
@@ -568,6 +586,7 @@ impl Widget {
 
 #[test]
 fn wrapping_some_setter_recommends_strip_option() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Node {
     name: Option<String>,
@@ -595,6 +614,7 @@ impl Node {
 
 #[test]
 fn two_wrapping_fluents_are_a_builder() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Node {
     name: Option<String>,
@@ -623,6 +643,7 @@ impl Node {
 
 #[test]
 fn two_trivial_fluents_are_a_builder() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Point {
     x: u32,
@@ -651,6 +672,7 @@ impl Point {
 
 #[test]
 fn some_into_setter_recommends_both_options() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Node {
     name: Option<String>,
@@ -678,6 +700,7 @@ impl Node {
 
 #[test]
 fn as_str_forwards_to_derive_more_as_ref() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Widget {
     name: String,
@@ -705,6 +728,7 @@ impl Widget {
 
 #[test]
 fn as_ref_forwards_to_derive_more_as_ref() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Widget {
     name: String,
@@ -726,6 +750,7 @@ impl Widget {
 
 #[test]
 fn option_as_ref_is_not_an_as_ref_trait_candidate() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Widget {
     low_value: Option<u32>,
@@ -750,6 +775,7 @@ impl Widget {
 
 #[test]
 fn const_fn_new_getter_setter_and_as_ref_are_all_exempt() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Widget {
     name: String,
@@ -785,6 +811,7 @@ impl Widget {
 
 #[test]
 fn non_const_counterpart_still_flags_all_four() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 struct Widget {
     name: String,
@@ -928,6 +955,7 @@ mod shared;
 
 #[test]
 fn path_spliced_file_without_the_dependency_is_exempt() -> miette::Result<()> {
+    cordial::init_tracing();
     let (fixture, owner_root, owner_file) = write_path_spliced_fixture(false)?;
     let path_inclusions = cordial::workspace_path_inclusions(fixture.path());
     let source = fs::read_to_string(&owner_file).into_diagnostic()?;
@@ -953,6 +981,7 @@ fn path_spliced_file_without_the_dependency_is_exempt() -> miette::Result<()> {
 
 #[test]
 fn path_spliced_file_with_the_dependency_is_still_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let (fixture, owner_root, owner_file) = write_path_spliced_fixture(true)?;
     let path_inclusions = cordial::workspace_path_inclusions(fixture.path());
     let source = fs::read_to_string(&owner_file).into_diagnostic()?;
@@ -979,6 +1008,7 @@ fn path_spliced_file_with_the_dependency_is_still_flagged() -> miette::Result<()
 
 #[test]
 fn existing_as_ref_derive_skips_as_str() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 #[derive(derive_more::AsRef)]
 struct Widget {
@@ -1003,6 +1033,7 @@ impl Widget {
 
 #[test]
 fn clap_schema_skips_pub_field() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 #[derive(Parser)]
 pub struct Cli {

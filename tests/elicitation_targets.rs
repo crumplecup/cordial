@@ -12,6 +12,7 @@ use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
 fn tracked_targets_have_unique_upstream_and_shadow_names() {
+    cordial::init_tracing();
     let mut upstream = HashSet::new();
     let mut shadow = HashSet::new();
     for target in ELICITATION_TRACKED_TARGETS {
@@ -30,6 +31,7 @@ fn tracked_targets_have_unique_upstream_and_shadow_names() {
 
 #[test]
 fn active_tracked_targets_require_shadow_member() {
+    cordial::init_tracing();
     let members: HashSet<String> = ["elicit_url", "elicitation"]
         .into_iter()
         .map(str::to_string)
@@ -41,6 +43,7 @@ fn active_tracked_targets_require_shadow_member() {
 
 #[test]
 fn elicitation_provider_includes_shadow_pair_for_active_roster_entry() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_workspace(
         fixture.path(),

@@ -7,6 +7,7 @@ use cordial::{
 
 #[test]
 fn missing_config_files_use_default() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("workspace")?;
@@ -20,6 +21,7 @@ fn missing_config_files_use_default() -> miette::Result<()> {
 
 #[test]
 fn unreadable_config_falls_back_to_default() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("workspace")?;
@@ -36,6 +38,7 @@ fn unreadable_config_falls_back_to_default() -> miette::Result<()> {
 
 #[test]
 fn workspace_toml_overrides_store_home() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("workspace")?;
@@ -71,6 +74,7 @@ min_module_names = 3
 
 #[test]
 fn store_home_overrides_default() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("workspace")?;
@@ -98,6 +102,7 @@ prefer_root = false
 
 #[test]
 fn tracing_toml_overrides_default() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("workspace")?;
@@ -144,6 +149,7 @@ apply_skip_crates = ["fixture_verus"]
 
 #[test]
 fn tracing_subscriber_toml_overrides_default() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("workspace")?;
@@ -176,6 +182,7 @@ idempotent = false
 
 #[test]
 fn derives_toml_overrides_default() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("workspace")?;

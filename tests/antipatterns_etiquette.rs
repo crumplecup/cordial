@@ -28,6 +28,7 @@ fn scan_fixture(name: &str) -> miette::Result<Vec<cordial::AntipatternSiteRecord
 
 #[test]
 fn box_dyn_error_sites_are_detected() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("box_dyn_error.rs")?;
     assert_eq!(
         findings
@@ -41,6 +42,7 @@ fn box_dyn_error_sites_are_detected() -> miette::Result<()> {
 
 #[test]
 fn box_dyn_error_context_includes_enclosing_fn() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("box_dyn_error.rs")?;
     let accepts = findings
         .iter()
@@ -53,6 +55,7 @@ fn box_dyn_error_context_includes_enclosing_fn() -> miette::Result<()> {
 
 #[test]
 fn non_box_dyn_error_types_are_ignored() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("box_dyn_error.rs")?;
     assert!(
         !findings
@@ -64,6 +67,7 @@ fn non_box_dyn_error_types_are_ignored() -> miette::Result<()> {
 
 #[test]
 fn string_error_result_types_are_detected() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("string_error.rs")?;
     let string_errors: Vec<_> = findings
         .iter()
@@ -100,6 +104,7 @@ fn string_error_result_types_are_detected() -> miette::Result<()> {
 
 #[test]
 fn unused_underscore_arguments_are_detected() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("unused_underscore_args.rs")?;
     let unused = findings
         .iter()
@@ -131,6 +136,7 @@ fn unused_underscore_arguments_are_detected() -> miette::Result<()> {
 
 #[test]
 fn foreign_trait_impl_unused_args_are_skipped() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("foreign_trait_unused_args.rs")?;
     let unused = findings
         .iter()
@@ -153,6 +159,7 @@ fn foreign_trait_impl_unused_args_are_skipped() -> miette::Result<()> {
 
 #[test]
 fn proc_macro_abi_and_creusot_opaque_stub_unused_args_are_skipped() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("unused_underscore_args_exempt_signatures.rs")?;
     let unused = findings
         .iter()
@@ -200,6 +207,7 @@ fn proc_macro_abi_and_creusot_opaque_stub_unused_args_are_skipped() -> miette::R
 
 #[test]
 fn cfg_sibling_unused_args_are_skipped_when_a_sibling_reads_them() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("unused_underscore_args_cfg_siblings.rs")?;
     let unused = findings
         .iter()
@@ -242,6 +250,7 @@ fn cfg_sibling_unused_args_are_skipped_when_a_sibling_reads_them() -> miette::Re
 
 #[test]
 fn crate_local_traits_apply_across_files() -> miette::Result<()> {
+    cordial::init_tracing();
     let tmp = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let src = tmp.path().join("src");
     fs::create_dir_all(&src)
@@ -298,6 +307,7 @@ fn crate_local_traits_apply_across_files() -> miette::Result<()> {
 
 #[test]
 fn trait_declarations_do_not_flag_placeholder_params() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("unused_underscore_args.rs")?;
     assert!(!findings.iter().any(|f| {
         f.rule_id == AntipatternRuleId::UnusedUnderscoreArg001
@@ -309,6 +319,7 @@ fn trait_declarations_do_not_flag_placeholder_params() -> miette::Result<()> {
 
 #[test]
 fn static_struct_fields_are_detected() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("static_struct_fields.rs")?;
     let static_refs = findings
         .iter()
@@ -341,6 +352,7 @@ fn static_struct_fields_are_detected() -> miette::Result<()> {
 
 #[test]
 fn enum_variant_tuple_and_struct_payloads_are_detected() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("static_struct_fields.rs")?;
     let variant_findings: Vec<_> = findings
         .iter()
@@ -355,6 +367,7 @@ fn enum_variant_tuple_and_struct_payloads_are_detected() -> miette::Result<()> {
 
 #[test]
 fn fn_signatures_with_static_refs_are_not_struct_fields() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("static_struct_fields.rs")?;
     assert!(!findings.iter().any(|f| {
         f.rule_id == AntipatternRuleId::StructStaticRef001
@@ -365,6 +378,7 @@ fn fn_signatures_with_static_refs_are_not_struct_fields() -> miette::Result<()> 
 
 #[test]
 fn crate_local_dyn_trait_static_refs_are_exempt() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("local_dyn_trait_static_refs.rs")?;
     let static_refs: Vec<_> = findings
         .iter()
@@ -395,6 +409,7 @@ fn crate_local_dyn_trait_static_refs_are_exempt() -> miette::Result<()> {
 
 #[test]
 fn const_static_only_types_may_store_static_str() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("const_table_static_refs.rs")?;
     let static_refs: Vec<_> = findings
         .iter()
@@ -429,6 +444,7 @@ fn const_static_only_types_may_store_static_str() -> miette::Result<()> {
 
 #[test]
 fn inventory_collect_registered_types_may_store_static_str() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("inventory_collect_static_refs.rs")?;
     let static_refs: Vec<_> = findings
         .iter()
@@ -452,6 +468,7 @@ fn inventory_collect_registered_types_may_store_static_str() -> miette::Result<(
 
 #[test]
 fn trait_static_slice_or_ref_return_types_may_store_static_str() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture("trait_static_slice_return_static_refs.rs")?;
     let static_refs: Vec<_> = findings
         .iter()
@@ -476,6 +493,7 @@ fn trait_static_slice_or_ref_return_types_may_store_static_str() -> miette::Resu
 
 #[test]
 fn antipatterns_etiquette_emits_reports() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/parity/workspaces/box_dyn_error");
     let store = tempfile::tempdir()
@@ -519,6 +537,7 @@ fn antipatterns_etiquette_emits_reports() -> miette::Result<()> {
 
 #[test]
 fn aliased_one_arg_result_is_not_a_string_error() -> miette::Result<()> {
+    cordial::init_tracing();
     let src_root = Path::new(".");
     let file = src_root.join("aliased.rs");
     let findings = scan_antipatterns_rust_source(
@@ -540,6 +559,7 @@ fn aliased_one_arg_result_is_not_a_string_error() -> miette::Result<()> {
 
 #[test]
 fn documented_exceptions_suppress_checklist_items() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(workspace.path().join("src"))
         .into_diagnostic()

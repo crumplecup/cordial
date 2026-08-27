@@ -47,6 +47,7 @@ fn pad_source_to_lines(mut source: String, lines: usize) -> String {
 
 #[test]
 fn modularity_etiquette_detects_large_functions() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -84,6 +85,7 @@ fn modularity_etiquette_detects_large_functions() -> miette::Result<()> {
 
 #[test]
 fn scan_modularity_rust_source_ranks_handlers() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("handlers.rs");
     fs::write(&file, HANDLERS_RS)
@@ -159,6 +161,7 @@ fn padded_fn_body(lines: usize) -> String {
 
 #[test]
 fn long_impl_method_is_flagged_on_the_type() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = format!(
         "pub struct Widget;\nimpl Widget {{\n    pub fn run(&self) {}\n}}\n",
         padded_fn_body(12)
@@ -175,6 +178,7 @@ fn long_impl_method_is_flagged_on_the_type() -> miette::Result<()> {
 
 #[test]
 fn long_trait_default_method_is_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = format!(
         "pub trait Drive {{\n    fn go(&self) {}\n    fn stop(&self);\n}}\n",
         padded_fn_body(12)
@@ -193,6 +197,7 @@ fn long_trait_default_method_is_flagged() -> miette::Result<()> {
 
 #[test]
 fn cfg_test_methods_are_ignored() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = format!(
         "pub struct Widget;\n#[cfg(test)]\nimpl Widget {{\n    fn run(&self) {}\n}}\n",
         padded_fn_body(12)
@@ -207,6 +212,7 @@ fn cfg_test_methods_are_ignored() -> miette::Result<()> {
 
 #[test]
 fn function_length_counts_the_body_not_the_signature() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
         pub fn wide<
             A,
@@ -231,6 +237,7 @@ fn function_length_counts_the_body_not_the_signature() -> miette::Result<()> {
 
 #[test]
 fn modularity_default_thresholds() {
+    cordial::init_tracing();
     let thresholds = ModularityThresholds::default();
     assert_eq!(thresholds.file_inventory_min_lines(), 500);
     assert_eq!(thresholds.function_inventory_min_lines(), 150);
@@ -271,6 +278,7 @@ fn scan_snippet(
 
 #[test]
 fn types_per_file_flags_when_over_max() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_snippet("pub struct Alpha;\npub struct Beta;\n", test_thresholds())?;
     assert!(
         findings.contains(&ModularityKind::TypesPerFile),
@@ -281,6 +289,7 @@ fn types_per_file_flags_when_over_max() -> miette::Result<()> {
 
 #[test]
 fn types_per_file_allows_one_type() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_snippet("pub struct Only;\n", test_thresholds())?;
     assert!(
         !findings.contains(&ModularityKind::TypesPerFile),
@@ -291,6 +300,7 @@ fn types_per_file_allows_one_type() -> miette::Result<()> {
 
 #[test]
 fn types_per_file_ignores_aliases_and_cfg_test() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
         pub struct Only;
         pub type Alias = Only;
@@ -311,6 +321,7 @@ fn types_per_file_ignores_aliases_and_cfg_test() -> miette::Result<()> {
 
 #[test]
 fn types_per_file_counts_inline_module_types() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
         pub struct Outer;
         mod inner {
@@ -327,6 +338,7 @@ fn types_per_file_counts_inline_module_types() -> miette::Result<()> {
 
 #[test]
 fn types_per_file_respects_higher_config_max() -> miette::Result<()> {
+    cordial::init_tracing();
     let thresholds = test_thresholds().with_max_types_per_file(3);
     let findings = scan_snippet(
         "pub struct A;\npub enum B { X }\npub trait C {}\n",
@@ -341,6 +353,7 @@ fn types_per_file_respects_higher_config_max() -> miette::Result<()> {
 
 #[test]
 fn modularity_etiquette_session_reads_types_per_file_config() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -380,6 +393,7 @@ fn modularity_etiquette_session_reads_types_per_file_config() -> miette::Result<
 
 #[test]
 fn module_size_stats_flags_two_sigma_outliers() {
+    cordial::init_tracing();
     let sizes = [10, 10, 10, 10, 10, 10, 10, 200];
     let stats = ModuleSizeStats::from_lines(&sizes);
     assert!(stats.is_outlier(200, 2));
@@ -389,6 +403,7 @@ fn module_size_stats_flags_two_sigma_outliers() {
 
 #[test]
 fn module_size_stats_need_spread() {
+    cordial::init_tracing();
     let stats = ModuleSizeStats::from_lines(&[12, 12, 12]);
     assert!(!stats.is_outlier(12, 2));
     let one = ModuleSizeStats::from_lines(&[40]);
@@ -397,6 +412,7 @@ fn module_size_stats_need_spread() {
 
 #[test]
 fn module_size_stats_split_upper_and_lower_tails() {
+    cordial::init_tracing();
     let sizes = [10, 10, 10, 10, 10, 10, 10, 200];
     let stats = ModuleSizeStats::from_lines(&sizes);
     assert!(stats.is_upper_outlier(200, 2));
@@ -410,6 +426,7 @@ fn module_size_stats_split_upper_and_lower_tails() {
 
 #[test]
 fn module_size_checklist_floor_is_upper_tail_only() {
+    cordial::init_tracing();
     let thresholds = ModularityThresholds::default();
     assert!(thresholds.is_module_size_checklist(500, Some(2.1)));
     assert!(
@@ -433,6 +450,7 @@ fn module_size_checklist_floor_is_upper_tail_only() {
 
 #[test]
 fn module_size_inventory_includes_file_and_inline_mod() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = "mod inner {\n    pub fn x() {}\n}\n";
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("lib.rs");
@@ -484,6 +502,7 @@ fn padded_module(lines: usize) -> String {
 
 #[test]
 fn module_size_session_flags_two_sigma_outlier() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -542,6 +561,7 @@ fn module_size_session_flags_two_sigma_outlier() -> miette::Result<()> {
 
 #[test]
 fn module_size_upper_tail_below_file_floor_is_not_checklist() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -591,6 +611,7 @@ fn module_size_upper_tail_below_file_floor_is_not_checklist() -> miette::Result<
 
 #[test]
 fn module_size_lower_tail_checklists_when_not_ignored() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -636,6 +657,7 @@ fn module_size_lower_tail_checklists_when_not_ignored() -> miette::Result<()> {
 
 #[test]
 fn module_size_lower_tail_can_be_ignored() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -687,6 +709,7 @@ fn module_size_lower_tail_can_be_ignored() -> miette::Result<()> {
 
 #[test]
 fn module_size_session_does_not_flag_even_sizes() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -721,6 +744,7 @@ fn module_size_session_does_not_flag_even_sizes() -> miette::Result<()> {
 
 #[test]
 fn min_module_lines_drops_tiny_modules_from_sigma_sample() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -768,6 +792,7 @@ fn min_module_lines_drops_tiny_modules_from_sigma_sample() -> miette::Result<()>
 
 #[test]
 fn strahler_order_bumps_when_two_children_share_max() -> miette::Result<()> {
+    cordial::init_tracing();
     let nodes = build_module_hierarchy(&[
         input("<crate>", "src/lib.rs", 10),
         input("left", "src/left.rs", 8),
@@ -788,6 +813,7 @@ fn strahler_order_bumps_when_two_children_share_max() -> miette::Result<()> {
 
 #[test]
 fn library_branches_rank_top_heavy_parents_first() {
+    cordial::init_tracing();
     let nodes = build_module_hierarchy(&[
         input("<crate>", "src/lib.rs", 6),
         input("fat", "src/fat/mod.rs", 80),
@@ -809,6 +835,7 @@ fn library_branches_rank_top_heavy_parents_first() {
 
 #[test]
 fn fat_leaves_are_not_ranked_as_library_branches() {
+    cordial::init_tracing();
     let nodes = build_module_hierarchy(&[
         input("<crate>", "src/lib.rs", 6),
         input("session", "src/session.rs", 695),
@@ -827,6 +854,7 @@ fn fat_leaves_are_not_ranked_as_library_branches() {
 
 #[test]
 fn top_heavy_parents_include_nested_nodes() {
+    cordial::init_tracing();
     let nodes = build_module_hierarchy(&[
         input("<crate>", "src/lib.rs", 10),
         input("pkg", "src/pkg/mod.rs", 8),
@@ -840,6 +868,7 @@ fn top_heavy_parents_include_nested_nodes() {
 
 #[test]
 fn lopsided_siblings_rank_the_dominant_child() {
+    cordial::init_tracing();
     let nodes = build_module_hierarchy(&[
         input("<crate>", "src/lib.rs", 10),
         input("antipatterns", "src/antipatterns.rs", 3000),
@@ -855,6 +884,7 @@ fn lopsided_siblings_rank_the_dominant_child() {
 
 #[test]
 fn lopsided_siblings_ignore_stub_children() {
+    cordial::init_tracing();
     let nodes = build_module_hierarchy(&[
         input("<crate>", "src/lib.rs", 10),
         input("tracked_targets", "src/tracked_targets.rs", 275),
@@ -868,6 +898,7 @@ fn lopsided_siblings_ignore_stub_children() {
 
 #[test]
 fn lopsided_hit_requires_seventy_five_percent_of_substantial_siblings() {
+    cordial::init_tracing();
     let thresholds = ModularityThresholds::default();
     assert!(!thresholds.is_lopsided_hit(296, 462));
     assert!(thresholds.is_lopsided_hit(450, 600));
@@ -875,6 +906,7 @@ fn lopsided_hit_requires_seventy_five_percent_of_substantial_siblings() {
 
 #[test]
 fn unary_nests_rank_the_passthrough_directory() {
+    cordial::init_tracing();
     let nodes = build_module_hierarchy(&[
         input("<crate>", "src/lib.rs", 10),
         input("error", "src/error.rs", 200),
@@ -893,6 +925,7 @@ fn unary_nests_rank_the_passthrough_directory() {
 
 #[test]
 fn unary_nests_ignore_a_unary_leaf_child() {
+    cordial::init_tracing();
     let nodes = build_module_hierarchy(&[
         input("<crate>", "src/lib.rs", 10),
         input("chain_layer", "src/chain_layer/mod.rs", 194),
@@ -903,6 +936,7 @@ fn unary_nests_ignore_a_unary_leaf_child() {
 
 #[test]
 fn unary_nests_ignore_crate_root_unary_package() {
+    cordial::init_tracing();
     let nodes = build_module_hierarchy(&[
         input("<crate>", "src/lib.rs", 10),
         input("only", "src/only/mod.rs", 8),
@@ -914,6 +948,7 @@ fn unary_nests_ignore_crate_root_unary_package() {
 
 #[test]
 fn collapse_hit_requires_hierarchy_min_subtree() {
+    cordial::init_tracing();
     let thresholds = ModularityThresholds::default();
     assert!(!thresholds.is_collapse_hit(149));
     assert!(thresholds.is_collapse_hit(150));
@@ -921,6 +956,7 @@ fn collapse_hit_requires_hierarchy_min_subtree() {
 
 #[test]
 fn top_heavy_parent_is_a_peel_checklist_item() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src/fat"))
         .into_diagnostic()
@@ -970,6 +1006,7 @@ fn top_heavy_parent_is_a_peel_checklist_item() -> miette::Result<()> {
 
 #[test]
 fn lopsided_sibling_is_a_split_checklist_item() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -1016,6 +1053,7 @@ fn lopsided_sibling_is_a_split_checklist_item() -> miette::Result<()> {
 
 #[test]
 fn unary_nest_is_a_collapse_checklist_item() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src/error/sources"))
         .into_diagnostic()
@@ -1080,6 +1118,7 @@ fn unary_nest_is_a_collapse_checklist_item() -> miette::Result<()> {
 
 #[test]
 fn unary_leaf_is_not_a_collapse_checklist_item() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src/chain_layer"))
         .into_diagnostic()
@@ -1123,6 +1162,7 @@ fn unary_leaf_is_not_a_collapse_checklist_item() -> miette::Result<()> {
 
 #[test]
 fn checklist_names_longest_methods_on_too_long_files() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -1183,6 +1223,7 @@ fn checklist_names_longest_methods_on_too_long_files() -> miette::Result<()> {
 
 #[test]
 fn checklist_extract_helpers_on_too_long_files_without_long_bodies() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -1231,6 +1272,7 @@ fn checklist_extract_helpers_on_too_long_files_without_long_bodies() -> miette::
 
 #[test]
 fn checklist_names_helpers_below_inventory_on_too_long_files() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -1281,6 +1323,7 @@ fn checklist_names_helpers_below_inventory_on_too_long_files() -> miette::Result
 
 #[test]
 fn scan_records_helpers_only_on_inventory_sized_files() -> miette::Result<()> {
+    cordial::init_tracing();
     let helper = function_with_body_lines("helper", 90);
     let small = scan_modularity_rust_source(
         &helper,
@@ -1327,6 +1370,7 @@ fn scan_records_helpers_only_on_inventory_sized_files() -> miette::Result<()> {
 
 #[test]
 fn module_hierarchy_session_writes_branch_ranking() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src/fat"))
         .into_diagnostic()

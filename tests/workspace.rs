@@ -5,6 +5,7 @@ use cordial::{PANICS_ETIQUETTE, RunAll, Session, SessionBuilder};
 
 #[test]
 fn workspace_run_analyzes_each_member() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_workspace(
         fixture.path(),

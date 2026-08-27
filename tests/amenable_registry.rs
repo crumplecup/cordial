@@ -31,6 +31,7 @@ fn sample_alias(path: &str, alias_target: &str) -> StdInventoryItem {
 
 #[test]
 fn parse_rust_std_standard_inner_extracts_type_parameter() {
+    cordial::init_tracing();
     assert_eq!(
         parse_rust_std_standard_inner(
             "amenable_std::rust_std::RustStdStandard<std::string::String>"
@@ -47,6 +48,7 @@ fn parse_rust_std_standard_inner_extracts_type_parameter() {
 
 #[test]
 fn evidence_for_std_type_matches_generic_instantiation_to_bare_inventory_path() {
+    cordial::init_tracing();
     let registry = RegistryDump {
         evidence_links: vec![EvidenceLinkDump {
             name: "amenable_std::rust_std::RustStdStandard<std::sync::mpsc::Sender<i32>>"
@@ -67,6 +69,7 @@ fn evidence_for_std_type_matches_generic_instantiation_to_bare_inventory_path() 
 #[test]
 fn build_amenable_std_report_classifies_complete_partial_missing_and_skipped() -> miette::Result<()>
 {
+    cordial::init_tracing();
     let items = vec![
         sample_item("std::string::String"),
         sample_item("std::vec::Vec"),
@@ -153,6 +156,7 @@ fn build_amenable_std_report_classifies_complete_partial_missing_and_skipped() -
 
 #[test]
 fn witness_verifiers_for_std_type_tolerates_evidence_and_proof_path_drift() {
+    cordial::init_tracing();
     let registry = RegistryDump {
         evidence_links: vec![EvidenceLinkDump {
             name: "amenable_std::rust_std::RustStdStandard<std::fmt::Alignment>".to_string(),
@@ -174,6 +178,7 @@ fn witness_verifiers_for_std_type_tolerates_evidence_and_proof_path_drift() {
 
 #[test]
 fn build_amenable_std_report_resolves_evidence_via_type_alias_target() -> miette::Result<()> {
+    cordial::init_tracing();
     let items = vec![sample_alias("core::num::NonZeroI8", "NonZero")];
     let registry = RegistryDump {
         evidence_links: vec![EvidenceLinkDump {
@@ -215,6 +220,7 @@ fn build_amenable_std_report_resolves_evidence_via_type_alias_target() -> miette
 #[test]
 fn a_scoped_exception_only_excepts_its_named_verifier_and_keeps_real_witnesses_visible()
 -> miette::Result<()> {
+    cordial::init_tracing();
     let items = vec![sample_item("std::os::windows::ffi::EncodeWide")];
     let registry = RegistryDump {
         evidence_links: vec![EvidenceLinkDump {
@@ -271,6 +277,7 @@ fn a_scoped_exception_only_excepts_its_named_verifier_and_keeps_real_witnesses_v
 
 #[test]
 fn a_scoped_exception_does_not_hide_a_real_gap_on_a_different_verifier() -> miette::Result<()> {
+    cordial::init_tracing();
     let items = vec![sample_item("std::os::windows::prelude::OwnedSocket")];
     let registry = RegistryDump {
         evidence_links: vec![EvidenceLinkDump {
@@ -319,6 +326,7 @@ fn a_scoped_exception_does_not_hide_a_real_gap_on_a_different_verifier() -> miet
 
 #[test]
 fn amenable_std_plugin_is_registered() -> miette::Result<()> {
+    cordial::init_tracing();
     use cordial::{PluginCategory, coverage_plugins};
     let plugins = coverage_plugins();
     assert!(
@@ -339,6 +347,7 @@ fn amenable_std_plugin_is_registered() -> miette::Result<()> {
 
 #[test]
 fn follows_a_two_hop_alias_chain_to_the_concrete_target() {
+    cordial::init_tracing();
     use cordial::testing::{InventoryItemKind, StdInventoryItem, resolve_alias_chain};
 
     let items = vec![StdInventoryItem {
@@ -356,6 +365,7 @@ fn follows_a_two_hop_alias_chain_to_the_concrete_target() {
 
 #[test]
 fn stops_on_a_self_referential_cycle() {
+    cordial::init_tracing();
     use cordial::testing::{InventoryItemKind, StdInventoryItem, resolve_alias_chain};
 
     let items = vec![StdInventoryItem {

@@ -82,6 +82,7 @@ fn scan_fixture() -> miette::Result<Vec<ErrorSiteScanRow>> {
 
 #[test]
 fn foreign_error_types_detect_chain_breaks() -> miette::Result<()> {
+    cordial::init_tracing();
     let scan_rows = scan_fixture()?;
     let partition_rows = partition_error_site_records(&scan_rows, "fixture");
     let partition = build_error_site_partition_report("fixture", partition_rows);
@@ -138,6 +139,7 @@ fn run_syn_parse_fixture(manifest: Option<&str>) -> miette::Result<String> {
 
 #[test]
 fn proc_macro_crate_does_not_flag_syn_error_as_a_foreign_leak() -> miette::Result<()> {
+    cordial::init_tracing();
     let csv = run_syn_parse_fixture(Some(
         "[package]\nname = \"fixture\"\nversion = \"0.1.0\"\n\n[lib]\nproc-macro = true\n",
     ))?;
@@ -150,6 +152,7 @@ fn proc_macro_crate_does_not_flag_syn_error_as_a_foreign_leak() -> miette::Resul
 
 #[test]
 fn non_proc_macro_crate_still_flags_syn_error_as_a_foreign_leak() -> miette::Result<()> {
+    cordial::init_tracing();
     let csv = run_syn_parse_fixture(None)?;
     assert!(
         csv.contains("syn::Error"),
@@ -160,6 +163,7 @@ fn non_proc_macro_crate_still_flags_syn_error_as_a_foreign_leak() -> miette::Res
 
 #[test]
 fn foreign_error_types_session_produces_artifacts() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()

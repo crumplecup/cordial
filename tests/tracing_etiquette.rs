@@ -19,6 +19,7 @@ fn write_minimal_crate_manifest(root: &Path, crate_name: &str) -> miette::Result
 
 #[test]
 fn tracing_etiquette_detects_missing_instrument() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -96,6 +97,7 @@ fn private_fn() {
 
 #[test]
 fn tracing_etiquette_classifies_roles_and_recipes() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -210,6 +212,7 @@ pub fn run_apply_patches() {}
 
 #[test]
 fn attribute_nodes_materialized_for_instrument() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -247,6 +250,7 @@ pub fn ok() {}
 
 #[test]
 fn tracing_etiquette_emits_recipe_deltas() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -351,6 +355,7 @@ pub fn run(crate_name: &str) {}
 #[cfg(feature = "error_sites")]
 #[test]
 fn tracing_non_result_error_site_is_not_silent() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -392,6 +397,7 @@ pub fn scan_source_tree() {
 
 #[test]
 fn tracing_option_try_is_not_silent() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -437,6 +443,7 @@ pub fn lookup_first() -> Option<u8> {
 
 #[test]
 fn tracing_reports_private_and_pub_super() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -480,6 +487,7 @@ fn private_helper() {}
 
 #[test]
 fn tracing_extra_skip_from_config() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -527,6 +535,7 @@ fn tracing_extra_skip_from_config() -> miette::Result<()> {
 
 #[test]
 fn tracing_const_fn_is_never_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -589,6 +598,7 @@ pub fn traced_ordinary_fn() {}
 
 #[test]
 fn tracing_err_recipe_requires_confirmed_display() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -661,6 +671,7 @@ pub fn returns_displayable_err() -> Result<(), DisplayableError> {
 
 #[test]
 fn tracing_skip_covers_tuple_destructured_generic_params() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -717,6 +728,7 @@ impl<T: PartialEq> Check<T> for Checker<T> {
 
 #[test]
 fn tracing_never_flags_function_nested_in_configured_gate_cfg() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -782,6 +794,7 @@ pub fn traced_ordinary_fn() {}
 
 #[test]
 fn tracing_never_flags_function_called_only_from_proof_context() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -865,6 +878,7 @@ pub fn traced_ordinary_fn() {}
 
 #[test]
 fn tracing_still_flags_function_with_an_ordinary_caller_too() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -938,6 +952,7 @@ pub fn validate(value: u32) -> bool {
 
 #[test]
 fn tracing_treats_cfg_attr_gated_instrument_as_present() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -995,6 +1010,7 @@ fn open_rule_ids(outcome: &dyn cordial::RunOutcome) -> Vec<String> {
 
 #[test]
 fn tracing_proof_only_method_with_instrument_is_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -1065,6 +1081,7 @@ pub fn traced_ordinary_fn() {}
 
 #[test]
 fn tracing_proof_only_gated_instrument_never_fires_so_it_is_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -1129,6 +1146,7 @@ mod proofs {
 
 #[test]
 fn tracing_ungated_instrument_on_ordinary_fn_in_gate_crate() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -1174,6 +1192,7 @@ pub fn scan_tree() {}
 
 #[test]
 fn tracing_skip_crate_with_instrument_is_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -1221,6 +1240,7 @@ pub fn other_fn() {}
 
 #[test]
 fn tracing_skip_crate_uninstrumented_is_silent() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()

@@ -8,6 +8,7 @@ use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
 fn rustdoc_structure_enricher_materializes_type_attrs() -> miette::Result<()> {
+    cordial::init_tracing();
     let temp = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let json_path = temp.path().join("demo.json");
     write_rustdoc_crate_json(&json_path, &demo_impl_coverage_crate())
@@ -47,6 +48,7 @@ fn rustdoc_structure_enricher_materializes_type_attrs() -> miette::Result<()> {
 
 #[test]
 fn rustdoc_structure_enricher_sets_item_identity_at_loader() -> miette::Result<()> {
+    cordial::init_tracing();
     let temp = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let json_path = temp.path().join("demo.json");
     write_rustdoc_crate_json(&json_path, &demo_impl_coverage_crate())

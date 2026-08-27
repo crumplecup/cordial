@@ -20,6 +20,7 @@ fn clean() {
 
 #[test]
 fn scan_glob_imports_finds_three_stars() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("globs.rs");
     fs::write(&file, GLOB_SAMPLE)
@@ -62,6 +63,7 @@ fn scan_glob_imports_finds_three_stars() -> miette::Result<()> {
 
 #[test]
 fn glob_imports_etiquette_writes_checklist() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -100,6 +102,7 @@ fn glob_imports_etiquette_writes_checklist() -> miette::Result<()> {
 
 #[test]
 fn glob_imports_in_tests_tree_count() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -127,6 +130,7 @@ fn glob_imports_in_tests_tree_count() -> miette::Result<()> {
 
 #[test]
 fn super_glob_and_cfg_test_module_globs_are_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 mod child {
     use super::*;
@@ -163,6 +167,7 @@ use crate::inner::*;
 
 #[test]
 fn sibling_super_glob_is_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = "mod child { use super::helper::*; }\n";
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("sib.rs");

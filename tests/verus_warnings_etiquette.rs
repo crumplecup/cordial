@@ -16,6 +16,7 @@ fn canary_path() -> PathBuf {
 
 #[test]
 fn parse_amenable_canary_keeps_two_unique_warnings() {
+    cordial::init_tracing();
     let crate_root = PathBuf::from("/workspace");
     let records = parse_verus_compiler_output(CANARY, &crate_root);
     assert_eq!(records.len(), 2);
@@ -38,6 +39,7 @@ fn parse_amenable_canary_keeps_two_unique_warnings() {
 
 #[test]
 fn parse_drops_summary_lines_and_errors() {
+    cordial::init_tracing();
     let output = "\
 error: expected `;`
  --> src/lib.rs:1:1
@@ -50,6 +52,7 @@ warning: 3 warnings emitted
 
 #[test]
 fn crate_named_verus_is_a_target() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let crate_root = fixture.path().join("demo_verus");
     fs::create_dir_all(crate_root.join("src")).into_diagnostic()?;
@@ -65,6 +68,7 @@ fn crate_named_verus_is_a_target() -> miette::Result<()> {
 
 #[test]
 fn crate_with_vstd_dep_is_a_target() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::write(
         fixture.path().join("Cargo.toml"),
@@ -77,6 +81,7 @@ fn crate_with_vstd_dep_is_a_target() -> miette::Result<()> {
 
 #[test]
 fn ordinary_crate_is_not_a_verus_target() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::write(
         fixture.path().join("Cargo.toml"),
@@ -89,6 +94,7 @@ fn ordinary_crate_is_not_a_verus_target() -> miette::Result<()> {
 
 #[test]
 fn scan_skips_non_verus_crate_without_invoking_compiler() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
     fs::write(
@@ -107,6 +113,7 @@ fn scan_skips_non_verus_crate_without_invoking_compiler() -> miette::Result<()> 
 #[cfg(unix)]
 #[test]
 fn session_writes_checklist_from_injected_verus() -> miette::Result<()> {
+    cordial::init_tracing();
     use std::os::unix::fs::PermissionsExt;
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let crate_root = fixture.path().join("canary_verus");

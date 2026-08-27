@@ -15,6 +15,7 @@ use quality::ACME_STYLE;
 
 #[test]
 fn three_plugin_kinds_register_and_quality_finds_todo() -> miette::Result<()> {
+    cordial::init_tracing();
     let plugins: Vec<&dyn Plugin> = vec![&ACME_STYLE, &ACME_API_COVERAGE, &ACME_ERROR_HANDLING];
 
     let quality = plugins_in_category(&plugins, PluginCategory::Quality);

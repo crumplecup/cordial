@@ -24,6 +24,7 @@ fn propagate_internal(x: CordialResult<()>) -> CordialResult<()> {
 
 #[test]
 fn error_flow_enricher_partitions_sites_and_links_origins() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -129,5 +130,6 @@ fn error_flow_enricher_partitions_sites_and_links_origins() -> miette::Result<()
 
 #[test]
 fn error_flow_enricher_is_auto_injected_with_error_site_inventory() {
+    cordial::init_tracing();
     assert_eq!(ErrorFlowEnricher::ID, "error-flow");
 }

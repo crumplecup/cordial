@@ -31,6 +31,7 @@ fn clean_fn() {}
 
 #[test]
 fn allows_workspace_fixture_has_four_sites() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/parity/workspaces/allow_attrs");
     let records = cordial::scan_crate_allows(&workspace)
@@ -42,6 +43,7 @@ fn allows_workspace_fixture_has_four_sites() -> miette::Result<()> {
 
 #[test]
 fn allows_etiquette_detects_allow_attributes() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -86,6 +88,7 @@ fn allows_etiquette_detects_allow_attributes() -> miette::Result<()> {
 
 #[test]
 fn scan_allows_rust_source_finds_four_sites() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("allow_attrs.rs");
     fs::write(&file, ALLOW_ATTRS)
@@ -122,6 +125,7 @@ fn scan_allows_rust_source_finds_four_sites() -> miette::Result<()> {
 
 #[test]
 fn scan_allows_rust_source_finds_allow_on_use_items() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("uses.rs");
     fs::write(
@@ -179,6 +183,7 @@ use vstd::prelude::*;
 
 #[test]
 fn reasoned_verus_vstd_allow_is_not_an_action_item() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_inline("verus_reasoned.rs", VERUS_PRELUDE_WITH_REASON)?;
     assert!(
         findings.is_empty(),
@@ -189,6 +194,7 @@ fn reasoned_verus_vstd_allow_is_not_an_action_item() -> miette::Result<()> {
 
 #[test]
 fn verus_vstd_allow_without_reason_is_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_inline("verus_bare.rs", VERUS_PRELUDE_WITHOUT_REASON)?;
     assert_eq!(findings.len(), 1, "{findings:?}");
     assert_eq!(findings[0].rule_id, AllowRuleId::VerusReason001);
@@ -198,6 +204,7 @@ fn verus_vstd_allow_without_reason_is_flagged() -> miette::Result<()> {
 
 #[test]
 fn verus_allow_empty_reason_is_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_inline(
         "verus_empty_reason.rs",
         r#"
@@ -212,6 +219,7 @@ use vstd::float::FloatBitsProperties;
 
 #[test]
 fn allows_etiquette_emits_verus_reason_finding() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()

@@ -10,6 +10,7 @@ use cordial::testing::{
 
 #[test]
 fn collect_proof_harness_parses_non_empty_and_kani_contains() -> miette::Result<()> {
+    cordial::init_tracing();
     let dir = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let path = dir.path().join("harness.rs");
     fs::write(
@@ -35,6 +36,7 @@ fn collect_proof_harness_parses_non_empty_and_kani_contains() -> miette::Result<
 
 #[test]
 fn collect_proof_harness_parses_qualified_non_empty_types() -> miette::Result<()> {
+    cordial::init_tracing();
     let dir = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let path = dir.path().join("harness.rs");
     fs::write(&path, "assert_proofs_non_empty::<url::Widget>();\n")
@@ -52,6 +54,7 @@ fn collect_proof_harness_parses_qualified_non_empty_types() -> miette::Result<()
 
 #[test]
 fn minimal_workspace_fixture_links_widget_to_proof_harness() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/parity/workspaces/minimal-workspace");
     let harness_path = workspace.join("crates/elicitation/tests/proof_non_empty_test.rs");
@@ -68,6 +71,7 @@ fn minimal_workspace_fixture_links_widget_to_proof_harness() -> miette::Result<(
 
 #[test]
 fn test_status_handles_nested_generics_in_turbofish() {
+    cordial::init_tracing();
     let harness = ProofHarness {
         non_empty_types: ["HashMap<String, Vec<bool>>".to_string()]
             .into_iter()

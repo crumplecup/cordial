@@ -46,6 +46,7 @@ fn option_to_err(x: Option<i32>) -> CordialResult<i32> {
 
 #[test]
 fn error_site_kinds_are_detected() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("error_sites.rs");
     fs::write(&file, ERROR_SITES)
@@ -77,6 +78,7 @@ fn error_site_kinds_are_detected() -> miette::Result<()> {
 
 #[test]
 fn error_site_context_includes_enclosing_fn() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("error_sites.rs");
     fs::write(&file, ERROR_SITES)
@@ -103,6 +105,7 @@ fn error_site_context_includes_enclosing_fn() -> miette::Result<()> {
 
 #[test]
 fn error_sites_etiquette_session_produces_csv() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -164,6 +167,7 @@ fn error_sites_etiquette_session_produces_csv() -> miette::Result<()> {
 
 #[test]
 fn map_err_on_std_is_other() {
+    cordial::init_tracing();
     use cordial::ErrorSiteScanRow;
     use cordial::partition_error_site_row;
     use std::path::Path;
@@ -184,6 +188,7 @@ fn map_err_on_std_is_other() {
 
 #[test]
 fn question_mark_after_map_err_is_internal() -> miette::Result<()> {
+    cordial::init_tracing();
     use cordial::ErrorSiteScanRow;
     use cordial::partition_error_site_row;
     use std::path::Path;
@@ -205,6 +210,7 @@ fn question_mark_after_map_err_is_internal() -> miette::Result<()> {
 
 #[test]
 fn partition_fixture_has_foreign_pool() -> miette::Result<()> {
+    cordial::init_tracing();
     use cordial::ErrorSiteScanRow;
     use cordial::partition_error_site_row;
 

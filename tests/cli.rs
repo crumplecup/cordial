@@ -29,6 +29,7 @@ fn write_minimal_crate(root: &std::path::Path, lib_rs: &str) -> miette::Result<(
 
 #[test]
 fn cli_quality_writes_reports_and_rollup() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_minimal_crate(
         fixture.path(),
@@ -66,6 +67,7 @@ fn cli_quality_writes_reports_and_rollup() -> miette::Result<()> {
 
 #[test]
 fn cli_view_prints_artifact() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_minimal_crate(fixture.path(), "pub fn ok() {}")?;
 
@@ -105,6 +107,7 @@ fn cli_view_prints_artifact() -> miette::Result<()> {
 
 #[test]
 fn cli_export_surreal_reads_cached_ir() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_minimal_crate(fixture.path(), "pub fn ok() {}")?;
 
@@ -151,6 +154,7 @@ fn cli_export_surreal_reads_cached_ir() -> miette::Result<()> {
 
 #[test]
 fn cli_exceptions_backup_and_load_roundtrip() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_minimal_crate(fixture.path(), "pub fn ok() {}")?;
 
@@ -261,6 +265,7 @@ fn cli_exceptions_backup_and_load_roundtrip() -> miette::Result<()> {
 
 #[test]
 fn cli_exceptions_add_writes_quality_and_coverage_rows() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_minimal_crate(fixture.path(), "pub fn ok() {}")?;
     let store_home = tempfile::tempdir()

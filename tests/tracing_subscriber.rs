@@ -66,6 +66,7 @@ fn has(rules: &[SubscriberRuleId], rule: SubscriberRuleId) -> bool {
 
 #[test]
 fn missing_init_in_main_is_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test("pub fn unused() {}\n", "fn main() {}\n", None)?;
     let rules = scan(fixture.path(), "fixture", false)?;
     assert!(
@@ -81,6 +82,7 @@ fn missing_init_in_main_is_flagged() -> miette::Result<()> {
 
 #[test]
 fn test_without_helper_call_is_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test(
         GOOD_HELPER,
         "fn main() { init_tracing(); }\n",
@@ -100,6 +102,7 @@ fn test_without_helper_call_is_flagged() -> miette::Result<()> {
 
 #[test]
 fn helper_only_in_main_fails_lib() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test(
         "pub fn unused() {}\n",
         r#"
@@ -131,6 +134,7 @@ fn main() {
 
 #[test]
 fn inline_init_in_main_satisfies_main_fails_lib() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test(
         "pub fn unused() {}\n",
         r#"
@@ -162,6 +166,7 @@ fn main() {
 
 #[test]
 fn helper_in_lib_that_main_never_calls_fails_main() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test(GOOD_HELPER, "fn main() {}\n", None)?;
     let rules = scan(fixture.path(), "fixture", false)?;
     assert!(
@@ -177,6 +182,7 @@ fn helper_in_lib_that_main_never_calls_fails_main() -> miette::Result<()> {
 
 #[test]
 fn good_helper_called_from_main_and_test_is_clean() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test(
         GOOD_HELPER,
         "fn main() { init_tracing(); }\n",
@@ -192,6 +198,7 @@ fn good_helper_called_from_main_and_test_is_clean() -> miette::Result<()> {
 
 #[test]
 fn init_without_once_fails_idempotent() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test(
         r#"
 pub fn init_tracing() {
@@ -220,6 +227,7 @@ pub fn init_tracing() {
 
 #[test]
 fn from_default_env_without_fallback_fails_rust_log() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test(
         r#"
 pub fn init_tracing() {
@@ -245,6 +253,7 @@ pub fn init_tracing() {
 
 #[test]
 fn rust_log_env_var_plus_fallback_is_ok() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test(
         r#"
 pub fn init_tracing() {
@@ -265,6 +274,7 @@ pub fn init_tracing() {
 
 #[test]
 fn init_wrapped_in_once_is_idempotent() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test(
         r#"
 pub fn init_tracing() {
@@ -292,6 +302,7 @@ pub fn init_tracing() {
 
 #[test]
 fn knobs_off_silence_all_five() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test(
         "pub fn unused() {}\n",
         r#"
@@ -318,6 +329,7 @@ fn main() {
 
 #[test]
 fn lib_only_skips_main() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -335,6 +347,7 @@ fn lib_only_skips_main() -> miette::Result<()> {
 
 #[test]
 fn bin_only_skips_lib() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -366,6 +379,7 @@ fn main() {
 
 #[test]
 fn skip_program_lints_silences_main_and_test() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test(
         "pub fn unused() {}\n",
         "fn main() {}\n",
@@ -385,6 +399,7 @@ fn skip_program_lints_silences_main_and_test() -> miette::Result<()> {
 
 #[test]
 fn session_writes_subscriber_checklist_not_instrument_rows() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test("pub fn unused() {}\n", "fn main() {}\n", None)?;
     let store = tempfile::tempdir()
         .into_diagnostic()
@@ -429,6 +444,7 @@ fn session_writes_subscriber_checklist_not_instrument_rows() -> miette::Result<(
 
 #[test]
 fn skip_crate_config_skips_main() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_lib_bin_test("pub fn unused() {}\n", "fn main() {}\n", None)?;
     fs::write(
         fixture.path().join("Cargo.toml"),
@@ -460,5 +476,17 @@ fn skip_crate_config_skips_main() -> miette::Result<()> {
             && finding.rule().id() == SubscriberRuleId::Main.as_str()
     });
     assert!(!main, "apply_skip_crates must skip MAIN");
+    Ok(())
+}
+
+#[test]
+fn dogfood_cordial_subscriber_policy_is_clean() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let rules = scan(root, "cordial", false)?;
+    assert!(
+        rules.is_empty(),
+        "cordial should satisfy its own subscriber policy: {rules:?}"
+    );
     Ok(())
 }

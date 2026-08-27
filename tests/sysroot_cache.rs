@@ -6,6 +6,7 @@ use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
 fn sysroot_cache_defaults_under_cordial_home() {
+    cordial::init_tracing();
     let home = default_store_home();
     let cache = SysrootCache::from_home(&home);
     assert_eq!(cache.root, home.join("sysroot"));
@@ -17,6 +18,7 @@ fn sysroot_cache_defaults_under_cordial_home() {
 
 #[test]
 fn sysroot_cache_default_matches_from_home() {
+    cordial::init_tracing();
     let expected = SysrootCache::from_home(default_store_home());
     assert_eq!(SysrootCache::default().root, expected.root);
 }
@@ -31,6 +33,7 @@ fn sysroot_cache_default_matches_from_home() {
 #[cfg(feature = "slow_tests")]
 #[test]
 fn merged_std_inventory_excludes_unstable_simd_from_stable_scope() -> miette::Result<()> {
+    cordial::init_tracing();
     use cordial::SysrootCache;
     use cordial::testing::{framework_std_type_items, load_merged_std_inventory};
 
@@ -66,6 +69,7 @@ fn merged_std_inventory_excludes_unstable_simd_from_stable_scope() -> miette::Re
 
 #[test]
 fn is_std_family_crate_recognizes_std_core_alloc() {
+    cordial::init_tracing();
     use cordial::is_std_family_crate;
 
     assert!(is_std_family_crate("std"));
@@ -76,6 +80,7 @@ fn is_std_family_crate_recognizes_std_core_alloc() {
 
 #[test]
 fn resolve_sysroot_library_manifest_finds_std_when_nightly_installed() -> miette::Result<()> {
+    cordial::init_tracing();
     use cordial::resolve_sysroot_library_manifest;
 
     let Ok(manifest) = resolve_sysroot_library_manifest("std") else {

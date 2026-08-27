@@ -22,6 +22,7 @@ fn write_cli_crate(lib: &str, main: &str) -> miette::Result<tempfile::TempDir> {
 
 #[test]
 fn clap_types_only_in_main_are_an_island() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_cli_crate(
         "pub struct Lib;\n",
         r#"
@@ -50,6 +51,7 @@ fn main() {}
 
 #[test]
 fn parser_without_act_is_a_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_cli_crate(
         r#"
 use clap::Parser;
@@ -76,6 +78,7 @@ pub struct Cli {
 
 #[test]
 fn match_in_main_is_a_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_cli_crate(
         r#"
 use clap::{Parser, Subcommand};
@@ -128,6 +131,7 @@ fn main() {
 
 #[test]
 fn bin_only_error_type_is_an_island() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_cli_crate(
         "pub struct Lib;\n",
         r#"
@@ -158,6 +162,7 @@ fn main() {}
 
 #[test]
 fn well_formed_cli_layout_is_not_a_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_cli_crate(
         r#"
 use clap::{Parser, Subcommand};
@@ -209,6 +214,7 @@ fn main() -> Result<(), std::io::Error> {
 
 #[test]
 fn tracing_helper_call_in_main_is_not_a_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_cli_crate(
         r#"
 use clap::{Parser, Subcommand};
@@ -263,6 +269,7 @@ fn main() -> Result<(), std::io::Error> {
 
 #[test]
 fn subcommand_without_act_is_a_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_cli_crate(
         r#"
 use clap::{Parser, Subcommand};
@@ -305,6 +312,7 @@ fn main() -> Result<(), std::io::Error> {
 
 #[test]
 fn parser_act_must_hand_off_to_nested_command() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_cli_crate(
         r#"
 use clap::{Parser, Subcommand};
@@ -353,6 +361,7 @@ fn main() -> Result<(), std::io::Error> {
 
 #[test]
 fn free_function_taking_cli_is_a_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_cli_crate(
         r#"
 use clap::{Parser, Subcommand};
@@ -405,6 +414,7 @@ fn main() -> Result<(), std::io::Error> {
 
 #[test]
 fn free_function_taking_option_cli_is_a_violation() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_cli_crate(
         r#"
 use clap::{Parser, Subcommand};
@@ -460,6 +470,7 @@ fn main() -> Result<(), std::io::Error> {
 
 #[test]
 fn act_must_hand_off_every_nested_clap_type() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_cli_crate(
         r#"
 use clap::{Parser, Subcommand};
@@ -542,6 +553,7 @@ fn main() -> Result<(), std::io::Error> {
 
 #[test]
 fn dogfood_cordial_follows_cli_layout() -> miette::Result<()> {
+    cordial::init_tracing();
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let findings = scan_crate_cli_layout(root, "cordial")
         .into_diagnostic()
@@ -555,6 +567,7 @@ fn dogfood_cordial_follows_cli_layout() -> miette::Result<()> {
 
 #[test]
 fn session_writes_cli_layout_artifacts() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = write_cli_crate(
         r#"
 use clap::Parser;

@@ -41,6 +41,7 @@ fn kani_type_record(kind: &str, evidence: &str) -> ContractRecordDump {
 
 #[test]
 fn creusot_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let name = "contract_bounds_creusot.rs";
     let src_root = fixtures_root();
     let registry = vec![logic_fn_record("creusot", "ensures", "char_roundtrips")];
@@ -76,6 +77,7 @@ fn creusot_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::
 
 #[test]
 fn creusot_named_call_to_an_unregistered_fn_name_is_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let name = "contract_bounds_creusot.rs";
     let src_root = fixtures_root();
     let findings =
@@ -93,6 +95,7 @@ fn creusot_named_call_to_an_unregistered_fn_name_is_flagged() -> miette::Result<
 
 #[test]
 fn creusot_trivial_requires_true_is_never_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let name = "contract_bounds_creusot.rs";
     let src_root = fixtures_root();
     let findings =
@@ -106,6 +109,7 @@ fn creusot_trivial_requires_true_is_never_flagged() -> miette::Result<()> {
 
 #[test]
 fn creusot_trivial_bare_result_is_never_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 amenable_derive::harness! {
     creusot, VERIFY_SOMETHING_SRC, {
@@ -136,6 +140,7 @@ amenable_derive::harness! {
 
 #[test]
 fn verus_trivial_bare_result_is_never_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 use verus_builtin_macros::verus;
 use vstd::prelude::*;
@@ -167,6 +172,7 @@ pub fn verify_something() -> (result: bool)
 
 #[test]
 fn verus_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let name = "contract_bounds_verus.rs";
     let src_root = fixtures_root();
     let registry = vec![logic_fn_record("verus", "ensures", "char_roundtrips")];
@@ -187,6 +193,7 @@ fn verus_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::Re
 
 #[test]
 fn verus_named_call_with_final_argument_is_not_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 use verus_builtin_macros::verus;
 use vstd::prelude::*;
@@ -230,6 +237,7 @@ impl VerusCellModel {
 #[test]
 fn verus_assume_specification_semicolon_terminator_does_not_leak_into_the_next_item()
 -> miette::Result<()> {
+    cordial::init_tracing();
     // `assume_specification` (and any other body-less Verus declaration)
     // ends its `ensures`/`requires` list with a bare `;`, not a brace
     // group. Without a `;` stop case in the clause-list scanner, the scan
@@ -285,6 +293,7 @@ pub fn verify_something(value: i32) -> (result: i32)
 
 #[test]
 fn kani_named_call_matching_a_registered_type_is_not_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let name = "contract_bounds_kani.rs";
     let src_root = fixtures_root();
     let registry = vec![
@@ -312,6 +321,7 @@ fn kani_named_call_matching_a_registered_type_is_not_flagged() -> miette::Result
 
 #[test]
 fn kani_named_call_to_an_unregistered_type_is_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let name = "contract_bounds_kani.rs";
     let src_root = fixtures_root();
     let findings =
@@ -335,6 +345,7 @@ fn kani_named_call_to_an_unregistered_type_is_flagged() -> miette::Result<()> {
 
 #[test]
 fn kani_type_suffix_match_handles_an_abbreviated_call_site_name() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 amenable_derive::harness! {
     kani, VERIFY_ABBREVIATED_SRC, {
@@ -368,6 +379,7 @@ amenable_derive::harness! {
 
 #[test]
 fn kani_type_suffix_match_handles_a_nested_generic_evidence_type() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 amenable_derive::harness! {
     kani, VERIFY_NESTED_GENERIC_SRC, {
@@ -401,6 +413,7 @@ amenable_derive::harness! {
 
 #[test]
 fn kani_negated_call_to_a_registered_type_is_not_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 amenable_derive::harness! {
     kani, VERIFY_REJECTS_ZERO_SRC, {
@@ -429,6 +442,7 @@ amenable_derive::harness! {
 
 #[test]
 fn kani_double_negated_call_is_still_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 amenable_derive::harness! {
     kani, VERIFY_DOUBLE_NEGATED_SRC, {
@@ -457,6 +471,7 @@ amenable_derive::harness! {
 
 #[test]
 fn kani_assert_eq_call_shape_is_never_recognized_as_a_named_call() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 amenable_derive::harness! {
     kani, VERIFY_STILL_RAW_SRC, {
@@ -485,6 +500,7 @@ amenable_derive::harness! {
 
 #[test]
 fn verus_negated_bare_result_is_never_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 use verus_builtin_macros::verus;
 use vstd::prelude::*;
@@ -516,6 +532,7 @@ pub fn verify_something() -> (result: bool)
 
 #[test]
 fn verus_bare_result_is_none_is_never_flagged_but_is_some_content_is() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 use verus_builtin_macros::verus;
 use vstd::prelude::*;
@@ -565,6 +582,7 @@ pub fn verify_something() -> (result: (Option<i32>, Option<i32>, Option<i32>))
 #[test]
 fn verus_bare_result_tuple_projections_are_never_flagged_but_comparisons_are() -> miette::Result<()>
 {
+    cordial::init_tracing();
     let source = r#"
 use verus_builtin_macros::verus;
 use vstd::prelude::*;
@@ -599,6 +617,7 @@ pub fn verify_something(initial: i32, updated: i32) -> (result: (bool, bool, i32
 
 #[test]
 fn kani_raw_assert_eq_is_flagged_as_the_synthesized_equality() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 amenable_derive::harness! {
     kani, VERIFY_RAW_EQ_SRC, {
@@ -631,6 +650,7 @@ amenable_derive::harness! {
 
 #[test]
 fn kani_raw_assume_is_now_flagged_when_unregistered() -> miette::Result<()> {
+    cordial::init_tracing();
     let source = r#"
 amenable_derive::harness! {
     kani, VERIFY_RAW_ASSUME_SRC, {
@@ -660,6 +680,7 @@ amenable_derive::harness! {
 
 #[test]
 fn kani_gallery_directory_is_pruned_from_the_crate_walk() -> miette::Result<()> {
+    cordial::init_tracing();
     let crate_root = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let src_root = crate_root.path().join("src");
     let gallery_root = src_root.join("gallery");
@@ -713,6 +734,7 @@ amenable_derive::harness! {
 
 #[test]
 fn checklist_groups_same_shape_findings_into_a_duplicate_cluster() -> miette::Result<()> {
+    cordial::init_tracing();
     let workspace = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let crate_root = workspace.path().join("amenable_kani");
     let src_root = crate_root.join("src");

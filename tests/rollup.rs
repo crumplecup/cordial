@@ -5,6 +5,7 @@ use cordial::{NamedRunFilter, PANICS_ETIQUETTE, Session, SessionBuilder, TRACING
 
 #[test]
 fn quality_cli_filter_runs_both_etiquettes() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -48,6 +49,7 @@ pub fn quiet() {}
 
 #[test]
 fn rollup_summary_lists_open_findings_by_etiquette() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()

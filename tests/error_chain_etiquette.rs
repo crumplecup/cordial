@@ -102,6 +102,7 @@ fn scan_fixture() -> miette::Result<Vec<cordial::ErrorChainRecord>> {
 
 #[test]
 fn wrapper_source_field_is_detected() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture()?;
     assert!(findings.iter().any(|f| {
         f.rule_id == ErrorChainProbeId::WrapperSourceField001 && f.snippet.contains("IoSource")
@@ -111,6 +112,7 @@ fn wrapper_source_field_is_detected() -> miette::Result<()> {
 
 #[test]
 fn from_bridge_is_detected() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture()?;
     assert!(
         findings
@@ -122,6 +124,7 @@ fn from_bridge_is_detected() -> miette::Result<()> {
 
 #[test]
 fn preserved_question_mark_on_foreign_call() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture()?;
     assert!(findings.iter().any(|f| {
         f.rule_id == ErrorChainProbeId::PreservedQuestionMark001
@@ -132,6 +135,7 @@ fn preserved_question_mark_on_foreign_call() -> miette::Result<()> {
 
 #[test]
 fn preserved_map_err_propagation_is_detected() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture()?;
     assert!(findings.iter().any(|f| {
         f.rule_id == ErrorChainProbeId::PreservedMapErr001
@@ -162,6 +166,7 @@ fn preserved_map_err_propagation_is_detected() -> miette::Result<()> {
 
 #[test]
 fn stringifying_map_err_is_not_preserved() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_fixture()?;
     assert!(
         !findings
@@ -173,6 +178,7 @@ fn stringifying_map_err_is_not_preserved() -> miette::Result<()> {
 
 #[test]
 fn session_produces_error_chain_preserved_csv() -> miette::Result<()> {
+    cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
@@ -220,6 +226,7 @@ fn session_produces_error_chain_preserved_csv() -> miette::Result<()> {
 
 #[test]
 fn probe_counts_aggregate_fixture_rules() -> miette::Result<()> {
+    cordial::init_tracing();
     let records = scan_fixture()?;
     let counts = probe_counts(&records);
     assert_eq!(counts.wrapper_source, 1);
@@ -231,6 +238,7 @@ fn probe_counts_aggregate_fixture_rules() -> miette::Result<()> {
 
 #[test]
 fn scan_rust_source_accepts_relative_paths() -> miette::Result<()> {
+    cordial::init_tracing();
     let findings = scan_error_chain_rust_source(
         PRESERVED_FIXTURE,
         Path::new("src/lib.rs"),

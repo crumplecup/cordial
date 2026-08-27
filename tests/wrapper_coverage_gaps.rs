@@ -8,6 +8,7 @@ use cordial::{ElicitCompleteSet, TraitPrereqs};
 
 #[test]
 fn wrapper_elicit_complete_suppresses_foreign_gap() {
+    cordial::init_tracing();
     let foreign = "demo::Foreign";
     let wrapper = "demo::ForeignWrapper";
     let mut wrapper_prereqs = std::collections::HashMap::new();
@@ -44,6 +45,7 @@ fn wrapper_elicit_complete_suppresses_foreign_gap() {
 
 #[test]
 fn partial_wrapper_prereqs_credit_indirect_our_traits() {
+    cordial::init_tracing();
     let foreign = "demo::Foreign";
     let wrapper = "demo::PartialWrapper";
     let mut wrapper_prereqs = std::collections::HashMap::new();
@@ -83,6 +85,7 @@ fn partial_wrapper_prereqs_credit_indirect_our_traits() {
 
 #[test]
 fn lookup_wrapper_coverage_falls_back_to_bare_name() {
+    cordial::init_tracing();
     let mut map = WrapperCoverageMap::new();
     map.insert(
         "chrono::naive::date::NaiveDate".to_string(),
