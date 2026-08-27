@@ -75,6 +75,12 @@ pub use etiquettes::antipatterns::{
     scan_kani_contract_bounds_source, scan_rust_source as scan_antipatterns_rust_source,
     scan_verus_contract_bounds_source,
 };
+#[cfg(feature = "cfg_hygiene")]
+pub use etiquettes::cfg_hygiene::{
+    CFG_HYGIENE_ETIQUETTE, CfgHygieneRuleId, CfgHygieneSiteRecord, all_verifier_names,
+    declared_names_for_crate, expected_verifier_for, scan_crate_cfg_hygiene,
+    scan_rust_source as scan_cfg_hygiene_rust_source,
+};
 #[cfg(feature = "cfg_scatter")]
 pub use etiquettes::cfg_scatter::{
     CFG_SCATTER_ETIQUETTE, CfgSiteKind, scan_rust_source as scan_cfg_scatter_rust_source,
@@ -272,9 +278,9 @@ pub use cargo_rustdoc::{
     resolve_shadow_dep_build_config,
 };
 pub use config::{
-    CfgScatterThresholds, CordialConfig, DerivesThresholds, ModularityThresholds,
-    TracingSubscriberPolicy, TracingThresholds, VisibilityThresholds, load_cordial_config,
-    load_derives_thresholds, load_session_config, load_visibility_thresholds,
+    CfgHygieneThresholds, CfgScatterThresholds, CordialConfig, DerivesThresholds,
+    ModularityThresholds, TracingSubscriberPolicy, TracingThresholds, VisibilityThresholds,
+    load_cordial_config, load_derives_thresholds, load_session_config, load_visibility_thresholds,
 };
 pub use exceptions::{
     AddExceptionOutcome, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,

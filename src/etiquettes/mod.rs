@@ -28,6 +28,7 @@
 //! | `foreign_error_attenuation` | `foreign_error_attenuation` | How should those foreign errors be wrapped? |
 //! | `antipatterns` | `antipatterns` | Untyped error carriers and related smells |
 //! | `cfg_scatter` | `cfg_scatter` | Is the same `#[cfg]` copied across item kinds? |
+//! | `cfg_hygiene` | `cfg_hygiene` | Is every `cfg` name declared, and does each verifier crate only use its own? |
 //! | `visibility` | `visibility` | Do `pub mod` paths earn their existence? |
 //! | `cli_layout` | `cli_layout` | Do clap types dispatch in the library with `act`? |
 //! | `glob_imports` | `glob_imports` | Are there glob `use` trees (`foo::*`, including `super::*`)? |
@@ -52,6 +53,8 @@
 pub(crate) mod allows;
 #[cfg(feature = "antipatterns")]
 pub(crate) mod antipatterns;
+#[cfg(feature = "cfg_hygiene")]
+pub(crate) mod cfg_hygiene;
 #[cfg(feature = "cfg_scatter")]
 pub(crate) mod cfg_scatter;
 #[cfg(feature = "cli_layout")]
@@ -109,7 +112,7 @@ pub(crate) mod trenchcoat;
 /// `docs/planning/quality-report-feeder-trait.md`).
 #[::tracing::instrument(level = "debug")]
 fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::QualityEtiquette> {
-    let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 18] = [
+    let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 19] = [
         #[cfg(feature = "panics")]
         Some(&panics::PANICS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "panics"))]
@@ -166,6 +169,10 @@ fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::QualityEtiq
         #[cfg(feature = "cfg_scatter")]
         Some(&cfg_scatter::CFG_SCATTER_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "cfg_scatter"))]
+        None,
+        #[cfg(feature = "cfg_hygiene")]
+        Some(&cfg_hygiene::CFG_HYGIENE_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        #[cfg(not(feature = "cfg_hygiene"))]
         None,
         #[cfg(feature = "visibility")]
         Some(&visibility::VISIBILITY_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),

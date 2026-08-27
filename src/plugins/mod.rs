@@ -230,7 +230,7 @@ pub fn coverage_only_plugins() -> Vec<&'static dyn Plugin> {
 /// Static quality plugins wrapping each enabled etiquette.
 #[instrument(level = "debug")]
 fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
-    let items: [Option<&'static EtiquettePlugin>; 12] = [
+    let items: [Option<&'static EtiquettePlugin>; 13] = [
         #[cfg(feature = "tracing")]
         Some(tracing_plugin()),
         #[cfg(not(feature = "tracing"))]
@@ -254,6 +254,10 @@ fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
         #[cfg(feature = "cfg_scatter")]
         Some(cfg_scatter_plugin()),
         #[cfg(not(feature = "cfg_scatter"))]
+        None,
+        #[cfg(feature = "cfg_hygiene")]
+        Some(cfg_hygiene_plugin()),
+        #[cfg(not(feature = "cfg_hygiene"))]
         None,
         #[cfg(feature = "visibility")]
         Some(visibility_plugin()),
@@ -318,6 +322,11 @@ etiquette_plugin_fn!(
 etiquette_plugin_fn!(
     cfg_scatter_plugin,
     &crate::etiquettes::cfg_scatter::CFG_SCATTER_ETIQUETTE
+);
+#[cfg(feature = "cfg_hygiene")]
+etiquette_plugin_fn!(
+    cfg_hygiene_plugin,
+    &crate::etiquettes::cfg_hygiene::CFG_HYGIENE_ETIQUETTE
 );
 #[cfg(feature = "visibility")]
 etiquette_plugin_fn!(

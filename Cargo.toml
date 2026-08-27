@@ -64,6 +64,7 @@ foreign_error_types = ["error_sites"]
 foreign_error_attenuation = ["foreign_error_types", "error_chain"]
 antipatterns = ["dep:toml", "dep:quote"]
 cfg_scatter = []
+cfg_hygiene = ["dep:toml"]
 visibility = []
 cli_layout = []
 glob_imports = []
@@ -79,7 +80,7 @@ verus_ir = ["dep:verus_syn", "dep:quote"]
 # is_trusted_not_proven()), and broadcast. The real consumer verus_ir was
 # built for.
 proof_patterns = ["verus_ir"]
-quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "glob_imports", "inline_tests", "verus_warnings", "proof_patterns"]
+quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "glob_imports", "inline_tests", "verus_warnings", "proof_patterns"]
 # Shared rustdoc JSON support for coverage plugins.
 rustdoc = ["dep:rustdoc-types", "dep:nom"]
 # Elicitation coverage plugins (each requires rustdoc).
@@ -162,6 +163,10 @@ required-features = ["modularity"]
 [[test]]
 name = "cfg_scatter_etiquette"
 required-features = ["cfg_scatter"]
+
+[[test]]
+name = "cfg_hygiene_etiquette"
+required-features = ["cfg_hygiene"]
 
 [[test]]
 name = "visibility_etiquette"
@@ -306,5 +311,5 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(creusot)',
   'cfg(prusti)',
   'cfg(verus)',
-  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "visibility", "cli_layout", "glob_imports", "inline_tests", "verus_warnings", "verus_ir", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
+  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "glob_imports", "inline_tests", "verus_warnings", "verus_ir", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
 ] }
