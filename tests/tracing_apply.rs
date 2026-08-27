@@ -1178,3 +1178,60 @@ fn apply_gates_bare_instrument_on_ordinary_fn() -> miette::Result<()> {
     );
     Ok(())
 }
+
+/// Real bug (found applying to `amenable_kani::net_model`, 2026-08-27):
+/// an existing attribute that rustfmt has wrapped across multiple physical
+/// lines -- `#[cfg_attr(\n  not(kani),\n  tracing::instrument(...)\n)]`,
+/// the shape a long gated recipe line commonly takes -- was invisible to
+/// `collect_attr_indices`'s single-line-only scan, so a mismatch never
+/// replaced it: a second, corrected attribute was inserted right below the
+/// untouched original, leaving the function double-instrumented.
+#[test]
+fn apply_rewrites_a_multi_line_gated_attribute_without_duplicating_it() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = write_policy_fixture(
+        &["fixture_crate"],
+        "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
+        &checklist_for_crate("fixture_crate", &[("Store::write_payload", 6)]),
+    )?;
+    write_policy_crate(
+        &fixture.workspace,
+        "fixture_crate",
+        r#"
+pub struct Store {
+    root: String,
+}
+
+impl Store {
+    #[cfg_attr(
+        not(kani),
+        tracing::instrument(level = "warn", skip(self, target, payload))
+    )]
+    pub fn write_payload(&self, target: &str, payload: Vec<u8>) -> String {
+        format!("{}/{}/{}", self.root, target, payload.len())
+    }
+}
+"#,
+        &[],
+    )?;
+
+    let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
+        .into_diagnostic()
+        .wrap_err("apply tracing")?;
+    assert_eq!(summary.changed_functions, 1, "{summary:?}");
+
+    let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
+        .into_diagnostic()
+        .wrap_err("read updated source")?;
+    assert_eq!(
+        updated.matches("cfg_attr").count(),
+        1,
+        "the stale multi-line attribute must be replaced, not left behind \
+         alongside a second corrected one: {updated}"
+    );
+    assert!(
+        !updated.contains("level = \"warn\""),
+        "the mismatched level must actually be rewritten: {updated}"
+    );
+    Ok(())
+}

@@ -227,18 +227,57 @@ fn extract_fn_name(line: &str) -> Option<&str> {
     Some(name)
 }
 
+/// Net `)`/`]` minus `(`/`[` on one line -- positive means the line closes
+/// more delimiters than it opens (a mid/tail continuation line of a
+/// multi-line attribute, e.g. `not(kani),` or the trailing `)]`).
+#[instrument(level = "trace", ret)]
+fn closes_minus_opens(line: &str) -> i32 {
+    let mut delta = 0i32;
+    for ch in line.chars() {
+        match ch {
+            '(' | '[' => delta -= 1,
+            ')' | ']' => delta += 1,
+            _ => {}
+        }
+    }
+    delta
+}
+
+/// Every line spanned by the attribute block directly above `fn_idx`,
+/// including every physical line of a multi-line `#[cfg_attr(\n  ...,\n
+/// ...\n)]` (bracket-depth aware, not just lines literally starting with
+/// `#[` -- a continuation line like `not(kani),` or the attribute's own
+/// `tracing::instrument(...)` payload line never does).
 #[instrument(level = "debug")]
 fn collect_attr_indices(lines: &[String], fn_idx: usize) -> Vec<usize> {
     let mut indices = Vec::new();
     let mut i = fn_idx;
+    let mut pending: i32 = 0;
     while i > 0 {
         i -= 1;
         let stripped = lines[i].trim();
+        let delta = closes_minus_opens(stripped);
+        if pending > 0 {
+            // Still inside an unmatched multi-line attribute opened
+            // (in file order) below this line.
+            indices.insert(0, i);
+            pending += delta;
+            continue;
+        }
         if stripped.starts_with("#[") {
             indices.insert(0, i);
+            pending += delta;
             continue;
         }
         if stripped.is_empty() || stripped.starts_with("///") || stripped.starts_with("//") {
+            continue;
+        }
+        if delta > 0 {
+            // A closing-only tail line (e.g. bare `)]`) that doesn't
+            // itself start with `#[` -- still part of the attribute
+            // above it.
+            indices.insert(0, i);
+            pending = delta;
             continue;
         }
         break;
@@ -250,15 +289,27 @@ fn collect_attr_indices(lines: &[String], fn_idx: usize) -> Vec<usize> {
 fn instrument_attr_range(lines: &[String], fn_idx: usize) -> Option<(usize, usize)> {
     let attrs = collect_attr_indices(lines, fn_idx);
     for &start in &attrs {
-        if !lines[start].contains("instrument") {
+        if !lines[start].trim_start().starts_with("#[") {
             continue;
         }
+        // The block of lines this specific attribute (starting at
+        // `start`) owns, out of every attribute line collected above --
+        // walk forward accumulating bracket depth until it returns to
+        // zero, not just "the next line containing `]`" (a nested `[`
+        // inside the attribute's own arguments, e.g. `fields(x = ?v[0])`,
+        // would otherwise close too early).
         let mut end = start;
-        while end < fn_idx && !lines[end].contains(']') {
+        let mut depth = -closes_minus_opens(lines[start].trim());
+        while depth > 0 && end + 1 < fn_idx {
             end += 1;
+            depth -= closes_minus_opens(lines[end].trim());
         }
-        if end >= fn_idx {
-            return None;
+        if depth > 0 {
+            continue;
+        }
+        let block = lines[start..=end].join(" ");
+        if !block.contains("instrument") {
+            continue;
         }
         return Some((start, end));
     }
