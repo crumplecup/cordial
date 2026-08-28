@@ -32,10 +32,26 @@ pub fn fetch_contract_records(workspace_root: &Path, store_root: &Path) -> Vec<C
     let store = StoreLayout::from_root(store_root, slug);
     let dump_path = store.cache_dir().join("amenable-registry.dump.json");
 
-    let records = if dump_path.is_file() {
-        load_registry_dump(&dump_path).unwrap_or_default()
-    } else if workspace_has_amenable(workspace_root) {
+    // Always regenerate, never trust a pre-existing dump on disk: this
+    // rule exists to catch drift between real proof-site clauses and
+    // what's actually registered, so a stale dump silently hides exactly
+    // the class of change it's supposed to catch -- confirmed for real,
+    // not theoretical, in `amenable` itself: a real macro fix landed in
+    // `amenable_derive` (predicate-anchored `ContractRecord` fragments
+    // gained their missing `fn` token) and a scan against the pre-
+    // existing cached dump kept reporting the old, pre-fix counts
+    // (952/548) until the stale file was deleted by hand. `cargo run`'s
+    // own incremental build keeps a no-op re-run cheap, so there's no
+    // real cost to paying this correctly every time -- the per-process
+    // `CONTRACT_RECORDS_CACHE` above still avoids repeat work within one
+    // scan run.
+    let records = if workspace_has_amenable(workspace_root) {
         if run_amenable_dump_registry(workspace_root, &dump_path).is_ok() {
+            load_registry_dump(&dump_path).unwrap_or_default()
+        } else if dump_path.is_file() {
+            // The real rebuild failed (e.g. a transient toolchain issue)
+            // -- fall back to whatever was last known good rather than
+            // reporting zero records outright.
             load_registry_dump(&dump_path).unwrap_or_default()
         } else {
             Vec::new()
