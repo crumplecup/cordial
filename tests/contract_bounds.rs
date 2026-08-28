@@ -470,6 +470,45 @@ amenable_derive::harness! {
 }
 
 #[test]
+fn kani_fully_qualified_call_matching_a_registered_type_is_not_flagged() -> miette::Result<()> {
+    cordial::init_tracing();
+    // `<Type as Trait>::method(...)` -- the disambiguating form this
+    // workspace's own `CONTRACT_BOUND_NAMING_WORKFLOW.md` documents as
+    // the real fix for a competing-impl ambiguity, not just a stylistic
+    // variant of `Type::ensures(...)`. `syn` represents this as a `Path`
+    // with `qself: Some(..)`, not as extra leading path segments -- a
+    // real, previously-unrecognized shape distinct from the plain
+    // `<TypePath>::ensures(...)` case the other Kani tests here cover.
+    let source = r#"
+amenable_derive::harness! {
+    kani, VERIFY_QUALIFIED_SRC, {
+        #[kani::proof]
+        fn verify_qualified() {
+            let value: i32 = kani::any();
+            assert!(
+                <fixture::NonNegative as Ensures<KaniVerifier>>::ensures(value),
+                "message"
+            );
+        }
+    }
+}
+"#;
+    let path = fixtures_root().join("inline_kani_qualified.rs");
+    let registry = vec![kani_type_record("ensures", "fixture::NonNegative")];
+    let findings = scan_kani_contract_bounds_source(
+        source,
+        &path,
+        path.parent().ok_or_else(|| miette::miette!("parent"))?,
+        &registry,
+    )
+    .into_diagnostic()
+    .wrap_err("scan qualified kani")?;
+
+    assert!(findings.is_empty());
+    Ok(())
+}
+
+#[test]
 fn kani_assert_eq_call_shape_is_never_recognized_as_a_named_call() -> miette::Result<()> {
     cordial::init_tracing();
     let source = r#"

@@ -57,7 +57,14 @@ impl ContractIndex {
     ///   registered `evidence` string for this `(verifier, kind)` — a
     ///   *suffix* match, since a call site's type name is usually
     ///   abbreviated by a `use` import while `evidence` is always fully
-    ///   qualified.
+    ///   qualified. The fully-qualified disambiguating form, `<Type as
+    ///   Ensures<V>>::ensures(...)` (`syn` represents this as a `Path`
+    ///   with `qself: Some(..)`, not extra leading segments), is a
+    ///   distinct sub-shape: the real type lives in `qself.ty`, never in
+    ///   `path`'s own segments (those name the *trait*, e.g.
+    ///   `Ensures<KaniVerifier>`) — matched directly against `qself.ty`
+    ///   when present, no turbofish-stripping needed (type position
+    ///   never writes `::<>`).
     /// - **`name(...)`** (Creusot/Verus): a bare single-segment call.
     ///   `name` is compared against the function name found in each
     ///   registered fragment's own `harness!`-captured source (scanned
@@ -126,21 +133,39 @@ impl ContractIndex {
             return false;
         };
 
-        if segments.len() >= 2 && last.ident == kind {
-            let mut prefix = syn::Path {
-                leading_colon: func_path.path.leading_colon,
-                segments: syn::punctuated::Punctuated::new(),
-            };
-            for seg in segments.iter().take(segments.len() - 1) {
-                prefix.segments.push(seg.clone());
+        if last.ident == kind {
+            // `<Type as Trait>::ensures(...)` -- the fully-qualified
+            // form, used deliberately in this workspace to disambiguate
+            // when a second verifier registers a competing `Ensures`/
+            // `Requires` impl for the same type (see `amenable`'s own
+            // `CONTRACT_BOUND_NAMING_WORKFLOW.md` Gotchas). `path`'s own
+            // segments here name the *trait* (`Ensures<KaniVerifier>`),
+            // never the `Self` type a registered contract's `evidence`
+            // describes -- the real type lives in `qself.ty` instead,
+            // syn's dedicated slot for the part before `as`.
+            if let Some(qself) = &func_path.qself {
+                let prefix_text = normalize_tokens(qself.ty.to_token_stream());
+                return known
+                    .iter()
+                    .any(|(evidence, _)| normalize_text(evidence).ends_with(&prefix_text));
             }
-            let prefix_text = strip_turbofish(&normalize_tokens(prefix.to_token_stream()));
-            return known
-                .iter()
-                .any(|(evidence, _)| normalize_text(evidence).ends_with(&prefix_text));
+
+            if segments.len() >= 2 {
+                let mut prefix = syn::Path {
+                    leading_colon: func_path.path.leading_colon,
+                    segments: syn::punctuated::Punctuated::new(),
+                };
+                for seg in segments.iter().take(segments.len() - 1) {
+                    prefix.segments.push(seg.clone());
+                }
+                let prefix_text = strip_turbofish(&normalize_tokens(prefix.to_token_stream()));
+                return known
+                    .iter()
+                    .any(|(evidence, _)| normalize_text(evidence).ends_with(&prefix_text));
+            }
         }
 
-        if segments.len() == 1 {
+        if segments.len() == 1 && func_path.qself.is_none() {
             let name = last.ident.to_string();
             return known
                 .iter()
