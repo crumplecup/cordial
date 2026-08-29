@@ -76,7 +76,9 @@ framework itself.
 | `allows` | `#[allow(...)]` inventory |
 | `verus_warnings` | Verus rustc-fork compiler warnings ([verus-warnings-etiquette.md](docs/planning/verus-warnings-etiquette.md)) |
 | `modularity` | File/function size, types-per-file, module-size σ, hierarchy lints |
-| `quality` (default) | All source-quality scanners (panics, tracing, error stack, derives, allows, modularity, antipatterns, cfg_scatter, visibility, cli_layout, glob_imports, inline_tests, verus_warnings) |
+| `cli_layout` | Clap types and `act` dispatch in the library |
+| `crate_attrs` | Crate-root `#![forbid(unsafe_code)]` / `#![warn(missing_docs)]` ([crate-attrs-etiquette.md](docs/planning/crate-attrs-etiquette.md)) |
+| `quality` (default) | All source-quality scanners (panics, tracing, error stack, derives, allows, modularity, antipatterns, cfg_scatter, cfg_hygiene, visibility, cli_layout, crate_attrs, glob_imports, inline_tests, verus_warnings) |
 | `impl_coverage` | Trait impl coverage (requires `rustdoc`) |
 | `trenchcoat` | Trenchcoat wrapper coverage |
 | `shadow` | Shadow mirror coverage |

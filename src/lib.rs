@@ -14,7 +14,7 @@
 //!
 //! Built-in plugins are feature-gated:
 //!
-//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `glob_imports`, `inline_tests`, `verus_warnings`, `proof_patterns` — source-quality scanners
+//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `crate_attrs`, `glob_imports`, `inline_tests`, `verus_warnings`, `proof_patterns` — source-quality scanners
 //!   (the `quality` umbrella is enabled by default)
 //! - `cli` — clap binary (`cordial`); enabled by default
 //! - `impl_coverage`, `trenchcoat`, `shadow` — rustdoc coverage scanners
@@ -88,6 +88,11 @@ pub use etiquettes::cfg_scatter::{
 #[cfg(feature = "cli_layout")]
 pub use etiquettes::cli_layout::{
     CLI_LAYOUT_ETIQUETTE, CliLayoutId, CliLayoutRecord, scan_crate_cli_layout,
+};
+#[cfg(feature = "crate_attrs")]
+pub use etiquettes::crate_attrs::{
+    CRATE_ATTRS_ETIQUETTE, CrateAttrsRuleId, CrateAttrsSiteRecord, library_root_rs,
+    scan_crate_attrs,
 };
 #[cfg(feature = "derives")]
 pub use etiquettes::derives::{
@@ -203,6 +208,7 @@ pub use digest::{
     feature = "cfg_scatter",
     feature = "visibility",
     feature = "cli_layout",
+    feature = "crate_attrs",
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "verus_warnings",
@@ -278,9 +284,10 @@ pub use cargo_rustdoc::{
     resolve_shadow_dep_build_config,
 };
 pub use config::{
-    CfgHygieneThresholds, CfgScatterThresholds, CordialConfig, DerivesThresholds,
-    ModularityThresholds, TracingSubscriberPolicy, TracingThresholds, VisibilityThresholds,
-    load_cordial_config, load_derives_thresholds, load_session_config, load_visibility_thresholds,
+    CfgHygieneThresholds, CfgScatterThresholds, CordialConfig, CrateAttrsThresholds,
+    DerivesThresholds, ModularityThresholds, TracingSubscriberPolicy, TracingThresholds,
+    VisibilityThresholds, load_cordial_config, load_derives_thresholds, load_session_config,
+    load_visibility_thresholds,
 };
 pub use exceptions::{
     AddExceptionOutcome, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,

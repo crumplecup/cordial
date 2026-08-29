@@ -39,6 +39,14 @@ hierarchy_min_lines = 150
 min_distinct_kinds = 2
 min_occurrences = 5
 
+[crate_attrs]
+# Both default true. Per-member exceptions keep an FFI crate free to use
+# unsafe without turning the lint off workspace-wide.
+# forbid_unsafe = true
+# missing_docs = true
+# allow_unsafe = ["ffi"]
+# allow_missing_docs = []
+
 [derives]
 max_constructor_args = 3
 min_fluent_setters = 2
@@ -72,7 +80,8 @@ in code until dogfood needs a project override.
 Implemented (`tests/cordial_config.rs`). Visibility, modularity (including
 types-per-file, module-size 2σ, lower-tail ignore, hotspot diagnosis, and
 hierarchy lints: top-heavy, lopsided, unary-nest collapse), cfg_scatter,
-derives (`max_constructor_args`, `min_fluent_setters`), and tracing
+derives (`max_constructor_args`, `min_fluent_setters`), tracing
 (`extra_skip`, `apply_gate_crates`, `apply_skip_crates`, nested
-`[tracing.subscriber]`) read through `load_session_config`. Role→level
+`[tracing.subscriber]`), and crate_attrs (`forbid_unsafe`, `missing_docs`,
+`allow_unsafe`, `allow_missing_docs`) read through `load_session_config`. Role→level
 maps stay in code.

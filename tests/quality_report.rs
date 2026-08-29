@@ -5,7 +5,7 @@ use miette::{IntoDiagnostic, WrapErr};
 fn quality_report_lists_resolution_order() -> miette::Result<()> {
     cordial::init_tracing();
     let report = build_quality_report(&[]).into_diagnostic()?;
-    assert_eq!(report.areas.len(), 15);
+    assert_eq!(report.areas.len(), 16);
     assert_eq!(report.areas[0].title, "Error handling");
     assert_eq!(report.areas[1].title, "Tracing instrumentation");
     assert_eq!(report.areas[2].title, "Allow attributes");
@@ -17,10 +17,11 @@ fn quality_report_lists_resolution_order() -> miette::Result<()> {
     assert_eq!(report.areas[8].title, "Cfg hygiene");
     assert_eq!(report.areas[9].title, "Module visibility");
     assert_eq!(report.areas[10].title, "CLI layout");
-    assert_eq!(report.areas[11].title, "Glob imports");
-    assert_eq!(report.areas[12].title, "Inline tests");
-    assert_eq!(report.areas[13].title, "Verus compiler warnings");
-    assert_eq!(report.areas[14].title, "Proof patterns");
+    assert_eq!(report.areas[11].title, "Crate attributes");
+    assert_eq!(report.areas[12].title, "Glob imports");
+    assert_eq!(report.areas[13].title, "Inline tests");
+    assert_eq!(report.areas[14].title, "Verus compiler warnings");
+    assert_eq!(report.areas[15].title, "Proof patterns");
 
     let body = cordial::render_quality_report_markdown(&report).into_diagnostic()?;
     assert!(body.contains("## Resolution order"));
@@ -32,6 +33,7 @@ fn quality_report_lists_resolution_order() -> miette::Result<()> {
     assert!(body.contains("visibility.checklist.md"));
     assert!(body.contains("cfg-scatter-summary.md"));
     assert!(body.contains("cli-layout.checklist.md"));
+    assert!(body.contains("crate-attrs.checklist.md"));
 
     let summary = cordial::render_quality_workspace_summary_markdown(&report).into_diagnostic()?;
     assert!(summary.contains("# Quality workspace summary"));

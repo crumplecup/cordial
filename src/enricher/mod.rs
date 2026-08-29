@@ -14,6 +14,7 @@ use tracing::instrument;
     feature = "cfg_scatter",
     feature = "visibility",
     feature = "cli_layout",
+    feature = "crate_attrs",
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "verus_warnings"
@@ -55,6 +56,7 @@ mod wrapper_coverage;
     feature = "cfg_scatter",
     feature = "visibility",
     feature = "cli_layout",
+    feature = "crate_attrs",
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "verus_warnings"
@@ -75,6 +77,7 @@ pub use attribute::AttributeEnricher;
     feature = "cfg_scatter",
     feature = "visibility",
     feature = "cli_layout",
+    feature = "crate_attrs",
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "verus_warnings"

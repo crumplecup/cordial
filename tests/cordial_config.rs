@@ -205,3 +205,34 @@ min_fluent_setters = 3
     assert_eq!(loaded.derives().min_fluent_setters(), 3);
     Ok(())
 }
+
+#[test]
+fn crate_attrs_toml_overrides_default() -> miette::Result<()> {
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store home")?;
+    fs::write(
+        workspace.path().join("cordial.toml"),
+        r#"
+[crate_attrs]
+forbid_unsafe = false
+missing_docs = true
+allow_unsafe = ["ffi"]
+allow_missing_docs = ["legacy"]
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("workspace config")?;
+
+    let loaded = load_cordial_config(workspace.path(), store_home.path());
+    let crate_attrs = loaded.crate_attrs();
+    assert!(!crate_attrs.forbid_unsafe());
+    assert!(crate_attrs.missing_docs());
+    assert_eq!(crate_attrs.allow_unsafe(), &["ffi".to_string()]);
+    assert_eq!(crate_attrs.allow_missing_docs(), &["legacy".to_string()]);
+    Ok(())
+}

@@ -25,6 +25,8 @@ pub struct CordialConfig {
     #[serde(default)]
     cfg_hygiene: CfgHygieneThresholds,
     #[serde(default)]
+    crate_attrs: CrateAttrsThresholds,
+    #[serde(default)]
     tracing: TracingThresholds,
     #[serde(default)]
     derives: DerivesThresholds,
@@ -438,6 +440,53 @@ impl Default for CfgHygieneThresholds {
             extra_known_names: Vec::new(),
             crate_verifier: std::collections::HashMap::new(),
         }
+    }
+}
+
+/// Crate-root `#![forbid(unsafe_code)]` / `#![warn(missing_docs)]` knobs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub struct CrateAttrsThresholds {
+    /// Require `#![forbid(unsafe_code)]` on each library root.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    forbid_unsafe: bool,
+    /// Require `#![warn(missing_docs)]` (or deny/forbid) on each library root.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    missing_docs: bool,
+    /// Package names that may omit `forbid(unsafe_code)` (an FFI crate, say).
+    #[serde(default)]
+    allow_unsafe: Vec<String>,
+    /// Package names that may omit `warn(missing_docs)`.
+    #[serde(default)]
+    allow_missing_docs: Vec<String>,
+}
+
+impl Default for CrateAttrsThresholds {
+    #[instrument(level = "debug", ret)]
+    fn default() -> Self {
+        Self {
+            forbid_unsafe: true,
+            missing_docs: true,
+            allow_unsafe: Vec::new(),
+            allow_missing_docs: Vec::new(),
+        }
+    }
+}
+
+impl CrateAttrsThresholds {
+    #[instrument(level = "debug", skip(self))]
+    pub fn skip_unsafe(&self, crate_name: &str) -> bool {
+        !self.forbid_unsafe || self.allow_unsafe.iter().any(|name| name == crate_name)
+    }
+
+    #[instrument(level = "debug", skip(self))]
+    pub fn skip_missing_docs(&self, crate_name: &str) -> bool {
+        !self.missing_docs
+            || self
+                .allow_missing_docs
+                .iter()
+                .any(|name| name == crate_name)
     }
 }
 

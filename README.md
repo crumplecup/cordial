@@ -116,6 +116,7 @@ scanners you want.
 | `cfg_scatter` | Is the same `#[cfg]` copied across item kinds instead of a gated `mod`? Field/variant gating is never flagged. `[cfg_scatter]` in `cordial.toml`. |
 | `visibility` | Do `pub mod` paths earn their existence (flat crate, thin module, vis mismatch)? `[visibility]` in `cordial.toml`. |
 | `cli_layout` | Do clap types live in the library and dispatch with `act`? Is `main` only parse + `act` + miette? |
+| `crate_attrs` | Does each library root declare `#![forbid(unsafe_code)]` and `#![warn(missing_docs)]`? `[crate_attrs]` in `cordial.toml` (per-member allow lists). |
 | `glob_imports` | Are there glob `use` trees (`foo::*`, including `super::*`)? Replace them with explicit names. |
 | `inline_tests` | Are `#[cfg(test)]` modules or `#[test]` functions mixed into `src/`? Move them to `tests/`. |
 | `verus_warnings` | Does the Verus rustc fork emit `warning:` diagnostics rustc never sees? Invokes `verus` on `*_verus` / `vstd` crates. |
