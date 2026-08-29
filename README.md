@@ -31,6 +31,10 @@ cargo install --path .
 cordial quality -p <project>          # source-quality etiquettes
 cordial quality --apply               # tracing recipes + crate-root lint attributes
 cordial quality --apply --dry-run     # log apply without writing
+cordial explain                       # id + one-line why for every compiled etiquette
+cordial explain doc_warnings          # why it exists, what it flags, how to opt out
+cordial explain DOC-WARNING-001       # same page (rule id alias)
+# opt out: `[doc_warnings] enabled = false` in the project's cordial.toml
 cordial build rustdoc                 # rustdoc JSON for coverage (needs elicitation)
 cordial coverage                      # impl / trenchcoat / shadow (and std if enabled)
 cordial run                           # quality + coverage
@@ -52,7 +56,9 @@ checklists, summaries). A quality rollup lands at `findings/quality-report.md`.
 
 Thresholds load later-wins from `CordialConfig::default`, then
 `{store_home}/cordial.toml`, then `{workspace}/cordial.toml`. Missing files fall
-back to defaults. Canonical knobs: committed [`cordial.toml`](cordial.toml) and
+back to defaults. Every etiquette table accepts `enabled` (default true);
+`enabled = false` turns that lint off for the project. Canonical knobs:
+committed [`cordial.toml`](cordial.toml) and
 [docs/planning/cordial-config.md](docs/planning/cordial-config.md).
 
 Hand-audited exceptions live in the target repo (CI) and copy into the

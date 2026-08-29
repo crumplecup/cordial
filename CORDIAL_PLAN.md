@@ -27,7 +27,9 @@ The motivating use case is twofold:
 
 Phases 0–6 implemented on `main`. Built-in etiquettes cover panics, tracing,
 and elicitation coverage (impl / trenchcoat / shadow). The `cordial` binary
-drives session runs against local and workspace projects.
+drives session runs against local and workspace projects. `cordial explain`
+prints why a compiled-in etiquette exists and how to opt out
+([etiquette-explain.md](docs/planning/etiquette-explain.md)).
 
 Output parity with `elicit_doc` is retired -- see
 [docs/planning/elicit-doc-parity.md](docs/planning/elicit-doc-parity.md) for
@@ -79,7 +81,8 @@ framework itself.
 | `cli_layout` | Clap types and `act` dispatch in the library |
 | `crate_attrs` | Crate-root `#![forbid(unsafe_code)]` / `#![warn(missing_docs)]` ([crate-attrs-etiquette.md](docs/planning/crate-attrs-etiquette.md)) |
 | `doc_warnings` | rustdoc diagnostics from `cargo doc` ([doc-warnings-etiquette.md](docs/planning/doc-warnings-etiquette.md)) |
-| `quality` (default) | All source-quality scanners (panics, tracing, error stack, derives, allows, modularity, antipatterns, cfg_scatter, cfg_hygiene, visibility, cli_layout, crate_attrs, doc_warnings, glob_imports, inline_tests, verus_warnings) |
+| `pageantry` | File-level type arrangement; traits in a leading block ([pageantry-etiquette.md](docs/planning/pageantry-etiquette.md)) |
+| `quality` (default) | All source-quality scanners (panics, tracing, error stack, derives, allows, modularity, antipatterns, cfg_scatter, cfg_hygiene, visibility, cli_layout, crate_attrs, doc_warnings, glob_imports, inline_tests, verus_warnings, pageantry) |
 | `impl_coverage` | Trait impl coverage (requires `rustdoc`) |
 | `trenchcoat` | Trenchcoat wrapper coverage |
 | `shadow` | Shadow mirror coverage |

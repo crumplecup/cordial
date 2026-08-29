@@ -42,7 +42,10 @@ pub use reporter::{
 pub use scan::scan_crate_proof_patterns;
 pub use types::ProofPatternKind;
 
-use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule};
+use crate::etiquette::{
+    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    StaticQualityEtiquette, count_open_rule,
+};
 use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 
@@ -84,6 +87,38 @@ pub static PROOF_PATTERNS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiqu
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Which verus! functions are trusted rather than proven, or apply themselves invisibly?",
+            why: "A verus! function's signature says what it proves; these signals say how much of that is actually checked versus trusted, and (for broadcast) how much of a proof's real dependency surface is invisible. Verus accepts every one of these forms without complaint.",
+            logic: "Inventories assume, admit, #[verifier::external_body], uninterp spec fn, axiom fn (trusted rather than proven), and broadcast proof fn. Requires verus_ir. Ordinary cargo check / clippy / verus_warnings never see these.",
+            opt_out: "`[proof_patterns] enabled = false` in cordial.toml.",
+            rules: &[
+                EtiquetteRuleExplain {
+                    id: "PROOF-PATTERN-ASSUME",
+                    summary: "`assume(...)` in a verus! function",
+                },
+                EtiquetteRuleExplain {
+                    id: "PROOF-PATTERN-ADMIT",
+                    summary: "`admit()` in a verus! function",
+                },
+                EtiquetteRuleExplain {
+                    id: "PROOF-PATTERN-EXTERNAL-BODY",
+                    summary: "`#[verifier::external_body]`",
+                },
+                EtiquetteRuleExplain {
+                    id: "PROOF-PATTERN-UNINTERP",
+                    summary: "`uninterp spec fn`",
+                },
+                EtiquetteRuleExplain {
+                    id: "PROOF-PATTERN-AXIOM",
+                    summary: "`axiom fn`",
+                },
+                EtiquetteRuleExplain {
+                    id: "PROOF-PATTERN-BROADCAST",
+                    summary: "`broadcast proof fn`",
+                },
+            ],
+        },
     },
     quality_area: Some(QualityAreaSpec {
         title: "Proof patterns",

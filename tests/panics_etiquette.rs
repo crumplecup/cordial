@@ -80,6 +80,46 @@ pub fn never() -> ! {
 }
 
 #[test]
+fn panics_disabled_in_cordial_toml_skips_the_etiquette() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        "pub fn boom() { panic!(\"kaboom\"); }\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[panics]\nenabled = false\n",
+    )
+    .into_diagnostic()
+    .wrap_err("cordial.toml")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&PANICS_ETIQUETTE)
+        .build();
+
+    let outcome = session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+    assert_eq!(outcome.findings().count(), 0);
+    assert!(
+        !store.path().join("findings/panics.csv").is_file(),
+        "disabled etiquette must not write findings"
+    );
+    Ok(())
+}
+
+#[test]
 fn scan_rust_source_finds_panics_inside_a_verus_block() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;

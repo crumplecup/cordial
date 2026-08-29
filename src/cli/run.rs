@@ -11,9 +11,10 @@ use crate::build_workspace_members;
 use crate::{
     AddExceptionOutcome, CordialError, CordialResult, CoverageSkipEntry, CrateIr, Disposition,
     ExceptionEntry, NamedRunFilter, Plugin, RunAll, RunFilter, RunOutcome, Session, SessionBuilder,
-    StoreLayout, SurrealGraphExport, add_coverage_skip, add_exception, backup_exception_files,
-    default_store_home, load_exception_files, load_exceptions, resolve_exceptions_root,
-    run_tracing_instrument_apply,
+    StoreLayout, SurrealGraphExport, add_coverage_skip, add_exception, all_plugins,
+    backup_exception_files, default_store_home, etiquettes_from_plugins, load_exception_files,
+    load_exceptions, lookup_etiquette, render_explain_list, render_explain_page,
+    resolve_exceptions_root, run_tracing_instrument_apply,
 };
 #[cfg(feature = "homecoming_std")]
 use crate::{SysrootCache, build_sysroot_libraries};
@@ -67,6 +68,25 @@ pub(super) fn execute_build_sysroot(
         );
     }
     Ok(())
+}
+
+#[instrument(level = "debug", err(level = "warn"))]
+pub(super) fn execute_explain(id: Option<&str>) -> CordialResult<()> {
+    let plugins = all_plugins();
+    let etiquettes = etiquettes_from_plugins(&plugins);
+    match id {
+        None => {
+            print!("{}", render_explain_list(&etiquettes));
+            Ok(())
+        }
+        Some(query) => {
+            let Some(etiquette) = lookup_etiquette(&etiquettes, query) else {
+                return Err(CordialError::unknown_etiquette(query));
+            };
+            print!("{}", render_explain_page(etiquette));
+            Ok(())
+        }
+    }
 }
 
 #[instrument(level = "debug", skip(store), err(level = "warn"))]

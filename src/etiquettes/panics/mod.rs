@@ -37,7 +37,9 @@ pub use reporter::{PanicChecklistReporter, PanicCsvReporter, PanicSummaryReporte
 pub use scan::{scan_crate_panics, scan_rust_source, scan_source_tree};
 pub use types::PanicKind;
 
-use crate::etiquette::{StaticEtiquette, StaticQualityEtiquette};
+use crate::etiquette::{
+    EtiquetteExplain, EtiquetteRuleExplain, StaticEtiquette, StaticQualityEtiquette,
+};
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
@@ -69,6 +71,34 @@ pub static PANICS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Where does this crate abort?",
+            why: "Abort sites are the first error-handling layer. Library code should return the crate's internal error type (preserving source()); binaries and tests should surface through miette.",
+            logic: "Inventories panic!, unwrap, expect, unreachable!, and compile_error!. Test unwrap/expect (including #[cfg(test)] modules under src/) stay on the checklist rather than becoming CSV-only inventory.",
+            opt_out: "`[panics] enabled = false` in cordial.toml.",
+            rules: &[
+                EtiquetteRuleExplain {
+                    id: "PANIC-SOURCE-PANIC",
+                    summary: "`panic!` in source",
+                },
+                EtiquetteRuleExplain {
+                    id: "PANIC-SOURCE-UNREACHABLE",
+                    summary: "`unreachable!` in source",
+                },
+                EtiquetteRuleExplain {
+                    id: "PANIC-SOURCE-EXPECT",
+                    summary: "`.expect(...)` in source",
+                },
+                EtiquetteRuleExplain {
+                    id: "PANIC-SOURCE-UNWRAP",
+                    summary: "`.unwrap()` in source",
+                },
+                EtiquetteRuleExplain {
+                    id: "PANIC-SOURCE-COMPILE-ERROR",
+                    summary: "`compile_error!` in source",
+                },
+            ],
+        },
     },
     // Declines a dedicated row on purpose: its own checklist_total feeds
     // the hand-composed "Error handling" area instead (see

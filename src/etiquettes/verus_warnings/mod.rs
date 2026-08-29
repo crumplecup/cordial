@@ -36,7 +36,8 @@ pub use scan::{crate_is_verus_target, parse_verus_compiler_output, scan_crate_ve
 pub use types::{VerusWarningRecord, VerusWarningRuleId};
 
 use crate::etiquette::{
-    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_category,
+    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    StaticQualityEtiquette, count_open_category,
 };
 use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
@@ -79,6 +80,16 @@ pub static VERUS_WARNINGS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiqu
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Does the Verus rustc fork emit warnings this crate's rustc never sees?",
+            why: "Verus is a different compiler. It fires diagnostics rustc and clippy never see, and it has no deny-warnings flag.",
+            logic: "Invokes verus on crates that are Verus compilation units (*_verus or a vstd / verus_builtin dependency) and records each warning: diagnostic. Summary lines are dropped; the same span is kept once. Skipped when the crate is not a Verus target or verus is not on PATH.",
+            opt_out: "`[verus_warnings] enabled = false` in cordial.toml.",
+            rules: &[EtiquetteRuleExplain {
+                id: "VERUS-WARNING-001",
+                summary: "A warning: line from the Verus rustc fork",
+            }],
+        },
     },
     quality_area: Some(QualityAreaSpec {
         title: "Verus compiler warnings",

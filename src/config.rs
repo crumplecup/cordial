@@ -32,6 +32,103 @@ pub struct CordialConfig {
     tracing: TracingThresholds,
     #[serde(default)]
     derives: DerivesThresholds,
+    #[serde(default)]
+    panics: EtiquetteGate,
+    #[serde(default)]
+    allows: EtiquetteGate,
+    #[serde(default)]
+    error_sites: EtiquetteGate,
+    #[serde(default)]
+    error_chain: EtiquetteGate,
+    #[serde(default)]
+    internal_error_chain: EtiquetteGate,
+    #[serde(default)]
+    foreign_error_types: EtiquetteGate,
+    #[serde(default)]
+    foreign_error_attenuation: EtiquetteGate,
+    #[serde(default)]
+    antipatterns: EtiquetteGate,
+    #[serde(default)]
+    cli_layout: EtiquetteGate,
+    #[serde(default)]
+    glob_imports: EtiquetteGate,
+    #[serde(default)]
+    inline_tests: EtiquetteGate,
+    #[serde(default)]
+    verus_warnings: EtiquetteGate,
+    #[serde(default)]
+    proof_patterns: EtiquetteGate,
+    #[serde(default)]
+    pageantry: EtiquetteGate,
+    #[serde(rename = "impl-coverage", default)]
+    impl_coverage: EtiquetteGate,
+    #[serde(default)]
+    trenchcoat: EtiquetteGate,
+    #[serde(default)]
+    shadow: EtiquetteGate,
+    #[serde(rename = "homecoming-std", default)]
+    homecoming_std: EtiquetteGate,
+    #[serde(rename = "amenable-std", default)]
+    amenable_std: EtiquetteGate,
+}
+
+/// On/off gate for an etiquette that has no other `cordial.toml` knobs.
+///
+/// Default on. `[panics] enabled = false` skips that etiquette for the
+/// project (see [`CordialConfig::etiquette_enabled`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub struct EtiquetteGate {
+    /// Run this etiquette (`true`) or skip it (`false`).
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    enabled: bool,
+}
+
+impl Default for EtiquetteGate {
+    #[instrument(level = "debug", ret)]
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
+impl CordialConfig {
+    /// Whether this etiquette should run for the project.
+    ///
+    /// Unknown ids (custom plugins) stay on. Built-ins read
+    /// `[<id>] enabled` from `cordial.toml` (default `true`).
+    #[instrument(level = "debug", skip(self))]
+    pub fn etiquette_enabled(&self, id: &str) -> bool {
+        match id {
+            "visibility" => self.visibility.enabled,
+            "modularity" => self.modularity.enabled,
+            "cfg_scatter" => self.cfg_scatter.enabled,
+            "cfg_hygiene" => self.cfg_hygiene.enabled,
+            "crate_attrs" => self.crate_attrs.enabled,
+            "doc_warnings" => self.doc_warnings.enabled,
+            "tracing" => self.tracing.enabled,
+            "derives" => self.derives.enabled,
+            "panics" => self.panics.enabled,
+            "allows" => self.allows.enabled,
+            "error_sites" => self.error_sites.enabled,
+            "error_chain" => self.error_chain.enabled,
+            "internal_error_chain" => self.internal_error_chain.enabled,
+            "foreign_error_types" => self.foreign_error_types.enabled,
+            "foreign_error_attenuation" => self.foreign_error_attenuation.enabled,
+            "antipatterns" => self.antipatterns.enabled,
+            "cli_layout" => self.cli_layout.enabled,
+            "glob_imports" => self.glob_imports.enabled,
+            "inline_tests" => self.inline_tests.enabled,
+            "verus_warnings" => self.verus_warnings.enabled,
+            "proof_patterns" => self.proof_patterns.enabled,
+            "pageantry" => self.pageantry.enabled,
+            "impl-coverage" => self.impl_coverage.enabled,
+            "trenchcoat" => self.trenchcoat.enabled,
+            "shadow" => self.shadow.enabled,
+            "homecoming-std" => self.homecoming_std.enabled,
+            "amenable-std" => self.amenable_std.enabled,
+            _ => true,
+        }
+    }
 }
 
 /// Visibility etiquette knobs.
@@ -61,6 +158,11 @@ pub struct VisibilityThresholds {
     #[new(value = "true")]
     #[getter(copy)]
     prefer_root: bool,
+    /// Run this etiquette (`true`) or skip it (`false`).
+    #[serde(default = "default_true")]
+    #[new(value = "true")]
+    #[getter(copy)]
+    enabled: bool,
 }
 
 #[instrument(level = "debug")]
@@ -93,6 +195,7 @@ impl Default for VisibilityThresholds {
             max_crate_names_for_flat: default_max_crate_names_for_flat(),
             min_module_names: default_min_module_names(),
             prefer_root: default_prefer_root(),
+            enabled: true,
         }
     }
 }
@@ -159,6 +262,10 @@ pub struct ModularityThresholds {
     #[serde(default = "default_hierarchy_min_lines")]
     #[getter(copy)]
     hierarchy_min_lines: u32,
+    /// Run this etiquette (`true`) or skip it (`false`).
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    enabled: bool,
 }
 
 #[instrument(level = "debug")]
@@ -231,6 +338,7 @@ impl Default for ModularityThresholds {
             top_heavy_min_percent: default_top_heavy_min_percent(),
             lopsided_min_percent: default_lopsided_min_percent(),
             hierarchy_min_lines: default_hierarchy_min_lines(),
+            enabled: true,
         }
     }
 }
@@ -401,6 +509,11 @@ pub struct CfgScatterThresholds {
     #[serde(default = "default_min_occurrences")]
     #[getter(copy)]
     min_occurrences: usize,
+    /// Run this etiquette (`true`) or skip it (`false`).
+    #[serde(default = "default_true")]
+    #[new(value = "true")]
+    #[getter(copy)]
+    enabled: bool,
 }
 
 #[instrument(level = "debug")]
@@ -418,6 +531,7 @@ impl Default for CfgScatterThresholds {
         Self {
             min_distinct_kinds: default_min_distinct_kinds(),
             min_occurrences: default_min_occurrences(),
+            enabled: true,
         }
     }
 }
@@ -446,6 +560,11 @@ pub struct CfgHygieneThresholds {
     /// `crate_verifier = { my_kani_crate = "kani", my_creusot_crate = "creusot" }`.
     #[serde(default)]
     crate_verifier: std::collections::HashMap<String, String>,
+    /// Run this etiquette (`true`) or skip it (`false`).
+    #[serde(default = "default_true")]
+    #[new(value = "true")]
+    #[getter(copy)]
+    enabled: bool,
 }
 
 impl Default for CfgHygieneThresholds {
@@ -454,6 +573,7 @@ impl Default for CfgHygieneThresholds {
         Self {
             extra_known_names: Vec::new(),
             crate_verifier: std::collections::HashMap::new(),
+            enabled: true,
         }
     }
 }
@@ -475,6 +595,10 @@ pub struct CrateAttrsThresholds {
     /// Package names that may omit `warn(missing_docs)`.
     #[serde(default)]
     allow_missing_docs: Vec<String>,
+    /// Run this etiquette (`true`) or skip it (`false`).
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    enabled: bool,
 }
 
 impl Default for CrateAttrsThresholds {
@@ -485,6 +609,7 @@ impl Default for CrateAttrsThresholds {
             missing_docs: true,
             allow_unsafe: Vec::new(),
             allow_missing_docs: Vec::new(),
+            enabled: true,
         }
     }
 }
@@ -521,6 +646,10 @@ pub struct DocWarningsThresholds {
     /// Package names that skip the `cargo doc` invocation.
     #[serde(default)]
     skip_crates: Vec<String>,
+    /// Run this etiquette (`true`) or skip it (`false`).
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    enabled: bool,
 }
 
 impl Default for DocWarningsThresholds {
@@ -530,6 +659,7 @@ impl Default for DocWarningsThresholds {
             document_private_items: false,
             all_features: false,
             skip_crates: Vec::new(),
+            enabled: true,
         }
     }
 }
@@ -565,6 +695,11 @@ pub struct DerivesThresholds {
     #[serde(default = "default_min_fluent_setters")]
     #[getter(copy)]
     min_fluent_setters: usize,
+    /// Run this etiquette (`true`) or skip it (`false`).
+    #[serde(default = "default_true")]
+    #[new(value = "true")]
+    #[getter(copy)]
+    enabled: bool,
 }
 
 #[instrument(level = "debug")]
@@ -582,6 +717,7 @@ impl Default for DerivesThresholds {
         Self {
             max_constructor_args: default_max_constructor_args(),
             min_fluent_setters: default_min_fluent_setters(),
+            enabled: true,
         }
     }
 }
@@ -628,6 +764,11 @@ pub struct TracingThresholds {
     #[serde(default)]
     #[new(default)]
     subscriber: TracingSubscriberPolicy,
+    /// Run this etiquette (`true`) or skip it (`false`).
+    #[serde(default = "default_true")]
+    #[new(value = "true")]
+    #[getter(copy)]
+    enabled: bool,
 }
 
 /// Whether each tracing-subscriber init rule is armed.
@@ -695,6 +836,7 @@ impl Default for TracingThresholds {
             apply_gate_crates: std::collections::HashMap::new(),
             apply_skip_crates: Vec::new(),
             subscriber: TracingSubscriberPolicy::default(),
+            enabled: true,
         }
     }
 }

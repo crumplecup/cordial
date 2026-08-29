@@ -9,6 +9,45 @@ use crate::session::{RunFilter, SessionView};
 use crate::targets::discover_crate_targets;
 
 use tracing::instrument;
+
+/// Profile policy: which layers run and how findings are classified.
+pub trait ErrorHandlingPolicy: Send + Sync {
+    /// Layers.
+    fn layers(&self) -> ErrorHandlingLayers;
+}
+
+/// Discovers crate scopes for an error-handling run (default: workspace members).
+pub trait ErrorScopeProvider: Send + Sync {
+    /// Error scopes.
+    fn error_scopes(
+        &self,
+        session: &dyn SessionView,
+        filter: &dyn RunFilter,
+    ) -> CordialResult<Vec<ErrorScope>>;
+}
+
+/// Semantic supertrait: error flow analysis over workspace source IR.
+pub trait ErrorHandling: Plugin {
+    /// Scope provider.
+    fn scope_provider(&self) -> &dyn ErrorScopeProvider;
+    /// Policy.
+    fn policy(&self) -> &dyn ErrorHandlingPolicy;
+
+    /// Scopes.
+    fn scopes(
+        &self,
+        session: &dyn SessionView,
+        filter: &dyn RunFilter,
+    ) -> CordialResult<Vec<ErrorScope>> {
+        self.scope_provider().error_scopes(session, filter)
+    }
+
+    /// Etiquette / lint category this rule belongs to.
+    fn category(&self) -> PluginCategory {
+        PluginCategory::ErrorHandling
+    }
+}
+
 /// One crate in scope for error-flow analysis.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ErrorScope {
@@ -139,22 +178,6 @@ impl std::fmt::Display for ErrorSurface {
     }
 }
 
-/// Profile policy: which layers run and how findings are classified.
-pub trait ErrorHandlingPolicy: Send + Sync {
-    /// Layers.
-    fn layers(&self) -> ErrorHandlingLayers;
-}
-
-/// Discovers crate scopes for an error-handling run (default: workspace members).
-pub trait ErrorScopeProvider: Send + Sync {
-    /// Error scopes.
-    fn error_scopes(
-        &self,
-        session: &dyn SessionView,
-        filter: &dyn RunFilter,
-    ) -> CordialResult<Vec<ErrorScope>>;
-}
-
 /// Default provider: one scope per workspace member from `cargo metadata`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct WorkspaceMembersErrorScopeProvider;
@@ -182,27 +205,5 @@ impl ErrorHandlingPolicy for StandardErrorHandlingPolicy {
     #[instrument(level = "trace", skip(self))]
     fn layers(&self) -> ErrorHandlingLayers {
         ErrorHandlingLayers::FULL
-    }
-}
-
-/// Semantic supertrait: error flow analysis over workspace source IR.
-pub trait ErrorHandling: Plugin {
-    /// Scope provider.
-    fn scope_provider(&self) -> &dyn ErrorScopeProvider;
-    /// Policy.
-    fn policy(&self) -> &dyn ErrorHandlingPolicy;
-
-    /// Scopes.
-    fn scopes(
-        &self,
-        session: &dyn SessionView,
-        filter: &dyn RunFilter,
-    ) -> CordialResult<Vec<ErrorScope>> {
-        self.scope_provider().error_scopes(session, filter)
-    }
-
-    /// Etiquette / lint category this rule belongs to.
-    fn category(&self) -> PluginCategory {
-        PluginCategory::ErrorHandling
     }
 }

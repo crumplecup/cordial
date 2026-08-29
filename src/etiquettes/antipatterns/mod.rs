@@ -46,7 +46,10 @@ pub use version_reporter::{
     VersionInMemberChecklistReporter, VersionInMemberCsvReporter, VersionInMemberSummaryReporter,
 };
 
-use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule};
+use crate::etiquette::{
+    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    StaticQualityEtiquette, count_open_rule,
+};
 use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 
@@ -92,6 +95,38 @@ pub static ANTIPATTERNS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquet
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Untyped error carriers and related source smells?",
+            why: "These are quality problems adjacent to error handling that are not site/chain/foreign layers: they erase types, hide unused work, or fight workspace versioning.",
+            logic: "Flags Box<dyn Error>, Result<_, String>, unused _arg (except on impls of foreign traits), struct &'static fields where an owned type would do, unnamed contract bounds (Kani/Creusot/Verus), and workspace members that pin a version. Some Box<dyn Error> / unused-arg rows feed the Error handling quality-report area.",
+            opt_out: "`[antipatterns] enabled = false` in cordial.toml.",
+            rules: &[
+                EtiquetteRuleExplain {
+                    id: "ANTIPATTERN-BOX-DYN-ERROR-001",
+                    summary: "`Box<dyn Error>` carrier",
+                },
+                EtiquetteRuleExplain {
+                    id: "ANTIPATTERN-STRING-ERROR-001",
+                    summary: "`Result<_, String>` carrier",
+                },
+                EtiquetteRuleExplain {
+                    id: "ANTIPATTERN-UNUSED-UNDERSCORE-ARG-001",
+                    summary: "Unused `_arg` parameter",
+                },
+                EtiquetteRuleExplain {
+                    id: "ANTIPATTERN-STRUCT-STATIC-REF-001",
+                    summary: "`&'static` field that should be owned",
+                },
+                EtiquetteRuleExplain {
+                    id: "ANTIPATTERN-UNNAMED-CONTRACT-BOUND-001",
+                    summary: "Unnamed verifier contract bound",
+                },
+                EtiquetteRuleExplain {
+                    id: "ANTIPATTERN-VERSION-IN-MEMBER-001",
+                    summary: "Version pin on a workspace member",
+                },
+            ],
+        },
     },
     quality_area: Some(QualityAreaSpec {
         title: "Antipatterns",

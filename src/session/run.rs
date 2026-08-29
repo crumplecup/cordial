@@ -116,6 +116,11 @@ pub(super) fn run_session(
     store.ensure_dirs()?;
 
     let etiquettes = resolved_etiquettes(&session.plugins, &session.etiquettes, filter);
+    let config = crate::load_session_config(session);
+    let etiquettes: Vec<&'static dyn Etiquette> = etiquettes
+        .into_iter()
+        .filter(|etiquette| config.etiquette_enabled(etiquette.id()))
+        .collect();
     if etiquettes.is_empty() {
         return Ok(empty_outcome());
     }

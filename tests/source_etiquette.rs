@@ -1,6 +1,6 @@
 use cordial::{
-    RunAll, ScopeEnricher, Session, SessionBuilder, SourceLoader, StaticEtiquette,
-    project_slug_from_path,
+    EtiquetteExplain, RunAll, ScopeEnricher, Session, SessionBuilder, SourceLoader,
+    StaticEtiquette, project_slug_from_path,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -20,6 +20,13 @@ static SOURCE_ETIQUETTE: StaticEtiquette = StaticEtiquette {
     workspace_assessors: None,
     reporters: &[],
     is_coverage: false,
+    explain: EtiquetteExplain {
+        summary: "Test inventory (not a product lint)",
+        why: "Session fixture used by cordial's own tests.",
+        logic: "Loads source (and optionally rustdoc) into IR; emits no findings.",
+        opt_out: "Not registered in the cordial binary.",
+        rules: &[],
+    },
 };
 
 #[test]

@@ -31,7 +31,7 @@ use crate::RustdocLoader;
 use crate::enricher::{
     FeatureProbeEnricher, ProofHarnessEnricher, TraitImplEnricher, WrapperCoverageEnricher,
 };
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{EtiquetteExplain, EtiquetteRuleExplain, StaticEtiquette};
 
 static RUSTDOC_LOADER: RustdocLoader = RustdocLoader;
 static TRAIT_IMPL: TraitImplEnricher = TraitImplEnricher;
@@ -66,4 +66,14 @@ pub static IMPL_COVERAGE_ETIQUETTE: StaticEtiquette = StaticEtiquette {
     workspace_assessors: None,
     reporters: REPORTERS,
     is_coverage: true,
+    explain: EtiquetteExplain {
+        summary: "Do types implement the required elicitation traits?",
+        why: "Elicitation coverage is a completeness inventory, not a source lint. Types that wrap foreign values or sit on a tracked target need the trait stack before they are done.",
+        logic: "From rustdoc JSON, finds types that should implement ElicitComplete (and prerequisites) and classifies gaps: missing our traits, ready for ElicitComplete, feature-gated external, or externally blocked. Needs cordial build rustdoc.",
+        opt_out: "`[impl-coverage] enabled = false` in cordial.toml.",
+        rules: &[EtiquetteRuleExplain {
+            id: "IMPL-COVERAGE-GAP",
+            summary: "Type is missing required elicitation traits",
+        }],
+    },
 };

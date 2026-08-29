@@ -4,16 +4,6 @@ use super::anchor::IrAnchor;
 use super::artifact::FindingSink;
 
 use tracing::instrument;
-/// Severity or resolution state of a finding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum Disposition {
-    /// Still unresolved.
-    Open,
-    /// Kept as a documented example, not a defect.
-    Exemplar,
-    /// Silenced by an exception patch.
-    Suppressed,
-}
 
 /// Identity of a rule that produced a finding.
 pub trait Rule: Send + Sync {
@@ -35,6 +25,17 @@ pub trait Finding: Send + Sync {
     fn anchor(&self) -> &dyn IrAnchor;
     /// Write structured fields for reporters.
     fn emit(&self, sink: &mut dyn FindingSink);
+}
+
+/// Severity or resolution state of a finding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum Disposition {
+    /// Still unresolved.
+    Open,
+    /// Kept as a documented example, not a defect.
+    Exemplar,
+    /// Silenced by an exception patch.
+    Suppressed,
 }
 
 impl Display for Disposition {

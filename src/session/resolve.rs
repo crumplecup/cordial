@@ -14,6 +14,47 @@ use tracing::instrument;
 
 use super::RunFilter;
 
+trait Hook {
+    fn hook_id(&self) -> &str;
+}
+
+impl Hook for dyn Loader {
+    fn hook_id(&self) -> &str {
+        self.id()
+    }
+}
+
+impl Hook for dyn IrEnricher {
+    fn hook_id(&self) -> &str {
+        self.id()
+    }
+}
+
+impl Hook for dyn Probe {
+    fn hook_id(&self) -> &str {
+        self.id()
+    }
+}
+
+impl Hook for dyn Assessor {
+    fn hook_id(&self) -> &str {
+        self.id()
+    }
+}
+
+impl Hook for dyn WorkspaceAssessor {
+    fn hook_id(&self) -> &str {
+        self.id()
+    }
+}
+
+impl Hook for dyn Reporter {
+    #[instrument(level = "trace", skip(self))]
+    fn hook_id(&self) -> &str {
+        self.id()
+    }
+}
+
 #[instrument(level = "debug", skip(plugins, direct_etiquettes, filter))]
 pub(super) fn resolved_etiquettes(
     plugins: &[&'static dyn Plugin],
@@ -204,45 +245,4 @@ fn dedupe_hooks<'a, T: Hook + ?Sized>(items: impl Iterator<Item = &'a T>) -> Vec
         }
     }
     out
-}
-
-trait Hook {
-    fn hook_id(&self) -> &str;
-}
-
-impl Hook for dyn Loader {
-    fn hook_id(&self) -> &str {
-        self.id()
-    }
-}
-
-impl Hook for dyn IrEnricher {
-    fn hook_id(&self) -> &str {
-        self.id()
-    }
-}
-
-impl Hook for dyn Probe {
-    fn hook_id(&self) -> &str {
-        self.id()
-    }
-}
-
-impl Hook for dyn Assessor {
-    fn hook_id(&self) -> &str {
-        self.id()
-    }
-}
-
-impl Hook for dyn WorkspaceAssessor {
-    fn hook_id(&self) -> &str {
-        self.id()
-    }
-}
-
-impl Hook for dyn Reporter {
-    #[instrument(level = "trace", skip(self))]
-    fn hook_id(&self) -> &str {
-        self.id()
-    }
 }

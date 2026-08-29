@@ -82,7 +82,8 @@ verus_ir = ["dep:verus_syn", "dep:quote"]
 # is_trusted_not_proven()), and broadcast. The real consumer verus_ir was
 # built for.
 proof_patterns = ["verus_ir"]
-quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "crate_attrs", "doc_warnings", "glob_imports", "inline_tests", "verus_warnings", "proof_patterns"]
+pageantry = []
+quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "crate_attrs", "doc_warnings", "glob_imports", "inline_tests", "verus_warnings", "proof_patterns", "pageantry"]
 # Shared rustdoc JSON support for coverage plugins.
 rustdoc = ["dep:rustdoc-types", "dep:nom"]
 # Elicitation coverage plugins (each requires rustdoc).
@@ -113,6 +114,10 @@ required-features = ["quality", "impl_coverage"]
 [[test]]
 name = "cli"
 required-features = ["cli", "quality"]
+
+[[test]]
+name = "explain"
+required-features = ["quality"]
 
 [[test]]
 name = "stability"
@@ -201,6 +206,10 @@ required-features = ["verus_warnings"]
 [[test]]
 name = "proof_patterns_etiquette"
 required-features = ["proof_patterns"]
+
+[[test]]
+name = "pageantry_etiquette"
+required-features = ["pageantry"]
 
 [[test]]
 name = "derives_etiquette"
@@ -321,5 +330,5 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(creusot)',
   'cfg(prusti)',
   'cfg(verus)',
-  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "crate_attrs", "doc_warnings", "glob_imports", "inline_tests", "verus_warnings", "verus_ir", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
+  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "crate_attrs", "doc_warnings", "glob_imports", "inline_tests", "verus_warnings", "verus_ir", "proof_patterns", "pageantry", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
 ] }

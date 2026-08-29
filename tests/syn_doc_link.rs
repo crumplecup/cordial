@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 
 use cordial::{
-    ATTR_IR_ORIGIN, BasicQuery, IrView, ORIGIN_RUSTDOC, ORIGIN_SOURCE, RunAll, RustdocLoader,
-    Session, SessionBuilder, SourceLoader, StaticEtiquette, syn_doc_peer,
+    ATTR_IR_ORIGIN, BasicQuery, EtiquetteExplain, IrView, ORIGIN_RUSTDOC, ORIGIN_SOURCE, RunAll,
+    RustdocLoader, Session, SessionBuilder, SourceLoader, StaticEtiquette, syn_doc_peer,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -23,6 +23,13 @@ static DUAL_INVENTORY_ETIQUETTE: StaticEtiquette = StaticEtiquette {
     workspace_assessors: None,
     reporters: &[],
     is_coverage: false,
+    explain: EtiquetteExplain {
+        summary: "Test inventory (not a product lint)",
+        why: "Session fixture used by cordial's own tests.",
+        logic: "Loads source (and optionally rustdoc) into IR; emits no findings.",
+        opt_out: "Not registered in the cordial binary.",
+        rules: &[],
+    },
 };
 
 #[test]

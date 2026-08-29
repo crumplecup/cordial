@@ -41,6 +41,7 @@ builds reuse rustc's cache.
 
 ```toml
 [doc_warnings]
+# enabled = true
 # document_private_items = false
 # all_features = true          # match CI that docs every feature
 # skip_crates = ["proc-macro-helper"]

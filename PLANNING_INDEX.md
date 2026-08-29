@@ -25,6 +25,8 @@ Active implementation plans for `cordial`.
 | [Verus compiler warnings](docs/planning/verus-warnings-etiquette.md) | **Active** | Post-process `verus` output; rustc never sees these diagnostics |
 | [Proof patterns etiquette](docs/planning/proof-patterns-etiquette.md) | **Active** | `assume`/`admit`/`external_body`/`uninterp`/`axiom`/`broadcast` via `verus_ir` |
 | [Quality-report feeder trait](docs/planning/quality-report-feeder-trait.md) | **Complete** | `QualityReportArea`/`StaticQualityEtiquette` -- compiler-enforced rollup coverage, closes the `proof_patterns`/`foreign_error_types` silent-gap class |
+| [Etiquette explain](docs/planning/etiquette-explain.md) | **Active** | Required `Etiquette::explain`; `cordial explain [id]` (rule ids alias the page) |
+| [Pageantry etiquette](docs/planning/pageantry-etiquette.md) | **Active** | File-level type arrangement; first rule: traits in a leading block below the import/`mod` header |
 
 ## Completed / archived
 

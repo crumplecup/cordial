@@ -32,7 +32,8 @@ pub use scan::scan_rust_source;
 pub use types::CfgSiteKind;
 
 use crate::etiquette::{
-    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_category,
+    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    StaticQualityEtiquette, count_open_category,
 };
 use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
@@ -75,6 +76,16 @@ pub static CFG_SCATTER_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquett
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Is the same #[cfg] copied across item kinds instead of a gated mod?",
+            why: "Copy-pasted feature lists on free-standing items are a “this logic is its own module” signal. Gating a field that holds a feature-gated type is often unavoidable and is not that signal.",
+            logic: "Flags a #[cfg(...)] predicate copied across multiple item kinds in one file, or repeated many times on one kind. #[cfg] on a mod is never scanned. Field- and variant-only gating is never flagged. Thresholds: [cfg_scatter] min_distinct_kinds / min_occurrences.",
+            opt_out: "`[cfg_scatter] enabled = false` in cordial.toml.",
+            rules: &[EtiquetteRuleExplain {
+                id: "CFG-SCATTER-001",
+                summary: "Scattered #[cfg] that belongs on a mod",
+            }],
+        },
     },
     quality_area: Some(QualityAreaSpec {
         title: "Cfg scatter",

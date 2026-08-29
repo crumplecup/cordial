@@ -37,7 +37,10 @@ pub use reporter::{ModularityChecklistReporter, ModularityCsvReporter, Modularit
 pub use scan::scan_rust_source;
 pub use types::{ModularityKind, ModuleSizeStats};
 
-use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette};
+use crate::etiquette::{
+    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    StaticQualityEtiquette,
+};
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
@@ -70,6 +73,42 @@ pub static MODULARITY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Which files, functions, and modules are too large or badly packed?",
+            why: "Size and packing problems are split/extract signals. Visibility asks whether a pub mod path has earned its existence; this etiquette asks whether the mass in those modules should be peeled, split, or collapsed.",
+            logic: "Seven rules: oversized files and function bodies, too many types per file, modules far from the crate mean (σ), top-heavy parents, lopsided siblings, and unary child directories. Thresholds live under [modularity] in cordial.toml.",
+            opt_out: "`[modularity] enabled = false` in cordial.toml.",
+            rules: &[
+                EtiquetteRuleExplain {
+                    id: "MODULARITY-FILE",
+                    summary: "File over the line threshold",
+                },
+                EtiquetteRuleExplain {
+                    id: "MODULARITY-FUNCTION",
+                    summary: "Function body over the line threshold",
+                },
+                EtiquetteRuleExplain {
+                    id: "MODULARITY-TYPES-PER-FILE",
+                    summary: "Too many types in one file",
+                },
+                EtiquetteRuleExplain {
+                    id: "MODULARITY-MODULE-SIZE",
+                    summary: "Module size far from the crate mean",
+                },
+                EtiquetteRuleExplain {
+                    id: "MODULARITY-TOP-HEAVY",
+                    summary: "Parent holds most of the mass",
+                },
+                EtiquetteRuleExplain {
+                    id: "MODULARITY-LOPSIDED",
+                    summary: "Sibling modules are badly unbalanced",
+                },
+                EtiquetteRuleExplain {
+                    id: "MODULARITY-COLLAPSE",
+                    summary: "Unary child directory that should collapse",
+                },
+            ],
+        },
     },
     quality_area: Some(QualityAreaSpec {
         title: "Modularity",

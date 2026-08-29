@@ -10,7 +10,8 @@
 //! (`cordial exceptions`).
 //!
 //! Each child module’s docs cover what it checks, why, and how to use it.
-//! Policy tables live in `docs/planning/`.
+//! Policy tables live in `docs/planning/`. `cordial explain` prints the
+//! same why / logic / opt-out for every bundle compiled into the binary.
 //!
 //! # Quality
 //!
@@ -37,6 +38,7 @@
 //! | `inline_tests` | `inline_tests` | Are tests mixed into `src/` instead of `tests/`? |
 //! | `verus_warnings` | `verus_warnings` | Does the Verus rustc fork emit warnings this crate's rustc never sees? |
 //! | `proof_patterns` | `proof_patterns` | Which `verus!` functions are trusted rather than proven, or apply themselves invisibly (`broadcast`)? |
+//! | `pageantry` | `pageantry` | Are traits defined in a leading block just below the import / `mod` header? |
 //!
 //! # Coverage
 //!
@@ -95,6 +97,8 @@ pub(crate) mod impl_coverage;
 pub(crate) mod internal_error_chain;
 #[cfg(feature = "modularity")]
 pub(crate) mod modularity;
+#[cfg(feature = "pageantry")]
+pub(crate) mod pageantry;
 #[cfg(feature = "panics")]
 pub(crate) mod panics;
 #[cfg(feature = "proof_patterns")]
@@ -118,7 +122,7 @@ pub(crate) mod trenchcoat;
 /// `docs/planning/quality-report-feeder-trait.md`).
 #[::tracing::instrument(level = "debug")]
 fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::QualityEtiquette> {
-    let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 21] = [
+    let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 22] = [
         #[cfg(feature = "panics")]
         Some(&panics::PANICS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "panics"))]
@@ -211,6 +215,10 @@ fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::QualityEtiq
         #[cfg(feature = "proof_patterns")]
         Some(&proof_patterns::PROOF_PATTERNS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "proof_patterns"))]
+        None,
+        #[cfg(feature = "pageantry")]
+        Some(&pageantry::PAGEANTRY_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        #[cfg(not(feature = "pageantry"))]
         None,
     ];
     items.into_iter().flatten().collect()

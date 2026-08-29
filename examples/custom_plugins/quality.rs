@@ -5,10 +5,10 @@
 
 use cordial::{
     AssessView, Assessor, AttributeEnricher, CordialResult, Disposition, EdgeKind, EnrichView,
-    Etiquette, FileSpan, Finding, FindingSink, IrAnchor, IrEnricher, Loader, Marker, NodeAnchor,
-    NodeKind, NodeView, NodeWeight, PluginCategory, Probe, ProbeView, Query, RenderView, Reporter,
-    Rule, ScopeEnricher, SourceLoadView, SourceLoader, SourceSpan, StaticEtiquette, StaticPlugin,
-    TextArtifact,
+    Etiquette, EtiquetteExplain, EtiquetteRuleExplain, FileSpan, Finding, FindingSink, IrAnchor,
+    IrEnricher, Loader, Marker, NodeAnchor, NodeKind, NodeView, NodeWeight, PluginCategory, Probe,
+    ProbeView, Query, RenderView, Reporter, Rule, ScopeEnricher, SourceLoadView, SourceLoader,
+    SourceSpan, StaticEtiquette, StaticPlugin, TextArtifact,
 };
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -39,6 +39,16 @@ pub static TODO_ETIQUETTE: StaticEtiquette = StaticEtiquette {
     workspace_assessors: None,
     reporters: REPORTERS,
     is_coverage: false,
+    explain: EtiquetteExplain {
+        summary: "Leftover todo!() macros in source",
+        why: "Unfinished todo!() sites should not merge. This example shows a quality-family plugin wrapping one etiquette.",
+        logic: "Walks syn for todo!() macros and emits ACME-TODO-001. Not a built-in; copy examples/custom_plugins.",
+        opt_out: "Do not register ACME_STYLE. This is an example plugin, not compiled into the cordial binary.",
+        rules: &[EtiquetteRuleExplain {
+            id: "ACME-TODO-001",
+            summary: "Leftover `todo!()` macro",
+        }],
+    },
 };
 
 static ACME_STYLE_ETIQUETTES: &[&dyn Etiquette] = &[&TODO_ETIQUETTE];

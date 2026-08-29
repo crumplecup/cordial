@@ -72,6 +72,11 @@ the source-scan families against a planted `todo!()`. The coverage plugin
 is not executed in that fixture — `IMPL_COVERAGE_ETIQUETTE` needs rustdoc
 JSON.
 
+`StaticEtiquette` requires an `explain` field (`Etiquette::explain`) so a
+custom bundle cannot ship without a why / logic / opt-out page.
+`cordial explain` prints those pages for etiquettes compiled into the
+binary; third-party plugins are not on that CLI yet.
+
 Out of scope: CLI flags for third-party plugins; relaxing `'static` on
 `SessionBuilder::register_plugin`.
 

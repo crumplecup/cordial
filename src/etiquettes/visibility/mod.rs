@@ -32,7 +32,10 @@ pub use reporter::{VisibilityChecklistReporter, VisibilityCsvReporter, Visibilit
 pub use scan::{BranchingCache, scan_crate_visibility, scan_crate_visibility_with_cache};
 pub use types::{VisibilityRecord, VisibilityRuleId};
 
-use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule};
+use crate::etiquette::{
+    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    StaticQualityEtiquette, count_open_rule,
+};
 use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 
@@ -68,6 +71,26 @@ pub static VISIBILITY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Do pub mod paths earn their existence?",
+            why: "pub mod is a promise of a public path. A thin module or a pub child of a private parent splits crate-internal navigation without buying a real API.",
+            logic: "A small crate stays flat; a visible module needs enough leaf names; a child's visibility must not exceed its parent. Pub fields stay in derives. Thresholds: [visibility] in cordial.toml. prefer_root (default true) keeps a fat root when flattening would overflow the crate-name cap.",
+            opt_out: "`[visibility] enabled = false` in cordial.toml.",
+            rules: &[
+                EtiquetteRuleExplain {
+                    id: "VIS-CRATE-FLAT-001",
+                    summary: "Small crate should stay flat",
+                },
+                EtiquetteRuleExplain {
+                    id: "VIS-MOD-THIN-001",
+                    summary: "Visible module has too few leaf names",
+                },
+                EtiquetteRuleExplain {
+                    id: "VIS-MOD-MISMATCH-001",
+                    summary: "Child visibility exceeds its parent",
+                },
+            ],
+        },
     },
     quality_area: Some(QualityAreaSpec {
         title: "Module visibility",

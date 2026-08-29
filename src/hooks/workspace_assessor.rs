@@ -3,6 +3,14 @@ use crate::ir::WorkspaceIr;
 use crate::objects::Finding;
 use crate::session::{RunFilter, SessionView};
 
+/// Consumes workspace-scoped IR and emits cross-crate findings.
+pub trait WorkspaceAssessor: Send + Sync {
+    /// Stable identifier for this hook.
+    fn id(&self) -> &str;
+    /// Judge markers (or workspace IR) and emit findings.
+    fn assess(&self, view: WorkspaceAssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>>;
+}
+
 /// Shared inputs for [`WorkspaceAssessor::assess`].
 ///
 /// Take the fields the assessor needs; unused neighbors are not unused
@@ -15,12 +23,4 @@ pub struct WorkspaceAssessView<'a> {
     pub session: &'a dyn SessionView,
     /// Run filter for workspace-scoped assessment.
     pub filter: &'a dyn RunFilter,
-}
-
-/// Consumes workspace-scoped IR and emits cross-crate findings.
-pub trait WorkspaceAssessor: Send + Sync {
-    /// Stable identifier for this hook.
-    fn id(&self) -> &str;
-    /// Judge markers (or workspace IR) and emit findings.
-    fn assess(&self, view: WorkspaceAssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>>;
 }

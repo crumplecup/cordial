@@ -42,17 +42,6 @@ pub use workspace_hub::{WorkspaceHub, detect_workspace_hub, discover_workspace_h
 
 use crate::etiquette::Etiquette;
 
-/// Whether a plugin participates in coverage analysis or source-quality scans.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PluginCategory {
-    /// Run source-quality etiquettes, or apply mechanical patches.
-    Quality,
-    /// Error Handling.
-    ErrorHandling,
-    /// Run rustdoc coverage etiquettes.
-    Coverage,
-}
-
 /// Runnable unit registered with the session.
 pub trait Plugin: Send + Sync {
     /// Stable identifier for this hook.
@@ -67,6 +56,17 @@ pub trait Plugin: Send + Sync {
     fn category(&self) -> PluginCategory {
         PluginCategory::Quality
     }
+}
+
+/// Whether a plugin participates in coverage analysis or source-quality scans.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PluginCategory {
+    /// Run source-quality etiquettes, or apply mechanical patches.
+    Quality,
+    /// Error Handling.
+    ErrorHandling,
+    /// Run rustdoc coverage etiquettes.
+    Coverage,
 }
 
 /// Wraps a single etiquette as a quality plugin (id matches the etiquette id).

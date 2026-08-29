@@ -57,7 +57,10 @@ pub use reporter::{TracingChecklistReporter, TracingCsvReporter, TracingSummaryR
 pub use scan::scan_rust_source;
 pub use subscriber::{SubscriberRuleId, SubscriberSiteRecord, scan_crate_tracing_subscriber};
 
-use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette};
+use crate::etiquette::{
+    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    StaticQualityEtiquette,
+};
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
@@ -116,6 +119,70 @@ pub static TRACING_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Are functions instrumented with the recipe for their role?",
+            why: "A missing-span census that skips private helpers creates blind spots. Volume is a subscriber level problem, not a reason to skip spans.",
+            logic: "Every function gets a use-class, complexity, and target InstrumentRecipe. Probes flag a missing attribute, a recipe delta, or attenuation (instrument on proof-only code, skip-policy files, or ungated on a prover-reachable function). Visibility does not exempt a function. Subscriber-init rows are a second checklist; --apply does not patch those.",
+            opt_out: "`[tracing] enabled = false` in cordial.toml.",
+            rules: &[
+                EtiquetteRuleExplain {
+                    id: "TRACING-MISSING-INSTRUMENT",
+                    summary: "Function lacks #[instrument]",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-LEVEL-MISMATCH",
+                    summary: "level does not match the recipe",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-SKIP-MISSING",
+                    summary: "recipe skip list is missing",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-ERR-MISSING",
+                    summary: "fallible function missing err",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-ERROR-PATH-SILENT",
+                    summary: "error path is not recorded",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-FIELDS-MISSING",
+                    summary: "recipe fields are missing",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-PROOF-INSTRUMENT",
+                    summary: "#[instrument] on proof-only code",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-UNGATED-INSTRUMENT",
+                    summary: "ungated instrument on a prover-reachable function",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-SKIP-INSTRUMENT",
+                    summary: "instrument present on a skip-policy file",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-SUBSCRIBER-MAIN",
+                    summary: "binary main has no subscriber init",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-SUBSCRIBER-TEST",
+                    summary: "tests have no subscriber init",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-SUBSCRIBER-LIB",
+                    summary: "library has no documented subscriber story",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-SUBSCRIBER-RUST-LOG",
+                    summary: "RUST_LOG / EnvFilter policy mismatch",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-SUBSCRIBER-IDEMPOTENT",
+                    summary: "init is not idempotent",
+                },
+            ],
+        },
     },
     quality_area: Some(QualityAreaSpec {
         title: "Tracing instrumentation",

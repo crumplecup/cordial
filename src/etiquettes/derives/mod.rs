@@ -47,7 +47,10 @@ pub use reporter::{DeriveChecklistReporter, DeriveCsvReporter, DeriveSummaryRepo
 pub use scan::scan_rust_source;
 pub use types::{DeriveRuleId, DeriveSiteRecord};
 
-use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule};
+use crate::etiquette::{
+    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    StaticQualityEtiquette, count_open_rule,
+};
 use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 
@@ -83,6 +86,46 @@ pub static DERIVES_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Which manual builders, getters, setters, or new could be derives?",
+            why: "Repeated accessors and builders are noise. Derives keep the type definition as the source of truth.",
+            logic: "Flags hand-rolled builders, constructors that should be builders, getters, setters, as_ref/as_str, trivial new, and public fields. Error types are exempt from derive_new (#[track_caller]). Clap Parser/Args/Subcommand skip public-field linting. const fn constructors and accessors are exempt because the derive crates do not generate const fn. Knobs: [derives] in cordial.toml.",
+            opt_out: "`[derives] enabled = false` in cordial.toml.",
+            rules: &[
+                EtiquetteRuleExplain {
+                    id: "DERIVE-BUILDER-001",
+                    summary: "Hand-rolled builder",
+                },
+                EtiquetteRuleExplain {
+                    id: "DERIVE-USE-BUILDER-001",
+                    summary: "Constructor arity says use a builder",
+                },
+                EtiquetteRuleExplain {
+                    id: "DERIVE-GETTER-001",
+                    summary: "Hand-rolled getter",
+                },
+                EtiquetteRuleExplain {
+                    id: "DERIVE-SETTER-001",
+                    summary: "Hand-rolled setter",
+                },
+                EtiquetteRuleExplain {
+                    id: "DERIVE-ASREF-001",
+                    summary: "Hand-rolled as_ref",
+                },
+                EtiquetteRuleExplain {
+                    id: "DERIVE-ASSTR-001",
+                    summary: "Hand-rolled as_str",
+                },
+                EtiquetteRuleExplain {
+                    id: "DERIVE-NEW-001",
+                    summary: "Trivial new that could be derive_new",
+                },
+                EtiquetteRuleExplain {
+                    id: "DERIVE-PUB-FIELD-001",
+                    summary: "Public field that should stay private",
+                },
+            ],
+        },
     },
     quality_area: Some(QualityAreaSpec {
         title: "Derive patterns",

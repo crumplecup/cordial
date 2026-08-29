@@ -42,6 +42,16 @@ pub trait IrMut: IrView {
     }
 }
 
+/// Trait alias for node-level read API used by probes.
+pub trait NodeView {
+    /// Stable identifier for this hook.
+    fn id(&self) -> NodeId;
+    /// Borrowed error kind.
+    fn kind(&self) -> &NodeKind;
+    /// Latest attribute value stored under `key`.
+    fn attr(&self, key: &str) -> Option<&serde_json::Value>;
+}
+
 /// Borrowed node handle for probes.
 pub struct NodeRef<'a> {
     pub id: NodeId,
@@ -58,16 +68,6 @@ impl<'a> NodeRef<'a> {
     pub fn attr(&self, key: &str) -> Option<&serde_json::Value> {
         self.weight.attr(key)
     }
-}
-
-/// Trait alias for node-level read API used by probes.
-pub trait NodeView {
-    /// Stable identifier for this hook.
-    fn id(&self) -> NodeId;
-    /// Borrowed error kind.
-    fn kind(&self) -> &NodeKind;
-    /// Latest attribute value stored under `key`.
-    fn attr(&self, key: &str) -> Option<&serde_json::Value>;
 }
 
 impl NodeView for NodeRef<'_> {

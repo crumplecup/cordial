@@ -33,7 +33,10 @@ pub use types::{CliLayoutId, CliLayoutRecord};
 
 use crate::SourceLoader;
 use crate::enricher::{AttributeEnricher, ScopeEnricher};
-use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule};
+use crate::etiquette::{
+    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    StaticQualityEtiquette, count_open_rule,
+};
 use crate::objects::Finding;
 
 use tracing::instrument;
@@ -68,6 +71,26 @@ pub static CLI_LAYOUT_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Do clap types live in the library and dispatch with act?",
+            why: "A single Cli::act still hides a god-match and execute_*(&Cli) helpers. Dispatch belongs on the clap types themselves.",
+            logic: "For lib+bin crates that use clap, Parser / Subcommand types must live in the library, each implement fn act(self, …) -> Result, and hand off to every nested clap type. Free functions do not take clap types. main only parses, calls act, and converts with miette. Error types must not live only on the binary side.",
+            opt_out: "`[cli_layout] enabled = false` in cordial.toml.",
+            rules: &[
+                EtiquetteRuleExplain {
+                    id: "CLI-ISLAND-001",
+                    summary: "Clap types live only on the binary",
+                },
+                EtiquetteRuleExplain {
+                    id: "CLI-ACT-001",
+                    summary: "Clap type does not dispatch with act",
+                },
+                EtiquetteRuleExplain {
+                    id: "CLI-MAIN-001",
+                    summary: "main does more than parse + act + miette",
+                },
+            ],
+        },
     },
     quality_area: Some(QualityAreaSpec {
         title: "CLI layout",

@@ -71,6 +71,12 @@ pub enum Commands {
         #[command(subcommand)]
         command: BuildCommands,
     },
+    /// Print why an etiquette exists and how to opt out.
+    Explain {
+        /// Etiquette id or rule id (`doc_warnings`, `DOC-WARNING-001`).
+        /// Omit to list every etiquette compiled into this binary.
+        id: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -236,6 +242,7 @@ impl Commands {
             Self::Export { command } => command.act(&ctx),
             #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
             Self::Build { command } => command.act(&ctx),
+            Self::Explain { id } => super::run::execute_explain(id.as_deref()),
         }
     }
 }

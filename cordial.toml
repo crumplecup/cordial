@@ -4,6 +4,8 @@
 # `{store_home}/cordial.toml` (`~/.cordial` unless `CORDIAL_HOME` /
 # `--store-home` says otherwise), then `{workspace}/cordial.toml`.
 # Missing files fall back to Default; the run does not fail.
+# Every table accepts `enabled` (default true). `enabled = false` skips
+# that etiquette for the project (`cordial explain` names this line).
 
 [visibility]
 max_crate_names_for_flat = 50

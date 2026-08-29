@@ -14,7 +14,7 @@
 //!
 //! Built-in plugins are feature-gated:
 //!
-//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `crate_attrs`, `doc_warnings`, `glob_imports`, `inline_tests`, `verus_warnings`, `proof_patterns` — source-quality scanners
+//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `crate_attrs`, `doc_warnings`, `glob_imports`, `inline_tests`, `verus_warnings`, `proof_patterns`, `pageantry` — source-quality scanners
 //!   (the `quality` umbrella is enabled by default)
 //! - `cli` — clap binary (`cordial`); enabled by default
 //! - `impl_coverage`, `trenchcoat`, `shadow` — rustdoc coverage scanners
@@ -159,6 +159,11 @@ pub use etiquettes::modularity::{
     lopsided_siblings, order_bands, scan_rust_source as scan_modularity_rust_source,
     top_heavy_parents, unary_nests,
 };
+#[cfg(feature = "pageantry")]
+pub use etiquettes::pageantry::{
+    PAGEANTRY_ETIQUETTE, PageantryRuleId, scan_crate_pageantry,
+    scan_rust_source as scan_pageantry_rust_source,
+};
 #[cfg(feature = "panics")]
 pub use etiquettes::panics::{
     PANICS_ETIQUETTE, PanicKind, scan_crate_panics, scan_rust_source, scan_source_tree,
@@ -222,7 +227,8 @@ pub use digest::{
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "verus_warnings",
-    feature = "proof_patterns"
+    feature = "proof_patterns",
+    feature = "pageantry"
 ))]
 pub use enricher::AttributeEnricher;
 pub use enricher::ScopeEnricher;
@@ -245,8 +251,9 @@ pub use enricher::{
 };
 pub use error::{CordialError, CordialErrorKind, CordialResult, TokenStreamParseError};
 pub use etiquette::{
-    Etiquette, QualityAreaSpec, QualityEtiquette, QualityReportArea, StaticEtiquette,
-    StaticQualityEtiquette,
+    Etiquette, EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, QualityEtiquette,
+    QualityReportArea, StaticEtiquette, StaticQualityEtiquette, lookup_etiquette,
+    render_explain_list, render_explain_page,
 };
 #[cfg(feature = "elicitation")]
 pub use etiquettes::coverage_etiquettes;
@@ -295,9 +302,9 @@ pub use cargo_rustdoc::{
 };
 pub use config::{
     CfgHygieneThresholds, CfgScatterThresholds, CordialConfig, CrateAttrsThresholds,
-    DerivesThresholds, DocWarningsThresholds, ModularityThresholds, TracingSubscriberPolicy,
-    TracingThresholds, VisibilityThresholds, load_cordial_config, load_derives_thresholds,
-    load_session_config, load_visibility_thresholds,
+    DerivesThresholds, DocWarningsThresholds, EtiquetteGate, ModularityThresholds,
+    TracingSubscriberPolicy, TracingThresholds, VisibilityThresholds, load_cordial_config,
+    load_derives_thresholds, load_session_config, load_visibility_thresholds,
 };
 pub use exceptions::{
     AddExceptionOutcome, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,

@@ -29,7 +29,8 @@ pub use scan::{scan_crate_glob_imports, scan_rust_source};
 pub use types::GlobImportRuleId;
 
 use crate::etiquette::{
-    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_category,
+    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    StaticQualityEtiquette, count_open_category,
 };
 use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
@@ -69,6 +70,16 @@ pub static GLOB_IMPORTS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquet
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Are there glob use trees (foo::*)?",
+            why: "Glob imports hide which names a file depends on and break completion. Explicit lists stay reviewable when code moves.",
+            logic: "Flags every * in a use item, including pub use, use super::*, and nested use foo::{bar, *}.",
+            opt_out: "`[glob_imports] enabled = false` in cordial.toml.",
+            rules: &[EtiquetteRuleExplain {
+                id: "GLOB-IMPORT-001",
+                summary: "A glob `use` tree",
+            }],
+        },
     },
     quality_area: Some(QualityAreaSpec {
         title: "Glob imports",

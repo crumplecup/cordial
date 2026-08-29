@@ -29,7 +29,9 @@ pub use types::{ErrorChainProbeId, ErrorChainRecord, probe_counts};
 
 use crate::SourceLoader;
 use crate::enricher::ERROR_IR_ENRICHERS;
-use crate::etiquette::{StaticEtiquette, StaticQualityEtiquette};
+use crate::etiquette::{
+    EtiquetteExplain, EtiquetteRuleExplain, StaticEtiquette, StaticQualityEtiquette,
+};
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static ERROR_CHAIN_PROBE: ErrorChainProbe = ErrorChainProbe;
@@ -60,6 +62,34 @@ pub static ERROR_CHAIN_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquett
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Which converters drop source() instead of wrapping the original error?",
+            why: "A typed crate error is useless in the field if the foreign cause was stringified away. Chain preservation is the difference between “something failed” and a diagnosable source() walk.",
+            logic: "Among inventoried error sites, flags converters (especially map_err) that drop the original error instead of wrapping it. Sites that already preserve the chain are the contrast set, not the checklist. Reference-only / contrast inventory: no dedicated quality-report area of its own.",
+            opt_out: "`[error_chain] enabled = false` in cordial.toml.",
+            rules: &[
+                EtiquetteRuleExplain {
+                    id: "ERROR-CHAIN-WRAPPER-SOURCE-001",
+                    summary: "Wrapper should keep a source field",
+                },
+                EtiquetteRuleExplain {
+                    id: "ERROR-CHAIN-KIND-WRAPPER-PAYLOAD-001",
+                    summary: "Kind wrapper payload shape",
+                },
+                EtiquetteRuleExplain {
+                    id: "ERROR-CHAIN-FROM-BRIDGE-001",
+                    summary: "From bridge drops the cause",
+                },
+                EtiquetteRuleExplain {
+                    id: "ERROR-CHAIN-PRESERVED-QUESTION-MARK-001",
+                    summary: "Contrast: ? already preserves the chain",
+                },
+                EtiquetteRuleExplain {
+                    id: "ERROR-CHAIN-PRESERVED-MAP-ERR-001",
+                    summary: "Contrast: map_err already preserves the chain",
+                },
+            ],
+        },
     },
     // Declines a dedicated row on purpose: reference patterns (already-
     // preserved chains), not open action items -- its own doc comment:

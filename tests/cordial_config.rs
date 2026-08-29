@@ -263,5 +263,43 @@ skip_crates = ["proc_helper"]
     assert!(doc_warnings.document_private_items());
     assert!(doc_warnings.all_features());
     assert_eq!(doc_warnings.skip_crates(), &["proc_helper".to_string()]);
+    assert!(doc_warnings.enabled());
+    Ok(())
+}
+
+#[test]
+fn enabled_false_turns_the_etiquette_off() -> miette::Result<()> {
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store home")?;
+    fs::write(
+        workspace.path().join("cordial.toml"),
+        r#"
+[doc_warnings]
+enabled = false
+
+[panics]
+enabled = false
+
+[impl-coverage]
+enabled = false
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("workspace config")?;
+
+    let loaded = load_cordial_config(workspace.path(), store_home.path());
+    assert!(!loaded.etiquette_enabled("doc_warnings"));
+    assert!(!loaded.etiquette_enabled("panics"));
+    assert!(!loaded.etiquette_enabled("impl-coverage"));
+    assert!(loaded.etiquette_enabled("tracing"));
+    assert!(
+        loaded.etiquette_enabled("custom_plugin"),
+        "unknown ids stay on"
+    );
     Ok(())
 }

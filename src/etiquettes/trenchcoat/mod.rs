@@ -21,7 +21,7 @@ pub use assessor::TrenchcoatAssessor;
 pub use probe::UnwrappedForeignProbe;
 pub use reporter::TrenchcoatCsvReporter;
 
-use crate::etiquette::StaticEtiquette;
+use crate::etiquette::{EtiquetteExplain, EtiquetteRuleExplain, StaticEtiquette};
 use crate::{RustdocLoader, TrenchcoatEnricher};
 
 static RUSTDOC_LOADER: RustdocLoader = RustdocLoader;
@@ -47,4 +47,14 @@ pub static TRENCHCOAT_ETIQUETTE: StaticEtiquette = StaticEtiquette {
     workspace_assessors: None,
     reporters: REPORTERS,
     is_coverage: true,
+    explain: EtiquetteExplain {
+        summary: "Are foreign types wrapped before they reach our traits?",
+        why: "Binding a foreign type directly to an elicitation trait couples our surface to upstream layout and orphan-rule limits. Wrappers are the seam that impl-coverage and shadow then measure.",
+        logic: "From rustdoc JSON, finds types that implement (or should implement) our traits while still exposing an unwrapped foreign type. Needs cordial build rustdoc.",
+        opt_out: "`[trenchcoat] enabled = false` in cordial.toml.",
+        rules: &[EtiquetteRuleExplain {
+            id: "TRENCHCOAT-MISSING-WRAP",
+            summary: "Foreign type lacks a trenchcoat wrapper",
+        }],
+    },
 };

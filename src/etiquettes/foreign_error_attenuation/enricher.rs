@@ -15,6 +15,18 @@ use crate::loader::SourceLoadView;
 use super::assess::{ErrorBridgeHint, build_foreign_error_attenuation_report_with_bridges};
 
 use tracing::instrument;
+
+trait IrViewRef {
+    fn as_view(&self) -> &dyn IrView;
+}
+
+impl IrViewRef for &mut dyn IrMut {
+    #[instrument(level = "trace", skip(self))]
+    fn as_view(&self) -> &dyn IrView {
+        *self as &dyn IrView
+    }
+}
+
 /// Joins typed foreign error sites with chain probes and annotates matching IR nodes.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ForeignErrorAttenuationInventoryEnricher;
@@ -361,16 +373,5 @@ fn parse_confidence(value: &str) -> crate::etiquettes::error_sites::ForeignTypeC
         crate::etiquettes::error_sites::ForeignTypeConfidence::Medium
     } else {
         crate::etiquettes::error_sites::ForeignTypeConfidence::High
-    }
-}
-
-trait IrViewRef {
-    fn as_view(&self) -> &dyn IrView;
-}
-
-impl IrViewRef for &mut dyn IrMut {
-    #[instrument(level = "trace", skip(self))]
-    fn as_view(&self) -> &dyn IrView {
-        *self as &dyn IrView
     }
 }

@@ -34,7 +34,10 @@ pub use reporter::{CrateAttrsChecklistReporter, CrateAttrsCsvReporter, CrateAttr
 pub use scan::{library_root_rs, scan_crate_attrs};
 pub use types::{CrateAttrsRuleId, CrateAttrsSiteRecord};
 
-use crate::etiquette::{QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_rule};
+use crate::etiquette::{
+    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    StaticQualityEtiquette, count_open_rule,
+};
 use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 
@@ -74,6 +77,22 @@ pub static CRATE_ATTRS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquett
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Does each library root forbid(unsafe_code) and warn(missing_docs)?",
+            why: "Sibling CLAUDE.md files require both attributes on lib.rs so the whole library is locked down.",
+            logic: "Flags library crates whose root file is missing those inner attributes. deny(unsafe_code) is not enough; warn/deny/forbid(missing_docs) all satisfy the docs lint. [lib] path is honored; bin-only packages are skipped. [crate_attrs] allow_unsafe lists members that may use unsafe. cordial quality --apply writes the missing inner attributes.",
+            opt_out: "`[crate_attrs] enabled = false` in cordial.toml.",
+            rules: &[
+                EtiquetteRuleExplain {
+                    id: "CRATE-FORBID-UNSAFE-001",
+                    summary: "Library root missing #![forbid(unsafe_code)]",
+                },
+                EtiquetteRuleExplain {
+                    id: "CRATE-MISSING-DOCS-001",
+                    summary: "Library root missing #![warn(missing_docs)]",
+                },
+            ],
+        },
     },
     quality_area: Some(QualityAreaSpec {
         title: "Crate attributes",

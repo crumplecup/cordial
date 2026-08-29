@@ -340,3 +340,59 @@ fn cli_exceptions_add_writes_quality_and_coverage_rows() -> miette::Result<()> {
     assert!(skip_body.contains("upstream skip"));
     Ok(())
 }
+
+#[test]
+fn cli_explain_lists_compiled_etiquettes() -> miette::Result<()> {
+    cordial::init_tracing();
+    let output = cordial_command()
+        .arg("explain")
+        .output()
+        .into_diagnostic()
+        .wrap_err("cordial explain")?;
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let body = String::from_utf8_lossy(&output.stdout);
+    assert!(body.contains("doc_warnings"));
+    assert!(body.contains("panics"));
+    Ok(())
+}
+
+#[test]
+fn cli_explain_rule_id_prints_page() -> miette::Result<()> {
+    cordial::init_tracing();
+    let output = cordial_command()
+        .args(["explain", "DOC-WARNING-001"])
+        .output()
+        .into_diagnostic()
+        .wrap_err("cordial explain DOC-WARNING-001")?;
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let body = String::from_utf8_lossy(&output.stdout);
+    assert!(body.contains("`doc_warnings`"));
+    assert!(body.contains("## Why"));
+    assert!(body.contains("## Opt out"));
+    Ok(())
+}
+
+#[test]
+fn cli_explain_unknown_id_fails() -> miette::Result<()> {
+    cordial::init_tracing();
+    let output = cordial_command()
+        .args(["explain", "not-a-real-lint"])
+        .output()
+        .into_diagnostic()
+        .wrap_err("cordial explain unknown")?;
+    assert!(!output.status.success());
+    let err = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        err.contains("not-a-real-lint") || err.contains("etiquette not registered"),
+        "stderr: {err}"
+    );
+    Ok(())
+}

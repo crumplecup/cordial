@@ -10,6 +10,51 @@ use crate::session::{RunFilter, SessionView};
 use crate::targets::discover_crate_targets;
 use tracing::instrument;
 
+/// What impls count as covered for a coverage profile.
+pub trait TraitRequirement: Send + Sync {
+    /// Composite trait.
+    fn composite_trait(&self) -> Option<&str>;
+    /// Supertraits.
+    fn supertraits(&self) -> &[&str];
+}
+
+/// Discovers [`CoverageTarget`] rows for a profile.
+pub trait TargetProvider: Send + Sync {
+    /// Coverage targets.
+    fn coverage_targets(
+        &self,
+        session: &dyn SessionView,
+        filter: &dyn RunFilter,
+    ) -> CordialResult<Vec<CoverageTarget>>;
+}
+
+/// Semantic supertrait: trait-impl coverage over a target library.
+pub trait Coverage: Plugin {
+    /// Target provider.
+    fn target_provider(&self) -> &dyn TargetProvider;
+    /// Trait requirement.
+    fn trait_requirement(&self) -> &dyn TraitRequirement;
+
+    /// Targets.
+    fn targets(
+        &self,
+        session: &dyn SessionView,
+        filter: &dyn RunFilter,
+    ) -> CordialResult<Vec<CoverageTarget>> {
+        self.target_provider().coverage_targets(session, filter)
+    }
+
+    /// Classify gap.
+    #[cfg(feature = "impl_coverage")]
+    fn classify_gap(&self, ctx: &GapContext) -> Option<ImplGapKind> {
+        classify_elicit_complete_gap(&ctx.prereqs)
+    }
+    /// Etiquette / lint category this rule belongs to.
+    fn category(&self) -> PluginCategory {
+        PluginCategory::Coverage
+    }
+}
+
 /// Which library a coverage target represents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoverageTargetKind {
@@ -90,14 +135,6 @@ impl CoverageTarget {
     }
 }
 
-/// What impls count as covered for a coverage profile.
-pub trait TraitRequirement: Send + Sync {
-    /// Composite trait.
-    fn composite_trait(&self) -> Option<&str>;
-    /// Supertraits.
-    fn supertraits(&self) -> &[&str];
-}
-
 /// Elicitation profile: `ElicitComplete` plus its eight supertraits.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ElicitCompleteRequirement;
@@ -132,16 +169,6 @@ impl GapContext {
     }
 }
 
-/// Discovers [`CoverageTarget`] rows for a profile.
-pub trait TargetProvider: Send + Sync {
-    /// Coverage targets.
-    fn coverage_targets(
-        &self,
-        session: &dyn SessionView,
-        filter: &dyn RunFilter,
-    ) -> CordialResult<Vec<CoverageTarget>>;
-}
-
 /// Default provider: one target per workspace member from `cargo metadata`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct WorkspaceMembersTargetProvider;
@@ -158,33 +185,6 @@ impl TargetProvider for WorkspaceMembersTargetProvider {
             .into_iter()
             .map(|target: CrateTarget| CoverageTarget::workspace_member(target.crate_name))
             .collect())
-    }
-}
-
-/// Semantic supertrait: trait-impl coverage over a target library.
-pub trait Coverage: Plugin {
-    /// Target provider.
-    fn target_provider(&self) -> &dyn TargetProvider;
-    /// Trait requirement.
-    fn trait_requirement(&self) -> &dyn TraitRequirement;
-
-    /// Targets.
-    fn targets(
-        &self,
-        session: &dyn SessionView,
-        filter: &dyn RunFilter,
-    ) -> CordialResult<Vec<CoverageTarget>> {
-        self.target_provider().coverage_targets(session, filter)
-    }
-
-    /// Classify gap.
-    #[cfg(feature = "impl_coverage")]
-    fn classify_gap(&self, ctx: &GapContext) -> Option<ImplGapKind> {
-        classify_elicit_complete_gap(&ctx.prereqs)
-    }
-    /// Etiquette / lint category this rule belongs to.
-    fn category(&self) -> PluginCategory {
-        PluginCategory::Coverage
     }
 }
 

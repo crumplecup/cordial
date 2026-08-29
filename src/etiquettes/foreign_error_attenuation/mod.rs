@@ -41,7 +41,9 @@ pub use types::{
 
 use crate::SourceLoader;
 use crate::enricher::ERROR_IR_ENRICHERS;
-use crate::etiquette::{StaticEtiquette, StaticQualityEtiquette};
+use crate::etiquette::{
+    EtiquetteExplain, EtiquetteRuleExplain, StaticEtiquette, StaticQualityEtiquette,
+};
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
 static FOREIGN_ERROR_ATTENUATION_PROBE: ForeignErrorAttenuationProbe = ForeignErrorAttenuationProbe;
@@ -76,6 +78,30 @@ pub static FOREIGN_ERROR_ATTENUATION_ETIQUETTE: StaticQualityEtiquette = StaticQ
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "How should those foreign error sites be wrapped, mapped, or deferred?",
+            why: "Listing foreign types is not enough; the actionable question is what to do at this site.",
+            logic: "Classifies each typed foreign site: chain already preserved, chain break, pending infrastructure, or neutral. Suggests keep the exemplar, replace a stringifying map_err, add infrastructure then ?, or review by hand. Feeds the hand-composed Error handling quality-report area.",
+            opt_out: "`[foreign_error_attenuation] enabled = false` in cordial.toml.",
+            rules: &[
+                EtiquetteRuleExplain {
+                    id: "ERROR-HANDLING-CHAIN-PRESERVED",
+                    summary: "Contrast: chain already preserved",
+                },
+                EtiquetteRuleExplain {
+                    id: "ERROR-HANDLING-CHAIN-BREAK",
+                    summary: "Site drops the source() chain",
+                },
+                EtiquetteRuleExplain {
+                    id: "ERROR-HANDLING-PENDING-INFRA",
+                    summary: "Needs a From / wrapper before ?",
+                },
+                EtiquetteRuleExplain {
+                    id: "ERROR-HANDLING-NEUTRAL",
+                    summary: "Review by hand; not auto-classified",
+                },
+            ],
+        },
     },
     // Declines a dedicated row on purpose: its migration-backlog
     // (chain-break + pending-infra) counts feed the hand-composed

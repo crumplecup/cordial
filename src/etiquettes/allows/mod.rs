@@ -32,7 +32,8 @@ pub use scan::{scan_crate_allows, scan_rust_source};
 pub use types::{AllowRuleId, AllowSiteRecord};
 
 use crate::etiquette::{
-    QualityAreaSpec, StaticEtiquette, StaticQualityEtiquette, count_open_category,
+    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    StaticQualityEtiquette, count_open_category,
 };
 use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
@@ -68,6 +69,22 @@ pub static ALLOWS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
         workspace_assessors: None,
         reporters: REPORTERS,
         is_coverage: false,
+        explain: EtiquetteExplain {
+            summary: "Which #[allow] attributes are in force?",
+            why: "Allows hide compiler and Clippy signal. A regeneratable catalog makes each suppression reviewable instead of disappearing into the source.",
+            logic: "Records every #[allow(...)] and inner #![allow(...)]. Verus is the one judged case: an allow on a vstd / verus_builtin import must carry rustc's reason = \"...\". A reasoned Verus allow is not an action item.",
+            opt_out: "`[allows] enabled = false` in cordial.toml.",
+            rules: &[
+                EtiquetteRuleExplain {
+                    id: "ALLOW-ATTR-001",
+                    summary: "An #[allow] / #![allow] attribute in source",
+                },
+                EtiquetteRuleExplain {
+                    id: "ALLOW-VERUS-REASON-001",
+                    summary: "Verus prelude allow missing reason = \"...\"",
+                },
+            ],
+        },
     },
     quality_area: Some(QualityAreaSpec {
         title: "Allow attributes",
