@@ -77,11 +77,11 @@ const RUSTC_BUILTIN_NAMES: &[&str] = &[
 const CARGO_INJECTED_NAMES: &[&str] = &["test", "feature", "docsrs"];
 
 /// All cfg names `crate_root` can gate on without `unexpected_cfgs` firing:
-/// [`RUSTC_BUILTIN_NAMES`] + [`CARGO_INJECTED_NAMES`] + this crate's own
-/// `Cargo.toml [lints.rust.unexpected_cfgs.check-cfg]` +
+/// rustc's built-ins, Cargo's injected names (`test`, `feature`, `docsrs`),
+/// this crate's own `Cargo.toml [lints.rust.unexpected_cfgs.check-cfg]`,
 /// `workspace_root`'s `[workspace.lints.rust...]` (only if this crate's
-/// manifest sets `[lints] workspace = true`) + this crate's own
-/// `build.rs`-emitted `cargo::rustc-check-cfg=cfg(...)` lines +
+/// manifest sets `[lints] workspace = true`), this crate's own
+/// `build.rs`-emitted `cargo::rustc-check-cfg=cfg(...)` lines, and
 /// `thresholds`' `extra_known_names` escape hatch.
 #[instrument(level = "debug", skip(thresholds))]
 pub fn declared_names_for_crate(

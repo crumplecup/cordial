@@ -13,6 +13,7 @@ use super::types::{InlineTestRuleId, InlineTestSiteRecord};
 
 use tracing::instrument;
 
+/// Scan one crate for inline tests.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_inline_tests(crate_root: &Path) -> CordialResult<Vec<InlineTestSiteRecord>> {
     scan_source_tree(&crate_root.join("src"), crate_root)
@@ -54,6 +55,7 @@ pub fn scan_source_tree(
     Ok(findings)
 }
 
+/// Scan one Rust source file and return records.
 #[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,

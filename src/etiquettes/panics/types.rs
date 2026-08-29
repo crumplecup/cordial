@@ -11,14 +11,20 @@ use tracing::instrument;
 /// Category of panic or hard-fail site detected in source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PanicKind {
+    /// panic.
     Panic,
+    /// unreachable.
     Unreachable,
+    /// expect.
     Expect,
+    /// unwrap.
     Unwrap,
+    /// compile_error.
     CompileError,
 }
 
 impl PanicKind {
+    /// Rule id.
     #[instrument(level = "debug", skip(self))]
     pub fn rule_id(self) -> &'static str {
         match self {
@@ -30,6 +36,7 @@ impl PanicKind {
         }
     }
 
+    /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
@@ -42,6 +49,7 @@ impl PanicKind {
         }
     }
 
+    /// Stable identifier string for IR attributes.
     #[instrument(level = "debug", skip(self))]
     pub fn as_attr(self) -> &'static str {
         match self {

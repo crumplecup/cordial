@@ -11,7 +11,9 @@ mod run;
 
 /// Read-only session context passed to hooks.
 pub trait SessionView: Send + Sync {
+    /// Project root.
     fn project_root(&self) -> &Path;
+    /// Store root.
     fn store_root(&self) -> &Path;
     /// Store home (`~/.cordial` or `--store-home` / `CORDIAL_HOME`).
     fn store_home(&self) -> &Path;
@@ -19,14 +21,18 @@ pub trait SessionView: Send + Sync {
 
 /// Filter for which plugins, etiquettes, and crates to run.
 pub trait RunFilter: Send + Sync {
+    /// Etiquettes registered on this session.
     fn plugins(&self) -> Option<&[String]> {
         None
     }
 
+    /// Etiquettes registered on this session.
     fn etiquettes(&self) -> Option<&[String]>;
+    /// Crates.
     fn crates(&self) -> Option<&[&str]> {
         None
     }
+    /// Package name this IR belongs to.
     fn crate_name(&self) -> Option<&str> {
         None
     }
@@ -34,14 +40,19 @@ pub trait RunFilter: Send + Sync {
 
 /// Outcome of a session run.
 pub trait RunOutcome: Send + Sync {
+    /// Findings.
     fn findings(&self) -> Box<dyn Iterator<Item = &dyn Finding> + '_>;
+    /// Artifacts.
     fn artifacts(&self) -> Box<dyn Iterator<Item = &dyn Artifact> + '_>;
 }
 
 /// Orchestrates plugin and etiquette execution.
 pub trait Session: Send + Sync {
+    /// Register an etiquette on this session builder.
     fn register(&mut self, etiquette: &'static dyn Etiquette);
+    /// Register an etiquette on this session.
     fn register_plugin(&mut self, plugin: &'static dyn Plugin);
+    /// Run.
     fn run(&self, filter: &dyn RunFilter) -> CordialResult<Box<dyn RunOutcome>>;
 }
 
@@ -68,6 +79,7 @@ impl std::fmt::Debug for SessionBuilder {
 }
 
 impl SessionBuilder {
+    /// Construct a new value.
     #[instrument(level = "debug", skip(project_root), ret)]
     pub fn new(project_root: impl Into<PathBuf>) -> Self {
         let project_root = project_root.into();
@@ -83,12 +95,14 @@ impl SessionBuilder {
         }
     }
 
+    /// Return a copy with `store_home` set.
     #[instrument(level = "trace", skip(self, store_home))]
     pub fn with_store_home(mut self, store_home: impl Into<PathBuf>) -> Self {
         self.store_home = store_home.into();
         self
     }
 
+    /// Return a copy with `store_root` set.
     #[instrument(level = "trace", skip(self, store_root))]
     pub fn with_store_root(mut self, store_root: impl Into<PathBuf>) -> Self {
         let store_root = store_root.into();
@@ -97,18 +111,21 @@ impl SessionBuilder {
         self
     }
 
+    /// Register an etiquette on this session builder.
     #[instrument(level = "trace", skip(self, etiquette))]
     pub fn register(mut self, etiquette: &'static dyn Etiquette) -> Self {
         self.etiquettes.push(etiquette);
         self
     }
 
+    /// Register an etiquette on this session.
     #[instrument(level = "trace", skip(self, plugin))]
     pub fn register_plugin(mut self, plugin: &'static dyn Plugin) -> Self {
         self.plugins.push(plugin);
         self
     }
 
+    /// Finish the builder and return the value.
     #[instrument(level = "debug", skip(self))]
     pub fn build(self) -> RuntimeSession {
         RuntimeSession {

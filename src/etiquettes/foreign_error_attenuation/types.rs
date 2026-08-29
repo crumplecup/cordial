@@ -11,9 +11,13 @@ use tracing::instrument;
 /// How a typed foreign error site aligns with chain-preservation probes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ForeignErrorHandlingClass {
+    /// Chain Preserved.
     ChainPreserved,
+    /// Chain Break.
     ChainBreak,
+    /// Pending Infrastructure.
     PendingInfrastructure,
+    /// Neutral.
     Neutral,
 }
 
@@ -76,7 +80,9 @@ pub struct ForeignErrorAttenuationRecord {
 /// Attenuation report for one crate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForeignErrorAttenuationReport {
+    /// Cargo package name.
     pub crate_name: String,
+    /// Findings produced by assessors in this session.
     pub findings: Vec<ForeignErrorAttenuationRecord>,
 }
 
@@ -90,6 +96,7 @@ pub struct ForeignErrorHandlingCounts {
 }
 
 impl ForeignErrorAttenuationReport {
+    /// Handling counts.
     #[instrument(level = "debug", skip(self))]
     pub fn handling_counts(&self) -> ForeignErrorHandlingCounts {
         let mut counts = ForeignErrorHandlingCounts::default();
@@ -106,6 +113,7 @@ impl ForeignErrorAttenuationReport {
         counts
     }
 
+    /// Preservation rate.
     #[instrument(level = "debug", skip(self))]
     pub fn preservation_rate(&self) -> Option<f64> {
         let counts = self.handling_counts();
@@ -132,17 +140,27 @@ pub struct ForeignErrorAttenuationTypeRow {
 /// Workspace attenuation metrics.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkspaceForeignErrorAttenuationSummary {
+    /// Sites that still have a typed foreign error.
     pub typed_sites: usize,
+    /// Sites that keep the foreign error in `source()`.
     pub chain_preserved: usize,
+    /// Places the `source()` chain is dropped.
     pub chain_breaks: usize,
+    /// Sites waiting on infrastructure before they can preserve the chain.
     pub pending_infrastructure: usize,
+    /// Sites that are neither a break nor a preservation.
     pub neutral: usize,
+    /// Fraction of typed sites that preserve the chain.
     pub preservation_rate: Option<f64>,
+    /// Sites still needing a typed wrap.
     pub migration_backlog: usize,
+    /// Type names collected for this row.
     pub types: Vec<ForeignErrorAttenuationTypeRow>,
+    /// Counts keyed by resolution label.
     pub resolutions: BTreeMap<String, usize>,
 }
 
+/// Build workspace foreign error attenuation summary.
 #[instrument(level = "debug", skip(reports))]
 pub fn build_workspace_foreign_error_attenuation_summary(
     reports: &[ForeignErrorAttenuationReport],

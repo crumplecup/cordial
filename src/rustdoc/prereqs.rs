@@ -19,28 +19,40 @@ pub const ELICIT_COMPLETE_SUPERTRAITS: &[&str] = &[
     "ToCodeLiteral",
 ];
 
+/// Trait name that marks elicitation as complete.
 pub const ELICIT_COMPLETE_TRAIT: &str = "ElicitComplete";
 
 /// Which of the eight `ElicitComplete` supertraits a type already implements.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TraitPrereqs {
+    /// Whether `Serialize` is a prerequisite.
     pub serialize: bool,
+    /// Whether `Deserialize` is a prerequisite.
     pub deserialize: bool,
+    /// Whether `JsonSchema` is a prerequisite.
     pub json_schema: bool,
+    /// Whether the elicitation trait is a prerequisite.
     pub elicitation_trait: bool,
+    /// Whether `ElicitIntrospect` is a prerequisite.
     pub elicit_introspect: bool,
+    /// Whether `ElicitSpec` is a prerequisite.
     pub elicit_spec: bool,
+    /// Whether `ElicitPromptTree` is a prerequisite.
     pub elicit_prompt_tree: bool,
+    /// Whether `ToCodeLiteral` is a prerequisite.
     pub to_code_literal: bool,
+    /// Whether `ElicitComplete` itself is present.
     pub elicit_complete: bool,
 }
 
 impl TraitPrereqs {
+    /// Can be direct.
     #[instrument(level = "trace", skip(self))]
     pub fn can_be_direct(&self) -> bool {
         self.serialize && self.deserialize && self.json_schema
     }
 
+    /// Missing our traits.
     #[instrument(level = "debug", skip(self))]
     pub fn missing_our_traits(&self) -> Vec<&'static str> {
         let mut missing = Vec::new();
@@ -62,11 +74,13 @@ impl TraitPrereqs {
         missing
     }
 
+    /// Our traits complete.
     #[instrument(level = "trace", skip(self))]
     pub fn our_traits_complete(&self) -> bool {
         self.missing_our_traits().is_empty()
     }
 
+    /// External blockers.
     #[instrument(level = "debug", skip(self))]
     pub fn external_blockers(&self) -> Vec<&'static str> {
         let mut blockers = Vec::new();
@@ -82,6 +96,7 @@ impl TraitPrereqs {
         blockers
     }
 
+    /// Set prerequisite flags from a short trait name (`Serialize`, …).
     #[instrument(level = "debug", ret)]
     pub fn from_trait_short(trait_short: &str) -> Self {
         let mut prereqs = Self::default();
@@ -89,6 +104,7 @@ impl TraitPrereqs {
         prereqs
     }
 
+    /// OR this type's flags with the prerequisites implied by `trait_short`.
     #[instrument(level = "debug", skip(self))]
     pub fn apply_trait_short(&mut self, trait_short: &str) {
         match trait_short {
@@ -105,6 +121,7 @@ impl TraitPrereqs {
         }
     }
 
+    /// Merge another value into this one.
     #[instrument(level = "debug", skip(self, other))]
     pub fn merge(&mut self, other: &Self) {
         self.serialize |= other.serialize;
@@ -167,7 +184,7 @@ pub fn collect_trait_prereqs_for_inventory(
     map
 }
 
-/// Merge prereqs from [`EdgeKind::Implements`] trait short names.
+/// Merge prereqs from [`crate::EdgeKind::Implements`] trait short names.
 #[instrument(level = "debug")]
 pub fn prereqs_from_trait_shorts(trait_shorts: &[String]) -> TraitPrereqs {
     let mut prereqs = TraitPrereqs::default();

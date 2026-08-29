@@ -27,6 +27,7 @@ pub enum CfgHygieneRuleId {
 }
 
 impl CfgHygieneRuleId {
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -35,6 +36,7 @@ impl CfgHygieneRuleId {
         }
     }
 
+    /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
@@ -154,10 +156,16 @@ impl Finding for CfgHygieneFinding {
 /// `any(kani, creusot)`, can produce more than one record).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CfgHygieneSiteRecord {
+    /// Stable probe rule identifier.
     pub rule_id: CfgHygieneRuleId,
+    /// Cfg predicate name that is undeclared or mismatched.
     pub cfg_name: String,
+    /// Qualified name or extra locator for this site.
     pub context: String,
+    /// Source file path, usually crate-relative.
     pub file: PathBuf,
+    /// Source line number (1-based), when known.
     pub line: u32,
+    /// Source snippet captured at the site.
     pub snippet: String,
 }

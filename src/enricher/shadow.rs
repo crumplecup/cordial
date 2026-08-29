@@ -12,7 +12,9 @@ use tracing::instrument;
 /// One upstream → shadow item mapping.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct ShadowMapEntry {
+    /// Crate being loaded or analyzed.
     pub target: String,
+    /// Shadow crate that should mirror the upstream.
     pub shadow: String,
 }
 
@@ -21,6 +23,7 @@ pub struct ShadowMapEntry {
 pub struct ShadowLinkEnricher;
 
 impl ShadowLinkEnricher {
+    /// Stable identifier for `ShadowLinkEnricher`.
     pub const ID: &'static str = "shadow-link";
 }
 
@@ -116,6 +119,7 @@ fn shadow_path_for(target_path: &str) -> Option<String> {
     Some(format!("{prefix}::{name}Shadow"))
 }
 
+/// Load shadow map.
 #[instrument(level = "info", skip(path), err(level = "warn"))]
 pub fn load_shadow_map(path: &Path) -> CordialResult<Vec<ShadowMapEntry>> {
     let bytes = std::fs::read(path)?;

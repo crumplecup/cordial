@@ -11,16 +11,24 @@ use crate::objects::{Disposition, Finding, MapFindingSink};
 use tracing::instrument;
 /// Named bundle of cordial hook implementations.
 pub trait Etiquette: Send + Sync {
+    /// Stable identifier for this hook.
     fn id(&self) -> &str;
+    /// Human-readable name.
     fn name(&self) -> &str;
 
+    /// Loaders that populate IR for this etiquette.
     fn loaders(&self) -> &[&dyn Loader];
+    /// Enrichers that run after loaders.
     fn enrichers(&self) -> &[&dyn IrEnricher];
+    /// Probes that attach markers to the IR.
     fn probes(&self) -> &[&dyn Probe];
+    /// Assessors that turn markers into findings.
     fn assessors(&self) -> &[&dyn Assessor];
+    /// Optional workspace-scoped assessors; empty by default.
     fn workspace_assessors(&self) -> &[&dyn WorkspaceAssessor] {
         &[]
     }
+    /// Reporters that render findings into artifacts.
     fn reporters(&self) -> &[&dyn Reporter];
 
     /// True for trait-impl / framework coverage hook bundles (not source-quality scans).
@@ -32,14 +40,23 @@ pub trait Etiquette: Send + Sync {
 /// Static etiquette declaration backed by slices of trait object references.
 #[derive(Default)]
 pub struct StaticEtiquette {
+    /// Stable identifier.
     pub id: &'static str,
+    /// Human-readable name.
     pub name: &'static str,
+    /// Loaders in this etiquette.
     pub loaders: &'static [&'static dyn Loader],
+    /// Enrichers in this etiquette.
     pub enrichers: &'static [&'static dyn IrEnricher],
+    /// Probes in this etiquette.
     pub probes: &'static [&'static dyn Probe],
+    /// Assessors in this etiquette.
     pub assessors: &'static [&'static dyn Assessor],
+    /// Workspace-scoped assessors, if any.
     pub workspace_assessors: Option<&'static [&'static dyn WorkspaceAssessor]>,
+    /// Reporters in this etiquette.
     pub reporters: &'static [&'static dyn Reporter],
+    /// Whether this bundle is a coverage etiquette.
     pub is_coverage: bool,
 }
 
@@ -119,6 +136,7 @@ pub struct QualityAreaSpec {
 /// etiquette must make that choice explicitly rather than defaulting to
 /// invisible. See `docs/planning/quality-report-feeder-trait.md`.
 pub trait QualityReportArea {
+    /// This etiquette's row in the workspace quality-report rollup, if any.
     fn quality_area(&self) -> Option<QualityAreaSpec>;
 }
 
@@ -134,7 +152,9 @@ impl<T: Etiquette + QualityReportArea + ?Sized> QualityEtiquette for T {}
 /// `id`/`loaders`/etc. delegate straight through to the wrapped
 /// `StaticEtiquette`.
 pub struct StaticQualityEtiquette {
+    /// Hook bundle this quality etiquette wraps.
     pub etiquette: StaticEtiquette,
+    /// Optional quality-report rollup contribution.
     pub quality_area: Option<QualityAreaSpec>,
 }
 

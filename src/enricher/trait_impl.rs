@@ -10,6 +10,7 @@ use tracing::instrument;
 pub struct TraitImplEnricher;
 
 impl TraitImplEnricher {
+    /// Stable identifier for `TraitImplEnricher`.
     pub const ID: &'static str = "trait-impl";
 }
 

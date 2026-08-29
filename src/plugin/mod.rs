@@ -45,19 +45,25 @@ use crate::etiquette::Etiquette;
 /// Whether a plugin participates in coverage analysis or source-quality scans.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PluginCategory {
+    /// Run source-quality etiquettes, or apply mechanical patches.
     Quality,
+    /// Error Handling.
     ErrorHandling,
+    /// Run rustdoc coverage etiquettes.
     Coverage,
 }
 
 /// Runnable unit registered with the session.
 pub trait Plugin: Send + Sync {
+    /// Stable identifier for this hook.
     fn id(&self) -> &str;
+    /// Human-readable name.
     fn name(&self) -> &str;
 
     /// Hook bundles this plugin contributes (deduped across plugins in one run).
     fn etiquettes(&self) -> &[&'static dyn Etiquette];
 
+    /// Etiquette / lint category this rule belongs to.
     fn category(&self) -> PluginCategory {
         PluginCategory::Quality
     }
@@ -92,9 +98,13 @@ impl Plugin for EtiquettePlugin {
 /// instead — see `examples/custom_plugins`.
 #[derive(Clone, Copy)]
 pub struct StaticPlugin {
+    /// Stable identifier.
     pub id: &'static str,
+    /// Human-readable name.
     pub name: &'static str,
+    /// Plugin category this product belongs to.
     pub category: PluginCategory,
+    /// Etiquettes this product contributes.
     pub etiquettes: &'static [&'static dyn Etiquette],
 }
 

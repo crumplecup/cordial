@@ -16,13 +16,16 @@ use super::elicitation_tracked_targets::{
 /// One upstream ↔ shadow mirror pair active in the current workspace.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShadowPair {
+    /// Upstream crate this shadow pair tracks.
     pub upstream: String,
+    /// Shadow crate that should mirror the upstream.
     pub shadow: String,
 }
 
 /// Workspace `elicit_*` mirror members with no entry in the tracked roster.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrackedTargetRosterGap {
+    /// Workspace members with no tracked elicitation target.
     pub members_without_tracked_target: Vec<String>,
 }
 

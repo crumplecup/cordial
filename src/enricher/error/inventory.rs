@@ -18,6 +18,7 @@ use tracing::instrument;
 pub struct ErrorIrScanEnricher;
 
 impl ErrorIrScanEnricher {
+    /// Stable identifier for `ErrorIrScanEnricher`.
     pub const ID: &'static str = "error-ir-scan";
 }
 

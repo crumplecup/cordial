@@ -9,11 +9,17 @@ use tracing::instrument;
 /// Kind of item extracted from rustdoc JSON.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InventoryItemKind {
+    /// Struct.
     Struct,
+    /// Enum.
     Enum,
+    /// Trait.
     Trait,
+    /// TypeAlias.
     TypeAlias,
+    /// Function.
     Function,
+    /// Other.
     Other,
 }
 
@@ -30,11 +36,13 @@ impl InventoryItemKind {
         }
     }
 
+    /// Whether this kind is a type (struct, enum, or alias).
     #[instrument(level = "trace", skip(self), ret)]
     pub fn is_type(self) -> bool {
         matches!(self, Self::Struct | Self::Enum | Self::TypeAlias)
     }
 
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -51,22 +59,31 @@ impl InventoryItemKind {
 /// One public type or trait from a crate inventory.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RustdocItem {
+    /// Qualified rustdoc path of this item.
     pub path: String,
+    /// Unqualified item name.
     pub name: String,
+    /// rustdoc item kind.
     pub kind: InventoryItemKind,
+    /// Whether rustdoc considers this item public.
     pub is_public: bool,
 }
 
 /// Parsed rustdoc inventory for one crate.
 #[derive(Debug, Clone)]
 pub struct RustdocInventory {
+    /// Cargo package name.
     pub crate_name: String,
+    /// Crate version recorded in the rustdoc JSON.
     pub crate_version: String,
+    /// Inventory items parsed from rustdoc JSON.
     pub items: Vec<RustdocItem>,
+    /// Parsed rustdoc crate object.
     pub krate: Crate,
 }
 
 impl RustdocInventory {
+    /// Type items.
     #[instrument(level = "trace", skip(self))]
     pub fn type_items(&self) -> impl Iterator<Item = &RustdocItem> {
         self.items.iter().filter(|item| item.kind.is_type())

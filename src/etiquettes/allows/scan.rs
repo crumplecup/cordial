@@ -16,6 +16,7 @@ use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_t
 use super::types::{AllowRuleId, AllowSiteRecord};
 
 use tracing::instrument;
+/// Scan one crate for allows.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_allows(crate_root: &Path) -> CordialResult<Vec<AllowSiteRecord>> {
     let mut findings = Vec::new();
@@ -63,6 +64,7 @@ pub fn scan_source_tree(
     Ok(findings)
 }
 
+/// Scan one Rust source file and return records.
 #[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,

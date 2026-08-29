@@ -20,6 +20,7 @@ use tracing::instrument;
 pub struct RustdocStructureEnricher;
 
 impl RustdocStructureEnricher {
+    /// Stable identifier for `RustdocStructureEnricher`.
     pub const ID: &'static str = "rustdoc-structure";
 }
 

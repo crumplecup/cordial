@@ -11,8 +11,11 @@ use tracing::instrument;
 pub struct SourceLoader;
 
 impl SourceLoader {
+    /// Stable identifier for `SourceLoader`.
     pub const ID: &'static str = "source";
+    /// IR attribute key (`ir_origin`).
     pub const ATTR_IR_ORIGIN: &'static str = crate::ir::ATTR_IR_ORIGIN;
+    /// Loader origin tag written onto IR nodes.
     pub const ORIGIN: &'static str = crate::ir::ORIGIN_SOURCE;
 }
 
@@ -57,15 +60,20 @@ impl Loader for SourceLoader {
 /// Parsed source file retained for IR construction.
 #[derive(Debug, Clone)]
 pub struct SourceFile {
+    /// Filesystem path of this source file.
     pub path: PathBuf,
+    /// File contents.
     pub source: String,
 }
 
 /// Source loader output.
 #[derive(Debug, Clone)]
 pub struct SourceLoadView {
+    /// Cargo package name.
     pub crate_name: String,
+    /// Crate `src` directory.
     pub src_root: PathBuf,
+    /// Parsed source files under `src`.
     pub files: Vec<SourceFile>,
 }
 

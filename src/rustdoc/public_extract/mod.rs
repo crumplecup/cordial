@@ -16,17 +16,25 @@ mod type_walk;
 
 pub(super) use reexport::collect_public_same_crate_reexport_aliases;
 
+/// One public item extracted from rustdoc JSON.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtractedItem {
+    /// Path segments of this public item.
     pub path: Vec<String>,
+    /// rustdoc item kind.
     pub kind: InventoryItemKind,
+    /// Unqualified item name.
     pub name: String,
+    /// Whether the type is generic.
     pub is_generic: bool,
+    /// Path this type alias points at, when it is an alias.
     pub alias_target: Option<String>,
+    /// Whether rustdoc marked this item unstable.
     pub is_unstable: bool,
 }
 
 impl ExtractedItem {
+    /// `foo::bar` form of [`Self::path`].
     #[instrument(level = "trace", skip(self))]
     pub fn path_str(&self) -> String {
         self.path.join("::")
@@ -60,6 +68,7 @@ impl ExtractedItemKind {
     }
 }
 
+/// Extract public items.
 #[instrument(level = "debug", skip(krate))]
 pub fn extract_public_items(
     krate: &Crate,

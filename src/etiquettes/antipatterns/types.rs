@@ -11,15 +11,22 @@ use tracing::instrument;
 /// Stable rule identifier for an antipattern probe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AntipatternRuleId {
+    /// `ANTIPATTERN-BOX-DYN-ERROR-001`.
     BoxDynError001,
+    /// `ANTIPATTERN-STRING-ERROR-001`.
     StringError001,
+    /// `ANTIPATTERN-UNUSED-UNDERSCORE-ARG-001`.
     UnusedUnderscoreArg001,
+    /// `ANTIPATTERN-STRUCT-STATIC-REF-001`.
     StructStaticRef001,
+    /// `ANTIPATTERN-UNNAMED-CONTRACT-BOUND-001`.
     UnnamedContractBound001,
+    /// `ANTIPATTERN-VERSION-IN-MEMBER-001`.
     VersionInMember001,
 }
 
 impl AntipatternRuleId {
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -32,6 +39,7 @@ impl AntipatternRuleId {
         }
     }
 
+    /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
@@ -165,10 +173,15 @@ impl Finding for AntipatternFinding {
 /// Raw scan row used while building IR nodes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AntipatternSiteRecord {
+    /// Stable probe rule identifier.
     pub rule_id: AntipatternRuleId,
+    /// Qualified name or extra locator for this site.
     pub context: String,
+    /// Source file path, usually crate-relative.
     pub file: PathBuf,
+    /// Source line number (1-based), when known.
     pub line: u32,
+    /// Source snippet captured at the site.
     pub snippet: String,
 }
 

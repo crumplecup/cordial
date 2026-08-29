@@ -16,25 +16,37 @@ const PROOF_CHAIN_RUST_STD_PREFIX: &str = "RustStdStandard<";
 /// Features passed to `cargo run -p amenable -- dump-registry`.
 pub const AMENABLE_DUMP_REGISTRY_FEATURES: &str = "creusot,verus";
 
+/// Serializable dump of a std-family coverage registry.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RegistryDump {
+    /// Evidence links dumped from the registry.
     pub evidence_links: Vec<EvidenceLinkDump>,
+    /// Proof records dumped from the registry.
     pub proof_records: Vec<ProofRecordDump>,
+    /// Contract-bound records dumped from the registry.
     #[serde(default)]
     pub contract_records: Vec<ContractRecordDump>,
+    /// Kani proof records dumped from the registry.
     pub kani_proofs: Vec<KaniProofDump>,
 }
 
+/// Serializable evidence link inside a registry dump.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EvidenceLinkDump {
+    /// Evidence item name.
     pub name: String,
+    /// Evidence basis label.
     pub basis: String,
+    /// Ordinal of this record in its list.
     pub index: usize,
 }
 
+/// Serializable proof record inside a registry dump.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProofRecordDump {
+    /// Supporting evidence paths or labels.
     pub evidence: String,
+    /// Proof verifier this row is about (`kani`, `creusot`, …).
     pub verifier: String,
 }
 
@@ -105,6 +117,7 @@ pub fn parse_rust_std_standard_inner(evidence: &str) -> Option<String> {
     Some(type_path_without_generics(typed))
 }
 
+/// Evidence for std type.
 #[instrument(level = "debug", skip(registry))]
 pub fn evidence_for_std_type(registry: &RegistryDump, type_path: &str) -> Option<String> {
     for link in &registry.evidence_links {
@@ -136,6 +149,7 @@ pub fn proof_chain_subject_matches_type(subject: &str, type_path: &str) -> bool 
     type_has_trait_impl(&singleton, type_path)
 }
 
+/// Witness verifiers for std type.
 #[instrument(level = "debug", skip(registry))]
 pub fn witness_verifiers_for_std_type(registry: &RegistryDump, type_path: &str) -> HashSet<String> {
     let mut verifiers = HashSet::new();

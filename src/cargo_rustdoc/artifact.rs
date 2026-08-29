@@ -19,12 +19,15 @@ pub struct BuildArtifact {
     fingerprint: Option<DocFingerprint>,
 }
 
+/// What kind of crate a rustdoc build artifact came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BuildKind {
+    /// A member of the analyzed workspace.
     WorkspaceMember,
     /// Upstream crate rustdoc built with features activated via a shadow member dependency.
     MemberDependency,
+    /// A sysroot crate such as `std` or `core`.
     SysrootLibrary,
 }
 
@@ -36,6 +39,7 @@ pub struct DocFingerprint {
 }
 
 impl BuildArtifact {
+    /// Artifact for a workspace-member rustdoc build.
     #[instrument(level = "debug", skip(crate_name))]
     pub fn workspace_member(
         crate_name: impl Into<String>,
@@ -56,6 +60,7 @@ impl BuildArtifact {
         }
     }
 
+    /// Artifact for a sysroot library rustdoc build.
     #[instrument(level = "debug", skip(crate_name))]
     pub fn sysroot_library(
         crate_name: impl Into<String>,
@@ -76,6 +81,7 @@ impl BuildArtifact {
         }
     }
 
+    /// Artifact for a shadow-crate dependency rustdoc build.
     #[instrument(level = "debug", skip(shadow_crate, upstream_crate))]
     pub fn shadow_dep(
         shadow_crate: impl Into<String>,

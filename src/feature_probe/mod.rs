@@ -14,8 +14,11 @@ use crate::session::RunFilter;
 /// Per-type feature probe result used for actionable impl-gap reporting.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TypeFeatureProbe {
+    /// Crate whose features were probed.
     pub feature_crate: String,
+    /// Feature names that would unlock the missing item.
     pub candidate_unlock_features: Vec<String>,
+    /// Prerequisite flags observed under the probed features.
     pub probed_prereqs: Option<TraitPrereqs>,
 }
 
@@ -75,6 +78,7 @@ pub fn load_crate_feature_probes(
     )
 }
 
+/// Build type feature probes.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn build_type_feature_probes(
     project_root: &Path,

@@ -9,7 +9,9 @@ use tracing::instrument;
 /// Wrapper type paired with the foreign type it wraps via `From<T>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrenchcoatPair {
+    /// Path of the wrapper type.
     pub wrapper_path: String,
+    /// Path of the wrapped foreign type.
     pub foreign_path: String,
 }
 

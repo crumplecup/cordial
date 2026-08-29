@@ -21,6 +21,7 @@ pub const AMENABLE_PATCH_SET: &str = "amenable";
 /// Options for amenable std registry coverage assessment.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AmenableStdOptions {
+    /// Whether nightly-only items are in scope.
     pub include_nightly: bool,
     /// Re-run `amenable dump-registry` even when a cached dump exists.
     pub refresh_registry: bool,

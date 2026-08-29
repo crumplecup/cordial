@@ -6,8 +6,11 @@ use tracing::instrument;
 /// One `impl Trait for Type` edge from rustdoc.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TraitImplRecord {
+    /// Qualified type path.
     pub type_path: String,
+    /// Qualified path of the trait.
     pub trait_path: String,
+    /// Unqualified trait name.
     pub trait_short: String,
 }
 

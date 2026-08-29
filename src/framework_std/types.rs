@@ -10,8 +10,11 @@ use tracing::instrument;
 /// Whether a std type has the tracked framework trait impl.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FrameworkTraitStatus {
+    /// The item is fully satisfied.
     Complete,
+    /// Expected item is absent.
     Missing,
+    /// The item is out of scope for this run.
     Skipped,
 }
 
@@ -29,9 +32,13 @@ impl std::fmt::Display for FrameworkTraitStatus {
 /// One std inventory row assessed for framework trait coverage.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StdInventoryItem {
+    /// Qualified rustdoc path of this item.
     pub path: String,
+    /// rustdoc item kind.
     pub kind: InventoryItemKind,
+    /// Whether the type is generic.
     pub is_generic: bool,
+    /// Whether rustdoc marked this item unstable.
     pub is_unstable: bool,
     /// For type aliases, the aliased type path (used by amenable registry matching).
     pub alias_target: Option<String>,
@@ -40,27 +47,41 @@ pub struct StdInventoryItem {
 /// One row in a framework trait coverage report.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FrameworkTraitEntry {
+    /// Qualified type path.
     pub type_path: String,
+    /// rustdoc item kind of the type.
     pub type_kind: String,
+    /// Whether the type is generic.
     pub is_generic: bool,
+    /// Whether the tracked trait impl is complete, missing, or skipped.
     pub trait_status: FrameworkTraitStatus,
+    /// Why this row was skipped, when it was.
     pub skip_reason: Option<String>,
 }
 
 /// Coverage report for merged std-family inventory vs impl-crate trait impls.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FrameworkTraitReport {
+    /// Crate that defined the foreign type.
     pub source_crate: String,
+    /// Tracked trait this row is about.
     pub trait_name: String,
+    /// Crate that provides the impl under review.
     pub impl_crate: String,
+    /// Whether nightly-only items are in scope.
     pub include_nightly: bool,
+    /// Per-item coverage rows.
     pub entries: Vec<FrameworkTraitEntry>,
+    /// How many rows are complete.
     pub complete_count: usize,
+    /// How many items are still missing.
     pub missing_count: usize,
+    /// How many rows were skipped.
     pub skipped_count: usize,
 }
 
 impl FrameworkTraitReport {
+    /// Covered items as a percentage of the inventory.
     #[instrument(level = "debug", skip(self))]
     pub fn coverage_pct(&self) -> f32 {
         let accountable = self.entries.len().saturating_sub(self.skipped_count);
@@ -71,6 +92,7 @@ impl FrameworkTraitReport {
         }
     }
 
+    /// Summary.
     #[instrument(level = "trace", skip(self))]
     pub fn summary(&self) -> String {
         format!(
@@ -89,14 +111,21 @@ impl FrameworkTraitReport {
 /// One actionable gap row for framework trait coverage.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FrameworkGapEntry {
+    /// Crate that defined the foreign type.
     pub source_crate: String,
+    /// Qualified type path.
     pub type_path: String,
+    /// rustdoc item kind of the type.
     pub type_kind: String,
+    /// Tracked trait this row is about.
     pub trait_name: String,
+    /// Crate that provides the impl under review.
     pub impl_crate: String,
+    /// Recommended next action for this gap.
     pub action: String,
 }
 
+/// Map of skipped paths to reasons.
 pub type SkipMap = std::collections::HashMap<String, String>;
 
 /// Classify one std inventory row for framework trait coverage.

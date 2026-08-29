@@ -23,6 +23,7 @@ pub enum VisibilityRuleId {
 }
 
 impl VisibilityRuleId {
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -32,6 +33,7 @@ impl VisibilityRuleId {
         }
     }
 
+    /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
@@ -148,11 +150,18 @@ impl Finding for VisibilityFinding {
 /// One visibility finding from the crate-tree scan.
 #[derive(Debug, Clone)]
 pub struct VisibilityRecord {
+    /// Stable probe rule identifier.
     pub rule_id: VisibilityRuleId,
+    /// Module path this visibility finding refers to.
     pub module_path: String,
+    /// Source file path, usually crate-relative.
     pub file: PathBuf,
+    /// Source line number (1-based), when known.
     pub line: u32,
+    /// How many leaf names this module exposes.
     pub name_count: usize,
+    /// Visibility of the parent module.
     pub parent_vis: String,
+    /// Visibility declared on this item.
     pub declared_vis: String,
 }

@@ -10,6 +10,7 @@ use tracing::instrument;
 pub struct TrenchcoatEnricher;
 
 impl TrenchcoatEnricher {
+    /// Stable identifier for `TrenchcoatEnricher`.
     pub const ID: &'static str = "trenchcoat";
 }
 

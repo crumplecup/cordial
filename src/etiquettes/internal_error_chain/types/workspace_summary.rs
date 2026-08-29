@@ -4,16 +4,25 @@ use tracing::instrument;
 /// Workspace rollup for internal error-chain scans.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkspaceInternalErrorChainSummary {
+    /// How many error types were inventoried.
     pub type_nodes: usize,
+    /// Internal error types that do not wrap another type.
     pub internal_leaves: usize,
+    /// Internal error types that wrap another internal type.
     pub internal_links: usize,
+    /// Internal error types that wrap a foreign error.
     pub foreign_bridges: usize,
+    /// Compliance findings for this crate.
     pub compliance_findings: usize,
+    /// Sites that stringify a typed error.
     pub stringify_violations: usize,
+    /// Sites that discard a typed error.
     pub discard_violations: usize,
+    /// Crate names in this rollup.
     pub crates: Vec<InternalErrorChainCrateSummary>,
 }
 
+/// Build workspace internal error chain summary.
 #[instrument(level = "debug", skip(reports))]
 pub fn build_workspace_internal_error_chain_summary(
     reports: &[InternalErrorChainScanReport],

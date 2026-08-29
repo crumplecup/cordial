@@ -35,9 +35,9 @@ pub fn discover_crate_targets(
 /// Discover crate targets for a session run, driven by active coverage plugins when present.
 ///
 /// When one or more [`PluginCategory::Coverage`] plugins are selected, crate names come from
-/// each plugin's [`Coverage::targets`](crate::plugin::Coverage::targets) union. Quality-only
-/// runs continue to use workspace members from `cargo metadata`. Combined quality + coverage
-/// runs union coverage IR crate names with all filtered workspace members.
+/// each coverage plugin's target list. Quality-only runs continue to use workspace
+/// members from `cargo metadata`. Combined quality + coverage runs union coverage
+/// IR crate names with all filtered workspace members.
 #[instrument(
     level = "debug",
     skip(registered_plugins, session, filter),

@@ -11,6 +11,7 @@ use super::source::{SourceFile, SourceLoadView, SourceLoader};
 
 use tracing::instrument;
 impl SourceLoadView {
+    /// Fill the crate IR from loaded views.
     #[instrument(level = "debug", skip(self, ir), err(level = "warn"))]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
         let root = ir.root;

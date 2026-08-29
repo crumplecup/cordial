@@ -13,10 +13,12 @@ use crate::store::StoreLayout;
 use super::amenable::{amenable_gaps_from_findings, amenable_report_from_findings};
 
 use tracing::instrument;
+/// Reporter for amenable-std coverage.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AmenableStdReporter;
 
 impl AmenableStdReporter {
+    /// Stable identifier for `AmenableStdReporter`.
     pub const ID: &'static str = "amenable-std-reporter";
 }
 

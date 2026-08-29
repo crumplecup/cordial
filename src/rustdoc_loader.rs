@@ -14,9 +14,13 @@ use tracing::instrument;
 pub struct RustdocLoader;
 
 impl RustdocLoader {
+    /// Stable identifier for `RustdocLoader`.
     pub const ID: &'static str = "rustdoc";
+    /// IR attribute key (`crate_version`).
     pub const ATTR_CRATE_VERSION: &'static str = "crate_version";
+    /// IR attribute key (`ir_origin`).
     pub const ATTR_IR_ORIGIN: &'static str = crate::ir::ATTR_IR_ORIGIN;
+    /// Loader origin tag written onto IR nodes.
     pub const ORIGIN: &'static str = crate::ir::ORIGIN_RUSTDOC;
 }
 
@@ -72,6 +76,7 @@ impl crate::loader::LoadView for RustdocLoadView {
 }
 
 impl RustdocLoadView {
+    /// Fill the crate IR from loaded views.
     #[instrument(level = "debug", skip(self, ir), err(level = "warn"))]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
         let root = ir.root;
@@ -119,6 +124,7 @@ impl RustdocLoadView {
     }
 }
 
+/// Resolve rustdoc json.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn resolve_rustdoc_json(
     crate_root: &Path,

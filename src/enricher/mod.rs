@@ -15,6 +15,7 @@ use tracing::instrument;
     feature = "visibility",
     feature = "cli_layout",
     feature = "crate_attrs",
+    feature = "doc_warnings",
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "verus_warnings"
@@ -57,6 +58,7 @@ mod wrapper_coverage;
     feature = "visibility",
     feature = "cli_layout",
     feature = "crate_attrs",
+    feature = "doc_warnings",
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "verus_warnings"
@@ -78,6 +80,7 @@ pub use attribute::AttributeEnricher;
     feature = "visibility",
     feature = "cli_layout",
     feature = "crate_attrs",
+    feature = "doc_warnings",
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "verus_warnings"
@@ -122,6 +125,7 @@ use crate::ir::{BasicQuery, EdgeKind, IrView, NodeKind};
 pub struct ScopeEnricher;
 
 impl ScopeEnricher {
+    /// Stable identifier for `ScopeEnricher`.
     pub const ID: &'static str = "scope";
 }
 

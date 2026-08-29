@@ -136,6 +136,7 @@ pub fn collect_trait_impl_map_from_krate(krate: &Crate) -> HashMap<String, BTree
     map
 }
 
+/// Collect trait impl map from inventory.
 #[instrument(level = "debug", skip(inventory))]
 pub fn collect_trait_impl_map_from_inventory(
     inventory: &RustdocInventory,
@@ -143,6 +144,7 @@ pub fn collect_trait_impl_map_from_inventory(
     collect_trait_impl_map_from_krate(&inventory.krate)
 }
 
+/// Collect trait impl map.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn collect_trait_impl_map(
     json_path: &Path,

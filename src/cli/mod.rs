@@ -13,6 +13,7 @@ mod run;
 use commands::ActCtx;
 pub use commands::Commands;
 
+/// Top-level clap parser for the `cordial` binary.
 #[derive(Parser)]
 #[command(
     name = "cordial",
@@ -32,12 +33,13 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub crate_name: Option<String>,
 
+    /// Nested clap subcommand.
     #[command(subcommand)]
     pub command: Commands,
 }
 
 impl Cli {
-    /// Build session context and hand off to [`Commands::act`].
+    /// Build session context and dispatch the selected [`Commands`] variant.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
     pub fn act(self) -> CordialResult<()> {
         let project_root = match &self.project {

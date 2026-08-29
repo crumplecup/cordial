@@ -12,6 +12,7 @@ use super::scan::{CfgNameOccurrence, scan_rust_source};
 use super::types::{CfgHygieneRuleId, CfgHygieneSiteRecord};
 
 use tracing::instrument;
+/// Scan one crate for cfg hygiene.
 #[instrument(level = "debug", skip(thresholds), err(level = "warn"))]
 pub fn scan_crate_cfg_hygiene(
     crate_root: &Path,

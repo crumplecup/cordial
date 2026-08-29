@@ -11,16 +11,24 @@ use tracing::instrument;
 /// Which modularity metric fired.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModularityKind {
+    /// `MODULARITY-FILE`.
     File,
+    /// `MODULARITY-FUNCTION`.
     Function,
+    /// `MODULARITY-TYPES-PER-FILE`.
     TypesPerFile,
+    /// `MODULARITY-MODULE-SIZE`.
     ModuleSize,
+    /// `MODULARITY-TOP-HEAVY`.
     TopHeavy,
+    /// `MODULARITY-LOPSIDED`.
     Lopsided,
+    /// `MODULARITY-COLLAPSE`.
     Collapse,
 }
 
 impl ModularityKind {
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -34,6 +42,7 @@ impl ModularityKind {
         }
     }
 
+    /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
@@ -62,6 +71,7 @@ impl Display for ModularityKind {
 pub use crate::config::ModularityThresholds;
 
 impl ModularityThresholds {
+    /// Whether this kind is large enough to appear on the checklist.
     #[instrument(level = "trace", skip(self, kind))]
     pub fn is_checklist_item(&self, kind: ModularityKind, lines: u32) -> bool {
         match kind {
@@ -198,12 +208,16 @@ pub struct ModularitySiteRecord {
 /// Sample mean and standard deviation for module (or other) line counts.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ModuleSizeStats {
+    /// Sample size.
     pub n: usize,
+    /// Sample mean.
     pub mean: f64,
+    /// Sample standard deviation.
     pub stddev: f64,
 }
 
 impl ModuleSizeStats {
+    /// Compute mean and standard deviation from a slice of line counts.
     #[instrument(level = "debug", ret)]
     pub fn from_lines(lines: &[u32]) -> Self {
         let n = lines.len();
@@ -237,6 +251,7 @@ impl ModuleSizeStats {
         }
     }
 
+    /// Zscore.
     #[instrument(level = "debug", skip(self))]
     pub fn zscore(self, lines: u32) -> Option<f64> {
         if self.n < 2 || self.stddev <= 0.0 {
@@ -246,17 +261,20 @@ impl ModuleSizeStats {
         }
     }
 
+    /// Whether `|z|` exceeds `sigma` on either tail.
     #[instrument(level = "trace", skip(self), ret)]
     pub fn is_outlier(self, lines: u32, sigma: u32) -> bool {
         self.is_upper_outlier(lines, sigma) || self.is_lower_outlier(lines, sigma)
     }
 
+    /// Whether `z` exceeds `+sigma`.
     #[instrument(level = "trace", skip(self), ret)]
     pub fn is_upper_outlier(self, lines: u32, sigma: u32) -> bool {
         self.zscore(lines)
             .is_some_and(|zscore| zscore > f64::from(sigma))
     }
 
+    /// Whether `z` is below `-sigma`.
     #[instrument(level = "trace", skip(self), ret)]
     pub fn is_lower_outlier(self, lines: u32, sigma: u32) -> bool {
         self.zscore(lines)

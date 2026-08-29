@@ -17,6 +17,7 @@ pub struct IrCacheDigest {
     enrichers: Vec<String>,
 }
 
+/// Fingerprint of crate sources used to invalidate cached IR.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new)]
 pub struct SourceFileDigest {
     path: String,
@@ -24,11 +25,13 @@ pub struct SourceFileDigest {
 }
 
 impl IrCacheDigest {
+    /// Store path for this digest file.
     #[instrument(level = "debug")]
     pub fn cache_path(cache_dir: &Path, crate_name: &str) -> PathBuf {
         cache_dir.join(format!("{crate_name}.ir.digests.json"))
     }
 
+    /// Fingerprint the current source inputs for cache invalidation.
     #[instrument(level = "debug", skip(target, load_views), err(level = "warn"))]
     pub fn compute(
         target: &CrateTarget,
@@ -67,6 +70,7 @@ impl IrCacheDigest {
         })
     }
 
+    /// Serialize this value to `path`.
     #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
     pub fn write(&self, path: &Path) -> CordialResult<()> {
         if let Some(parent) = path.parent() {

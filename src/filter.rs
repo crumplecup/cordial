@@ -10,16 +10,19 @@ pub struct NamedRunFilter {
 }
 
 impl NamedRunFilter {
+    /// All plugins.
     #[instrument(level = "debug")]
     pub fn all_plugins() -> Self {
         Self::default()
     }
 
+    /// All etiquettes.
     #[instrument(level = "debug")]
     pub fn all_etiquettes() -> Self {
         Self::default()
     }
 
+    /// Etiquettes registered on this session.
     #[instrument(level = "debug", skip(ids))]
     pub fn plugins(ids: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
         Self {
@@ -29,6 +32,7 @@ impl NamedRunFilter {
         }
     }
 
+    /// Etiquettes registered on this session.
     #[instrument(level = "debug", skip(ids))]
     pub fn etiquettes(ids: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
         Self {
@@ -38,12 +42,14 @@ impl NamedRunFilter {
         }
     }
 
+    /// Return a copy with `crate` set.
     #[instrument(level = "trace", skip(self, crate_name))]
     pub fn with_crate(mut self, crate_name: impl Into<String>) -> Self {
         self.crate_name = Some(crate_name.into());
         self
     }
 
+    /// Package name this IR belongs to.
     #[instrument(level = "trace", skip(self))]
     pub fn crate_name(&self) -> Option<&str> {
         self.crate_name.as_deref()

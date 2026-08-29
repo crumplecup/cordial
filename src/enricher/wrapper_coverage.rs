@@ -9,8 +9,10 @@ use tracing::instrument;
 pub struct WrapperCoverageEnricher;
 
 impl WrapperCoverageEnricher {
+    /// Stable identifier for `WrapperCoverageEnricher`.
     pub const ID: &'static str = "wrapper-coverage";
 
+    /// IR attribute key (`wrapper_coverage`).
     pub const ATTR_WRAPPER_COVERAGE: &'static str = "wrapper_coverage";
 }
 

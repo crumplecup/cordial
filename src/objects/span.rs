@@ -4,8 +4,11 @@ use std::path::Path;
 use tracing::instrument;
 /// Source location for findings and markers.
 pub trait SourceSpan: Send + Sync {
+    /// Source file this span refers to.
     fn file(&self) -> &Path;
+    /// Source line (1-based); `0` when unknown.
     fn line(&self) -> u32;
+    /// Source column (1-based); `0` when unknown.
     fn column(&self) -> u32;
 }
 
@@ -28,9 +31,12 @@ impl SourceSpan for () {
     Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, derive_new::new,
 )]
 pub struct FileSpan {
+    /// Source file path, usually crate-relative.
     #[new(into)]
     pub file: std::path::PathBuf,
+    /// Source line number (1-based), when known.
     pub line: u32,
+    /// Source column (1-based), when known.
     pub column: u32,
 }
 

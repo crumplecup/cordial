@@ -10,9 +10,13 @@ use tracing::instrument;
 /// One registered `amenable_core::Ensures`/`Requires` contract fragment.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ContractRecordDump {
+    /// Supporting evidence paths or labels.
     pub evidence: String,
+    /// Proof verifier this row is about (`kani`, `creusot`, …).
     pub verifier: String,
+    /// Contract kind (`ensures`, `requires`, …).
     pub kind: String,
+    /// Source fragment of the contract bound.
     pub fragment: String,
 }
 

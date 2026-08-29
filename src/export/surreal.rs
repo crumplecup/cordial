@@ -7,29 +7,42 @@ use tracing::instrument;
 /// Agent-friendly graph export shaped for SurrealDB ingestion.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SurrealGraphExport {
+    /// Cargo package name.
     pub crate_name: String,
+    /// Graph nodes in this export.
     pub nodes: Vec<SurrealNode>,
+    /// Directed edges in this graph or export.
     pub edges: Vec<SurrealEdge>,
 }
 
+/// One IR node in a SurrealDB-oriented export.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SurrealNode {
+    /// Stable identifier.
     pub id: String,
+    /// Node kind as a lowercase tag.
     pub kind: String,
+    /// Optional item name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// JSON attributes attached to this node.
     #[serde(skip_serializing_if = "serde_json::Value::is_null")]
     pub attrs: Value,
 }
 
+/// One IR edge in a SurrealDB-oriented export.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SurrealEdge {
+    /// Source node id.
     pub from: String,
+    /// Target node id.
     pub to: String,
+    /// Edge kind as a lowercase tag.
     pub kind: String,
 }
 
 impl SurrealGraphExport {
+    /// Rebuild from a serialized snapshot.
     #[instrument(level = "debug", skip(snapshot), ret)]
     pub fn from_snapshot(snapshot: &CrateIrSnapshot) -> Self {
         let nodes = snapshot
@@ -61,11 +74,13 @@ impl SurrealGraphExport {
         }
     }
 
+    /// Build an export from a crate IR graph.
     #[instrument(level = "debug", skip(ir), err(level = "warn"))]
     pub fn from_crate_ir(ir: &CrateIr) -> CordialResult<Self> {
         Ok(Self::from_snapshot(&ir.snapshot()?))
     }
 
+    /// Pretty-printed JSON for this export.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
     pub fn to_json_pretty(&self) -> CordialResult<String> {
         Ok(serde_json::to_string_pretty(self)?)

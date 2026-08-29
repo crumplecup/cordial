@@ -51,6 +51,7 @@ pub fn scan_source_tree(
     Ok(findings)
 }
 
+/// Scan one Rust source file and return records.
 #[instrument(level = "debug", skip(source, file, thresholds), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,

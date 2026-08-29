@@ -177,6 +177,7 @@ pub struct TokenStreamParseError {
 }
 
 impl TokenStreamParseError {
+    /// Construct a new value.
     #[track_caller]
     #[instrument(level = "debug", skip(source), ret)]
     pub fn new(source: impl Into<String>) -> Self {

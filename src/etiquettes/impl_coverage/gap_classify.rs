@@ -12,16 +12,27 @@ use tracing::instrument;
 /// Full assessment for one inventoried type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImplGapAssessment {
+    /// How this coverage gap is classified.
     pub gap_kind: Option<ImplGapKind>,
+    /// Our traits the type still needs to impl.
     pub missing_our_traits: String,
+    /// External traits the type still needs to impl.
     pub missing_external_traits: String,
+    /// Whether ElicitComplete is still missing.
     pub elicit_complete_gap: bool,
+    /// Whether the gap is behind a Cargo feature.
     pub feature_gated_external: bool,
+    /// Whether the orphan rule blocks the impl.
     pub blocked_by_orphan_rule: bool,
+    /// Crate that owns the feature gating this item.
     pub feature_owner_crate: String,
+    /// Feature names that would unlock the missing item.
     pub candidate_unlock_features: String,
+    /// Which coverage plugin classified this gap.
     pub coverage_provider: String,
+    /// Wrapper types that cover this item indirectly.
     pub wrapper_paths: String,
+    /// Whether a wrapper supplies the missing impl.
     pub covered_indirectly: bool,
 }
 

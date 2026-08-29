@@ -62,18 +62,26 @@ pub enum VerusPublish {
 /// ordinary-looking fragments of it).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum VerusPanicKind {
+    /// `panic!`.
     Panic,
+    /// `unreachable!`.
     Unreachable,
+    /// `.expect(...)`.
     Expect,
+    /// `.unwrap()`.
     Unwrap,
+    /// `compile_error!`.
     CompileError,
 }
 
 /// One abort site found inside a function's body.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VerusPanicSite {
+    /// Abort kind (`panic!`, `unwrap`, …).
     pub kind: VerusPanicKind,
+    /// Source line number (1-based), when known.
     pub line: u32,
+    /// Source snippet captured at the site.
     pub snippet: String,
     /// True when this site sits in a `match` arm gated
     /// `#[cfg(not(verus_keep_ghost))]` whose sibling arm -- same
@@ -188,6 +196,7 @@ impl VerusFnFacts {
 /// blocks.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VerusCrateIr {
+    /// Verus functions inventoried in this crate.
     pub functions: Vec<VerusFnFacts>,
 }
 

@@ -17,18 +17,26 @@ pub use render::{render_quality_report_markdown, render_quality_workspace_summar
 /// One resolution-priority area in the code quality report.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QualityAreaSummary {
+    /// Sort key; lower numbers appear first in the report.
     pub priority: u8,
+    /// Section title in `quality-report.md`.
     pub title: String,
+    /// Open findings in this area.
     pub open_items: usize,
+    /// Checklist artifact filename.
     pub checklist: String,
+    /// Summary artifact filename.
     pub summary: String,
+    /// One-line breakdown shown in the rollup table.
     pub detail: String,
 }
 
 /// Workspace code quality report in resolution order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QualityReport {
+    /// Per-etiquette sections of the quality report.
     pub areas: Vec<QualityAreaSummary>,
+    /// Open findings across every area.
     pub total_open_items: usize,
 }
 
@@ -130,6 +138,7 @@ fn quality_area(
 pub struct QualityReportReporter;
 
 impl QualityReportReporter {
+    /// Stable identifier for `QualityReportReporter`.
     pub const ID: &'static str = "quality-report";
 }
 

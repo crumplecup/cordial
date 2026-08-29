@@ -21,6 +21,7 @@ pub enum InlineTestRuleId {
 }
 
 impl InlineTestRuleId {
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -30,6 +31,7 @@ impl InlineTestRuleId {
         }
     }
 
+    /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {

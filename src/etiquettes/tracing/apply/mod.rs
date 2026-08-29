@@ -12,7 +12,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
-use crate::error::{CordialError, CordialResult};
+use crate::error::CordialResult;
 use crate::loader::CrateTarget;
 use crate::session::RunAll;
 use crate::targets::discover_crate_targets;
@@ -38,22 +38,30 @@ use crate::{PathInclusionFacts, workspace_path_inclusions};
 /// One open checklist row targeting a function or method.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstrumentGap {
+    /// Cargo package name.
     pub crate_name: String,
+    /// Fully qualified item name.
     pub qualified_name: String,
+    /// Path of the patched file relative to the crate root.
     pub rel_path: PathBuf,
+    /// Source line number (1-based), when known.
     pub line: u32,
 }
 
 /// Result of applying instrumentation patches.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstrumentApplySummary {
+    /// How many functions received `#[instrument]`.
     pub changed_functions: usize,
+    /// How many source files were rewritten.
     pub changed_files: usize,
+    /// Items that already satisfied the recipe.
     pub skipped_existing: usize,
     /// Left untouched because the real verifier toolchain for every
     /// crate that compiles the file can't tolerate `#[instrument]`,
-    /// gated or not -- see [`TracingApplyPolicy::Skip`].
+    /// gated or not (apply skip policy).
     pub skipped_policy: usize,
+    /// Checklist rows that could not be matched in source.
     pub unresolved: usize,
 }
 
@@ -67,9 +75,14 @@ pub fn run_tracing_instrument_apply(
 ) -> CordialResult<InstrumentApplySummary> {
     let gaps = parse_tracing_instrument_checklist(checklist_path)?;
     if gaps.is_empty() {
-        return Err(CordialError::invariant(
-            "no open checklist items found in tracing instrument checklist",
-        ));
+        tracing::info!("no open checklist items found in tracing instrument checklist");
+        return Ok(InstrumentApplySummary {
+            changed_functions: 0,
+            changed_files: 0,
+            skipped_existing: 0,
+            skipped_policy: 0,
+            unresolved: 0,
+        });
     }
 
     let filter = RunAll;

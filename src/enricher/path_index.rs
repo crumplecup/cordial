@@ -7,6 +7,7 @@ use tracing::instrument;
 pub struct PathIndexEnricher;
 
 impl PathIndexEnricher {
+    /// Stable identifier for `PathIndexEnricher`.
     pub const ID: &'static str = "path-index";
 }
 

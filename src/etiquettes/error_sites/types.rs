@@ -41,15 +41,22 @@ impl ForeignErrorRecordKind {
 /// How an error enters or moves through control flow at this site.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ErrorSiteKind {
+    /// question_mark.
     QuestionMark,
+    /// map_err.
     MapErr,
+    /// return_err.
     ReturnErr,
+    /// if_let_err.
     IfLetErr,
+    /// match_err.
     MatchErr,
+    /// ok_or.
     OkOr,
 }
 
 impl ErrorSiteKind {
+    /// Stable identifier string for IR attributes.
     #[instrument(level = "debug", skip(self))]
     pub fn as_attr(self) -> &'static str {
         match self {
@@ -62,6 +69,7 @@ impl ErrorSiteKind {
         }
     }
 
+    /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
@@ -100,8 +108,11 @@ impl Display for ErrorSiteKind {
 /// Partition bucket for an error site row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ErrorOriginClass {
+    /// An internal (crate-defined) error type.
     Internal,
+    /// Any other item kind.
     Other,
+    /// A graph edge, not a node.
     Edge,
 }
 
@@ -234,12 +245,19 @@ pub struct ErrorSiteRecord {
 /// Intermediate scan input for partition logic.
 #[derive(Debug, Clone)]
 pub struct ErrorSiteScanRow {
+    /// Cargo package name.
     pub crate_name: String,
+    /// Error-site kind (`?`, `map_err`, …).
     pub kind: ErrorSiteKind,
+    /// Qualified name or extra locator for this site.
     pub context: String,
+    /// Source file path, usually crate-relative.
     pub file: PathBuf,
+    /// Source line number (1-based), when known.
     pub line: u32,
+    /// Snippet of the originating expression.
     pub source_snippet: String,
+    /// Snippet of the conversion site.
     pub site_snippet: String,
 }
 

@@ -23,17 +23,21 @@ use vis::VisKind;
 /// scanned crate files; a source edit invalidates it and forces a re-peel.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BranchingCache {
+    /// Visibility digest of names in this module.
     pub digest: String,
+    /// Minimum leaf-name count for a visible module.
     pub floor: usize,
 }
 
 impl BranchingCache {
+    /// Read raw material for this crate and return a load view.
     #[instrument(level = "debug", skip(path))]
     pub fn load(path: &Path) -> Option<Self> {
         let bytes = std::fs::read(path).ok()?;
         serde_json::from_slice(&bytes).ok()
     }
 
+    /// Serialize this value to `path`.
     #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
     pub fn write(&self, path: &Path) -> CordialResult<()> {
         if let Some(parent) = path.parent() {

@@ -17,6 +17,7 @@ use tracing::instrument;
 pub struct AttributeEnricher;
 
 impl AttributeEnricher {
+    /// Stable identifier for `AttributeEnricher`.
     pub const ID: &'static str = "attribute";
 }
 

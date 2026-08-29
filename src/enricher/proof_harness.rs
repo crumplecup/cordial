@@ -10,9 +10,12 @@ use tracing::instrument;
 pub struct ProofHarnessEnricher;
 
 impl ProofHarnessEnricher {
+    /// Stable identifier for `ProofHarnessEnricher`.
     pub const ID: &'static str = "proof-harness";
 
+    /// IR attribute key (`proof_test`).
     pub const ATTR_PROOF_TEST: &'static str = "proof_test";
+    /// IR attribute key (`composition_test`).
     pub const ATTR_COMPOSITION_TEST: &'static str = "composition_test";
 }
 

@@ -12,13 +12,16 @@ use crate::framework_std::{FrameworkTraitReport, build_framework_trait_report};
 use crate::session::SessionView;
 use crate::store::{StoreLayout, SysrootCache};
 
+/// Impl crate name used by homecoming-std coverage.
 pub const HOMECOMING_IMPL_CRATE: &str = "homecoming_core";
+/// Root trait name used by homecoming-std coverage.
 pub const HOMECOMING_TRAIT: &str = "Code";
 pub const HOMECOMING_PATCH_SET: &str = "homecoming";
 
 /// Options for framework std coverage assessment.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FrameworkStdOptions {
+    /// Whether nightly-only items are in scope.
     pub include_nightly: bool,
 }
 

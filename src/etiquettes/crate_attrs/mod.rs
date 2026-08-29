@@ -12,10 +12,13 @@
 //! **How to use.** Run `cordial quality` (feature `crate_attrs`). Knobs
 //! live under `[crate_attrs]` in `cordial.toml`. Artifacts:
 //! `{store}/findings/crate-attrs.checklist.md` and `crate-attrs-summary.md`.
-//! Register [`CRATE_ATTRS_ETIQUETTE`].
+//! `cordial quality --apply` writes the missing inner attributes onto each
+//! library root (`--dry-run` logs without writing). Register
+//! [`CRATE_ATTRS_ETIQUETTE`].
 //!
 //! Policy: `docs/planning/crate-attrs-etiquette.md`.
 
+mod apply;
 mod assessor;
 mod enricher;
 mod probe;
@@ -23,6 +26,7 @@ mod reporter;
 mod scan;
 mod types;
 
+pub use apply::{CrateAttrsApplySummary, run_crate_attrs_apply};
 pub use assessor::CrateAttrsAssessor;
 pub use enricher::CrateAttrsInventoryEnricher;
 pub use probe::CrateAttrsSiteProbe;

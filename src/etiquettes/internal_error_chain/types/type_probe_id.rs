@@ -6,12 +6,16 @@ use tracing::instrument;
 /// Type-graph probe rule identifiers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum InternalErrorTypeProbeId {
+    /// `ERROR-CHAIN-INTERNAL-LEAF-001`.
     InternalLeaf001,
+    /// `ERROR-CHAIN-INTERNAL-LINK-001`.
     InternalLink001,
+    /// `ERROR-CHAIN-INTERNAL-NESTED-001`.
     InternalNested001,
 }
 
 impl InternalErrorTypeProbeId {
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -21,6 +25,7 @@ impl InternalErrorTypeProbeId {
         }
     }
 
+    /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {

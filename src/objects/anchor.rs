@@ -3,6 +3,7 @@ use crate::ir::NodeId;
 use tracing::instrument;
 /// Stable reference to a node in the IR graph.
 pub trait IrAnchor: Send + Sync {
+    /// Graph node this finding is attached to.
     fn node_id(&self) -> NodeId;
 }
 

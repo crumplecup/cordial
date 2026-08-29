@@ -24,16 +24,21 @@ use crate::etiquettes::internal_error_chain::{
 /// Combined scan output for one crate (one parse + unified walk per file).
 #[derive(Debug, Clone, Default)]
 pub struct ErrorIrScanReport {
+    /// Error-site records from this crate.
     pub sites: Vec<ErrorSiteRecord>,
+    /// Error-chain records from this crate.
     #[cfg(feature = "error_chain")]
     pub chain: Vec<ErrorChainRecord>,
+    /// Type-relationship graph for this crate.
     #[cfg(feature = "internal_error_chain")]
     pub type_graph: InternalErrorTypeGraphReport,
+    /// Compliance findings for this crate.
     #[cfg(feature = "internal_error_chain")]
     pub compliance: Vec<InternalErrorComplianceFinding>,
 }
 
 impl ErrorIrScanReport {
+    /// Internal report.
     #[instrument(level = "trace", skip(self))]
     #[cfg(feature = "internal_error_chain")]
     pub fn internal_report(&self, crate_name: &str) -> InternalErrorChainScanReport {

@@ -9,12 +9,16 @@ pub enum TestStatus {
     /// `assert_proofs_non_empty::<T>()` call found (with matching type).
     Covered,
     /// Factory impl exists but only a concrete instantiation is tested.
-    CoveredConcrete { instantiation: String },
+    CoveredConcrete {
+        /// Concrete type argument the harness actually tests.
+        instantiation: String,
+    },
     /// No harness entry found.
     Missing,
 }
 
 impl TestStatus {
+    /// Stable string form of this value.
     #[instrument(level = "trace", skip(self))]
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -24,6 +28,7 @@ impl TestStatus {
         }
     }
 
+    /// Human-readable form, including the concrete instantiation when present.
     #[instrument(level = "debug", skip(self))]
     pub fn display(&self) -> String {
         match self {

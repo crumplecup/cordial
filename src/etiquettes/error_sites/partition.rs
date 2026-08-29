@@ -3,20 +3,32 @@
 use super::types::{ErrorOriginClass, ErrorSiteKind, ErrorSiteScanRow};
 
 use tracing::instrument;
+/// One error site after partitioning into local vs foreign.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PartitionedErrorSiteRow {
+    /// Cargo package name.
     pub crate_name: String,
+    /// Error-site kind (`?`, `map_err`, …).
     pub kind: ErrorSiteKind,
+    /// Qualified name or extra locator for this site.
     pub context: String,
+    /// Source file path, usually crate-relative.
     pub file: std::path::PathBuf,
+    /// Source line number (1-based), when known.
     pub line: u32,
+    /// Snippet of the originating expression.
     pub source_snippet: String,
+    /// Snippet of the conversion site.
     pub site_snippet: String,
+    /// Whether the error originates locally or from a foreign type.
     pub origin_class: ErrorOriginClass,
+    /// Extra classifier detail for the origin.
     pub origin_detail: String,
+    /// Why this site was partitioned this way.
     pub rationale: String,
 }
 
+/// Partition error site records.
 #[instrument(level = "debug", skip(records))]
 pub fn partition_error_site_records(
     records: &[ErrorSiteScanRow],
@@ -28,6 +40,7 @@ pub fn partition_error_site_records(
         .collect()
 }
 
+/// Partition error site row.
 #[instrument(level = "debug", skip(finding))]
 pub fn partition_error_site_row(
     finding: &ErrorSiteScanRow,

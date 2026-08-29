@@ -72,8 +72,19 @@ that is missing a declaration):
 
 Feature `crate_attrs = ["dep:toml"]` (manifest `[lib] path`), folded into
 `quality`. Artifacts: `crate-attrs.checklist.md`, `crate-attrs.csv`,
-`crate-attrs-summary.md`. No `--apply` (the fix is one line a human
-writes).
+`crate-attrs-summary.md`.
+
+`cordial quality --apply` writes the missing inner attributes onto each
+library root (same `[lib] path` / allow-list rules as the scanner).
+`--dry-run` logs without writing. Tracing `--apply` still consumes
+`tracing-instrument.checklist.md`; crate-attrs apply scans the tree and
+does not need a prior `quality` run.
+
+Turning on `#![warn(missing_docs)]` is the cheap half: every public item
+then needs rustdoc. This crate's library root now carries both inner
+attributes, and the public API is documented so `cargo check` is clean
+under that lint. The dogfood test in `tests/crate_attrs_etiquette.rs`
+asserts a clean scan of `cordial` itself.
 
 ## Status
 
@@ -82,4 +93,6 @@ writes).
 | Scan + `[lib] path` | done |
 | Config toggles + per-crate allow lists | done |
 | Checklist grouped by crate | done |
+| Apply | `cordial quality --apply` inserts the missing inner attributes |
+| Cordial dogfood | `src/lib.rs` has both attrs; public items documented |
 | Tests | `tests/crate_attrs_etiquette.rs` |

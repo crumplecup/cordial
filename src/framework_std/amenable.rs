@@ -15,9 +15,13 @@ use crate::framework_std::verifier_skip::VerifierSkipMap;
 /// Overall registration status for one std type row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AmenableStdStatus {
+    /// The item is fully satisfied.
     Complete,
+    /// Partial.
     Partial,
+    /// Expected item is absent.
     Missing,
+    /// The item is out of scope for this run.
     Skipped,
 }
 
@@ -58,17 +62,26 @@ pub struct AmenableStdEntry {
 /// Coverage report for amenable std registry vs std type inventory.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AmenableStdReport {
+    /// Crate that defined the foreign type.
     pub source_crate: String,
+    /// Crate that provides the impl under review.
     pub impl_crate: String,
+    /// Whether nightly-only items are in scope.
     pub include_nightly: bool,
+    /// Per-item coverage rows.
     pub entries: Vec<AmenableStdEntry>,
+    /// How many rows are complete.
     pub complete_count: usize,
+    /// How many rows are partial.
     pub partial_count: usize,
+    /// How many items are still missing.
     pub missing_count: usize,
+    /// How many rows were skipped.
     pub skipped_count: usize,
 }
 
 impl AmenableStdReport {
+    /// Covered items as a percentage of the inventory.
     #[instrument(level = "debug", skip(self))]
     pub fn coverage_pct(&self) -> f32 {
         let accountable = self.entries.len().saturating_sub(self.skipped_count);
@@ -248,6 +261,7 @@ pub fn amenable_gap_fields(entry: &AmenableStdEntry, impl_crate: &str) -> (Strin
     )
 }
 
+/// Resolve alias chain.
 #[instrument(level = "debug", skip(items))]
 pub fn resolve_alias_chain(items: &[StdInventoryItem], start: &str, max_hops: usize) -> String {
     let mut current = start.to_string();

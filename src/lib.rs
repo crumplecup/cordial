@@ -14,13 +14,16 @@
 //!
 //! Built-in plugins are feature-gated:
 //!
-//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `crate_attrs`, `glob_imports`, `inline_tests`, `verus_warnings`, `proof_patterns` — source-quality scanners
+//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `crate_attrs`, `doc_warnings`, `glob_imports`, `inline_tests`, `verus_warnings`, `proof_patterns` — source-quality scanners
 //!   (the `quality` umbrella is enabled by default)
 //! - `cli` — clap binary (`cordial`); enabled by default
 //! - `impl_coverage`, `trenchcoat`, `shadow` — rustdoc coverage scanners
 //! - `elicitation` — umbrella for all coverage plugins
 //! - `homecoming_std`, `amenable_std` — std-family coverage
 //! - `full` — every built-in plugin
+
+#![forbid(unsafe_code)]
+#![warn(missing_docs)]
 
 mod cache_digest;
 #[cfg(feature = "rustdoc")]
@@ -50,6 +53,7 @@ mod plugins;
 #[cfg(feature = "impl_coverage")]
 mod proof_harness;
 mod reporter;
+/// Rustdoc JSON inventory helpers used by coverage etiquettes.
 #[cfg(feature = "rustdoc")]
 pub mod rustdoc;
 #[cfg(feature = "rustdoc")]
@@ -91,13 +95,18 @@ pub use etiquettes::cli_layout::{
 };
 #[cfg(feature = "crate_attrs")]
 pub use etiquettes::crate_attrs::{
-    CRATE_ATTRS_ETIQUETTE, CrateAttrsRuleId, CrateAttrsSiteRecord, library_root_rs,
-    scan_crate_attrs,
+    CRATE_ATTRS_ETIQUETTE, CrateAttrsApplySummary, CrateAttrsRuleId, CrateAttrsSiteRecord,
+    library_root_rs, run_crate_attrs_apply, scan_crate_attrs,
 };
 #[cfg(feature = "derives")]
 pub use etiquettes::derives::{
     DERIVES_ETIQUETTE, DeriveRuleId, DeriveSiteRecord, PathInclusionFacts,
     scan_rust_source as scan_derives_rust_source, workspace_path_inclusions,
+};
+#[cfg(feature = "doc_warnings")]
+pub use etiquettes::doc_warnings::{
+    DOC_WARNINGS_ETIQUETTE, DocWarningRecord, DocWarningRuleId, parse_doc_compiler_output,
+    scan_crate_doc_warnings,
 };
 #[cfg(feature = "error_chain")]
 pub use etiquettes::error_chain::{
@@ -209,6 +218,7 @@ pub use digest::{
     feature = "visibility",
     feature = "cli_layout",
     feature = "crate_attrs",
+    feature = "doc_warnings",
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "verus_warnings",
@@ -285,9 +295,9 @@ pub use cargo_rustdoc::{
 };
 pub use config::{
     CfgHygieneThresholds, CfgScatterThresholds, CordialConfig, CrateAttrsThresholds,
-    DerivesThresholds, ModularityThresholds, TracingSubscriberPolicy, TracingThresholds,
-    VisibilityThresholds, load_cordial_config, load_derives_thresholds, load_session_config,
-    load_visibility_thresholds,
+    DerivesThresholds, DocWarningsThresholds, ModularityThresholds, TracingSubscriberPolicy,
+    TracingThresholds, VisibilityThresholds, load_cordial_config, load_derives_thresholds,
+    load_session_config, load_visibility_thresholds,
 };
 pub use exceptions::{
     AddExceptionOutcome, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,

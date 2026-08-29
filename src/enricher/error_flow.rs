@@ -19,7 +19,9 @@ use tracing::instrument;
 pub struct ErrorFlowEnricher;
 
 impl ErrorFlowEnricher {
+    /// Stable identifier for `ErrorFlowEnricher`.
     pub const ID: &'static str = "error-flow";
+    /// IR attribute key (`error_flow_origin`).
     pub const ATTR_ERROR_FLOW_ORIGIN: &'static str = "error_flow_origin";
 }
 

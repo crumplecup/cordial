@@ -7,11 +7,14 @@ use crate::error::CordialResult;
 /// Local store layout under `~/.cordial/{project}/`.
 #[derive(Debug, Clone)]
 pub struct StoreLayout {
+    /// Directory-name slug identifying this project in the store.
     pub project_slug: String,
+    /// Filesystem or graph root.
     pub root: PathBuf,
 }
 
 impl StoreLayout {
+    /// Construct a new value.
     #[instrument(level = "debug", skip(project_slug), ret)]
     pub fn new(project_slug: impl Into<String>) -> Self {
         let project_slug = project_slug.into();
@@ -19,6 +22,7 @@ impl StoreLayout {
         Self { project_slug, root }
     }
 
+    /// Build a store layout rooted at `root`.
     #[instrument(level = "debug", skip(root, project_slug), ret)]
     pub fn from_root(root: impl Into<PathBuf>, project_slug: impl Into<String>) -> Self {
         Self {
@@ -27,6 +31,7 @@ impl StoreLayout {
         }
     }
 
+    /// Create cache, findings, and exceptions directories if missing.
     #[instrument(level = "info", skip(self), err(level = "warn"))]
     pub fn ensure_dirs(&self) -> CordialResult<()> {
         std::fs::create_dir_all(self.cache_dir())?;
@@ -35,16 +40,19 @@ impl StoreLayout {
         Ok(())
     }
 
+    /// Directory for cached IR and rustdoc artifacts.
     #[instrument(level = "trace", skip(self))]
     pub fn cache_dir(&self) -> PathBuf {
         self.root.join("cache")
     }
 
+    /// Directory for generated reports.
     #[instrument(level = "trace", skip(self))]
     pub fn findings_dir(&self) -> PathBuf {
         self.root.join("findings")
     }
 
+    /// Directory for JSON patch exception files.
     #[instrument(level = "trace", skip(self))]
     pub fn exceptions_dir(&self) -> PathBuf {
         self.root.join("exceptions")
@@ -56,11 +64,13 @@ impl StoreLayout {
         self.root.join("config")
     }
 
+    /// Etiquette config path.
     #[instrument(level = "trace", skip(self))]
     pub fn etiquette_config_path(&self, etiquette_id: &str) -> PathBuf {
         self.config_dir().join(format!("{etiquette_id}.json"))
     }
 
+    /// Patches dir.
     #[instrument(level = "trace", skip(self))]
     pub fn patches_dir(&self) -> PathBuf {
         self.root.join("patches")
@@ -72,21 +82,25 @@ impl StoreLayout {
         self.root.join("quality").join("patches")
     }
 
+    /// Directory for rustdoc build artifacts.
     #[instrument(level = "trace", skip(self))]
     pub fn builds_dir(&self) -> PathBuf {
         self.cache_dir().join("builds")
     }
 
+    /// Directory for cached rustdoc JSON.
     #[instrument(level = "trace", skip(self))]
     pub fn rustdoc_cache_dir(&self) -> PathBuf {
         self.cache_dir().join("rustdoc")
     }
 
+    /// Path of the cached rustdoc build artifact for this crate.
     #[instrument(level = "trace", skip(self))]
     pub fn build_artifact_path(&self, crate_name: &str) -> PathBuf {
         self.builds_dir().join(format!("{crate_name}.build.json"))
     }
 
+    /// Path of cached rustdoc JSON for this crate.
     #[instrument(level = "trace", skip(self))]
     pub fn rustdoc_cache_path(&self, crate_name: &str) -> PathBuf {
         self.rustdoc_cache_dir().join(format!("{crate_name}.json"))
@@ -98,6 +112,7 @@ impl StoreLayout {
         format!("shadow-dep-{shadow_crate}-{upstream_crate}")
     }
 
+    /// Shadow dep rustdoc cache path.
     #[instrument(level = "trace", skip(self))]
     pub fn shadow_dep_rustdoc_cache_path(
         &self,
@@ -110,6 +125,7 @@ impl StoreLayout {
         ))
     }
 
+    /// Shadow dep build artifact path.
     #[instrument(level = "trace", skip(self))]
     pub fn shadow_dep_build_artifact_path(
         &self,
@@ -122,6 +138,7 @@ impl StoreLayout {
         ))
     }
 
+    /// Ir cache path.
     #[instrument(level = "trace", skip(self))]
     pub fn ir_cache_path(&self, crate_name: &str) -> PathBuf {
         crate::ir::CrateIr::cache_path(&self.cache_dir(), crate_name)
@@ -134,6 +151,7 @@ impl StoreLayout {
 /// here rather than in per-project stores.
 #[derive(Debug, Clone)]
 pub struct SysrootCache {
+    /// Filesystem or graph root.
     pub root: PathBuf,
 }
 
@@ -144,6 +162,7 @@ impl SysrootCache {
         Self::from_home(default_store_home())
     }
 
+    /// Place the sysroot cache under `{home}/sysroot`.
     #[instrument(level = "debug", skip(home), ret)]
     pub fn from_home(home: impl Into<PathBuf>) -> Self {
         Self {
@@ -151,11 +170,13 @@ impl SysrootCache {
         }
     }
 
+    /// Build a store layout rooted at `root`.
     #[instrument(level = "debug", skip(root), ret)]
     pub fn from_root(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
     }
 
+    /// Create cache, findings, and exceptions directories if missing.
     #[instrument(level = "info", skip(self), err(level = "warn"))]
     pub fn ensure_dirs(&self) -> CordialResult<()> {
         std::fs::create_dir_all(self.rustdoc_cache_dir())?;
@@ -163,31 +184,37 @@ impl SysrootCache {
         Ok(())
     }
 
+    /// Directory for cached IR and rustdoc artifacts.
     #[instrument(level = "trace", skip(self))]
     pub fn cache_dir(&self) -> PathBuf {
         self.root.join("cache")
     }
 
+    /// Directory for cached rustdoc JSON.
     #[instrument(level = "trace", skip(self))]
     pub fn rustdoc_cache_dir(&self) -> PathBuf {
         self.cache_dir().join("rustdoc")
     }
 
+    /// Directory for rustdoc build artifacts.
     #[instrument(level = "trace", skip(self))]
     pub fn builds_dir(&self) -> PathBuf {
         self.cache_dir().join("builds")
     }
 
+    /// Build target dir.
     #[instrument(level = "trace", skip(self))]
     pub fn build_target_dir(&self) -> PathBuf {
         self.cache_dir().join("target")
     }
 
+    /// Path of cached rustdoc JSON for this crate.
     #[instrument(level = "trace", skip(self))]
     pub fn rustdoc_cache_path(&self, crate_name: &str) -> PathBuf {
         self.rustdoc_cache_dir().join(format!("{crate_name}.json"))
     }
 
+    /// Path of the cached rustdoc build artifact for this crate.
     #[instrument(level = "trace", skip(self))]
     pub fn build_artifact_path(&self, crate_name: &str) -> PathBuf {
         self.builds_dir().join(format!("{crate_name}.build.json"))
@@ -201,6 +228,7 @@ impl Default for SysrootCache {
     }
 }
 
+/// Default store home.
 #[instrument(level = "debug")]
 pub fn default_store_home() -> PathBuf {
     std::env::var_os("CORDIAL_HOME")
@@ -209,6 +237,7 @@ pub fn default_store_home() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".cordial"))
 }
 
+/// Project slug from path.
 #[instrument(level = "debug")]
 pub fn project_slug_from_path(project_root: &Path) -> String {
     project_root

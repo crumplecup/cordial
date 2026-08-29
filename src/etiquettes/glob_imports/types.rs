@@ -17,6 +17,7 @@ pub enum GlobImportRuleId {
 }
 
 impl GlobImportRuleId {
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -24,6 +25,7 @@ impl GlobImportRuleId {
         }
     }
 
+    /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {

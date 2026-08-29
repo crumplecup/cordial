@@ -26,22 +26,37 @@ pub struct CordialError {
 /// Umbrella kind boxed by [`CordialError`].
 #[derive(Debug)]
 pub enum CordialErrorKind {
+    /// Filesystem I/O failed.
     Io(IoSource),
+    /// JSON serialization or deserialization failed.
     Json(JsonSource),
+    /// A JSON file failed to parse.
     JsonParse(JsonParseSource),
+    /// `cordial.toml` (or layered config) failed to load.
     Config(ConfigSource),
+    /// `syn` failed to parse a Rust file.
     SynParse(SynParseSource),
+    /// An internal invariant was violated.
     Invariant(InvariantSource),
+    /// No etiquette is registered under that id.
     UnknownEtiquette(UnknownEtiquetteSource),
+    /// `cargo metadata` failed.
     CargoMetadata(CargoMetadataSource),
+    /// Writing formatted text failed.
     Fmt(FmtSource),
+    /// A token stream failed to parse.
     TokenStreamParse(TokenStreamParseError),
+    /// A required path was missing.
     NotFound(NotFoundSource),
+    /// No exception file exists for that etiquette and crate.
     NoExceptions(NoExceptionsSource),
+    /// Cached IR was required but missing.
     NoCachedIr(NoCachedIrSource),
+    /// A path was not a prefix of another.
     Prefix(PrefixSource),
 }
 
+/// Result alias that uses [`CordialError`].
 pub type CordialResult<T> = Result<T, CordialError>;
 
 impl CordialError {
@@ -53,17 +68,20 @@ impl CordialError {
         }
     }
 
+    /// Borrowed error kind.
     #[instrument(level = "trace", skip(self))]
     pub fn kind(&self) -> &CordialErrorKind {
         &self.kind
     }
 
+    /// An internal invariant was violated.
     #[track_caller]
     #[instrument(level = "debug", skip(message))]
     pub fn invariant(message: impl Into<String>) -> Self {
         Self::from_kind(CordialErrorKind::Invariant(InvariantSource::new(message)))
     }
 
+    /// No etiquette is registered under this id.
     #[track_caller]
     #[instrument(level = "debug", skip(id))]
     pub fn unknown_etiquette(id: impl Into<String>) -> Self {
@@ -72,30 +90,35 @@ impl CordialError {
         ))
     }
 
+    /// `syn` failed to parse this source file.
     #[track_caller]
     #[instrument(level = "debug", skip(path, err))]
     pub fn syn_parse(path: impl Into<String>, err: syn::Error) -> Self {
         Self::from_kind(CordialErrorKind::SynParse(SynParseSource::new(path, err)))
     }
 
+    /// JSON failed to parse at this path.
     #[track_caller]
     #[instrument(level = "debug", skip(path, err))]
     pub fn json_parse(path: impl Into<String>, err: serde_json::Error) -> Self {
         Self::from_kind(CordialErrorKind::JsonParse(JsonParseSource::new(path, err)))
     }
 
+    /// Wrap a `cargo_metadata` failure.
     #[track_caller]
     #[instrument(level = "debug", skip(err))]
     pub fn cargo_metadata(err: cargo_metadata::Error) -> Self {
         Self::from(err)
     }
 
+    /// This path does not exist.
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
     pub fn not_found(path: PathBuf) -> Self {
         Self::from_kind(CordialErrorKind::NotFound(NotFoundSource::new(path)))
     }
 
+    /// No exception file exists for this etiquette and crate.
     #[track_caller]
     #[instrument(level = "debug", skip(etiquette, crate_name))]
     pub fn no_exceptions(etiquette: impl Into<String>, crate_name: impl Into<String>) -> Self {
@@ -104,6 +127,7 @@ impl CordialError {
         )))
     }
 
+    /// No cached IR artifact exists at this path.
     #[track_caller]
     #[instrument(level = "debug", skip(path))]
     pub fn no_cached_ir(path: PathBuf) -> Self {

@@ -10,7 +10,7 @@ use super::run::execute_build_rustdoc;
 use super::run::execute_build_sysroot;
 use super::run::{
     execute_add_coverage_skip, execute_add_exception, execute_backup_exceptions,
-    execute_load_exceptions, execute_run_plugins, execute_tracing_apply, export_surreal,
+    execute_load_exceptions, execute_quality_apply, execute_run_plugins, export_surreal,
     list_exceptions, show_exceptions, view_store_file,
 };
 #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
@@ -25,19 +25,22 @@ use crate::{
 use crate::{coverage_plugins_for_hub, discover_workspace_hub};
 use tracing::instrument;
 
+/// Top-level `cordial` subcommands.
 #[derive(Subcommand)]
 pub enum Commands {
     /// Run all built-in etiquettes (quality + coverage).
     Run,
-    /// Run source-quality etiquettes, or apply tracing instrument patches.
+    /// Run source-quality etiquettes, or apply mechanical patches.
     Quality {
-        /// Apply `#[instrument]` from the tracing checklist instead of running scanners.
+        /// Write tracing `#[instrument]` recipes and crate-root lint attributes.
         #[arg(long)]
         apply: bool,
-        /// Log tracing apply changes without writing source files.
+        /// Log apply changes without writing source files.
         #[arg(long)]
         dry_run: bool,
-        /// Checklist path for `--apply` (default: `{store}/findings/tracing-instrument.checklist.md`).
+        /// Tracing instrument checklist (default:
+        /// `{store}/findings/tracing-instrument.checklist.md`). Crate-attrs
+        /// apply scans library roots and does not use this path.
         #[arg(long)]
         checklist: Option<PathBuf>,
     },
@@ -51,17 +54,20 @@ pub enum Commands {
     },
     /// Inspect or manage JSON patch exception files.
     Exceptions {
+        /// Nested clap subcommand.
         #[command(subcommand)]
         command: ExceptionCommands,
     },
     /// Export cached IR for agent integration.
     Export {
+        /// Nested clap subcommand.
         #[command(subcommand)]
         command: ExportCommands,
     },
     /// Build rustdoc JSON and cache artifacts for coverage analysis.
     #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
     Build {
+        /// Nested clap subcommand.
         #[command(subcommand)]
         command: BuildCommands,
     },
@@ -183,10 +189,11 @@ impl Commands {
                 checklist,
             } => {
                 if apply {
-                    execute_tracing_apply(
+                    execute_quality_apply(
                         &ctx.project_root,
                         &ctx.store,
                         ctx.crate_name.as_deref(),
+                        ctx.store_home.clone(),
                         checklist.as_deref(),
                         dry_run,
                     )

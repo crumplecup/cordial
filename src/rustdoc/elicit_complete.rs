@@ -14,11 +14,14 @@ use tracing::instrument;
 /// Types with `impl ElicitComplete for T` in a hub crate rustdoc snapshot.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ElicitCompleteSet {
+    /// Concrete types that impl ElicitComplete.
     pub concrete: HashSet<String>,
+    /// Factory types whose product impls ElicitComplete.
     pub factory: HashSet<String>,
 }
 
 impl ElicitCompleteSet {
+    /// Contains path.
     #[instrument(level = "trace", skip(self, path))]
     pub fn contains_path(&self, path: &str) -> bool {
         self.concrete.contains(path) || self.factory.contains(path)
@@ -35,6 +38,7 @@ pub fn collect_elicit_complete_paths(
     Ok(collect_elicit_complete_from_inventory(&inventory))
 }
 
+/// Collect types that impl `ElicitComplete` (concrete vs factory) from an inventory.
 #[instrument(level = "debug", skip(inventory))]
 pub fn collect_elicit_complete_from_inventory(inventory: &RustdocInventory) -> ElicitCompleteSet {
     let local_crate_name = inventory.crate_name.replace('-', "_");

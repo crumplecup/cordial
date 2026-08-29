@@ -57,6 +57,7 @@ pub fn scan_crate_trees(crate_root: &Path) -> CordialResult<Vec<AntipatternSiteR
     Ok(findings)
 }
 
+/// Scan one Rust source file and return records.
 #[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,

@@ -11,12 +11,14 @@ use crate::store::StoreLayout;
 /// One intentionally-excepted type, scoped to the verifiers it applies to.
 #[derive(Debug, Clone)]
 pub struct VerifierSkipEntry {
+    /// Human-readable explanation.
     pub reason: String,
     /// `None` means every verifier is excepted (whole-row skip).
     pub verifiers: Option<HashSet<String>>,
 }
 
 impl VerifierSkipEntry {
+    /// Covers.
     #[instrument(level = "debug", skip(self))]
     pub fn covers(&self, verifier: &str) -> bool {
         match &self.verifiers {
@@ -26,6 +28,7 @@ impl VerifierSkipEntry {
     }
 }
 
+/// Per-verifier skip map.
 pub type VerifierSkipMap = HashMap<String, VerifierSkipEntry>;
 
 #[derive(Debug, Clone, Deserialize)]

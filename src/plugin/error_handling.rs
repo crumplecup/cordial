@@ -12,10 +12,12 @@ use tracing::instrument;
 /// One crate in scope for error-flow analysis.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ErrorScope {
+    /// Cargo package name.
     pub crate_name: String,
 }
 
 impl ErrorScope {
+    /// Error-analysis scope for a workspace member crate.
     #[instrument(level = "debug", skip(crate_name))]
     pub fn workspace_member(crate_name: impl Into<String>) -> Self {
         Self {
@@ -29,14 +31,20 @@ impl ErrorScope {
 pub struct ErrorHandlingLayers {
     /// Abort sites (`panic!`, `unwrap`, `expect`, `unreachable!`).
     pub panics: bool,
+    /// Error-site scanning (`?`, `map_err`, …).
     pub sites: bool,
+    /// Error-chain / `source()` preservation scanning.
     pub chain: bool,
+    /// Library code should return a crate error type, not panic.
     pub internal: bool,
+    /// Keep foreign error types in the `source()` chain.
     pub foreign_types: bool,
+    /// Do not stringify or discard typed errors.
     pub attenuation: bool,
 }
 
 impl ErrorHandlingLayers {
+    /// Fully enabled error-handling policy.
     pub const FULL: Self = Self {
         panics: true,
         sites: true,
@@ -46,6 +54,7 @@ impl ErrorHandlingLayers {
         attenuation: true,
     };
 
+    /// Any enabled.
     #[instrument(level = "debug", skip(self))]
     pub fn any_enabled(self) -> bool {
         self.panics
@@ -69,6 +78,7 @@ pub enum ErrorSurface {
 }
 
 impl ErrorSurface {
+    /// Classify a source path as library, binary, or test.
     #[instrument(level = "debug", skip(path), ret)]
     pub fn from_path(path: &Path) -> Self {
         let components: Vec<&str> = path
@@ -93,6 +103,7 @@ impl ErrorSurface {
         Self::Library
     }
 
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -130,11 +141,13 @@ impl std::fmt::Display for ErrorSurface {
 
 /// Profile policy: which layers run and how findings are classified.
 pub trait ErrorHandlingPolicy: Send + Sync {
+    /// Layers.
     fn layers(&self) -> ErrorHandlingLayers;
 }
 
 /// Discovers crate scopes for an error-handling run (default: workspace members).
 pub trait ErrorScopeProvider: Send + Sync {
+    /// Error scopes.
     fn error_scopes(
         &self,
         session: &dyn SessionView,
@@ -174,9 +187,12 @@ impl ErrorHandlingPolicy for StandardErrorHandlingPolicy {
 
 /// Semantic supertrait: error flow analysis over workspace source IR.
 pub trait ErrorHandling: Plugin {
+    /// Scope provider.
     fn scope_provider(&self) -> &dyn ErrorScopeProvider;
+    /// Policy.
     fn policy(&self) -> &dyn ErrorHandlingPolicy;
 
+    /// Scopes.
     fn scopes(
         &self,
         session: &dyn SessionView,
@@ -185,6 +201,7 @@ pub trait ErrorHandling: Plugin {
         self.scope_provider().error_scopes(session, filter)
     }
 
+    /// Etiquette / lint category this rule belongs to.
     fn category(&self) -> PluginCategory {
         PluginCategory::ErrorHandling
     }

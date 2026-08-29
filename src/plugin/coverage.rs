@@ -13,21 +13,29 @@ use tracing::instrument;
 /// Which library a coverage target represents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoverageTargetKind {
+    /// A member of the analyzed workspace.
     WorkspaceMember,
+    /// Upstream Dep.
     UpstreamDep,
+    /// Shadow Pair.
     ShadowPair,
+    /// Std Inventory.
     StdInventory,
 }
 
 /// One built-inventory scope in a coverage run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoverageTarget {
+    /// Kind of coverage inventory this target represents.
     pub kind: CoverageTargetKind,
+    /// Cargo package name.
     pub crate_name: String,
+    /// Shadow crate that should mirror the target.
     pub shadow_crate: Option<String>,
 }
 
 impl CoverageTarget {
+    /// Coverage target for a workspace member crate.
     #[instrument(level = "debug", skip(crate_name))]
     pub fn workspace_member(crate_name: impl Into<String>) -> Self {
         Self {
@@ -37,6 +45,7 @@ impl CoverageTarget {
         }
     }
 
+    /// Coverage target for an upstream dependency crate.
     #[instrument(level = "debug", skip(crate_name))]
     pub fn upstream_dep(crate_name: impl Into<String>) -> Self {
         Self {
@@ -46,6 +55,7 @@ impl CoverageTarget {
         }
     }
 
+    /// Coverage target pairing an upstream crate with its shadow.
     #[instrument(level = "debug", skip(upstream, shadow))]
     pub fn shadow_pair(upstream: impl Into<String>, shadow: impl Into<String>) -> Self {
         Self {
@@ -55,6 +65,7 @@ impl CoverageTarget {
         }
     }
 
+    /// Whether this target includes `crate_name` as member, upstream, or shadow.
     #[instrument(level = "trace", skip(self))]
     pub fn matches_crate_filter(&self, crate_name: &str) -> bool {
         self.crate_name == crate_name || self.shadow_crate.as_deref() == Some(crate_name)
@@ -81,7 +92,9 @@ impl CoverageTarget {
 
 /// What impls count as covered for a coverage profile.
 pub trait TraitRequirement: Send + Sync {
+    /// Composite trait.
     fn composite_trait(&self) -> Option<&str>;
+    /// Supertraits.
     fn supertraits(&self) -> &[&str];
 }
 
@@ -104,11 +117,14 @@ impl TraitRequirement for ElicitCompleteRequirement {
 /// Inputs for gap classification.
 #[derive(Debug, Clone)]
 pub struct GapContext {
+    /// Qualified type path.
     pub type_path: String,
+    /// ElicitComplete prerequisite trait flags.
     pub prereqs: TraitPrereqs,
 }
 
 impl GapContext {
+    /// Gap kind.
     #[instrument(level = "trace", skip(self))]
     #[cfg(feature = "impl_coverage")]
     pub fn gap_kind(&self) -> Option<ImplGapKind> {
@@ -118,6 +134,7 @@ impl GapContext {
 
 /// Discovers [`CoverageTarget`] rows for a profile.
 pub trait TargetProvider: Send + Sync {
+    /// Coverage targets.
     fn coverage_targets(
         &self,
         session: &dyn SessionView,
@@ -146,9 +163,12 @@ impl TargetProvider for WorkspaceMembersTargetProvider {
 
 /// Semantic supertrait: trait-impl coverage over a target library.
 pub trait Coverage: Plugin {
+    /// Target provider.
     fn target_provider(&self) -> &dyn TargetProvider;
+    /// Trait requirement.
     fn trait_requirement(&self) -> &dyn TraitRequirement;
 
+    /// Targets.
     fn targets(
         &self,
         session: &dyn SessionView,
@@ -157,15 +177,18 @@ pub trait Coverage: Plugin {
         self.target_provider().coverage_targets(session, filter)
     }
 
+    /// Classify gap.
     #[cfg(feature = "impl_coverage")]
     fn classify_gap(&self, ctx: &GapContext) -> Option<ImplGapKind> {
         classify_elicit_complete_gap(&ctx.prereqs)
     }
+    /// Etiquette / lint category this rule belongs to.
     fn category(&self) -> PluginCategory {
         PluginCategory::Coverage
     }
 }
 
+/// Classify elicit complete gap.
 #[instrument(level = "debug", skip(prereqs))]
 #[cfg(feature = "impl_coverage")]
 pub fn classify_elicit_complete_gap(prereqs: &TraitPrereqs) -> Option<ImplGapKind> {

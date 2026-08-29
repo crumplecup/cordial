@@ -21,6 +21,7 @@ pub enum CliLayoutId {
 }
 
 impl CliLayoutId {
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -41,11 +42,17 @@ impl Display for CliLayoutId {
 /// One CLI-layout scan row (crate-level, before IR).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CliLayoutRecord {
+    /// Cargo package name.
     pub crate_name: String,
+    /// Stable probe rule identifier.
     pub rule_id: CliLayoutId,
+    /// Qualified name or extra locator for this site.
     pub context: String,
+    /// Source file path, usually crate-relative.
     pub file: PathBuf,
+    /// Source line number (1-based), when known.
     pub line: u32,
+    /// Source snippet captured at the site.
     pub snippet: String,
 }
 

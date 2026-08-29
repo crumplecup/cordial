@@ -13,6 +13,7 @@ use super::types::{GlobImportRuleId, GlobImportSiteRecord};
 
 use tracing::instrument;
 
+/// Scan one crate for glob imports.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_glob_imports(crate_root: &Path) -> CordialResult<Vec<GlobImportSiteRecord>> {
     let mut findings = Vec::new();
@@ -59,6 +60,7 @@ pub fn scan_source_tree(
     Ok(findings)
 }
 
+/// Scan one Rust source file and return records.
 #[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,

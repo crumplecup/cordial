@@ -10,6 +10,7 @@ use tracing::instrument;
 pub struct RollupReporter;
 
 impl RollupReporter {
+    /// Stable identifier for `RollupReporter`.
     pub const ID: &'static str = "rollup";
 }
 

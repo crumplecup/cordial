@@ -230,7 +230,7 @@ pub fn coverage_only_plugins() -> Vec<&'static dyn Plugin> {
 /// Static quality plugins wrapping each enabled etiquette.
 #[instrument(level = "debug")]
 fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
-    let items: [Option<&'static EtiquettePlugin>; 14] = [
+    let items: [Option<&'static EtiquettePlugin>; 15] = [
         #[cfg(feature = "tracing")]
         Some(tracing_plugin()),
         #[cfg(not(feature = "tracing"))]
@@ -270,6 +270,10 @@ fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
         #[cfg(feature = "crate_attrs")]
         Some(crate_attrs_plugin()),
         #[cfg(not(feature = "crate_attrs"))]
+        None,
+        #[cfg(feature = "doc_warnings")]
+        Some(doc_warnings_plugin()),
+        #[cfg(not(feature = "doc_warnings"))]
         None,
         #[cfg(feature = "glob_imports")]
         Some(glob_imports_plugin()),
@@ -346,6 +350,11 @@ etiquette_plugin_fn!(
 etiquette_plugin_fn!(
     crate_attrs_plugin,
     &crate::etiquettes::crate_attrs::CRATE_ATTRS_ETIQUETTE
+);
+#[cfg(feature = "doc_warnings")]
+etiquette_plugin_fn!(
+    doc_warnings_plugin,
+    &crate::etiquettes::doc_warnings::DOC_WARNINGS_ETIQUETTE
 );
 #[cfg(feature = "glob_imports")]
 etiquette_plugin_fn!(

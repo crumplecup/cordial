@@ -10,10 +10,14 @@ use tracing::instrument;
 pub struct FeatureProbeEnricher;
 
 impl FeatureProbeEnricher {
+    /// Stable identifier for `FeatureProbeEnricher`.
     pub const ID: &'static str = "feature-probe";
 
+    /// IR attribute key (`crate`).
     pub const ATTR_CRATE: &'static str = "feature_probe_crate";
+    /// IR attribute key (`candidate_features`).
     pub const ATTR_CANDIDATE_FEATURES: &'static str = "feature_probe_candidate_unlock_features";
+    /// IR attribute key (`probed_prereqs`).
     pub const ATTR_PROBED_PREREQS: &'static str = "feature_probe_probed_prereqs";
 }
 

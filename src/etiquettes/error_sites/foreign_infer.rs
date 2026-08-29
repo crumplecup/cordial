@@ -6,7 +6,9 @@ use tracing::instrument;
 /// Confidence tier for inferred foreign error types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ForeignTypeConfidence {
+    /// High confidence or severity.
     High,
+    /// Medium confidence or severity.
     Medium,
 }
 

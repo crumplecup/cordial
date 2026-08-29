@@ -13,6 +13,7 @@ Active implementation plans for `cordial`.
 | [One crate, CLI in the library](docs/planning/one-crate-cli-layout.md) | **Active** | One `CordialError`; `cli_layout` etiquette; clap dispatch in the library |
 | [cfg_scatter etiquette](docs/planning/cfg-scatter-etiquette.md) | **Active** | Static lint for `#[cfg(feature = "...")]` scattered across item kinds vs. mod-gated |
 | [Crate attributes](docs/planning/crate-attrs-etiquette.md) | **Active** | `#![forbid(unsafe_code)]` and `#![warn(missing_docs)]` on each library root |
+| [Doc warnings](docs/planning/doc-warnings-etiquette.md) | **Active** | Post-process `cargo doc`; rustc/clippy never see `rustdoc::*` diagnostics |
 | [Custom plugin example](docs/planning/custom-plugin-example.md) | **Active** | Downstream templates: `StaticPlugin`, `Coverage`, `ErrorHandling` |
 | [Derive patterns etiquette](docs/planning/derives-etiquette.md) | **Active** | `derive_*` vs hand-rolled accessors; constructor arity → builder |
 | [Visibility etiquette](docs/planning/visibility-etiquette.md) | **Active** | `pub mod` paths must earn their existence; `prefer_root` vs branching peel |

@@ -10,20 +10,26 @@ pub use source::{SourceFile, SourceLoadView, SourceLoader};
 
 /// Opaque bundle produced by a loader.
 pub trait LoadView: Send + Sync {
+    /// Loader id.
     fn loader_id(&self) -> &str;
+    /// Package name this IR belongs to.
     fn crate_name(&self) -> &str;
+    /// As any.
     fn as_any(&self) -> &dyn std::any::Any;
 }
 
 /// Target workspace member to analyze.
 #[derive(Debug, Clone, derive_new::new)]
 pub struct CrateTarget {
+    /// Cargo package name.
     #[new(into)]
     pub crate_name: String,
+    /// Filesystem path of the crate root.
     #[new(into)]
     pub crate_root: PathBuf,
 }
 
+/// Map a file under `src/` to its module path segments.
 #[instrument(level = "debug", skip(file))]
 pub fn module_path_from_src_file(src_root: &Path, file: &Path) -> Vec<String> {
     let Ok(rel) = file.strip_prefix(src_root) else {

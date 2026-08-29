@@ -13,18 +13,25 @@ use crate::ir::{EdgeKind, EdgeWeight, IrIndexes, NodeId, NodeKind, NodeWeight};
 /// Serializable snapshot of a crate graph for cache read/write.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CrateIrSnapshot {
+    /// Cargo package name.
     pub crate_name: String,
+    /// Filesystem or graph root.
     pub root: NodeId,
+    /// Graph nodes in this export.
     pub nodes: Vec<NodeWeight>,
+    /// Directed edges in this graph or export.
     pub edges: Vec<(u32, u32, EdgeWeight)>,
+    /// Path and kind indexes for this snapshot.
     pub indexes: IrIndexes,
 }
 
 /// One crate's append-only IR graph.
 #[derive(Debug, Clone, derive_getters::Getters)]
 pub struct CrateIr {
+    /// Cargo package name.
     #[getter(skip)]
     pub crate_name: String,
+    /// Filesystem or graph root.
     #[getter(skip)]
     pub root: NodeId,
     graph: StableDiGraph<NodeWeight, EdgeWeight>,
@@ -32,6 +39,7 @@ pub struct CrateIr {
 }
 
 impl CrateIr {
+    /// Construct a new value.
     #[instrument(level = "debug", skip(crate_name), ret)]
     pub fn new(crate_name: impl Into<String>) -> Self {
         let crate_name = crate_name.into();
@@ -47,11 +55,13 @@ impl CrateIr {
         }
     }
 
+    /// Node weight.
     #[instrument(level = "trace", skip(self, id))]
     pub fn node_weight(&self, id: NodeId) -> Option<&NodeWeight> {
         self.graph.node_weight(id.to_index())
     }
 
+    /// Insert a node and return its id.
     #[instrument(level = "debug", skip(self, weight))]
     pub fn insert_node(&mut self, weight: NodeWeight) -> NodeId {
         let index = self.graph.add_node(weight);
@@ -62,6 +72,7 @@ impl CrateIr {
         id
     }
 
+    /// Insert a directed edge of `kind`.
     #[instrument(level = "debug", skip(self, from, to, kind), err(level = "warn"))]
     pub fn insert_edge(&mut self, from: NodeId, to: NodeId, kind: EdgeKind) -> CordialResult<()> {
         if self.graph.node_weight(from.to_index()).is_none()
@@ -74,6 +85,7 @@ impl CrateIr {
         Ok(())
     }
 
+    /// Set a JSON attribute on a node.
     #[instrument(level = "trace", skip(self, node, value), err(level = "warn"))]
     pub fn set_attr(
         &mut self,
@@ -92,11 +104,13 @@ impl CrateIr {
         Ok(())
     }
 
+    /// Rebuild the path → node index after structural edits.
     #[instrument(level = "debug", skip(self))]
     pub fn rebuild_path_index(&mut self) {
         self.indexes.rebuild_by_path(&self.graph);
     }
 
+    /// Neighbors.
     #[instrument(level = "debug", skip(self, node, kind, direction))]
     pub fn neighbors(
         &self,
@@ -118,6 +132,7 @@ impl CrateIr {
             .collect()
     }
 
+    /// Snapshot.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
     pub fn snapshot(&self) -> CordialResult<CrateIrSnapshot> {
         Ok(CrateIrSnapshot {
@@ -142,6 +157,7 @@ impl CrateIr {
         })
     }
 
+    /// Rebuild from a serialized snapshot.
     #[instrument(level = "debug", skip(snapshot), err(level = "warn"))]
     pub fn from_snapshot(snapshot: CrateIrSnapshot) -> CordialResult<Self> {
         let mut graph = StableDiGraph::new();
@@ -172,6 +188,7 @@ impl CrateIr {
         })
     }
 
+    /// Write cache.
     #[instrument(level = "info", skip(self, path), err(level = "warn"))]
     pub fn write_cache(&self, path: &Path) -> CordialResult<()> {
         if let Some(parent) = path.parent() {
@@ -183,6 +200,7 @@ impl CrateIr {
         Ok(())
     }
 
+    /// Read cache.
     #[instrument(level = "info", skip(path), err(level = "warn"))]
     pub fn read_cache(path: &Path) -> CordialResult<Self> {
         let json = fs::read_to_string(path)?;
@@ -190,6 +208,7 @@ impl CrateIr {
         Self::from_snapshot(snapshot)
     }
 
+    /// Store path for this digest file.
     #[instrument(level = "debug")]
     pub fn cache_path(cache_dir: &Path, crate_name: &str) -> PathBuf {
         cache_dir.join(format!("{crate_name}.ir.json"))

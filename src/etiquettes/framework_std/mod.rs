@@ -74,6 +74,7 @@ mod amenable_etiquette {
     static AMENABLE_PROBES: &[&'static dyn crate::Probe] = &[&AMENABLE_STD_PROBE];
     static AMENABLE_ASSESSORS: &[&'static dyn crate::Assessor] = &[&AMENABLE_STD_ASSESSOR];
 
+    /// `AMENABLE_STD_ETIQUETTE`.
     pub static AMENABLE_STD_ETIQUETTE: StaticEtiquette = StaticEtiquette {
         id: "amenable-std",
         name: "Amenable std coverage",

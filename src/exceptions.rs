@@ -34,16 +34,19 @@ pub struct ExceptionSet {
 }
 
 impl ExceptionSet {
+    /// Build a set from these entries.
     #[instrument(level = "debug", skip(entries), ret)]
     pub fn from_entries(entries: Vec<ExceptionEntry>) -> Self {
         Self { entries }
     }
 
+    /// Whether this set has no entries.
     #[instrument(level = "trace", skip(self))]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
+    /// Reason of the first entry that matches this finding, if any.
     #[instrument(level = "trace", skip(self, finding))]
     pub fn match_reason(&self, finding: &dyn Finding) -> Option<&str> {
         self.entries
@@ -54,6 +57,7 @@ impl ExceptionSet {
 }
 
 impl ExceptionEntry {
+    /// Construct a new value.
     #[instrument(level = "debug", skip(file, reason), ret)]
     pub fn new(file: impl Into<String>, reason: impl Into<String>) -> Self {
         Self {
@@ -65,6 +69,7 @@ impl ExceptionEntry {
         }
     }
 
+    /// Return a copy with `line` set.
     #[instrument(level = "debug", skip(self), ret)]
     pub fn with_line(self, line: u32) -> Self {
         Self {
@@ -73,6 +78,7 @@ impl ExceptionEntry {
         }
     }
 
+    /// Return a copy with `rule_id` set.
     #[instrument(level = "debug", skip(self, rule_id), ret)]
     pub fn with_rule_id(self, rule_id: impl Into<String>) -> Self {
         Self {
@@ -81,6 +87,7 @@ impl ExceptionEntry {
         }
     }
 
+    /// Return a copy with `context` set.
     #[instrument(level = "debug", skip(self, context), ret)]
     pub fn with_context(self, context: impl Into<String>) -> Self {
         Self {
@@ -223,6 +230,7 @@ pub struct CoverageSkipEntry {
 }
 
 impl CoverageSkipEntry {
+    /// Construct a new value.
     #[instrument(level = "debug", skip(path, reason), ret)]
     pub fn new(path: impl Into<String>, reason: impl Into<String>) -> Self {
         Self {
@@ -236,12 +244,19 @@ impl CoverageSkipEntry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AddExceptionOutcome {
     /// The row was written to `path`.
-    Inserted { path: PathBuf },
+    Inserted {
+        /// Store file that received the new row.
+        path: PathBuf,
+    },
     /// An identical row was already present at `path`.
-    AlreadyPresent { path: PathBuf },
+    AlreadyPresent {
+        /// Store file that already contained the row.
+        path: PathBuf,
+    },
 }
 
 impl AddExceptionOutcome {
+    /// Store file this outcome refers to.
     #[instrument(level = "trace", skip(self))]
     pub fn path(&self) -> &Path {
         match self {
@@ -249,6 +264,7 @@ impl AddExceptionOutcome {
         }
     }
 
+    /// Inserted.
     #[instrument(level = "trace", skip(self))]
     pub fn inserted(&self) -> bool {
         matches!(self, Self::Inserted { .. })

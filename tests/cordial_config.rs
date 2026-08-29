@@ -236,3 +236,32 @@ allow_missing_docs = ["legacy"]
     assert_eq!(crate_attrs.allow_missing_docs(), &["legacy".to_string()]);
     Ok(())
 }
+
+#[test]
+fn doc_warnings_toml_overrides_default() -> miette::Result<()> {
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store home")?;
+    fs::write(
+        workspace.path().join("cordial.toml"),
+        r#"
+[doc_warnings]
+document_private_items = true
+all_features = true
+skip_crates = ["proc_helper"]
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("workspace config")?;
+
+    let loaded = load_cordial_config(workspace.path(), store_home.path());
+    let doc_warnings = loaded.doc_warnings();
+    assert!(doc_warnings.document_private_items());
+    assert!(doc_warnings.all_features());
+    assert_eq!(doc_warnings.skip_crates(), &["proc_helper".to_string()]);
+    Ok(())
+}

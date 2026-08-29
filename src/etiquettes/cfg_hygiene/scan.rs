@@ -39,6 +39,7 @@ pub struct CfgNameOccurrence {
     pub snippet: String,
 }
 
+/// Scan one Rust source file and return records.
 #[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,

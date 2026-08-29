@@ -21,6 +21,7 @@ pub struct ProofHarness {
 }
 
 impl ProofHarness {
+    /// Merge another value into this one.
     #[instrument(level = "debug", skip(self, other))]
     pub fn merge(&mut self, other: ProofHarness) {
         self.non_empty_types.extend(other.non_empty_types);

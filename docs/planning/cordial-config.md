@@ -47,6 +47,11 @@ min_occurrences = 5
 # allow_unsafe = ["ffi"]
 # allow_missing_docs = []
 
+[doc_warnings]
+# document_private_items = false
+# all_features = false
+# skip_crates = []
+
 [derives]
 max_constructor_args = 3
 min_fluent_setters = 2
@@ -82,6 +87,7 @@ types-per-file, module-size 2σ, lower-tail ignore, hotspot diagnosis, and
 hierarchy lints: top-heavy, lopsided, unary-nest collapse), cfg_scatter,
 derives (`max_constructor_args`, `min_fluent_setters`), tracing
 (`extra_skip`, `apply_gate_crates`, `apply_skip_crates`, nested
-`[tracing.subscriber]`), and crate_attrs (`forbid_unsafe`, `missing_docs`,
-`allow_unsafe`, `allow_missing_docs`) read through `load_session_config`. Role→level
-maps stay in code.
+`[tracing.subscriber]`), crate_attrs (`forbid_unsafe`, `missing_docs`,
+`allow_unsafe`, `allow_missing_docs`), and doc_warnings
+(`document_private_items`, `all_features`, `skip_crates`) read through
+`load_session_config`. Role→level maps stay in code.

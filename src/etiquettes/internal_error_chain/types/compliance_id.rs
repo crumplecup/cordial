@@ -6,7 +6,9 @@ use tracing::instrument;
 /// Non-compliant error-handling pattern (call site or source-wrapper shape).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum InternalErrorComplianceId {
+    /// `ERROR-CHAIN-COMPLIANCE-STRINGIFY-001`.
     StringifyForeign001,
+    /// `ERROR-CHAIN-COMPLIANCE-DISCARD-TYPED-001`.
     DiscardTyped001,
     /// Foreign-source wrapper missing `source` and/or owned `file`+`line`.
     SourceShape001,
@@ -23,6 +25,7 @@ pub enum InternalErrorComplianceId {
 }
 
 impl InternalErrorComplianceId {
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -37,6 +40,7 @@ impl InternalErrorComplianceId {
         }
     }
 
+    /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {

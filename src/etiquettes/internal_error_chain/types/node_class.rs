@@ -6,13 +6,18 @@ use tracing::instrument;
 /// Classification of one node in the crate error type graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum InternalErrorNodeClass {
+    /// `ERROR-CHAIN-INTERNAL-LEAF`.
     InternalLeaf,
+    /// `ERROR-CHAIN-INTERNAL-LINK`.
     InternalLink,
+    /// `ERROR-CHAIN-FOREIGN-BRIDGE`.
     ForeignBridge,
+    /// `ERROR-CHAIN-INTERNAL-UMBRELLA`.
     UmbrellaWrapper,
 }
 
 impl InternalErrorNodeClass {
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -23,6 +28,7 @@ impl InternalErrorNodeClass {
         }
     }
 
+    /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {

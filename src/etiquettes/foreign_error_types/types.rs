@@ -13,30 +13,45 @@ use tracing::instrument;
 /// Partitioned findings for one crate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ErrorSitePartitionReport {
+    /// Cargo package name.
     pub crate_name: String,
+    /// Findings produced by assessors in this session.
     pub findings: Vec<PartitionedErrorSiteRow>,
 }
 
 /// One site with an inferred std / third-party error type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForeignErrorTypeRecord {
+    /// Cargo package name.
     pub crate_name: String,
+    /// Foreign error type named at this site.
     pub foreign_error_type: String,
+    /// Stable probe rule identifier.
     pub rule_id: String,
+    /// How confidently this site was classified as a foreign type.
     pub confidence: ForeignTypeConfidence,
+    /// Whether this site drops the `source()` chain.
     pub chain_break: bool,
+    /// Error-site kind (`?`, `map_err`, …).
     pub kind: ErrorSiteKind,
+    /// Qualified name or extra locator for this site.
     pub context: String,
+    /// Source file path, usually crate-relative.
     pub file: PathBuf,
+    /// Source line number (1-based), when known.
     pub line: u32,
+    /// Snippet of the originating expression.
     pub source_snippet: String,
+    /// Snippet of the conversion site.
     pub site_snippet: String,
 }
 
 /// Inferred foreign error types for one crate.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForeignErrorTypeReport {
+    /// Cargo package name.
     pub crate_name: String,
+    /// Findings produced by assessors in this session.
     pub findings: Vec<ForeignErrorTypeRecord>,
 }
 
@@ -51,11 +66,15 @@ pub struct ForeignErrorTypeSummaryRow {
 /// Workspace rollup for inferred foreign error types.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkspaceForeignErrorTypeSummary {
+    /// How many sites were inferred rather than annotated.
     pub inferred_sites: usize,
+    /// Places the `source()` chain is dropped.
     pub chain_breaks: usize,
+    /// Type names collected for this row.
     pub types: Vec<ForeignErrorTypeSummaryRow>,
 }
 
+/// Build workspace foreign error type summary.
 #[instrument(level = "debug", skip(reports))]
 pub fn build_workspace_foreign_error_type_summary(
     reports: &[ForeignErrorTypeReport],

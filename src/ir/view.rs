@@ -8,20 +8,31 @@ use super::query::Query;
 
 /// Read-only view over a crate IR graph.
 pub trait IrView {
+    /// Package name this IR belongs to.
     fn crate_name(&self) -> &str;
+    /// Root node of this graph.
     fn root(&self) -> CordialResult<NodeId>;
+    /// Borrow the node with this id, if it exists.
     fn node(&self, id: NodeId) -> Option<NodeRef<'_>>;
+    /// Nodes whose weights match `query`.
     fn nodes_matching(&self, query: &dyn Query) -> Vec<NodeRef<'_>>;
+    /// Parent node ids along edges of `kind`.
     fn parents(&self, id: NodeId, kind: EdgeKind) -> Vec<NodeId>;
+    /// Child node ids along edges of `kind`.
     fn children(&self, id: NodeId, kind: EdgeKind) -> Vec<NodeId>;
+    /// Node id for a `foo::bar` path, if indexed.
     fn node_by_path(&self, path: &str) -> Option<NodeId>;
 }
 
 /// Mutable view for enrichers.
 pub trait IrMut: IrView {
+    /// Insert a node and return its id.
     fn insert_node(&mut self, weight: NodeWeight) -> CordialResult<NodeId>;
+    /// Insert a directed edge of `kind`.
     fn insert_edge(&mut self, from: NodeId, to: NodeId, kind: EdgeKind) -> CordialResult<()>;
+    /// Set a JSON attribute on a node.
     fn set_attr(&mut self, node: NodeId, key: &str, value: serde_json::Value) -> CordialResult<()>;
+    /// Rebuild the path → node index after structural edits.
     fn rebuild_path_index(&mut self) -> CordialResult<()>;
 
     /// Workspace-level wrapper coverage from the elicitation hub IR.
@@ -51,8 +62,11 @@ impl<'a> NodeRef<'a> {
 
 /// Trait alias for node-level read API used by probes.
 pub trait NodeView {
+    /// Stable identifier for this hook.
     fn id(&self) -> NodeId;
+    /// Borrowed error kind.
     fn kind(&self) -> &NodeKind;
+    /// Latest attribute value stored under `key`.
     fn attr(&self, key: &str) -> Option<&serde_json::Value>;
 }
 

@@ -15,6 +15,7 @@ use tracing::instrument;
 pub struct SynDocLinkEnricher;
 
 impl SynDocLinkEnricher {
+    /// Stable identifier for `SynDocLinkEnricher`.
     pub const ID: &'static str = "syn-doc-link";
 }
 
@@ -97,6 +98,7 @@ pub fn syn_doc_peer(node: &dyn NodeView) -> Option<crate::ir::NodeId> {
     Some(id)
 }
 
+/// Inventory link key.
 #[instrument(level = "debug", skip(path))]
 pub fn inventory_link_key(path: &str, crate_name: &str) -> String {
     let normalized = crate_name.replace('-', "_");

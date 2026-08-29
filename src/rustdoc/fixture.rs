@@ -12,6 +12,7 @@ use rustdoc_types::{
 use crate::error::CordialResult;
 
 use tracing::instrument;
+/// Write rustdoc crate json.
 #[instrument(level = "info", skip(path, krate), err(level = "warn"))]
 pub fn write_rustdoc_crate_json(path: &Path, krate: &Crate) -> CordialResult<()> {
     std::fs::write(path, serde_json::to_string_pretty(krate)?)?;
@@ -127,6 +128,7 @@ pub fn demo_impl_coverage_crate() -> Crate {
     base_crate(root, paths, index)
 }
 
+/// Demo trenchcoat crate.
 #[instrument(level = "debug")]
 pub fn demo_trenchcoat_crate() -> Crate {
     let root = Id(0);
@@ -224,6 +226,7 @@ pub fn demo_trenchcoat_crate() -> Crate {
     base_crate(root, paths, index)
 }
 
+/// Demo shadow crate.
 #[instrument(level = "debug")]
 pub fn demo_shadow_crate() -> Crate {
     let root = Id(0);

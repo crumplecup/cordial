@@ -10,6 +10,7 @@ use super::types::AntipatternSiteRecord;
 use super::version_in_member::scan_workspace_version_in_member;
 
 use tracing::instrument;
+/// Scan one crate for antipatterns.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_antipatterns(
     crate_root: &Path,

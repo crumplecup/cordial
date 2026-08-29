@@ -6,8 +6,10 @@ use super::EdgeWeight;
 use super::node::{NodeId, NodeWeight};
 
 use tracing::instrument;
+/// String key for an IR node attribute.
 pub type AttrKey = String;
 
+/// JSON value stored on an IR node attribute.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct AttrValue(pub serde_json::Value);
@@ -17,11 +19,13 @@ pub struct AttrValue(pub serde_json::Value);
 pub struct QualifiedPath(pub Vec<String>);
 
 impl QualifiedPath {
+    /// Build a path from path segments.
     #[instrument(level = "debug", skip(segments), ret)]
     pub fn from_segments(segments: impl IntoIterator<Item = impl Into<String>>) -> Self {
         Self(segments.into_iter().map(Into::into).collect())
     }
 
+    /// Stable string form of this value.
     #[instrument(level = "trace", skip(self))]
     pub fn as_str(&self) -> String {
         self.0.join("::")
@@ -38,11 +42,14 @@ impl From<&str> for QualifiedPath {
 /// Secondary indexes over a crate graph.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct IrIndexes {
+    /// Node ids keyed by `foo::bar` path.
     pub by_path: HashMap<String, NodeId>,
+    /// Node ids grouped by kind tag.
     pub by_kind: HashMap<String, Vec<NodeId>>,
 }
 
 impl IrIndexes {
+    /// Index node.
     #[instrument(level = "debug", skip(self, node, weight))]
     pub fn index_node(&mut self, node: NodeId, weight: &NodeWeight) {
         let kind_key = format!("{:?}", weight.kind);

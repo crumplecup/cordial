@@ -11,13 +11,18 @@ use tracing::instrument;
 /// Coverage provided by one elicitation-owned wrapper for a foreign type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WrapperCoverage {
+    /// Path of the wrapper type.
     pub wrapper_path: String,
+    /// Whether the wrapper impls ElicitComplete.
     pub wrapper_elicit_complete: bool,
+    /// ElicitComplete prerequisites the wrapper satisfies.
     pub wrapper_prereqs: TraitPrereqs,
 }
 
+/// Map of type path to wrapper-coverage records.
 pub type WrapperCoverageMap = HashMap<String, Vec<WrapperCoverage>>;
 
+/// Lookup wrapper coverage.
 #[instrument(level = "debug", skip(map))]
 pub fn lookup_wrapper_coverage<'a>(
     map: &'a WrapperCoverageMap,
@@ -37,6 +42,7 @@ pub fn lookup_wrapper_coverage<'a>(
         .map(|(_, wrappers)| wrappers)
 }
 
+/// Build wrapper coverage map.
 #[instrument(level = "debug", skip(complete_paths, wrapper_prereqs))]
 pub fn build_wrapper_coverage_map(
     pairs: &[(String, String)],
@@ -64,6 +70,7 @@ pub fn build_wrapper_coverage_map(
     map
 }
 
+/// Join wrapper paths.
 #[instrument(level = "debug", skip(wrappers))]
 pub fn join_wrapper_paths(wrappers: Option<&[WrapperCoverage]>) -> String {
     wrappers
@@ -83,6 +90,7 @@ fn merge_wrapper_prereqs(wrappers: Option<&[WrapperCoverage]>) -> TraitPrereqs {
     merged
 }
 
+/// Effective missing our traits.
 #[instrument(level = "debug", skip(wrappers))]
 pub fn effective_missing_our_traits(
     direct_missing: &[&'static str],
@@ -103,6 +111,7 @@ pub fn effective_missing_our_traits(
         .collect()
 }
 
+/// Covered indirectly.
 #[instrument(level = "debug", skip(wrappers))]
 pub fn covered_indirectly(wrappers: Option<&[WrapperCoverage]>) -> bool {
     wrappers.is_some_and(|known| {
@@ -112,6 +121,7 @@ pub fn covered_indirectly(wrappers: Option<&[WrapperCoverage]>) -> bool {
     })
 }
 
+/// Indirect elicit complete.
 #[instrument(level = "debug", skip(wrappers))]
 pub fn indirect_elicit_complete(wrappers: Option<&[WrapperCoverage]>) -> bool {
     wrappers
@@ -120,6 +130,7 @@ pub fn indirect_elicit_complete(wrappers: Option<&[WrapperCoverage]>) -> bool {
         .any(|wrapper| wrapper.wrapper_elicit_complete)
 }
 
+/// Coverage provider label.
 #[instrument(level = "debug")]
 pub fn coverage_provider_label(
     direct_our_traits_complete: bool,

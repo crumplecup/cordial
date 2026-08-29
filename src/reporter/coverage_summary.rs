@@ -10,14 +10,19 @@ use tracing::instrument;
 /// One registered coverage plugin section in the workspace rollup.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoveragePluginSummary {
+    /// Coverage plugin identifier.
     pub plugin_id: String,
+    /// Human-readable coverage plugin name.
     pub plugin_name: String,
+    /// Artifact payload.
     pub body: String,
 }
 
 /// Workspace rollup across registered coverage plugins.
 pub struct CoverageSummary {
+    /// Per-plugin coverage summaries.
     pub plugins: Vec<CoveragePluginSummary>,
+    /// Additional artifacts emitted beside the summary.
     pub extra_artifacts: Vec<Box<dyn Artifact>>,
 }
 
@@ -140,6 +145,7 @@ fn section_for_plugin(
     }
 }
 
+/// Render coverage summary markdown.
 #[instrument(level = "debug", skip(summary), err(level = "warn"))]
 pub fn render_coverage_summary_markdown(summary: &CoverageSummary) -> CordialResult<String> {
     let mut out = String::new();

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use cordial::{
     CRATE_ATTRS_ETIQUETTE, CrateAttrsRuleId, CrateAttrsThresholds, RunAll, Session, SessionBuilder,
-    library_root_rs, scan_crate_attrs,
+    library_root_rs, run_crate_attrs_apply, scan_crate_attrs,
 };
 
 const BOTH: &str = r#"
@@ -396,20 +396,8 @@ fn dogfood_cordial_library_root() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("scan cordial")?;
     assert!(
-        has(&records, CrateAttrsRuleId::ForbidUnsafe001),
-        "cordial src/lib.rs has no #![forbid(unsafe_code)]: {records:?}"
-    );
-    assert!(
-        has(&records, CrateAttrsRuleId::MissingDocs001),
-        "cordial src/lib.rs has no #![warn(missing_docs)]: {records:?}"
-    );
-    assert!(
-        records.iter().all(|record| record
-            .file
-            .to_string_lossy()
-            .replace('\\', "/")
-            .ends_with("src/lib.rs")),
-        "cordial [lib] path is src/lib.rs: {records:?}"
+        records.is_empty(),
+        "cordial src/lib.rs should declare both crate-root attrs: {records:?}"
     );
 
     let store = tempfile::tempdir()
@@ -433,11 +421,131 @@ fn dogfood_cordial_library_root() -> miette::Result<()> {
     .wrap_err("checklist")?;
     eprintln!("{checklist}");
     assert!(
-        checklist.contains("## `cordial`"),
-        "checklist should name this crate: {checklist}"
+        checklist.contains("**Open items:** 0"),
+        "cordial should have no crate-attr findings: {checklist}"
     );
-    assert!(checklist.contains("CRATE-FORBID-UNSAFE-001"));
-    assert!(checklist.contains("CRATE-MISSING-DOCS-001"));
-    assert!(checklist.contains("**Open items:** 2"));
+    assert!(
+        checklist.contains("_No crate-attribute findings._"),
+        "empty checklist should say so: {checklist}"
+    );
+
+    let before = fs::read_to_string(root.join("src/lib.rs")).into_diagnostic()?;
+    let summary = run_crate_attrs_apply(root, store.path(), None, true).into_diagnostic()?;
+    let after = fs::read_to_string(root.join("src/lib.rs")).into_diagnostic()?;
+    assert_eq!(before, after, "dry-run must not rewrite cordial src/lib.rs");
+    assert_eq!(summary.inserted_attrs, 0);
+    assert_eq!(summary.changed_files, 0);
+    Ok(())
+}
+
+#[test]
+fn apply_inserts_both_after_crate_docs() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    write_package(
+        fixture.path(),
+        "bare",
+        "//! Crate docs.\n\npub fn ready() {}\n",
+    )?;
+    let summary =
+        run_crate_attrs_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(summary.inserted_attrs, 2);
+    assert_eq!(summary.changed_files, 1);
+    let lib = fs::read_to_string(fixture.path().join("src/lib.rs")).into_diagnostic()?;
+    assert!(
+        lib.contains("//! Crate docs."),
+        "must keep crate docs: {lib}"
+    );
+    assert!(
+        lib.contains("#![forbid(unsafe_code)]"),
+        "must insert forbid: {lib}"
+    );
+    assert!(
+        lib.contains("#![warn(missing_docs)]"),
+        "must insert warn missing_docs: {lib}"
+    );
+    let docs_at = lib.find("//! Crate docs.").unwrap();
+    let forbid_at = lib.find("#![forbid(unsafe_code)]").unwrap();
+    let item_at = lib.find("pub fn ready()").unwrap();
+    assert!(docs_at < forbid_at && forbid_at < item_at, "order: {lib}");
+    Ok(())
+}
+
+#[test]
+fn apply_is_idempotent_and_fills_only_the_gap() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    write_package(
+        fixture.path(),
+        "partial",
+        "#![forbid(unsafe_code)]\n\npub fn ready() {}\n",
+    )?;
+    let first =
+        run_crate_attrs_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(first.inserted_attrs, 1);
+    let lib = fs::read_to_string(fixture.path().join("src/lib.rs")).into_diagnostic()?;
+    assert_eq!(lib.matches("#![forbid(unsafe_code)]").count(), 1);
+    assert!(lib.contains("#![warn(missing_docs)]"));
+    let second =
+        run_crate_attrs_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(second.changed_files, 0);
+    assert_eq!(second.skipped_existing, 1);
+    Ok(())
+}
+
+#[test]
+fn apply_dry_run_does_not_write() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    write_package(fixture.path(), "bare", "pub fn ready() {}\n")?;
+    let before = fs::read_to_string(fixture.path().join("src/lib.rs")).into_diagnostic()?;
+    let summary =
+        run_crate_attrs_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
+    assert_eq!(summary.changed_files, 1);
+    let after = fs::read_to_string(fixture.path().join("src/lib.rs")).into_diagnostic()?;
+    assert_eq!(before, after);
+    Ok(())
+}
+
+#[test]
+fn apply_honors_allow_unsafe_and_lib_path() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = \"ffi\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[lib]\npath = \"src/core.rs\"\n",
+    )
+    .into_diagnostic()
+    .wrap_err("manifest")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[crate_attrs]\nallow_unsafe = [\"ffi\"]\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+    fs::write(fixture.path().join("src/lib.rs"), "pub fn decoy() {}\n")
+        .into_diagnostic()
+        .wrap_err("decoy")?;
+    fs::write(fixture.path().join("src/core.rs"), "pub fn real() {}\n")
+        .into_diagnostic()
+        .wrap_err("core")?;
+
+    let summary =
+        run_crate_attrs_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(summary.inserted_attrs, 1);
+    let decoy = fs::read_to_string(fixture.path().join("src/lib.rs")).into_diagnostic()?;
+    let core = fs::read_to_string(fixture.path().join("src/core.rs")).into_diagnostic()?;
+    assert_eq!(decoy, "pub fn decoy() {}\n");
+    assert!(
+        !core.contains("#![forbid(unsafe_code)]"),
+        "ffi is on allow_unsafe: {core}"
+    );
+    assert!(
+        core.contains("#![warn(missing_docs)]"),
+        "docs still applied on [lib] path: {core}"
+    );
     Ok(())
 }

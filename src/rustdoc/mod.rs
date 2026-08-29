@@ -1,3 +1,5 @@
+//! Rustdoc JSON inventory helpers used by coverage etiquettes.
+
 mod elicit_complete;
 mod impls;
 mod inventory;

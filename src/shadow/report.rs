@@ -346,6 +346,7 @@ pub fn build_shadow_report_from_inventories(
     build_shadow_report_from_inventories_with_maps(target, shadow, &ShadowBuildMaps::empty())
 }
 
+/// Build shadow report from inventories with maps.
 #[instrument(level = "debug", skip(target, shadow, maps))]
 pub fn build_shadow_report_from_inventories_with_maps(
     target: &RustdocInventory,

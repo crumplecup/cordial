@@ -8,6 +8,7 @@ use super::QualityReport;
 
 use tracing::instrument;
 
+/// Render quality report markdown.
 #[instrument(level = "debug", skip(report), err(level = "warn"))]
 pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<String> {
     let mut out = String::new();
@@ -62,6 +63,7 @@ pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<S
     Ok(out)
 }
 
+/// Render quality workspace summary markdown.
 #[instrument(level = "debug", skip(report), err(level = "warn"))]
 pub fn render_quality_workspace_summary_markdown(report: &QualityReport) -> CordialResult<String> {
     let mut out = String::new();

@@ -11,17 +11,26 @@ use tracing::instrument;
 /// Rule identifier for a manual pattern that should use a derive crate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DeriveRuleId {
+    /// `DERIVE-BUILDER-001`.
     Builder001,
+    /// `DERIVE-USE-BUILDER-001`.
     UseBuilder001,
+    /// `DERIVE-GETTER-001`.
     Getter001,
+    /// `DERIVE-SETTER-001`.
     Setter001,
+    /// `DERIVE-ASREF-001`.
     AsRef001,
+    /// `DERIVE-ASSTR-001`.
     AsStr001,
+    /// `DERIVE-NEW-001`.
     New001,
+    /// `DERIVE-PUB-FIELD-001`.
     PubField001,
 }
 
 impl DeriveRuleId {
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -36,6 +45,7 @@ impl DeriveRuleId {
         }
     }
 
+    /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
@@ -155,12 +165,20 @@ impl Finding for DeriveFinding {
 /// Raw scan row used while building IR nodes.
 #[derive(Debug, Clone)]
 pub struct DeriveSiteRecord {
+    /// Stable probe rule identifier.
     pub rule_id: DeriveRuleId,
+    /// Struct the derive pattern was found on.
     pub struct_name: String,
+    /// Method name, when the pattern is a method.
     pub method_name: Option<String>,
+    /// Fully qualified item name.
     pub qualified_name: String,
+    /// Suggested fix for this derive pattern.
     pub recommendation: String,
+    /// Source file path, usually crate-relative.
     pub file: PathBuf,
+    /// Source line number (1-based), when known.
     pub line: u32,
+    /// Supporting evidence paths or labels.
     pub evidence: String,
 }

@@ -7,7 +7,9 @@ use tracing::instrument;
 /// Workspace-level IR: one graph per crate plus cross-crate edges.
 #[derive(Debug, Default)]
 pub struct WorkspaceIr {
+    /// Crate names in this rollup.
     pub crates: HashMap<String, CrateIr>,
+    /// Edges that connect nodes in different crates.
     pub cross_crate_edges: Vec<(String, NodeId, String, NodeId, EdgeWeight)>,
     /// Foreign-type → elicitation wrapper coverage built from hub crate IR.
     #[cfg(feature = "impl_coverage")]
@@ -15,12 +17,14 @@ pub struct WorkspaceIr {
 }
 
 impl WorkspaceIr {
+    /// Store workspace-level wrapper coverage from the elicitation hub.
     #[instrument(level = "trace", skip(self, map))]
     #[cfg(feature = "impl_coverage")]
     pub fn set_wrapper_coverage_map(&mut self, map: crate::rustdoc::WrapperCoverageMap) {
         self.wrapper_coverage_map = Some(map);
     }
 
+    /// Workspace-level wrapper coverage from the elicitation hub, if recorded.
     #[instrument(level = "trace", skip(self))]
     #[cfg(feature = "impl_coverage")]
     pub fn wrapper_coverage_map(&self) -> Option<&crate::rustdoc::WrapperCoverageMap> {
@@ -36,6 +40,7 @@ impl WorkspaceIr {
             .unwrap_or(0)
     }
 
+    /// Crate version recorded on the crate root node, if any.
     #[instrument(level = "trace", skip(self))]
     pub fn crate_version(&self, crate_name: &str) -> Option<String> {
         self.crate_ir(crate_name)
@@ -45,6 +50,7 @@ impl WorkspaceIr {
             .map(str::to_string)
     }
 
+    /// Insert crate.
     #[instrument(level = "debug", skip(self, crate_ir))]
     pub fn insert_crate(&mut self, crate_ir: CrateIr) -> NodeId {
         let root = crate_ir.root;
@@ -52,11 +58,13 @@ impl WorkspaceIr {
         root
     }
 
+    /// Crate ir.
     #[instrument(level = "trace", skip(self))]
     pub fn crate_ir(&self, crate_name: &str) -> Option<&CrateIr> {
         self.crates.get(crate_name)
     }
 
+    /// Crate ir mut.
     #[instrument(level = "debug", skip(self))]
     pub fn crate_ir_mut(&mut self, crate_name: &str) -> Option<&mut CrateIr> {
         self.crates.get_mut(crate_name)
@@ -74,6 +82,7 @@ impl WorkspaceIr {
             .ok_or_else(|| CordialError::invariant(format!("crate `{crate_name}` must exist")))
     }
 
+    /// Insert cross crate edge.
     #[instrument(level = "debug", skip(self, from_crate, from, to_crate, to, kind))]
     pub fn insert_cross_crate_edge(
         &mut self,
@@ -95,7 +104,9 @@ impl WorkspaceIr {
 
 /// View over one crate inside a workspace.
 pub struct CrateView<'a> {
+    /// Workspace IR this assessor reads.
     pub workspace: &'a WorkspaceIr,
+    /// Cargo package name.
     pub crate_name: String,
 }
 
@@ -142,7 +153,9 @@ impl IrView for CrateView<'_> {
 
 /// Mutable view over one crate inside a workspace.
 pub struct CrateViewMut<'a> {
+    /// Workspace IR this assessor reads.
     pub workspace: &'a mut WorkspaceIr,
+    /// Cargo package name.
     pub crate_name: String,
 }
 

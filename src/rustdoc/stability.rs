@@ -25,11 +25,13 @@ pub enum StabilityLevel {
 }
 
 impl StabilityLevel {
+    /// Whether rustdoc marked this item unstable.
     #[instrument(level = "trace", skip(self), ret)]
     pub fn is_unstable(self) -> bool {
         matches!(self, Self::Unstable)
     }
 
+    /// Whether rustdoc marked this item stable.
     #[instrument(level = "trace", skip(self), ret)]
     pub fn is_stable(self) -> bool {
         matches!(self, Self::Stable)

@@ -68,6 +68,7 @@ pub fn scan_source_tree(
     skip(source, file, path_inclusions),
     err(level = "warn")
 )]
+/// Scan one Rust source file and return records.
 pub fn scan_rust_source(
     source: &str,
     file: &Path,

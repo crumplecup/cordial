@@ -54,6 +54,7 @@ pub fn scan_crate_panics(crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord
     Ok(findings)
 }
 
+/// Scan a crate `src` tree for panic sites.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_source_tree(src_root: &Path, crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord>> {
     let parsed = parse_source_tree(src_root, crate_root)?;
@@ -103,6 +104,7 @@ fn parse_source_tree(src_root: &Path, crate_root: &Path) -> CordialResult<Vec<Pa
     Ok(parsed)
 }
 
+/// Scan one Rust source file and return records.
 #[instrument(level = "debug", skip(source, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,

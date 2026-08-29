@@ -29,8 +29,8 @@ cargo install --path .
 
 ```text
 cordial quality -p <project>          # source-quality etiquettes
-cordial quality --apply               # write tracing #[instrument] from the checklist
-cordial quality --apply --dry-run     # log tracing apply without writing
+cordial quality --apply               # tracing recipes + crate-root lint attributes
+cordial quality --apply --dry-run     # log apply without writing
 cordial build rustdoc                 # rustdoc JSON for coverage (needs elicitation)
 cordial coverage                      # impl / trenchcoat / shadow (and std if enabled)
 cordial run                           # quality + coverage
@@ -116,14 +116,16 @@ scanners you want.
 | `cfg_scatter` | Is the same `#[cfg]` copied across item kinds instead of a gated `mod`? Field/variant gating is never flagged. `[cfg_scatter]` in `cordial.toml`. |
 | `visibility` | Do `pub mod` paths earn their existence (flat crate, thin module, vis mismatch)? `[visibility]` in `cordial.toml`. |
 | `cli_layout` | Do clap types live in the library and dispatch with `act`? Is `main` only parse + `act` + miette? |
-| `crate_attrs` | Does each library root declare `#![forbid(unsafe_code)]` and `#![warn(missing_docs)]`? `[crate_attrs]` in `cordial.toml` (per-member allow lists). |
+| `crate_attrs` | Does each library root declare `#![forbid(unsafe_code)]` and `#![warn(missing_docs)]`? This crate does. `cordial quality --apply` writes them. `[crate_attrs]` in `cordial.toml` (per-member allow lists). |
+| `doc_warnings` | Does `cargo doc` emit `rustdoc::*` diagnostics (broken intra-doc links, …) that `cargo check` never sees? This crate is clean. `[doc_warnings]` in `cordial.toml`. |
 | `glob_imports` | Are there glob `use` trees (`foo::*`, including `super::*`)? Replace them with explicit names. |
 | `inline_tests` | Are `#[cfg(test)]` modules or `#[test]` functions mixed into `src/`? Move them to `tests/`. |
 | `verus_warnings` | Does the Verus rustc fork emit `warning:` diagnostics rustc never sees? Invokes `verus` on `*_verus` / `vstd` crates. |
 | `proof_patterns` | Which `verus!` functions are trusted rather than proven (`assume`/`admit`/`external_body`/`uninterp`/`axiom`), or apply themselves invisibly to every proof in scope (`broadcast`)? |
 
-Error-handling etiquettes share one source scan (`error_ir`). Tracing apply is
-the only quality path that rewrites source.
+Error-handling etiquettes share one source scan (`error_ir`). Quality `--apply`
+rewrites source for tracing (`#[instrument]` recipes from the checklist) and
+crate-attrs (crate-root lint attributes; scans the tree, no checklist).
 
 ## Coverage etiquettes
 

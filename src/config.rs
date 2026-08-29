@@ -27,6 +27,8 @@ pub struct CordialConfig {
     #[serde(default)]
     crate_attrs: CrateAttrsThresholds,
     #[serde(default)]
+    doc_warnings: DocWarningsThresholds,
+    #[serde(default)]
     tracing: TracingThresholds,
     #[serde(default)]
     derives: DerivesThresholds,
@@ -77,6 +79,7 @@ fn default_prefer_root() -> bool {
 }
 
 impl VisibilityThresholds {
+    /// Return a copy with `prefer_root` set.
     #[instrument(level = "trace", skip(self))]
     pub fn with_prefer_root(mut self, prefer_root: bool) -> Self {
         self.prefer_root = prefer_root;
@@ -233,6 +236,7 @@ impl Default for ModularityThresholds {
 }
 
 impl ModularityThresholds {
+    /// Return a copy with `module_size_ignore_lower_tail` set.
     #[instrument(level = "debug")]
     pub fn with_module_size_ignore_lower_tail(self, ignore: bool) -> Self {
         Self {
@@ -241,6 +245,7 @@ impl ModularityThresholds {
         }
     }
 
+    /// Return a copy with `file_inventory_min_lines` set.
     #[instrument(level = "debug")]
     pub fn with_file_inventory_min_lines(self, value: u32) -> Self {
         Self {
@@ -249,6 +254,7 @@ impl ModularityThresholds {
         }
     }
 
+    /// Return a copy with `function_inventory_min_lines` set.
     #[instrument(level = "debug")]
     pub fn with_function_inventory_min_lines(self, value: u32) -> Self {
         Self {
@@ -257,6 +263,7 @@ impl ModularityThresholds {
         }
     }
 
+    /// Return a copy with `function_hotspot_min_lines` set.
     #[instrument(level = "debug")]
     pub fn with_function_hotspot_min_lines(self, value: u32) -> Self {
         Self {
@@ -265,6 +272,7 @@ impl ModularityThresholds {
         }
     }
 
+    /// Return a copy with `file_checklist_min_lines` set.
     #[instrument(level = "debug")]
     pub fn with_file_checklist_min_lines(self, value: u32) -> Self {
         Self {
@@ -273,6 +281,7 @@ impl ModularityThresholds {
         }
     }
 
+    /// Return a copy with `function_checklist_min_lines` set.
     #[instrument(level = "debug")]
     pub fn with_function_checklist_min_lines(self, value: u32) -> Self {
         Self {
@@ -281,6 +290,7 @@ impl ModularityThresholds {
         }
     }
 
+    /// Return a copy with `max_types_per_file` set.
     #[instrument(level = "debug")]
     pub fn with_max_types_per_file(self, value: u32) -> Self {
         Self {
@@ -289,6 +299,7 @@ impl ModularityThresholds {
         }
     }
 
+    /// Return a copy with `lopsided_min_percent` set.
     #[instrument(level = "debug")]
     pub fn with_lopsided_min_percent(self, value: u32) -> Self {
         Self {
@@ -297,6 +308,7 @@ impl ModularityThresholds {
         }
     }
 
+    /// Return a copy with `hierarchy_min_lines` set.
     #[instrument(level = "debug")]
     pub fn with_hierarchy_min_lines(self, value: u32) -> Self {
         Self {
@@ -305,17 +317,20 @@ impl ModularityThresholds {
         }
     }
 
+    /// Whether `numerator / denominator` is at least `percent`.
     #[instrument(level = "debug")]
     pub fn ratio_meets(numerator: u32, denominator: u32, percent: u32) -> bool {
         denominator > 0 && u64::from(numerator) * 100 >= u64::from(denominator) * u64::from(percent)
     }
 
+    /// Whether own-file lines vs subtree lines exceed the top-heavy threshold.
     #[instrument(level = "trace", skip(self))]
     pub fn is_top_heavy_hit(&self, own_lines: u32, subtree_lines: u32) -> bool {
         own_lines >= self.hierarchy_min_lines
             && Self::ratio_meets(own_lines, subtree_lines, self.top_heavy_min_percent)
     }
 
+    /// Whether the largest child vs sibling total exceeds the lopsided threshold.
     #[instrument(level = "trace", skip(self))]
     pub fn is_lopsided_hit(&self, largest_subtree: u32, sibling_total: u32) -> bool {
         largest_subtree >= self.hierarchy_min_lines
@@ -475,11 +490,13 @@ impl Default for CrateAttrsThresholds {
 }
 
 impl CrateAttrsThresholds {
+    /// Whether this package is exempt from `forbid(unsafe_code)`.
     #[instrument(level = "debug", skip(self))]
     pub fn skip_unsafe(&self, crate_name: &str) -> bool {
         !self.forbid_unsafe || self.allow_unsafe.iter().any(|name| name == crate_name)
     }
 
+    /// Whether this package is exempt from `warn(missing_docs)`.
     #[instrument(level = "debug", skip(self))]
     pub fn skip_missing_docs(&self, crate_name: &str) -> bool {
         !self.missing_docs
@@ -487,6 +504,41 @@ impl CrateAttrsThresholds {
                 .allow_missing_docs
                 .iter()
                 .any(|name| name == crate_name)
+    }
+}
+
+/// `cargo doc` / rustdoc-warning etiquette knobs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub struct DocWarningsThresholds {
+    /// Pass `--document-private-items` so private-item link lints fire.
+    #[serde(default)]
+    #[getter(copy)]
+    document_private_items: bool,
+    /// Pass `--all-features` (match CI that documents every feature).
+    #[serde(default)]
+    #[getter(copy)]
+    all_features: bool,
+    /// Package names that skip the `cargo doc` invocation.
+    #[serde(default)]
+    skip_crates: Vec<String>,
+}
+
+impl Default for DocWarningsThresholds {
+    #[instrument(level = "debug", ret)]
+    fn default() -> Self {
+        Self {
+            document_private_items: false,
+            all_features: false,
+            skip_crates: Vec::new(),
+        }
+    }
+}
+
+impl DocWarningsThresholds {
+    /// Whether this package should not run `cargo doc`.
+    #[instrument(level = "debug", skip(self))]
+    pub fn skip(&self, crate_name: &str) -> bool {
+        self.skip_crates.iter().any(|name| name == crate_name)
     }
 }
 

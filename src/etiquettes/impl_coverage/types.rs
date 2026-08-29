@@ -1,15 +1,21 @@
 use crate::objects::{Disposition, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan};
 
 use tracing::instrument;
+/// Why an impl-coverage item is counted as a gap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImplGapKind {
+    /// MissingOurTraits.
     MissingOurTraits,
+    /// ReadyForElicitComplete.
     ReadyForElicitComplete,
+    /// FeatureGatedExternal.
     FeatureGatedExternal,
+    /// ExternallyBlocked.
     ExternallyBlocked,
 }
 
 impl ImplGapKind {
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {

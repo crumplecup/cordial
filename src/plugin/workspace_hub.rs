@@ -10,13 +10,18 @@ use crate::targets::discover_crate_targets;
 /// Hub crate that selects a coverage profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkspaceHub {
+    /// Elicitation.
     Elicitation,
+    /// Homecoming.
     Homecoming,
+    /// Amenable.
     Amenable,
+    /// Unknown.
     Unknown,
 }
 
 impl WorkspaceHub {
+    /// Framework impl crate.
     #[instrument(level = "debug", skip(self))]
     pub fn framework_impl_crate(self) -> Option<&'static str> {
         match self {
@@ -26,6 +31,7 @@ impl WorkspaceHub {
         }
     }
 
+    /// Framework patch set.
     #[instrument(level = "debug", skip(self))]
     pub fn framework_patch_set(self) -> Option<&'static str> {
         match self {
@@ -35,6 +41,7 @@ impl WorkspaceHub {
         }
     }
 
+    /// Framework primary trait.
     #[instrument(level = "debug", skip(self))]
     pub fn framework_primary_trait(self) -> Option<&'static str> {
         match self {
@@ -43,6 +50,7 @@ impl WorkspaceHub {
         }
     }
 
+    /// Whether this hub is a std-family framework (homecoming or amenable).
     #[instrument(level = "trace", skip(self), ret)]
     pub fn is_framework_std(self) -> bool {
         matches!(self, Self::Homecoming | Self::Amenable)

@@ -14,15 +14,22 @@ use tracing::instrument;
 /// what each one means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ProofPatternKind {
+    /// assume.
     Assume,
+    /// admit.
     Admit,
+    /// external_body.
     ExternalBody,
+    /// uninterp.
     Uninterp,
+    /// axiom.
     Axiom,
+    /// broadcast.
     Broadcast,
 }
 
 impl ProofPatternKind {
+    /// Rule id.
     #[instrument(level = "debug", skip(self))]
     pub fn rule_id(self) -> &'static str {
         match self {
@@ -35,6 +42,7 @@ impl ProofPatternKind {
         }
     }
 
+    /// Parse from the stable identifier string.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
@@ -48,6 +56,7 @@ impl ProofPatternKind {
         }
     }
 
+    /// Stable identifier string for IR attributes.
     #[instrument(level = "debug", skip(self))]
     pub fn as_attr(self) -> &'static str {
         match self {

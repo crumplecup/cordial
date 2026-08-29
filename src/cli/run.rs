@@ -70,6 +70,55 @@ pub(super) fn execute_build_sysroot(
 }
 
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
+pub(super) fn execute_quality_apply(
+    project_root: &Path,
+    store: &StoreLayout,
+    crate_name: Option<&str>,
+    store_home: Option<PathBuf>,
+    checklist: Option<&Path>,
+    dry_run: bool,
+) -> CordialResult<()> {
+    #[cfg(not(feature = "crate_attrs"))]
+    let _ = store_home;
+
+    #[cfg(feature = "crate_attrs")]
+    {
+        let home = store_home.clone().unwrap_or_else(default_store_home);
+        let summary = crate::run_crate_attrs_apply(project_root, &home, crate_name, dry_run)?;
+        eprintln!(
+            "crate-attrs apply: {} attributes in {} files ({} already compliant, {} unresolved)",
+            summary.inserted_attrs,
+            summary.changed_files,
+            summary.skipped_existing,
+            summary.unresolved,
+        );
+    }
+
+    #[cfg(feature = "tracing")]
+    {
+        let checklist_path = checklist
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| store.findings_dir().join("tracing-instrument.checklist.md"));
+        if checklist_path.is_file() {
+            execute_tracing_apply(
+                project_root,
+                store,
+                crate_name,
+                Some(&checklist_path),
+                dry_run,
+            )?;
+        } else {
+            eprintln!(
+                "tracing apply: no checklist at {}, skipped",
+                checklist_path.display()
+            );
+        }
+    }
+
+    Ok(())
+}
+
+#[instrument(level = "debug", skip(store), err(level = "warn"))]
 pub(super) fn execute_tracing_apply(
     project_root: &Path,
     store: &StoreLayout,

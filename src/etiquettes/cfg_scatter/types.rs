@@ -43,26 +43,40 @@ impl Display for CfgScatterRuleId {
 /// counts, because that logic *can* move into a `#[cfg]`-gated module.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum CfgSiteKind {
+    /// field.
     Field,
+    /// variant.
     Variant,
+    /// fn.
     Fn,
+    /// impl_fn.
     ImplFn,
     /// A default method inside a `trait { ... }` body — distinct from
     /// [`Self::ImplFn`] (a method inside an `impl` block) since it lives in
     /// a different syntactic home and is fixed differently.
     TraitFn,
+    /// struct.
     Struct,
+    /// enum.
     Enum,
+    /// trait.
     Trait,
+    /// impl.
     Impl,
+    /// const.
     Const,
+    /// static.
     Static,
+    /// type_alias.
     TypeAlias,
+    /// use.
     Use,
+    /// arm.
     Arm,
 }
 
 impl CfgSiteKind {
+    /// Stable string form of this value.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -83,6 +97,7 @@ impl CfgSiteKind {
         }
     }
 
+    /// Whether this kind is a field or variant (not a free-standing item).
     #[instrument(level = "trace", skip(self), ret)]
     pub fn is_field_like(self) -> bool {
         matches!(self, Self::Field | Self::Variant)
