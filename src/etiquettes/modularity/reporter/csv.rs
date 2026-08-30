@@ -1,3 +1,4 @@
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, TextArtifact};
@@ -40,16 +41,16 @@ impl Reporter for ModularityCsvReporter {
         for row in rows {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{},{}\n",
-                row.crate_name,
-                row.kind,
-                row.context,
-                row.file,
-                row.line,
-                row.lines,
-                row.checklist,
-                row.zscore,
-                row.share,
-                row.detail,
+                csv_field(&row.crate_name),
+                csv_field(&row.kind),
+                csv_field(&row.context),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.lines),
+                csv_field(&row.checklist),
+                csv_field(&row.zscore),
+                csv_field(&row.share),
+                csv_field(&row.detail),
             ));
         }
         let mut artifacts: Vec<Box<dyn Artifact>> = vec![Box::new(TextArtifact {
@@ -84,9 +85,9 @@ fn branches_csv_artifact(all_rows: &[ModularityRow]) -> Box<dyn Artifact> {
         for node in nodes {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{:.3},{}\n",
-                crate_name,
-                node.path,
-                node.file,
+                csv_field(&crate_name),
+                csv_field(&node.path),
+                csv_field(&node.file),
                 node.order,
                 node.depth,
                 node.own_lines,

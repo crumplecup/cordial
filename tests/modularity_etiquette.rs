@@ -1448,6 +1448,77 @@ fn node<'a>(
         .ok_or_else(|| miette::miette!("missing {path}"))
 }
 
+#[test]
+fn types_per_file_csv_row_quotes_the_comma_joined_context() -> miette::Result<()> {
+    // A real bug, found via dogfooding: MODULARITY-TYPES-PER-FILE's
+    // `context` field joins every packed type name with ", ", and used
+    // to be written into modularity.csv unquoted -- any file with 2+
+    // types silently shifted every column after `context` for that row,
+    // since a plain CSV reader treats each embedded comma as a real
+    // column separator.
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        "pub struct TypeOne;\npub struct TypeTwo;\npub struct TypeThree;\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write lib")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[modularity]\nmax_types_per_file = 1\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&MODULARITY_ETIQUETTE)
+        .build();
+    session.run(&RunAll).into_diagnostic().wrap_err("run")?;
+
+    let csv = fs::read_to_string(store.path().join("findings/modularity.csv"))
+        .into_diagnostic()
+        .wrap_err("read modularity.csv")?;
+    let row = csv
+        .lines()
+        .find(|line| line.contains("MODULARITY-TYPES-PER-FILE"))
+        .ok_or_else(|| miette::miette!("no MODULARITY-TYPES-PER-FILE row in: {csv}"))?;
+
+    assert!(
+        row.contains("\"TypeOne, TypeTwo, TypeThree\""),
+        "context field must be quoted so its own commas don't shift columns: {row}"
+    );
+    assert_eq!(
+        quote_aware_column_count(row),
+        10,
+        "row must still have exactly 10 columns despite the comma-bearing context field: {row}"
+    );
+    Ok(())
+}
+
+/// Minimal RFC 4180-aware comma split, test-only: counts columns the way
+/// a real CSV reader would, respecting quoted fields — a naive
+/// `row.split(',').count()` can't tell a quoted field's internal comma
+/// from a real column separator, which is exactly the distinction this
+/// test exists to check.
+fn quote_aware_column_count(row: &str) -> usize {
+    let mut count = 1;
+    let mut in_quotes = false;
+    for c in row.chars() {
+        match c {
+            '"' => in_quotes = !in_quotes,
+            ',' if !in_quotes => count += 1,
+            _ => {}
+        }
+    }
+    count
+}
+
 fn field(finding: &dyn Finding, name: &str) -> Option<String> {
     let mut sink = MapFindingSink::default();
     finding.emit(&mut sink);

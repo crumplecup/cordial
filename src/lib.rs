@@ -31,6 +31,7 @@ mod cargo_rustdoc;
 #[cfg(feature = "cli")]
 mod cli;
 mod config;
+mod csv_row;
 #[cfg(feature = "elicitation")]
 mod digest;
 mod enricher;
