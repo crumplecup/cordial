@@ -27,7 +27,7 @@ Active implementation plans for `cordial`.
 | [Quality-report feeder trait](docs/planning/quality-report-feeder-trait.md) | **Complete** | `QualityReportArea`/`StaticQualityEtiquette` -- compiler-enforced rollup coverage, closes the `proof_patterns`/`foreign_error_types` silent-gap class |
 | [Etiquette explain](docs/planning/etiquette-explain.md) | **Active** | Required `Etiquette::explain`; `cordial explain [id]` (rule ids alias the page) |
 | [Pageantry etiquette](docs/planning/pageantry-etiquette.md) | **Active** | File-level type arrangement; first rule: traits in a leading block below the import/`mod` header |
-| [Contract-bounds shape matrix](docs/planning/contract-bounds-shape-matrix.md) | **Active** | Table-driven `(verifier, shape, expected outcome)` regression suite for `ANTIPATTERN-UNNAMED-CONTRACT-BOUND-001`'s clause matcher; 13-row table implemented, growing |
+| [Contract-bounds shape matrix](docs/planning/contract-bounds-shape-matrix.md) | **Active** | Table-driven `(verifier, shape, expected outcome)` regression suite for `ANTIPATTERN-UNNAMED-CONTRACT-BOUND-001`'s clause matcher; 14-row table, all known gaps closed and confirmed against real `amenable` |
 
 ## Completed / archived
 

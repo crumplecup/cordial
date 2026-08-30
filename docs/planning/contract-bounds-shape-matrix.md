@@ -216,7 +216,7 @@ while building the harness below.
 
 **Implemented 2026-08-30, known gaps closed same day.** `tests/contract_bounds.rs`
 now has a `Verifier` enum, `ShapeCase` struct, and a `SHAPE_CASES` table
-(13 rows) driven by one `shape_matrix_matches_expected_flags` test,
+(14 rows) driven by one `shape_matrix_matches_expected_flags` test,
 dispatching to `scan_{kani,creusot,verus}_contract_bounds_source` and
 asserting `!findings.is_empty() == expect_flagged`.
 
@@ -235,12 +235,34 @@ precisely scoped, reproducible target, which led straight to the real
 fix in `check_macro_call` (see "Why the const-generic case turned out not
 to be harder" above) rather than staying deferred. Both rows now read
 `expect_flagged: false` and pass — exactly the growth loop's "fixing now"
-path, just faster than expected. `SHAPE_CASES` currently has zero
-`expect_flagged: true` rows.
+path, just faster than expected.
+
+Re-running the scanner against real `amenable` right after that fix
+landed (`just install` + `cordial quality --project ~/repos/amenable
+--crate-name amenable_kani`) is what the growth loop calls dogfooding,
+and it worked exactly as designed: `array.rs`'s sites were gone, but a
+*different* real site (`alloc_collections.rs`'s
+`verify_linked_list_extract_if_partitions_by_the_predicate`) was still
+flagged — a second, distinct bug in the same neighborhood, a trailing
+comma inside the turbofish itself surviving into the type-prefix suffix
+match (`RustStdStandard::<..ExtractIf<..>,\n>::ensures(..)`, comma before
+the closing `>`, valid and semantically elidable Rust). Added as
+`kani_turbofish_trailing_comma`, fixed the same day via
+`canonicalize_type_text` collapsing `,>` to `>`, row now
+`expect_flagged: false`. `SHAPE_CASES` has 14 rows and zero
+`expect_flagged: true` ones.
 
 `cargo test --features full --test contract_bounds`: 15 passed, 0 failed.
 `cargo test --features full` (whole crate) and `cargo clippy --features
-full`: clean. `cargo fmt --check`: clean.
+full`: clean. `cargo fmt --check`: clean. Confirmed against real
+production code, not just the fixtures: workspace-wide `cordial quality
+--project ~/repos/amenable` now reports `amenable_kani`: 0
+`ANTIPATTERN-UNNAMED-CONTRACT-BOUND-001` findings, `amenable_creusot`: 0,
+`amenable_verus`: 10 (unchanged — all 10 are separately-documented
+genuine exceptions: trigger clauses, a Verus builtin, and
+`cfg(windows)`-gated registrations, none of them scanner bugs). Before
+this session `amenable_kani` carried the `array.rs` sites as a documented
+scanner-limitation exception; it no longer needs one.
 
 Open for a future session: grow `SHAPE_CASES` with the other taxonomy
 rows that don't yet have a row (verus state forms, `@`/`is`/`->` view
@@ -248,5 +270,6 @@ forms, `#[trigger]`-annotated calls — currently only covered implicitly
 by the kept dedicated tests, not as standalone table rows); and whether
 the Creusot/Verus side's own naive token-level clause-list splitting
 (`bare_named_call_name` in `index.rs`, `walk_verus_tokens` in `verus.rs`)
-has the same comma-in-turbofish exposure the Kani fix didn't touch — no
-known real instance yet, but nothing rules it out.
+has the same comma-in-turbofish exposure the two Kani fixes didn't touch
+— no known real instance yet (Verus's 10 remaining findings are all
+genuine, not this), but nothing rules it out for a future real site.
