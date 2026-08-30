@@ -2,6 +2,7 @@
 
 use std::fmt::Write as _;
 
+use crate::csv_row::csv_field as csv_escape;
 use crate::error::CordialResult;
 use crate::framework_std::amenable::{AmenableStdGapEntry, AmenableStdReport, AmenableStdStatus};
 use crate::framework_std::verifier_skip::VerifierSkipMap;
@@ -203,13 +204,4 @@ pub fn render_amenable_std_summary_md(report: &AmenableStdReport) -> String {
         missing = report.missing_count,
         skipped = report.skipped_count,
     )
-}
-
-#[instrument(level = "debug")]
-fn csv_escape(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_string()
-    }
 }

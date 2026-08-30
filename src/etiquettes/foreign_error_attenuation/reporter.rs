@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -77,15 +78,6 @@ fn open_rows(
     rows: &[ForeignErrorAttenuationRow],
 ) -> impl Iterator<Item = &ForeignErrorAttenuationRow> {
     rows.iter().filter(|row| row.disposition == "open")
-}
-
-#[instrument(level = "debug")]
-fn escape_csv(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_string()
-    }
 }
 
 #[instrument(level = "debug", skip(rows))]
@@ -187,21 +179,21 @@ impl Reporter for ForeignErrorAttenuationCsvReporter {
         for row in open_rows(&attenuation_rows(findings)) {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
-                row.crate_name,
-                row.handling_class,
-                row.resolution_id,
-                escape_csv(&row.foreign_error_type),
-                row.inference_rule_id,
-                row.confidence,
-                row.context,
-                row.file,
-                row.line,
-                row.site_kind,
-                escape_csv(&row.source_snippet),
-                escape_csv(&row.site_snippet),
-                escape_csv(&row.resolution),
-                escape_csv(&row.good_pattern),
-                escape_csv(&row.bad_pattern),
+                csv_field(&row.crate_name),
+                csv_field(&row.handling_class),
+                csv_field(&row.resolution_id),
+                csv_field(&row.foreign_error_type),
+                csv_field(&row.inference_rule_id),
+                csv_field(&row.confidence),
+                csv_field(&row.context),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.site_kind),
+                csv_field(&row.source_snippet),
+                csv_field(&row.site_snippet),
+                csv_field(&row.resolution),
+                csv_field(&row.good_pattern),
+                csv_field(&row.bad_pattern),
             ));
         }
         Ok(vec![Box::new(TextArtifact {

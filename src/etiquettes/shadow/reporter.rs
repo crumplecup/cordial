@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::csv_row::csv_field as csv_escape;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -62,20 +63,20 @@ impl Reporter for ShadowPairCsvReporter {
             for row in sorted {
                 body.push_str(&format!(
                     "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
-                    field(row, "item_path"),
-                    field(row, "item_kind"),
-                    api_family(field(row, "item_path")),
-                    field(row, "status"),
-                    field(row, "coverage_kind"),
-                    field(row, "primary_gap_kind"),
-                    field(row, "shadow_item"),
-                    field(row, "drift_confidence"),
-                    field(row, "shadow_elicit_impl"),
-                    field(row, "verification_gap"),
-                    field(row, "verification_ready"),
-                    field(row, "shadow_can_be_direct"),
-                    field(row, "shadow_missing_external_traits"),
-                    field(row, "shadow_missing_our_traits"),
+                    csv_escape(field(row, "item_path")),
+                    csv_escape(field(row, "item_kind")),
+                    csv_escape(&api_family(field(row, "item_path"))),
+                    csv_escape(field(row, "status")),
+                    csv_escape(field(row, "coverage_kind")),
+                    csv_escape(field(row, "primary_gap_kind")),
+                    csv_escape(field(row, "shadow_item")),
+                    csv_escape(field(row, "drift_confidence")),
+                    csv_escape(field(row, "shadow_elicit_impl")),
+                    csv_escape(field(row, "verification_gap")),
+                    csv_escape(field(row, "verification_ready")),
+                    csv_escape(field(row, "shadow_can_be_direct")),
+                    csv_escape(field(row, "shadow_missing_external_traits")),
+                    csv_escape(field(row, "shadow_missing_our_traits")),
                     csv_escape(field(row, "action")),
                     csv_escape(field(row, "notes")),
                 ));
@@ -131,17 +132,17 @@ impl Reporter for ShadowGapsCsvReporter {
             };
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
-                field(row, "target_crate"),
-                field(row, "shadow_crate"),
-                field(row, "item_path"),
-                field(row, "item_kind"),
-                gap_kind,
-                field(row, "shadow_item"),
-                field(row, "drift_confidence"),
-                field(row, "shadow_elicit_impl"),
-                field(row, "shadow_can_be_direct"),
-                field(row, "shadow_missing_external_traits"),
-                field(row, "shadow_missing_our_traits"),
+                csv_escape(field(row, "target_crate")),
+                csv_escape(field(row, "shadow_crate")),
+                csv_escape(field(row, "item_path")),
+                csv_escape(field(row, "item_kind")),
+                csv_escape(gap_kind),
+                csv_escape(field(row, "shadow_item")),
+                csv_escape(field(row, "drift_confidence")),
+                csv_escape(field(row, "shadow_elicit_impl")),
+                csv_escape(field(row, "shadow_can_be_direct")),
+                csv_escape(field(row, "shadow_missing_external_traits")),
+                csv_escape(field(row, "shadow_missing_our_traits")),
                 csv_escape(field(row, "action")),
                 csv_escape(field(row, "notes")),
             ));
@@ -151,15 +152,6 @@ impl Reporter for ShadowGapsCsvReporter {
             media_type: "text/csv".to_string(),
             body,
         })])
-    }
-}
-
-#[instrument(level = "debug")]
-fn csv_escape(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_string()
     }
 }
 
@@ -194,10 +186,10 @@ impl Reporter for ShadowCsvReporter {
             };
             body.push_str(&format!(
                 "{},{},{},{}\n",
-                field("crate"),
-                field("target_path"),
-                field("shadow_path"),
-                finding.disposition()
+                csv_escape(field("crate")),
+                csv_escape(field("target_path")),
+                csv_escape(field("shadow_path")),
+                csv_escape(&finding.disposition().to_string())
             ));
         }
         Ok(vec![Box::new(TextArtifact {

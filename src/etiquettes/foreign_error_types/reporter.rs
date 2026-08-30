@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -78,15 +79,6 @@ fn open_rows(rows: &[ForeignErrorTypeRow]) -> impl Iterator<Item = &ForeignError
     rows.iter().filter(|row| row.disposition == "open")
 }
 
-#[instrument(level = "debug")]
-fn escape_csv(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_string()
-    }
-}
-
 #[instrument(level = "debug", skip(rows))]
 fn typed_report_from_rows(rows: &[ForeignErrorTypeRow]) -> super::types::ForeignErrorTypeReport {
     let crate_name = rows
@@ -155,17 +147,17 @@ impl Reporter for ForeignErrorTypesCsvReporter {
         for row in typed_rows(&foreign_error_type_rows(findings)) {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{},{},{}\n",
-                row.crate_name,
-                escape_csv(&row.foreign_error_type),
-                row.inference_rule_id,
-                row.confidence,
-                row.chain_break,
-                row.site_kind,
-                row.context,
-                row.file,
-                row.line,
-                escape_csv(&row.source_snippet),
-                escape_csv(&row.site_snippet),
+                csv_field(&row.crate_name),
+                csv_field(&row.foreign_error_type),
+                csv_field(&row.inference_rule_id),
+                csv_field(&row.confidence),
+                csv_field(&row.chain_break),
+                csv_field(&row.site_kind),
+                csv_field(&row.context),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.source_snippet),
+                csv_field(&row.site_snippet),
             ));
         }
         Ok(vec![Box::new(TextArtifact {

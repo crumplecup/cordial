@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -82,15 +83,15 @@ impl Reporter for DeriveCsvReporter {
         for row in derive_rows(findings) {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{}\n",
-                row.crate_name,
-                row.rule_id,
-                row.struct_name,
-                row.method_name,
-                row.qualified_name,
-                escape_csv(&row.recommendation),
-                row.file,
-                row.line,
-                escape_csv(&row.evidence),
+                csv_field(&row.crate_name),
+                csv_field(&row.rule_id),
+                csv_field(&row.struct_name),
+                csv_field(&row.method_name),
+                csv_field(&row.qualified_name),
+                csv_field(&row.recommendation),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.evidence),
             ));
         }
         Ok(vec![Box::new(TextArtifact {
@@ -235,14 +236,5 @@ impl Reporter for DeriveSummaryReporter {
             media_type: "text/markdown".to_string(),
             body,
         })])
-    }
-}
-
-#[instrument(level = "debug")]
-fn escape_csv(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_string()
     }
 }

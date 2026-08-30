@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -60,15 +61,6 @@ fn open_rows(rows: &[AntipatternRow]) -> impl Iterator<Item = &AntipatternRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
-#[instrument(level = "debug")]
-pub(super) fn escape_csv(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_string()
-    }
-}
-
 /// Writes `antipatterns.csv`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AntipatternCsvReporter;
@@ -89,12 +81,12 @@ impl Reporter for AntipatternCsvReporter {
         for row in open_rows(&antipattern_rows(findings)) {
             body.push_str(&format!(
                 "{},{},{},{},{},{}\n",
-                row.crate_name,
-                row.rule_id,
-                row.context,
-                row.file,
-                row.line,
-                escape_csv(&row.snippet),
+                csv_field(&row.crate_name),
+                csv_field(&row.rule_id),
+                csv_field(&row.context),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.snippet),
             ));
         }
         Ok(vec![Box::new(TextArtifact {

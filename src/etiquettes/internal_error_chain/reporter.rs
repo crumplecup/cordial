@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -79,15 +80,6 @@ fn compliance_rows(rows: &[InternalErrorChainRow]) -> impl Iterator<Item = &Inte
         .filter(|row| row.record_kind == InternalErrorRecordKind::Compliance.as_str())
 }
 
-#[instrument(level = "debug")]
-fn escape_csv(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_string()
-    }
-}
-
 #[instrument(level = "debug", skip(rows))]
 fn class_counts(rows: &[InternalErrorChainRow]) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
@@ -153,16 +145,16 @@ impl Reporter for InternalErrorTypeGraphCsvReporter {
         for row in type_graph_rows(&rows) {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{},{}\n",
-                row.crate_name,
-                escape_csv(&row.type_path),
-                row.node_class,
-                row.rule_id,
-                escape_csv(&row.source_target),
-                row.reaches_foreign,
-                row.chain_depth,
-                row.file,
-                row.line,
-                escape_csv(&row.snippet),
+                csv_field(&row.crate_name),
+                csv_field(&row.type_path),
+                csv_field(&row.node_class),
+                csv_field(&row.rule_id),
+                csv_field(&row.source_target),
+                csv_field(&row.reaches_foreign),
+                csv_field(&row.chain_depth),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.snippet),
             ));
         }
         Ok(vec![Box::new(TextArtifact {
@@ -196,14 +188,14 @@ impl Reporter for InternalErrorComplianceCsvReporter {
         for row in compliance_rows(&rows) {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{}\n",
-                row.crate_name,
-                row.rule_id,
-                escape_csv(&row.foreign_error_type),
-                escape_csv(&row.internal_constructor),
-                row.context,
-                row.file,
-                row.line,
-                escape_csv(&row.snippet),
+                csv_field(&row.crate_name),
+                csv_field(&row.rule_id),
+                csv_field(&row.foreign_error_type),
+                csv_field(&row.internal_constructor),
+                csv_field(&row.context),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.snippet),
             ));
         }
         Ok(vec![Box::new(TextArtifact {

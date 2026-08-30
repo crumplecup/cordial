@@ -1,3 +1,4 @@
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, MapFindingSink, TextArtifact};
@@ -36,9 +37,9 @@ impl Reporter for TrenchcoatCsvReporter {
             };
             body.push_str(&format!(
                 "{},{},{}\n",
-                field("crate"),
-                field("type_path"),
-                finding.disposition()
+                csv_field(field("crate")),
+                csv_field(field("type_path")),
+                csv_field(&finding.disposition().to_string())
             ));
         }
         Ok(vec![Box::new(TextArtifact {

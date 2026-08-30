@@ -1,3 +1,4 @@
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -79,15 +80,15 @@ impl Reporter for ImplCoverageCsvReporter {
         for row in coverage_rows(findings) {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{}\n",
-                row.crate_name,
-                row.type_path,
-                row.gap_kind,
-                row.missing_our_traits,
-                row.missing_external_traits,
-                row.elicit_complete_gap,
-                row.proof_test,
-                row.composition_test,
-                row.disposition,
+                csv_field(&row.crate_name),
+                csv_field(&row.type_path),
+                csv_field(&row.gap_kind),
+                csv_field(&row.missing_our_traits),
+                csv_field(&row.missing_external_traits),
+                csv_field(&row.elicit_complete_gap),
+                csv_field(&row.proof_test),
+                csv_field(&row.composition_test),
+                csv_field(&row.disposition),
             ));
         }
         Ok(vec![Box::new(TextArtifact {
@@ -122,18 +123,18 @@ impl Reporter for ImplGapsCsvReporter {
         {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{},{},{},{}\n",
-                row.crate_name,
-                row.type_path,
-                row.gap_kind,
-                row.missing_our_traits,
-                row.missing_external_traits,
-                row.elicit_complete_gap,
-                row.feature_gated_external,
-                row.feature_owner_crate,
-                row.candidate_unlock_features,
-                row.coverage_provider,
-                row.wrapper_paths,
-                row.covered_indirectly,
+                csv_field(&row.crate_name),
+                csv_field(&row.type_path),
+                csv_field(&row.gap_kind),
+                csv_field(&row.missing_our_traits),
+                csv_field(&row.missing_external_traits),
+                csv_field(&row.elicit_complete_gap),
+                csv_field(&row.feature_gated_external),
+                csv_field(&row.feature_owner_crate),
+                csv_field(&row.candidate_unlock_features),
+                csv_field(&row.coverage_provider),
+                csv_field(&row.wrapper_paths),
+                csv_field(&row.covered_indirectly),
             ));
         }
         Ok(vec![Box::new(TextArtifact {

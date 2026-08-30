@@ -2,11 +2,12 @@
 
 use std::collections::BTreeMap;
 
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, TextArtifact};
 
-use super::reporter::{AntipatternRow, antipattern_rows, escape_csv};
+use super::reporter::{AntipatternRow, antipattern_rows};
 use super::types::{AntipatternRuleId, build_workspace_version_in_member_summary};
 
 use tracing::instrument;
@@ -41,12 +42,12 @@ impl Reporter for VersionInMemberCsvReporter {
         {
             body.push_str(&format!(
                 "{},{},{},{},{},{}\n",
-                row.crate_name,
-                row.rule_id,
-                row.context,
-                row.file,
-                row.line,
-                escape_csv(&row.snippet),
+                csv_field(&row.crate_name),
+                csv_field(&row.rule_id),
+                csv_field(&row.context),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.snippet),
             ));
         }
         Ok(vec![Box::new(TextArtifact {

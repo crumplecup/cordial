@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -94,14 +95,14 @@ impl Reporter for CfgHygieneCsvReporter {
         let mut body = String::from("crate,rule_id,cfg_name,context,file,line,snippet\n");
         for row in rows {
             body.push_str(&format!(
-                "{},{},{},\"{}\",{},{},\"{}\"\n",
-                row.crate_name,
-                row.rule_id,
-                row.cfg_name,
-                row.context.replace('"', "''"),
-                row.file,
-                row.line,
-                row.snippet.replace('"', "''"),
+                "{},{},{},{},{},{},{}\n",
+                csv_field(&row.crate_name),
+                csv_field(&row.rule_id),
+                csv_field(&row.cfg_name),
+                csv_field(&row.context),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.snippet),
             ));
         }
         Ok(vec![Box::new(TextArtifact {

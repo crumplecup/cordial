@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -74,12 +75,12 @@ impl Reporter for AllowCsvReporter {
         for row in allow_rows(findings) {
             body.push_str(&format!(
                 "{},{},{},{},{},{}\n",
-                row.crate_name,
-                row.rule_id,
-                row.context,
-                row.file,
-                row.line,
-                escape_csv(&row.snippet),
+                csv_field(&row.crate_name),
+                csv_field(&row.rule_id),
+                csv_field(&row.context),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.snippet),
             ));
         }
         Ok(vec![Box::new(TextArtifact {
@@ -185,14 +186,5 @@ impl Reporter for AllowSummaryReporter {
             media_type: "text/markdown".to_string(),
             body,
         })])
-    }
-}
-
-#[instrument(level = "debug")]
-fn escape_csv(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_string()
     }
 }

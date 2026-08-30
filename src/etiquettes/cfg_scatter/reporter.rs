@@ -1,3 +1,4 @@
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -88,13 +89,13 @@ impl Reporter for CfgScatterCsvReporter {
         let mut body = String::from("crate,predicate,file,kinds,occurrences,sample\n");
         for row in rows {
             body.push_str(&format!(
-                "{},\"{}\",{},{},{},\"{}\"\n",
-                row.crate_name,
-                row.predicate.replace('"', "''"),
-                row.file,
-                row.kinds,
-                row.occurrences,
-                row.sample.replace('"', "''"),
+                "{},{},{},{},{},{}\n",
+                csv_field(&row.crate_name),
+                csv_field(&row.predicate),
+                csv_field(&row.file),
+                csv_field(&row.kinds),
+                csv_field(&row.occurrences),
+                csv_field(&row.sample),
             ));
         }
         Ok(vec![Box::new(TextArtifact {

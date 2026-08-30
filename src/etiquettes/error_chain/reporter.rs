@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -82,15 +83,6 @@ fn probe_counts_from_rows(rows: &[ErrorChainRow]) -> ErrorChainProbeCounts {
     counts
 }
 
-#[instrument(level = "debug")]
-fn escape_csv(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_string()
-    }
-}
-
 /// Writes `error-chain-preserved.csv`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ErrorChainCsvReporter;
@@ -111,13 +103,13 @@ impl Reporter for ErrorChainCsvReporter {
         for row in error_chain_rows(findings) {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{}\n",
-                row.crate_name,
-                row.rule_id,
-                escape_csv(&row.foreign_error_type),
-                row.context,
-                row.file,
-                row.line,
-                escape_csv(&row.snippet),
+                csv_field(&row.crate_name),
+                csv_field(&row.rule_id),
+                csv_field(&row.foreign_error_type),
+                csv_field(&row.context),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.snippet),
             ));
         }
         Ok(vec![Box::new(TextArtifact {

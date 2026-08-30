@@ -1,3 +1,4 @@
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -86,14 +87,14 @@ impl Reporter for VisibilityCsvReporter {
         for row in open_rows(&visibility_rows(findings)) {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{}\n",
-                row.crate_name,
-                row.rule_id,
-                row.module_path,
-                row.file,
-                row.line,
-                row.name_count,
-                row.parent_vis,
-                row.declared_vis,
+                csv_field(&row.crate_name),
+                csv_field(&row.rule_id),
+                csv_field(&row.module_path),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.name_count),
+                csv_field(&row.parent_vis),
+                csv_field(&row.declared_vis),
             ));
         }
         Ok(vec![Box::new(TextArtifact {

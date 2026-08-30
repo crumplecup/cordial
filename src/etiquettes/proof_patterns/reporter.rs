@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -85,15 +86,15 @@ impl Reporter for ProofPatternCsvReporter {
         for row in pattern_rows(findings) {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{}\n",
-                row.crate_name,
-                row.kind,
-                row.context,
-                row.file,
-                row.line,
-                escape_csv(&row.snippet),
-                row.cfg_test,
-                escape_csv(&row.tracked_params),
-                escape_csv(&row.recommends),
+                csv_field(&row.crate_name),
+                csv_field(&row.kind),
+                csv_field(&row.context),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.snippet),
+                csv_field(&row.cfg_test),
+                csv_field(&row.tracked_params),
+                csv_field(&row.recommends),
             ));
         }
         Ok(vec![Box::new(TextArtifact {
@@ -221,14 +222,5 @@ impl Reporter for ProofPatternSummaryReporter {
             media_type: "text/markdown".to_string(),
             body,
         })])
-    }
-}
-
-#[instrument(level = "debug")]
-fn escape_csv(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_string()
     }
 }

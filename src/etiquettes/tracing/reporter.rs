@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
@@ -77,15 +78,6 @@ fn crate_names(rows: &[&TracingRow]) -> Vec<String> {
     names
 }
 
-#[instrument(level = "debug")]
-fn escape_csv(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_string()
-    }
-}
-
 /// Writes `tracing-instrument.csv`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TracingCsvReporter;
@@ -108,17 +100,17 @@ impl Reporter for TracingCsvReporter {
         for row in tracing_rows(findings) {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{},{},{}\n",
-                row.crate_name,
-                escape_csv(&row.qualified_name),
-                row.role,
-                row.complexity,
-                row.rule,
-                row.function_kind,
-                row.visibility,
-                escape_csv(&row.recipe),
-                escape_csv(&row.file),
-                row.line,
-                row.disposition,
+                csv_field(&row.crate_name),
+                csv_field(&row.qualified_name),
+                csv_field(&row.role),
+                csv_field(&row.complexity),
+                csv_field(&row.rule),
+                csv_field(&row.function_kind),
+                csv_field(&row.visibility),
+                csv_field(&row.recipe),
+                csv_field(&row.file),
+                csv_field(&row.line),
+                csv_field(&row.disposition),
             ));
         }
         Ok(vec![Box::new(TextArtifact {
