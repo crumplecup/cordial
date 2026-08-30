@@ -419,7 +419,6 @@ fn dogfood_cordial_library_root() -> miette::Result<()> {
     )
     .into_diagnostic()
     .wrap_err("checklist")?;
-    eprintln!("{checklist}");
     assert!(
         checklist.contains("**Open items:** 0"),
         "cordial should have no crate-attr findings: {checklist}"

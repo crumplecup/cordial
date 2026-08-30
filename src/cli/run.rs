@@ -30,20 +30,20 @@ pub(super) fn execute_build_rustdoc(
 ) -> CordialResult<()> {
     let artifacts = build_workspace_members(project_root, store, crate_name, force)?;
     for artifact in artifacts {
-        eprintln!(
-            "built {} -> {}",
-            artifact.crate_name(),
-            artifact.rustdoc_json().display()
+        tracing::info!(
+            crate_name = artifact.crate_name(),
+            path = %artifact.rustdoc_json().display(),
+            "built rustdoc"
         );
     }
     #[cfg(feature = "elicitation")]
     if let Ok(shadow_dep_artifacts) = build_all_active_shadow_deps(project_root, store, force) {
         for artifact in shadow_dep_artifacts {
-            eprintln!(
-                "built shadow-dep {} (via {}) -> {}",
-                artifact.crate_name(),
-                artifact.reference_member().as_deref().unwrap_or("unknown"),
-                artifact.rustdoc_json().display()
+            tracing::info!(
+                crate_name = artifact.crate_name(),
+                via = artifact.reference_member().as_deref().unwrap_or("unknown"),
+                path = %artifact.rustdoc_json().display(),
+                "built shadow-dep rustdoc"
             );
         }
     }
@@ -61,10 +61,10 @@ pub(super) fn execute_build_sysroot(
     let sysroot = SysrootCache::from_home(home);
     let artifacts = build_sysroot_libraries(&sysroot, crate_name, force)?;
     for artifact in artifacts {
-        eprintln!(
-            "built {} -> {}",
-            artifact.crate_name(),
-            sysroot.rustdoc_cache_path(artifact.crate_name()).display()
+        tracing::info!(
+            crate_name = artifact.crate_name(),
+            path = %sysroot.rustdoc_cache_path(artifact.crate_name()).display(),
+            "built sysroot rustdoc"
         );
     }
     Ok(())
@@ -76,14 +76,14 @@ pub(super) fn execute_explain(id: Option<&str>) -> CordialResult<()> {
     let etiquettes = etiquettes_from_plugins(&plugins);
     match id {
         None => {
-            print!("{}", render_explain_list(&etiquettes));
+            write!(io::stdout(), "{}", render_explain_list(&etiquettes))?;
             Ok(())
         }
         Some(query) => {
             let Some(etiquette) = lookup_etiquette(&etiquettes, query) else {
                 return Err(CordialError::unknown_etiquette(query));
             };
-            print!("{}", render_explain_page(etiquette));
+            write!(io::stdout(), "{}", render_explain_page(etiquette))?;
             Ok(())
         }
     }
@@ -105,12 +105,12 @@ pub(super) fn execute_quality_apply(
     {
         let home = store_home.clone().unwrap_or_else(default_store_home);
         let summary = crate::run_crate_attrs_apply(project_root, &home, crate_name, dry_run)?;
-        eprintln!(
-            "crate-attrs apply: {} attributes in {} files ({} already compliant, {} unresolved)",
-            summary.inserted_attrs,
-            summary.changed_files,
-            summary.skipped_existing,
-            summary.unresolved,
+        tracing::info!(
+            inserted_attrs = summary.inserted_attrs,
+            changed_files = summary.changed_files,
+            already_compliant = summary.skipped_existing,
+            unresolved = summary.unresolved,
+            "crate-attrs apply"
         );
     }
 
@@ -128,9 +128,9 @@ pub(super) fn execute_quality_apply(
                 dry_run,
             )?;
         } else {
-            eprintln!(
-                "tracing apply: no checklist at {}, skipped",
-                checklist_path.display()
+            tracing::warn!(
+                path = %checklist_path.display(),
+                "tracing apply: no checklist, skipped"
             );
         }
     }
@@ -150,13 +150,13 @@ pub(super) fn execute_tracing_apply(
         .map(Path::to_path_buf)
         .unwrap_or_else(|| store.findings_dir().join("tracing-instrument.checklist.md"));
     let summary = run_tracing_instrument_apply(project_root, &checklist_path, crate_name, dry_run)?;
-    eprintln!(
-        "tracing apply: {} functions in {} files ({} already instrumented, {} skipped by verifier policy, {} unresolved)",
-        summary.changed_functions,
-        summary.changed_files,
-        summary.skipped_existing,
-        summary.skipped_policy,
-        summary.unresolved,
+    tracing::info!(
+        changed_functions = summary.changed_functions,
+        changed_files = summary.changed_files,
+        already_instrumented = summary.skipped_existing,
+        skipped_by_policy = summary.skipped_policy,
+        unresolved = summary.unresolved,
+        "tracing apply"
     );
     Ok(())
 }
@@ -222,12 +222,9 @@ fn print_run_summary(outcome: &dyn RunOutcome) {
         .artifacts()
         .map(|artifact| artifact.name())
         .collect();
-    eprintln!("findings: {open} open, {suppressed} suppressed");
+    tracing::info!(open, suppressed, "findings");
     if !artifacts.is_empty() {
-        eprintln!("artifacts:");
-        for name in artifacts {
-            eprintln!("  {name}");
-        }
+        tracing::info!(?artifacts, "artifacts");
     }
 }
 
@@ -250,9 +247,10 @@ pub(super) fn execute_backup_exceptions(
 ) -> CordialResult<()> {
     let backup_root = resolve_exceptions_root(project_root, root);
     let copied = backup_exception_files(store, &backup_root)?;
-    println!(
-        "backed up {copied} exception files to {}",
-        backup_root.join(&store.project_slug).display()
+    tracing::info!(
+        copied,
+        path = %backup_root.join(&store.project_slug).display(),
+        "backed up exception files"
     );
     Ok(())
 }
@@ -265,9 +263,10 @@ pub(super) fn execute_load_exceptions(
 ) -> CordialResult<()> {
     let backup_root = resolve_exceptions_root(project_root, root);
     let copied = load_exception_files(store, &backup_root)?;
-    println!(
-        "loaded {copied} exception files from {}",
-        backup_root.join(&store.project_slug).display()
+    tracing::info!(
+        copied,
+        path = %backup_root.join(&store.project_slug).display(),
+        "loaded exception files"
     );
     Ok(())
 }
@@ -298,7 +297,7 @@ fn print_add_outcome(outcome: AddExceptionOutcome) -> CordialResult<()> {
     } else {
         "already present"
     };
-    println!("{verb} {}", outcome.path().display());
+    tracing::info!(verb, path = %outcome.path().display(), "exception row");
     Ok(())
 }
 
@@ -324,16 +323,16 @@ pub(super) fn list_exceptions(store: &StoreLayout) -> CordialResult<()> {
     }
     files.sort();
     if files.is_empty() {
-        eprintln!(
-            "no exception files under {}, {}, or {}",
-            exceptions_dir.display(),
-            quality_patches_dir.display(),
-            patches_dir.display()
+        tracing::warn!(
+            exceptions = %exceptions_dir.display(),
+            quality_patches = %quality_patches_dir.display(),
+            patches = %patches_dir.display(),
+            "no exception files"
         );
         return Ok(());
     }
     for path in files {
-        println!("{}", path.display());
+        writeln!(io::stdout(), "{}", path.display())?;
     }
     Ok(())
 }
@@ -379,7 +378,7 @@ pub(super) fn show_exceptions(
     let bytes = fs::read(&path)?;
     io::stdout().write_all(&bytes)?;
     if !bytes.ends_with(b"\n") {
-        println!();
+        writeln!(io::stdout())?;
     }
     Ok(())
 }
@@ -414,9 +413,9 @@ pub(super) fn export_surreal(
 
     if let Some(path) = output {
         fs::write(path, body)?;
-        eprintln!("wrote {}", path.display());
+        tracing::info!(path = %path.display(), "wrote surreal export");
     } else {
-        print!("{body}");
+        write!(io::stdout(), "{body}")?;
     }
     Ok(())
 }

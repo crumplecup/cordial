@@ -73,7 +73,7 @@ framework itself.
 | Feature | Plugin |
 | --- | --- |
 | `panics` | Panic sources — error-handling layer (library → internal errors, binary/tests → miette) |
-| `tracing` | `#[instrument]` coverage → classified recipes ([tracing-etiquette.md](docs/planning/tracing-etiquette.md)) |
+| `tracing` | `#[instrument]` coverage → classified recipes; leftover stdio (`println!`/`print!`/`dbg!`) ([tracing-etiquette.md](docs/planning/tracing-etiquette.md)) |
 | `derives` | Manual builder/getter/setter/new patterns |
 | `allows` | `#[allow(...)]` inventory |
 | `verus_warnings` | Verus rustc-fork compiler warnings ([verus-warnings-etiquette.md](docs/planning/verus-warnings-etiquette.md)) |

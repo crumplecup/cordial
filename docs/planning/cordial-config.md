@@ -80,6 +80,16 @@ min_fluent_setters = 2
 # helper_in_lib = true
 # rust_log_fallback = true
 # idempotent = true
+
+[tracing.stdio]
+# All default true. One leftover-stdio lint per macro.
+# println = true
+# eprintln = true
+# print = true
+# eprint = true
+# dbg = true
+# skip_cargo_protocol = true
+# skip_folders = ["tests/fixtures", "tests/parity"]
 ```
 
 `apply_gate_crates` wraps `--apply`'s `#[instrument]` as
@@ -105,7 +115,8 @@ session. Visibility, modularity (including types-per-file, module-size
 2σ, lower-tail ignore, hotspot diagnosis, and hierarchy lints: top-heavy,
 lopsided, unary-nest collapse), cfg_scatter, derives
 (`max_constructor_args`, `min_fluent_setters`), tracing (`extra_skip`,
-`apply_gate_crates`, `apply_skip_crates`, nested `[tracing.subscriber]`),
+`apply_gate_crates`, `apply_skip_crates`, nested `[tracing.subscriber]`
+and `[tracing.stdio]`),
 crate_attrs (`forbid_unsafe`, `missing_docs`, `allow_unsafe`,
 `allow_missing_docs`), and doc_warnings (`document_private_items`,
 `all_features`, `skip_crates`) read through `load_session_config`.

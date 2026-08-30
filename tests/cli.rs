@@ -3,7 +3,9 @@ use std::fs;
 use std::process::Command;
 
 fn cordial_command() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_cordial"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+    command.env("RUST_LOG", "info");
+    command
 }
 
 fn utf8_path(path: &std::path::Path) -> miette::Result<&str> {
@@ -199,8 +201,11 @@ fn cli_exceptions_backup_and_load_roundtrip() -> miette::Result<()> {
         "stderr: {}",
         String::from_utf8_lossy(&backup.stderr)
     );
-    let backup_body = String::from_utf8_lossy(&backup.stdout);
-    assert!(backup_body.contains("backed up 2 exception files"));
+    let backup_body = String::from_utf8_lossy(&backup.stderr);
+    assert!(
+        backup_body.contains("backed up exception files"),
+        "stderr: {backup_body}"
+    );
     assert!(
         fixture
             .path()
@@ -239,8 +244,11 @@ fn cli_exceptions_backup_and_load_roundtrip() -> miette::Result<()> {
         "stderr: {}",
         String::from_utf8_lossy(&load.stderr)
     );
-    let load_body = String::from_utf8_lossy(&load.stdout);
-    assert!(load_body.contains("loaded 2 exception files"));
+    let load_body = String::from_utf8_lossy(&load.stderr);
+    assert!(
+        load_body.contains("loaded exception files"),
+        "stderr: {load_body}"
+    );
     assert!(project_store.join("exceptions/panics/demo.json").is_file());
     assert!(project_store.join("patches/chrono.json").is_file());
 
@@ -300,8 +308,8 @@ fn cli_exceptions_add_writes_quality_and_coverage_rows() -> miette::Result<()> {
         "stderr: {}",
         String::from_utf8_lossy(&add.stderr)
     );
-    let add_body = String::from_utf8_lossy(&add.stdout);
-    assert!(add_body.contains("added"));
+    let add_body = String::from_utf8_lossy(&add.stderr);
+    assert!(add_body.contains("added"), "stderr: {add_body}");
     let quality = project_store.join("exceptions/panics/demo.json");
     assert!(quality.is_file());
     let quality_body = fs::read_to_string(&quality)

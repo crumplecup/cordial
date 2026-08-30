@@ -19,7 +19,7 @@ Active implementation plans for `cordial`.
 | [Visibility etiquette](docs/planning/visibility-etiquette.md) | **Active** | `pub mod` paths must earn their existence; `prefer_root` vs branching peel |
 | [cordial.toml config](docs/planning/cordial-config.md) | **Active** | Layered `cordial.toml` via the `config` crate; canonical etiquette thresholds |
 | [Modularity etiquette](docs/planning/modularity-etiquette.md) | **Active** | Combined modularity plugin: size, packing, hierarchy lints |
-| [Tracing etiquette](docs/planning/tracing-etiquette.md) | **Active** | Classify by role; recipe deltas; apply; attenuation; subscriber init policy |
+| [Tracing etiquette](docs/planning/tracing-etiquette.md) | **Active** | Classify by role; recipe deltas; apply; attenuation; subscriber init; leftover stdio (`println!`/`print!`/`dbg!`) |
 | [Glob imports](docs/planning/glob-imports-etiquette.md) | **Active** | Flag `use …::*`; replace with explicit names |
 | [Inline tests](docs/planning/inline-tests-etiquette.md) | **Active** | `#[cfg(test)]` / `#[test]` under `src/` belong in `tests/` |
 | [Verus compiler warnings](docs/planning/verus-warnings-etiquette.md) | **Active** | Post-process `verus` output; rustc never sees these diagnostics |

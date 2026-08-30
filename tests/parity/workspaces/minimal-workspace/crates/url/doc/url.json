@@ -3,6 +3,26 @@
   "crate_version": "0.1.0",
   "includes_private": false,
   "index": {
+    "1": {
+      "id": 1,
+      "crate_id": 0,
+      "name": "url",
+      "span": null,
+      "visibility": "public",
+      "docs": null,
+      "links": {},
+      "attrs": [],
+      "deprecation": null,
+      "inner": {
+        "module": {
+          "is_crate": true,
+          "items": [
+            2
+          ],
+          "is_stripped": false
+        }
+      }
+    },
     "2": {
       "id": 2,
       "crate_id": 0,
@@ -23,36 +43,9 @@
           "impls": []
         }
       }
-    },
-    "1": {
-      "id": 1,
-      "crate_id": 0,
-      "name": "url",
-      "span": null,
-      "visibility": "public",
-      "docs": null,
-      "links": {},
-      "attrs": [],
-      "deprecation": null,
-      "inner": {
-        "module": {
-          "is_crate": true,
-          "items": [
-            2
-          ],
-          "is_stripped": false
-        }
-      }
     }
   },
   "paths": {
-    "1": {
-      "crate_id": 0,
-      "path": [
-        "url"
-      ],
-      "kind": "module"
-    },
     "2": {
       "crate_id": 0,
       "path": [
@@ -60,6 +53,13 @@
         "Widget"
       ],
       "kind": "struct"
+    },
+    "1": {
+      "crate_id": 0,
+      "path": [
+        "url"
+      ],
+      "kind": "module"
     }
   },
   "external_crates": {},

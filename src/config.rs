@@ -764,6 +764,10 @@ pub struct TracingThresholds {
     #[serde(default)]
     #[new(default)]
     subscriber: TracingSubscriberPolicy,
+    /// Leftover-stdio filter. Each macro defaults **on**.
+    #[serde(default)]
+    #[new(default)]
+    stdio: TracingStdioPolicy,
     /// Run this etiquette (`true`) or skip it (`false`).
     #[serde(default = "default_true")]
     #[new(value = "true")]
@@ -828,6 +832,74 @@ impl Default for TracingSubscriberPolicy {
     }
 }
 
+/// Whether each leftover-stdio macro is armed, plus folder / cargo skips.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+)]
+pub struct TracingStdioPolicy {
+    /// Flag leftover `println!` (including `std::println!`).
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    println: bool,
+    /// Flag leftover `eprintln!`.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    eprintln: bool,
+    /// Flag leftover `print!`.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    print: bool,
+    /// Flag leftover `eprint!`.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    eprint: bool,
+    /// Flag leftover `dbg!`.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    dbg: bool,
+    /// Skip first-string `cargo:` / `cargo::` build-script protocol.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    skip_cargo_protocol: bool,
+    /// Crate-relative folder prefixes to skip (`tests/fixtures`, `src/generated`).
+    /// Replacing this list in `cordial.toml` replaces the defaults, it does
+    /// not union with them.
+    #[serde(default = "default_stdio_skip_folders")]
+    skip_folders: Vec<String>,
+}
+
+#[instrument(level = "debug")]
+fn default_stdio_skip_folders() -> Vec<String> {
+    vec!["tests/fixtures".to_string(), "tests/parity".to_string()]
+}
+
+impl TracingStdioPolicy {
+    /// Whether `file` lives under a configured skip folder.
+    #[instrument(level = "debug", skip(self, file, crate_root), ret)]
+    pub fn skips_file(&self, file: &Path, crate_root: &Path) -> bool {
+        let rel = file.strip_prefix(crate_root).unwrap_or(file);
+        self.skip_folders.iter().any(|folder| {
+            let prefix = Path::new(folder);
+            rel == prefix || rel.starts_with(prefix)
+        })
+    }
+}
+
+impl Default for TracingStdioPolicy {
+    #[instrument(level = "debug", ret)]
+    fn default() -> Self {
+        Self {
+            println: true,
+            eprintln: true,
+            print: true,
+            eprint: true,
+            dbg: true,
+            skip_cargo_protocol: true,
+            skip_folders: default_stdio_skip_folders(),
+        }
+    }
+}
+
 impl Default for TracingThresholds {
     #[instrument(level = "debug", ret)]
     fn default() -> Self {
@@ -836,6 +908,7 @@ impl Default for TracingThresholds {
             apply_gate_crates: std::collections::HashMap::new(),
             apply_skip_crates: Vec::new(),
             subscriber: TracingSubscriberPolicy::default(),
+            stdio: TracingStdioPolicy::default(),
             enabled: true,
         }
     }

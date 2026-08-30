@@ -251,6 +251,17 @@ input to the recipe, not the only knob.
 # helper_in_lib = true
 # rust_log_fallback = true
 # idempotent = true
+
+[tracing.stdio]
+# All default true. One lint per leftover stdio macro.
+# println = true
+# eprintln = true
+# print = true
+# eprint = true
+# dbg = true
+# skip_cargo_protocol = true
+# skip_folders replaces the default list (does not union):
+# skip_folders = ["tests/fixtures", "tests/parity"]
 ```
 
 Role→level maps stay in code for v1 (the enum is the policy). Promote to
@@ -310,6 +321,37 @@ are still a fat main.
 
 ---
 
+## Std print
+
+Leftover stdio is a diagnostic that should be a tracing event — including
+`main`, `src/cli`, and `tests/`. One lint per macro, same `tracing`
+feature and etiquette; **separate artifacts**
+(`tracing-print.checklist.md`) so `--apply` never rewrites these rows.
+The filter is `[tracing.stdio]` in `cordial.toml`.
+
+| Rule | Macro | Fix |
+| --- | --- | --- |
+| `TRACING-STD-PRINTLN` | `println!` | `tracing::info!` / `debug!` |
+| `TRACING-STD-EPRINTLN` | `eprintln!` | `tracing::warn!` / `error!` |
+| `TRACING-STD-PRINT` | `print!` | `tracing::info!` / `debug!` |
+| `TRACING-STD-EPRINT` | `eprint!` | `tracing::warn!` / `error!` |
+| `TRACING-STD-DBG` | `dbg!` | `tracing::debug!` |
+
+Knobs (all default **on** except folder list):
+
+- `println` / `eprintln` / `print` / `eprint` / `dbg` — arm that lint
+- `skip_cargo_protocol` — skip first-string `cargo:` / `cargo::`
+- `skip_folders` — crate-relative prefixes. Default
+  `["tests/fixtures", "tests/parity"]`. A TOML list **replaces** the
+  default, it does not union. Per-site suppressions stay
+  `cordial exceptions add`.
+
+Dogfood: cordial `src/` and `tests/` have none. Command payloads (explain
+pages, JSON, file dumps) write to stdout with `write!` / `write_all`,
+not leftover stdio macros.
+
+---
+
 ## Module layout
 
 ```text
@@ -325,6 +367,7 @@ src/etiquettes/tracing/
   reporter.rs       crate → role grouping; relative paths
   apply/            classify + recipe match; write attribute
   subscriber/       init-helper policy (MAIN/TEST/LIB/RUST-LOG/IDEMPOTENT)
+  print/            leftover stdio macros (TRACING-STD-PRINTLN / … / DBG)
 ```
 
 If `recipe.rs` grows past the modularity file floor, peel
@@ -358,10 +401,12 @@ init**. Classify + recipe on every finding; delta rules vs present
 (`TRACING-PROOF-INSTRUMENT`, `TRACING-UNGATED-INSTRUMENT`,
 `TRACING-SKIP-INSTRUMENT`) fire when a span is already present where the
 backend cannot use it. Subscriber rules (`TRACING-SUBSCRIBER-*`) live on
-the same etiquette with their own checklist. `[tracing]` knobs
-(`extra_skip`, `apply_gate_crates`, `apply_skip_crates`,
-`[tracing.subscriber]`) load through `cordial.toml`. The quality report
-blurb is open gaps **by role**, plus a subscriber count.
+the same etiquette with their own checklist. Leftover stdio
+(`[tracing.stdio]`, one rule per macro) is a third checklist; `--apply`
+does not rewrite those rows. `[tracing]` knobs (`extra_skip`,
+`apply_gate_crates`, `apply_skip_crates`, `[tracing.subscriber]`,
+`[tracing.stdio]`) load through `cordial.toml`. The quality report
+blurb is open gaps **by role**, plus subscriber and std-print counts.
 
 Every function is on the instrument checklist. Visibility is recorded on
 the finding; it does not suppress a gap. Role recipes pick `trace` /

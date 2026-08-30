@@ -46,6 +46,13 @@
     }
   },
   "paths": {
+    "1": {
+      "crate_id": 0,
+      "path": [
+        "elicitation"
+      ],
+      "kind": "module"
+    },
     "2": {
       "crate_id": 0,
       "path": [
@@ -53,13 +60,6 @@
         "Handle"
       ],
       "kind": "struct"
-    },
-    "1": {
-      "crate_id": 0,
-      "path": [
-        "elicitation"
-      ],
-      "kind": "module"
     }
   },
   "external_crates": {},
