@@ -148,7 +148,7 @@ impl ContractIndex {
             // describes -- the real type lives in `qself.ty` instead,
             // syn's dedicated slot for the part before `as`.
             if let Some(qself) = &func_path.qself {
-                let prefix_text = normalize_tokens(qself.ty.to_token_stream());
+                let prefix_text = strip_whitespace(&normalize_tokens(qself.ty.to_token_stream()));
                 return known
                     .iter()
                     .any(|(evidence, _)| normalize_text(evidence).ends_with(&prefix_text));
@@ -162,7 +162,9 @@ impl ContractIndex {
                 for seg in segments.iter().take(segments.len() - 1) {
                     prefix.segments.push(seg.clone());
                 }
-                let prefix_text = strip_turbofish(&normalize_tokens(prefix.to_token_stream()));
+                let prefix_text = strip_whitespace(&strip_turbofish(&normalize_tokens(
+                    prefix.to_token_stream(),
+                )));
                 return known
                     .iter()
                     .any(|(evidence, _)| normalize_text(evidence).ends_with(&prefix_text));
@@ -247,31 +249,38 @@ pub(super) fn verifier_for_crate(crate_name: &str) -> Option<&'static str> {
 }
 
 /// Re-tokenize and re-stringify a fragment or clause into a canonical,
-/// whitespace-normalized form. Tokenizing (not parsing as an expression)
-/// is what makes this work for Pearlite/Verus-spec syntax that isn't valid
-/// plain Rust.
+/// whitespace-stripped form for the type-prefix suffix comparison in
+/// [`ContractIndex::matches_named_call`]. Tokenizing (not parsing as an
+/// expression) is what makes this work for Pearlite/Verus-spec syntax
+/// that isn't valid plain Rust.
 ///
-/// Also splits any adjacent `>` run apart ([`split_adjacent_gt`]) so
-/// suffix comparison succeeds against nested-generic `evidence` strings.
+/// Whitespace-stripped rather than merely whitespace-*normalized*:
+/// `evidence` strings are re-lexed from plain text (`TokenStream::
+/// parse`), while a call site's type prefix comes from `ToTokens` on a
+/// live `syn::Path`/`syn::Type` AST — the two can pick different
+/// Joint/Alone spacing for identical-looking output even after generic
+/// normalization (confirmed against a nested-generic type carrying a
+/// lifetime, `Bytes<'static>`: one path prints `Bytes <'static > >`,
+/// the other `Bytes < 'static > >`, an inconsistency in the space
+/// *before* the lifetime's leading `'`, on top of the adjacent-`>>`
+/// case a single space-insertion pass already had to special-case).
+/// Whitespace carries no meaning in a suffix comparison over Rust
+/// tokens, so stripping it entirely removes the whole class of
+/// spacing mismatches at once rather than patching one quirk at a
+/// time -- paired with [`strip_whitespace`] on the call-site side.
 #[instrument(level = "debug")]
 fn normalize_text(text: &str) -> String {
     text.parse::<TokenStream>()
-        .map(|stream| split_adjacent_gt(&stream.to_string()))
-        .unwrap_or_else(|_| text.trim().to_string())
+        .map(|stream| strip_whitespace(&stream.to_string()))
+        .unwrap_or_else(|_| strip_whitespace(text.trim()))
 }
 
-/// Insert a space between every pair of immediately-adjacent `>` characters.
+/// Strip every whitespace character from `text` — see [`normalize_text`]
+/// for why the type-prefix suffix comparison needs this instead of
+/// preserved-but-normalized spacing.
 #[instrument(level = "debug")]
-fn split_adjacent_gt(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        out.push(c);
-        if c == '>' && chars.peek() == Some(&'>') {
-            out.push(' ');
-        }
-    }
-    out
+fn strip_whitespace(text: &str) -> String {
+    text.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
 #[instrument(level = "debug", skip(tokens))]

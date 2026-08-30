@@ -39,6 +39,422 @@ fn kani_type_record(kind: &str, evidence: &str) -> ContractRecordDump {
     }
 }
 
+// ---------------------------------------------------------------------
+// Shape matrix
+//
+// See `docs/planning/contract-bounds-shape-matrix.md`. Instead of one
+// hand-written `#[test]` per syntactic shape the scanner needs to
+// recognize, `SHAPE_CASES` enumerates `(verifier, shape, expected
+// outcome)` rows and one driving test dispatches each row to the right
+// `scan_*_contract_bounds_source` entry point. A row with
+// `expect_flagged: true` for a shape that *should* be silenced (a real,
+// correctly-named call) documents a known scanner gap rather than hiding
+// it -- grep for `expect_flagged: true` to find every open case.
+// ---------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy)]
+enum Verifier {
+    Kani,
+    Creusot,
+    Verus,
+}
+
+struct ShapeCase {
+    /// Names the pattern under test; appears in the panic message so a
+    /// broken row points straight at its own shape.
+    id: &'static str,
+    verifier: Verifier,
+    /// Documentary only -- which clause list the fixture's single clause
+    /// lives in. Not passed to the scanner (which detects this from the
+    /// source itself); read this alongside `id` when auditing coverage.
+    kind: &'static str,
+    source: &'static str,
+    registry: fn() -> Vec<ContractRecordDump>,
+    /// `false` = the scanner must stay silent (a real, correctly-named
+    /// call). `true` = the scanner is expected to flag this shape --
+    /// either because it's genuinely a raw/unnamed bound, or because it's
+    /// a documented gap (see `docs/planning/contract-bounds-shape-matrix.md`).
+    expect_flagged: bool,
+}
+
+fn empty_registry() -> Vec<ContractRecordDump> {
+    Vec::new()
+}
+
+fn abbreviated_ensures_registry() -> Vec<ContractRecordDump> {
+    vec![ContractRecordDump {
+        evidence: "amenable_std::rust_std::RustStdStandard<i32>".to_string(),
+        verifier: "kani".to_string(),
+        kind: "ensures".to_string(),
+        fragment: "value >= 0".to_string(),
+    }]
+}
+
+fn nested_generic_cell_registry() -> Vec<ContractRecordDump> {
+    vec![ContractRecordDump {
+        evidence: "amenable_std::rust_std::RustStdStandard<Cell<i32>>".to_string(),
+        verifier: "kani".to_string(),
+        kind: "ensures".to_string(),
+        fragment: "actual == expected".to_string(),
+    }]
+}
+
+fn nonnegative_ensures_registry() -> Vec<ContractRecordDump> {
+    vec![kani_type_record("ensures", "fixture::NonNegative")]
+}
+
+fn write_stores_new_value_registry() -> Vec<ContractRecordDump> {
+    vec![logic_fn_record(
+        "verus",
+        "ensures",
+        "write_stores_new_value",
+    )]
+}
+
+fn bytes_lifetime_registry() -> Vec<ContractRecordDump> {
+    vec![kani_type_record(
+        "ensures",
+        "amenable_std::rust_std::RustStdStandard<std::str::Bytes<'static>>",
+    )]
+}
+
+fn into_iter_const_generic_registry() -> Vec<ContractRecordDump> {
+    vec![kani_type_record(
+        "ensures",
+        "amenable_std::rust_std::RustStdStandard<std::array::IntoIter<i32, 3>>",
+    )]
+}
+
+fn pair_like_comma_generic_registry() -> Vec<ContractRecordDump> {
+    vec![kani_type_record(
+        "ensures",
+        "amenable_std::rust_std::RustStdStandard<PairLike<i32, i32>>",
+    )]
+}
+
+const SHAPE_CASES: &[ShapeCase] = &[
+    ShapeCase {
+        id: "creusot_trivial_bare_result",
+        verifier: Verifier::Creusot,
+        kind: "ensures",
+        source: r#"
+amenable_derive::harness! {
+    creusot, VERIFY_SOMETHING_SRC, {
+        #[trusted]
+        #[ensures(result)]
+        fn verify_something() -> bool {
+            match 1 {
+                1 => true,
+                _ => false,
+            }
+        }
+    }
+}
+"#,
+        registry: empty_registry,
+        expect_flagged: false,
+    },
+    ShapeCase {
+        id: "verus_trivial_bare_result",
+        verifier: Verifier::Verus,
+        kind: "ensures",
+        source: r#"
+use verus_builtin_macros::verus;
+use vstd::prelude::*;
+
+verus! {
+
+pub fn verify_something() -> (result: bool)
+    ensures
+        result,
+{
+    true
+}
+
+} // verus!
+"#,
+        registry: empty_registry,
+        expect_flagged: false,
+    },
+    ShapeCase {
+        id: "verus_named_call_with_final_argument",
+        verifier: Verifier::Verus,
+        kind: "ensures",
+        source: r#"
+use verus_builtin_macros::verus;
+use vstd::prelude::*;
+
+pub struct VerusCellModel {
+    value: i32,
+}
+
+verus! {
+
+impl VerusCellModel {
+    pub fn set(&mut self, new_value: i32)
+        ensures
+            write_stores_new_value(new_value as int, final(self).value as int),
+    {
+        self.value = new_value;
+    }
+}
+
+} // verus!
+"#,
+        registry: write_stores_new_value_registry,
+        expect_flagged: false,
+    },
+    ShapeCase {
+        id: "kani_type_suffix_abbreviated_call_site",
+        verifier: Verifier::Kani,
+        kind: "ensures",
+        source: r#"
+amenable_derive::harness! {
+    kani, VERIFY_ABBREVIATED_SRC, {
+        #[kani::proof]
+        fn verify_abbreviated() {
+            let value: i32 = kani::any();
+            assert!(RustStdStandard::<i32>::ensures(value), "message");
+        }
+    }
+}
+"#,
+        registry: abbreviated_ensures_registry,
+        expect_flagged: false,
+    },
+    ShapeCase {
+        id: "kani_type_suffix_nested_generic_evidence",
+        verifier: Verifier::Kani,
+        kind: "ensures",
+        source: r#"
+amenable_derive::harness! {
+    kani, VERIFY_NESTED_GENERIC_SRC, {
+        #[kani::proof]
+        fn verify_nested_generic() {
+            let cell = std::cell::Cell::new(0i32);
+            assert!(RustStdStandard::<Cell<i32>>::ensures((cell.get(), 0)), "message");
+        }
+    }
+}
+"#,
+        registry: nested_generic_cell_registry,
+        expect_flagged: false,
+    },
+    ShapeCase {
+        id: "kani_negated_call_registered_type",
+        verifier: Verifier::Kani,
+        kind: "ensures",
+        source: r#"
+amenable_derive::harness! {
+    kani, VERIFY_REJECTS_ZERO_SRC, {
+        #[kani::proof]
+        fn verify_rejects_zero() {
+            let value: i32 = kani::any();
+            assert!(!fixture::NonNegative::ensures(value), "message");
+        }
+    }
+}
+"#,
+        registry: nonnegative_ensures_registry,
+        expect_flagged: false,
+    },
+    ShapeCase {
+        id: "kani_double_negated_call",
+        verifier: Verifier::Kani,
+        kind: "ensures",
+        source: r#"
+amenable_derive::harness! {
+    kani, VERIFY_DOUBLE_NEGATED_SRC, {
+        #[kani::proof]
+        fn verify_double_negated() {
+            let value: i32 = kani::any();
+            assert!(!!fixture::NonNegative::ensures(value), "message");
+        }
+    }
+}
+"#,
+        registry: nonnegative_ensures_registry,
+        // A double negation isn't folded by the matcher, so it's still
+        // flagged -- genuinely, not a documented gap: `!!name(x)` isn't
+        // the same recognized shape as `name(x)` or `!name(x)`.
+        expect_flagged: true,
+    },
+    ShapeCase {
+        id: "kani_fully_qualified_qself_call",
+        verifier: Verifier::Kani,
+        kind: "ensures",
+        source: r#"
+amenable_derive::harness! {
+    kani, VERIFY_QUALIFIED_SRC, {
+        #[kani::proof]
+        fn verify_qualified() {
+            let value: i32 = kani::any();
+            assert!(
+                <fixture::NonNegative as Ensures<KaniVerifier>>::ensures(value),
+                "message"
+            );
+        }
+    }
+}
+"#,
+        registry: nonnegative_ensures_registry,
+        expect_flagged: false,
+    },
+    ShapeCase {
+        id: "kani_assert_eq_call_shape_synthesis",
+        verifier: Verifier::Kani,
+        kind: "ensures",
+        source: r#"
+amenable_derive::harness! {
+    kani, VERIFY_STILL_RAW_SRC, {
+        #[kani::proof]
+        fn verify_still_raw() {
+            let value: i32 = kani::any();
+            assert_eq!(fixture::NonNegative::round_trip(value), value);
+        }
+    }
+}
+"#,
+        registry: nonnegative_ensures_registry,
+        // `assert_eq!(A, B)` is always synthesized as the raw equation
+        // `A == B`, never matched against a registered call -- even
+        // though `fixture::NonNegative` is registered, it's `round_trip`
+        // being called, not `ensures`/`requires`, so this is genuinely
+        // unnamed, not a gap.
+        expect_flagged: true,
+    },
+    ShapeCase {
+        id: "verus_negated_bare_result",
+        verifier: Verifier::Verus,
+        kind: "ensures",
+        source: r#"
+use verus_builtin_macros::verus;
+use vstd::prelude::*;
+
+verus! {
+
+pub fn verify_something() -> (result: bool)
+    ensures
+        !result,
+{
+    false
+}
+
+} // verus!
+"#,
+        registry: empty_registry,
+        expect_flagged: false,
+    },
+    ShapeCase {
+        id: "kani_turbofish_nested_generic_lifetime",
+        verifier: Verifier::Kani,
+        kind: "ensures",
+        source: r#"
+amenable_derive::harness! {
+    kani, VERIFY_BYTES_SRC, {
+        #[kani::proof]
+        fn verify_bytes_yields_the_utf8_encoding() {
+            let byte: u8 = kani::any();
+            let s = (byte as char).to_string();
+            let mut it = s.bytes();
+            assert!(
+                RustStdStandard::<std::str::Bytes<'static>>::ensures((it.next(), Some(byte))),
+                "message"
+            );
+        }
+    }
+}
+"#,
+        registry: bytes_lifetime_registry,
+        expect_flagged: false,
+    },
+    ShapeCase {
+        id: "kani_turbofish_const_generic",
+        verifier: Verifier::Kani,
+        kind: "ensures",
+        source: r#"
+amenable_derive::harness! {
+    kani, VERIFY_ARRAY_INTO_ITER_SRC, {
+        #[kani::proof]
+        fn verify_array_into_iter_next_matches_original_element() {
+            let a: i32 = kani::any();
+            let b: i32 = kani::any();
+            let c: i32 = kani::any();
+            let mut it = [a, b, c].into_iter();
+            assert!(RustStdStandard::<std::array::IntoIter<i32, 3>>::ensures((it.next(), Some(a))));
+        }
+    }
+}
+"#,
+        registry: into_iter_const_generic_registry,
+        // KNOWN GAP, deliberately unfixed -- see "Why the const-generic
+        // case is harder than the other two" in
+        // docs/planning/contract-bounds-shape-matrix.md. The comma inside
+        // `IntoIter<i32, 3>` isn't nested in any `Group` token, so
+        // `check_macro_call`'s top-level-comma split truncates the real
+        // call, and it's flagged even though `RustStdStandard<..>` is
+        // correctly registered and named above. Real production instance:
+        // `crates/amenable_kani/src/rust_std/array.rs`.
+        expect_flagged: true,
+    },
+    ShapeCase {
+        id: "kani_turbofish_comma_bearing_generic",
+        verifier: Verifier::Kani,
+        kind: "ensures",
+        source: r#"
+amenable_derive::harness! {
+    kani, VERIFY_PAIR_LIKE_SRC, {
+        #[kani::proof]
+        fn verify_pair_like_ensures_matches() {
+            let a: i32 = kani::any();
+            let b: i32 = kani::any();
+            assert!(RustStdStandard::<PairLike<i32, i32>>::ensures((a, b)));
+        }
+    }
+}
+"#,
+        registry: pair_like_comma_generic_registry,
+        // KNOWN GAP, same root cause as `kani_turbofish_const_generic`
+        // (a non-const two-parameter generic instead of a const one) --
+        // no real production instance yet, kept as a synthetic row so the
+        // shape is documented and reproducible before one shows up.
+        expect_flagged: true,
+    },
+];
+
+#[test]
+fn shape_matrix_matches_expected_flags() -> miette::Result<()> {
+    cordial::init_tracing();
+    let src_root = fixtures_root();
+    for case in SHAPE_CASES {
+        let path = src_root.join(format!("shape_{}.rs", case.id));
+        let registry = (case.registry)();
+        let scan = match case.verifier {
+            Verifier::Kani => scan_kani_contract_bounds_source,
+            Verifier::Creusot => scan_creusot_contract_bounds_source,
+            Verifier::Verus => scan_verus_contract_bounds_source,
+        };
+        let findings = scan(case.source, &path, &src_root, &registry)
+            .into_diagnostic()
+            .wrap_err_with(|| format!("scan shape case {} ({})", case.id, case.kind))?;
+        let flagged = !findings.is_empty();
+        assert_eq!(
+            flagged, case.expect_flagged,
+            "shape case {:?} ({:?}, {}): expected flagged={}, got flagged={} (findings: {findings:?})",
+            case.id, case.verifier, case.kind, case.expect_flagged, flagged,
+        );
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------
+// Coverage beyond the shape matrix: fixture-driven, multi-clause, and
+// crate/session-level tests whose assertions inspect specific finding
+// content or use a different entry point (`scan_crate_contract_bounds`,
+// `SessionBuilder`) rather than a single source string's flagged/silent
+// outcome. These stay as dedicated tests rather than table rows.
+// ---------------------------------------------------------------------
+
 #[test]
 fn creusot_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::Result<()> {
     cordial::init_tracing();
@@ -108,69 +524,6 @@ fn creusot_trivial_requires_true_is_never_flagged() -> miette::Result<()> {
 }
 
 #[test]
-fn creusot_trivial_bare_result_is_never_flagged() -> miette::Result<()> {
-    cordial::init_tracing();
-    let source = r#"
-amenable_derive::harness! {
-    creusot, VERIFY_SOMETHING_SRC, {
-        #[trusted]
-        #[ensures(result)]
-        fn verify_something() -> bool {
-            match 1 {
-                1 => true,
-                _ => false,
-            }
-        }
-    }
-}
-"#;
-    let path = fixtures_root().join("inline_creusot.rs");
-    let findings = scan_creusot_contract_bounds_source(
-        source,
-        &path,
-        path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        &[],
-    )
-    .into_diagnostic()
-    .wrap_err("scan inline creusot")?;
-
-    assert!(findings.is_empty());
-    Ok(())
-}
-
-#[test]
-fn verus_trivial_bare_result_is_never_flagged() -> miette::Result<()> {
-    cordial::init_tracing();
-    let source = r#"
-use verus_builtin_macros::verus;
-use vstd::prelude::*;
-
-verus! {
-
-pub fn verify_something() -> (result: bool)
-    ensures
-        result,
-{
-    true
-}
-
-} // verus!
-"#;
-    let path = fixtures_root().join("inline_verus.rs");
-    let findings = scan_verus_contract_bounds_source(
-        source,
-        &path,
-        path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        &[],
-    )
-    .into_diagnostic()
-    .wrap_err("scan inline verus")?;
-
-    assert!(findings.is_empty());
-    Ok(())
-}
-
-#[test]
 fn verus_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::Result<()> {
     cordial::init_tracing();
     let name = "contract_bounds_verus.rs";
@@ -188,49 +541,6 @@ fn verus_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::Re
     assert_eq!(findings.len(), 1);
     assert!(findings[0].context.contains("verify_something_raw"));
     assert!(findings[0].snippet.contains("value >= 0"));
-    Ok(())
-}
-
-#[test]
-fn verus_named_call_with_final_argument_is_not_flagged() -> miette::Result<()> {
-    cordial::init_tracing();
-    let source = r#"
-use verus_builtin_macros::verus;
-use vstd::prelude::*;
-
-pub struct VerusCellModel {
-    value: i32,
-}
-
-verus! {
-
-impl VerusCellModel {
-    pub fn set(&mut self, new_value: i32)
-        ensures
-            write_stores_new_value(new_value as int, final(self).value as int),
-    {
-        self.value = new_value;
-    }
-}
-
-} // verus!
-"#;
-    let path = fixtures_root().join("inline_verus_final_call.rs");
-    let registry = vec![logic_fn_record(
-        "verus",
-        "ensures",
-        "write_stores_new_value",
-    )];
-    let findings = scan_verus_contract_bounds_source(
-        source,
-        &path,
-        path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        &registry,
-    )
-    .into_diagnostic()
-    .wrap_err("scan inline verus final-arg call")?;
-
-    assert!(findings.is_empty());
     Ok(())
 }
 
@@ -340,232 +650,6 @@ fn kani_named_call_to_an_unregistered_type_is_flagged() -> miette::Result<()> {
             .iter()
             .any(|finding| finding.snippet.contains("NonNegative :: ensures"))
     );
-    Ok(())
-}
-
-#[test]
-fn kani_type_suffix_match_handles_an_abbreviated_call_site_name() -> miette::Result<()> {
-    cordial::init_tracing();
-    let source = r#"
-amenable_derive::harness! {
-    kani, VERIFY_ABBREVIATED_SRC, {
-        #[kani::proof]
-        fn verify_abbreviated() {
-            let value: i32 = kani::any();
-            assert!(RustStdStandard::<i32>::ensures(value), "message");
-        }
-    }
-}
-"#;
-    let path = fixtures_root().join("inline_kani_abbreviated.rs");
-    let registry = vec![ContractRecordDump {
-        evidence: "amenable_std::rust_std::RustStdStandard<i32>".to_string(),
-        verifier: "kani".to_string(),
-        kind: "ensures".to_string(),
-        fragment: "value >= 0".to_string(),
-    }];
-    let findings = scan_kani_contract_bounds_source(
-        source,
-        &path,
-        path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        &registry,
-    )
-    .into_diagnostic()
-    .wrap_err("scan abbreviated kani")?;
-
-    assert!(findings.is_empty());
-    Ok(())
-}
-
-#[test]
-fn kani_type_suffix_match_handles_a_nested_generic_evidence_type() -> miette::Result<()> {
-    cordial::init_tracing();
-    let source = r#"
-amenable_derive::harness! {
-    kani, VERIFY_NESTED_GENERIC_SRC, {
-        #[kani::proof]
-        fn verify_nested_generic() {
-            let cell = std::cell::Cell::new(0i32);
-            assert!(RustStdStandard::<Cell<i32>>::ensures((cell.get(), 0)), "message");
-        }
-    }
-}
-"#;
-    let path = fixtures_root().join("inline_kani_nested_generic.rs");
-    let registry = vec![ContractRecordDump {
-        evidence: "amenable_std::rust_std::RustStdStandard<Cell<i32>>".to_string(),
-        verifier: "kani".to_string(),
-        kind: "ensures".to_string(),
-        fragment: "actual == expected".to_string(),
-    }];
-    let findings = scan_kani_contract_bounds_source(
-        source,
-        &path,
-        path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        &registry,
-    )
-    .into_diagnostic()
-    .wrap_err("scan nested generic kani")?;
-
-    assert!(findings.is_empty());
-    Ok(())
-}
-
-#[test]
-fn kani_negated_call_to_a_registered_type_is_not_flagged() -> miette::Result<()> {
-    cordial::init_tracing();
-    let source = r#"
-amenable_derive::harness! {
-    kani, VERIFY_REJECTS_ZERO_SRC, {
-        #[kani::proof]
-        fn verify_rejects_zero() {
-            let value: i32 = kani::any();
-            assert!(!fixture::NonNegative::ensures(value), "message");
-        }
-    }
-}
-"#;
-    let path = fixtures_root().join("inline_kani_negated.rs");
-    let registry = vec![kani_type_record("ensures", "fixture::NonNegative")];
-    let findings = scan_kani_contract_bounds_source(
-        source,
-        &path,
-        path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        &registry,
-    )
-    .into_diagnostic()
-    .wrap_err("scan negated kani")?;
-
-    assert!(findings.is_empty());
-    Ok(())
-}
-
-#[test]
-fn kani_double_negated_call_is_still_flagged() -> miette::Result<()> {
-    cordial::init_tracing();
-    let source = r#"
-amenable_derive::harness! {
-    kani, VERIFY_DOUBLE_NEGATED_SRC, {
-        #[kani::proof]
-        fn verify_double_negated() {
-            let value: i32 = kani::any();
-            assert!(!!fixture::NonNegative::ensures(value), "message");
-        }
-    }
-}
-"#;
-    let path = fixtures_root().join("inline_kani_double_negated.rs");
-    let registry = vec![kani_type_record("ensures", "fixture::NonNegative")];
-    let findings = scan_kani_contract_bounds_source(
-        source,
-        &path,
-        path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        &registry,
-    )
-    .into_diagnostic()
-    .wrap_err("scan double negated kani")?;
-
-    assert_eq!(findings.len(), 1);
-    Ok(())
-}
-
-#[test]
-fn kani_fully_qualified_call_matching_a_registered_type_is_not_flagged() -> miette::Result<()> {
-    cordial::init_tracing();
-    // `<Type as Trait>::method(...)` -- the disambiguating form this
-    // workspace's own `CONTRACT_BOUND_NAMING_WORKFLOW.md` documents as
-    // the real fix for a competing-impl ambiguity, not just a stylistic
-    // variant of `Type::ensures(...)`. `syn` represents this as a `Path`
-    // with `qself: Some(..)`, not as extra leading path segments -- a
-    // real, previously-unrecognized shape distinct from the plain
-    // `<TypePath>::ensures(...)` case the other Kani tests here cover.
-    let source = r#"
-amenable_derive::harness! {
-    kani, VERIFY_QUALIFIED_SRC, {
-        #[kani::proof]
-        fn verify_qualified() {
-            let value: i32 = kani::any();
-            assert!(
-                <fixture::NonNegative as Ensures<KaniVerifier>>::ensures(value),
-                "message"
-            );
-        }
-    }
-}
-"#;
-    let path = fixtures_root().join("inline_kani_qualified.rs");
-    let registry = vec![kani_type_record("ensures", "fixture::NonNegative")];
-    let findings = scan_kani_contract_bounds_source(
-        source,
-        &path,
-        path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        &registry,
-    )
-    .into_diagnostic()
-    .wrap_err("scan qualified kani")?;
-
-    assert!(findings.is_empty());
-    Ok(())
-}
-
-#[test]
-fn kani_assert_eq_call_shape_is_never_recognized_as_a_named_call() -> miette::Result<()> {
-    cordial::init_tracing();
-    let source = r#"
-amenable_derive::harness! {
-    kani, VERIFY_STILL_RAW_SRC, {
-        #[kani::proof]
-        fn verify_still_raw() {
-            let value: i32 = kani::any();
-            assert_eq!(fixture::NonNegative::round_trip(value), value);
-        }
-    }
-}
-"#;
-    let path = fixtures_root().join("inline_kani_assert_eq_call.rs");
-    let registry = vec![kani_type_record("ensures", "fixture::NonNegative")];
-    let findings = scan_kani_contract_bounds_source(
-        source,
-        &path,
-        path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        &registry,
-    )
-    .into_diagnostic()
-    .wrap_err("scan assert_eq call kani")?;
-
-    assert_eq!(findings.len(), 1);
-    Ok(())
-}
-
-#[test]
-fn verus_negated_bare_result_is_never_flagged() -> miette::Result<()> {
-    cordial::init_tracing();
-    let source = r#"
-use verus_builtin_macros::verus;
-use vstd::prelude::*;
-
-verus! {
-
-pub fn verify_something() -> (result: bool)
-    ensures
-        !result,
-{
-    false
-}
-
-} // verus!
-"#;
-    let path = fixtures_root().join("inline_verus_negated.rs");
-    let findings = scan_verus_contract_bounds_source(
-        source,
-        &path,
-        path.parent().ok_or_else(|| miette::miette!("parent"))?,
-        &[],
-    )
-    .into_diagnostic()
-    .wrap_err("scan negated verus")?;
-
-    assert!(findings.is_empty());
     Ok(())
 }
 
@@ -893,5 +977,41 @@ amenable_derive::harness! {
         .ok_or_else(|| miette::miette!("cluster section present"))?;
     let cluster_block = cluster_section.split("\n\n").next().unwrap_or_default();
     assert!(!cluster_block.contains("verify_cstring"));
+    Ok(())
+}
+
+#[test]
+fn verus_dotted_ensures_method_call_is_not_mistaken_for_the_clause_keyword() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+use verus_builtin_macros::verus;
+use vstd::prelude::*;
+
+verus! {
+
+pub assume_specification<H: core::default::Default + Hasher> [<BuildHasherDefault<H> as BuildHasher>::build_hasher] (builder: &BuildHasherDefault<H>) -> (result: H)
+    ensures
+        H::default.ensures((), result),
+;
+
+} // verus!
+"#;
+    let path = fixtures_root().join("inline_verus_dotted_ensures_method.rs");
+    let findings = scan_verus_contract_bounds_source(
+        source,
+        &path,
+        path.parent().ok_or_else(|| miette::miette!("parent"))?,
+        &[],
+    )
+    .into_diagnostic()
+    .wrap_err("scan verus dotted-ensures method call")?;
+
+    // The whole clause is genuinely unnamed (`H::default.ensures(..)` is
+    // Verus's own builtin function-item contract inspection, not a call
+    // to a registered predicate), so it's expected to still be flagged --
+    // but as exactly ONE finding covering the whole clause, not split in
+    // two at the method call's own literal `ensures` identifier.
+    assert_eq!(findings.len(), 1, "findings: {findings:?}");
+    assert_eq!(findings[0].snippet, "H :: default . ensures (() , result)");
     Ok(())
 }

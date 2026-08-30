@@ -84,6 +84,21 @@ pub(super) fn scan_verus_source(
 /// function's signature, at the same top-level token sequence as the `fn`
 /// keyword — never inside a nested `Group`), and attaches it to each
 /// clause so matching can be scoped to "this clause's own site."
+/// Whether `items[idx]` is immediately preceded by a `.` — a dotted
+/// method call (`H::default.ensures((), result)`, Verus's own builtin
+/// function-item contract-inspection method) spells its method name
+/// `ensures`/`requires` identically to the real clause-list keyword,
+/// but is never one: a genuine `requires`/`ensures` keyword always
+/// follows a function signature directly, never a `.`.
+#[instrument(level = "trace", ret)]
+fn preceded_by_dot(items: &[TokenTree], idx: usize) -> bool {
+    idx > 0
+        && matches!(
+            &items[idx - 1],
+            TokenTree::Punct(punct) if punct.as_char() == '.'
+        )
+}
+
 #[instrument(level = "debug", skip(tokens, out))]
 fn walk_verus_tokens(tokens: TokenStream, out: &mut Vec<(&'static str, TokenStream, String)>) {
     let items: Vec<TokenTree> = tokens.into_iter().collect();
@@ -97,7 +112,9 @@ fn walk_verus_tokens(tokens: TokenStream, out: &mut Vec<(&'static str, TokenStre
                 }
                 i += 1;
             }
-            TokenTree::Ident(ident) if ident == "requires" || ident == "ensures" => {
+            TokenTree::Ident(ident)
+                if (ident == "requires" || ident == "ensures") && !preceded_by_dot(&items, i) =>
+            {
                 let kind = if ident == "requires" {
                     "requires"
                 } else {
@@ -108,7 +125,12 @@ fn walk_verus_tokens(tokens: TokenStream, out: &mut Vec<(&'static str, TokenStre
                     match &items[j] {
                         TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => break,
                         TokenTree::Punct(punct) if punct.as_char() == ';' => break,
-                        TokenTree::Ident(next) if next == "requires" || next == "ensures" => break,
+                        TokenTree::Ident(next)
+                            if (next == "requires" || next == "ensures")
+                                && !preceded_by_dot(&items, j) =>
+                        {
+                            break;
+                        }
                         _ => j += 1,
                     }
                 }
