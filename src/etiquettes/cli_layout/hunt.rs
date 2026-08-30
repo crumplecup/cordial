@@ -198,6 +198,21 @@ impl ActCallHunt<'_> {
         }
     }
 
+    /// Whether `path`'s final segment is one of Rust's single-field
+    /// transparent wrapper variants (`Some`, `Ok`) whose inner value
+    /// keeps exactly the type already resolved for the pattern's own
+    /// scrutinee. `None`/`Err` carry no such value and aren't included.
+    #[instrument(level = "debug")]
+    fn is_transparent_wrapper(path: &syn::Path) -> bool {
+        matches!(
+            path.segments
+                .last()
+                .map(|seg| seg.ident.to_string())
+                .as_deref(),
+            Some("Some") | Some("Ok")
+        )
+    }
+
     #[instrument(level = "debug", skip(self, pat, out))]
     fn collect_pat_bindings(
         &self,
@@ -228,6 +243,23 @@ impl ActCallHunt<'_> {
                         .cloned()
                         .unwrap_or_default();
                     self.bind_pat_to_types(&field.pat, &field_tys, out);
+                }
+            }
+            Pat::TupleStruct(tuple) if Self::is_transparent_wrapper(&tuple.path) => {
+                // `Some(x)`/`Ok(x)` are transparent single-field wrappers:
+                // `x`'s real type is exactly the type already resolved
+                // for this pattern's own scrutinee, not a variant of it.
+                // `pattern_rec` below has no way to match a wrapper
+                // enum's own variant name ("Some") against the INNER
+                // type's variants, so without this case a nested-act
+                // check on `x` silently loses the binding -- confirmed
+                // against a real site, `match self.command { Some(command)
+                // => command.act(), .. }` on an `Option<Commands>` field,
+                // where `command` never got typed and its `.act()` call
+                // went undetected even though `Commands` really is a
+                // tracked nested clap type.
+                if let Some(elem) = tuple.elems.first() {
+                    self.collect_pat_bindings(elem, type_name, out);
                 }
             }
             Pat::TupleStruct(tuple) => {
