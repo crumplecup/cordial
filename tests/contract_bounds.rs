@@ -132,6 +132,13 @@ fn pair_like_comma_generic_registry() -> Vec<ContractRecordDump> {
     )]
 }
 
+fn extract_if_trailing_comma_registry() -> Vec<ContractRecordDump> {
+    vec![kani_type_record(
+        "ensures",
+        "amenable_std::rust_std::RustStdStandard<std::collections::linked_list::ExtractIf<'static, i32, fn(&mut i32) -> bool>>",
+    )]
+}
+
 const SHAPE_CASES: &[ShapeCase] = &[
     ShapeCase {
         id: "creusot_trivial_bare_result",
@@ -423,6 +430,48 @@ amenable_derive::harness! {
         // `kani_turbofish_const_generic` (a non-const two-parameter
         // generic instead of a const one) -- no real production instance,
         // kept as a synthetic row so the shape stays covered.
+        expect_flagged: false,
+    },
+    ShapeCase {
+        id: "kani_turbofish_trailing_comma",
+        verifier: Verifier::Kani,
+        kind: "ensures",
+        source: r#"
+amenable_derive::harness! {
+    kani, VERIFY_EXTRACT_IF_SRC, {
+        #[kani::proof]
+        fn verify_extract_if_yields_matching_elements() {
+            let value: i32 = kani::any();
+            assert!(
+                RustStdStandard::<
+                    std::collections::linked_list::ExtractIf<'static, i32, fn(&mut i32) -> bool>,
+                >::ensures((value, value)),
+                "message"
+            );
+        }
+    }
+}
+"#,
+        registry: extract_if_trailing_comma_registry,
+        // Found via real dogfooding (2026-08-30) immediately after fixing
+        // `kani_turbofish_const_generic`/`kani_turbofish_comma_bearing_generic`:
+        // re-running the scanner against `amenable` after those fixes
+        // landed showed `array.rs`'s sites cleared, but a NEW site
+        // (`alloc_collections.rs`'s real
+        // `verify_linked_list_extract_if_partitions_by_the_predicate`)
+        // was still flagged, a different bug in the same neighborhood --
+        // a *trailing* comma inside the turbofish itself
+        // (`RustStdStandard::<\n    ExtractIf<..>,\n>::ensures(..)`, a
+        // call site written across multiple lines with a trailing comma
+        // before the closing `>`, both valid, elidable Rust syntax).
+        // `check_macro_call`'s real-`syn::Expr` parsing (the earlier fix)
+        // captures the whole clause correctly; `matches_named_call`'s own
+        // type-prefix suffix match was the remaining bug -- `syn`
+        // preserves a source trailing comma through `ToTokens`, so the
+        // re-emitted prefix ended `...bool>,>` against a hand-written
+        // `evidence` string ending `...bool>>`, an otherwise-correct
+        // suffix match failing on a comma with no semantic meaning. Fixed
+        // via `canonicalize_type_text` collapsing `,>` to `>`.
         expect_flagged: false,
     },
 ];

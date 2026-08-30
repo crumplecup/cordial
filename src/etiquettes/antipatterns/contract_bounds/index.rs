@@ -148,7 +148,8 @@ impl ContractIndex {
             // describes -- the real type lives in `qself.ty` instead,
             // syn's dedicated slot for the part before `as`.
             if let Some(qself) = &func_path.qself {
-                let prefix_text = strip_whitespace(&normalize_tokens(qself.ty.to_token_stream()));
+                let prefix_text =
+                    canonicalize_type_text(&normalize_tokens(qself.ty.to_token_stream()));
                 return known
                     .iter()
                     .any(|(evidence, _)| normalize_text(evidence).ends_with(&prefix_text));
@@ -162,7 +163,7 @@ impl ContractIndex {
                 for seg in segments.iter().take(segments.len() - 1) {
                     prefix.segments.push(seg.clone());
                 }
-                let prefix_text = strip_whitespace(&strip_turbofish(&normalize_tokens(
+                let prefix_text = canonicalize_type_text(&strip_turbofish(&normalize_tokens(
                     prefix.to_token_stream(),
                 )));
                 return known
@@ -248,39 +249,54 @@ pub(super) fn verifier_for_crate(crate_name: &str) -> Option<&'static str> {
     }
 }
 
-/// Re-tokenize and re-stringify a fragment or clause into a canonical,
-/// whitespace-stripped form for the type-prefix suffix comparison in
+/// Re-tokenize and re-stringify a fragment or clause into a canonical
+/// form for the type-prefix suffix comparison in
 /// [`ContractIndex::matches_named_call`]. Tokenizing (not parsing as an
 /// expression) is what makes this work for Pearlite/Verus-spec syntax
 /// that isn't valid plain Rust.
 ///
-/// Whitespace-stripped rather than merely whitespace-*normalized*:
-/// `evidence` strings are re-lexed from plain text (`TokenStream::
-/// parse`), while a call site's type prefix comes from `ToTokens` on a
-/// live `syn::Path`/`syn::Type` AST — the two can pick different
-/// Joint/Alone spacing for identical-looking output even after generic
-/// normalization (confirmed against a nested-generic type carrying a
-/// lifetime, `Bytes<'static>`: one path prints `Bytes <'static > >`,
-/// the other `Bytes < 'static > >`, an inconsistency in the space
-/// *before* the lifetime's leading `'`, on top of the adjacent-`>>`
-/// case a single space-insertion pass already had to special-case).
-/// Whitespace carries no meaning in a suffix comparison over Rust
-/// tokens, so stripping it entirely removes the whole class of
-/// spacing mismatches at once rather than patching one quirk at a
-/// time -- paired with [`strip_whitespace`] on the call-site side.
+/// Passed through [`canonicalize_type_text`] rather than merely
+/// whitespace-*normalized*: `evidence` strings are re-lexed from plain
+/// text (`TokenStream::parse`), while a call site's type prefix comes
+/// from `ToTokens` on a live `syn::Path`/`syn::Type` AST — the two can
+/// pick different Joint/Alone spacing for identical-looking output even
+/// after generic normalization (confirmed against a nested-generic type
+/// carrying a lifetime, `Bytes<'static>`: one path prints
+/// `Bytes <'static > >`, the other `Bytes < 'static > >`, an
+/// inconsistency in the space *before* the lifetime's leading `'`, on
+/// top of the adjacent-`>>` case a single space-insertion pass already
+/// had to special-case).
 #[instrument(level = "debug")]
 fn normalize_text(text: &str) -> String {
     text.parse::<TokenStream>()
-        .map(|stream| strip_whitespace(&stream.to_string()))
-        .unwrap_or_else(|_| strip_whitespace(text.trim()))
+        .map(|stream| canonicalize_type_text(&stream.to_string()))
+        .unwrap_or_else(|_| canonicalize_type_text(text.trim()))
 }
 
-/// Strip every whitespace character from `text` — see [`normalize_text`]
-/// for why the type-prefix suffix comparison needs this instead of
-/// preserved-but-normalized spacing.
+/// Canonicalize `text` for the type-prefix suffix comparison in
+/// [`ContractIndex::matches_named_call`]: strip every whitespace
+/// character (whitespace carries no meaning in a suffix comparison over
+/// Rust tokens, so stripping it entirely removes a whole class of
+/// spacing mismatches at once rather than patching one quirk at a time
+/// -- see [`normalize_text`]), then collapse an elidable trailing comma
+/// before a closing `>` in a generic-argument list. `Type<A, B,>` and
+/// `Type<A, B>` are the same type — Rust's grammar makes a trailing
+/// comma in a turbofish/generic-argument list optional — but `syn`'s
+/// `Punctuated` preserves a source trailing comma through `ToTokens`
+/// when the call site writes one (confirmed against a real multi-line
+/// call site, `RustStdStandard::<\n    ExtractIf<'static, i32, fn(&mut
+/// i32) -> bool>,\n>::ensures(..)`, whose re-emitted prefix ends
+/// `...bool>,>` against a hand-written `evidence` string ending
+/// `...bool>>` — an otherwise-correct suffix match failing on a comma
+/// with no semantic meaning). Collapsing every `,>` to `>` in one pass
+/// is safe: a comma immediately before a generic list's closing `>` is
+/// never anything other than an elidable trailing separator.
 #[instrument(level = "debug")]
-fn strip_whitespace(text: &str) -> String {
-    text.chars().filter(|c| !c.is_whitespace()).collect()
+fn canonicalize_type_text(text: &str) -> String {
+    text.chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        .replace(",>", ">")
 }
 
 #[instrument(level = "debug", skip(tokens))]
