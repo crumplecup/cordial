@@ -38,26 +38,27 @@ during the 2026-08-29 `amenable` contract-bound-naming sweep:
    real clause into two bogus fragments. Fixed by requiring a genuine
    `requires`/`ensures` keyword never be immediately preceded by `.`.
 
-A third, structurally similar bug is **known and currently unfixed**:
+A third, structurally similar bug was found the same way, initially left
+**unfixed** and later closed (2026-08-30, see "Why the const-generic case
+turned out not to be harder" below):
 `RustStdStandard::<std::array::IntoIter<i32, 3>>::ensures(...)` — a
 multi-parameter/const-generic turbofish — has a comma *inside* `<i32, 3>`
-that isn't inside any `Group` token. `kani.rs`'s `check_macro_call` splits
-`assert!`'s arguments on top-level commas and, seeing exactly 2 segments,
-assumes it's hit the ordinary `assert!(expr, "message")` shape: it keeps
-the truncated first segment (`RustStdStandard::<std::array::IntoIter<i32`)
-as "the expression" and silently discards the second as if it were a
-message string. The truncated fragment doesn't parse as any valid call
-shape, so it's flagged even though the real code is already correctly
-named. Left unfixed deliberately — see "Why the const-generic case is
-harder" below — but currently undocumented except in this plan and in
-`amenable`'s own session memory.
+that isn't inside any `Group` token. `kani.rs`'s `check_macro_call` used
+to split `assert!`'s arguments on top-level commas and, seeing exactly 2
+segments, assumed it had hit the ordinary `assert!(expr, "message")`
+shape: it kept the truncated first segment
+(`RustStdStandard::<std::array::IntoIter<i32`) as "the expression" and
+silently discarded the second as if it were a message string. The
+truncated fragment didn't parse as any valid call shape, so it was
+flagged even though the real code was already correctly named.
 
-Both fixed bugs, and the deferred one, were each found by hand while
-doing unrelated naming work, then patched with exactly one hand-written
-regression test apiece (`tests/contract_bounds.rs`, currently 25 tests,
-969 lines). Nothing enumerates the space of shapes the scanner is
-*supposed* to handle, so there's no way to tell "we've covered the
-realistic cases" from "we've covered the cases someone happened to hit."
+Both fixed bugs, and the third (also now fixed), were each found by hand
+while doing unrelated naming work, then patched with exactly one
+hand-written regression test apiece (`tests/contract_bounds.rs`,
+originally 25 tests, 969 lines). Nothing enumerated the space of shapes
+the scanner is *supposed* to handle, so there was no way to tell "we've
+covered the realistic cases" from "we've covered the cases someone
+happened to hit."
 
 ## Design: the shape matrix
 
@@ -81,8 +82,8 @@ clause text differently; not every shape applies to every verifier
 | Fully-qualified (qself) | `<Type as Trait>::method(args)` | kani | handled |
 | Typed-path suffix (abbreviated via `use`) | `Type::method(args)` | kani | handled |
 | Turbofish, no internal comma | `Type::<Generic<'a>>::method(args)` | kani | handled |
-| Turbofish, comma-bearing generic | `Type::<Generic<A, B>>::method(args)` | kani | **broken** |
-| Turbofish, const-generic | `Type::<Generic<A, 3>>::method(args)` | kani | **broken** (array.rs) |
+| Turbofish, comma-bearing generic | `Type::<Generic<A, B>>::method(args)` | kani | handled (fixed 2026-08-30) |
+| Turbofish, const-generic | `Type::<Generic<A, 3>>::method(args)` | kani | handled (fixed 2026-08-30, array.rs) |
 | Dotted call reusing a keyword-shaped name | `X::default.ensures(args)` | verus | handled (fixed 2026-08-29) |
 | `assert_eq!` synthesis | `assert_eq!(A, B)` → `A == B` | kani | handled |
 | Trivial: bare `result`/`!result` | `result`, `!result` | all | handled |
@@ -131,23 +132,57 @@ one test" into a checklist that can't silently shrink.
    rather than leaving it only in a commit message or memory file).
 2. **Fixing now**: implement, flip `expect_flagged` to the correct value,
    confirm green.
-3. **Deferring** (see the const-generic case below): leave the row as an
-   accepted-gap marker. The table itself becomes the "known limitations"
-   list — a future contributor (or session) can grep for
+3. **Deferring**: leave the row as an accepted-gap marker if a real fix
+   is out of scope for now. The table itself becomes the "known
+   limitations" list — a future contributor (or session) can grep for
    `expect_flagged: true` and see exactly which shapes are still open,
-   with a runnable reproduction attached to each one.
+   with a runnable reproduction attached to each one. (No row is
+   currently in this state — see "Why the const-generic case turned out
+   not to be harder" below for the case that looked like it would need
+   this and didn't.)
 
 ### Migration
 
 The existing 25 hand-written tests in `tests/contract_bounds.rs` migrate
 into rows first (preserving current coverage, not building a second
-parallel suite), then the three documented bugs above (2 fixed, 1
-deferred) get their own rows as the bootstrap set for "found in the
-wild." `tests/contract_bounds.rs`'s existing helpers (`fixtures_root()`,
+parallel suite), then the three documented bugs above get their own rows
+as the bootstrap set for "found in the wild."
+`tests/contract_bounds.rs`'s existing helpers (`fixtures_root()`,
 `logic_fn_record()`, `kani_type_record()`) carry over into the row
 `registry` closures largely unchanged.
 
-## Why the const-generic case is harder than the other two
+## Why the const-generic case turned out not to be harder than the other two
+
+The original assessment (below, kept for the record) expected this case
+to need real scoped work: a hand-rolled `<`/`>` depth counter can't safely
+disambiguate a turbofish's generic-argument list from the comparison/
+shift operators (`assert!(a < b, "msg")` must still split into two
+arguments) without reimplementing a real slice of Rust's grammar.
+
+That assessment was correct about the *naive* fix being unsafe, but
+missed a simpler option: `kani.rs`'s `check_macro_call` was hand-splitting
+`assert!`/`assert_eq!`'s raw macro-argument tokens on top-level commas
+only because `syn::parse_file` doesn't parse a macro invocation's body at
+all (a macro's grammar is macro-specific, so `syn` only ever hands back
+the opaque token stream). But `assert!`/`assert_eq!`'s arguments are
+always ordinary Rust expressions — there was no need to hand-roll
+anything. Parsing `node.tokens` directly via
+`syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated`
+gets the exact same `<`/`>` disambiguation rustc itself performs, for
+free, with zero new bespoke logic — because it *is* rustc's real
+expression grammar, just invoked through `syn` instead of reinvented.
+Fixed in `check_macro_call` (2026-08-30); both `kani_turbofish_const_generic`
+and `kani_turbofish_comma_bearing_generic` flipped from `expect_flagged:
+true` to `false` and pass. `bare_named_call_name`'s Creusot/Verus token
+walk (`index.rs`) and `walk_verus_tokens`'s Verus clause-list splitting
+(`verus.rs`) still use the naive token-level split and are NOT covered by
+this fix — they can't parse as `syn::Expr` at all (Pearlite/Verus DSL
+syntax isn't valid plain Rust), so a comma-bearing generic inside a
+`requires`/`ensures` clause list on the Verus/Creusot side remains
+unexamined; no known real instance yet.
+
+<details>
+<summary>Original assessment (superseded, kept for the record)</summary>
 
 The two already-fixed bugs both had an unambiguous fix: "a `.` immediately
 before `ensures`/`requires` is never the keyword" and "normalize
@@ -166,6 +201,8 @@ make that scoping decision **informed**, by first cataloguing exactly
 which real shapes in this class exist and how many rows would flip green,
 before deciding whether the investment is worth it.
 
+</details>
+
 ## Test execution access
 
 Resolved 2026-08-30: for a genuine, requested cordial-repo work session
@@ -177,30 +214,39 @@ while building the harness below.
 
 ## Status
 
-**Implemented 2026-08-30.** `tests/contract_bounds.rs` now has a
-`Verifier` enum, `ShapeCase` struct, and a `SHAPE_CASES` table (13 rows)
-driven by one `shape_matrix_matches_expected_flags` test, dispatching to
-`scan_{kani,creusot,verus}_contract_bounds_source` and asserting
-`!findings.is_empty() == expect_flagged`.
+**Implemented 2026-08-30, known gaps closed same day.** `tests/contract_bounds.rs`
+now has a `Verifier` enum, `ShapeCase` struct, and a `SHAPE_CASES` table
+(13 rows) driven by one `shape_matrix_matches_expected_flags` test,
+dispatching to `scan_{kani,creusot,verus}_contract_bounds_source` and
+asserting `!findings.is_empty() == expect_flagged`.
 
 Of the original 25 hand-written tests, 11 were pure boolean flagged/silent
 checks and were migrated into table rows (their standalone `#[test]` fns
 removed); the remaining 14 assert specific finding counts/content or use a
 different entry point (`scan_crate_contract_bounds`, `SessionBuilder`) and
 were kept as dedicated tests rather than forced into the coarser boolean
-model. Two new rows bootstrap the "known gap" side of the table:
-`kani_turbofish_const_generic` (the real, still-unfixed `array.rs` case)
-and `kani_turbofish_comma_bearing_generic` (same root cause, a synthetic
-two-parameter-generic variant with no production instance yet). Both
-correctly reproduce the documented bug as still-flagged, confirming the
-"Problem" section's account of the scanner's actual behavior.
+model.
 
-`cargo test --features full --test contract_bounds`: 15 passed, 0 failed
-(the 1 table-driven test plus the 14 kept dedicated tests).
+The table's first two "known gap" rows (`kani_turbofish_const_generic`,
+the real `array.rs` case, and its synthetic sibling
+`kani_turbofish_comma_bearing_generic`) proved short-lived: building the
+matrix's `expect_flagged: true` rows immediately surfaced them as a
+precisely scoped, reproducible target, which led straight to the real
+fix in `check_macro_call` (see "Why the const-generic case turned out not
+to be harder" above) rather than staying deferred. Both rows now read
+`expect_flagged: false` and pass — exactly the growth loop's "fixing now"
+path, just faster than expected. `SHAPE_CASES` currently has zero
+`expect_flagged: true` rows.
 
-Open for a future session: whether to grow `SHAPE_CASES` with the other
-taxonomy rows that don't yet have a row (verus state forms, `@`/`is`/`->`
-view forms, `#[trigger]`-annotated calls — currently only covered
-implicitly by the kept dedicated tests, not as standalone table rows), and
-whether the const-generic/comma-bearing-generic gap is worth fixing now
-that it's precisely scoped and reproducible on demand.
+`cargo test --features full --test contract_bounds`: 15 passed, 0 failed.
+`cargo test --features full` (whole crate) and `cargo clippy --features
+full`: clean. `cargo fmt --check`: clean.
+
+Open for a future session: grow `SHAPE_CASES` with the other taxonomy
+rows that don't yet have a row (verus state forms, `@`/`is`/`->` view
+forms, `#[trigger]`-annotated calls — currently only covered implicitly
+by the kept dedicated tests, not as standalone table rows); and whether
+the Creusot/Verus side's own naive token-level clause-list splitting
+(`bare_named_call_name` in `index.rs`, `walk_verus_tokens` in `verus.rs`)
+has the same comma-in-turbofish exposure the Kani fix didn't touch — no
+known real instance yet, but nothing rules it out.

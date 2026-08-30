@@ -387,15 +387,20 @@ amenable_derive::harness! {
 }
 "#,
         registry: into_iter_const_generic_registry,
-        // KNOWN GAP, deliberately unfixed -- see "Why the const-generic
-        // case is harder than the other two" in
-        // docs/planning/contract-bounds-shape-matrix.md. The comma inside
-        // `IntoIter<i32, 3>` isn't nested in any `Group` token, so
-        // `check_macro_call`'s top-level-comma split truncates the real
-        // call, and it's flagged even though `RustStdStandard<..>` is
-        // correctly registered and named above. Real production instance:
-        // `crates/amenable_kani/src/rust_std/array.rs`.
-        expect_flagged: true,
+        // FIXED 2026-08-30 -- was the first documented gap in
+        // docs/planning/contract-bounds-shape-matrix.md ("Why the
+        // const-generic case is harder than the other two"). The comma
+        // inside `IntoIter<i32, 3>` isn't nested in any `Group` token, so
+        // the old naive top-level-comma split in `check_macro_call`
+        // truncated the real call and flagged it even though
+        // `RustStdStandard<..>` was correctly registered and named.
+        // `check_macro_call` now parses `assert!`/`assert_eq!`'s argument
+        // tokens as real `Punctuated<Expr, Comma>` grammar instead of a
+        // hand-rolled split, which disambiguates a turbofish's internal
+        // comma the same way rustc itself does -- eliminates this whole
+        // bug class rather than special-casing const generics. Real
+        // production instance: `crates/amenable_kani/src/rust_std/array.rs`.
+        expect_flagged: false,
     },
     ShapeCase {
         id: "kani_turbofish_comma_bearing_generic",
@@ -414,11 +419,11 @@ amenable_derive::harness! {
 }
 "#,
         registry: pair_like_comma_generic_registry,
-        // KNOWN GAP, same root cause as `kani_turbofish_const_generic`
-        // (a non-const two-parameter generic instead of a const one) --
-        // no real production instance yet, kept as a synthetic row so the
-        // shape is documented and reproducible before one shows up.
-        expect_flagged: true,
+        // FIXED 2026-08-30, same root cause and same fix as
+        // `kani_turbofish_const_generic` (a non-const two-parameter
+        // generic instead of a const one) -- no real production instance,
+        // kept as a synthetic row so the shape stays covered.
+        expect_flagged: false,
     },
 ];
 

@@ -2,18 +2,20 @@
 
 use std::path::{Path, PathBuf};
 
-use proc_macro2::{TokenStream, TokenTree};
+use proc_macro2::TokenStream;
 use quote::ToTokens;
+use syn::parse::Parser;
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Attribute, ItemFn, ItemMacro};
+use syn::{Attribute, Expr, ItemFn, ItemMacro, Token};
 use tracing::instrument;
 
 use crate::error::{CordialError, CordialResult};
 use crate::etiquettes::antipatterns::types::AntipatternSiteRecord;
 use crate::loader::module_path_from_src_file;
 
-use super::index::{ContractIndex, is_trivial, normalize_tokens, split_top_level_commas};
+use super::index::{ContractIndex, is_trivial, normalize_tokens};
 use super::{harness_macro_item_fn, make_finding, site_context};
 
 #[instrument(level = "debug", skip(source, file, index), err(level = "warn"))]
@@ -82,31 +84,49 @@ impl KaniVisitor<'_> {
     /// `assert_eq!` synthesizes the clause `A == B` from its two
     /// comparands: a direct transcription of what's on the page, not a
     /// guess.
+    ///
+    /// A macro's argument tokens aren't parsed into structured `Expr`s by
+    /// `syn::parse_file` (a macro's grammar is macro-specific, so `syn`
+    /// only hands back the raw body), so the arguments are parsed here
+    /// directly as `Punctuated<Expr, Comma>` — real Rust expression
+    /// grammar, not a naive top-level-comma split. That's what correctly
+    /// tells a turbofish's internal comma (`Type::<A, B>::method(..)`,
+    /// `Type::<Array<i32, 3>>::method(..)`) apart from a real argument
+    /// separator, the same disambiguation rustc itself performs, instead
+    /// of reinventing it: a hand-rolled `<`/`>` depth counter can't, since
+    /// those characters are also the comparison/shift operators
+    /// (`assert!(a < b, "msg")` must still split into two arguments).
     #[instrument(level = "debug", skip(self, node))]
     fn check_macro_call(&mut self, node: &syn::Macro) {
         if !self.in_kani_proof {
             return;
         }
         let path = &node.path;
-        let items: Vec<TokenTree> = node.tokens.clone().into_iter().collect();
-        let segments = split_top_level_commas(&items);
+        if !(path.is_ident("assert") || path.is_ident("assert_eq")) {
+            return;
+        }
+        let Ok(args) = Punctuated::<Expr, Token![,]>::parse_terminated.parse2(node.tokens.clone())
+        else {
+            // Not a shape this parses as plain Rust expressions -- skip
+            // rather than guess.
+            return;
+        };
 
-        let (first_span_tokens, clause): (&[TokenTree], TokenStream) = if path.is_ident("assert") {
+        let (first_expr, clause): (&Expr, TokenStream) = if path.is_ident("assert") {
             // Not a plain assert!(expr) or assert!(expr, "msg") shape —
             // skip rather than guess.
-            if segments.len() > 2 {
+            if args.len() > 2 {
                 return;
             }
-            let Some(expr) = segments.first() else {
+            let Some(expr) = args.first() else {
                 return;
             };
-            (expr, expr.iter().cloned().collect())
-        } else if path.is_ident("assert_eq") {
-            if segments.len() < 2 {
+            (expr, expr.to_token_stream())
+        } else {
+            if args.len() < 2 {
                 return;
             }
-            let mut clause = TokenStream::new();
-            clause.extend(segments[0].iter().cloned());
+            let mut clause = args[0].to_token_stream();
             clause.extend(match "==".parse::<TokenStream>() {
                 Ok(tokens) => tokens,
                 Err(err) => {
@@ -114,16 +134,11 @@ impl KaniVisitor<'_> {
                     return;
                 }
             });
-            clause.extend(segments[1].iter().cloned());
-            (&segments[0], clause)
-        } else {
-            return;
+            clause.extend(args[1].to_token_stream());
+            (&args[0], clause)
         };
 
-        let line = first_span_tokens
-            .first()
-            .map(|tt| tt.span().start().line as u32)
-            .unwrap_or_else(|| node.span().start().line as u32);
+        let line = first_expr.span().start().line as u32;
         self.check_clause("ensures", clause, line);
     }
 
