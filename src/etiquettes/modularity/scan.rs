@@ -17,7 +17,7 @@ use tracing::instrument;
 pub fn scan_source_tree(
     src_root: &Path,
     crate_root: &Path,
-    thresholds: ModularityThresholds,
+    thresholds: &ModularityThresholds,
 ) -> CordialResult<Vec<ModularitySiteRecord>> {
     let mut findings = Vec::new();
     if !src_root.is_dir() {
@@ -58,23 +58,28 @@ pub fn scan_rust_source(
     file: &Path,
     src_root: &Path,
     crate_root: &Path,
-    thresholds: ModularityThresholds,
+    thresholds: &ModularityThresholds,
 ) -> CordialResult<Vec<ModularitySiteRecord>> {
     let mut findings = Vec::new();
-    maybe_push_file_finding(source, file, crate_root, thresholds, &mut findings)?;
+    let generated = thresholds.is_generated_file(file, crate_root);
+    if !generated {
+        maybe_push_file_finding(source, file, crate_root, thresholds, &mut findings)?;
+    }
 
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
     maybe_push_types_finding(&syntax, file, crate_root, thresholds, &mut findings);
     let module_prefix = module_path_from_src_file(src_root, file);
-    push_module_size_records(
-        source,
-        &syntax,
-        file,
-        crate_root,
-        &module_prefix,
-        &mut findings,
-    );
+    if !generated {
+        push_module_size_records(
+            source,
+            &syntax,
+            file,
+            crate_root,
+            &module_prefix,
+            &mut findings,
+        );
+    }
     let mut visitor = ModularityScanVisitor {
         file: file.to_path_buf(),
         crate_root: crate_root.to_path_buf(),
@@ -82,7 +87,7 @@ pub fn scan_rust_source(
         impl_type: None,
         fn_stack: Vec::new(),
         file_lines: count_source_lines(source),
-        thresholds,
+        thresholds: thresholds.clone(),
         findings: Vec::new(),
     };
     visitor.visit_file(&syntax);
@@ -99,7 +104,7 @@ fn maybe_push_file_finding(
     source: &str,
     file: &Path,
     crate_root: &Path,
-    thresholds: ModularityThresholds,
+    thresholds: &ModularityThresholds,
     findings: &mut Vec<ModularitySiteRecord>,
 ) -> CordialResult<()> {
     let lines = count_source_lines(source);
@@ -183,7 +188,7 @@ fn maybe_push_types_finding(
     syntax: &syn::File,
     file: &Path,
     crate_root: &Path,
-    thresholds: ModularityThresholds,
+    thresholds: &ModularityThresholds,
     findings: &mut Vec<ModularitySiteRecord>,
 ) {
     let names = file_type_names(&syntax.items);

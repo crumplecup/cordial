@@ -41,6 +41,7 @@ min_module_lines = 0
 top_heavy_min_percent = 50
 lopsided_min_percent = 75
 hierarchy_min_lines = 150
+# generated_files = ["src/derived_witness", "src/some_generated_file.rs"]
 
 [cfg_scatter]
 # enabled = true
@@ -112,8 +113,9 @@ in code until dogfood needs a project override.
 Implemented (`tests/cordial_config.rs`). Every etiquette table has
 `enabled` (default true); `CordialConfig::etiquette_enabled` gates the
 session. Visibility, modularity (including types-per-file, module-size
-2σ, lower-tail ignore, hotspot diagnosis, and hierarchy lints: top-heavy,
-lopsided, unary-nest collapse), cfg_scatter, derives
+2σ, lower-tail ignore, hotspot diagnosis, hierarchy lints: top-heavy,
+lopsided, unary-nest collapse, and a `generated_files` exceptions list
+for the file-size and module-size checks), cfg_scatter, derives
 (`max_constructor_args`, `min_fluent_setters`), tracing (`extra_skip`,
 `apply_gate_crates`, `apply_skip_crates`, nested `[tracing.subscriber]`
 and `[tracing.stdio]`),

@@ -23,6 +23,7 @@ min_module_lines = 0
 top_heavy_min_percent = 50
 lopsided_min_percent = 75
 hierarchy_min_lines = 150
+# generated_files = ["src/derived_witness", "src/some_generated_file.rs"]
 ```
 
 ## Rules
@@ -36,6 +37,24 @@ hierarchy_min_lines = 150
 | `MODULARITY-TOP-HEAVY` | A parent (not the crate root) kept ≥ `top_heavy_min_percent` of its subtree in its own file, and own lines ≥ `hierarchy_min_lines`. Action: peel the leftover mass into children. |
 | `MODULARITY-LOPSIDED` | One child holds ≥ `lopsided_min_percent` of its siblings' combined subtree after dropping siblings below `hierarchy_min_lines`, and at least two siblings remain. Action: split the dominant sibling. |
 | `MODULARITY-COLLAPSE` | A parent (not the crate root) has exactly one child, that child is itself a branch, and the child's subtree ≥ `hierarchy_min_lines`. Action: collapse the extra directory and lift grandchildren into the parent. A unary *leaf* (`chain_layer` + `preds.rs`) is a peel, not this. |
+
+`generated_files` names known-generated targets exempt from the file-size
+and module-size LOC checks (`MODULARITY-FILE`, `MODULARITY-MODULE-SIZE`
+-- neither the finding nor the σ-sample entry is produced for a matched
+file). There is no reliable way to detect "this file is generated" from
+the source alone, so this is an explicit allowlist, not a heuristic.
+Entries are crate-relative paths, matched as an exact file or a path
+prefix (so one entry can name either a single generated file or a whole
+directory of them, e.g. a `derived_witness/` tree) -- the same
+folder-or-file idiom `[tracing.stdio] skip_folders` uses. Replacing this
+list in `cordial.toml` replaces the default (empty), it does not union
+with it.
+
+The exemption is deliberately narrow: `MODULARITY-TYPES-PER-FILE` and
+`MODULARITY-FUNCTION` are unaffected by `generated_files` -- a packed
+type list or an oversized function body are per-type/per-function
+signals, not the file's own LOC count, and generated code that produces
+either is still worth knowing about.
 
 `max_types_per_file` is a packing cap, not a file-per-type rule. Default `10`
 lets a handful of types share a file; only files above that become peel-types
@@ -116,7 +135,8 @@ masses; collapse `detail` names the parent and the grandchildren to lift).
 Size rules, types-per-file (default 10), module-size 2σ (upper tail gated
 on the file inventory floor; lower tail optional via
 `module_size_ignore_lower_tail`), hotspot diagnosis (including
-extract-helpers down to 80 body lines on too-long files), and hierarchy
+extract-helpers down to 80 body lines on too-long files), hierarchy
 lints (top-heavy peel, lopsided split at 75% after dropping stub siblings,
-unary-nest collapse) are in place. Modularize means extract helpers as
-well as split into a directory.
+unary-nest collapse), and a `generated_files` exceptions list for the two
+LOC-based rules are in place. Modularize means extract helpers as well as
+split into a directory.

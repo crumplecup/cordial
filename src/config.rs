@@ -201,7 +201,7 @@ impl Default for VisibilityThresholds {
 }
 
 /// Modularity etiquette knobs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct ModularityThresholds {
     /// File inventory floor, and the *upper-tail* MODULE-SIZE checklist
     /// floor. A large-side 2σ module below this many lines stays
@@ -262,6 +262,18 @@ pub struct ModularityThresholds {
     #[serde(default = "default_hierarchy_min_lines")]
     #[getter(copy)]
     hierarchy_min_lines: u32,
+    /// Crate-relative file paths (or path prefixes, for a whole directory
+    /// of generated files) exempt from the file-size and module-size LOC
+    /// checks (`MODULARITY-FILE`, `MODULARITY-MODULE-SIZE`). There is no
+    /// reliable way to detect "this file is generated" from the source
+    /// alone, so known generated targets (codegen output, derived witness
+    /// modules, ...) are named here instead. Does not exempt
+    /// `MODULARITY-TYPES-PER-FILE` or `MODULARITY-FUNCTION` -- those are
+    /// per-type and per-function signals, not the file's own LOC count.
+    /// Replacing this list in `cordial.toml` replaces the default (empty),
+    /// it does not union with it.
+    #[serde(default)]
+    generated_files: Vec<String>,
     /// Run this etiquette (`true`) or skip it (`false`).
     #[serde(default = "default_true")]
     #[getter(copy)]
@@ -338,6 +350,7 @@ impl Default for ModularityThresholds {
             top_heavy_min_percent: default_top_heavy_min_percent(),
             lopsided_min_percent: default_lopsided_min_percent(),
             hierarchy_min_lines: default_hierarchy_min_lines(),
+            generated_files: Vec::new(),
             enabled: true,
         }
     }
@@ -421,6 +434,15 @@ impl ModularityThresholds {
     pub fn with_hierarchy_min_lines(self, value: u32) -> Self {
         Self {
             hierarchy_min_lines: value,
+            ..self
+        }
+    }
+
+    /// Return a copy with `generated_files` set.
+    #[instrument(level = "debug", skip(value))]
+    pub fn with_generated_files(self, value: Vec<String>) -> Self {
+        Self {
+            generated_files: value,
             ..self
         }
     }

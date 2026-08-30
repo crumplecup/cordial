@@ -31,11 +31,12 @@ impl Reporter for ModularitySummaryReporter {
 
         let rows = modularity_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
-        let thresholds = *crate::config::load_session_config(session).modularity();
+        let config = crate::config::load_session_config(session);
+        let thresholds = config.modularity();
         let inventory: Vec<_> = open
             .iter()
             .copied()
-            .filter(|row| is_inventory_row(row, &thresholds))
+            .filter(|row| is_inventory_row(row, thresholds))
             .collect();
         let inventory_total = inventory.len();
         let checklist: Vec<_> = open

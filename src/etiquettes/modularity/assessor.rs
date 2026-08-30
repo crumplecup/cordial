@@ -48,7 +48,8 @@ impl Assessor for ModularityAssessor {
         let ir = view.ir;
         let session = view.session;
 
-        let thresholds = *crate::config::load_session_config(session).modularity();
+        let config = crate::config::load_session_config(session);
+        let thresholds = config.modularity();
         let mut pending = Vec::new();
         for marker in markers {
             let node_id = marker.anchor().node_id();
@@ -138,7 +139,7 @@ impl Assessor for ModularityAssessor {
 fn hierarchy_findings(
     pending: &[PendingSite],
     crate_name: &str,
-    thresholds: crate::config::ModularityThresholds,
+    thresholds: &crate::config::ModularityThresholds,
 ) -> Vec<Box<dyn Finding>> {
     let inputs: Vec<ModuleSizeInput> = pending
         .iter()

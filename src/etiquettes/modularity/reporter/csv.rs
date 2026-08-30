@@ -30,9 +30,10 @@ impl Reporter for ModularityCsvReporter {
         let session = view.session;
 
         let all_rows = modularity_rows(findings);
-        let thresholds = *crate::config::load_session_config(session).modularity();
+        let config = crate::config::load_session_config(session);
+        let thresholds = config.modularity();
         let mut rows: Vec<_> = open_rows(&all_rows)
-            .filter(|row| is_inventory_row(row, &thresholds))
+            .filter(|row| is_inventory_row(row, thresholds))
             .collect();
         sort_by_lines_desc(&mut rows);
 

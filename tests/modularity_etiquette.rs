@@ -97,7 +97,7 @@ fn scan_modularity_rust_source_ranks_handlers() -> miette::Result<()> {
         &file,
         fixture.path(),
         fixture.path(),
-        test_thresholds(),
+        &test_thresholds(),
     )
     .into_diagnostic()
     .wrap_err("scan")?;
@@ -140,7 +140,7 @@ fn scan_function_contexts(source: &str) -> miette::Result<Vec<String>> {
         &file,
         fixture.path(),
         fixture.path(),
-        test_thresholds(),
+        &test_thresholds(),
     )
     .into_diagnostic()
     .wrap_err("scan")?
@@ -267,7 +267,7 @@ fn scan_snippet(
         &file,
         fixture.path(),
         fixture.path(),
-        thresholds,
+        &thresholds,
     )
     .into_diagnostic()
     .wrap_err("scan")?
@@ -392,6 +392,98 @@ fn modularity_etiquette_session_reads_types_per_file_config() -> miette::Result<
 }
 
 #[test]
+fn generated_files_are_exempt_from_file_and_module_size_but_not_types_per_file()
+-> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+
+    // Twelve types (over the default max_types_per_file of 10) padded past
+    // the default file_inventory_min_lines (500) -- written identically
+    // into an excepted "generated" module and a plain module of the same
+    // shape, so the test proves the exception is scoped by path, not a
+    // blanket "big files are fine now" regression.
+    let mut oversized = String::new();
+    for index in 0..12 {
+        oversized.push_str(&format!("pub struct Type{index};\n"));
+    }
+    let oversized = pad_source_to_lines(oversized, 600);
+
+    fs::write(fixture.path().join("src/generated.rs"), &oversized)
+        .into_diagnostic()
+        .wrap_err("write generated")?;
+    fs::write(fixture.path().join("src/normal.rs"), &oversized)
+        .into_diagnostic()
+        .wrap_err("write normal")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        "mod generated;\nmod normal;\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write lib")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[modularity]\ngenerated_files = [\"src/generated.rs\"]\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&MODULARITY_ETIQUETTE)
+        .build();
+    let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
+    let findings: Vec<_> = outcome.findings().collect();
+
+    let file_files: Vec<_> = findings
+        .iter()
+        .copied()
+        .filter(|finding| finding.rule().id() == "MODULARITY-FILE")
+        .filter_map(|finding| field(finding, "file"))
+        .collect();
+    assert!(
+        !file_files.iter().any(|file| file.contains("generated.rs")),
+        "an excepted generated file must not get a MODULARITY-FILE finding: {file_files:?}"
+    );
+    assert!(
+        file_files.iter().any(|file| file.contains("normal.rs")),
+        "the same-shaped, non-excepted file must still get a MODULARITY-FILE finding: {file_files:?}"
+    );
+
+    let module_size_contexts: Vec<_> = findings
+        .iter()
+        .copied()
+        .filter(|finding| finding.rule().id() == "MODULARITY-MODULE-SIZE")
+        .filter_map(|finding| field(finding, "context"))
+        .collect();
+    assert!(
+        !module_size_contexts.iter().any(|ctx| ctx == "generated"),
+        "an excepted generated file's module must not enter the MODULE-SIZE inventory at all: {module_size_contexts:?}"
+    );
+    assert!(
+        module_size_contexts.iter().any(|ctx| ctx == "normal"),
+        "the non-excepted module must still enter the MODULE-SIZE inventory: {module_size_contexts:?}"
+    );
+
+    let types_files: Vec<_> = findings
+        .iter()
+        .copied()
+        .filter(|finding| finding.rule().id() == "MODULARITY-TYPES-PER-FILE")
+        .filter_map(|finding| field(finding, "file"))
+        .collect();
+    assert!(
+        types_files.iter().any(|file| file.contains("generated.rs")),
+        "types-per-file is a different signal (per-type, not file LOC) and must still fire \
+         on the excepted file: {types_files:?}"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn module_size_stats_flags_two_sigma_outliers() {
     cordial::init_tracing();
     let sizes = [10, 10, 10, 10, 10, 10, 10, 200];
@@ -462,7 +554,7 @@ fn module_size_inventory_includes_file_and_inline_mod() -> miette::Result<()> {
         &file,
         fixture.path(),
         fixture.path(),
-        test_thresholds(),
+        &test_thresholds(),
     )
     .into_diagnostic()
     .wrap_err("scan")?;
@@ -1330,7 +1422,7 @@ fn scan_records_helpers_only_on_inventory_sized_files() -> miette::Result<()> {
         std::path::Path::new("lib.rs"),
         std::path::Path::new("."),
         std::path::Path::new("."),
-        ModularityThresholds::default(),
+        &ModularityThresholds::default(),
     )
     .into_diagnostic()
     .wrap_err("scan small")?;
@@ -1352,7 +1444,7 @@ fn scan_records_helpers_only_on_inventory_sized_files() -> miette::Result<()> {
         &file,
         fixture.path(),
         fixture.path(),
-        ModularityThresholds::default(),
+        &ModularityThresholds::default(),
     )
     .into_diagnostic()
     .wrap_err("scan large")?;

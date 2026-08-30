@@ -12,7 +12,7 @@ use tracing::instrument;
 pub(super) fn append_hierarchy_sections(
     body: &mut String,
     modules: &[&ModularityRow],
-    thresholds: crate::config::ModularityThresholds,
+    thresholds: &crate::config::ModularityThresholds,
 ) {
     let names = crate_names(modules);
     if names.is_empty() {
@@ -67,7 +67,7 @@ fn append_ranked_branches(
     body: &mut String,
     modules: &[&ModularityRow],
     names: &[String],
-    thresholds: crate::config::ModularityThresholds,
+    thresholds: &crate::config::ModularityThresholds,
 ) {
     body.push_str("## Library branches\n\n");
     body.push_str(
@@ -156,7 +156,7 @@ fn append_top_heavy_parents(
     body: &mut String,
     modules: &[&ModularityRow],
     names: &[String],
-    thresholds: crate::config::ModularityThresholds,
+    thresholds: &crate::config::ModularityThresholds,
 ) {
     body.push_str("## Top-heavy parents\n\n");
     body.push_str(&format!(
@@ -215,7 +215,7 @@ fn append_lopsided(
     body: &mut String,
     modules: &[&ModularityRow],
     names: &[String],
-    thresholds: crate::config::ModularityThresholds,
+    thresholds: &crate::config::ModularityThresholds,
 ) {
     body.push_str("## Lopsided siblings\n\n");
     body.push_str(&format!(
@@ -278,7 +278,7 @@ fn append_unary_nests(
     body: &mut String,
     modules: &[&ModularityRow],
     names: &[String],
-    thresholds: crate::config::ModularityThresholds,
+    thresholds: &crate::config::ModularityThresholds,
 ) {
     body.push_str("## Unary nests\n\n");
     body.push_str(&format!(

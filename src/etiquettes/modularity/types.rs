@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -83,6 +83,25 @@ impl ModularityThresholds {
             // file inventory floor; lower tail has its own ignore flag.
             ModularityKind::ModuleSize => false,
         }
+    }
+
+    /// Whether `file` is a configured generated-code exception, exempt
+    /// from the file-size and module-size LOC checks (`MODULARITY-FILE`,
+    /// `MODULARITY-MODULE-SIZE`). There is no reliable way to detect
+    /// "this file is generated" from the source alone, so `cordial.toml`
+    /// names known generated targets explicitly under
+    /// `[modularity] generated_files`. Matched against `file`'s
+    /// crate-relative path as an exact match or a path prefix -- the same
+    /// folder-or-file idiom `[tracing.stdio] skip_folders` already uses,
+    /// so one entry can name either a single generated file or a whole
+    /// directory of them (e.g. a `derived_witness/` tree).
+    #[instrument(level = "debug", skip(self, file, crate_root), ret)]
+    pub fn is_generated_file(&self, file: &Path, crate_root: &Path) -> bool {
+        let rel = file.strip_prefix(crate_root).unwrap_or(file);
+        self.generated_files().iter().any(|entry| {
+            let prefix = Path::new(entry);
+            rel == prefix || rel.starts_with(prefix)
+        })
     }
 }
 
