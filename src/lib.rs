@@ -175,11 +175,12 @@ pub use etiquettes::proof_patterns::{
 };
 #[cfg(feature = "tracing")]
 pub use etiquettes::tracing::{
-    InstrumentApplySummary, InstrumentGap, PrintRuleId, PrintSiteRecord, SubscriberRuleId,
-    SubscriberSiteRecord, TRACING_ETIQUETTE, parse_tracing_instrument_checklist,
-    parse_tracing_instrument_checklist_text, run_tracing_instrument_apply,
-    scan_crate_tracing_print, scan_crate_tracing_subscriber,
-    scan_rust_source as scan_tracing_rust_source, scan_tracing_print_rust_source,
+    BoundaryRuleId, BoundarySiteRecord, InstrumentApplySummary, InstrumentGap, PrintRuleId,
+    PrintSiteRecord, SubscriberRuleId, SubscriberSiteRecord, TRACING_ETIQUETTE,
+    parse_tracing_instrument_checklist, parse_tracing_instrument_checklist_text,
+    run_tracing_instrument_apply, scan_crate_tracing_boundary, scan_crate_tracing_print,
+    scan_crate_tracing_subscriber, scan_rust_source as scan_tracing_rust_source,
+    scan_tracing_print_rust_source,
 };
 #[cfg(feature = "trenchcoat")]
 pub use etiquettes::trenchcoat::TRENCHCOAT_ETIQUETTE;
@@ -305,8 +306,9 @@ pub use cargo_rustdoc::{
 pub use config::{
     CfgHygieneThresholds, CfgScatterThresholds, CordialConfig, CrateAttrsThresholds,
     DerivesThresholds, DocWarningsThresholds, EtiquetteGate, ModularityThresholds,
-    TracingStdioPolicy, TracingSubscriberPolicy, TracingThresholds, VisibilityThresholds,
-    load_cordial_config, load_derives_thresholds, load_session_config, load_visibility_thresholds,
+    TracingBoundaryPolicy, TracingStdioPolicy, TracingSubscriberPolicy, TracingThresholds,
+    VisibilityThresholds, load_cordial_config, load_derives_thresholds, load_session_config,
+    load_visibility_thresholds,
 };
 pub use exceptions::{
     AddExceptionOutcome, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,

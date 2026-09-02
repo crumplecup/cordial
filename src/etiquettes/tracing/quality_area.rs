@@ -3,6 +3,7 @@
 use crate::etiquette::finding_field;
 use crate::objects::{Disposition, Finding};
 
+use super::boundary::BoundaryRuleId;
 use super::print::PrintRuleId;
 use super::subscriber::SubscriberRuleId;
 
@@ -25,6 +26,7 @@ const ROLE_ORDER: [&str; 10] = [
 struct Metrics {
     gaps: usize,
     subscriber: usize,
+    boundary: usize,
     std_print: usize,
     suppressed: usize,
     by_role: [usize; ROLE_ORDER.len()],
@@ -42,6 +44,17 @@ fn metrics(findings: &[&dyn Finding]) -> Metrics {
                 Disposition::Open => {
                     metrics.gaps += 1;
                     metrics.subscriber += 1;
+                }
+                Disposition::Suppressed => metrics.suppressed += 1,
+                Disposition::Exemplar => {}
+            }
+            continue;
+        }
+        if BoundaryRuleId::is_boundary_rule(finding.rule().id()) {
+            match finding.disposition() {
+                Disposition::Open => {
+                    metrics.gaps += 1;
+                    metrics.boundary += 1;
                 }
                 Disposition::Suppressed => metrics.suppressed += 1,
                 Disposition::Exemplar => {}
@@ -87,6 +100,9 @@ pub(super) fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String)
         .collect();
     if metrics.subscriber > 0 {
         parts.push(format!("subscriber **{}**", metrics.subscriber));
+    }
+    if metrics.boundary > 0 {
+        parts.push(format!("boundary **{}**", metrics.boundary));
     }
     if metrics.std_print > 0 {
         parts.push(format!("std print **{}**", metrics.std_print));

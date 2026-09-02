@@ -786,6 +786,10 @@ pub struct TracingThresholds {
     #[serde(default)]
     #[new(default)]
     subscriber: TracingSubscriberPolicy,
+    /// Binary error-boundary policy knobs. Defaults **on**.
+    #[serde(default)]
+    #[new(default)]
+    boundary: TracingBoundaryPolicy,
     /// Leftover-stdio filter. Each macro defaults **on**.
     #[serde(default)]
     #[new(default)]
@@ -849,6 +853,37 @@ impl Default for TracingSubscriberPolicy {
             helper_in_lib: true,
             rust_log_fallback: true,
             idempotent: true,
+            known_helper_paths: Vec::new(),
+        }
+    }
+}
+
+/// Whether the binary error-boundary rule is armed.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+)]
+pub struct TracingBoundaryPolicy {
+    /// A fallible `fn main` in a binary must convert its error to a
+    /// tracing warn/error emission (via `#[instrument(err(...))]` or an
+    /// explicit `tracing::warn!`/`error!` on the error path) before the
+    /// process boundary, instead of letting it bubble up and crash.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    main_reports_errors: bool,
+    /// Fully-qualified paths (e.g. `amenable_core::run_and_report`) of a
+    /// shared dispatch helper defined in one crate and called from a
+    /// sibling crate's `main` — trusted as already reporting its own
+    /// errors, the same way `[tracing.subscriber] known_helper_paths`
+    /// trusts a cross-crate init helper. Empty by default.
+    #[serde(default)]
+    known_helper_paths: Vec<String>,
+}
+
+impl Default for TracingBoundaryPolicy {
+    #[instrument(level = "debug", ret)]
+    fn default() -> Self {
+        Self {
+            main_reports_errors: true,
             known_helper_paths: Vec::new(),
         }
     }
@@ -930,6 +965,7 @@ impl Default for TracingThresholds {
             apply_gate_crates: std::collections::HashMap::new(),
             apply_skip_crates: Vec::new(),
             subscriber: TracingSubscriberPolicy::default(),
+            boundary: TracingBoundaryPolicy::default(),
             stdio: TracingStdioPolicy::default(),
             enabled: true,
         }

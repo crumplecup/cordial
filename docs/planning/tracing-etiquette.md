@@ -252,6 +252,13 @@ input to the recipe, not the only knob.
 # rust_log_fallback = true
 # idempotent = true
 
+[tracing.boundary]
+# Default true.
+# main_reports_errors = true
+# Cross-crate dispatch helper(s) trusted as already reporting their own
+# errors (same shape as [tracing.subscriber]'s knob of the same name).
+# known_helper_paths = ["amenable_core::run_and_report"]
+
 [tracing.stdio]
 # All default true. One lint per leftover stdio macro.
 # println = true
@@ -321,6 +328,46 @@ are still a fat main.
 
 ---
 
+## Binary error boundary
+
+A library propagates errors up via `?` — that's the existing error-chain
+policy, unchanged. A binary's `fn main` is the process boundary: an `Err`
+that reaches it unreported is the equivalent of crashing, not reporting
+to the user, for a project that has locked its I/O down to tracing events
+(`TRACING-STD-*` above disarms `print!`/`dbg!`, so tracing is the one
+designated UI channel left). One rule, default **on**, under
+`[tracing.boundary]`. Same `tracing` feature and etiquette; **separate
+artifact** (`tracing-boundary.checklist.md`) so `--apply` never rewrites
+these rows (this is a design signal, not a rewrite the tool can pick a
+`level` for on its own).
+
+| Rule | When | Fix |
+| --- | --- | --- |
+| `TRACING-BOUNDARY-MAIN-SILENT` | Bin has a fallible `fn main` (`-> Result<_, _>`) that neither carries `#[instrument(err(...))]` nor emits `tracing::warn!`/`error!` on its error path, nor delegates to a function in this crate that does either | Add `#[instrument(err(level = "warn"))]` to `main`, or handle the error and emit `tracing::warn!`/`error!` before returning |
+
+Recognize "reports its error" the same way `TRACING-ERR-MISSING` reads an
+existing recipe (syn, no rustc): `#[instrument(err)]` / `#[instrument(err(...))]`,
+including the `#[cfg_attr(pred, instrument(...))]` gated form, or a direct
+`tracing::warn!`/`error!` (bare `warn!`/`error!` too) anywhere in the
+function body. `main` delegating to a helper elsewhere in the crate that
+itself reports (e.g. `Cli::act`) satisfies the rule without requiring
+`err(...)` on `main` a second time — mirrors subscriber's helper-name
+delegation, scoped to this crate's own scan. A cross-crate dispatch
+helper this crate's scan can't see the body of is trusted only if named
+in `known_helper_paths`, same shape as `[tracing.subscriber]`'s knob of
+the same name.
+
+Scope:
+
+- `fn main` that can't return `Err` (`-> ()`, `-> ExitCode` via
+  `std::process::exit`) has nothing to report — not flagged.
+- Skip/gate verifier crates (`apply_skip_crates` / `apply_gate_crates` on
+  **that crate's name**): skipped — not logging programs.
+- Library-only crates (no `src/main.rs` / `src/bin/`): N/A, nothing to
+  check.
+
+---
+
 ## Std print
 
 Leftover stdio is a diagnostic that should be a tracing event — including
@@ -367,6 +414,7 @@ src/etiquettes/tracing/
   reporter.rs       crate → role grouping; relative paths
   apply/            classify + recipe match; write attribute
   subscriber/       init-helper policy (MAIN/TEST/LIB/RUST-LOG/IDEMPOTENT)
+  boundary/         binary error-boundary policy (MAIN-SILENT)
   print/            leftover stdio macros (TRACING-STD-PRINTLN / … / DBG)
 ```
 
@@ -395,18 +443,22 @@ than weakening fixture recall.
 
 ## Status
 
-**Phase 4 complete**, plus verifier **attenuation** and **subscriber
-init**. Classify + recipe on every finding; delta rules vs present
-`#[instrument]`; apply writes the recipe. Counter-lints
-(`TRACING-PROOF-INSTRUMENT`, `TRACING-UNGATED-INSTRUMENT`,
+**Phase 4 complete**, plus verifier **attenuation**, **subscriber init**,
+and the **binary error boundary**. Classify + recipe on every finding;
+delta rules vs present `#[instrument]`; apply writes the recipe.
+Counter-lints (`TRACING-PROOF-INSTRUMENT`, `TRACING-UNGATED-INSTRUMENT`,
 `TRACING-SKIP-INSTRUMENT`) fire when a span is already present where the
 backend cannot use it. Subscriber rules (`TRACING-SUBSCRIBER-*`) live on
-the same etiquette with their own checklist. Leftover stdio
-(`[tracing.stdio]`, one rule per macro) is a third checklist; `--apply`
-does not rewrite those rows. `[tracing]` knobs (`extra_skip`,
-`apply_gate_crates`, `apply_skip_crates`, `[tracing.subscriber]`,
-`[tracing.stdio]`) load through `cordial.toml`. The quality report
-blurb is open gaps **by role**, plus subscriber and std-print counts.
+the same etiquette with their own checklist. `TRACING-BOUNDARY-MAIN-SILENT`
+(a fallible binary `fn main` that never reports its error via tracing
+before the process boundary) is a fourth checklist, same delegation
+strategy as subscriber's `known_helper_paths`. Leftover stdio
+(`[tracing.stdio]`, one rule per macro) is a fifth checklist; `--apply`
+does not rewrite subscriber, boundary, or std-print rows. `[tracing]`
+knobs (`extra_skip`, `apply_gate_crates`, `apply_skip_crates`,
+`[tracing.subscriber]`, `[tracing.boundary]`, `[tracing.stdio]`) load
+through `cordial.toml`. The quality report blurb is open gaps **by
+role**, plus subscriber, boundary, and std-print counts.
 
 Every function is on the instrument checklist. Visibility is recorded on
 the finding; it does not suppress a gap. Role recipes pick `trace` /

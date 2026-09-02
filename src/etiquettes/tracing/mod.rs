@@ -17,7 +17,10 @@
 //! **How to use.**
 //! 1. `cordial quality` writes `{store}/findings/tracing-instrument.checklist.md`
 //!    and `tracing-summary.md`. Subscriber-init rows go to
-//!    `tracing-subscriber.checklist.md`. Leftover stdio (`println!`/`print!`/
+//!    `tracing-subscriber.checklist.md`. The binary error-boundary rule
+//!    (a fallible `fn main` must report its error via tracing before the
+//!    process boundary, not bubble it into a crash) goes to
+//!    `tracing-boundary.checklist.md`. Leftover stdio (`println!`/`print!`/
 //!    `dbg!`, including `main`, `src/cli`, and `tests/`) go to
 //!    `tracing-print.checklist.md`. Filter those with `[tracing.stdio]`
 //!    (`--apply` does not patch those).
@@ -26,7 +29,7 @@
 //!
 //! Knobs live under `[tracing]` in `cordial.toml` (`extra_skip`,
 //! `apply_gate_crates`, `apply_skip_crates`, `[tracing.subscriber]`,
-//! `[tracing.stdio]`).
+//! `[tracing.boundary]`, `[tracing.stdio]`).
 //! Role→level maps stay in code. Feature `tracing` is on by default. Register
 //! [`TRACING_ETIQUETTE`] on a [`crate::Session`].
 //!
@@ -34,6 +37,7 @@
 
 mod apply;
 mod assessor;
+mod boundary;
 mod call_graph;
 mod classify;
 mod delta;
@@ -56,6 +60,7 @@ pub use apply::{
 };
 
 pub use assessor::TracingAssessor;
+pub use boundary::{BoundaryRuleId, BoundarySiteRecord, scan_crate_tracing_boundary};
 pub use enricher::FunctionInventoryEnricher;
 pub use print::{
     PrintRuleId, PrintSiteRecord, scan_crate_tracing_print,
@@ -77,15 +82,19 @@ static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
 static FUNCTION_INVENTORY: FunctionInventoryEnricher = FunctionInventoryEnricher;
 static SUBSCRIBER_INVENTORY: subscriber::SubscriberInventoryEnricher =
     subscriber::SubscriberInventoryEnricher;
+static BOUNDARY_INVENTORY: boundary::BoundaryInventoryEnricher =
+    boundary::BoundaryInventoryEnricher;
 static PRINT_INVENTORY: print::PrintInventoryEnricher = print::PrintInventoryEnricher;
 static ATTRIBUTE_ENRICHER: AttributeEnricher = AttributeEnricher;
 static MISSING_INSTRUMENT_PROBE: MissingInstrumentProbe = MissingInstrumentProbe;
 static RECIPE_DELTA_PROBE: RecipeDeltaProbe = RecipeDeltaProbe;
 static FORBIDDEN_INSTRUMENT_PROBE: ForbiddenInstrumentProbe = ForbiddenInstrumentProbe;
 static SUBSCRIBER_PROBE: subscriber::SubscriberSiteProbe = subscriber::SubscriberSiteProbe;
+static BOUNDARY_PROBE: boundary::BoundarySiteProbe = boundary::BoundarySiteProbe;
 static PRINT_PROBE: print::PrintSiteProbe = print::PrintSiteProbe;
 static TRACING_ASSESSOR: TracingAssessor = TracingAssessor;
 static SUBSCRIBER_ASSESSOR: subscriber::SubscriberAssessor = subscriber::SubscriberAssessor;
+static BOUNDARY_ASSESSOR: boundary::BoundaryAssessor = boundary::BoundaryAssessor;
 static PRINT_ASSESSOR: print::PrintAssessor = print::PrintAssessor;
 static TRACING_CSV: TracingCsvReporter = TracingCsvReporter;
 static TRACING_CHECKLIST: TracingChecklistReporter = TracingChecklistReporter;
@@ -95,6 +104,10 @@ static SUBSCRIBER_CHECKLIST: subscriber::SubscriberChecklistReporter =
     subscriber::SubscriberChecklistReporter;
 static SUBSCRIBER_SUMMARY: subscriber::SubscriberSummaryReporter =
     subscriber::SubscriberSummaryReporter;
+static BOUNDARY_CSV: boundary::BoundaryCsvReporter = boundary::BoundaryCsvReporter;
+static BOUNDARY_CHECKLIST: boundary::BoundaryChecklistReporter =
+    boundary::BoundaryChecklistReporter;
+static BOUNDARY_SUMMARY: boundary::BoundarySummaryReporter = boundary::BoundarySummaryReporter;
 static PRINT_CSV: print::PrintCsvReporter = print::PrintCsvReporter;
 static PRINT_CHECKLIST: print::PrintChecklistReporter = print::PrintChecklistReporter;
 static PRINT_SUMMARY: print::PrintSummaryReporter = print::PrintSummaryReporter;
@@ -104,6 +117,7 @@ static ENRICHERS: &[&'static dyn crate::IrEnricher] = &[
     &SCOPE_ENRICHER,
     &FUNCTION_INVENTORY,
     &SUBSCRIBER_INVENTORY,
+    &BOUNDARY_INVENTORY,
     &PRINT_INVENTORY,
     &ATTRIBUTE_ENRICHER,
 ];
@@ -112,10 +126,15 @@ static PROBES: &[&'static dyn crate::Probe] = &[
     &RECIPE_DELTA_PROBE,
     &FORBIDDEN_INSTRUMENT_PROBE,
     &SUBSCRIBER_PROBE,
+    &BOUNDARY_PROBE,
     &PRINT_PROBE,
 ];
-static ASSESSORS: &[&'static dyn crate::Assessor] =
-    &[&TRACING_ASSESSOR, &SUBSCRIBER_ASSESSOR, &PRINT_ASSESSOR];
+static ASSESSORS: &[&'static dyn crate::Assessor] = &[
+    &TRACING_ASSESSOR,
+    &SUBSCRIBER_ASSESSOR,
+    &BOUNDARY_ASSESSOR,
+    &PRINT_ASSESSOR,
+];
 static REPORTERS: &[&'static dyn crate::Reporter] = &[
     &TRACING_CSV,
     &TRACING_CHECKLIST,
@@ -123,6 +142,9 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
     &SUBSCRIBER_CSV,
     &SUBSCRIBER_CHECKLIST,
     &SUBSCRIBER_SUMMARY,
+    &BOUNDARY_CSV,
+    &BOUNDARY_CHECKLIST,
+    &BOUNDARY_SUMMARY,
     &PRINT_CSV,
     &PRINT_CHECKLIST,
     &PRINT_SUMMARY,
@@ -201,6 +223,10 @@ pub static TRACING_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
                 EtiquetteRuleExplain {
                     id: "TRACING-SUBSCRIBER-IDEMPOTENT",
                     summary: "init is not idempotent",
+                },
+                EtiquetteRuleExplain {
+                    id: "TRACING-BOUNDARY-MAIN-SILENT",
+                    summary: "fallible binary main never reports its error via tracing",
                 },
                 EtiquetteRuleExplain {
                     id: "TRACING-STD-PRINTLN",
