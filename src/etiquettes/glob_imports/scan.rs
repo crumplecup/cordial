@@ -112,6 +112,22 @@ impl GlobImportVisitor {
                 }
             }
             UseTree::Glob(glob) => {
+                if prefix.last().is_some_and(|segment| segment == "prelude") {
+                    // `use <path>::prelude::*;` -- a crate's own `prelude`
+                    // module is conventionally designed to be glob-imported
+                    // (the same way `std::prelude::*` is auto-imported into
+                    // every ordinary Rust crate): `vstd::prelude`,
+                    // `itertools::prelude`, `rayon::prelude`, `diesel::
+                    // prelude`, and every other crate shipping one all
+                    // follow this. Confirmed real, not just convenient: a
+                    // Verus proof file's `use vstd::prelude::*;` brings in
+                    // the ghost/tracked machinery and internal names the
+                    // `verus! { .. }` macro's own expansion depends on --
+                    // there is no idiomatic explicit-list alternative, the
+                    // same way there's no explicit-list alternative to
+                    // `std`'s own implicit prelude.
+                    return;
+                }
                 let snippet = if prefix.is_empty() {
                     "*".to_string()
                 } else {

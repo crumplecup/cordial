@@ -165,6 +165,70 @@ use crate::inner::*;
     Ok(())
 }
 
+/// `use <path>::prelude::*;` is exempt -- a crate's own `prelude` module
+/// is conventionally designed to be glob-imported (`vstd::prelude`,
+/// `itertools::prelude`, ...), the same way `std`'s own prelude is
+/// auto-imported with no explicit-list alternative. `use foo::preludes::*;`
+/// (a different, non-`prelude` module) is not exempt -- the check is
+/// exact-segment, not a substring match.
+#[test]
+fn prelude_glob_is_exempt_but_a_similarly_named_module_is_not() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+use vstd::prelude::*;
+use itertools::prelude::*;
+use crate::preludes::*;
+use std::collections::*;
+"#;
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("globs.rs");
+    fs::write(&file, source)
+        .into_diagnostic()
+        .wrap_err("write")?;
+
+    let findings = scan_glob_imports_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    let snippets: Vec<_> = findings.iter().map(|row| row.snippet.as_str()).collect();
+    assert_eq!(
+        snippets,
+        ["crate::preludes::*", "std::collections::*"],
+        "vstd::prelude::* and itertools::prelude::* are exempt, \
+         crate::preludes::* (not literally `prelude`) still flags: {snippets:?}"
+    );
+    Ok(())
+}
+
+/// `use foo::prelude::{self, *};` -- the glob sits inside a group whose
+/// own path prefix is `foo::prelude`, the same shape `walk_use_tree`
+/// resolves for every other nested-group case.
+#[test]
+fn prelude_glob_inside_a_use_group_is_also_exempt() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = "use vstd::prelude::{self, *};\n";
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("globs.rs");
+    fs::write(&file, source)
+        .into_diagnostic()
+        .wrap_err("write")?;
+
+    let findings = scan_glob_imports_rust_source(
+        &fs::read_to_string(&file).into_diagnostic()?,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+    assert!(findings.is_empty(), "{findings:?}");
+    Ok(())
+}
+
 #[test]
 fn sibling_super_glob_is_flagged() -> miette::Result<()> {
     cordial::init_tracing();

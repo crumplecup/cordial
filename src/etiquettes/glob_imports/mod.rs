@@ -1,7 +1,12 @@
 //! Glob `use` trees (`foo::*`).
 //!
 //! **What.** Flags every `*` in a `use` item (`GLOB-IMPORT-001`), including
-//! `pub use`, `use super::*;`, and nested `use foo::{bar, *}`.
+//! `pub use`, `use super::*;`, and nested `use foo::{bar, *}`. Exempts
+//! `use <path>::prelude::*;` -- a crate's own `prelude` module is
+//! conventionally designed to be glob-imported (`std::prelude`,
+//! `vstd::prelude`, `itertools::prelude`, `rayon::prelude`, `diesel::
+//! prelude`, ...), the same way `std`'s own prelude is auto-imported into
+//! every ordinary Rust crate with no explicit-list alternative.
 //!
 //! **Why.** Glob imports hide which names a file depends on and break
 //! completion in most IDEs. Explicit lists stay reviewable when code moves,
