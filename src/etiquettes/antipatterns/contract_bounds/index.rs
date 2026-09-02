@@ -181,6 +181,67 @@ impl ContractIndex {
 
         false
     }
+
+    /// Whether `clause` (found at `idx` within `siblings`, the full
+    /// clause list split from the same `requires`/`ensures` occurrence)
+    /// is a raw restatement of some *other* clause in `siblings` that is
+    /// itself a real named call to a registered contract fragment.
+    ///
+    /// Verus's automatic broadcast/trigger instantiation needs a
+    /// `#[trigger]`-marked equation to be the literal term appearing in
+    /// the proof state — a call wrapping the same equation inside a named
+    /// predicate gives the solver nothing to pattern-match on. This
+    /// project's convention (confirmed via two real, independently
+    /// doc-commented sites — `cstring_carrier.rs`'s
+    /// `axiom_vec_u8_into_vec_u8_is_identity` and `cow_carrier.rs`'s
+    /// `axiom_i32_to_owned_is_identity`) is to state the claim twice in
+    /// the same `ensures` list: once as a raw `#[trigger]`ed equation for
+    /// the solver, once as a bare named call for the reader and the
+    /// registry. The raw half isn't a second, unnamed bound — it's a
+    /// required-by-Verus restatement of the named one right next to it.
+    ///
+    /// Matching is strict, not heuristic: `clause`, with its own leading
+    /// `#[trigger]` stripped, must be *token-identical* after
+    /// normalization to the named sibling's own registered fragment
+    /// body. A raw clause with no token-identical named sibling is still
+    /// flagged — distinguishing this restatement idiom from a genuinely
+    /// new, still-unnamed bound needs exact equality, not a loose
+    /// "something nearby looks related" check that could mask a real
+    /// future violation.
+    #[instrument(level = "debug", skip(self, clause, siblings))]
+    pub(super) fn is_raw_duplicate_of_named_sibling(
+        &self,
+        verifier: &str,
+        kind: &str,
+        clause: TokenStream,
+        siblings: &[TokenStream],
+        idx: usize,
+    ) -> bool {
+        let own_normalized = normalize_tokens(strip_leading_trigger_attr(clause));
+        siblings.iter().enumerate().any(|(sibling_idx, sibling)| {
+            sibling_idx != idx
+                && named_call_name_allowing_leading_attr(sibling.clone()).is_some_and(|name| {
+                    self.named_fragment_body(verifier, kind, &name)
+                        .is_some_and(|body| body == own_normalized)
+                })
+        })
+    }
+
+    /// The normalized body text of the registered `(verifier, kind)`
+    /// fragment whose own `fn` name is `name`, if any — the counterpart
+    /// [`fragment_fn_name`] needs to look inside a fragment's body rather
+    /// than just its name, for [`Self::is_raw_duplicate_of_named_sibling`].
+    #[instrument(level = "debug", skip(self))]
+    fn named_fragment_body(&self, verifier: &str, kind: &str, name: &str) -> Option<String> {
+        let known = self
+            .records
+            .get(&(verifier.to_string(), kind.to_string()))?;
+        known.iter().find_map(|(_, fragment)| {
+            (fragment_fn_name(fragment).as_deref() == Some(name))
+                .then(|| fragment_fn_body_text(fragment))
+                .flatten()
+        })
+    }
 }
 
 /// Drop the `::` a call-site turbofish (`Type::<Args>`) writes before its
@@ -215,6 +276,52 @@ fn fragment_fn_name(fragment: &str) -> Option<String> {
     })
 }
 
+/// Find the brace-delimited body immediately following the top-level
+/// `fn <name>` pair in `fragment`'s own source text, normalized the same
+/// way a clause's own tokens are (see [`normalize_tokens`]) — the
+/// counterpart to [`fragment_fn_name`], which finds the name instead of
+/// the body. Used only by [`ContractIndex::is_raw_duplicate_of_named_sibling`]
+/// to compare a registered predicate's real body against a raw clause
+/// that claims to restate it.
+#[instrument(level = "debug")]
+fn fragment_fn_body_text(fragment: &str) -> Option<String> {
+    let tokens: TokenStream = fragment.parse().ok()?;
+    let items: Vec<TokenTree> = tokens.into_iter().collect();
+    let fn_idx = items
+        .windows(2)
+        .position(|pair| matches!(&pair[0], TokenTree::Ident(keyword) if keyword == "fn"))?;
+    items[fn_idx..].iter().find_map(|tt| match tt {
+        TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => {
+            Some(normalize_tokens(group.stream()))
+        }
+        _ => None,
+    })
+}
+
+/// Strip a leading `#[trigger]` attribute from `tokens`, if present.
+/// Verus's raw-equation restatement clause (see
+/// [`ContractIndex::is_raw_duplicate_of_named_sibling`]) carries this
+/// attribute to mark itself as the solver's pattern-match target; the
+/// registered named predicate's own body never does, so comparing the
+/// two for equality needs it stripped first. Only a bare, argument-less
+/// `#[trigger]` is recognized — Verus's other `#![trigger a, b]`
+/// multi-term statement-level syntax is a different construct entirely
+/// and is left untouched.
+#[instrument(level = "debug", skip(tokens))]
+fn strip_leading_trigger_attr(tokens: TokenStream) -> TokenStream {
+    let items: Vec<TokenTree> = tokens.into_iter().collect();
+    match items.as_slice() {
+        [TokenTree::Punct(hash), TokenTree::Group(group), rest @ ..]
+            if hash.as_char() == '#'
+                && group.delimiter() == Delimiter::Bracket
+                && group.stream().to_string() == "trigger" =>
+        {
+            rest.iter().cloned().collect()
+        }
+        _ => items.into_iter().collect(),
+    }
+}
+
 /// Recognize a whole-clause bare call `name(...)` or `!name(...)`
 /// directly from tokens without requiring the argument list to parse as
 /// plain Rust syntax. This is the Creusot/Verus call shape; Kani uses a
@@ -235,6 +342,45 @@ fn bare_named_call_name(clause: TokenStream) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// [`bare_named_call_name`], extended to also recognize a Creusot/Verus
+/// bare call carrying a leading outer attribute (`#[trigger] name(...)`,
+/// Verus's own solver-hint annotation on a broadcast axiom's *named*
+/// sibling clause — real Rust expression grammar allows an outer
+/// attribute here, but `bare_named_call_name`'s pure-token scan doesn't
+/// look past one). Falls back to a real `syn::Expr::Call` parse, which
+/// happily accepts the leading attribute as part of the expression and
+/// still exposes the call underneath; only used by
+/// [`ContractIndex::is_raw_duplicate_of_named_sibling`], which needs to
+/// resolve a sibling clause's call name exactly as permissively as
+/// [`ContractIndex::matches_named_call`] already does for that same
+/// clause when it's checked directly (confirmed necessary: a two-clause
+/// `ensures` list where *both* clauses carry `#[trigger]` -- real site,
+/// `cstring_carrier.rs`'s `axiom_vec_u8_into_vec_u8_is_identity` --
+/// otherwise makes the named sibling invisible to this check even
+/// though `matches_named_call` itself already accepts it).
+#[instrument(level = "debug", skip(clause))]
+fn named_call_name_allowing_leading_attr(clause: TokenStream) -> Option<String> {
+    if let Some(name) = bare_named_call_name(clause.clone()) {
+        return Some(name);
+    }
+    let expr = syn::parse2::<syn::Expr>(clause).ok()?;
+    let call = match &expr {
+        syn::Expr::Call(call) => call,
+        syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Not(_)) => {
+            match unary.expr.as_ref() {
+                syn::Expr::Call(call) => call,
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    let syn::Expr::Path(func_path) = call.func.as_ref() else {
+        return None;
+    };
+    (func_path.qself.is_none() && func_path.path.segments.len() == 1)
+        .then(|| func_path.path.segments.last().unwrap().ident.to_string())
 }
 
 /// Which verifier a crate name maps to, if any — the only crates this rule

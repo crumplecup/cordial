@@ -40,29 +40,38 @@ pub(super) fn scan_verus_source(
         {
             continue;
         }
-        let mut clauses = Vec::new();
-        walk_verus_tokens(mac.tokens.clone(), &mut clauses);
-        for (kind, clause, harness) in clauses {
-            let normalized = normalize_tokens(clause.clone());
-            if is_trivial(&normalized)
-                || is_builtin_contract_inspection(kind, clause.clone())
-                || index.matches_named_call("verus", kind, clause.clone())
-            {
-                continue;
+        let mut clause_groups = Vec::new();
+        walk_verus_tokens(mac.tokens.clone(), &mut clause_groups);
+        for (kind, clauses, harness) in clause_groups {
+            for (idx, clause) in clauses.iter().cloned().enumerate() {
+                let normalized = normalize_tokens(clause.clone());
+                if is_trivial(&normalized)
+                    || is_builtin_contract_inspection(kind, clause.clone())
+                    || index.matches_named_call("verus", kind, clause.clone())
+                    || index.is_raw_duplicate_of_named_sibling(
+                        "verus",
+                        kind,
+                        clause.clone(),
+                        &clauses,
+                        idx,
+                    )
+                {
+                    continue;
+                }
+                let line = clause
+                    .clone()
+                    .into_iter()
+                    .next()
+                    .map(|tt| tt.span().start().line as u32)
+                    .unwrap_or(0);
+                let leaf = if harness.is_empty() {
+                    "verus!".to_string()
+                } else {
+                    format!("verus!::{harness}")
+                };
+                let context = site_context(&module_prefix, &leaf);
+                findings.push(make_finding(context, file, line, &normalized));
             }
-            let line = clause
-                .clone()
-                .into_iter()
-                .next()
-                .map(|tt| tt.span().start().line as u32)
-                .unwrap_or(0);
-            let leaf = if harness.is_empty() {
-                "verus!".to_string()
-            } else {
-                format!("verus!::{harness}")
-            };
-            let context = site_context(&module_prefix, &leaf);
-            findings.push(make_finding(context, file, line, &normalized));
         }
     }
 
@@ -90,6 +99,12 @@ pub(super) fn scan_verus_source(
 /// function's signature, at the same top-level token sequence as the `fn`
 /// keyword — never inside a nested `Group`), and attaches it to each
 /// clause so matching can be scoped to "this clause's own site."
+///
+/// Every clause split from one `requires`/`ensures` occurrence is kept
+/// together as a single group (rather than flattened into the output one
+/// clause at a time) so a caller can recognize a raw equation that only
+/// restates a *sibling* clause in the same list — see
+/// [`super::index::ContractIndex::is_raw_duplicate_of_named_sibling`].
 /// Whether `items[idx]` is immediately preceded by a `.` — a dotted
 /// method call (`H::default.ensures((), result)`, Verus's own builtin
 /// function-item contract-inspection method) spells its method name
@@ -106,7 +121,7 @@ fn preceded_by_dot(items: &[TokenTree], idx: usize) -> bool {
 }
 
 #[instrument(level = "debug", skip(tokens, out))]
-fn walk_verus_tokens(tokens: TokenStream, out: &mut Vec<(&'static str, TokenStream, String)>) {
+fn walk_verus_tokens(tokens: TokenStream, out: &mut Vec<(&'static str, Vec<TokenStream>, String)>) {
     let items: Vec<TokenTree> = tokens.into_iter().collect();
     let mut i = 0;
     let mut current_fn = String::new();
@@ -140,11 +155,13 @@ fn walk_verus_tokens(tokens: TokenStream, out: &mut Vec<(&'static str, TokenStre
                         _ => j += 1,
                     }
                 }
-                for segment in split_top_level_commas(&items[i + 1..j]) {
-                    if segment.is_empty() {
-                        continue;
-                    }
-                    out.push((kind, segment.into_iter().collect(), current_fn.clone()));
+                let group: Vec<TokenStream> = split_top_level_commas(&items[i + 1..j])
+                    .into_iter()
+                    .filter(|segment| !segment.is_empty())
+                    .map(|segment| segment.into_iter().collect())
+                    .collect();
+                if !group.is_empty() {
+                    out.push((kind, group, current_fn.clone()));
                 }
                 i = j;
             }
