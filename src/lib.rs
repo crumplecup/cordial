@@ -196,8 +196,8 @@ pub use etiquettes::visibility::{
 };
 #[cfg(feature = "verus_ir")]
 pub use verus_ir::{
-    VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPanicKind, VerusPanicSite, VerusPublish,
-    scan_crate_verus_ir, scan_verus_rust_source,
+    VerusCrateIr, VerusEnumFacts, VerusEnumVariantFacts, VerusFnFacts, VerusFnMode, VerusPanicKind,
+    VerusPanicSite, VerusPublish, scan_crate_verus_ir, scan_verus_rust_source,
 };
 #[cfg(feature = "shadow")]
 mod shadow;

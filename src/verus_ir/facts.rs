@@ -6,7 +6,8 @@ use crate::objects::FileSpan;
 
 use super::parse::VerusBlock;
 use super::types::{
-    VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPanicKind, VerusPanicSite, VerusPublish,
+    VerusCrateIr, VerusEnumFacts, VerusEnumVariantFacts, VerusFnFacts, VerusFnMode, VerusPanicKind,
+    VerusPanicSite, VerusPublish,
 };
 
 use tracing::instrument;
@@ -16,19 +17,22 @@ use tracing::instrument;
 #[instrument(level = "debug", skip(blocks))]
 pub(super) fn build_crate_ir(blocks: Vec<VerusBlock>) -> VerusCrateIr {
     let mut functions = Vec::new();
+    let mut enums = Vec::new();
     for block in blocks {
         let mut visitor = FactsVisitor {
             file: block.file,
             module_path: block.module_path,
             cfg_test: block.cfg_test,
             functions: Vec::new(),
+            enums: Vec::new(),
         };
         for item in &block.items {
             visitor.visit_item(item);
         }
         functions.extend(visitor.functions);
+        enums.extend(visitor.enums);
     }
-    VerusCrateIr { functions }
+    VerusCrateIr { functions, enums }
 }
 
 struct FactsVisitor {
@@ -36,6 +40,7 @@ struct FactsVisitor {
     module_path: String,
     cfg_test: bool,
     functions: Vec<VerusFnFacts>,
+    enums: Vec<VerusEnumFacts>,
 }
 
 impl FactsVisitor {
@@ -107,6 +112,40 @@ impl<'ast> Visit<'ast> for FactsVisitor {
         self.record(&node.attrs, &node.sig, &node.block, line);
         verus_syn::visit::visit_impl_item_fn(self, node);
     }
+
+    #[instrument(level = "trace", skip(self, node))]
+    fn visit_item_enum(&mut self, node: &'ast verus_syn::ItemEnum) {
+        use verus_syn::spanned::Spanned;
+        let line = node.enum_token.span().start().line as u32;
+        self.enums.push(VerusEnumFacts {
+            name: node.ident.to_string(),
+            module_path: self.module_path.clone(),
+            span: FileSpan::new(self.file.clone(), line, 0),
+            cfg_test: self.cfg_test,
+            has_doc: has_doc_comment(&node.attrs),
+            variants: node.variants.iter().map(variant_facts).collect(),
+        });
+        verus_syn::visit::visit_item_enum(self, node);
+    }
+}
+
+/// Real facts for one enum variant -- see [`VerusEnumFacts`]'s own doc
+/// comment for why `carries_data`/`has_doc` are the two that matter.
+#[instrument(level = "trace", skip(variant))]
+fn variant_facts(variant: &verus_syn::Variant) -> VerusEnumVariantFacts {
+    VerusEnumVariantFacts {
+        name: variant.ident.to_string(),
+        carries_data: !matches!(variant.fields, verus_syn::Fields::Unit),
+        has_doc: has_doc_comment(&variant.attrs),
+    }
+}
+
+/// Whether `attrs` carries a doc comment (`///`/`//!`, or a literal
+/// `#[doc = ..]`) -- `///` desugars to `#[doc = "..."]` before this
+/// visitor ever sees it, so a single check covers both spellings.
+#[instrument(level = "trace", skip(attrs), ret)]
+fn has_doc_comment(attrs: &[verus_syn::Attribute]) -> bool {
+    attrs.iter().any(|attr| attr.path().is_ident("doc"))
 }
 
 #[instrument(level = "trace", skip(node), ret)]

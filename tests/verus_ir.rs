@@ -4,6 +4,60 @@ use std::path::Path;
 
 use cordial::{VerusFnMode, VerusPanicKind, VerusPublish, scan_verus_rust_source};
 
+/// A fully-documented enum with one data-carrying and one unit variant --
+/// the real shape `TransferError`/the derived-witness result enums take
+/// in `amenable_verus`.
+const DOCUMENTED_DATA_CARRYING_ENUM_SOURCE: &str = r#"
+use verus_builtin_macros::verus;
+
+verus! {
+
+/// Sanitized mirror of a real error type.
+pub enum TransferError {
+    /// The transfer amount wasn't positive.
+    NegativeAmount(i64),
+    /// The paying and receiving accounts were the same.
+    SameAccount,
+}
+
+}
+"#;
+
+/// Same shape, but the data-carrying variant has no doc comment -- a
+/// real gap, not Verus's synthesized accessor.
+const UNDOCUMENTED_VARIANT_ENUM_SOURCE: &str = r#"
+use verus_builtin_macros::verus;
+
+verus! {
+
+/// Sanitized mirror of a real error type.
+pub enum TransferError {
+    NegativeAmount(i64),
+    /// The paying and receiving accounts were the same.
+    SameAccount,
+}
+
+}
+"#;
+
+/// An all-unit-variant enum -- Verus never synthesizes a
+/// pattern-projection accessor for one of these, so it's never exempt.
+const UNIT_ONLY_ENUM_SOURCE: &str = r#"
+use verus_builtin_macros::verus;
+
+verus! {
+
+/// Selects which composed claim a call proves.
+pub enum Selector {
+    /// The first arm.
+    Balanced,
+    /// The second arm.
+    Closed,
+}
+
+}
+"#;
+
 /// Reproduces `cstr_carrier.rs::verify_cstr_excludes_the_terminating_nul_from_to_bytes`
 /// -- the exact function whose real `@` view-operator usage broke the
 /// syn-only best-effort recovery in `panics::verus_recover`. `verus_syn`
@@ -395,4 +449,86 @@ fn records_local_call_target_names() {
 
     let helper = find("helper");
     assert!(helper.calls.is_empty(), "{:?}", helper.calls);
+}
+
+#[test]
+fn fully_documented_data_carrying_enum_is_a_pattern_projection_enum() {
+    cordial::init_tracing();
+    let file = Path::new("transfer_error.rs");
+    let ir = scan_verus_rust_source(
+        DOCUMENTED_DATA_CARRYING_ENUM_SOURCE,
+        file,
+        "gallery::transfer_error",
+    );
+
+    let transfer_error = ir
+        .enums
+        .iter()
+        .find(|e| e.name == "TransferError")
+        .unwrap_or_else(|| panic!("TransferError not found in {:?}", ir.enums));
+    assert!(transfer_error.synthesizes_pattern_projection_accessors());
+    assert!(transfer_error.fully_documented());
+    assert!(ir.is_documented_pattern_projection_enum(file, transfer_error.span.line));
+}
+
+#[test]
+fn undocumented_data_carrying_variant_is_not_exempt() {
+    cordial::init_tracing();
+    let file = Path::new("transfer_error.rs");
+    let ir = scan_verus_rust_source(
+        UNDOCUMENTED_VARIANT_ENUM_SOURCE,
+        file,
+        "gallery::transfer_error",
+    );
+
+    let transfer_error = ir
+        .enums
+        .iter()
+        .find(|e| e.name == "TransferError")
+        .unwrap_or_else(|| panic!("TransferError not found in {:?}", ir.enums));
+    assert!(transfer_error.synthesizes_pattern_projection_accessors());
+    assert!(
+        !transfer_error.fully_documented(),
+        "NegativeAmount has no doc comment"
+    );
+    assert!(!ir.is_documented_pattern_projection_enum(file, transfer_error.span.line));
+}
+
+#[test]
+fn unit_only_enum_never_synthesizes_accessors() {
+    cordial::init_tracing();
+    let file = Path::new("selector.rs");
+    let ir = scan_verus_rust_source(UNIT_ONLY_ENUM_SOURCE, file, "gallery::selector");
+
+    let selector = ir
+        .enums
+        .iter()
+        .find(|e| e.name == "Selector")
+        .unwrap_or_else(|| panic!("Selector not found in {:?}", ir.enums));
+    assert!(
+        !selector.synthesizes_pattern_projection_accessors(),
+        "no variant carries data"
+    );
+    assert!(!ir.is_documented_pattern_projection_enum(file, selector.span.line));
+}
+
+#[test]
+fn wrong_line_or_file_is_never_a_match() {
+    cordial::init_tracing();
+    let file = Path::new("transfer_error.rs");
+    let ir = scan_verus_rust_source(
+        DOCUMENTED_DATA_CARRYING_ENUM_SOURCE,
+        file,
+        "gallery::transfer_error",
+    );
+    let transfer_error = ir
+        .enums
+        .iter()
+        .find(|e| e.name == "TransferError")
+        .unwrap_or_else(|| panic!("TransferError not found in {:?}", ir.enums));
+
+    assert!(!ir.is_documented_pattern_projection_enum(file, transfer_error.span.line + 1));
+    assert!(
+        !ir.is_documented_pattern_projection_enum(Path::new("other.rs"), transfer_error.span.line)
+    );
 }

@@ -14,12 +14,15 @@
 //! Visit` never descends into a macro's own token stream, and Verus's
 //! own grammar extensions (`requires`/`ensures`/the `@` view operator/
 //! quantifiers) aren't parseable by plain `syn` even if something did.
-//! This is foundational infrastructure other analysis builds on -- not
-//! itself a source of findings/exceptions yet, so it isn't part of
-//! `quality` (no CSV/checklist/reporter here). A real soundness/proof-
-//! pattern etiquette can consume [`VerusCrateIr`] once one exists,
-//! matching this workspace's own [`crate::ir`] separation between "the
-//! parsed structure" and "the rule that flags something about it."
+//! This is foundational infrastructure other analysis builds on -- it
+//! isn't part of `quality` itself (no CSV/checklist/reporter here), but
+//! [`VerusCrateIr::is_documented_pattern_projection_enum`] is a real
+//! consumer: `etiquettes::verus_warnings` uses it to recognize (and
+//! suppress) a "missing documentation for a method" warning about a
+//! data-carrying enum's own compiler-synthesized, undocumentable
+//! pattern-projection accessor, matching this workspace's own
+//! [`crate::ir`] separation between "the parsed structure" and "the
+//! rule that flags something about it."
 //!
 //! **How to use.** Feature `verus_ir`. [`scan_crate_verus_ir`] returns a
 //! crate's [`VerusCrateIr`]; best-effort throughout (a block or function
@@ -32,7 +35,8 @@ mod parse;
 mod types;
 
 pub use types::{
-    VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPanicKind, VerusPanicSite, VerusPublish,
+    VerusCrateIr, VerusEnumFacts, VerusEnumVariantFacts, VerusFnFacts, VerusFnMode, VerusPanicKind,
+    VerusPanicSite, VerusPublish,
 };
 
 use std::path::Path;

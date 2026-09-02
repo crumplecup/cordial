@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 
 use crate::objects::FileSpan;
@@ -192,12 +194,81 @@ impl VerusFnFacts {
     }
 }
 
-/// Every `VerusFnFacts` recovered from one crate's real `verus! { .. }`
-/// blocks.
+/// One variant of an `enum` found inside a `verus! { .. }` block.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerusEnumVariantFacts {
+    /// The variant's own name.
+    pub name: String,
+    /// Whether the variant carries data (a tuple or named-field variant)
+    /// as opposed to being a bare unit variant.
+    pub carries_data: bool,
+    /// Whether the variant carries a doc comment (`///` or `#[doc = ..]`).
+    pub has_doc: bool,
+}
+
+/// Real facts extracted from one `enum` found inside a `verus! { .. }`
+/// block, via `verus_syn`'s own real Verus-aware parser. Exists for one
+/// specific, confirmed reason: Verus auto-synthesizes a hidden
+/// field-projection accessor method per data field on a data-carrying
+/// enum variant, to support its own `result->Variant_N` pattern-
+/// projection syntax -- that accessor is never a literal AST node the
+/// source declares, so a real `verus` compile reports a "missing
+/// documentation for a method" warning *at the enum's own declaration
+/// line* with nothing real to attach a doc comment to. Confirmed against
+/// a real `verus` invocation, not assumed: neither a doc comment on the
+/// variant nor on the individual data field cleared the warning.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerusEnumFacts {
+    /// The enum's own name.
+    pub name: String,
+    /// Crate-relative module path.
+    pub module_path: String,
+    /// Where this enum is declared.
+    pub span: FileSpan,
+    /// Whether the enclosing `verus! { .. }` invocation sits inside a
+    /// `#[cfg(test)]` module.
+    pub cfg_test: bool,
+    /// Whether the enum itself carries a doc comment.
+    pub has_doc: bool,
+    /// Every variant, in declared order.
+    pub variants: Vec<VerusEnumVariantFacts>,
+}
+
+impl VerusEnumFacts {
+    /// Whether Verus will synthesize at least one hidden field-projection
+    /// accessor method for this enum -- true whenever any variant
+    /// carries data. See this type's own doc comment for why that
+    /// matters.
+    #[instrument(level = "trace", skip(self), ret)]
+    pub fn synthesizes_pattern_projection_accessors(&self) -> bool {
+        self.variants.iter().any(|variant| variant.carries_data)
+    }
+
+    /// Whether every human-writable doc site on this enum (the enum
+    /// itself, and every data-carrying variant) is already documented --
+    /// the real, complete answer for why a "missing documentation for a
+    /// method" warning about this enum's own synthesized accessor has
+    /// nothing left here for a human to fix. A genuinely undocumented
+    /// enum or variant still leaves this `false`, so the warning still
+    /// flags normally.
+    #[instrument(level = "trace", skip(self), ret)]
+    pub fn fully_documented(&self) -> bool {
+        self.has_doc
+            && self
+                .variants
+                .iter()
+                .all(|variant| !variant.carries_data || variant.has_doc)
+    }
+}
+
+/// Every `VerusFnFacts`/[`VerusEnumFacts`] recovered from one crate's
+/// real `verus! { .. }` blocks.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VerusCrateIr {
     /// Verus functions inventoried in this crate.
     pub functions: Vec<VerusFnFacts>,
+    /// Verus enums inventoried in this crate.
+    pub enums: Vec<VerusEnumFacts>,
 }
 
 impl VerusCrateIr {
@@ -223,5 +294,22 @@ impl VerusCrateIr {
     #[instrument(level = "debug", skip(self))]
     pub fn broadcasts(&self) -> impl Iterator<Item = &VerusFnFacts> {
         self.functions.iter().filter(|f| f.is_broadcast)
+    }
+
+    /// Whether `line` in `file` is a fully-documented, data-carrying
+    /// enum's own declaration -- the real signal `verus_warnings` uses
+    /// to recognize (and suppress) a "missing documentation for a
+    /// method" warning about that enum's synthesized, undocumentable
+    /// pattern-projection accessor. See [`VerusEnumFacts::
+    /// synthesizes_pattern_projection_accessors`]/[`VerusEnumFacts::
+    /// fully_documented`].
+    #[instrument(level = "debug", skip(self), ret)]
+    pub fn is_documented_pattern_projection_enum(&self, file: &Path, line: u32) -> bool {
+        self.enums.iter().any(|item| {
+            item.span.file.as_path() == file
+                && item.span.line == line
+                && item.synthesizes_pattern_projection_accessors()
+                && item.fully_documented()
+        })
     }
 }

@@ -8,6 +8,9 @@ use crate::error::CordialResult;
 
 use super::types::{VerusWarningRecord, VerusWarningRuleId};
 
+#[cfg(feature = "verus_ir")]
+use crate::verus_ir::scan_crate_verus_ir;
+
 use tracing::instrument;
 
 /// Scan a crate: run Verus when this crate is a Verus target and the
@@ -28,7 +31,41 @@ pub fn scan_crate_verus_warnings(crate_root: &Path) -> CordialResult<Vec<VerusWa
         return Ok(Vec::new());
     };
     let output = run_verus(&verus, crate_root, &entry)?;
-    Ok(parse_verus_compiler_output(&output, crate_root))
+    let records = parse_verus_compiler_output(&output, crate_root);
+    retain_real_warnings(records, crate_root)
+}
+
+/// Drop a "missing documentation for a method" warning that lands
+/// exactly on a fully-documented, data-carrying enum's own declaration
+/// line -- Verus's own synthesized pattern-projection accessor for that
+/// enum, not a real gap. See [`crate::verus_ir::VerusCrateIr::
+/// is_documented_pattern_projection_enum`]'s own doc comment for the
+/// confirmed, real reason. A no-op when the `verus_ir` feature isn't
+/// compiled in (kept independently toggleable, matching every other
+/// cross-etiquette signal reuse in this codebase).
+#[cfg(feature = "verus_ir")]
+#[instrument(level = "debug", skip(records), err(level = "warn"))]
+fn retain_real_warnings(
+    records: Vec<VerusWarningRecord>,
+    crate_root: &Path,
+) -> CordialResult<Vec<VerusWarningRecord>> {
+    let ir = scan_crate_verus_ir(crate_root)?;
+    Ok(records
+        .into_iter()
+        .filter(|record| {
+            !(record.snippet == "missing documentation for a method"
+                && ir.is_documented_pattern_projection_enum(&record.file, record.line))
+        })
+        .collect())
+}
+
+#[cfg(not(feature = "verus_ir"))]
+#[instrument(level = "debug", skip(records))]
+fn retain_real_warnings(
+    records: Vec<VerusWarningRecord>,
+    _crate_root: &Path,
+) -> CordialResult<Vec<VerusWarningRecord>> {
+    Ok(records)
 }
 
 /// True when this member is meant to be compiled with the Verus rustc fork.
