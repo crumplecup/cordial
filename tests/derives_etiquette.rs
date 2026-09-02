@@ -1070,3 +1070,134 @@ pub struct Record {
     );
     Ok(())
 }
+
+/// A hand-rolled `const fn` fluent builder is real evidence the type
+/// needs to stay `const`-constructible (e.g. for `inventory::submit!`,
+/// which requires a `const`-evaluable value, or a `&'static [T]` array
+/// literal via rvalue static promotion) -- `derive_builder` can't
+/// generate `const` methods, so recommending it here would be
+/// recommending something that doesn't actually replace what the type
+/// needs. Real precedent: `amenable_core::link::ExchangeEdgeRecord`.
+#[test]
+fn const_fn_fluent_builder_is_exempt_from_derive_builder() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+struct Edge {
+    x: u32,
+    y: u32,
+}
+
+impl Edge {
+    pub const fn with_x(mut self, x: u32) -> Self {
+        self.x = x;
+        self
+    }
+
+    pub const fn with_y(mut self, y: u32) -> Self {
+        self.y = y;
+        self
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        !findings.contains(&DeriveRuleId::Builder001),
+        "const fn fluent setters can't be replaced by derive_builder: {findings:?}"
+    );
+    Ok(())
+}
+
+/// A `const fn build(self)` is the same real exemption as the fluent-setter
+/// case above, just on the terminal method instead of the setters.
+#[test]
+fn const_fn_build_is_exempt_from_derive_builder() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+struct Edge {
+    x: u32,
+}
+
+impl Edge {
+    pub const fn build(self) -> Self {
+        self
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        !findings.contains(&DeriveRuleId::Builder001),
+        "const fn build can't be replaced by derive_builder: {findings:?}"
+    );
+    Ok(())
+}
+
+/// Only when *every* fluent setter is `const` does the exemption apply --
+/// a mix means the type isn't actually held to a whole-chain `const`
+/// requirement, so the ordinary recommendation still stands.
+#[test]
+fn mixed_const_and_non_const_fluents_still_flag_builder() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+struct Edge {
+    x: u32,
+    y: u32,
+}
+
+impl Edge {
+    pub const fn with_x(mut self, x: u32) -> Self {
+        self.x = x;
+        self
+    }
+
+    pub fn with_y(mut self, y: u32) -> Self {
+        self.y = y;
+        self
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        findings.contains(&DeriveRuleId::Builder001),
+        "a non-const fluent setter means the chain isn't really const-bound: {findings:?}"
+    );
+    Ok(())
+}
+
+/// `#[cfg(creusot)]`-only structs are exempt from `DERIVE-PUB-FIELD-001`:
+/// Creusot's own proof-transparency check requires everything an
+/// `#[ensures(..)]`/`#[requires(..)]` clause touches to be at least as
+/// visible as the function stating it -- confirmed against a real `cargo
+/// creusot` translation (not assumed): privatizing
+/// `amenable_creusot::ledger::ledger_validate::Ledger::balance`, whose
+/// own `check_sufficient_funds` method states `#[ensures(..
+/// self.balance ..)]`, produced a real "cannot make `.. balance`
+/// transparent in `.. check_sufficient_funds`" translation error.
+#[test]
+fn cfg_creusot_struct_skips_pub_field() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+#[cfg(creusot)]
+pub struct Ledger {
+    pub balance: i64,
+}
+
+pub struct Record {
+    pub name: String,
+}
+"#;
+    let findings = scan_findings(source, DerivesThresholds::default())?;
+    let pub_fields: Vec<&str> = findings
+        .iter()
+        .filter(|record| record.rule_id == DeriveRuleId::PubField001)
+        .map(|record| record.struct_name.as_str())
+        .collect();
+    assert!(
+        !pub_fields.contains(&"Ledger"),
+        "cfg(creusot) structs skip DERIVE-PUB-FIELD-001: {pub_fields:?}"
+    );
+    assert!(
+        pub_fields.contains(&"Record"),
+        "non-creusot pub fields still flag: {pub_fields:?}"
+    );
+    Ok(())
+}

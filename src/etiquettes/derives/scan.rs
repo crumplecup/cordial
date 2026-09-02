@@ -14,8 +14,8 @@ use super::path_inclusion::PathInclusionFacts;
 use super::syntax::{
     FieldRead, body_is_struct_literal, classify_field_read, classify_setter_body,
     constructor_arg_count, constructor_fields_match_params, consumes_self, error_impl_target,
-    field_is_exposed, has_derive, has_track_caller, is_cfg_test, is_clap_schema, is_fluent_setter,
-    type_label,
+    field_is_exposed, has_derive, has_track_caller, is_cfg_creusot, is_cfg_test, is_clap_schema,
+    is_fluent_setter, type_label,
 };
 use super::types::{DeriveRuleId, DeriveSiteRecord};
 
@@ -242,7 +242,10 @@ impl DeriveScanVisitor<'_> {
                 fields,
             },
         );
-        if exposed_fields.is_empty() || is_clap_schema(&item_struct.attrs) {
+        if exposed_fields.is_empty()
+            || is_clap_schema(&item_struct.attrs)
+            || is_cfg_creusot(&item_struct.attrs)
+        {
             return;
         }
         let field_list = exposed_fields
@@ -297,13 +300,14 @@ impl DeriveScanVisitor<'_> {
         self_ty: &str,
         struct_info: Option<&StructInfo>,
         method: &syn::ImplItemFn,
-        fluent_setters: &mut Vec<(String, u32)>,
-        build_line: &mut Option<u32>,
+        fluent_setters: &mut Vec<(String, u32, bool)>,
+        build_line: &mut Option<(u32, bool)>,
     ) {
         let method_name = method.sig.ident.to_string();
         let line = method.span().start().line as u32;
+        let is_const = method.sig.constness.is_some();
         if method_name == "build" && consumes_self(&method.sig) {
-            *build_line = Some(line);
+            *build_line = Some((line, is_const));
         }
         if is_fluent_setter(&method.sig)
             && classify_setter_body(
@@ -313,7 +317,7 @@ impl DeriveScanVisitor<'_> {
             )
             .is_some()
         {
-            fluent_setters.push((method_name.clone(), line));
+            fluent_setters.push((method_name.clone(), line, is_const));
         }
         if method_name == "new" {
             self.check_new_candidate(self_ty, struct_info, method, &method_name);
@@ -330,8 +334,8 @@ impl DeriveScanVisitor<'_> {
         &mut self,
         self_ty: &str,
         item_impl: &ItemImpl,
-        fluent_setters: &[(String, u32)],
-        build_line: Option<u32>,
+        fluent_setters: &[(String, u32, bool)],
+        build_line: Option<(u32, bool)>,
     ) {
         let recommendation = "Use #[derive(derive_builder::Builder)] on the built type";
         if self_ty.ends_with("Builder") {
@@ -347,23 +351,41 @@ impl DeriveScanVisitor<'_> {
             self.push_finding(record);
             return;
         }
-        if let Some(line) = build_line {
-            let record = self.site(SiteArgs::new(
-                DeriveRuleId::Builder001,
-                self_ty,
-                Some("build".to_string()),
-                format!("{self_ty}::build"),
-                recommendation,
-                line,
-                format!("`{self_ty}::build(self) -> …`"),
-            ));
-            self.push_finding(record);
+        if let Some((line, is_const)) = build_line {
+            // `derive_builder` generates ordinary (non-`const`) methods --
+            // a hand-written `const fn build` is real evidence the type
+            // needs to stay `const`-constructible (e.g. for a `&'static
+            // [T]` array literal via rvalue static promotion, or a value
+            // passed to `inventory::submit!`, which requires a
+            // `const`-evaluable expression), not an oversight `derive_
+            // builder` would just as well replace.
+            if !is_const {
+                let record = self.site(SiteArgs::new(
+                    DeriveRuleId::Builder001,
+                    self_ty,
+                    Some("build".to_string()),
+                    format!("{self_ty}::build"),
+                    recommendation,
+                    line,
+                    format!("`{self_ty}::build(self) -> …`"),
+                ));
+                self.push_finding(record);
+            }
             return;
         }
         if !fluent_setters.is_empty()
             && fluent_setters.len() >= self.thresholds.min_fluent_setters()
         {
-            let (name, line) = &fluent_setters[0];
+            // Same `const fn` exemption as `build`, above -- only when
+            // *every* fluent setter found is `const` is the whole chain
+            // (constructor included, by construction: a non-`const`
+            // constructor feeding a `const fn` setter couldn't be called
+            // from a `const` context anyway) genuinely incompatible with
+            // `derive_builder`.
+            if fluent_setters.iter().all(|(_, _, is_const)| *is_const) {
+                return;
+            }
+            let (name, line, _) = &fluent_setters[0];
             let record = self.site(SiteArgs::new(
                 DeriveRuleId::Builder001,
                 self_ty,

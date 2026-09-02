@@ -52,6 +52,32 @@ pub(super) fn is_clap_schema(attrs: &[Attribute]) -> bool {
     has_derive(attrs, "Parser") || has_derive(attrs, "Args") || has_derive(attrs, "Subcommand")
 }
 
+/// `#[cfg(creusot)]`-only types: a real, if less common, reason a field
+/// needs to stay at least as visible as it is. Creusot's own
+/// proof-transparency check requires everything an `#[ensures(..)]`/
+/// `#[requires(..)]` clause touches (`self.field`, or `value.field` on a
+/// by-value parameter) to be *at least* as visible as the function
+/// stating it -- confirmed against a real `cargo creusot` translation,
+/// not assumed: privatizing a field one such struct's own accessor
+/// referenced this way produced a real "cannot make `.. field`
+/// transparent in `.. method`" error, not a lint. A `#[cfg(creusot)]`
+/// struct exists at all only to carry exactly this kind of Pearlite spec
+/// content, so this skips the whole struct rather than requiring this
+/// scanner to parse Pearlite attribute contents to find the one field
+/// actually touched.
+#[instrument(level = "trace", skip(attrs), ret)]
+pub(super) fn is_cfg_creusot(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        let syn::Meta::List(list) = &attr.meta else {
+            return false;
+        };
+        if !list.path.is_ident("cfg") {
+            return false;
+        }
+        list.tokens.to_string().replace(' ', "") == "creusot"
+    })
+}
+
 #[instrument(level = "trace", skip(attrs))]
 pub(super) fn has_derive(attrs: &[Attribute], needle: &str) -> bool {
     attrs.iter().any(|attr| {
