@@ -65,6 +65,14 @@ pub(super) fn is_clap_schema(attrs: &[Attribute]) -> bool {
 /// content, so this skips the whole struct rather than requiring this
 /// scanner to parse Pearlite attribute contents to find the one field
 /// actually touched.
+///
+/// This only recognizes the gate on the item's *own* attribute list.
+/// `amenable_creusot`'s real `mirror` modules gate once on the
+/// enclosing `mod` instead of repeating `#[cfg(creusot)]` on every item
+/// inside it (confirmed the predominant shape: zero structs anywhere in
+/// that crate carry the attribute directly on the item) --
+/// `DeriveScanVisitor::walk_mod`'s own `in_cfg_creusot_mod` flag covers
+/// that ancestor case; this function alone does not.
 #[instrument(level = "trace", skip(attrs), ret)]
 pub(super) fn is_cfg_creusot(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {

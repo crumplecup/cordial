@@ -1172,6 +1172,15 @@ impl Edge {
 /// own `check_sufficient_funds` method states `#[ensures(..
 /// self.balance ..)]`, produced a real "cannot make `.. balance`
 /// transparent in `.. check_sufficient_funds`" translation error.
+///
+/// The attribute sits directly on the struct here -- covers
+/// `is_cfg_creusot`'s own item-level check. The real motivating shape
+/// (the gate on an *enclosing* `mod` instead) is a separate test below,
+/// `cfg_creusot_mod_skips_pub_field_on_ungated_struct_inside_it`: the
+/// two are genuinely different code paths
+/// (`is_cfg_creusot(&item_struct.attrs)` vs.
+/// `DeriveScanVisitor::in_cfg_creusot_mod`) and a bug in one doesn't
+/// imply the other works.
 #[test]
 fn cfg_creusot_struct_skips_pub_field() -> miette::Result<()> {
     cordial::init_tracing();
@@ -1194,6 +1203,48 @@ pub struct Record {
     assert!(
         !pub_fields.contains(&"Ledger"),
         "cfg(creusot) structs skip DERIVE-PUB-FIELD-001: {pub_fields:?}"
+    );
+    assert!(
+        pub_fields.contains(&"Record"),
+        "non-creusot pub fields still flag: {pub_fields:?}"
+    );
+    Ok(())
+}
+
+/// The real, predominant shape in `amenable_creusot`: the gate sits on
+/// an enclosing `mod`, never repeated on the struct itself (grep
+/// confirms zero structs anywhere in that crate carry `#[cfg(creusot)]`
+/// directly). `is_cfg_creusot` alone -- checking only an item's own
+/// attrs -- never matches this shape at all; this exercises
+/// `DeriveScanVisitor::in_cfg_creusot_mod`, the ancestor-tracking fix,
+/// against the exact real site
+/// (`amenable_creusot::ledger::ledger_validate::mirror::Ledger`) that
+/// motivated `is_cfg_creusot` in the first place but which the
+/// item-level check never actually covered.
+#[test]
+fn cfg_creusot_mod_skips_pub_field_on_ungated_struct_inside_it() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+#[cfg(creusot)]
+mod mirror {
+    pub struct Ledger {
+        pub(crate) balance: i64,
+    }
+}
+
+pub struct Record {
+    pub name: String,
+}
+"#;
+    let findings = scan_findings(source, DerivesThresholds::default())?;
+    let pub_fields: Vec<&str> = findings
+        .iter()
+        .filter(|record| record.rule_id == DeriveRuleId::PubField001)
+        .map(|record| record.struct_name.as_str())
+        .collect();
+    assert!(
+        !pub_fields.contains(&"Ledger"),
+        "a struct inside a cfg(creusot) mod skips DERIVE-PUB-FIELD-001 even without its own attribute: {pub_fields:?}"
     );
     assert!(
         pub_fields.contains(&"Record"),

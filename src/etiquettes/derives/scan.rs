@@ -89,6 +89,7 @@ pub fn scan_rust_source(
         thresholds,
         path_inclusions,
         findings: Vec::new(),
+        in_cfg_creusot_mod: false,
     };
     visitor.walk_items(&syntax.items);
     Ok(visitor.findings)
@@ -139,6 +140,15 @@ struct DeriveScanVisitor<'a> {
     thresholds: DerivesThresholds,
     path_inclusions: &'a PathInclusionFacts,
     findings: Vec<DeriveSiteRecord>,
+    /// Whether the item currently being walked sits inside a
+    /// `#[cfg(creusot)]`-gated `mod`, even if that gate sits on some
+    /// ancestor rather than the item itself -- the real, predominant
+    /// shape in this workspace (`amenable_creusot`'s own `mirror`
+    /// modules) gates once on the enclosing `mod`, never repeats
+    /// `#[cfg(creusot)]` on every item inside it. `is_cfg_creusot`
+    /// alone (checking only an item's own attrs) never matches that
+    /// shape at all.
+    in_cfg_creusot_mod: bool,
 }
 
 impl DeriveScanVisitor<'_> {
@@ -226,9 +236,19 @@ impl DeriveScanVisitor<'_> {
         };
         let mut nested = self.module_prefix.clone();
         nested.push(item_mod.ident.to_string());
-        let previous = std::mem::replace(&mut self.module_prefix, nested);
+        let previous_prefix = std::mem::replace(&mut self.module_prefix, nested);
+        // Sticky, not reset per-mod: a plain nested `mod` inside a
+        // `#[cfg(creusot)]` ancestor is still only compiled under that
+        // same gate, so a struct two levels down still counts as
+        // cfg(creusot)-only even though this particular `mod` carries
+        // no attribute of its own.
+        let previous_cfg_creusot = self.in_cfg_creusot_mod;
+        if is_cfg_creusot(&item_mod.attrs) {
+            self.in_cfg_creusot_mod = true;
+        }
         self.walk_items(items);
-        self.module_prefix = previous;
+        self.module_prefix = previous_prefix;
+        self.in_cfg_creusot_mod = previous_cfg_creusot;
     }
 
     #[instrument(level = "debug", skip(self, item_struct))]
@@ -244,6 +264,7 @@ impl DeriveScanVisitor<'_> {
         );
         if exposed_fields.is_empty()
             || is_clap_schema(&item_struct.attrs)
+            || self.in_cfg_creusot_mod
             || is_cfg_creusot(&item_struct.attrs)
         {
             return;
