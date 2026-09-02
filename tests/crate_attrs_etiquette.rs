@@ -254,6 +254,90 @@ fn allow_unsafe_skips_only_that_rule() -> miette::Result<()> {
     Ok(())
 }
 
+/// A verus-target crate (directory name ending `_verus`) that states a
+/// real `assume_specification` claim is exempt from
+/// `CRATE-FORBID-UNSAFE-001`: the real `verus` binary expands
+/// `assume_specification` into constructs its own `forbid(unsafe_code)`
+/// genuinely rejects, confirmed against a real `verus --crate-type=lib`
+/// invocation (see `crates/amenable_verus/src/lib.rs`'s own doc comment
+/// for the amenable-side story) -- invisible to plain `cargo build`/
+/// clippy, which never see this.
+#[test]
+fn verus_target_with_assume_specification_skips_forbid_unsafe() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let crate_root = fixture.path().join("fixture_verus");
+    write_lib(&crate_root, "pub fn ready() {}\n")?;
+    fs::write(
+        crate_root.join("src").join("carrier.rs"),
+        "pub assume_specification [char::from_str] (s: &str) -> (result: Result<char, ()>);\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write carrier")?;
+    let records = scan_crate_attrs(
+        &crate_root,
+        "fixture_verus",
+        &CrateAttrsThresholds::default(),
+    )
+    .into_diagnostic()?;
+    assert!(
+        !has(&records, CrateAttrsRuleId::ForbidUnsafe001),
+        "verus target with a real assume_specification site is exempt: {records:?}"
+    );
+    assert!(
+        has(&records, CrateAttrsRuleId::MissingDocs001),
+        "the exemption is narrow -- missing_docs still applies: {records:?}"
+    );
+    Ok(())
+}
+
+/// Both signals are required: a verus-target crate that never actually
+/// states an `assume_specification` claim has no reason to be exempt.
+#[test]
+fn verus_target_without_assume_specification_still_flags_forbid_unsafe() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let crate_root = fixture.path().join("fixture_verus");
+    write_lib(&crate_root, "pub fn ready() {}\n")?;
+    let records = scan_crate_attrs(
+        &crate_root,
+        "fixture_verus",
+        &CrateAttrsThresholds::default(),
+    )
+    .into_diagnostic()?;
+    assert!(
+        has(&records, CrateAttrsRuleId::ForbidUnsafe001),
+        "no real assume_specification site means no exemption: {records:?}"
+    );
+    Ok(())
+}
+
+/// Same converse: a non-verus-target crate that happens to mention
+/// `assume_specification` in a comment or string literal has no reason
+/// to be exempt either.
+#[test]
+fn non_verus_crate_with_assume_specification_text_still_flags_forbid_unsafe() -> miette::Result<()>
+{
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let crate_root = fixture.path().join("fixture_plain");
+    write_lib(
+        &crate_root,
+        "// mentions assume_specification but isn't a verus target\npub fn ready() {}\n",
+    )?;
+    let records = scan_crate_attrs(
+        &crate_root,
+        "fixture_plain",
+        &CrateAttrsThresholds::default(),
+    )
+    .into_diagnostic()?;
+    assert!(
+        has(&records, CrateAttrsRuleId::ForbidUnsafe001),
+        "not a verus-target crate, so no exemption: {records:?}"
+    );
+    Ok(())
+}
+
 #[test]
 fn toggling_a_rule_off_skips_it_everywhere() -> miette::Result<()> {
     cordial::init_tracing();

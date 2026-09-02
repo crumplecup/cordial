@@ -10,6 +10,9 @@ use crate::error::CordialResult;
 
 use super::types::{CrateAttrsRuleId, CrateAttrsSiteRecord};
 
+#[cfg(feature = "verus_warnings")]
+use crate::etiquettes::verus_warnings::crate_is_verus_target;
+
 use tracing::instrument;
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -42,7 +45,10 @@ pub fn scan_crate_attrs(
     }
     let line = 1;
     let mut records = Vec::new();
-    if !policy.skip_unsafe(crate_name) && !presence.forbid_unsafe_code {
+    if !policy.skip_unsafe(crate_name)
+        && !presence.forbid_unsafe_code
+        && !is_unsafe_forbid_exempt_verus_target(crate_root)
+    {
         records.push(CrateAttrsSiteRecord {
             rule_id: CrateAttrsRuleId::ForbidUnsafe001,
             context: crate_name.to_string(),
@@ -61,6 +67,54 @@ pub fn scan_crate_attrs(
         });
     }
     Ok(records)
+}
+
+/// A verus-target crate that states real `pub assume_specification
+/// [..] (..) -> (..) ..;` claims about external functions is exempt from
+/// `CRATE-FORBID-UNSAFE-001`: the real `verus` binary (invoked as a bare
+/// compiler, never through `cargo`) expands `assume_specification` into
+/// constructs its own `forbid(unsafe_code)` genuinely rejects
+/// ("declaration of an unsafe function" / "usage of an unsafe block"),
+/// even though the crate's own source never writes `unsafe` by hand --
+/// confirmed empirically against a real `verus --crate-type=lib`
+/// invocation, not assumed. Plain `cargo build`/clippy never see this;
+/// only the real Verus toolchain does. Both signals required: a
+/// verus-target crate that never actually states an external claim this
+/// way has no reason to be exempt.
+#[cfg(feature = "verus_warnings")]
+#[instrument(level = "debug")]
+fn is_unsafe_forbid_exempt_verus_target(crate_root: &Path) -> bool {
+    crate_is_verus_target(crate_root) && crate_uses_assume_specification(crate_root)
+}
+
+#[cfg(not(feature = "verus_warnings"))]
+#[instrument(level = "debug")]
+fn is_unsafe_forbid_exempt_verus_target(_crate_root: &Path) -> bool {
+    false
+}
+
+/// Whether any `.rs` file under `crate_root/src` literally mentions
+/// `assume_specification` -- a plain substring search, not a real parse:
+/// the construct only compiles under the real `verus` toolchain's own
+/// extended grammar (`verus_syn`), which this scanner has no reason to
+/// depend on just to recognize the one keyword that triggers the
+/// `forbid(unsafe_code)` conflict this exemption exists for.
+#[cfg(feature = "verus_warnings")]
+#[instrument(level = "debug")]
+fn crate_uses_assume_specification(crate_root: &Path) -> bool {
+    let src_root = crate_root.join("src");
+    if !src_root.is_dir() {
+        return false;
+    }
+    walkdir::WalkDir::new(&src_root)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_file())
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "rs"))
+        .any(|entry| {
+            std::fs::read_to_string(entry.path())
+                .is_ok_and(|source| source.contains("assume_specification"))
+        })
 }
 
 /// Absolute path of this package's library root, if it has one.
