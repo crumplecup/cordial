@@ -80,6 +80,19 @@ fn compliance_rows(rows: &[InternalErrorChainRow]) -> impl Iterator<Item = &Inte
         .filter(|row| row.record_kind == InternalErrorRecordKind::Compliance.as_str())
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[&InternalErrorChainRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 #[instrument(level = "debug", skip(rows))]
 fn class_counts(rows: &[InternalErrorChainRow]) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
@@ -221,7 +234,6 @@ impl Reporter for InternalErrorChainChecklistReporter {
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = internal_error_chain_rows(findings);
         let type_nodes: Vec<_> = type_graph_rows(&rows).collect();
@@ -249,63 +261,77 @@ impl Reporter for InternalErrorChainChecklistReporter {
              and a binary, clap types and dispatch live in the library (`Cli::act`); \
              `main` only parses and converts the umbrella error with miette.\n\n",
         );
-        body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
 
-        if !type_nodes.is_empty() {
-            body.push_str("### Type graph\n\n");
-            let mut by_class: BTreeMap<String, Vec<&InternalErrorChainRow>> = BTreeMap::new();
-            for row in &type_nodes {
-                by_class
-                    .entry(row.node_class.clone())
-                    .or_default()
-                    .push(row);
-            }
-            for (class, entries) in by_class {
-                body.push_str(&format!("#### {class}\n\n"));
-                for entry in entries {
-                    let target = if entry.source_target.is_empty() {
-                        "—"
-                    } else {
-                        &entry.source_target
-                    };
-                    body.push_str(&format!(
-                        "- [x] `{}` → `{target}` (depth {}, foreign={}) — `{}:{}`\n",
-                        entry.type_path,
-                        entry.chain_depth,
-                        entry.reaches_foreign,
-                        entry.file,
-                        entry.line
-                    ));
-                }
-                body.push('\n');
-            }
-        }
+        let all_rows: Vec<&InternalErrorChainRow> = rows.iter().collect();
+        for crate_name in crate_names(&all_rows) {
+            let crate_type_nodes: Vec<_> = type_nodes
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            let crate_compliance: Vec<_> = compliance
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            body.push_str(&format!("## `{crate_name}`\n\n"));
 
-        if !compliance.is_empty() {
-            body.push_str("### Compliance violations\n\n");
-            let mut by_rule: BTreeMap<String, Vec<&InternalErrorChainRow>> = BTreeMap::new();
-            for row in &compliance {
-                by_rule.entry(row.rule_id.clone()).or_default().push(row);
-            }
-            for (rule_id, entries) in by_rule {
-                body.push_str(&format!("#### {rule_id}\n\n"));
-                for entry in entries {
-                    let foreign = if entry.foreign_error_type.is_empty() {
-                        "—"
-                    } else {
-                        &entry.foreign_error_type
-                    };
-                    let constructor = if entry.internal_constructor.is_empty() {
-                        "—"
-                    } else {
-                        &entry.internal_constructor
-                    };
-                    body.push_str(&format!(
-                        "- [ ] `{}` — `{}:{}` — foreign `{foreign}` — constructor `{constructor}` — `{}`\n",
-                        entry.context, entry.file, entry.line, entry.snippet
-                    ));
+            if !crate_type_nodes.is_empty() {
+                body.push_str("### Type graph\n\n");
+                let mut by_class: BTreeMap<String, Vec<&InternalErrorChainRow>> = BTreeMap::new();
+                for row in &crate_type_nodes {
+                    by_class
+                        .entry(row.node_class.clone())
+                        .or_default()
+                        .push(row);
                 }
-                body.push('\n');
+                for (class, entries) in by_class {
+                    body.push_str(&format!("#### {class}\n\n"));
+                    for entry in entries {
+                        let target = if entry.source_target.is_empty() {
+                            "—"
+                        } else {
+                            &entry.source_target
+                        };
+                        body.push_str(&format!(
+                            "- [x] `{}` → `{target}` (depth {}, foreign={}) — `{}:{}`\n",
+                            entry.type_path,
+                            entry.chain_depth,
+                            entry.reaches_foreign,
+                            entry.file,
+                            entry.line
+                        ));
+                    }
+                    body.push('\n');
+                }
+            }
+
+            if !crate_compliance.is_empty() {
+                body.push_str("### Compliance violations\n\n");
+                let mut by_rule: BTreeMap<String, Vec<&InternalErrorChainRow>> = BTreeMap::new();
+                for row in &crate_compliance {
+                    by_rule.entry(row.rule_id.clone()).or_default().push(row);
+                }
+                for (rule_id, entries) in by_rule {
+                    body.push_str(&format!("#### {rule_id}\n\n"));
+                    for entry in entries {
+                        let foreign = if entry.foreign_error_type.is_empty() {
+                            "—"
+                        } else {
+                            &entry.foreign_error_type
+                        };
+                        let constructor = if entry.internal_constructor.is_empty() {
+                            "—"
+                        } else {
+                            &entry.internal_constructor
+                        };
+                        body.push_str(&format!(
+                            "- [ ] `{}` — `{}:{}` — foreign `{foreign}` — constructor `{constructor}` — `{}`\n",
+                            entry.context, entry.file, entry.line, entry.snippet
+                        ));
+                    }
+                    body.push('\n');
+                }
             }
         }
 
@@ -334,7 +360,6 @@ impl Reporter for InternalErrorChainSummaryReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = internal_error_chain_rows(findings);
         let counts = class_counts(&rows);
@@ -380,11 +405,49 @@ impl Reporter for InternalErrorChainSummaryReporter {
         body.push_str(
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
         );
+        let all_rows: Vec<&InternalErrorChainRow> = rows.iter().collect();
+        for crate_name in crate_names(&all_rows) {
+            let crate_rows: Vec<InternalErrorChainRow> = rows
+                .iter()
+                .filter(|row| row.crate_name == crate_name)
+                .cloned()
+                .collect();
+            let crate_counts = class_counts(&crate_rows);
+            let crate_type_nodes = type_graph_rows(&crate_rows).count();
+            let crate_leaves = crate_counts
+                .get(InternalErrorNodeClass::InternalLeaf.as_str())
+                .copied()
+                .unwrap_or(0);
+            let crate_links = crate_counts
+                .get(InternalErrorNodeClass::InternalLink.as_str())
+                .copied()
+                .unwrap_or(0)
+                + crate_counts
+                    .get(InternalErrorNodeClass::UmbrellaWrapper.as_str())
+                    .copied()
+                    .unwrap_or(0);
+            let crate_bridges = crate_counts
+                .get(InternalErrorNodeClass::ForeignBridge.as_str())
+                .copied()
+                .unwrap_or(0);
+            let crate_compliance_findings = compliance_rows(&crate_rows).count();
+            let (
+                crate_stringify,
+                crate_discard,
+                crate_source_shape,
+                crate_track_caller,
+                crate_architecture,
+            ) = compliance_counts(&crate_rows);
+            body.push_str(&format!(
+                "| `{crate_name}` | {crate_type_nodes} | {crate_leaves} | {crate_links} | {crate_bridges} | \
+                 {crate_compliance_findings} | {crate_stringify} | {crate_discard} | \
+                 {crate_source_shape} | {crate_track_caller} | {crate_architecture} |\n"
+            ));
+        }
         body.push_str(&format!(
-            "| `{}` | {type_nodes} | {internal_leaves} | {internal_links} | {foreign_bridges} | \
-             {compliance_findings} | {stringify_violations} | {discard_violations} | \
-             {source_shape_violations} | {track_caller_violations} | {architecture_violations} |\n\n",
-            ir.crate_name()
+            "\n| **Total** | **{type_nodes}** | **{internal_leaves}** | **{internal_links}** | **{foreign_bridges}** | \
+             **{compliance_findings}** | **{stringify_violations}** | **{discard_violations}** | \
+             **{source_shape_violations}** | **{track_caller_violations}** | **{architecture_violations}** |\n"
         ));
 
         Ok(vec![Box::new(TextArtifact {

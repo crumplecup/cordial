@@ -62,6 +62,19 @@ fn open_rows(rows: &[ProofPatternRow]) -> impl Iterator<Item = &ProofPatternRow>
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[&ProofPatternRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 /// Writes `proof-patterns.csv`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ProofPatternCsvReporter;
@@ -122,7 +135,6 @@ impl Reporter for ProofPatternChecklistReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = pattern_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -136,32 +148,40 @@ impl Reporter for ProofPatternChecklistReporter {
              `axiom`), or a `broadcast` lemma applying itself invisibly to every proof \
              in scope.\n\n",
         );
-        body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
 
-        let mut by_kind: BTreeMap<String, Vec<&ProofPatternRow>> = BTreeMap::new();
-        for row in &open {
-            by_kind.entry(row.kind.clone()).or_default().push(row);
-        }
+        for crate_name in crate_names(&open) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            body.push_str(&format!("## `{crate_name}`\n\n"));
 
-        for (kind, entries) in by_kind {
-            body.push_str(&format!("### {kind}\n\n"));
-            for entry in entries {
-                body.push_str(&format!(
-                    "- [ ] `{}` — `{}:{}` — `{}`",
-                    entry.context, entry.file, entry.line, entry.snippet
-                ));
-                if !entry.tracked_params.is_empty() {
-                    body.push_str(&format!(" — tracked: {}", entry.tracked_params));
-                }
-                if !entry.recommends.is_empty() {
-                    body.push_str(&format!(" — recommends: {}", entry.recommends));
-                }
-                if entry.cfg_test == "true" {
-                    body.push_str(" — `#[cfg(test)]`");
+            let mut by_kind: BTreeMap<String, Vec<&ProofPatternRow>> = BTreeMap::new();
+            for row in &crate_open {
+                by_kind.entry(row.kind.clone()).or_default().push(row);
+            }
+
+            for (kind, entries) in by_kind {
+                body.push_str(&format!("### {kind}\n\n"));
+                for entry in entries {
+                    body.push_str(&format!(
+                        "- [ ] `{}` — `{}:{}` — `{}`",
+                        entry.context, entry.file, entry.line, entry.snippet
+                    ));
+                    if !entry.tracked_params.is_empty() {
+                        body.push_str(&format!(" — tracked: {}", entry.tracked_params));
+                    }
+                    if !entry.recommends.is_empty() {
+                        body.push_str(&format!(" — recommends: {}", entry.recommends));
+                    }
+                    if entry.cfg_test == "true" {
+                        body.push_str(" — `#[cfg(test)]`");
+                    }
+                    body.push('\n');
                 }
                 body.push('\n');
             }
-            body.push('\n');
         }
 
         Ok(vec![Box::new(TextArtifact {
@@ -189,7 +209,6 @@ impl Reporter for ProofPatternSummaryReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = pattern_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -209,10 +228,22 @@ impl Reporter for ProofPatternSummaryReporter {
         ));
         body.push_str("| Crate | Trusted-not-proven | Broadcast | Total |\n");
         body.push_str("| --- | ---: | ---: | ---: |\n");
-        body.push_str(&format!(
-            "| `{}` | {trusted} | {broadcasts} | {total} |\n",
-            ir.crate_name()
-        ));
+        for crate_name in crate_names(&open) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            let crate_total = crate_open.len();
+            let crate_trusted = crate_open
+                .iter()
+                .filter(|row| row.kind != "PROOF-PATTERN-BROADCAST")
+                .count();
+            let crate_broadcasts = crate_total - crate_trusted;
+            body.push_str(&format!(
+                "| `{crate_name}` | {crate_trusted} | {crate_broadcasts} | {crate_total} |\n"
+            ));
+        }
         body.push_str(&format!(
             "\n| **Total** | **{trusted}** | **{broadcasts}** | **{total}** |\n"
         ));

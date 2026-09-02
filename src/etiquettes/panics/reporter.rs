@@ -66,6 +66,19 @@ fn checklist_panic_rows(rows: &[PanicRow]) -> impl Iterator<Item = &PanicRow> {
     open_panic_rows(rows).filter(|row| row.checklist != "false")
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[&PanicRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 /// Writes `panics.csv`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PanicCsvReporter;
@@ -118,7 +131,6 @@ impl Reporter for PanicChecklistReporter {
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = panic_rows(findings);
         let open: Vec<_> = checklist_panic_rows(&rows).collect();
@@ -139,64 +151,83 @@ impl Reporter for PanicChecklistReporter {
                 inventory
             ));
         }
-        body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
-
-        let mut by_surface: BTreeMap<String, Vec<&PanicRow>> = BTreeMap::new();
-        for row in &open {
-            let surface = if row.surface.is_empty() {
-                "library".to_string()
-            } else {
-                row.surface.clone()
-            };
-            by_surface.entry(surface).or_default().push(row);
-        }
-
-        for (surface, entries) in by_surface {
-            let (title, action) = match surface.as_str() {
-                "binary" => (
-                    "Binary — surface with miette",
-                    crate::plugin::ErrorSurface::Binary.abort_action(),
-                ),
-                "test" => (
-                    "Tests — surface with miette",
-                    crate::plugin::ErrorSurface::Test.abort_action(),
-                ),
-                _ => (
-                    "Library — return internal error types",
-                    crate::plugin::ErrorSurface::Library.abort_action(),
-                ),
-            };
-            body.push_str(&format!("### {title}\n\n"));
-            body.push_str(&format!("_{action}._\n\n"));
-            let mut by_kind: BTreeMap<String, Vec<&PanicRow>> = BTreeMap::new();
-            for entry in entries {
-                by_kind.entry(entry.kind.clone()).or_default().push(entry);
-            }
-            for (kind, kind_entries) in by_kind {
-                body.push_str(&format!("#### {kind}\n\n"));
-                for entry in kind_entries {
-                    body.push_str(&format!(
-                        "- [ ] `{}` — `{}:{}` — `{}`\n",
-                        entry.context, entry.file, entry.line, entry.snippet
-                    ));
-                }
-                body.push('\n');
-            }
-        }
 
         let suppressed: Vec<_> = rows
             .iter()
             .filter(|row| row.disposition == "suppressed")
             .collect();
-        if !suppressed.is_empty() {
-            body.push_str("### Documented exceptions\n\n");
-            for entry in suppressed {
-                body.push_str(&format!(
-                    "- [x] `{}` — `{}:{}` — _{}_\n",
-                    entry.context, entry.file, entry.line, entry.suppression_reason
-                ));
+        let all: Vec<&PanicRow> = open
+            .iter()
+            .copied()
+            .chain(suppressed.iter().copied())
+            .collect();
+
+        for crate_name in crate_names(&all) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            let crate_suppressed: Vec<_> = suppressed
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            body.push_str(&format!("## `{crate_name}`\n\n"));
+
+            let mut by_surface: BTreeMap<String, Vec<&PanicRow>> = BTreeMap::new();
+            for row in &crate_open {
+                let surface = if row.surface.is_empty() {
+                    "library".to_string()
+                } else {
+                    row.surface.clone()
+                };
+                by_surface.entry(surface).or_default().push(row);
             }
-            body.push('\n');
+
+            for (surface, entries) in by_surface {
+                let (title, action) = match surface.as_str() {
+                    "binary" => (
+                        "Binary — surface with miette",
+                        crate::plugin::ErrorSurface::Binary.abort_action(),
+                    ),
+                    "test" => (
+                        "Tests — surface with miette",
+                        crate::plugin::ErrorSurface::Test.abort_action(),
+                    ),
+                    _ => (
+                        "Library — return internal error types",
+                        crate::plugin::ErrorSurface::Library.abort_action(),
+                    ),
+                };
+                body.push_str(&format!("### {title}\n\n"));
+                body.push_str(&format!("_{action}._\n\n"));
+                let mut by_kind: BTreeMap<String, Vec<&PanicRow>> = BTreeMap::new();
+                for entry in entries {
+                    by_kind.entry(entry.kind.clone()).or_default().push(entry);
+                }
+                for (kind, kind_entries) in by_kind {
+                    body.push_str(&format!("#### {kind}\n\n"));
+                    for entry in kind_entries {
+                        body.push_str(&format!(
+                            "- [ ] `{}` — `{}:{}` — `{}`\n",
+                            entry.context, entry.file, entry.line, entry.snippet
+                        ));
+                    }
+                    body.push('\n');
+                }
+            }
+
+            if !crate_suppressed.is_empty() {
+                body.push_str("### Documented exceptions\n\n");
+                for entry in crate_suppressed {
+                    body.push_str(&format!(
+                        "- [x] `{}` — `{}:{}` — _{}_\n",
+                        entry.context, entry.file, entry.line, entry.suppression_reason
+                    ));
+                }
+                body.push('\n');
+            }
         }
 
         Ok(vec![Box::new(TextArtifact {
@@ -224,7 +255,6 @@ impl Reporter for PanicSummaryReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = panic_rows(findings);
         let inventory: Vec<_> = open_panic_rows(&rows).collect();
@@ -272,9 +302,25 @@ impl Reporter for PanicSummaryReporter {
             "| Crate | Total | Panic | Unreachable | Expect | Unwrap | Compile error |\n",
         );
         body.push_str("| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n");
+        for crate_name in crate_names(&open) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            let count = |kind: &str| crate_open.iter().filter(|row| row.kind == kind).count();
+            body.push_str(&format!(
+                "| `{crate_name}` | {} | {} | {} | {} | {} | {} |\n",
+                crate_open.len(),
+                count("PANIC-SOURCE-PANIC"),
+                count("PANIC-SOURCE-UNREACHABLE"),
+                count("PANIC-SOURCE-EXPECT"),
+                count("PANIC-SOURCE-UNWRAP"),
+                count("PANIC-SOURCE-COMPILE-ERROR"),
+            ));
+        }
         body.push_str(&format!(
-            "| `{}` | {total} | {panic} | {unreachable} | {expect} | {unwrap} | {compile_error} |\n",
-            ir.crate_name()
+            "\n| **Total** | **{total}** | **{panic}** | **{unreachable}** | **{expect}** | **{unwrap}** | **{compile_error}** |\n"
         ));
 
         Ok(vec![Box::new(TextArtifact {

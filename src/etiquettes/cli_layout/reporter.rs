@@ -53,6 +53,19 @@ fn open_rows(rows: &[CliLayoutRow]) -> impl Iterator<Item = &CliLayoutRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[&CliLayoutRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 /// Writes `cli-layout.csv`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CliLayoutCsvReporter;
@@ -107,7 +120,6 @@ impl Reporter for CliLayoutChecklistReporter {
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = cli_layout_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -122,14 +134,21 @@ impl Reporter for CliLayoutChecklistReporter {
         );
 
         if !open.is_empty() {
-            body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
-            for row in &open {
-                body.push_str(&format!(
-                    "- [ ] `{}:{}` — `{}` — {}\n  - {}\n",
-                    row.file, row.line, row.rule_id, row.context, row.snippet
-                ));
+            for crate_name in crate_names(&open) {
+                let crate_open: Vec<_> = open
+                    .iter()
+                    .copied()
+                    .filter(|row| row.crate_name == crate_name)
+                    .collect();
+                body.push_str(&format!("## `{crate_name}`\n\n"));
+                for row in &crate_open {
+                    body.push_str(&format!(
+                        "- [ ] `{}:{}` — `{}` — {}\n  - {}\n",
+                        row.file, row.line, row.rule_id, row.context, row.snippet
+                    ));
+                }
+                body.push('\n');
             }
-            body.push('\n');
         } else {
             body.push_str("_No CLI layout violations found._\n\n");
         }

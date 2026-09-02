@@ -59,6 +59,19 @@ fn open_rows(rows: &[ErrorChainRow]) -> impl Iterator<Item = &ErrorChainRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[&ErrorChainRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 #[instrument(level = "debug", skip(rows))]
 fn probe_counts_from_rows(rows: &[ErrorChainRow]) -> ErrorChainProbeCounts {
     let mut counts = ErrorChainProbeCounts::default();
@@ -135,7 +148,6 @@ impl Reporter for ErrorChainChecklistReporter {
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = error_chain_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -154,27 +166,35 @@ impl Reporter for ErrorChainChecklistReporter {
              `map_err`). These are **reference patterns** for error-chain preservation. \
              Contrast with `foreign-error-types.checklist.md` (chain breaks).\n\n",
         );
-        body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
 
-        let mut by_rule: BTreeMap<String, Vec<&ErrorChainRow>> = BTreeMap::new();
-        for row in &open {
-            by_rule.entry(row.rule_id.clone()).or_default().push(row);
-        }
+        for crate_name in crate_names(&open) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            body.push_str(&format!("## `{crate_name}`\n\n"));
 
-        for (rule_id, entries) in by_rule {
-            body.push_str(&format!("### {rule_id}\n\n"));
-            for entry in entries {
-                let foreign = if entry.foreign_error_type.is_empty() {
-                    "—"
-                } else {
-                    &entry.foreign_error_type
-                };
-                body.push_str(&format!(
-                    "- [x] `{}` — `{}:{}` — foreign `{foreign}` — `{}`\n",
-                    entry.context, entry.file, entry.line, entry.snippet
-                ));
+            let mut by_rule: BTreeMap<String, Vec<&ErrorChainRow>> = BTreeMap::new();
+            for row in &crate_open {
+                by_rule.entry(row.rule_id.clone()).or_default().push(row);
             }
-            body.push('\n');
+
+            for (rule_id, entries) in by_rule {
+                body.push_str(&format!("### {rule_id}\n\n"));
+                for entry in entries {
+                    let foreign = if entry.foreign_error_type.is_empty() {
+                        "—"
+                    } else {
+                        &entry.foreign_error_type
+                    };
+                    body.push_str(&format!(
+                        "- [x] `{}` — `{}:{}` — foreign `{foreign}` — `{}`\n",
+                        entry.context, entry.file, entry.line, entry.snippet
+                    ));
+                }
+                body.push('\n');
+            }
         }
 
         Ok(vec![Box::new(TextArtifact {
@@ -202,7 +222,6 @@ impl Reporter for ErrorChainSummaryReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = error_chain_rows(findings);
         let counts = probe_counts_from_rows(&rows);
@@ -219,10 +238,21 @@ impl Reporter for ErrorChainSummaryReporter {
         ));
         body.push_str("| Crate | Total | Propagation | Infrastructure |\n");
         body.push_str("| --- | ---: | ---: | ---: |\n");
-        body.push_str(&format!(
-            "| `{}` | {total} | {propagation} | {infrastructure} |\n",
-            ir.crate_name()
-        ));
+        let all_rows: Vec<&ErrorChainRow> = rows.iter().collect();
+        for crate_name in crate_names(&all_rows) {
+            let crate_rows: Vec<ErrorChainRow> = rows
+                .iter()
+                .filter(|row| row.crate_name == crate_name)
+                .cloned()
+                .collect();
+            let crate_counts = probe_counts_from_rows(&crate_rows);
+            body.push_str(&format!(
+                "| `{crate_name}` | {} | {} | {} |\n",
+                crate_counts.total(),
+                crate_counts.preserved_propagation(),
+                crate_counts.infrastructure(),
+            ));
+        }
         body.push_str(&format!(
             "\n| **Total** | **{total}** | **{propagation}** | **{infrastructure}** |\n"
         ));

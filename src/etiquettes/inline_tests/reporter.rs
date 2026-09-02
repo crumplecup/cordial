@@ -56,6 +56,19 @@ fn open_rows(rows: &[InlineTestRow]) -> impl Iterator<Item = &InlineTestRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[&InlineTestRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 /// Writes `inline-tests.csv`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct InlineTestCsvReporter;
@@ -111,7 +124,6 @@ impl Reporter for InlineTestChecklistReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = inline_test_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -122,22 +134,30 @@ impl Reporter for InlineTestChecklistReporter {
             "Move tests out of `src/` into the crate `tests/` directory so library \
              modules stay production code.\n\n",
         );
-        body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
 
-        let mut by_rule: BTreeMap<String, Vec<&InlineTestRow>> = BTreeMap::new();
-        for row in &open {
-            by_rule.entry(row.rule_id.clone()).or_default().push(row);
-        }
+        for crate_name in crate_names(&open) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            body.push_str(&format!("## `{crate_name}`\n\n"));
 
-        for (rule_id, entries) in by_rule {
-            body.push_str(&format!("### {rule_id}\n\n"));
-            for entry in entries {
-                body.push_str(&format!(
-                    "- [ ] `{}` — `{}:{}` — `{}`\n",
-                    entry.context, entry.file, entry.line, entry.snippet
-                ));
+            let mut by_rule: BTreeMap<String, Vec<&InlineTestRow>> = BTreeMap::new();
+            for row in &crate_open {
+                by_rule.entry(row.rule_id.clone()).or_default().push(row);
             }
-            body.push('\n');
+
+            for (rule_id, entries) in by_rule {
+                body.push_str(&format!("### {rule_id}\n\n"));
+                for entry in entries {
+                    body.push_str(&format!(
+                        "- [ ] `{}` — `{}:{}` — `{}`\n",
+                        entry.context, entry.file, entry.line, entry.snippet
+                    ));
+                }
+                body.push('\n');
+            }
         }
 
         Ok(vec![Box::new(TextArtifact {
@@ -165,7 +185,6 @@ impl Reporter for InlineTestSummaryReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = inline_test_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -192,10 +211,29 @@ impl Reporter for InlineTestSummaryReporter {
         ));
         body.push_str("| Crate | Total | Modules | cfg(test) items | #[test] fns |\n");
         body.push_str("| --- | ---: | ---: | ---: | ---: |\n");
-        body.push_str(&format!(
-            "| `{}` | {total} | {mods} | {cfg} | {fns} |\n",
-            ir.crate_name()
-        ));
+        for crate_name in crate_names(&open) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            let crate_total = crate_open.len();
+            let crate_mods = crate_open
+                .iter()
+                .filter(|row| row.rule_id == "INLINE-TEST-MOD")
+                .count();
+            let crate_cfg = crate_open
+                .iter()
+                .filter(|row| row.rule_id == "INLINE-TEST-CFG")
+                .count();
+            let crate_fns = crate_open
+                .iter()
+                .filter(|row| row.rule_id == "INLINE-TEST-FN")
+                .count();
+            body.push_str(&format!(
+                "| `{crate_name}` | {crate_total} | {crate_mods} | {crate_cfg} | {crate_fns} |\n"
+            ));
+        }
         body.push_str(&format!(
             "\n| **Total** | **{total}** | **{mods}** | **{cfg}** | **{fns}** |\n"
         ));

@@ -13,9 +13,23 @@ use tracing::instrument;
 
 /// Scan a crate: run `cargo doc` unless this package is skipped or cargo
 /// is not on `PATH`.
+///
+/// `resolve_root` -- the base a reported diagnostic file path is joined
+/// against -- is deliberately a separate parameter from `crate_root` (the
+/// literal directory `cargo doc` is invoked in, via `current_dir` and
+/// `-p`): confirmed the hard way that these differ in a real multi-member
+/// workspace. Cargo's own JSON diagnostics report `file_name` relative to
+/// the *workspace* root even when invoked with `current_dir` set to one
+/// member's own directory -- joining against `crate_root` there
+/// double-prepends the member's own relative path (`crates/amenable/
+/// crates/amenable/src/...`), confirmed against a real `cargo doc` run,
+/// not assumed. Pass the project/workspace root here; for a standalone
+/// (non-workspace) crate the two are the same path, so this is a no-op
+/// there.
 #[instrument(level = "debug", skip(policy), err(level = "warn"))]
 pub fn scan_crate_doc_warnings(
     crate_root: &Path,
+    resolve_root: &Path,
     crate_name: &str,
     policy: &DocWarningsThresholds,
 ) -> CordialResult<Vec<DocWarningRecord>> {
@@ -33,14 +47,17 @@ pub fn scan_crate_doc_warnings(
         return Ok(Vec::new());
     };
     let output = run_cargo_doc(&cargo, crate_root, crate_name, policy)?;
-    Ok(parse_doc_compiler_output(&output, crate_root))
+    Ok(parse_doc_compiler_output(&output, resolve_root))
 }
 
 /// Parse cargo JSON and rustc-style rustdoc diagnostics. rustc lints
 /// (including `missing_docs`) are dropped; the same span+message is kept
-/// once.
+/// once. `resolve_root` is the base a relative diagnostic file path is
+/// joined against -- see [`scan_crate_doc_warnings`]'s own doc comment
+/// for why that's the workspace root, not necessarily the scanned
+/// crate's own root.
 #[instrument(level = "debug", skip(output))]
-pub fn parse_doc_compiler_output(output: &str, crate_root: &Path) -> Vec<DocWarningRecord> {
+pub fn parse_doc_compiler_output(output: &str, resolve_root: &Path) -> Vec<DocWarningRecord> {
     let mut records = Vec::new();
     let mut seen = BTreeSet::new();
     let lines: Vec<&str> = output.lines().collect();
@@ -50,7 +67,7 @@ pub fn parse_doc_compiler_output(output: &str, crate_root: &Path) -> Vec<DocWarn
             push_record(
                 &mut records,
                 &mut seen,
-                crate_root,
+                resolve_root,
                 lint,
                 file,
                 line,
@@ -70,7 +87,7 @@ pub fn parse_doc_compiler_output(output: &str, crate_root: &Path) -> Vec<DocWarn
         push_record(
             &mut records,
             &mut seen,
-            crate_root,
+            resolve_root,
             lint,
             file,
             line,
@@ -161,12 +178,12 @@ fn parse_arrow_span(line: &str) -> Option<(String, u32)> {
 
 #[instrument(
     level = "trace",
-    skip(records, seen, crate_root, lint, file, line, message)
+    skip(records, seen, resolve_root, lint, file, line, message)
 )]
 fn push_record(
     records: &mut Vec<DocWarningRecord>,
     seen: &mut BTreeSet<(String, u32, String)>,
-    crate_root: &Path,
+    resolve_root: &Path,
     lint: String,
     file: String,
     line: u32,
@@ -179,19 +196,19 @@ fn push_record(
     records.push(DocWarningRecord {
         rule_id: DocWarningRuleId::Warning001,
         context: lint,
-        file: resolve_diagnostic_file(crate_root, &file),
+        file: resolve_diagnostic_file(resolve_root, &file),
         line,
         snippet: message,
     });
 }
 
 #[instrument(level = "debug")]
-fn resolve_diagnostic_file(crate_root: &Path, file: &str) -> PathBuf {
+fn resolve_diagnostic_file(resolve_root: &Path, file: &str) -> PathBuf {
     let path = PathBuf::from(file);
     if path.is_absolute() {
         return path;
     }
-    crate_root.join(path)
+    resolve_root.join(path)
 }
 
 #[instrument(level = "debug")]

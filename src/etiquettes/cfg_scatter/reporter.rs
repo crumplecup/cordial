@@ -53,6 +53,19 @@ fn open_rows(rows: &[CfgScatterRow]) -> impl Iterator<Item = &CfgScatterRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[&CfgScatterRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 #[instrument(level = "debug", skip(rows))]
 fn sort_by_occurrences_desc(rows: &mut [&CfgScatterRow]) {
     rows.sort_by(|left, right| {
@@ -121,7 +134,6 @@ impl Reporter for CfgScatterChecklistReporter {
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = cfg_scatter_rows(findings);
         let mut open: Vec<_> = open_rows(&rows).collect();
@@ -138,14 +150,21 @@ impl Reporter for CfgScatterChecklistReporter {
         );
 
         if !open.is_empty() {
-            body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
-            for row in &open {
-                body.push_str(&format!(
-                    "- [ ] `{}` — `cfg({})` — kinds: `{}` — **{} occurrences**\n  - sample: {}\n",
-                    row.file, row.predicate, row.kinds, row.occurrences, row.sample
-                ));
+            for crate_name in crate_names(&open) {
+                let crate_open: Vec<_> = open
+                    .iter()
+                    .copied()
+                    .filter(|row| row.crate_name == crate_name)
+                    .collect();
+                body.push_str(&format!("## `{crate_name}`\n\n"));
+                for row in &crate_open {
+                    body.push_str(&format!(
+                        "- [ ] `{}` — `cfg({})` — kinds: `{}` — **{} occurrences**\n  - sample: {}\n",
+                        row.file, row.predicate, row.kinds, row.occurrences, row.sample
+                    ));
+                }
+                body.push('\n');
             }
-            body.push('\n');
         } else {
             body.push_str("_No scattered cfg predicates found._\n\n");
         }
@@ -175,7 +194,6 @@ impl Reporter for CfgScatterSummaryReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = cfg_scatter_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -199,9 +217,28 @@ impl Reporter for CfgScatterSummaryReporter {
         ));
         body.push_str("| Crate | Scattered predicates | Files affected | Total gated sites |\n");
         body.push_str("| --- | ---: | ---: | ---: |\n");
+        for crate_name in crate_names(&open) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            let crate_occurrences: u32 = crate_open
+                .iter()
+                .filter_map(|row| row.occurrences.parse::<u32>().ok())
+                .sum();
+            let crate_files = crate_open
+                .iter()
+                .map(|row| row.file.clone())
+                .collect::<std::collections::BTreeSet<_>>()
+                .len();
+            body.push_str(&format!(
+                "| `{crate_name}` | {} | {crate_files} | {crate_occurrences} |\n",
+                crate_open.len()
+            ));
+        }
         body.push_str(&format!(
-            "| `{}` | {} | {files_affected} | {total_occurrences} |\n",
-            ir.crate_name(),
+            "\n| **Total** | **{}** | **{files_affected}** | **{total_occurrences}** |\n",
             open.len()
         ));
 

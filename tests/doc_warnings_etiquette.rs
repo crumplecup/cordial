@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use cordial::{
     DOC_WARNINGS_ETIQUETTE, DocWarningRuleId, DocWarningsThresholds, RunAll, Session,
@@ -8,6 +9,16 @@ use cordial::{
 use miette::{IntoDiagnostic, WrapErr};
 
 const CANARY: &str = include_str!("fixtures/quality/doc_warnings/canary.jsonl");
+
+/// Serializes tests that touch the process-wide `CORDIAL_CARGO` env var
+/// (`session_writes_checklist_from_injected_cargo` sets it to a fake
+/// `cargo`) against tests that depend on it being unset
+/// (`dogfood_cordial_has_no_rustdoc_warnings`) -- `cargo test` runs every
+/// test in this file as threads of one process, so without this a real
+/// scan running concurrently with the injection picks up the fake `cargo`
+/// and reports the fixture's canned warnings instead of a real `cargo doc`
+/// run against this crate.
+static CARGO_ENV_LOCK: Mutex<()> = Mutex::new(());
 
 fn canary_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -56,6 +67,33 @@ warning: 3 warnings emitted
     assert!(records.is_empty(), "{records:?}");
 }
 
+/// `cargo doc`'s own JSON diagnostics report `file_name` relative to the
+/// *workspace* root even when `cargo` is invoked with `current_dir` set
+/// to one member's own directory -- confirmed against a real `cargo doc`
+/// run in a real multi-member workspace, not assumed. Joining a path
+/// like `crates/member/src/lib.rs` against the *member's own* root
+/// (rather than the workspace root `scan_crate_doc_warnings` now takes
+/// as a separate `resolve_root` parameter) would double-prepend it into
+/// `crates/member/crates/member/src/lib.rs` -- the real bug this
+/// regresses.
+#[test]
+fn resolves_a_workspace_relative_diagnostic_path_against_the_given_root() {
+    cordial::init_tracing();
+    let output = "\
+warning[rustdoc::broken_intra_doc_links]: unresolved link to `Foo`
+ --> crates/member/src/lib.rs:3:11
+";
+    let workspace_root = PathBuf::from("/workspace");
+    let records = parse_doc_compiler_output(output, &workspace_root);
+    assert_eq!(records.len(), 1, "{records:?}");
+    assert_eq!(
+        records[0].file,
+        PathBuf::from("/workspace/crates/member/src/lib.rs"),
+        "joined once against the given root, not doubled: {:?}",
+        records[0].file
+    );
+}
+
 #[test]
 fn parse_human_rustdoc_warning() {
     cordial::init_tracing();
@@ -87,9 +125,14 @@ fn skip_crates_does_not_invoke_cargo() -> miette::Result<()> {
     )
     .into_diagnostic()?;
     let policy = load_cordial_config(fixture.path(), fixture.path());
-    let records = scan_crate_doc_warnings(fixture.path(), "skip_me", policy.doc_warnings())
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let records = scan_crate_doc_warnings(
+        fixture.path(),
+        fixture.path(),
+        "skip_me",
+        policy.doc_warnings(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
     assert!(records.is_empty());
     Ok(())
 }
@@ -99,6 +142,7 @@ fn scan_skips_directory_without_manifest() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let records = scan_crate_doc_warnings(
+        fixture.path(),
         fixture.path(),
         "ghost",
         load_cordial_config(fixture.path(), fixture.path()).doc_warnings(),
@@ -139,6 +183,9 @@ fn session_writes_checklist_from_injected_cargo() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("store tempdir")?;
 
+    let guard = CARGO_ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous = std::env::var_os("CORDIAL_CARGO");
     // SAFETY: test process owns this env var for the duration of the session run.
     unsafe {
@@ -159,6 +206,7 @@ fn session_writes_checklist_from_injected_cargo() -> miette::Result<()> {
             std::env::remove_var("CORDIAL_CARGO");
         },
     }
+    drop(guard);
     let outcome = outcome.into_diagnostic().wrap_err("session run")?;
     assert_eq!(outcome.findings().count(), 2);
 
@@ -188,10 +236,14 @@ fn session_writes_checklist_from_injected_cargo() -> miette::Result<()> {
 #[test]
 fn dogfood_cordial_has_no_rustdoc_warnings() -> miette::Result<()> {
     cordial::init_tracing();
+    let guard = CARGO_ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let records = scan_crate_doc_warnings(root, "cordial", &DocWarningsThresholds::default())
+    let records = scan_crate_doc_warnings(root, root, "cordial", &DocWarningsThresholds::default())
         .into_diagnostic()
         .wrap_err("scan cordial")?;
+    drop(guard);
     assert!(
         records.is_empty(),
         "cordial cargo doc should be clean of rustdoc::* diagnostics: {records:#?}"

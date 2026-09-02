@@ -61,6 +61,19 @@ fn open_rows(rows: &[DeriveRow]) -> impl Iterator<Item = &DeriveRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[&DeriveRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 /// Writes `derives.csv`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct DeriveCsvReporter;
@@ -117,7 +130,6 @@ impl Reporter for DeriveChecklistReporter {
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = derive_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -133,28 +145,36 @@ impl Reporter for DeriveChecklistReporter {
              `as_ref()` / `as_str()` use `#[derive(derive_more::AsRef)]`. Error types \
              (and `#[track_caller]` constructors) skip `derive_new`.\n\n",
         );
-        body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
 
-        let mut by_rule: BTreeMap<String, Vec<&DeriveRow>> = BTreeMap::new();
-        for row in &open {
-            by_rule.entry(row.rule_id.clone()).or_default().push(row);
-        }
+        for crate_name in crate_names(&open) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            body.push_str(&format!("## `{crate_name}`\n\n"));
 
-        for (rule_id, entries) in by_rule {
-            body.push_str(&format!("### {rule_id}\n\n"));
-            for entry in entries {
-                let method = if entry.method_name.is_empty() {
-                    String::new()
-                } else {
-                    format!(" `{}`", entry.method_name)
-                };
-                body.push_str(&format!(
-                    "- [ ] `{}`{method} — `{}:{}` — {}\n",
-                    entry.qualified_name, entry.file, entry.line, entry.recommendation
-                ));
-                body.push_str(&format!("  - _{}_\n", entry.evidence));
+            let mut by_rule: BTreeMap<String, Vec<&DeriveRow>> = BTreeMap::new();
+            for row in &crate_open {
+                by_rule.entry(row.rule_id.clone()).or_default().push(row);
             }
-            body.push('\n');
+
+            for (rule_id, entries) in by_rule {
+                body.push_str(&format!("### {rule_id}\n\n"));
+                for entry in entries {
+                    let method = if entry.method_name.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" `{}`", entry.method_name)
+                    };
+                    body.push_str(&format!(
+                        "- [ ] `{}`{method} — `{}:{}` — {}\n",
+                        entry.qualified_name, entry.file, entry.line, entry.recommendation
+                    ));
+                    body.push_str(&format!("  - _{}_\n", entry.evidence));
+                }
+                body.push('\n');
+            }
         }
 
         Ok(vec![Box::new(TextArtifact {
@@ -182,7 +202,6 @@ impl Reporter for DeriveSummaryReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = derive_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -223,10 +242,31 @@ impl Reporter for DeriveSummaryReporter {
             "| Crate | Total | Builder | Use builder | Getter | Setter | AsRef | AsStr | New | Pub field |\n",
         );
         body.push_str("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
-        body.push_str(&format!(
-            "| `{}` | {total} | {builder} | {use_builder} | {getter} | {setter} | {as_ref} | {as_str} | {new} | {pub_field} |\n",
-            ir.crate_name()
-        ));
+        for crate_name in crate_names(&open) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            let count = |rule_id: &str| {
+                crate_open
+                    .iter()
+                    .filter(|row| row.rule_id == rule_id)
+                    .count()
+            };
+            body.push_str(&format!(
+                "| `{crate_name}` | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
+                crate_open.len(),
+                count("DERIVE-BUILDER-001"),
+                count("DERIVE-USE-BUILDER-001"),
+                count("DERIVE-GETTER-001"),
+                count("DERIVE-SETTER-001"),
+                count("DERIVE-ASREF-001"),
+                count("DERIVE-ASSTR-001"),
+                count("DERIVE-NEW-001"),
+                count("DERIVE-PUB-FIELD-001"),
+            ));
+        }
         body.push_str(&format!(
             "\n| **Total** | **{total}** | **{builder}** | **{use_builder}** | **{getter}** | **{setter}** | **{as_ref}** | **{as_str}** | **{new}** | **{pub_field}** |\n"
         ));

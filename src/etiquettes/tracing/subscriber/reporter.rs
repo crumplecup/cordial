@@ -58,6 +58,19 @@ fn open_rows(rows: &[SubscriberRow]) -> impl Iterator<Item = &SubscriberRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[&SubscriberRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 /// Writes `tracing-subscriber.csv`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SubscriberCsvReporter;
@@ -113,7 +126,6 @@ impl Reporter for SubscriberChecklistReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = subscriber_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -125,22 +137,30 @@ impl Reporter for SubscriberChecklistReporter {
              uses `try_init()` (or `Once`). Call it from `fn main` and from each \
              `#[test]` under `tests/`. `--apply` does not rewrite these rows.\n\n",
         );
-        body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
 
-        let mut by_rule: BTreeMap<String, Vec<&SubscriberRow>> = BTreeMap::new();
-        for row in &open {
-            by_rule.entry(row.rule_id.clone()).or_default().push(row);
-        }
+        for crate_name in crate_names(&open) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            body.push_str(&format!("## `{crate_name}`\n\n"));
 
-        for (rule_id, entries) in by_rule {
-            body.push_str(&format!("### {rule_id}\n\n"));
-            for entry in entries {
-                body.push_str(&format!(
-                    "- [ ] `{}` — `{}:{}` — `{}`\n",
-                    entry.context, entry.file, entry.line, entry.snippet
-                ));
+            let mut by_rule: BTreeMap<String, Vec<&SubscriberRow>> = BTreeMap::new();
+            for row in &crate_open {
+                by_rule.entry(row.rule_id.clone()).or_default().push(row);
             }
-            body.push('\n');
+
+            for (rule_id, entries) in by_rule {
+                body.push_str(&format!("### {rule_id}\n\n"));
+                for entry in entries {
+                    body.push_str(&format!(
+                        "- [ ] `{}` — `{}:{}` — `{}`\n",
+                        entry.context, entry.file, entry.line, entry.snippet
+                    ));
+                }
+                body.push('\n');
+            }
         }
 
         Ok(vec![Box::new(TextArtifact {
@@ -168,7 +188,6 @@ impl Reporter for SubscriberSummaryReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = subscriber_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -182,7 +201,13 @@ impl Reporter for SubscriberSummaryReporter {
         ));
         body.push_str("| Crate | Subscriber gaps |\n");
         body.push_str("| --- | ---: |\n");
-        body.push_str(&format!("| `{}` | {total} |\n", ir.crate_name()));
+        for crate_name in crate_names(&open) {
+            let crate_total = open
+                .iter()
+                .filter(|row| row.crate_name == crate_name)
+                .count();
+            body.push_str(&format!("| `{crate_name}` | {crate_total} |\n"));
+        }
         body.push_str(&format!("\n| **Total** | **{total}** |\n"));
 
         Ok(vec![Box::new(TextArtifact {

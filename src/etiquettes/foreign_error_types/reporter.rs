@@ -79,6 +79,19 @@ fn open_rows(rows: &[ForeignErrorTypeRow]) -> impl Iterator<Item = &ForeignError
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[&ForeignErrorTypeRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 #[instrument(level = "debug", skip(rows))]
 fn typed_report_from_rows(rows: &[ForeignErrorTypeRow]) -> super::types::ForeignErrorTypeReport {
     let crate_name = rows
@@ -109,6 +122,32 @@ fn typed_report_from_rows(rows: &[ForeignErrorTypeRow]) -> super::types::Foreign
         crate_name,
         findings,
     }
+}
+
+/// One [`super::types::ForeignErrorTypeReport`] per distinct crate in `rows`,
+/// sorted by crate name -- the per-crate counterpart to
+/// [`typed_report_from_rows`], which flattens every row into a single report
+/// under one (arbitrary, `rows.first()`-derived) crate name. Used to render
+/// a real per-crate breakdown instead of mislabeling the workspace-wide
+/// aggregate as belonging to whichever crate happened to sort first.
+#[instrument(level = "debug", skip(rows))]
+fn typed_reports_by_crate(
+    rows: &[ForeignErrorTypeRow],
+) -> Vec<super::types::ForeignErrorTypeReport> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+        .into_iter()
+        .map(|crate_name| {
+            let crate_rows: Vec<ForeignErrorTypeRow> = rows
+                .iter()
+                .filter(|row| row.crate_name == crate_name)
+                .cloned()
+                .collect();
+            typed_report_from_rows(&crate_rows)
+        })
+        .collect()
 }
 
 #[instrument(level = "debug")]
@@ -247,22 +286,33 @@ impl Reporter for ForeignErrorTypesSummaryReporter {
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = foreign_error_type_rows(findings);
         let typed: Vec<_> = typed_rows(&rows).cloned().collect();
-        let report = typed_report_from_rows(&typed);
-        let summary = build_workspace_foreign_error_type_summary(&[report]);
+        let reports = typed_reports_by_crate(&typed);
+        let summary = build_workspace_foreign_error_type_summary(&reports);
 
         let mut body = String::new();
         body.push_str("# Foreign error types summary\n\n");
         body.push_str("---\n\n");
         body.push_str(&format!(
-            "Inferred foreign exposure for `{}`: **{}** sites, **{}** chain breaks \
+            "Inferred foreign exposure: **{}** sites, **{}** chain breaks \
              (`.map_err` that drops or stringifies the foreign error).\n\n",
-            ir.crate_name(),
-            summary.inferred_sites,
-            summary.chain_breaks,
+            summary.inferred_sites, summary.chain_breaks,
+        ));
+        body.push_str("| Crate | Inferred sites | Chain breaks |\n");
+        body.push_str("| --- | ---: | ---: |\n");
+        for report in &reports {
+            let crate_summary =
+                build_workspace_foreign_error_type_summary(std::slice::from_ref(report));
+            body.push_str(&format!(
+                "| `{}` | {} | {} |\n",
+                report.crate_name, crate_summary.inferred_sites, crate_summary.chain_breaks
+            ));
+        }
+        body.push_str(&format!(
+            "\n| **Total** | **{}** | **{}** |\n\n",
+            summary.inferred_sites, summary.chain_breaks
         ));
         body.push_str("| Foreign error type | Chain breaks | Total inferred |\n");
         body.push_str("| --- | ---: | ---: |\n");
@@ -302,7 +352,6 @@ impl Reporter for ForeignErrorsChecklistReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = foreign_error_type_rows(findings);
         let candidates: Vec<_> = open_rows(&rows)
@@ -317,38 +366,46 @@ impl Reporter for ForeignErrorsChecklistReporter {
              (std / third-party before conversion) or **edge** (unresolved callee) form \
              the pool for foreign-error typing. Resolution strategies are out of scope.\n\n",
         );
-        body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
 
-        let mut by_class: BTreeMap<String, Vec<&ForeignErrorTypeRow>> = BTreeMap::new();
-        for row in candidates {
-            by_class
-                .entry(row.origin_class.clone())
-                .or_default()
-                .push(row);
-        }
+        for crate_name in crate_names(&candidates) {
+            let crate_candidates: Vec<_> = candidates
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            body.push_str(&format!("## `{crate_name}`\n\n"));
 
-        for (class, class_rows) in by_class {
-            body.push_str(&format!("### {class}\n\n"));
-            let mut by_detail: BTreeMap<&str, Vec<&ForeignErrorTypeRow>> = BTreeMap::new();
-            for row in class_rows {
-                by_detail
-                    .entry(row.origin_detail.as_str())
+            let mut by_class: BTreeMap<String, Vec<&ForeignErrorTypeRow>> = BTreeMap::new();
+            for row in crate_candidates {
+                by_class
+                    .entry(row.origin_class.clone())
                     .or_default()
                     .push(row);
             }
-            for (detail, detail_rows) in by_detail {
-                body.push_str(&format!("#### `{detail}`\n\n"));
-                for row in detail_rows {
-                    body.push_str(&format!(
-                        "- [ ] `{}` — `{}:{}` — `{}` — source `{source}`\n",
-                        row.context,
-                        row.file,
-                        row.line,
-                        row.site_kind,
-                        source = row.source_snippet,
-                    ));
+
+            for (class, class_rows) in by_class {
+                body.push_str(&format!("### {class}\n\n"));
+                let mut by_detail: BTreeMap<&str, Vec<&ForeignErrorTypeRow>> = BTreeMap::new();
+                for row in class_rows {
+                    by_detail
+                        .entry(row.origin_detail.as_str())
+                        .or_default()
+                        .push(row);
                 }
-                body.push('\n');
+                for (detail, detail_rows) in by_detail {
+                    body.push_str(&format!("#### `{detail}`\n\n"));
+                    for row in detail_rows {
+                        body.push_str(&format!(
+                            "- [ ] `{}` — `{}:{}` — `{}` — source `{source}`\n",
+                            row.context,
+                            row.file,
+                            row.line,
+                            row.site_kind,
+                            source = row.source_snippet,
+                        ));
+                    }
+                    body.push('\n');
+                }
             }
         }
 

@@ -61,6 +61,19 @@ fn open_rows(rows: &[AntipatternRow]) -> impl Iterator<Item = &AntipatternRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[&AntipatternRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 /// Writes `antipatterns.csv`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AntipatternCsvReporter;
@@ -112,7 +125,6 @@ impl Reporter for AntipatternChecklistReporter {
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = antipattern_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -150,22 +162,41 @@ impl Reporter for AntipatternChecklistReporter {
              `{store}/exceptions/antipatterns/{{crate}}.json`.\n\n",
         );
 
-        if !open.is_empty() || !suppressed.is_empty() {
-            body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
-        }
+        let all: Vec<&AntipatternRow> = open
+            .iter()
+            .copied()
+            .chain(suppressed.iter().copied())
+            .collect();
+        for crate_name in crate_names(&all) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            let crate_suppressed: Vec<_> = suppressed
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            body.push_str(&format!("## `{crate_name}`\n\n"));
 
-        if !open.is_empty() {
-            write_finding_sections(&mut body, &open)?;
-        }
-        if !suppressed.is_empty() {
-            body.push_str("### Documented exceptions\n\n");
-            for entry in suppressed {
-                body.push_str(&format!(
-                    "- [x] `{}` — `{}:{}` — `{}` — _{}_\n",
-                    entry.context, entry.file, entry.line, entry.snippet, entry.suppression_reason
-                ));
+            if !crate_open.is_empty() {
+                write_finding_sections(&mut body, &crate_open)?;
             }
-            body.push('\n');
+            if !crate_suppressed.is_empty() {
+                body.push_str("### Documented exceptions\n\n");
+                for entry in crate_suppressed {
+                    body.push_str(&format!(
+                        "- [x] `{}` — `{}:{}` — `{}` — _{}_\n",
+                        entry.context,
+                        entry.file,
+                        entry.line,
+                        entry.snippet,
+                        entry.suppression_reason
+                    ));
+                }
+                body.push('\n');
+            }
         }
 
         Ok(vec![Box::new(TextArtifact {

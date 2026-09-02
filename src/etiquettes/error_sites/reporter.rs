@@ -82,6 +82,19 @@ fn kind_counts(rows: &[ErrorSiteRow]) -> ErrorSiteKindCounts {
     counts
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[&ErrorSiteRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 #[instrument(level = "debug", skip(rows))]
 fn origin_counts(rows: &[ErrorSiteRow]) -> ErrorOriginClassCounts {
     let mut counts = ErrorOriginClassCounts::default();
@@ -149,7 +162,6 @@ impl Reporter for ErrorSitesChecklistReporter {
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = error_site_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -162,22 +174,34 @@ impl Reporter for ErrorSitesChecklistReporter {
              partitions rows into **internal** (`CordialError` / crate-local) vs **other** \
              (std, third-party, unresolved). Resolution strategies are out of scope.\n\n",
         );
-        body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
 
-        let mut by_kind: BTreeMap<String, Vec<&ErrorSiteRow>> = BTreeMap::new();
-        for row in &open {
-            by_kind.entry(row.site_kind.clone()).or_default().push(row);
-        }
+        for crate_name in crate_names(&open) {
+            let crate_open: Vec<_> = open
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            body.push_str(&format!("## `{crate_name}`\n\n"));
 
-        for (kind, entries) in by_kind {
-            body.push_str(&format!("### {kind}\n\n"));
-            for entry in entries {
-                body.push_str(&format!(
-                    "- [ ] `{}` — `{}:{}` — source `{}` — `{}`\n",
-                    entry.context, entry.file, entry.line, entry.source_snippet, entry.site_snippet,
-                ));
+            let mut by_kind: BTreeMap<String, Vec<&ErrorSiteRow>> = BTreeMap::new();
+            for row in &crate_open {
+                by_kind.entry(row.site_kind.clone()).or_default().push(row);
             }
-            body.push('\n');
+
+            for (kind, entries) in by_kind {
+                body.push_str(&format!("### {kind}\n\n"));
+                for entry in entries {
+                    body.push_str(&format!(
+                        "- [ ] `{}` — `{}:{}` — source `{}` — `{}`\n",
+                        entry.context,
+                        entry.file,
+                        entry.line,
+                        entry.source_snippet,
+                        entry.site_snippet,
+                    ));
+                }
+                body.push('\n');
+            }
         }
 
         Ok(vec![Box::new(TextArtifact {
@@ -203,7 +227,6 @@ impl Reporter for ErrorSitesSummaryReporter {
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = error_site_rows(findings);
         let counts = kind_counts(&rows);
@@ -226,16 +249,25 @@ impl Reporter for ErrorSitesSummaryReporter {
             "| Crate | Total | `?` | map_err | return Err | if let Err | match Err | ok_or |\n",
         );
         body.push_str("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
-        body.push_str(&format!(
-            "| `{}` | {total} | {} | {} | {} | {} | {} | {} |\n",
-            ir.crate_name(),
-            counts.question_mark,
-            counts.map_err,
-            counts.return_err,
-            counts.if_let_err,
-            counts.match_err,
-            counts.ok_or,
-        ));
+        let all_rows: Vec<&ErrorSiteRow> = rows.iter().collect();
+        for crate_name in crate_names(&all_rows) {
+            let crate_rows: Vec<ErrorSiteRow> = rows
+                .iter()
+                .filter(|row| row.crate_name == crate_name)
+                .cloned()
+                .collect();
+            let crate_counts = kind_counts(&crate_rows);
+            body.push_str(&format!(
+                "| `{crate_name}` | {} | {} | {} | {} | {} | {} | {} |\n",
+                crate_counts.total(),
+                crate_counts.question_mark,
+                crate_counts.map_err,
+                crate_counts.return_err,
+                crate_counts.if_let_err,
+                crate_counts.match_err,
+                crate_counts.ok_or,
+            ));
+        }
         body.push_str(&format!(
             "\n| **Total** | **{total}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** |\n",
             counts.question_mark,
@@ -313,7 +345,6 @@ impl Reporter for ErrorSitesPartitionSummaryReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = error_site_rows(findings);
         let counts = origin_counts(&rows);
@@ -330,13 +361,23 @@ impl Reporter for ErrorSitesPartitionSummaryReporter {
         ));
         body.push_str("| Crate | Total | Internal | Other | Edge | Foreign pool |\n");
         body.push_str("| --- | ---: | ---: | ---: | ---: | ---: |\n");
-        body.push_str(&format!(
-            "| `{}` | {total} | {} | {} | {} | {foreign_pool} |\n",
-            ir.crate_name(),
-            counts.internal,
-            counts.other,
-            counts.edge,
-        ));
+        let all_rows: Vec<&ErrorSiteRow> = rows.iter().collect();
+        for crate_name in crate_names(&all_rows) {
+            let crate_rows: Vec<ErrorSiteRow> = rows
+                .iter()
+                .filter(|row| row.crate_name == crate_name)
+                .cloned()
+                .collect();
+            let crate_counts = origin_counts(&crate_rows);
+            let crate_foreign_pool = crate_counts.other + crate_counts.edge;
+            body.push_str(&format!(
+                "| `{crate_name}` | {} | {} | {} | {} | {crate_foreign_pool} |\n",
+                crate_rows.len(),
+                crate_counts.internal,
+                crate_counts.other,
+                crate_counts.edge,
+            ));
+        }
         body.push_str(&format!(
             "\n| **Total** | **{total}** | **{}** | **{}** | **{}** | **{foreign_pool}** |\n",
             counts.internal, counts.other, counts.edge,

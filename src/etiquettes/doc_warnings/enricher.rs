@@ -38,7 +38,12 @@ impl IrEnricher for DocWarningInventoryEnricher {
         let policy = crate::config::load_session_config(session)
             .doc_warnings()
             .clone();
-        let records = scan_crate_doc_warnings(&crate_root, ir.crate_name(), &policy)?;
+        let records = scan_crate_doc_warnings(
+            &crate_root,
+            session.project_root(),
+            ir.crate_name(),
+            &policy,
+        )?;
 
         for record in records {
             let parent = resolve_parent(ir, "<crate>")?;

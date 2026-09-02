@@ -59,6 +59,19 @@ fn coverage_rows(findings: &[&dyn Finding]) -> Vec<CoverageRow> {
         .collect()
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[&CoverageRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ImplCoverageCsvReporter;
 
@@ -161,21 +174,31 @@ impl Reporter for ImplChecklistReporter {
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
-        let rows: Vec<_> = coverage_rows(findings)
+        let owned_rows: Vec<_> = coverage_rows(findings)
             .into_iter()
             .filter(|row| row.disposition == "open")
             .collect();
+        let rows: Vec<&CoverageRow> = owned_rows.iter().collect();
         let mut body = String::new();
         body.push_str("# Impl coverage checklist\n\n");
         body.push_str(&format!("**Open gaps:** {}\n\n", rows.len()));
-        body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
-        for row in rows {
-            body.push_str(&format!(
-                "- [ ] `{}` — **{}** (our: {}; external: {})\n",
-                row.type_path, row.gap_kind, row.missing_our_traits, row.missing_external_traits,
-            ));
+        for crate_name in crate_names(&rows) {
+            let crate_rows: Vec<_> = rows
+                .iter()
+                .copied()
+                .filter(|row| row.crate_name == crate_name)
+                .collect();
+            body.push_str(&format!("## `{crate_name}`\n\n"));
+            for row in crate_rows {
+                body.push_str(&format!(
+                    "- [ ] `{}` — **{}** (our: {}; external: {})\n",
+                    row.type_path,
+                    row.gap_kind,
+                    row.missing_our_traits,
+                    row.missing_external_traits,
+                ));
+            }
         }
         Ok(vec![Box::new(TextArtifact {
             name: "impl-coverage.checklist.md".to_string(),

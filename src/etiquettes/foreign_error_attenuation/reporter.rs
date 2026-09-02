@@ -80,6 +80,19 @@ fn open_rows(
     rows.iter().filter(|row| row.disposition == "open")
 }
 
+/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// is pinned to whichever crate the run's target discovery lists first, not
+/// the crate a given row actually belongs to, so a workspace-spanning
+/// artifact must derive its own crate breakdown from `row.crate_name`
+/// instead (the same pattern `modularity::reporter::rows::crate_names` uses).
+#[instrument(level = "debug", skip(rows))]
+fn crate_names(rows: &[ForeignErrorAttenuationRow]) -> Vec<String> {
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 #[instrument(level = "debug", skip(rows))]
 fn report_from_rows(rows: &[ForeignErrorAttenuationRow]) -> ForeignErrorAttenuationReport {
     let crate_name = rows
@@ -219,10 +232,8 @@ impl Reporter for ForeignErrorAttenuationChecklistReporter {
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
-        let ir = view.ir;
 
         let rows = attenuation_rows(findings);
-        let report = report_from_rows(&rows);
 
         let mut body = String::new();
         body.push_str("# Foreign error handling attenuation\n\n");
@@ -231,32 +242,41 @@ impl Reporter for ForeignErrorAttenuationChecklistReporter {
              (`foreign-error-types.*` chain breaks). Each row pairs **bad code** at the site with \
              **good code** and a baked-in **resolution** strategy.\n\n",
         );
-        body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
 
-        write_class_section(
-            &mut body,
-            &report,
-            ForeignErrorHandlingClass::ChainPreserved,
-            true,
-        );
-        write_class_section(
-            &mut body,
-            &report,
-            ForeignErrorHandlingClass::ChainBreak,
-            false,
-        );
-        write_class_section(
-            &mut body,
-            &report,
-            ForeignErrorHandlingClass::PendingInfrastructure,
-            false,
-        );
-        write_class_section(
-            &mut body,
-            &report,
-            ForeignErrorHandlingClass::Neutral,
-            false,
-        );
+        for crate_name in crate_names(&rows) {
+            let crate_rows: Vec<ForeignErrorAttenuationRow> = rows
+                .iter()
+                .filter(|row| row.crate_name == crate_name)
+                .cloned()
+                .collect();
+            let report = report_from_rows(&crate_rows);
+            body.push_str(&format!("## `{crate_name}`\n\n"));
+
+            write_class_section(
+                &mut body,
+                &report,
+                ForeignErrorHandlingClass::ChainPreserved,
+                true,
+            );
+            write_class_section(
+                &mut body,
+                &report,
+                ForeignErrorHandlingClass::ChainBreak,
+                false,
+            );
+            write_class_section(
+                &mut body,
+                &report,
+                ForeignErrorHandlingClass::PendingInfrastructure,
+                false,
+            );
+            write_class_section(
+                &mut body,
+                &report,
+                ForeignErrorHandlingClass::Neutral,
+                false,
+            );
+        }
 
         Ok(vec![Box::new(TextArtifact {
             name: "foreign-error-attenuation.checklist.md".to_string(),
