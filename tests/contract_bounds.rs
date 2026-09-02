@@ -131,6 +131,26 @@ fn into_i32_identity_registry() -> Vec<ContractRecordDump> {
     }]
 }
 
+fn i32_and_bool_type_ids_differ_registry() -> Vec<ContractRecordDump> {
+    vec![ContractRecordDump {
+        evidence: "fixture::i32_and_bool_type_ids_differ".to_string(),
+        verifier: "verus".to_string(),
+        kind: "ensures".to_string(),
+        // Deliberately spaced turbofish (`:: <`, not `::<`) -- matches
+        // how `verus_ensures_predicate!`'s real codegen actually
+        // renders a fragment (re-emitted via a fresh `TokenStream`,
+        // which picks Alone spacing for a constructed `::` + `<` pair)
+        // rather than the compact `::<` a hand-typed literal or a
+        // clause parsed straight from real source produces. Written
+        // this way on purpose so this fixture actually exercises the
+        // Joint/Alone mismatch `is_raw_duplicate_of_named_sibling`'s
+        // `canonicalize_type_text` comparison exists to paper over --
+        // a compact `::<` fragment string would parse back with the
+        // same spacing as the clause and pass even without that fix.
+        fragment: "open spec fn i32_and_bool_type_ids_differ() -> bool { type_id_spec :: < i32 > () != type_id_spec :: < bool > () }".to_string(),
+    }]
+}
+
 fn bytes_lifetime_registry() -> Vec<ContractRecordDump> {
     vec![kani_type_record(
         "ensures",
@@ -603,6 +623,41 @@ pub broadcast proof fn axiom_i32_into_i32_is_identity(v: i32)
         // `syn::Expr` fallback (`named_call_name_allowing_leading_attr`)
         // to recognize the sibling as a named call at all.
         registry: into_i32_identity_registry,
+        expect_flagged: false,
+    },
+    ShapeCase {
+        id: "verus_raw_trigger_equation_with_two_trigger_attrs_restating_named_sibling",
+        verifier: Verifier::Verus,
+        kind: "ensures",
+        source: r#"
+use verus_builtin_macros::verus;
+use vstd::prelude::*;
+
+verus! {
+
+pub uninterp spec fn type_id_spec<T: 'static + ?Sized>() -> nat;
+
+pub open spec fn i32_and_bool_type_ids_differ() -> bool {
+    type_id_spec::<i32>() != type_id_spec::<bool>()
+}
+
+#[verifier::external_body]
+pub broadcast proof fn axiom_i32_and_bool_type_ids_differ()
+    ensures
+        #[trigger] type_id_spec::<i32>() != #[trigger] type_id_spec::<bool>(),
+        i32_and_bool_type_ids_differ(),
+{
+}
+
+} // verus!
+"#,
+        // A single clause carrying *two* `#[trigger]` attributes, one on
+        // each side of the comparison -- real production instance:
+        // `type_id_carrier.rs`'s `axiom_i32_and_bool_type_ids_differ`.
+        // `strip_trigger_attrs` has to remove every one, not just a
+        // leading one, before comparing against the named sibling's
+        // body (which carries none at all).
+        registry: i32_and_bool_type_ids_differ_registry,
         expect_flagged: false,
     },
 ];

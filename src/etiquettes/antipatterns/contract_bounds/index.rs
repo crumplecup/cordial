@@ -200,14 +200,30 @@ impl ContractIndex {
     /// registry. The raw half isn't a second, unnamed bound — it's a
     /// required-by-Verus restatement of the named one right next to it.
     ///
-    /// Matching is strict, not heuristic: `clause`, with its own leading
-    /// `#[trigger]` stripped, must be *token-identical* after
-    /// normalization to the named sibling's own registered fragment
-    /// body. A raw clause with no token-identical named sibling is still
-    /// flagged — distinguishing this restatement idiom from a genuinely
-    /// new, still-unnamed bound needs exact equality, not a loose
-    /// "something nearby looks related" check that could mask a real
-    /// future violation.
+    /// Matching is strict, not heuristic: `clause`, with every one of its
+    /// own `#[trigger]` attributes stripped (a clause can carry more
+    /// than one — a comparison can mark each side separately), must be
+    /// *token-identical* after normalization to the named sibling's own
+    /// registered fragment body. A raw clause with no token-identical
+    /// named sibling is still flagged — distinguishing this restatement
+    /// idiom from a genuinely new, still-unnamed bound needs exact
+    /// equality, not a loose "something nearby looks related" check that
+    /// could mask a real future violation.
+    ///
+    /// The comparison runs through [`canonicalize_type_text`] (whitespace
+    /// stripped), not plain [`normalize_tokens`] equality — the same
+    /// reason [`Self::matches_named_call`]'s own type-prefix suffix match
+    /// does: a fragment's body text is re-lexed from a plain string
+    /// (`TokenStream::parse`), while a raw clause's own tokens come from
+    /// parsing the real source file directly, and the two can pick
+    /// different Joint/Alone spacing for identical-looking output.
+    /// Confirmed real, not theoretical, on this exact check: a turbofish
+    /// body (`type_id_carrier.rs`'s `i32_and_bool_type_ids_differ`,
+    /// `type_id_spec::<i32>() != type_id_spec::<bool>()`) re-lexes from
+    /// its registered fragment string as `type_id_spec :: < i32 > ()`
+    /// (spaced) but parses from real source as `type_id_spec ::< i32 >
+    /// ()` (unspaced) — identical after whitespace stripping, distinct
+    /// under plain `.to_string()` equality.
     #[instrument(level = "debug", skip(self, clause, siblings))]
     pub(super) fn is_raw_duplicate_of_named_sibling(
         &self,
@@ -217,12 +233,12 @@ impl ContractIndex {
         siblings: &[TokenStream],
         idx: usize,
     ) -> bool {
-        let own_normalized = normalize_tokens(strip_leading_trigger_attr(clause));
+        let own_normalized = canonicalize_type_text(&normalize_tokens(strip_trigger_attrs(clause)));
         siblings.iter().enumerate().any(|(sibling_idx, sibling)| {
             sibling_idx != idx
                 && named_call_name_allowing_leading_attr(sibling.clone()).is_some_and(|name| {
                     self.named_fragment_body(verifier, kind, &name)
-                        .is_some_and(|body| body == own_normalized)
+                        .is_some_and(|body| canonicalize_type_text(&body) == own_normalized)
                 })
         })
     }
@@ -298,28 +314,40 @@ fn fragment_fn_body_text(fragment: &str) -> Option<String> {
     })
 }
 
-/// Strip a leading `#[trigger]` attribute from `tokens`, if present.
-/// Verus's raw-equation restatement clause (see
-/// [`ContractIndex::is_raw_duplicate_of_named_sibling`]) carries this
-/// attribute to mark itself as the solver's pattern-match target; the
-/// registered named predicate's own body never does, so comparing the
-/// two for equality needs it stripped first. Only a bare, argument-less
+/// Strip every top-level `#[trigger]` attribute from `tokens`. Verus's
+/// raw-equation restatement clause (see
+/// [`ContractIndex::is_raw_duplicate_of_named_sibling`]) can carry more
+/// than one — a comparison between two independently-triggered subterms
+/// (`#[trigger] a() != #[trigger] b()`, confirmed real:
+/// `type_id_carrier.rs`'s `axiom_i32_and_bool_type_ids_differ`) marks
+/// each side separately, not just the clause's own leading token. The
+/// registered named predicate's own body never carries any `#[trigger]`
+/// attribute, so comparing the two for equality needs every one
+/// stripped, not just a leading one. Only a bare, argument-less
 /// `#[trigger]` is recognized — Verus's other `#![trigger a, b]`
 /// multi-term statement-level syntax is a different construct entirely
-/// and is left untouched.
+/// and is left untouched. Only the top-level token sequence is scanned
+/// (never descending into a nested `Group`), matching every other
+/// token-shape helper in this module.
 #[instrument(level = "debug", skip(tokens))]
-fn strip_leading_trigger_attr(tokens: TokenStream) -> TokenStream {
+fn strip_trigger_attrs(tokens: TokenStream) -> TokenStream {
     let items: Vec<TokenTree> = tokens.into_iter().collect();
-    match items.as_slice() {
-        [TokenTree::Punct(hash), TokenTree::Group(group), rest @ ..]
-            if hash.as_char() == '#'
-                && group.delimiter() == Delimiter::Bracket
-                && group.stream().to_string() == "trigger" =>
+    let mut out = Vec::with_capacity(items.len());
+    let mut i = 0;
+    while i < items.len() {
+        if let (TokenTree::Punct(hash), Some(TokenTree::Group(group))) =
+            (&items[i], items.get(i + 1))
+            && hash.as_char() == '#'
+            && group.delimiter() == Delimiter::Bracket
+            && group.stream().to_string() == "trigger"
         {
-            rest.iter().cloned().collect()
+            i += 2;
+            continue;
         }
-        _ => items.into_iter().collect(),
+        out.push(items[i].clone());
+        i += 1;
     }
+    out.into_iter().collect()
 }
 
 /// Recognize a whole-clause bare call `name(...)` or `!name(...)`
