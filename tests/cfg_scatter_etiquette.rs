@@ -173,6 +173,65 @@ fn scan_cfg_scatter_rust_source_flags_trait_default_methods() -> miette::Result<
     Ok(())
 }
 
+const PROC_MACRO_SCATTERED_SOURCE: &str = r#"
+#[cfg(feature = "verus")]
+#[proc_macro]
+pub fn verus_ensures_fragments(input: TokenStream) -> TokenStream {
+    input
+}
+
+#[cfg(feature = "verus")]
+#[proc_macro]
+pub fn verus_requires_fragments(input: TokenStream) -> TokenStream {
+    input
+}
+
+#[cfg(feature = "verus")]
+#[proc_macro_derive(VerusWitness)]
+pub fn derive_verus_witness(input: TokenStream) -> TokenStream {
+    input
+}
+
+#[cfg(feature = "verus")]
+#[proc_macro_attribute]
+pub fn verus_export(attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+"#;
+
+#[test]
+fn scan_cfg_scatter_rust_source_never_flags_proc_macro_entry_points() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("lib.rs");
+    fs::write(&file, PROC_MACRO_SCATTERED_SOURCE)
+        .into_diagnostic()
+        .wrap_err("write source")?;
+
+    let groups = scan_cfg_scatter_rust_source(
+        PROC_MACRO_SCATTERED_SOURCE,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+
+    let verus_flagged = groups
+        .iter()
+        .find(|group| group.predicate.contains("verus"))
+        .map(|group| group.is_scatter(&test_thresholds()))
+        .unwrap_or(false);
+    assert!(
+        !verus_flagged,
+        "four #[cfg(feature = \"verus\")] proc-macro entry points sharing one predicate \
+         must never be flagged -- rustc only recognizes #[proc_macro]/#[proc_macro_derive]/\
+         #[proc_macro_attribute] on a free function at the crate root, so unlike an ordinary \
+         fn, they can never be consolidated into a #[cfg]-gated mod"
+    );
+    Ok(())
+}
+
 #[test]
 fn cfg_scatter_default_thresholds() {
     cordial::init_tracing();

@@ -167,11 +167,19 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
 
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
-        self.check_attrs(
-            &node.attrs,
-            CfgSiteKind::Fn,
-            format!("fn {}", node.sig.ident),
-        );
+        // A `#[proc_macro]`/`#[proc_macro_derive]`/`#[proc_macro_attribute]`
+        // function must be a free function at the proc-macro crate's own
+        // root -- rustc only recognizes those attributes there, so unlike
+        // every other `fn`, it can never be moved into a `mod` and
+        // re-exported to consolidate its `#[cfg(...)]` gate. Never scanned,
+        // the same real reason `mod` declarations themselves aren't.
+        if !is_proc_macro_entry_point(&node.attrs) {
+            self.check_attrs(
+                &node.attrs,
+                CfgSiteKind::Fn,
+                format!("fn {}", node.sig.ident),
+            );
+        }
         self.fn_stack.push(node.sig.ident.to_string());
         syn::visit::visit_item_fn(self, node);
         self.fn_stack.pop();
@@ -347,6 +355,21 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
         self.check_attrs(&node.attrs, CfgSiteKind::Arm, "match arm".to_string());
         syn::visit::visit_arm(self, node);
     }
+}
+
+/// Whether `attrs` names one of rustc's three proc-macro entry-point
+/// attributes (`#[proc_macro]`, `#[proc_macro_derive(...)]`,
+/// `#[proc_macro_attribute]`) -- confirmed real, permanent constraint:
+/// these are only recognized on a free function at the proc-macro
+/// crate's own root, so a `#[cfg(...)]`-gated one can never be
+/// consolidated into a `mod` the way an ordinary function can.
+#[instrument(level = "debug", skip(attrs))]
+fn is_proc_macro_entry_point(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        attr.path().is_ident("proc_macro")
+            || attr.path().is_ident("proc_macro_derive")
+            || attr.path().is_ident("proc_macro_attribute")
+    })
 }
 
 /// Extract normalized `cfg(...)` predicate text from every `#[cfg(...)]`
