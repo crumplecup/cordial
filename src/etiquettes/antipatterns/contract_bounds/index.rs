@@ -365,6 +365,28 @@ fn is_bare_result_is_none(normalized: &str) -> bool {
         .is_some_and(|index| !index.is_empty() && index.bytes().all(|b| b.is_ascii_digit()))
 }
 
+/// Verus's own builtin function-item contract-inspection syntax --
+/// `<expr>.ensures(...)`/`<expr>.requires(...)` (e.g. `H::default.ensures
+/// ((), result)`, inspecting a generic parameter's own real contract) --
+/// spelled identically to the real clause-list keyword, but a genuine
+/// method call on some function-item value, not a name this project
+/// could ever mint a local predicate for: it inspects an *external*
+/// function's own contract, which by definition has no local `fn` to
+/// point at. `preceded_by_dot` (`verus.rs`) already tells this shape
+/// apart from the real keyword while walking raw tokens (both spell
+/// `ensures`/`requires` identically); this is the same distinction
+/// applied to a fully parsed clause instead of a bare token, so it
+/// doesn't need a registered fragment at all -- a real
+/// `syn::Expr::MethodCall` whose own method name is exactly `kind` is
+/// this shape, unconditionally, no registry lookup involved.
+#[instrument(level = "debug", skip(clause))]
+pub(super) fn is_builtin_contract_inspection(kind: &str, clause: TokenStream) -> bool {
+    let Ok(syn::Expr::MethodCall(method_call)) = syn::parse2::<syn::Expr>(clause) else {
+        return false;
+    };
+    method_call.method == kind
+}
+
 /// Split a flat top-level token sequence on top-level commas. Safe by
 /// construction: `TokenStream` iteration only ever yields top-level
 /// `TokenTree`s — a comma inside a nested `Group` (e.g. `contains(&value)`)

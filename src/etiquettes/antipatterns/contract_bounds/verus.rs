@@ -10,7 +10,10 @@ use crate::error::{CordialError, CordialResult};
 use crate::etiquettes::antipatterns::types::AntipatternSiteRecord;
 use crate::loader::module_path_from_src_file;
 
-use super::index::{ContractIndex, is_trivial, normalize_tokens, split_top_level_commas};
+use super::index::{
+    ContractIndex, is_builtin_contract_inspection, is_trivial, normalize_tokens,
+    split_top_level_commas,
+};
 use super::{make_finding, site_context};
 
 #[instrument(level = "debug", skip(source, file, index), err(level = "warn"))]
@@ -41,7 +44,10 @@ pub(super) fn scan_verus_source(
         walk_verus_tokens(mac.tokens.clone(), &mut clauses);
         for (kind, clause, harness) in clauses {
             let normalized = normalize_tokens(clause.clone());
-            if is_trivial(&normalized) || index.matches_named_call("verus", kind, clause.clone()) {
+            if is_trivial(&normalized)
+                || is_builtin_contract_inspection(kind, clause.clone())
+                || index.matches_named_call("verus", kind, clause.clone())
+            {
                 continue;
             }
             let line = clause

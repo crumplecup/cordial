@@ -474,6 +474,35 @@ amenable_derive::harness! {
         // via `canonicalize_type_text` collapsing `,>` to `>`.
         expect_flagged: false,
     },
+    ShapeCase {
+        id: "verus_builtin_function_item_contract_inspection",
+        verifier: Verifier::Verus,
+        kind: "ensures",
+        source: r#"
+use verus_builtin_macros::verus;
+use vstd::prelude::*;
+
+verus! {
+
+pub assume_specification<H: core::default::Default> [<H as core::default::Default>::default] () -> (result: H)
+    ensures
+        H::default.ensures((), result),
+;
+
+} // verus!
+"#,
+        // Registry-independent: `H::default.ensures((), result)` is
+        // Verus's own builtin function-item contract-inspection syntax
+        // (`SomeFn.ensures(args)`/`SomeFn.requires(args)`, spelled
+        // identically to the real clause-list keyword but a genuine
+        // method call, inspecting an *external* function's own contract)
+        // -- there is no local `fn` this could ever be pointed at, so an
+        // empty registry still must not flag it. Found via real
+        // dogfooding against `amenable_verus::rust_std::collections::
+        // hash_carrier`'s own identical site.
+        registry: empty_registry,
+        expect_flagged: false,
+    },
 ];
 
 #[test]
@@ -1060,12 +1089,19 @@ pub assume_specification<H: core::default::Default + Hasher> [<BuildHasherDefaul
     .into_diagnostic()
     .wrap_err("scan verus dotted-ensures method call")?;
 
-    // The whole clause is genuinely unnamed (`H::default.ensures(..)` is
-    // Verus's own builtin function-item contract inspection, not a call
-    // to a registered predicate), so it's expected to still be flagged --
-    // but as exactly ONE finding covering the whole clause, not split in
-    // two at the method call's own literal `ensures` identifier.
-    assert_eq!(findings.len(), 1, "findings: {findings:?}");
-    assert_eq!(findings[0].snippet, "H :: default . ensures (() , result)");
+    // Two real properties, both confirmed by the same zero-findings
+    // outcome. First (the original, narrower concern this test was
+    // written for): the whole `H::default.ensures((), result)` clause
+    // has to survive `walk_verus_tokens` as one intact clause, not split
+    // in two at the method call's own literal `ensures` identifier --
+    // either half on its own (`H :: default .` / `(() , result)`) fails
+    // to parse as a real expression, so a split would surface as two
+    // spurious flagged fragments instead of zero findings. Second (added
+    // once `is_builtin_contract_inspection` recognized this shape):
+    // `H::default.ensures(..)` is Verus's own builtin function-item
+    // contract inspection, not a call to a registered predicate, and
+    // there is no local `fn` it could ever be pointed at -- so the
+    // intact clause is correctly exempt, not flagged.
+    assert_eq!(findings.len(), 0, "findings: {findings:?}");
     Ok(())
 }
