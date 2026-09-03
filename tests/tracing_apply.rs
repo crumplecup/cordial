@@ -919,7 +919,7 @@ fn apply_skips_function_called_only_from_proof_context() -> miette::Result<()> {
     let fixture = write_policy_fixture(
         &["fixture_crate"],
         "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
-        &checklist_for_crate("fixture_crate", &[("Ensures::ensures", 8)]),
+        &checklist_for_crate("fixture_crate", &[("<Checker as Ensures>::ensures", 8)]),
     )?;
     let source = r#"
 pub trait Ensures<T> {
@@ -970,7 +970,7 @@ fn apply_finds_calls_inside_a_harness_style_macro_invocation() -> miette::Result
     let fixture = write_policy_fixture(
         &["fixture_crate"],
         "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
-        &checklist_for_crate("fixture_crate", &[("Ensures::ensures", 6)]),
+        &checklist_for_crate("fixture_crate", &[("<Checker as Ensures>::ensures", 6)]),
     )?;
     let source = r#"
 pub trait Ensures<T> {
@@ -1026,7 +1026,7 @@ fn apply_strips_instrument_from_proof_only_method() -> miette::Result<()> {
     let fixture = write_policy_fixture(
         &["fixture_crate"],
         "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
-        &checklist_for_crate("fixture_crate", &[("Ensures::ensures", 9)]),
+        &checklist_for_crate("fixture_crate", &[("<Checker as Ensures>::ensures", 9)]),
     )?;
     let source = r#"
 pub trait Ensures<T> {
@@ -1077,7 +1077,7 @@ fn apply_strips_gated_instrument_from_proof_only_method() -> miette::Result<()> 
     let fixture = write_policy_fixture(
         &["fixture_crate"],
         "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
-        &checklist_for_crate("fixture_crate", &[("Ensures::ensures", 9)]),
+        &checklist_for_crate("fixture_crate", &[("<Checker as Ensures>::ensures", 9)]),
     )?;
     let source = r#"
 pub trait Ensures<T> {

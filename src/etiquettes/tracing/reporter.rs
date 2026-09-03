@@ -297,8 +297,18 @@ impl Reporter for TracingSummaryReporter {
 
 #[instrument(level = "debug")]
 fn module_key(qualified_name: &str) -> String {
-    match qualified_name.rsplit_once("::") {
-        Some((module, _)) => module.to_string(),
-        None => String::new(),
+    let Some((module, _)) = qualified_name.rsplit_once("::") else {
+        return String::new();
+    };
+    // Trait impl methods are recorded as `mod::path::<Ty as Trait>::method`;
+    // group them under `mod::path`, not one heading per impl.
+    let module = match module.rsplit_once("::<") {
+        Some((outer, _)) => outer,
+        None => module,
+    };
+    if module.starts_with('<') {
+        // A crate-root trait impl (`<Ty as Trait>::method`) -- no module.
+        return String::new();
     }
+    module.to_string()
 }

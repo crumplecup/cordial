@@ -201,7 +201,11 @@ impl AttributeVisitor<'_> {
 
     #[instrument(level = "debug", skip(self, item_impl))]
     fn visit_impl(&mut self, item_impl: &ItemImpl) {
-        let self_ty = type_label(&item_impl.self_ty);
+        // Must match `tracing`'s `impl_method_local_name` exactly, or an
+        // existing `#[instrument]` on a trait impl method attaches to no
+        // node (the tracing enricher records it under
+        // `<Type as Trait>::method`, generics kept).
+        let self_ty = self_type_key(&item_impl.self_ty);
         let trait_name = item_impl
             .trait_
             .as_ref()
@@ -211,7 +215,7 @@ impl AttributeVisitor<'_> {
                 continue;
             };
             let local = if let Some(trait_name) = trait_name.clone() {
-                format!("{trait_name}::{}", method.sig.ident)
+                format!("<{self_ty} as {trait_name}>::{}", method.sig.ident)
             } else {
                 format!("{self_ty}::{}", method.sig.ident)
             };
@@ -380,14 +384,75 @@ pub(crate) fn is_cfg_test(attrs: &[Attribute]) -> bool {
     })
 }
 
+/// A `::`-free rendering of a type that keeps its generic arguments.
+/// Mirrors `tracing`'s `scan::self_type_key` (duplicated, following this
+/// module's own local-`type_label` convention) so the two enrichers key
+/// impl-method nodes identically.
 #[instrument(level = "debug", skip(ty))]
-fn type_label(ty: &Type) -> String {
+fn self_type_key(ty: &Type) -> String {
     match ty {
-        Type::Path(type_path) => syn_path_label(&type_path.path),
-        Type::Reference(reference) => type_label(&reference.elem),
-        Type::Paren(paren) => type_label(&paren.elem),
-        Type::Group(group) => type_label(&group.elem),
+        Type::Path(type_path) => {
+            let Some(segment) = type_path.path.segments.last() else {
+                return "?".to_string();
+            };
+            let base = segment.ident.to_string();
+            let syn::PathArguments::AngleBracketed(args) = &segment.arguments else {
+                return base;
+            };
+            let rendered: Vec<String> = args
+                .args
+                .iter()
+                .filter_map(|arg| match arg {
+                    syn::GenericArgument::Type(inner) => Some(self_type_key(inner)),
+                    syn::GenericArgument::Const(expr) => Some(const_arg_label(expr)),
+                    _ => None,
+                })
+                .collect();
+            if rendered.is_empty() {
+                base
+            } else {
+                format!("{base}<{}>", rendered.join(", "))
+            }
+        }
+        Type::Reference(reference) => {
+            let inner = self_type_key(&reference.elem);
+            if reference.mutability.is_some() {
+                format!("&mut {inner}")
+            } else {
+                format!("&{inner}")
+            }
+        }
+        Type::Ptr(ptr) => {
+            let inner = self_type_key(&ptr.elem);
+            if ptr.mutability.is_some() {
+                format!("*mut {inner}")
+            } else {
+                format!("*const {inner}")
+            }
+        }
+        Type::Tuple(tuple) => {
+            let parts: Vec<String> = tuple.elems.iter().map(self_type_key).collect();
+            format!("({})", parts.join(", "))
+        }
+        Type::Slice(slice) => format!("[{}]", self_type_key(&slice.elem)),
+        Type::Array(array) => {
+            format!("[{}; {}]", self_type_key(&array.elem), const_arg_label(&array.len))
+        }
+        Type::Paren(paren) => self_type_key(&paren.elem),
+        Type::Group(group) => self_type_key(&group.elem),
         _ => "?".to_string(),
+    }
+}
+
+#[instrument(level = "trace", skip(expr))]
+fn const_arg_label(expr: &syn::Expr) -> String {
+    match expr {
+        syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Int(int), .. }) => {
+            int.base10_digits().to_string()
+        }
+        syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Bool(b), .. }) => b.value.to_string(),
+        syn::Expr::Path(path) => syn_path_label(&path.path),
+        _ => "_".to_string(),
     }
 }
 

@@ -47,14 +47,14 @@ use crate::config::TracingThresholds;
 use crate::{PathInclusionFacts, workspace_path_inclusions};
 
 use super::apply::crate_gate_cfgs;
-use super::scan::{impl_method_local_name, syn_path_label, type_label};
+use super::scan::{impl_method_local_name, self_type_key, syn_path_label, type_label};
 
 use tracing::instrument;
 
 /// One function's identity: which crate it's defined in, and its
 /// qualified name the same way [`super::scan::scan_rust_source`]
-/// records it (module-prefixed, trait-qualified for a trait impl
-/// method).
+/// records it (module-prefixed, UFCS-qualified --
+/// `<Type as Trait>::method` -- for a trait impl method).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct FunctionId {
     crate_name: String,
@@ -342,7 +342,13 @@ impl CollectVisitor<'_> {
 
     #[instrument(level = "debug", skip(self, item_impl))]
     fn visit_impl_seeded(&mut self, item_impl: &ItemImpl, ancestor_seed: bool) {
-        let self_ty = type_label(&item_impl.self_ty);
+        // Two renderings of the self type: the generic-preserving key
+        // (`RustStdStandard<AtomicI8>`) the method is *recorded* under, so
+        // it matches `scan`'s own `never_instrument` lookup; and the bare
+        // last-segment label (`RustStdStandard`) a `Type::method(..)` call
+        // site actually spells, for `call_keys`.
+        let self_ty_bare = type_label(&item_impl.self_ty);
+        let self_ty_key = self_type_key(&item_impl.self_ty);
         let trait_name = item_impl
             .trait_
             .as_ref()
@@ -351,11 +357,12 @@ impl CollectVisitor<'_> {
             let ImplItem::Fn(method) = impl_item else {
                 continue;
             };
-            let local = impl_method_local_name(&self_ty, trait_name.as_deref(), &method.sig.ident);
+            let local =
+                impl_method_local_name(&self_ty_key, trait_name.as_deref(), &method.sig.ident);
             let seed = ancestor_seed
                 || has_cfg(&method.attrs, self.gate_cfgs)
                 || has_verifier_attr(&method.attrs, self.gate_cfgs);
-            let mut call_keys = vec![format!("{self_ty}::{}", method.sig.ident)];
+            let mut call_keys = vec![format!("{self_ty_bare}::{}", method.sig.ident)];
             if let Some(trait_name) = &trait_name {
                 call_keys.push(format!("{trait_name}::{}", method.sig.ident));
             }
