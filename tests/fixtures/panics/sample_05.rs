@@ -1,0 +1,1 @@
+fn bad() { compile_error!("stop"); }

@@ -25,10 +25,10 @@ pub fn scan_crate_tracing_print(
         findings.extend(scan_source_tree(&tree_root, crate_root, policy)?);
     }
     findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.snippet.cmp(&b.snippet))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.snippet().cmp(b.snippet()))
     });
     Ok(findings)
 }
@@ -77,32 +77,34 @@ pub fn scan_rust_source(
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
     let module_prefix = module_path_from_src_file(tree_root, file);
-    Ok(scan_syntax(
-        &syntax,
-        file,
-        crate_root,
-        &module_prefix,
-        policy,
-    ))
+    scan_syntax(&syntax, file, crate_root, &module_prefix, policy)
 }
 
-#[instrument(level = "debug", skip(syntax, file, crate_root, module_prefix, policy))]
+#[instrument(
+    level = "debug",
+    skip(syntax, file, crate_root, module_prefix, policy),
+    err(level = "warn")
+)]
 fn scan_syntax(
     syntax: &File,
     file: &Path,
     crate_root: &Path,
     module_prefix: &[String],
     policy: &TracingStdioPolicy,
-) -> Vec<PrintSiteRecord> {
+) -> CordialResult<Vec<PrintSiteRecord>> {
     let mut visitor = PrintVisitor {
         file: file.to_path_buf(),
         crate_root: crate_root.to_path_buf(),
         module_prefix: module_prefix.to_vec(),
         policy: policy.clone(),
         findings: Vec::new(),
+        error: None,
     };
     visitor.visit_file(syntax);
-    visitor.findings
+    if let Some(error) = visitor.error {
+        return Err(error);
+    }
+    Ok(visitor.findings)
 }
 
 struct PrintVisitor {
@@ -111,6 +113,7 @@ struct PrintVisitor {
     module_prefix: Vec<String>,
     policy: TracingStdioPolicy,
     findings: Vec<PrintSiteRecord>,
+    error: Option<crate::error::CordialError>,
 }
 
 impl PrintVisitor {
@@ -165,13 +168,21 @@ impl<'ast> Visit<'ast> for PrintVisitor {
             if let Ok(rel) = file.strip_prefix(&self.crate_root) {
                 file = rel.to_path_buf();
             }
-            self.findings.push(PrintSiteRecord {
-                rule_id,
-                context: self.site_context(),
-                file,
-                line: node.path.span().start().line as u32,
-                snippet: rule_id.snippet().to_string(),
-            });
+            if self.error.is_some() {
+                syn::visit::visit_macro(self, node);
+                return;
+            }
+            match PrintSiteRecord::builder()
+                .rule_id(rule_id)
+                .context(self.site_context())
+                .file(file)
+                .line(node.path.span().start().line as u32)
+                .snippet(rule_id.snippet().to_string())
+                .build()
+            {
+                Ok(record) => self.findings.push(record),
+                Err(error) => self.error = Some(error),
+            }
         }
         syn::visit::visit_macro(self, node);
     }

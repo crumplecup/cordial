@@ -388,7 +388,7 @@ fn file_hotspots<'a>(open: &[&'a ModularityRow]) -> Vec<FileHotspot<'a>> {
     let tree = build_module_hierarchy(&file_module_inputs(open));
     let fat_leaf_paths: BTreeSet<String> = fat_leaves(&tree)
         .iter()
-        .map(|node| node.path.clone())
+        .map(|node| node.path().clone())
         .collect();
     let mut by_file: BTreeMap<&str, Vec<&ModularityRow>> = BTreeMap::new();
     for row in open {

@@ -81,7 +81,7 @@ pub fn discover_workspace_hub(
 ) -> crate::error::CordialResult<WorkspaceHub> {
     let members: HashSet<String> = discover_crate_targets(project_root, filter)?
         .into_iter()
-        .map(|target| target.crate_name)
+        .map(|target| target.crate_name().clone())
         .collect();
     Ok(detect_workspace_hub(&members))
 }

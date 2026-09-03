@@ -143,12 +143,14 @@ fn parse_tracing_checklist_groups_by_crate_section() -> miette::Result<()> {
     let body = fs::read_to_string("tests/fixtures/quality/apply_checklist.md")
         .into_diagnostic()
         .wrap_err("read apply checklist fixture")?;
-    let gaps = parse_tracing_instrument_checklist_text(&body);
+    let gaps = parse_tracing_instrument_checklist_text(&body)
+        .into_diagnostic()
+        .wrap_err("parse checklist")?;
     assert_eq!(gaps.len(), 2);
-    assert_eq!(gaps[0].crate_name, "fixture_crate");
-    assert_eq!(gaps[0].qualified_name, "apply_target::missing");
-    assert_eq!(gaps[0].rel_path, Path::new("src/lib.rs"));
-    assert_eq!(gaps[0].line, 1);
+    assert_eq!(gaps[0].crate_name(), "fixture_crate");
+    assert_eq!(gaps[0].qualified_name(), "apply_target::missing");
+    assert_eq!(gaps[0].rel_path(), Path::new("src/lib.rs"));
+    assert_eq!(gaps[0].line(), 1);
     Ok(())
 }
 

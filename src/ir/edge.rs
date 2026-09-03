@@ -30,11 +30,12 @@ pub enum EdgeKind {
 }
 
 /// Weight stored at each graph edge.
-#[derive(Debug, Clone, Serialize, Deserialize, derive_new::new)]
+#[derive(Debug, Clone, Serialize, Deserialize, derive_new::new, derive_getters::Getters)]
 pub struct EdgeWeight {
     /// Kind of this edge.
-    pub kind: EdgeKind,
+    #[getter(copy)]
+    kind: EdgeKind,
     /// Optional edge label.
     #[new(default)]
-    pub label: Option<String>,
+    label: Option<String>,
 }

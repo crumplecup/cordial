@@ -1,25 +1,38 @@
-use crate::objects::{Disposition, FileSpan, Finding, FindingSink, IrAnchor, Rule};
+use crate::objects::{Disposition, FileSpan, Finding, FindingSink, IrAnchor, Rule, SourceSpan};
 
 use super::{InternalErrorChainRule, InternalErrorNodeClass, InternalErrorRecordKind};
 
 use tracing::instrument;
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct InternalErrorChainFinding {
-    pub rule: InternalErrorChainRule,
-    pub record_kind: InternalErrorRecordKind,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub context: String,
-    pub span: FileSpan,
-    pub snippet: String,
-    pub type_path: Option<String>,
-    pub node_class: Option<InternalErrorNodeClass>,
-    pub source_target: Option<String>,
-    pub reaches_foreign: Option<bool>,
-    pub chain_depth: Option<u32>,
-    pub foreign_error_type: Option<String>,
-    pub internal_constructor: Option<String>,
+    rule: InternalErrorChainRule,
+    #[getter(copy)]
+    record_kind: InternalErrorRecordKind,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    context: String,
+    span: FileSpan,
+    snippet: String,
+    type_path: Option<String>,
+    #[getter(copy)]
+    node_class: Option<InternalErrorNodeClass>,
+    source_target: Option<String>,
+    #[getter(copy)]
+    reaches_foreign: Option<bool>,
+    #[getter(copy)]
+    chain_depth: Option<u32>,
+    foreign_error_type: Option<String>,
+    internal_constructor: Option<String>,
+}
+
+impl InternalErrorChainFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> InternalErrorChainFindingBuilder {
+        InternalErrorChainFindingBuilder::default()
+    }
 }
 
 impl Finding for InternalErrorChainFinding {
@@ -44,32 +57,32 @@ impl Finding for InternalErrorChainFinding {
         sink.field("record_kind", &self.record_kind.as_str());
         sink.field("rule_id", &self.rule.id());
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
-        if let Some(type_path) = &self.type_path {
+        if let Some(type_path) = self.type_path() {
             sink.field("type_path", type_path);
         }
-        if let Some(node_class) = self.node_class {
+        if let Some(node_class) = self.node_class() {
             sink.field("node_class", &node_class.to_string());
         }
         sink.field(
             "source_target",
-            &self.source_target.clone().unwrap_or_default(),
+            &self.source_target().clone().unwrap_or_default(),
         );
-        if let Some(reaches_foreign) = self.reaches_foreign {
+        if let Some(reaches_foreign) = self.reaches_foreign() {
             sink.field("reaches_foreign", &reaches_foreign.to_string());
         }
-        if let Some(chain_depth) = self.chain_depth {
+        if let Some(chain_depth) = self.chain_depth() {
             sink.field("chain_depth", &chain_depth.to_string());
         }
         sink.field(
             "foreign_error_type",
-            &self.foreign_error_type.clone().unwrap_or_default(),
+            &self.foreign_error_type().clone().unwrap_or_default(),
         );
         sink.field(
             "internal_constructor",
-            &self.internal_constructor.clone().unwrap_or_default(),
+            &self.internal_constructor().clone().unwrap_or_default(),
         );
         sink.snippet(&self.snippet);
     }

@@ -76,17 +76,46 @@ fn scan_sites_fixture() -> miette::Result<Vec<ErrorSiteScanRow>> {
         .map(|records| {
             records
                 .into_iter()
-                .map(|record| ErrorSiteScanRow {
-                    crate_name: "fixture".to_string(),
-                    kind: record.kind,
-                    context: record.context,
-                    file: record.file,
-                    line: record.line,
-                    source_snippet: record.source_snippet,
-                    site_snippet: record.site_snippet,
+                .map(|record| {
+                    ErrorSiteScanRow::builder()
+                        .crate_name("fixture".to_string())
+                        .kind(record.kind())
+                        .context(record.context().clone())
+                        .file(record.file().clone())
+                        .line(record.line())
+                        .source_snippet(record.source_snippet().clone())
+                        .site_snippet(record.site_snippet().clone())
+                        .build()
+                        .expect("scan row")
                 })
                 .collect()
         })
+}
+
+/// A `?`-site exemplar record. `site_snippet` is `source_snippet` with the
+/// trailing `?` that makes it a question-mark site.
+fn question_mark_record(
+    foreign_error_type: &str,
+    rule_id: &str,
+    context: &str,
+    file: &str,
+    line: u32,
+    source_snippet: &str,
+) -> ForeignErrorTypeRecord {
+    ForeignErrorTypeRecord::builder()
+        .crate_name("example".to_string())
+        .foreign_error_type(foreign_error_type.to_string())
+        .rule_id(rule_id.to_string())
+        .confidence(ForeignTypeConfidence::High)
+        .chain_break(false)
+        .kind(ErrorSiteKind::QuestionMark)
+        .context(context.to_string())
+        .file(PathBuf::from(file))
+        .line(line)
+        .source_snippet(source_snippet.to_string())
+        .site_snippet(format!("{source_snippet}?"))
+        .build()
+        .expect("foreign type record")
 }
 
 fn scan_chain_fixture() -> miette::Result<Vec<cordial::ErrorChainRecord>> {
@@ -104,25 +133,25 @@ fn scan_chain_fixture() -> miette::Result<Vec<cordial::ErrorChainRecord>> {
 fn attenuator_pairs_preserved_and_chain_break_sites() -> miette::Result<()> {
     cordial::init_tracing();
     let scan_rows = scan_sites_fixture()?;
-    let partition_rows = partition_error_site_records(&scan_rows, "fixture");
+    let partition_rows = partition_error_site_records(&scan_rows, "fixture").into_diagnostic()?;
     let partition = build_error_site_partition_report("fixture", partition_rows);
-    let foreign = build_foreign_error_type_report(&partition);
+    let foreign = build_foreign_error_type_report(&partition).into_diagnostic()?;
     let chain = scan_chain_fixture()?;
-    let attenuation = build_foreign_error_attenuation_report(&foreign, &chain);
+    let attenuation = build_foreign_error_attenuation_report(&foreign, &chain).into_diagnostic()?;
 
-    assert!(attenuation.findings.iter().any(|finding| {
-        finding.handling_class == ForeignErrorHandlingClass::ChainPreserved
-            && finding.context.contains("preserved_direct")
+    assert!(attenuation.findings().iter().any(|finding| {
+        finding.handling_class() == ForeignErrorHandlingClass::ChainPreserved
+            && finding.context().contains("preserved_direct")
     }));
-    assert!(attenuation.findings.iter().any(|finding| {
-        finding.handling_class == ForeignErrorHandlingClass::ChainBreak
-            && finding.context.contains("broken_stringify")
-            && finding.bad_pattern.contains("map_err")
-            && finding.good_pattern.contains("from")
+    assert!(attenuation.findings().iter().any(|finding| {
+        finding.handling_class() == ForeignErrorHandlingClass::ChainBreak
+            && finding.context().contains("broken_stringify")
+            && finding.bad_pattern().contains("map_err")
+            && finding.good_pattern().contains("from")
     }));
-    assert!(!attenuation.findings.iter().any(|finding| {
-        finding.handling_class == ForeignErrorHandlingClass::ChainBreak
-            && finding.context.contains("preserved_map_err_from")
+    assert!(!attenuation.findings().iter().any(|finding| {
+        finding.handling_class() == ForeignErrorHandlingClass::ChainBreak
+            && finding.context().contains("preserved_map_err_from")
     }));
     Ok(())
 }
@@ -130,26 +159,21 @@ fn attenuator_pairs_preserved_and_chain_break_sites() -> miette::Result<()> {
 #[test]
 fn test_into_diagnostic_is_miette_exemplar_not_pending_infra() {
     cordial::init_tracing();
-    let foreign = ForeignErrorTypeReport {
-        crate_name: "example".to_string(),
-        findings: vec![ForeignErrorTypeRecord {
-            crate_name: "example".to_string(),
-            foreign_error_type: "std::io::Error".to_string(),
-            rule_id: "FOREIGN-ERROR-TYPE-STD-IO-FS-001".to_string(),
-            confidence: ForeignTypeConfidence::High,
-            chain_break: false,
-            kind: ErrorSiteKind::QuestionMark,
-            context: "register::three_plugin_kinds_register_and_quality_finds_todo".to_string(),
-            file: PathBuf::from("tests/custom_plugins.rs"),
-            line: 25,
-            source_snippet: "std::fs::create_dir_all(…).into_diagnostic(…).wrap_err(…)".to_string(),
-            site_snippet: "std::fs::create_dir_all(…).into_diagnostic(…).wrap_err(…)?".to_string(),
-        }],
-    };
-    let report = build_foreign_error_attenuation_report(&foreign, &[]);
-    assert_eq!(report.findings.len(), 1);
+    let foreign = ForeignErrorTypeReport::new(
+        "example".to_string(),
+        vec![question_mark_record(
+            "std::io::Error",
+            "FOREIGN-ERROR-TYPE-STD-IO-FS-001",
+            "register::three_plugin_kinds_register_and_quality_finds_todo",
+            "tests/custom_plugins.rs",
+            25,
+            "std::fs::create_dir_all(…).into_diagnostic(…).wrap_err(…)",
+        )],
+    );
+    let report = build_foreign_error_attenuation_report(&foreign, &[]).expect("attenuation report");
+    assert_eq!(report.findings().len(), 1);
     assert_eq!(
-        report.findings[0].handling_class,
+        report.findings()[0].handling_class(),
         ForeignErrorHandlingClass::ChainPreserved
     );
 }
@@ -157,26 +181,21 @@ fn test_into_diagnostic_is_miette_exemplar_not_pending_infra() {
 #[test]
 fn display_fmt_question_mark_is_exemplar_not_pending_infra() {
     cordial::init_tracing();
-    let foreign = ForeignErrorTypeReport {
-        crate_name: "example".to_string(),
-        findings: vec![ForeignErrorTypeRecord {
-            crate_name: "example".to_string(),
-            foreign_error_type: "std::fmt::Error".to_string(),
-            rule_id: "FOREIGN-ERROR-TYPE-STD-FMT-001".to_string(),
-            confidence: ForeignTypeConfidence::High,
-            chain_break: false,
-            kind: ErrorSiteKind::QuestionMark,
-            context: "provenance_test::ManualCertificate::fmt".to_string(),
-            file: PathBuf::from("tests/provenance_test.rs"),
-            line: 71,
-            source_snippet: "write!(…)".to_string(),
-            site_snippet: "write!(…)?".to_string(),
-        }],
-    };
-    let report = build_foreign_error_attenuation_report(&foreign, &[]);
-    assert_eq!(report.findings.len(), 1);
+    let foreign = ForeignErrorTypeReport::new(
+        "example".to_string(),
+        vec![question_mark_record(
+            "std::fmt::Error",
+            "FOREIGN-ERROR-TYPE-STD-FMT-001",
+            "provenance_test::ManualCertificate::fmt",
+            "tests/provenance_test.rs",
+            71,
+            "write!(…)",
+        )],
+    );
+    let report = build_foreign_error_attenuation_report(&foreign, &[]).expect("attenuation report");
+    assert_eq!(report.findings().len(), 1);
     assert_eq!(
-        report.findings[0].handling_class,
+        report.findings()[0].handling_class(),
         ForeignErrorHandlingClass::ChainPreserved
     );
 }
@@ -184,25 +203,20 @@ fn display_fmt_question_mark_is_exemplar_not_pending_infra() {
 #[test]
 fn library_into_diagnostic_without_bridge_is_still_pending_infra() {
     cordial::init_tracing();
-    let foreign = ForeignErrorTypeReport {
-        crate_name: "example".to_string(),
-        findings: vec![ForeignErrorTypeRecord {
-            crate_name: "example".to_string(),
-            foreign_error_type: "std::io::Error".to_string(),
-            rule_id: "FOREIGN-ERROR-TYPE-STD-IO-FS-001".to_string(),
-            confidence: ForeignTypeConfidence::High,
-            chain_break: false,
-            kind: ErrorSiteKind::QuestionMark,
-            context: "lib::load".to_string(),
-            file: PathBuf::from("src/lib.rs"),
-            line: 10,
-            source_snippet: "std::fs::read_to_string(…).into_diagnostic()".to_string(),
-            site_snippet: "std::fs::read_to_string(…).into_diagnostic()?".to_string(),
-        }],
-    };
-    let report = build_foreign_error_attenuation_report(&foreign, &[]);
+    let foreign = ForeignErrorTypeReport::new(
+        "example".to_string(),
+        vec![question_mark_record(
+            "std::io::Error",
+            "FOREIGN-ERROR-TYPE-STD-IO-FS-001",
+            "lib::load",
+            "src/lib.rs",
+            10,
+            "std::fs::read_to_string(…).into_diagnostic()",
+        )],
+    );
+    let report = build_foreign_error_attenuation_report(&foreign, &[]).expect("attenuation report");
     assert_eq!(
-        report.findings[0].handling_class,
+        report.findings()[0].handling_class(),
         ForeignErrorHandlingClass::PendingInfrastructure
     );
 }
@@ -211,22 +225,22 @@ fn library_into_diagnostic_without_bridge_is_still_pending_infra() {
 fn chain_break_rows_carry_baked_in_resolution() -> miette::Result<()> {
     cordial::init_tracing();
     let scan_rows = scan_sites_fixture()?;
-    let partition_rows = partition_error_site_records(&scan_rows, "fixture");
+    let partition_rows = partition_error_site_records(&scan_rows, "fixture").into_diagnostic()?;
     let partition = build_error_site_partition_report("fixture", partition_rows);
-    let foreign = build_foreign_error_type_report(&partition);
+    let foreign = build_foreign_error_type_report(&partition).into_diagnostic()?;
     let chain = scan_chain_fixture()?;
-    let attenuation = build_foreign_error_attenuation_report(&foreign, &chain);
+    let attenuation = build_foreign_error_attenuation_report(&foreign, &chain).into_diagnostic()?;
     let broken = attenuation
-        .findings
+        .findings()
         .iter()
-        .find(|finding| finding.context.contains("broken_stringify"))
+        .find(|finding| finding.context().contains("broken_stringify"))
         .ok_or_else(|| miette::miette!("broken site"))?;
     assert!(
-        broken.resolution.contains("newtype") || broken.resolution.contains("CrateError"),
+        broken.resolution().contains("newtype") || broken.resolution().contains("CrateError"),
         "resolution should name a crate error newtype, got: {}",
-        broken.resolution
+        broken.resolution()
     );
-    assert!(broken.good_pattern.contains("from"));
+    assert!(broken.good_pattern().contains("from"));
     Ok(())
 }
 

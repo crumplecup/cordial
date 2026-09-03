@@ -46,8 +46,8 @@ pub fn scan_source_tree(
     groups.sort_by(|a, b| {
         b.non_field_count()
             .cmp(&a.non_field_count())
-            .then_with(|| a.file.cmp(&b.file))
-            .then_with(|| a.predicate.cmp(&b.predicate))
+            .then_with(|| a.file().cmp(b.file()))
+            .then_with(|| a.predicate().cmp(b.predicate()))
     });
 
     Ok(groups)
@@ -74,8 +74,12 @@ pub fn scan_rust_source(
         impl_type: None,
         fn_stack: Vec::new(),
         occurrences: BTreeMap::new(),
+        error: None,
     };
     visitor.visit_file(&syntax);
+    if let Some(error) = visitor.error {
+        return Err(error);
+    }
     Ok(visitor.into_groups())
 }
 
@@ -86,17 +90,17 @@ struct CfgScatterVisitor {
     fn_stack: Vec<String>,
     /// Keyed by normalized `cfg(...)` predicate text.
     occurrences: BTreeMap<String, Vec<CfgSiteOccurrence>>,
+    error: Option<crate::error::CordialError>,
 }
 
 impl CfgScatterVisitor {
     #[instrument(level = "debug", skip(self))]
     fn into_groups(self) -> Vec<CfgScatterGroup> {
+        let file = self.file;
         self.occurrences
             .into_iter()
-            .map(|(predicate, occurrences)| CfgScatterGroup {
-                file: self.file.clone(),
-                predicate,
-                occurrences,
+            .map(|(predicate, occurrences)| {
+                CfgScatterGroup::new(file.clone(), predicate, occurrences)
             })
             .collect()
     }
@@ -124,15 +128,24 @@ impl CfgScatterVisitor {
         let snippet = snippet.into();
         let context = self.site_context();
         for predicate in cfg_predicates(attrs) {
-            self.occurrences
-                .entry(predicate)
-                .or_default()
-                .push(CfgSiteOccurrence {
-                    kind,
-                    context: context.clone(),
-                    line,
-                    snippet: snippet.clone(),
-                });
+            if self.error.is_some() {
+                return;
+            }
+            match CfgSiteOccurrence::builder()
+                .kind(kind)
+                .context(context.clone())
+                .line(line)
+                .snippet(snippet.clone())
+                .build()
+            {
+                Ok(occurrence) => {
+                    self.occurrences
+                        .entry(predicate)
+                        .or_default()
+                        .push(occurrence);
+                }
+                Err(error) => self.error = Some(error),
+            }
         }
     }
 

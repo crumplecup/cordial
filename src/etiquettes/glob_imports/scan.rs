@@ -22,10 +22,10 @@ pub fn scan_crate_glob_imports(crate_root: &Path) -> CordialResult<Vec<GlobImpor
     }
 
     findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.snippet.cmp(&b.snippet))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.snippet().cmp(b.snippet()))
     });
 
     Ok(findings)
@@ -76,8 +76,12 @@ pub fn scan_rust_source(
         crate_root: crate_root.to_path_buf(),
         module_prefix,
         findings: Vec::new(),
+        error: None,
     };
     visitor.visit_file(&syntax);
+    if let Some(error) = visitor.error {
+        return Err(error);
+    }
     Ok(visitor.findings)
 }
 
@@ -86,6 +90,7 @@ struct GlobImportVisitor {
     crate_root: PathBuf,
     module_prefix: Vec<String>,
     findings: Vec<GlobImportSiteRecord>,
+    error: Option<crate::error::CordialError>,
 }
 
 impl GlobImportVisitor {
@@ -137,13 +142,20 @@ impl GlobImportVisitor {
                 if let Ok(rel) = file.strip_prefix(&self.crate_root) {
                     file = rel.to_path_buf();
                 }
-                self.findings.push(GlobImportSiteRecord {
-                    rule_id: GlobImportRuleId::Import001,
-                    context: self.site_context(),
-                    file,
-                    line: glob.span().start().line as u32,
-                    snippet,
-                });
+                if self.error.is_some() {
+                    return;
+                }
+                match GlobImportSiteRecord::builder()
+                    .rule_id(GlobImportRuleId::Import001)
+                    .context(self.site_context())
+                    .file(file)
+                    .line(glob.span().start().line as u32)
+                    .snippet(snippet)
+                    .build()
+                {
+                    Ok(record) => self.findings.push(record),
+                    Err(error) => self.error = Some(error),
+                }
             }
             UseTree::Name(_) | UseTree::Rename(_) => {}
         }

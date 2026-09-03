@@ -134,9 +134,9 @@ impl Rule for ProofPatternRule {
 }
 
 /// Marker emitted by [`super::probe::ProofPatternSiteProbe`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct ProofPatternMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for ProofPatternMarker {
@@ -162,18 +162,28 @@ impl Marker for ProofPatternMarker {
 }
 
 /// Assessed proof-pattern finding.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ProofPatternFinding {
-    pub rule: ProofPatternRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub context: String,
-    pub span: FileSpan,
-    pub snippet: String,
-    pub cfg_test: bool,
-    pub tracked_params: Vec<String>,
-    pub recommends: Vec<String>,
+    rule: ProofPatternRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    context: String,
+    span: FileSpan,
+    snippet: String,
+    #[getter(copy)]
+    cfg_test: bool,
+    tracked_params: Vec<String>,
+    recommends: Vec<String>,
+}
+
+impl ProofPatternFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> ProofPatternFindingBuilder {
+        ProofPatternFindingBuilder::default()
+    }
 }
 
 impl Finding for ProofPatternFinding {
@@ -197,8 +207,8 @@ impl Finding for ProofPatternFinding {
         sink.field("crate", &self.crate_name);
         sink.field("kind", &self.rule.kind);
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
         sink.field("cfg_test", &self.cfg_test.to_string());
         sink.field("tracked_params", &self.tracked_params.join(", "));
@@ -208,14 +218,25 @@ impl Finding for ProofPatternFinding {
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ProofPatternRecord {
-    pub kind: ProofPatternKind,
-    pub context: String,
-    pub file: PathBuf,
-    pub line: u32,
-    pub snippet: String,
-    pub cfg_test: bool,
-    pub tracked_params: Vec<String>,
-    pub recommends: Vec<String>,
+    #[getter(copy)]
+    kind: ProofPatternKind,
+    context: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    snippet: String,
+    #[getter(copy)]
+    cfg_test: bool,
+    tracked_params: Vec<String>,
+    recommends: Vec<String>,
+}
+
+impl ProofPatternRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> ProofPatternRecordBuilder {
+        ProofPatternRecordBuilder::default()
+    }
 }

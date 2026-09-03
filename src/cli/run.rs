@@ -396,7 +396,7 @@ pub(super) fn export_surreal(
         .or_else(|| {
             crate::discover_crate_targets(project_root, &NamedRunFilter::all_plugins())
                 .ok()
-                .and_then(|targets| targets.into_iter().next().map(|t| t.crate_name))
+                .and_then(|targets| targets.into_iter().next().map(|t| t.crate_name().clone()))
         })
         .unwrap_or_else(|| store.project_slug.clone());
     let cache_path = store.ir_cache_path(&crate_name);

@@ -15,12 +15,12 @@
 //! Built-in plugins are feature-gated:
 //!
 //! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `crate_attrs`, `doc_warnings`, `glob_imports`, `inline_tests`, `verus_warnings`, `proof_patterns`, `pageantry` — source-quality scanners
-//!   (the `quality` umbrella is enabled by default)
-//! - `cli` — clap binary (`cordial`); enabled by default
+//!   (the `quality` umbrella)
+//! - `cli` — clap binary (`cordial`)
 //! - `impl_coverage`, `trenchcoat`, `shadow` — rustdoc coverage scanners
 //! - `elicitation` — umbrella for all coverage plugins
 //! - `homecoming_std`, `amenable_std` — std-family coverage
-//! - `full` — every built-in plugin
+//! - `full` — every built-in plugin; this is the default (`cargo install --path .`)
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -76,9 +76,9 @@ pub use etiquettes::allows::{
 #[cfg(feature = "antipatterns")]
 pub use etiquettes::antipatterns::{
     ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, AntipatternSiteRecord, ContractRecordDump,
-    scan_crate_antipatterns, scan_crate_contract_bounds, scan_creusot_contract_bounds_source,
-    scan_kani_contract_bounds_source, scan_rust_source as scan_antipatterns_rust_source,
-    scan_verus_contract_bounds_source,
+    ContractRecordDumpBuilder, scan_crate_antipatterns, scan_crate_contract_bounds,
+    scan_creusot_contract_bounds_source, scan_kani_contract_bounds_source,
+    scan_rust_source as scan_antipatterns_rust_source, scan_verus_contract_bounds_source,
 };
 #[cfg(feature = "cfg_hygiene")]
 pub use etiquettes::cfg_hygiene::{
@@ -254,8 +254,8 @@ pub use enricher::{
 };
 pub use error::{CordialError, CordialErrorKind, CordialResult, TokenStreamParseError};
 pub use etiquette::{
-    Etiquette, EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, QualityEtiquette,
-    QualityReportArea, StaticEtiquette, StaticQualityEtiquette, lookup_etiquette,
+    Etiquette, EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec,
+    QualityEtiquette, QualityReportArea, StaticEtiquette, StaticQualityEtiquette, lookup_etiquette,
     render_explain_list, render_explain_page,
 };
 #[cfg(feature = "elicitation")]

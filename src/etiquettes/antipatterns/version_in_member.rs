@@ -108,13 +108,12 @@ pub fn scan_member_manifest(
         && package_uses_inline_version(package)
     {
         let line = find_line(&content, "version").unwrap_or(1);
-        findings.push(AntipatternSiteRecord {
-            rule_id: AntipatternRuleId::VersionInMember001,
-            context: "Cargo.toml [package].version".to_string(),
-            file: manifest_rel.clone(),
+        findings.push(version_record(
+            "Cargo.toml [package].version".to_string(),
+            manifest_rel.clone(),
             line,
-            snippet: package_version_snippet(&content, line, workspace_has_package_version),
-        });
+            package_version_snippet(&content, line, workspace_has_package_version),
+        )?);
     }
 
     for section in DEP_SECTIONS {
@@ -128,7 +127,7 @@ pub fn scan_member_manifest(
             &content,
             workspace_dep_names,
             &mut findings,
-        );
+        )?;
     }
 
     scan_target_dependency_tables(
@@ -137,13 +136,13 @@ pub fn scan_member_manifest(
         &content,
         workspace_dep_names,
         &mut findings,
-    );
+    )?;
 
     findings.sort_by(|left, right| {
-        left.file
-            .cmp(&right.file)
-            .then(left.line.cmp(&right.line))
-            .then(left.context.cmp(&right.context))
+        left.file()
+            .cmp(right.file())
+            .then(left.line().cmp(&right.line()))
+            .then(left.context().cmp(right.context()))
     });
     Ok(findings)
 }
@@ -223,7 +222,7 @@ fn scan_dependency_entries(
     content: &str,
     workspace_dep_names: &HashSet<String>,
     findings: &mut Vec<AntipatternSiteRecord>,
-) {
+) -> CordialResult<()> {
     for (dep_name, dep_value) in deps {
         if !dependency_should_use_workspace(dep_name, dep_value, workspace_dep_names) {
             continue;
@@ -231,14 +230,14 @@ fn scan_dependency_entries(
         let in_workspace = workspace_dep_names.contains(dep_name.as_str());
         let context = format!("Cargo.toml {section_path} {dep_name}");
         let line = find_dependency_line(content, section_path, dep_name).unwrap_or(1);
-        findings.push(AntipatternSiteRecord {
-            rule_id: AntipatternRuleId::VersionInMember001,
+        findings.push(version_record(
             context,
-            file: manifest_rel.to_path_buf(),
+            manifest_rel.to_path_buf(),
             line,
-            snippet: dependency_version_snippet(dep_name, dep_value, in_workspace),
-        });
+            dependency_version_snippet(dep_name, dep_value, in_workspace),
+        )?);
     }
+    Ok(())
 }
 
 #[instrument(level = "debug", skip(table, workspace_dep_names, findings))]
@@ -248,9 +247,9 @@ fn scan_target_dependency_tables(
     content: &str,
     workspace_dep_names: &HashSet<String>,
     findings: &mut Vec<AntipatternSiteRecord>,
-) {
+) -> CordialResult<()> {
     let Some(target_root) = table.get("target").and_then(Value::as_table) else {
-        return;
+        return Ok(());
     };
     for (cfg_key, cfg_table_value) in target_root {
         let Some(cfg_table) = cfg_table_value.as_table() else {
@@ -263,8 +262,9 @@ fn scan_target_dependency_tables(
             content,
             workspace_dep_names,
             findings,
-        );
+        )?;
     }
+    Ok(())
 }
 
 #[instrument(level = "debug", skip(table, workspace_dep_names, findings))]
@@ -275,7 +275,7 @@ fn scan_dependency_sections_in_table(
     content: &str,
     workspace_dep_names: &HashSet<String>,
     findings: &mut Vec<AntipatternSiteRecord>,
-) {
+) -> CordialResult<()> {
     for section in DEP_SECTIONS {
         let Some(deps) = table.get(*section).and_then(Value::as_table) else {
             continue;
@@ -287,7 +287,7 @@ fn scan_dependency_sections_in_table(
             content,
             workspace_dep_names,
             findings,
-        );
+        )?;
     }
     for (key, value) in table {
         if key.starts_with("target")
@@ -300,9 +300,10 @@ fn scan_dependency_sections_in_table(
                 content,
                 workspace_dep_names,
                 findings,
-            );
+            )?;
         }
     }
+    Ok(())
 }
 
 #[instrument(level = "debug")]
@@ -409,7 +410,21 @@ fn find_dependency_line(content: &str, section_path: &str, dep_name: &str) -> Op
     find_line(content, dep_name)
 }
 
-#[instrument(level = "debug", err(level = "warn"))]
+fn version_record(
+    context: String,
+    file: PathBuf,
+    line: u32,
+    snippet: String,
+) -> CordialResult<AntipatternSiteRecord> {
+    AntipatternSiteRecord::builder()
+        .rule_id(AntipatternRuleId::VersionInMember001)
+        .context(context)
+        .file(file)
+        .line(line)
+        .snippet(snippet)
+        .build()
+}
+
 fn parse_manifest_table(content: &str, manifest_path: &Path) -> CordialResult<toml::Table> {
     toml::from_str(content).map_err(|error| {
         CordialError::invariant(format!(

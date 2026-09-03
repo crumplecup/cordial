@@ -192,7 +192,7 @@ impl ErrorScopeProvider for WorkspaceMembersErrorScopeProvider {
         let members = discover_crate_targets(session.project_root(), filter)?;
         Ok(members
             .into_iter()
-            .map(|target: CrateTarget| ErrorScope::workspace_member(target.crate_name))
+            .map(|target: CrateTarget| ErrorScope::workspace_member(target.crate_name()))
             .collect())
     }
 }

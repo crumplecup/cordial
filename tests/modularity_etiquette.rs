@@ -104,27 +104,27 @@ fn scan_modularity_rust_source_ranks_handlers() -> miette::Result<()> {
 
     let functions: Vec<_> = findings
         .iter()
-        .filter(|record| record.kind == ModularityKind::Function)
+        .filter(|record| record.kind() == ModularityKind::Function)
         .collect();
     assert!(
         functions
             .iter()
-            .any(|record| record.context.contains("large_handler"))
+            .any(|record| record.context().contains("large_handler"))
     );
     assert!(
         functions
             .iter()
-            .any(|record| record.context.contains("medium_handler"))
+            .any(|record| record.context().contains("medium_handler"))
     );
     assert!(
         !functions
             .iter()
-            .any(|record| record.context.contains("small_helper"))
+            .any(|record| record.context().contains("small_helper"))
     );
     assert!(
         !findings
             .iter()
-            .any(|record| record.context.contains("ignored_large"))
+            .any(|record| record.context().contains("ignored_large"))
     );
     Ok(())
 }
@@ -145,8 +145,8 @@ fn scan_function_contexts(source: &str) -> miette::Result<Vec<String>> {
     .into_diagnostic()
     .wrap_err("scan")?
     .into_iter()
-    .filter(|record| record.kind == ModularityKind::Function)
-    .map(|record| record.context)
+    .filter(|record| record.kind() == ModularityKind::Function)
+    .map(|record| record.context().clone())
     .collect())
 }
 
@@ -272,7 +272,7 @@ fn scan_snippet(
     .into_diagnostic()
     .wrap_err("scan")?
     .into_iter()
-    .map(|record| record.kind)
+    .map(|record| record.kind())
     .collect())
 }
 
@@ -560,26 +560,26 @@ fn module_size_inventory_includes_file_and_inline_mod() -> miette::Result<()> {
     .wrap_err("scan")?;
     let modules: Vec<_> = records
         .iter()
-        .filter(|record| record.kind == ModularityKind::ModuleSize)
+        .filter(|record| record.kind() == ModularityKind::ModuleSize)
         .collect();
     assert_eq!(modules.len(), 2, "{modules:?}");
     assert!(
-        modules.iter().any(|record| record.context == "<crate>"),
+        modules.iter().any(|record| record.context() == "<crate>"),
         "{modules:?}"
     );
     assert!(
-        modules.iter().any(|record| record.context == "inner"),
+        modules.iter().any(|record| record.context() == "inner"),
         "{modules:?}"
     );
     assert!(
         modules
             .iter()
-            .any(|record| record.context == "<crate>" && !record.inline)
+            .any(|record| record.context() == "<crate>" && !record.inline())
     );
     assert!(
         modules
             .iter()
-            .any(|record| record.context == "inner" && record.inline)
+            .any(|record| record.context() == "inner" && record.inline())
     );
     Ok(())
 }
@@ -895,11 +895,19 @@ fn strahler_order_bumps_when_two_children_share_max() -> miette::Result<()> {
     let crate_root = node(&nodes, "<crate>")?;
     let left = node(&nodes, "left")?;
     let right = node(&nodes, "right")?;
-    assert_eq!(right.order, 1, "single leaf child keeps order 1");
-    assert_eq!(left.order, 2, "two order-1 children bump parent to 2");
-    assert_eq!(crate_root.order, 2, "max child order 2 with one such child");
+    assert_eq!(right.order(), 1, "single leaf child keeps order 1");
+    assert_eq!(left.order(), 2, "two order-1 children bump parent to 2");
+    assert_eq!(
+        crate_root.order(),
+        2,
+        "max child order 2 with one such child"
+    );
     let bands = order_bands(&nodes);
-    assert!(bands.iter().any(|band| band.order == 1 && band.count >= 3));
+    assert!(
+        bands
+            .iter()
+            .any(|band| band.order() == 1 && band.count() >= 3)
+    );
     Ok(())
 }
 
@@ -917,7 +925,7 @@ fn library_branches_rank_top_heavy_parents_first() {
     assert_eq!(
         branches
             .iter()
-            .map(|node| node.path.as_str())
+            .map(|node| node.path().as_str())
             .collect::<Vec<_>>(),
         vec!["fat", "thin"]
     );
@@ -936,12 +944,12 @@ fn fat_leaves_are_not_ranked_as_library_branches() {
     ]);
     let branches: Vec<_> = library_branches(&nodes)
         .iter()
-        .map(|node| node.path.as_str())
+        .map(|node| node.path().as_str())
         .collect();
     assert_eq!(branches, vec!["fat"]);
     let leaves = fat_leaves(&nodes);
-    assert_eq!(leaves[0].path, "session");
-    assert!(!leaves.iter().any(|node| node.path == "fat"));
+    assert_eq!(leaves[0].path(), "session");
+    assert!(!leaves.iter().any(|node| node.path() == "fat"));
 }
 
 #[test]
@@ -954,7 +962,7 @@ fn top_heavy_parents_include_nested_nodes() {
         input("pkg::loader::inner", "src/pkg/loader/inner.rs", 8),
     ]);
     let parents = top_heavy_parents(&nodes);
-    assert_eq!(parents[0].path, "pkg::loader");
+    assert_eq!(parents[0].path(), "pkg::loader");
     assert!(parents[0].top_heavy() > 0.8);
 }
 
@@ -967,11 +975,11 @@ fn lopsided_siblings_rank_the_dominant_child() {
         input("trenchcoat", "src/trenchcoat.rs", 300),
     ]);
     let ranked = lopsided_siblings(&nodes, 0);
-    assert_eq!(ranked[0].parent, "<crate>");
-    assert_eq!(ranked[0].largest, "antipatterns");
-    assert!(ranked[0].share > 0.8);
-    assert_eq!(ranked[0].sibling_count, 2);
-    assert_eq!(ranked[0].sibling_total, 3300);
+    assert_eq!(ranked[0].parent(), "<crate>");
+    assert_eq!(ranked[0].largest(), "antipatterns");
+    assert!(ranked[0].share() > 0.8);
+    assert_eq!(ranked[0].sibling_count(), 2);
+    assert_eq!(ranked[0].sibling_total(), 3300);
 }
 
 #[test]
@@ -984,8 +992,8 @@ fn lopsided_siblings_ignore_stub_children() {
     ]);
     assert!(lopsided_siblings(&nodes, 150).is_empty());
     let ranked = lopsided_siblings(&nodes, 0);
-    assert_eq!(ranked[0].largest, "tracked_targets");
-    assert!(ranked[0].share > 0.98);
+    assert_eq!(ranked[0].largest(), "tracked_targets");
+    assert!(ranked[0].share() > 0.98);
 }
 
 #[test]
@@ -1009,10 +1017,10 @@ fn unary_nests_rank_the_passthrough_directory() {
     ]);
     let ranked = unary_nests(&nodes, 150);
     assert_eq!(ranked.len(), 1);
-    assert_eq!(ranked[0].parent, "error");
-    assert_eq!(ranked[0].passthrough, "error::sources");
-    assert_eq!(ranked[0].passthrough_own, 14);
-    assert_eq!(ranked[0].grandchildren.len(), 3);
+    assert_eq!(ranked[0].parent(), "error");
+    assert_eq!(ranked[0].passthrough(), "error::sources");
+    assert_eq!(ranked[0].passthrough_own(), 14);
+    assert_eq!(ranked[0].grandchildren().len(), 3);
 }
 
 #[test]
@@ -1429,7 +1437,7 @@ fn scan_records_helpers_only_on_inventory_sized_files() -> miette::Result<()> {
     assert!(
         !small
             .iter()
-            .any(|record| record.kind == ModularityKind::Function),
+            .any(|record| record.kind() == ModularityKind::Function),
         "a 90-line body on a small file is below inventory: {small:?}"
     );
 
@@ -1450,10 +1458,10 @@ fn scan_records_helpers_only_on_inventory_sized_files() -> miette::Result<()> {
     .wrap_err("scan large")?;
     assert!(
         scanned.iter().any(|record| {
-            record.kind == ModularityKind::Function
-                && record.context.contains("helper")
-                && record.lines >= 80
-                && record.lines < 150
+            record.kind() == ModularityKind::Function
+                && record.context().contains("helper")
+                && record.lines() >= 80
+                && record.lines() < 150
         }),
         "inventory-sized files should record helper-sized bodies: {scanned:?}"
     );
@@ -1523,11 +1531,7 @@ fn module_hierarchy_session_writes_branch_ranking() -> miette::Result<()> {
 }
 
 fn input(path: &str, file: &str, lines: u32) -> ModuleSizeInput {
-    ModuleSizeInput {
-        path: path.to_string(),
-        file: file.to_string(),
-        lines,
-    }
+    ModuleSizeInput::new(path.to_string(), file.to_string(), lines)
 }
 
 fn node<'a>(
@@ -1536,7 +1540,7 @@ fn node<'a>(
 ) -> miette::Result<&'a ModuleHierarchyNode> {
     nodes
         .iter()
-        .find(|node| node.path == path)
+        .find(|node| node.path() == path)
         .ok_or_else(|| miette::miette!("missing {path}"))
 }
 

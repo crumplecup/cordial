@@ -31,11 +31,11 @@ pub fn scan_crate_antipatterns(
     }
 
     findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.context.cmp(&b.context))
-            .then(a.snippet.cmp(&b.snippet))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.context().cmp(b.context()))
+            .then(a.snippet().cmp(b.snippet()))
     });
 
     Ok(findings)

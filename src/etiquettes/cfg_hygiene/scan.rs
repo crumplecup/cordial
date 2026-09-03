@@ -30,13 +30,21 @@ use tracing::instrument;
 /// One cfg name mentioned by a `#[cfg(...)]`/`#[cfg_attr(...)]` attribute.
 /// A single attribute mentioning several names (e.g. `any(kani, creusot)`)
 /// produces one occurrence per name.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct CfgNameOccurrence {
-    pub name: String,
-    pub context: String,
-    pub file: PathBuf,
-    pub line: u32,
-    pub snippet: String,
+    name: String,
+    context: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    snippet: String,
+}
+
+impl CfgNameOccurrence {
+    pub fn builder() -> CfgNameOccurrenceBuilder {
+        CfgNameOccurrenceBuilder::default()
+    }
 }
 
 /// Scan one Rust source file and return records.
@@ -59,8 +67,12 @@ pub fn scan_rust_source(
         module_prefix,
         item_stack: Vec::new(),
         occurrences: Vec::new(),
+        error: None,
     };
     visitor.visit_file(&syntax);
+    if let Some(error) = visitor.error {
+        return Err(error);
+    }
     Ok(visitor.occurrences)
 }
 
@@ -69,6 +81,7 @@ struct CfgNameVisitor {
     module_prefix: Vec<String>,
     item_stack: Vec<String>,
     occurrences: Vec<CfgNameOccurrence>,
+    error: Option<crate::error::CordialError>,
 }
 
 impl CfgNameVisitor {
@@ -203,13 +216,20 @@ impl<'ast> Visit<'ast> for CfgNameVisitor {
         let line = node.span().start().line as u32;
         let snippet = attr_snippet(node);
         for name in names {
-            self.occurrences.push(CfgNameOccurrence {
-                name,
-                context: context.clone(),
-                file: self.file.clone(),
-                line,
-                snippet: snippet.clone(),
-            });
+            if self.error.is_some() {
+                return;
+            }
+            match CfgNameOccurrence::builder()
+                .name(name)
+                .context(context.clone())
+                .file(self.file.clone())
+                .line(line)
+                .snippet(snippet.clone())
+                .build()
+            {
+                Ok(record) => self.occurrences.push(record),
+                Err(error) => self.error = Some(error),
+            }
         }
     }
 }

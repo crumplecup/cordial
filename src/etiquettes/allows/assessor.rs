@@ -61,15 +61,17 @@ impl Assessor for AllowAssessor {
                 .unwrap_or_else(|| session.project_root().to_path_buf());
             let span = FileSpan::new(file, line, 1);
 
-            findings.push(Box::new(AllowFinding {
-                rule: AllowRule::new(rule_id),
-                disposition: Disposition::Open,
-                anchor: crate::objects::NodeAnchor(node_id),
-                crate_name: ir.crate_name().to_string(),
-                context,
-                span,
-                snippet,
-            }) as Box<dyn Finding>);
+            findings.push(Box::new(
+                AllowFinding::builder()
+                    .rule(AllowRule::new(rule_id))
+                    .disposition(Disposition::Open)
+                    .anchor(crate::objects::NodeAnchor(node_id))
+                    .crate_name(ir.crate_name().to_string())
+                    .context(context)
+                    .span(span)
+                    .snippet(snippet)
+                    .build()?,
+            ) as Box<dyn Finding>);
         }
         Ok(findings)
     }

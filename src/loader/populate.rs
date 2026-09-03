@@ -15,7 +15,7 @@ impl SourceLoadView {
     #[instrument(level = "debug", skip(self, ir), err(level = "warn"))]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
         let root = ir.root;
-        for file in &self.files {
+        for file in self.files() {
             self.load_file(ir, root, file)?;
         }
         Ok(())
@@ -28,16 +28,16 @@ impl SourceLoadView {
         parent: crate::ir::NodeId,
         file: &SourceFile,
     ) -> CordialResult<()> {
-        let syntax = syn::parse_file(&file.source).map_err(|err| {
-            crate::error::CordialError::syn_parse(file.path.display().to_string(), err)
+        let syntax = syn::parse_file(file.source()).map_err(|err| {
+            crate::error::CordialError::syn_parse(file.path().display().to_string(), err)
         })?;
 
-        let parts = module_path_from_src_file(&self.src_root, &file.path);
+        let parts = module_path_from_src_file(self.src_root(), file.path());
         let module_path = parts.join("::");
         let module_node = ir.insert_node(
             NodeWeight::new(NodeKind::Module)
                 .with_name(module_path.clone())
-                .with_span(line_span(&file.path, 1)),
+                .with_span(line_span(file.path(), 1)),
         );
         ir.set_attr(
             module_node,
@@ -52,7 +52,7 @@ impl SourceLoadView {
         ir.insert_edge(parent, module_node, EdgeKind::Contains)?;
 
         for item in syntax.items {
-            self.load_item(ir, module_node, &module_path, &file.path, item)?;
+            self.load_item(ir, module_node, &module_path, file.path(), item)?;
         }
         Ok(())
     }

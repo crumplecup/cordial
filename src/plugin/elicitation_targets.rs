@@ -42,7 +42,7 @@ impl TargetProvider for ElicitationTargetProvider {
     ) -> CordialResult<Vec<CoverageTarget>> {
         let all_members: HashSet<String> = discover_crate_targets(session.project_root(), &RunAll)?
             .into_iter()
-            .map(|target| target.crate_name)
+            .map(|target| target.crate_name().clone())
             .collect();
 
         let mut targets = Vec::new();
@@ -91,7 +91,7 @@ pub fn discover_active_shadow_pairs(
 ) -> CordialResult<Vec<ShadowPair>> {
     let members: HashSet<String> = discover_crate_targets(project_root, &RunAll)?
         .into_iter()
-        .map(|target| target.crate_name)
+        .map(|target| target.crate_name().clone())
         .collect();
     let pairs: Vec<ShadowPair> = active_tracked_targets(&members)
         .into_iter()

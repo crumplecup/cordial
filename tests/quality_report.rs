@@ -72,7 +72,7 @@ edition = { workspace = true }
     .wrap_err("write manifest")?;
     std::fs::write(
         fixture.path().join("src/lib.rs"),
-        "pub fn boom() { panic!(\"x\"); }\n",
+        include_str!("fixtures/panics/boom_x.rs"),
     )
     .into_diagnostic()
     .wrap_err("write fixture")?;

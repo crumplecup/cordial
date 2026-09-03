@@ -74,9 +74,9 @@ impl Rule for AllowRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct AllowMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for AllowMarker {
@@ -101,15 +101,24 @@ impl Marker for AllowMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct AllowFinding {
-    pub rule: AllowRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub context: String,
-    pub span: FileSpan,
-    pub snippet: String,
+    rule: AllowRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    context: String,
+    span: FileSpan,
+    snippet: String,
+}
+
+impl AllowFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> AllowFindingBuilder {
+        AllowFindingBuilder::default()
+    }
 }
 
 impl Finding for AllowFinding {
@@ -133,24 +142,34 @@ impl Finding for AllowFinding {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
         sink.snippet(&self.snippet);
     }
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct AllowSiteRecord {
     /// Stable probe rule identifier.
-    pub rule_id: AllowRuleId,
+    #[getter(copy)]
+    rule_id: AllowRuleId,
     /// Qualified name or extra locator for this site.
-    pub context: String,
+    context: String,
     /// Source file path, usually crate-relative.
-    pub file: PathBuf,
+    file: PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// Source snippet captured at the site.
-    pub snippet: String,
+    snippet: String,
+}
+
+impl AllowSiteRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> AllowSiteRecordBuilder {
+        AllowSiteRecordBuilder::default()
+    }
 }

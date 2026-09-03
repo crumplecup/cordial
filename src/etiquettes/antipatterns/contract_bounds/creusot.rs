@@ -30,8 +30,12 @@ pub(super) fn scan_creusot_source(
         fn_stack: Vec::new(),
         index,
         findings: Vec::new(),
+        error: None,
     };
     visitor.visit_file(&syntax);
+    if let Some(err) = visitor.error {
+        return Err(err);
+    }
     Ok(visitor.findings)
 }
 
@@ -41,6 +45,7 @@ struct CreusotVisitor<'a> {
     fn_stack: Vec<String>,
     index: &'a ContractIndex,
     findings: Vec<AntipatternSiteRecord>,
+    error: Option<CordialError>,
 }
 
 impl CreusotVisitor<'_> {
@@ -66,12 +71,18 @@ impl CreusotVisitor<'_> {
                 continue;
             }
             let context = site_context(&self.module_prefix, &self.fn_stack.join("::"));
-            self.findings.push(make_finding(
+            if self.error.is_some() {
+                return;
+            }
+            match make_finding(
                 context,
                 &self.file,
                 attr.span().start().line as u32,
                 &normalized,
-            ));
+            ) {
+                Ok(record) => self.findings.push(record),
+                Err(error) => self.error = Some(error),
+            }
         }
     }
 }

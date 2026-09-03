@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
+use crate::error::CordialResult;
 use crate::etiquettes::error_chain::{ErrorChainProbeId, ErrorChainRecord};
 use crate::etiquettes::error_sites::ErrorSiteKind;
 use crate::etiquettes::foreign_error_types::ForeignErrorTypeRecord;
@@ -23,15 +24,15 @@ struct SiteKey {
 pub fn build_foreign_error_attenuation_report(
     foreign_report: &crate::etiquettes::foreign_error_types::ForeignErrorTypeReport,
     chain_records: &[ErrorChainRecord],
-) -> ForeignErrorAttenuationReport {
+) -> CordialResult<ForeignErrorAttenuationReport> {
     build_foreign_error_attenuation_report_with_bridges(foreign_report, chain_records, &[])
 }
 
 /// Typed crate-error constructor that already keeps a foreign error as `source`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub(crate) struct ErrorBridgeHint {
-    pub foreign_type: String,
-    pub constructor: String,
+    foreign_type: String,
+    constructor: String,
 }
 
 #[instrument(level = "debug", skip(foreign_report, chain_records, bridges))]
@@ -39,34 +40,34 @@ pub(crate) fn build_foreign_error_attenuation_report_with_bridges(
     foreign_report: &crate::etiquettes::foreign_error_types::ForeignErrorTypeReport,
     chain_records: &[ErrorChainRecord],
     bridges: &[ErrorBridgeHint],
-) -> ForeignErrorAttenuationReport {
+) -> CordialResult<ForeignErrorAttenuationReport> {
     let preserved_by_site = index_preserved_propagation_sites(chain_records);
     let map_err_sites: HashSet<SiteKey> = foreign_report
-        .findings
+        .findings()
         .iter()
-        .filter(|foreign| foreign.kind == ErrorSiteKind::MapErr)
+        .filter(|foreign| foreign.kind() == ErrorSiteKind::MapErr)
         .map(|foreign| SiteKey {
-            file: foreign.file.clone(),
-            line: foreign.line,
+            file: foreign.file().clone(),
+            line: foreign.line(),
         })
         .collect();
-    let findings = foreign_report
-        .findings
-        .iter()
-        .filter(|foreign| {
-            foreign.kind != ErrorSiteKind::QuestionMark
-                || !map_err_sites.contains(&SiteKey {
-                    file: foreign.file.clone(),
-                    line: foreign.line,
-                })
-        })
-        .map(|foreign| classify_foreign_site(foreign, &preserved_by_site, bridges))
-        .collect();
-
-    ForeignErrorAttenuationReport {
-        crate_name: foreign_report.crate_name.clone(),
-        findings,
+    let mut findings = Vec::new();
+    for foreign in foreign_report.findings() {
+        if foreign.kind() == ErrorSiteKind::QuestionMark
+            && map_err_sites.contains(&SiteKey {
+                file: foreign.file().clone(),
+                line: foreign.line(),
+            })
+        {
+            continue;
+        }
+        findings.push(classify_foreign_site(foreign, &preserved_by_site, bridges)?);
     }
+
+    Ok(ForeignErrorAttenuationReport::new(
+        foreign_report.crate_name().clone(),
+        findings,
+    ))
 }
 
 #[instrument(level = "debug", skip(chain_records))]
@@ -75,13 +76,13 @@ fn index_preserved_propagation_sites(
 ) -> HashMap<SiteKey, ErrorChainRecord> {
     let mut map = HashMap::new();
     for record in chain_records {
-        if !is_propagation_probe(record.rule_id) {
+        if !is_propagation_probe(record.rule_id()) {
             continue;
         }
         map.insert(
             SiteKey {
-                file: record.file.clone(),
-                line: record.line,
+                file: record.file().clone(),
+                line: record.line(),
             },
             record.clone(),
         );
@@ -102,168 +103,143 @@ fn classify_foreign_site(
     foreign: &ForeignErrorTypeRecord,
     preserved_by_site: &HashMap<SiteKey, ErrorChainRecord>,
     bridges: &[ErrorBridgeHint],
-) -> ForeignErrorAttenuationRecord {
+) -> CordialResult<ForeignErrorAttenuationRecord> {
     let key = SiteKey {
-        file: foreign.file.clone(),
-        line: foreign.line,
+        file: foreign.file().clone(),
+        line: foreign.line(),
     };
     if let Some(preserved) = preserved_by_site.get(&key) {
-        return ForeignErrorAttenuationRecord {
-            crate_name: foreign.crate_name.clone(),
-            foreign_error_type: foreign.foreign_error_type.clone(),
-            inference_rule_id: foreign.rule_id.clone(),
-            confidence: foreign.confidence,
-            handling_class: ForeignErrorHandlingClass::ChainPreserved,
-            resolution_id: ErrorHandlingResolutionId::MaintainExemplar,
-            resolution: "Reference pattern — keep the foreign error as `source` on a crate \
+        return record_from_foreign(
+            foreign,
+            ForeignErrorHandlingClass::ChainPreserved,
+            ErrorHandlingResolutionId::MaintainExemplar,
+            "Reference pattern — keep the foreign error as `source` on a crate \
                           error newtype (or `From` bridge) and propagate with `?` or `map_err`."
                 .to_string(),
-            kind: foreign.kind,
-            context: foreign.context.clone(),
-            file: foreign.file.clone(),
-            line: foreign.line,
-            source_snippet: foreign.source_snippet.clone(),
-            site_snippet: foreign.site_snippet.clone(),
-            good_pattern: preserved.snippet.clone(),
-            bad_pattern: String::new(),
-        };
+            preserved.snippet().clone(),
+            String::new(),
+        );
     }
 
-    if foreign.chain_break {
+    if foreign.chain_break() {
         let (resolution_id, resolution, good_pattern) = chain_break_resolution(
-            &foreign.foreign_error_type,
-            &foreign.source_snippet,
+            foreign.foreign_error_type(),
+            foreign.source_snippet(),
             bridges,
         );
-        return ForeignErrorAttenuationRecord {
-            crate_name: foreign.crate_name.clone(),
-            foreign_error_type: foreign.foreign_error_type.clone(),
-            inference_rule_id: foreign.rule_id.clone(),
-            confidence: foreign.confidence,
-            handling_class: ForeignErrorHandlingClass::ChainBreak,
+        return record_from_foreign(
+            foreign,
+            ForeignErrorHandlingClass::ChainBreak,
             resolution_id,
             resolution,
-            kind: foreign.kind,
-            context: foreign.context.clone(),
-            file: foreign.file.clone(),
-            line: foreign.line,
-            source_snippet: foreign.source_snippet.clone(),
-            site_snippet: foreign.site_snippet.clone(),
             good_pattern,
-            bad_pattern: foreign.site_snippet.clone(),
-        };
+            foreign.site_snippet().clone(),
+        );
     }
 
-    if foreign.kind == ErrorSiteKind::QuestionMark {
-        if foreign.source_snippet.contains(".ok(") || foreign.site_snippet.contains(".ok(") {
+    if foreign.kind() == ErrorSiteKind::QuestionMark {
+        if foreign.source_snippet().contains(".ok(") || foreign.site_snippet().contains(".ok(") {
             return option_ok_neutral_record(foreign);
         }
-        if foreign.foreign_error_type == "std::fmt::Error" {
+        if foreign.foreign_error_type() == "std::fmt::Error" {
             return fmt_error_exemplar_record(foreign);
         }
         if is_miette_surface_site(foreign) {
             return miette_surface_record(foreign);
         }
-        if find_bridge(bridges, &foreign.foreign_error_type).is_some() {
-            return ForeignErrorAttenuationRecord {
-                crate_name: foreign.crate_name.clone(),
-                foreign_error_type: foreign.foreign_error_type.clone(),
-                inference_rule_id: foreign.rule_id.clone(),
-                confidence: foreign.confidence,
-                handling_class: ForeignErrorHandlingClass::ChainPreserved,
-                resolution_id: ErrorHandlingResolutionId::MaintainExemplar,
-                resolution: "Reference pattern — `From` already keeps the foreign error, so `?` \
+        if find_bridge(bridges, foreign.foreign_error_type()).is_some() {
+            return record_from_foreign(
+                foreign,
+                ForeignErrorHandlingClass::ChainPreserved,
+                ErrorHandlingResolutionId::MaintainExemplar,
+                "Reference pattern — `From` already keeps the foreign error, so `?` \
                               preserves the chain."
                     .to_string(),
-                kind: foreign.kind,
-                context: foreign.context.clone(),
-                file: foreign.file.clone(),
-                line: foreign.line,
-                source_snippet: foreign.source_snippet.clone(),
-                site_snippet: foreign.site_snippet.clone(),
-                good_pattern: format!("{}?", foreign.source_snippet),
-                bad_pattern: String::new(),
-            };
+                format!("{}?", foreign.source_snippet()),
+                String::new(),
+            );
         }
         let (resolution_id, resolution, good_pattern) = pending_infrastructure_resolution(
-            &foreign.foreign_error_type,
-            &foreign.source_snippet,
+            foreign.foreign_error_type(),
+            foreign.source_snippet(),
             bridges,
         );
-        return ForeignErrorAttenuationRecord {
-            crate_name: foreign.crate_name.clone(),
-            foreign_error_type: foreign.foreign_error_type.clone(),
-            inference_rule_id: foreign.rule_id.clone(),
-            confidence: foreign.confidence,
-            handling_class: ForeignErrorHandlingClass::PendingInfrastructure,
+        return record_from_foreign(
+            foreign,
+            ForeignErrorHandlingClass::PendingInfrastructure,
             resolution_id,
             resolution,
-            kind: foreign.kind,
-            context: foreign.context.clone(),
-            file: foreign.file.clone(),
-            line: foreign.line,
-            source_snippet: foreign.source_snippet.clone(),
-            site_snippet: foreign.site_snippet.clone(),
             good_pattern,
-            bad_pattern: foreign.site_snippet.clone(),
-        };
+            foreign.site_snippet().clone(),
+        );
     }
 
-    ForeignErrorAttenuationRecord {
-        crate_name: foreign.crate_name.clone(),
-        foreign_error_type: foreign.foreign_error_type.clone(),
-        inference_rule_id: foreign.rule_id.clone(),
-        confidence: foreign.confidence,
-        handling_class: ForeignErrorHandlingClass::Neutral,
-        resolution_id: ErrorHandlingResolutionId::ManualReview,
-        resolution: "Review typed foreign exposure — not a chain-break `map_err` or preserved \
+    record_from_foreign(
+        foreign,
+        ForeignErrorHandlingClass::Neutral,
+        ErrorHandlingResolutionId::ManualReview,
+        "Review typed foreign exposure — not a chain-break `map_err` or preserved \
                       propagation site."
             .to_string(),
-        kind: foreign.kind,
-        context: foreign.context.clone(),
-        file: foreign.file.clone(),
-        line: foreign.line,
-        source_snippet: foreign.source_snippet.clone(),
-        site_snippet: foreign.site_snippet.clone(),
-        good_pattern: good_pattern_template(
-            &foreign.foreign_error_type,
-            &foreign.source_snippet,
+        good_pattern_template(
+            foreign.foreign_error_type(),
+            foreign.source_snippet(),
             bridges,
         ),
-        bad_pattern: foreign.site_snippet.clone(),
-    }
+        foreign.site_snippet().clone(),
+    )
+}
+
+fn record_from_foreign(
+    foreign: &ForeignErrorTypeRecord,
+    handling_class: ForeignErrorHandlingClass,
+    resolution_id: ErrorHandlingResolutionId,
+    resolution: String,
+    good_pattern: String,
+    bad_pattern: String,
+) -> CordialResult<ForeignErrorAttenuationRecord> {
+    ForeignErrorAttenuationRecord::builder()
+        .crate_name(foreign.crate_name().clone())
+        .foreign_error_type(foreign.foreign_error_type().clone())
+        .inference_rule_id(foreign.rule_id().clone())
+        .confidence(foreign.confidence())
+        .handling_class(handling_class)
+        .resolution_id(resolution_id)
+        .resolution(resolution)
+        .kind(foreign.kind())
+        .context(foreign.context().clone())
+        .file(foreign.file().clone())
+        .line(foreign.line())
+        .source_snippet(foreign.source_snippet().clone())
+        .site_snippet(foreign.site_snippet().clone())
+        .good_pattern(good_pattern)
+        .bad_pattern(bad_pattern)
+        .build()
 }
 
 #[instrument(level = "trace", skip(foreign), ret)]
 fn is_miette_surface_site(foreign: &ForeignErrorTypeRecord) -> bool {
     matches!(
-        ErrorSurface::from_path(&foreign.file),
+        ErrorSurface::from_path(foreign.file()),
         ErrorSurface::Test | ErrorSurface::Binary
-    ) && (foreign.source_snippet.contains("into_diagnostic")
-        || foreign.site_snippet.contains("into_diagnostic"))
+    ) && (foreign.source_snippet().contains("into_diagnostic")
+        || foreign.site_snippet().contains("into_diagnostic"))
 }
 
 #[instrument(level = "debug", skip(foreign))]
-fn miette_surface_record(foreign: &ForeignErrorTypeRecord) -> ForeignErrorAttenuationRecord {
-    ForeignErrorAttenuationRecord {
-        crate_name: foreign.crate_name.clone(),
-        foreign_error_type: foreign.foreign_error_type.clone(),
-        inference_rule_id: foreign.rule_id.clone(),
-        confidence: foreign.confidence,
-        handling_class: ForeignErrorHandlingClass::ChainPreserved,
-        resolution_id: ErrorHandlingResolutionId::MaintainExemplar,
-        resolution: "Reference pattern — tests and binaries surface foreign errors with miette \
+fn miette_surface_record(
+    foreign: &ForeignErrorTypeRecord,
+) -> CordialResult<ForeignErrorAttenuationRecord> {
+    record_from_foreign(
+        foreign,
+        ForeignErrorHandlingClass::ChainPreserved,
+        ErrorHandlingResolutionId::MaintainExemplar,
+        "Reference pattern — tests and binaries surface foreign errors with miette \
                       (`into_diagnostic`), not a crate `From` bridge."
             .to_string(),
-        kind: foreign.kind,
-        context: foreign.context.clone(),
-        file: foreign.file.clone(),
-        line: foreign.line,
-        source_snippet: foreign.source_snippet.clone(),
-        site_snippet: foreign.site_snippet.clone(),
-        good_pattern: foreign.site_snippet.clone(),
-        bad_pattern: String::new(),
-    }
+        foreign.site_snippet().clone(),
+        String::new(),
+    )
 }
 
 /// `std::fmt::Error` carries no diagnostic detail worth wrapping (unlike
@@ -276,50 +252,35 @@ fn miette_surface_record(foreign: &ForeignErrorTypeRecord) -> ForeignErrorAttenu
 /// exactly). There is no newtype to add: `?` is already the complete,
 /// correct, final handling every time.
 #[instrument(level = "debug", skip(foreign))]
-fn fmt_error_exemplar_record(foreign: &ForeignErrorTypeRecord) -> ForeignErrorAttenuationRecord {
-    ForeignErrorAttenuationRecord {
-        crate_name: foreign.crate_name.clone(),
-        foreign_error_type: foreign.foreign_error_type.clone(),
-        inference_rule_id: foreign.rule_id.clone(),
-        confidence: foreign.confidence,
-        handling_class: ForeignErrorHandlingClass::ChainPreserved,
-        resolution_id: ErrorHandlingResolutionId::MaintainExemplar,
-        resolution: "Reference pattern — std::fmt::Error carries no diagnostic detail to \
+fn fmt_error_exemplar_record(
+    foreign: &ForeignErrorTypeRecord,
+) -> CordialResult<ForeignErrorAttenuationRecord> {
+    record_from_foreign(
+        foreign,
+        ForeignErrorHandlingClass::ChainPreserved,
+        ErrorHandlingResolutionId::MaintainExemplar,
+        "Reference pattern — std::fmt::Error carries no diagnostic detail to \
                       preserve, and its producers (write!/writeln! against a Formatter or other \
                       fmt::Write sink) live in functions whose return type the fmt::Write/Display/\
                       Debug contract already fixes, so `?` is the complete, correct handling."
             .to_string(),
-        kind: foreign.kind,
-        context: foreign.context.clone(),
-        file: foreign.file.clone(),
-        line: foreign.line,
-        source_snippet: foreign.source_snippet.clone(),
-        site_snippet: foreign.site_snippet.clone(),
-        good_pattern: format!("{}?", foreign.source_snippet),
-        bad_pattern: String::new(),
-    }
+        format!("{}?", foreign.source_snippet()),
+        String::new(),
+    )
 }
 
 #[instrument(level = "debug", skip(foreign))]
-fn option_ok_neutral_record(foreign: &ForeignErrorTypeRecord) -> ForeignErrorAttenuationRecord {
-    ForeignErrorAttenuationRecord {
-        crate_name: foreign.crate_name.clone(),
-        foreign_error_type: foreign.foreign_error_type.clone(),
-        inference_rule_id: foreign.rule_id.clone(),
-        confidence: foreign.confidence,
-        handling_class: ForeignErrorHandlingClass::Neutral,
-        resolution_id: ErrorHandlingResolutionId::ManualReview,
-        resolution: "Option propagation (`.ok()?`) — not a foreign `Result` chain boundary."
-            .to_string(),
-        kind: foreign.kind,
-        context: foreign.context.clone(),
-        file: foreign.file.clone(),
-        line: foreign.line,
-        source_snippet: foreign.source_snippet.clone(),
-        site_snippet: foreign.site_snippet.clone(),
-        good_pattern: String::new(),
-        bad_pattern: foreign.site_snippet.clone(),
-    }
+fn option_ok_neutral_record(
+    foreign: &ForeignErrorTypeRecord,
+) -> CordialResult<ForeignErrorAttenuationRecord> {
+    record_from_foreign(
+        foreign,
+        ForeignErrorHandlingClass::Neutral,
+        ErrorHandlingResolutionId::ManualReview,
+        "Option propagation (`.ok()?`) — not a foreign `Result` chain boundary.".to_string(),
+        String::new(),
+        foreign.site_snippet().clone(),
+    )
 }
 
 #[instrument(level = "debug", skip(bridges))]
@@ -334,7 +295,7 @@ fn chain_break_resolution(
             "`{constructor}` already keeps `{foreign_error_type}` as source. Replace the \
              stringifying `.map_err` with `{good}`. Do not stringify into `String` or \
              `invariant(format!(…{{err}}))`.",
-            constructor = bridge.constructor,
+            constructor = bridge.constructor(),
         ),
         None => format!(
             "Introduce a crate error newtype (or enum variant) that holds `{foreign_error_type}` \
@@ -361,7 +322,7 @@ fn pending_infrastructure_resolution(
         Some(bridge) => format!(
             "`{constructor}` already keeps `{foreign_error_type}` as source, so `{good}` \
              preserves the chain.",
-            constructor = bridge.constructor,
+            constructor = bridge.constructor(),
         ),
         None => format!(
             "Add a crate error newtype that holds `{foreign_error_type}` as `source` and \
@@ -384,10 +345,10 @@ fn good_pattern_template(
     match find_bridge(bridges, foreign_error_type) {
         Some(bridge) => {
             let enum_name = bridge
-                .constructor
+                .constructor()
                 .rsplit_once("::")
                 .map(|(prefix, _)| prefix)
-                .unwrap_or(bridge.constructor.as_str());
+                .unwrap_or(bridge.constructor().as_str());
             format!("{source_snippet}.map_err({enum_name}::from)?")
         }
         None => format!("{source_snippet}.map_err(CrateError::from)?"),
@@ -401,5 +362,5 @@ fn find_bridge<'a>(
 ) -> Option<&'a ErrorBridgeHint> {
     bridges
         .iter()
-        .find(|bridge| bridge.foreign_type == foreign_error_type)
+        .find(|bridge| bridge.foreign_type() == foreign_error_type)
 }

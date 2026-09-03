@@ -68,16 +68,18 @@ impl Assessor for CfgHygieneAssessor {
                 .unwrap_or_else(|| session.project_root().to_path_buf());
             let span = FileSpan::new(file, line, 1);
 
-            findings.push(Box::new(CfgHygieneFinding {
-                rule: CfgHygieneRule::new(rule_id),
-                disposition: Disposition::Open,
-                anchor: crate::objects::NodeAnchor(node_id),
-                crate_name: ir.crate_name().to_string(),
-                cfg_name,
-                context,
-                span,
-                snippet,
-            }) as Box<dyn Finding>);
+            findings.push(Box::new(
+                CfgHygieneFinding::builder()
+                    .rule(CfgHygieneRule::new(rule_id))
+                    .disposition(Disposition::Open)
+                    .anchor(crate::objects::NodeAnchor(node_id))
+                    .crate_name(ir.crate_name().to_string())
+                    .cfg_name(cfg_name)
+                    .context(context)
+                    .span(span)
+                    .snippet(snippet)
+                    .build()?,
+            ) as Box<dyn Finding>);
         }
         Ok(findings)
     }

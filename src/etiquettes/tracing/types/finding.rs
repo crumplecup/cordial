@@ -10,28 +10,44 @@ use super::class::{
 use tracing::instrument;
 
 /// One discovered function before IR materialization.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct FunctionRecord {
-    pub crate_name: String,
-    pub qualified_name: String,
-    pub kind: FunctionKind,
-    pub visibility: VisibilityLabel,
-    pub file: String,
-    pub line: u32,
-    pub instrumented: bool,
+    crate_name: String,
+    qualified_name: String,
+    #[getter(copy)]
+    kind: FunctionKind,
+    visibility: VisibilityLabel,
+    file: String,
+    #[getter(copy)]
+    line: u32,
+    #[getter(copy)]
+    instrumented: bool,
     /// Function is reachable only from proof-only entry points. Uninstrumented
     /// proof-only functions are not recorded; instrumented ones are, so
     /// attenuation can tell the user to remove the span.
-    pub proof_only: bool,
+    #[getter(copy)]
+    proof_only: bool,
     /// At least one `#[instrument]` is *not* wrapped in
     /// `#[cfg_attr(not(<gate>), …)]` — a prover that sets that cfg will
     /// still expand it.
-    pub prover_visible_instrument: bool,
-    pub has_error_path_event: bool,
-    pub param_names: Vec<String>,
-    pub role: FunctionRole,
-    pub complexity: FunctionComplexity,
-    pub recipe: InstrumentRecipe,
+    #[getter(copy)]
+    prover_visible_instrument: bool,
+    #[getter(copy)]
+    has_error_path_event: bool,
+    param_names: Vec<String>,
+    #[getter(copy)]
+    role: FunctionRole,
+    #[getter(copy)]
+    complexity: FunctionComplexity,
+    recipe: InstrumentRecipe,
+}
+
+impl FunctionRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> FunctionRecordBuilder {
+        FunctionRecordBuilder::default()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,10 +136,10 @@ pub const MISSING_INSTRUMENT_LABEL: &str = "missing-instrument";
 pub const RECIPE_DELTA_LABEL: &str = "recipe-delta";
 pub const FORBIDDEN_INSTRUMENT_LABEL: &str = "forbidden-instrument";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct TracingMarker {
-    pub anchor: crate::objects::NodeAnchor,
-    pub label: String,
+    anchor: crate::objects::NodeAnchor,
+    label: String,
 }
 
 impl Marker for TracingMarker {
@@ -148,19 +164,31 @@ impl Marker for TracingMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct TracingFinding {
-    pub rule: TracingRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub qualified_name: String,
-    pub kind: FunctionKind,
-    pub role: FunctionRole,
-    pub complexity: FunctionComplexity,
-    pub recipe: InstrumentRecipe,
-    pub visibility: VisibilityLabel,
-    pub span: FileSpan,
+    rule: TracingRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    qualified_name: String,
+    #[getter(copy)]
+    kind: FunctionKind,
+    #[getter(copy)]
+    role: FunctionRole,
+    #[getter(copy)]
+    complexity: FunctionComplexity,
+    recipe: InstrumentRecipe,
+    visibility: VisibilityLabel,
+    span: FileSpan,
+}
+
+impl TracingFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> TracingFindingBuilder {
+        TracingFindingBuilder::default()
+    }
 }
 
 impl Finding for TracingFinding {
@@ -190,20 +218,20 @@ impl Finding for TracingFinding {
         sink.field("role", &self.role);
         sink.field("complexity", &self.complexity);
         sink.field("recipe", &self.recipe_field());
-        sink.field("level", &self.recipe.level);
-        sink.field("skip", &self.recipe.skip.join(","));
+        sink.field("level", &self.recipe.level());
+        sink.field("skip", &self.recipe.skip().join(","));
         sink.field(
             "err",
             &self
                 .recipe
-                .err
+                .err()
                 .map(|level| level.to_string())
                 .unwrap_or_default(),
         );
-        sink.field("ret", &self.recipe.ret);
+        sink.field("ret", &self.recipe.ret());
         sink.field("visibility", &self.visibility);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
     }
 }
 

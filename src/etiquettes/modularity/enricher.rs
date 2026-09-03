@@ -35,23 +35,23 @@ impl IrEnricher for ModularityInventoryEnricher {
 
         let crate_root = member_crate_root(source, session);
         let config = crate::config::load_session_config(session);
-        let records = scan_source_tree(&source.src_root, &crate_root, config.modularity())?;
+        let records = scan_source_tree(source.src_root(), &crate_root, config.modularity())?;
 
         for record in records {
-            let parent = match record.kind {
+            let parent = match record.kind() {
                 ModularityKind::Function | ModularityKind::ModuleSize
-                    if !record.context.is_empty() =>
+                    if !record.context().is_empty() =>
                 {
-                    resolve_parent(ir, &record.context)?
+                    resolve_parent(ir, record.context())?
                 }
                 _ => ir.root()?,
             };
-            let file = crate_root.join(&record.file);
-            let span = FileSpan::new(file.clone(), record.line, 1);
-            let label = if record.context.is_empty() {
-                record.file.display().to_string()
+            let file = crate_root.join(record.file());
+            let span = FileSpan::new(file.clone(), record.line(), 1);
+            let label = if record.context().is_empty() {
+                record.file().display().to_string()
             } else {
-                record.context.clone()
+                record.context().clone()
             };
             let node = ir.insert_node(
                 NodeWeight::new(NodeKind::Expr)
@@ -61,22 +61,30 @@ impl IrEnricher for ModularityInventoryEnricher {
             ir.set_attr(
                 node,
                 "modularity_kind",
-                serde_json::Value::String(record.kind.as_str().to_string()),
+                serde_json::Value::String(record.kind().as_str().to_string()),
             )?;
-            ir.set_attr(node, "context", serde_json::Value::String(record.context))?;
+            ir.set_attr(
+                node,
+                "context",
+                serde_json::Value::String(record.context().clone()),
+            )?;
             ir.set_attr(
                 node,
                 "file",
                 serde_json::Value::String(file.display().to_string()),
             )?;
-            ir.set_attr(node, "line", serde_json::Value::Number(record.line.into()))?;
+            ir.set_attr(
+                node,
+                "line",
+                serde_json::Value::Number(record.line().into()),
+            )?;
             ir.set_attr(
                 node,
                 "lines",
-                serde_json::Value::Number(record.lines.into()),
+                serde_json::Value::Number(record.lines().into()),
             )?;
-            if record.kind == ModularityKind::ModuleSize {
-                ir.set_attr(node, "inline", serde_json::Value::Bool(record.inline))?;
+            if record.kind() == ModularityKind::ModuleSize {
+                ir.set_attr(node, "inline", serde_json::Value::Bool(record.inline()))?;
             }
             ir.insert_edge(parent, node, EdgeKind::Contains)?;
         }

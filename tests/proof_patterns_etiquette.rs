@@ -79,7 +79,7 @@ fn scan_crate_finds_every_real_escape_hatch_and_broadcast() -> miette::Result<()
         .into_diagnostic()
         .wrap_err("scan")?;
 
-    let kinds: Vec<ProofPatternKind> = records.iter().map(|record| record.kind).collect();
+    let kinds: Vec<ProofPatternKind> = records.iter().map(|record| record.kind()).collect();
     assert!(kinds.contains(&ProofPatternKind::Axiom), "{kinds:?}");
     assert!(kinds.contains(&ProofPatternKind::Uninterp), "{kinds:?}");
     assert!(kinds.contains(&ProofPatternKind::Assume), "{kinds:?}");
@@ -94,10 +94,13 @@ fn scan_crate_finds_every_real_escape_hatch_and_broadcast() -> miette::Result<()
 
     let broadcast = records
         .iter()
-        .find(|record| record.kind == ProofPatternKind::Broadcast)
-        .expect("broadcast record present");
-    assert_eq!(broadcast.tracked_params, vec!["cred"]);
-    assert_eq!(broadcast.recommends, vec!["cred . is_valid ()"]);
+        .find(|record| record.kind() == ProofPatternKind::Broadcast)
+        .ok_or_else(|| miette::miette!("broadcast record present"))?;
+    assert_eq!(broadcast.tracked_params(), &vec!["cred".to_string()]);
+    assert_eq!(
+        broadcast.recommends(),
+        &vec!["cred . is_valid ()".to_string()]
+    );
     Ok(())
 }
 

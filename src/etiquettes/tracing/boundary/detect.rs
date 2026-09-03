@@ -137,7 +137,7 @@ fn instrument_has_err(attrs: &[Attribute]) -> bool {
             return false;
         };
         if last == "instrument" {
-            return parse_instrument_meta(&attr_meta_string(attr)).err;
+            return parse_instrument_meta(&attr_meta_string(attr)).err();
         }
         if last != "cfg_attr" {
             return false;
@@ -152,7 +152,7 @@ fn instrument_has_err(attrs: &[Attribute]) -> bool {
         let compact: String = inner.split_whitespace().collect();
         let rest = compact.strip_prefix("::").unwrap_or(compact.as_str());
         let rest = rest.strip_prefix("tracing::").unwrap_or(rest);
-        rest.starts_with("instrument") && parse_instrument_meta(rest).err
+        rest.starts_with("instrument") && parse_instrument_meta(rest).err()
     })
 }
 

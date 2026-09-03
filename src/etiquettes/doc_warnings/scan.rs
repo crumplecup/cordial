@@ -47,7 +47,7 @@ pub fn scan_crate_doc_warnings(
         return Ok(Vec::new());
     };
     let output = run_cargo_doc(&cargo, crate_root, crate_name, policy)?;
-    Ok(parse_doc_compiler_output(&output, resolve_root))
+    parse_doc_compiler_output(&output, resolve_root)
 }
 
 /// Parse cargo JSON and rustc-style rustdoc diagnostics. rustc lints
@@ -56,8 +56,11 @@ pub fn scan_crate_doc_warnings(
 /// joined against -- see [`scan_crate_doc_warnings`]'s own doc comment
 /// for why that's the workspace root, not necessarily the scanned
 /// crate's own root.
-#[instrument(level = "debug", skip(output))]
-pub fn parse_doc_compiler_output(output: &str, resolve_root: &Path) -> Vec<DocWarningRecord> {
+#[instrument(level = "debug", skip(output), err(level = "warn"))]
+pub fn parse_doc_compiler_output(
+    output: &str,
+    resolve_root: &Path,
+) -> CordialResult<Vec<DocWarningRecord>> {
     let mut records = Vec::new();
     let mut seen = BTreeSet::new();
     let lines: Vec<&str> = output.lines().collect();
@@ -72,7 +75,7 @@ pub fn parse_doc_compiler_output(output: &str, resolve_root: &Path) -> Vec<DocWa
                 file,
                 line,
                 message,
-            );
+            )?;
             index += 1;
             continue;
         }
@@ -92,17 +95,17 @@ pub fn parse_doc_compiler_output(output: &str, resolve_root: &Path) -> Vec<DocWa
             file,
             line,
             message,
-        );
+        )?;
         index += 1;
     }
     records.sort_by(|left, right| {
-        left.file
-            .cmp(&right.file)
-            .then(left.line.cmp(&right.line))
-            .then(left.snippet.cmp(&right.snippet))
-            .then(left.context.cmp(&right.context))
+        left.file()
+            .cmp(right.file())
+            .then(left.line().cmp(&right.line()))
+            .then(left.snippet().cmp(right.snippet()))
+            .then(left.context().cmp(right.context()))
     });
-    records
+    Ok(records)
 }
 
 #[instrument(level = "trace")]
@@ -188,18 +191,21 @@ fn push_record(
     file: String,
     line: u32,
     message: String,
-) {
+) -> CordialResult<()> {
     let key = (file.clone(), line, message.clone());
     if !seen.insert(key) {
-        return;
+        return Ok(());
     }
-    records.push(DocWarningRecord {
-        rule_id: DocWarningRuleId::Warning001,
-        context: lint,
-        file: resolve_diagnostic_file(resolve_root, &file),
-        line,
-        snippet: message,
-    });
+    records.push(
+        DocWarningRecord::builder()
+            .rule_id(DocWarningRuleId::Warning001)
+            .context(lint)
+            .file(resolve_diagnostic_file(resolve_root, &file))
+            .line(line)
+            .snippet(message)
+            .build()?,
+    );
+    Ok(())
 }
 
 #[instrument(level = "debug")]

@@ -54,9 +54,10 @@ impl Probe for CfgScatterSiteProbe {
 
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&CFG_SCATTER_SITES_QUERY) {
-            markers.push(Box::new(CfgScatterMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(CfgScatterMarker::new(crate::objects::NodeAnchor(node.id)))
+                    as Box<dyn Marker>,
+            );
         }
         Ok(markers)
     }

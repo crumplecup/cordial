@@ -34,7 +34,7 @@ pub use scan::{scan_crate_glob_imports, scan_rust_source};
 pub use types::GlobImportRuleId;
 
 use crate::etiquette::{
-    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_category,
 };
 use crate::objects::Finding;
@@ -64,35 +64,30 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in glob-imports etiquette bundle.
-pub static GLOB_IMPORTS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
-    etiquette: StaticEtiquette {
-        id: "glob_imports",
-        name: "Glob imports",
-        loaders: LOADERS,
-        enrichers: ENRICHERS,
-        probes: PROBES,
-        assessors: ASSESSORS,
-        workspace_assessors: None,
-        reporters: REPORTERS,
-        is_coverage: false,
-        explain: EtiquetteExplain {
-            summary: "Are there glob use trees (foo::*)?",
-            why: "Glob imports hide which names a file depends on and break completion. Explicit lists stay reviewable when code moves.",
-            logic: "Flags every * in a use item, including pub use, use super::*, and nested use foo::{bar, *}.",
-            opt_out: "`[glob_imports] enabled = false` in cordial.toml.",
-            rules: &[EtiquetteRuleExplain {
-                id: "GLOB-IMPORT-001",
-                summary: "A glob `use` tree",
-            }],
-        },
-    },
-    quality_area: Some(QualityAreaSpec {
-        title: "Glob imports",
-        checklist: "glob-imports.checklist.md",
-        summary: "glob-imports-summary.md",
-        compute: quality_area_compute,
-    }),
-};
+pub static GLOB_IMPORTS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
+    StaticEtiquette::new(
+        "glob_imports",
+        "Glob imports",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        false,
+        EtiquetteExplain::new(
+            "Are there glob use trees (foo::*)?",
+            "Glob imports hide which names a file depends on and break completion. Explicit lists stay reviewable when code moves.",
+            "Flags every * in a use item, including pub use, use super::*, and nested use foo::{bar, *}.",
+            "`[glob_imports] enabled = false` in cordial.toml.",
+            &[EtiquetteRuleExplain::new(
+                "GLOB-IMPORT-001",
+                "A glob `use` tree",
+            )],
+        ),
+    ),
+    Some(QualityAreaSpec::new(
+        "Glob imports",
+        "glob-imports.checklist.md",
+        "glob-imports-summary.md",
+        quality_area_compute,
+    )),
+);
 
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {

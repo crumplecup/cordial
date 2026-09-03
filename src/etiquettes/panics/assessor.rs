@@ -1,7 +1,7 @@
 use crate::enricher::resolve_source_path;
 use crate::error::CordialResult;
 use crate::hooks::{AssessView, Assessor};
-use crate::objects::{Disposition, FileSpan, Finding};
+use crate::objects::{Disposition, FileSpan, Finding, SourceSpan};
 use crate::plugin::ErrorSurface;
 
 use super::types::{PanicFinding, PanicKind, PanicRule};
@@ -68,19 +68,21 @@ impl Assessor for PanicAssessor {
             let surface = if cfg_test {
                 ErrorSurface::Test
             } else {
-                ErrorSurface::from_path(&span.file)
+                ErrorSurface::from_path(span.file())
             };
-            findings.push(Box::new(PanicFinding {
-                rule: PanicRule::new(kind),
-                disposition: Disposition::Open,
-                anchor: crate::objects::NodeAnchor(node_id),
-                crate_name: ir.crate_name().to_string(),
-                context,
-                span,
-                snippet,
-                surface,
-                checklist: true,
-            }) as Box<dyn Finding>);
+            findings.push(Box::new(
+                PanicFinding::builder()
+                    .rule(PanicRule::new(kind))
+                    .disposition(Disposition::Open)
+                    .anchor(crate::objects::NodeAnchor(node_id))
+                    .crate_name(ir.crate_name().to_string())
+                    .context(context)
+                    .span(span)
+                    .snippet(snippet)
+                    .surface(surface)
+                    .checklist(true)
+                    .build()?,
+            ) as Box<dyn Finding>);
         }
         Ok(findings)
     }

@@ -38,7 +38,7 @@ pub use types::{
 use crate::SourceLoader;
 use crate::enricher::ERROR_IR_ENRICHERS;
 use crate::etiquette::{
-    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, finding_field, open_findings,
 };
 use crate::objects::Finding;
@@ -67,35 +67,30 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in foreign error types etiquette bundle.
-pub static FOREIGN_ERROR_TYPES_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
-    etiquette: StaticEtiquette {
-        id: "foreign_error_types",
-        name: "Foreign error types",
-        loaders: LOADERS,
-        enrichers: ENRICHERS,
-        probes: PROBES,
-        assessors: ASSESSORS,
-        workspace_assessors: None,
-        reporters: REPORTERS,
-        is_coverage: false,
-        explain: EtiquetteExplain {
-            summary: "Which foreign E types leak onto this crate's Result surface?",
-            why: "A public Result<_, io::Error> (or syn::Error, …) couples callers to an upstream type we do not control. Naming those types is the input to attenuation.",
-            logic: "From partitioned error sites, lists foreign E types (and confidence) that leak into this crate instead of being wrapped. Checklist focuses on chain breaks; a second checklist covers other / edge partition candidates. Typed site rule ids are the inferred type name plus chain-break class.",
-            opt_out: "`[foreign_error_types] enabled = false` in cordial.toml.",
-            rules: &[EtiquetteRuleExplain {
-                id: "FOREIGN-ERROR-CANDIDATE",
-                summary: "Other / edge partition candidate",
-            }],
-        },
-    },
-    quality_area: Some(QualityAreaSpec {
-        title: "Foreign error types",
-        checklist: "foreign-error-types.checklist.md",
-        summary: "foreign-error-types-summary.md",
-        compute: quality_area_compute,
-    }),
-};
+pub static FOREIGN_ERROR_TYPES_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
+    StaticEtiquette::new(
+        "foreign_error_types",
+        "Foreign error types",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        false,
+        EtiquetteExplain::new(
+            "Which foreign E types leak onto this crate's Result surface?",
+            "A public Result<_, io::Error> (or syn::Error, …) couples callers to an upstream type we do not control. Naming those types is the input to attenuation.",
+            "From partitioned error sites, lists foreign E types (and confidence) that leak into this crate instead of being wrapped. Checklist focuses on chain breaks; a second checklist covers other / edge partition candidates. Typed site rule ids are the inferred type name plus chain-break class.",
+            "`[foreign_error_types] enabled = false` in cordial.toml.",
+            &[EtiquetteRuleExplain::new(
+                "FOREIGN-ERROR-CANDIDATE",
+                "Other / edge partition candidate",
+            )],
+        ),
+    ),
+    Some(QualityAreaSpec::new(
+        "Foreign error types",
+        "foreign-error-types.checklist.md",
+        "foreign-error-types-summary.md",
+        quality_area_compute,
+    )),
+);
 
 /// Chain breaks: a typed (not merely candidate) foreign error record
 /// whose `.map_err` drops or stringifies the source, matching

@@ -126,11 +126,11 @@ pub(super) fn file_module_inputs(rows: &[&ModularityRow]) -> Vec<ModuleSizeInput
     rows.iter()
         .filter(|row| row.kind == "MODULARITY-MODULE-SIZE" && row.inline != "true")
         .filter_map(|row| {
-            Some(ModuleSizeInput {
-                path: row.context.clone(),
-                file: row.file.clone(),
-                lines: row.lines.parse().ok()?,
-            })
+            Some(ModuleSizeInput::new(
+                row.context.clone(),
+                row.file.clone(),
+                row.lines.parse().ok()?,
+            ))
         })
         .collect()
 }

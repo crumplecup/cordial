@@ -46,12 +46,12 @@ impl Assessor for TracingAssessor {
 
         let mut findings = Vec::new();
         for marker in markers {
-            let Some(parsed) = ParsedFn::from_marker(*marker, ir, session) else {
+            let Some(parsed) = ParsedFn::from_marker(*marker, ir, session)? else {
                 continue;
             };
             match marker.label() {
                 MISSING_INSTRUMENT_LABEL => {
-                    findings.push(parsed.into_finding(TracingRuleKind::MissingInstrument));
+                    findings.push(parsed.into_finding(TracingRuleKind::MissingInstrument)?);
                 }
                 RECIPE_DELTA_LABEL => {
                     let present = present_instrument(ir, parsed.anchor.0).unwrap_or_default();
@@ -65,12 +65,12 @@ impl Assessor for TracingAssessor {
                         },
                     );
                     for kind in kinds {
-                        findings.push(parsed.clone().into_finding(kind));
+                        findings.push(parsed.clone().into_finding(kind)?);
                     }
                 }
                 FORBIDDEN_INSTRUMENT_LABEL => {
                     let kind = parsed.forbidden_kind();
-                    findings.push(parsed.into_finding(kind));
+                    findings.push(parsed.into_finding(kind)?);
                 }
                 _ => {}
             }
@@ -97,14 +97,16 @@ struct ParsedFn {
 }
 
 impl ParsedFn {
-    #[instrument(level = "debug", skip(marker, ir, session))]
+    #[instrument(level = "debug", skip(marker, ir, session), err(level = "warn"))]
     fn from_marker(
         marker: &dyn Marker,
         ir: &dyn IrView,
         session: &dyn SessionView,
-    ) -> Option<Self> {
+    ) -> CordialResult<Option<Self>> {
         let node_id = marker.anchor().node_id();
-        let node = ir.node(node_id)?;
+        let Some(node) = ir.node(node_id) else {
+            return Ok(None);
+        };
         let attr = |key: &str| {
             node.attr(key)
                 .and_then(|value| value.as_str())
@@ -128,18 +130,20 @@ impl ParsedFn {
         let role = FunctionRole::from_attr(attr("function_role")).unwrap_or(FunctionRole::Other);
         let complexity = FunctionComplexity::from_attr(attr("function_complexity"))
             .unwrap_or(FunctionComplexity::Linear);
-        let recipe = InstrumentRecipe {
-            level: InstrumentLevel::from_attr(attr("recipe_level"))
-                .unwrap_or(InstrumentLevel::Debug),
-            skip: csv_list(attr("recipe_skip")),
-            fields: csv_list(attr("recipe_fields")),
-            err: InstrumentLevel::from_attr(attr("recipe_err")),
-            ret: node
-                .attr("recipe_ret")
-                .and_then(|value| value.as_bool())
-                .unwrap_or(false),
-        };
-        Some(Self {
+        let recipe = InstrumentRecipe::builder()
+            .level(
+                InstrumentLevel::from_attr(attr("recipe_level")).unwrap_or(InstrumentLevel::Debug),
+            )
+            .skip(csv_list(attr("recipe_skip")))
+            .fields(csv_list(attr("recipe_fields")))
+            .err(InstrumentLevel::from_attr(attr("recipe_err")))
+            .ret(
+                node.attr("recipe_ret")
+                    .and_then(|value| value.as_bool())
+                    .unwrap_or(false),
+            )
+            .build()?;
+        Ok(Some(Self {
             anchor: crate::objects::NodeAnchor(node_id),
             crate_name: ir.crate_name().to_string(),
             qualified_name,
@@ -159,7 +163,7 @@ impl ParsedFn {
                 .and_then(|value| value.as_bool())
                 .unwrap_or(false),
             apply_policy: attr("tracing_apply_policy").to_string(),
-        })
+        }))
     }
 
     #[instrument(level = "debug", skip(self))]
@@ -173,21 +177,23 @@ impl ParsedFn {
         }
     }
 
-    #[instrument(level = "debug", skip(self, kind))]
-    fn into_finding(self, kind: TracingRuleKind) -> Box<dyn Finding> {
-        Box::new(TracingFinding {
-            rule: TracingRule::new(kind),
-            disposition: Disposition::Open,
-            anchor: self.anchor,
-            crate_name: self.crate_name,
-            qualified_name: self.qualified_name,
-            kind: self.kind,
-            role: self.role,
-            complexity: self.complexity,
-            recipe: self.recipe,
-            visibility: self.visibility,
-            span: self.span,
-        })
+    #[instrument(level = "debug", skip(self, kind), err(level = "warn"))]
+    fn into_finding(self, kind: TracingRuleKind) -> CordialResult<Box<dyn Finding>> {
+        Ok(Box::new(
+            TracingFinding::builder()
+                .rule(TracingRule::new(kind))
+                .disposition(Disposition::Open)
+                .anchor(self.anchor)
+                .crate_name(self.crate_name)
+                .qualified_name(self.qualified_name)
+                .kind(self.kind)
+                .role(self.role)
+                .complexity(self.complexity)
+                .recipe(self.recipe)
+                .visibility(self.visibility)
+                .span(self.span)
+                .build()?,
+        ))
     }
 }
 

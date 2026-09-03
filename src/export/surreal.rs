@@ -63,7 +63,7 @@ impl SurrealGraphExport {
             .map(|(from, to, weight)| SurrealEdge {
                 from: node_id(snapshot.crate_name.as_str(), *from as usize),
                 to: node_id(snapshot.crate_name.as_str(), *to as usize),
-                kind: format_edge_kind(weight.kind),
+                kind: format_edge_kind(weight.kind()),
             })
             .collect();
 

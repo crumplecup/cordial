@@ -39,7 +39,10 @@ pub(super) fn append_hierarchy_sections(
         for band in order_bands(&tree) {
             body.push_str(&format!(
                 "| {} | {} | {:.1} | {:.1} |\n",
-                band.order, band.count, band.mean_own, band.mean_subtree
+                band.order(),
+                band.count(),
+                band.mean_own(),
+                band.mean_subtree()
             ));
         }
         body.push('\n');
@@ -89,17 +92,17 @@ fn append_ranked_branches(
         body.push_str("| Branch | Order | Own | Subtree | Top-heavy | Hit |\n");
         body.push_str("| --- | ---: | ---: | ---: | ---: | --- |\n");
         for node in branches {
-            let hit = if thresholds.is_top_heavy_hit(node.own_lines, node.subtree_lines) {
+            let hit = if thresholds.is_top_heavy_hit(node.own_lines(), node.subtree_lines()) {
                 "yes"
             } else {
                 ""
             };
             body.push_str(&format!(
                 "| `{}` | {} | {} | {} | {:.2} | {hit} |\n",
-                node.path,
-                node.order,
-                node.own_lines,
-                node.subtree_lines,
+                node.path(),
+                node.order(),
+                node.own_lines(),
+                node.subtree_lines(),
                 node.top_heavy()
             ));
         }
@@ -131,9 +134,9 @@ fn append_fat_leaves(body: &mut String, modules: &[&ModularityRow], names: &[Str
     rows.sort_by(|left, right| {
         right
             .1
-            .own_lines
-            .cmp(&left.1.own_lines)
-            .then_with(|| left.1.path.cmp(&right.1.path))
+            .own_lines()
+            .cmp(&left.1.own_lines())
+            .then_with(|| left.1.path().cmp(right.1.path()))
     });
     rows.truncate(SUMMARY_RANK_ROWS);
     if rows.is_empty() {
@@ -145,7 +148,9 @@ fn append_fat_leaves(body: &mut String, modules: &[&ModularityRow], names: &[Str
     for (crate_name, node) in rows {
         body.push_str(&format!(
             "| `{crate_name}` | `{}` | `{}` | {} |\n",
-            node.path, node.file, node.own_lines
+            node.path(),
+            node.file(),
+            node.own_lines()
         ));
     }
     body.push('\n');
@@ -170,7 +175,7 @@ fn append_top_heavy_parents(
     for crate_name in names {
         let tree = crate_tree(modules, crate_name);
         for node in top_heavy_parents(&tree) {
-            if thresholds.is_top_heavy_hit(node.own_lines, node.subtree_lines)
+            if thresholds.is_top_heavy_hit(node.own_lines(), node.subtree_lines())
                 || node.top_heavy() >= f64::from(thresholds.top_heavy_min_percent()) / 100.0
             {
                 rows.push((crate_name.clone(), node.clone()));
@@ -182,8 +187,8 @@ fn append_top_heavy_parents(
             .1
             .top_heavy()
             .total_cmp(&left.1.top_heavy())
-            .then_with(|| right.1.own_lines.cmp(&left.1.own_lines))
-            .then_with(|| left.1.path.cmp(&right.1.path))
+            .then_with(|| right.1.own_lines().cmp(&left.1.own_lines()))
+            .then_with(|| left.1.path().cmp(right.1.path()))
     });
     rows.truncate(SUMMARY_RANK_ROWS);
     if rows.is_empty() {
@@ -193,18 +198,18 @@ fn append_top_heavy_parents(
     body.push_str("| Crate | Module | Own | Subtree | Top-heavy | Children | Hit |\n");
     body.push_str("| --- | --- | ---: | ---: | ---: | ---: | --- |\n");
     for (crate_name, node) in rows {
-        let hit = if thresholds.is_top_heavy_hit(node.own_lines, node.subtree_lines) {
+        let hit = if thresholds.is_top_heavy_hit(node.own_lines(), node.subtree_lines()) {
             "yes"
         } else {
             ""
         };
         body.push_str(&format!(
             "| `{crate_name}` | `{}` | {} | {} | {:.2} | {} | {hit} |\n",
-            node.path,
-            node.own_lines,
-            node.subtree_lines,
+            node.path(),
+            node.own_lines(),
+            node.subtree_lines(),
             node.top_heavy(),
-            node.child_count
+            node.child_count()
         ));
     }
     body.push('\n');
@@ -229,8 +234,8 @@ fn append_lopsided(
     for crate_name in names {
         let tree = crate_tree(modules, crate_name);
         for imbalance in lopsided_siblings(&tree, thresholds.hierarchy_min_lines()) {
-            if thresholds.is_lopsided_hit(imbalance.largest_subtree, imbalance.sibling_total)
-                || imbalance.share >= f64::from(thresholds.lopsided_min_percent()) / 100.0
+            if thresholds.is_lopsided_hit(imbalance.largest_subtree(), imbalance.sibling_total())
+                || imbalance.share() >= f64::from(thresholds.lopsided_min_percent()) / 100.0
             {
                 rows.push((crate_name.clone(), imbalance));
             }
@@ -239,10 +244,10 @@ fn append_lopsided(
     rows.sort_by(|left, right| {
         right
             .1
-            .share
-            .total_cmp(&left.1.share)
-            .then_with(|| right.1.largest_subtree.cmp(&left.1.largest_subtree))
-            .then_with(|| left.1.parent.cmp(&right.1.parent))
+            .share()
+            .total_cmp(&left.1.share())
+            .then_with(|| right.1.largest_subtree().cmp(&left.1.largest_subtree()))
+            .then_with(|| left.1.parent().cmp(right.1.parent()))
     });
     rows.truncate(SUMMARY_RANK_ROWS);
     if rows.is_empty() {
@@ -255,19 +260,19 @@ fn append_lopsided(
     body.push_str("| Crate | Parent | Dominant child | Child subtree | Share | Siblings | Hit |\n");
     body.push_str("| --- | --- | --- | ---: | ---: | ---: | --- |\n");
     for (crate_name, imbalance) in rows {
-        let hit = if thresholds.is_lopsided_hit(imbalance.largest_subtree, imbalance.sibling_total)
-        {
-            "yes"
-        } else {
-            ""
-        };
+        let hit =
+            if thresholds.is_lopsided_hit(imbalance.largest_subtree(), imbalance.sibling_total()) {
+                "yes"
+            } else {
+                ""
+            };
         body.push_str(&format!(
             "| `{crate_name}` | `{}` | `{}` | {} | {:.2} | {} | {hit} |\n",
-            imbalance.parent,
-            imbalance.largest,
-            imbalance.largest_subtree,
-            imbalance.share,
-            imbalance.sibling_count
+            imbalance.parent(),
+            imbalance.largest(),
+            imbalance.largest_subtree(),
+            imbalance.share(),
+            imbalance.sibling_count()
         ));
     }
     body.push('\n');
@@ -291,7 +296,7 @@ fn append_unary_nests(
     for crate_name in names {
         let tree = crate_tree(modules, crate_name);
         for nest in unary_nests(&tree, thresholds.hierarchy_min_lines()) {
-            if thresholds.is_collapse_hit(nest.passthrough_subtree) {
+            if thresholds.is_collapse_hit(nest.passthrough_subtree()) {
                 rows.push((crate_name.clone(), nest));
             }
         }
@@ -299,9 +304,9 @@ fn append_unary_nests(
     rows.sort_by(|left, right| {
         right
             .1
-            .passthrough_subtree
-            .cmp(&left.1.passthrough_subtree)
-            .then_with(|| left.1.passthrough.cmp(&right.1.passthrough))
+            .passthrough_subtree()
+            .cmp(&left.1.passthrough_subtree())
+            .then_with(|| left.1.passthrough().cmp(right.1.passthrough()))
     });
     rows.truncate(SUMMARY_RANK_ROWS);
     if rows.is_empty() {
@@ -311,18 +316,18 @@ fn append_unary_nests(
     body.push_str("| Crate | Parent | Passthrough | Own | Subtree | Grandchildren | Hit |\n");
     body.push_str("| --- | --- | --- | ---: | ---: | ---: | --- |\n");
     for (crate_name, nest) in rows {
-        let hit = if thresholds.is_collapse_hit(nest.passthrough_subtree) {
+        let hit = if thresholds.is_collapse_hit(nest.passthrough_subtree()) {
             "yes"
         } else {
             ""
         };
         body.push_str(&format!(
             "| `{crate_name}` | `{}` | `{}` | {} | {} | {} | {hit} |\n",
-            nest.parent,
-            nest.passthrough,
-            nest.passthrough_own,
-            nest.passthrough_subtree,
-            nest.grandchildren.len()
+            nest.parent(),
+            nest.passthrough(),
+            nest.passthrough_own(),
+            nest.passthrough_subtree(),
+            nest.grandchildren().len()
         ));
     }
     body.push('\n');

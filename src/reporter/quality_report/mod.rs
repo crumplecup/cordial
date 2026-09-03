@@ -94,13 +94,13 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
         let Some(spec) = etiquette.quality_area() else {
             continue;
         };
-        let (open_items, detail) = (spec.compute)(findings);
+        let (open_items, detail) = (spec.compute())(findings);
         areas.push(quality_area(
             priority,
-            spec.title,
+            spec.title(),
             open_items,
-            spec.checklist,
-            spec.summary,
+            spec.checklist(),
+            spec.summary(),
             detail,
         ));
         priority += 1;

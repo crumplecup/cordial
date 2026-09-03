@@ -28,7 +28,7 @@ pub fn discover_crate_targets(
     };
 
     targets = apply_target_filter(targets, filter);
-    targets.sort_by(|a, b| a.crate_name.cmp(&b.crate_name));
+    targets.sort_by(|a, b| a.crate_name().cmp(b.crate_name()));
     Ok(targets)
 }
 
@@ -77,7 +77,7 @@ pub fn discover_run_crate_targets(
         || !plugins_in_category(&active_plugins, PluginCategory::ErrorHandling).is_empty()
     {
         for target in &filtered_workspace_targets {
-            crate_names.insert(target.crate_name.clone());
+            crate_names.insert(target.crate_name().clone());
         }
     }
 
@@ -87,9 +87,9 @@ pub fn discover_run_crate_targets(
 
     let mut targets: Vec<CrateTarget> = all_workspace_targets
         .into_iter()
-        .filter(|target| crate_names.contains(&target.crate_name))
+        .filter(|target| crate_names.contains(target.crate_name()))
         .collect();
-    targets.sort_by(|a, b| a.crate_name.cmp(&b.crate_name));
+    targets.sort_by(|a, b| a.crate_name().cmp(b.crate_name()));
     Ok(targets)
 }
 
@@ -135,13 +135,13 @@ fn apply_target_filter(targets: Vec<CrateTarget>, filter: &dyn RunFilter) -> Vec
     if let Some(name) = filter.crate_name() {
         return targets
             .into_iter()
-            .filter(|target| target.crate_name == name)
+            .filter(|target| target.crate_name() == name)
             .collect();
     }
     if let Some(names) = filter.crates() {
         return targets
             .into_iter()
-            .filter(|target| names.iter().any(|name| *name == target.crate_name))
+            .filter(|target| names.iter().any(|name| *name == target.crate_name()))
             .collect();
     }
     targets

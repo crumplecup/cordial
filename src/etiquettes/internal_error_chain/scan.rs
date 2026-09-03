@@ -20,19 +20,18 @@ pub fn scan_crate_internal_error_chain(
     crate_name: &str,
 ) -> CordialResult<InternalErrorChainScanReport> {
     let type_graph = scan_crate_internal_error_type_graph(crate_root, crate_name)?;
-    let mut compliance = scan_crate_internal_error_compliance(crate_root, crate_name)?;
-    compliance
-        .findings
-        .extend(scan_crate_error_architecture(crate_root, crate_name)?);
-    compliance.findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.rule_id.to_string().cmp(&b.rule_id.to_string()))
+    let compliance = scan_crate_internal_error_compliance(crate_root, crate_name)?;
+    let mut findings = compliance.findings().clone();
+    findings.extend(scan_crate_error_architecture(crate_root, crate_name)?);
+    findings.sort_by(|a, b| {
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.rule_id().to_string().cmp(&b.rule_id().to_string()))
     });
-    Ok(InternalErrorChainScanReport {
-        crate_name: crate_name.to_string(),
+    Ok(InternalErrorChainScanReport::new(
+        crate_name.to_string(),
         type_graph,
-        compliance,
-    })
+        super::types::InternalErrorComplianceReport::new(crate_name.to_string(), findings),
+    ))
 }

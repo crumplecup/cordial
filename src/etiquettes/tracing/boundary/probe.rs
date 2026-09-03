@@ -62,9 +62,10 @@ impl Probe for BoundarySiteProbe {
                 continue;
             }
 
-            markers.push(Box::new(BoundaryMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(BoundaryMarker::new(crate::objects::NodeAnchor(node.id)))
+                    as Box<dyn Marker>,
+            );
         }
         Ok(markers)
     }

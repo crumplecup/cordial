@@ -19,21 +19,57 @@ use super::preds::{
     static_ref_field_snippet, truncate_snippet, type_contains_disallowed_static_ref,
     type_is_location_capture, type_label, unused_argument_bindings,
 };
+use crate::error::CordialResult;
 use crate::etiquettes::antipatterns::types::{AntipatternRuleId, AntipatternSiteRecord};
 
 use tracing::instrument;
 pub(super) struct AntipatternScanVisitor<'a> {
-    pub(super) file: PathBuf,
-    pub(super) crate_root: PathBuf,
-    pub(super) module_prefix: Vec<String>,
-    pub(super) impl_type: Option<String>,
-    pub(super) fn_stack: Vec<String>,
-    pub(super) in_trait_definition: bool,
-    pub(super) in_foreign_trait_impl: bool,
-    pub(super) local_trait_names: &'a HashSet<String>,
-    pub(super) const_placed_types: &'a HashSet<String>,
-    pub(super) cfg_sibling_real_params: HashMap<String, HashSet<String>>,
-    pub(super) findings: Vec<AntipatternSiteRecord>,
+    file: PathBuf,
+    crate_root: PathBuf,
+    module_prefix: Vec<String>,
+    impl_type: Option<String>,
+    fn_stack: Vec<String>,
+    in_trait_definition: bool,
+    in_foreign_trait_impl: bool,
+    local_trait_names: &'a HashSet<String>,
+    const_placed_types: &'a HashSet<String>,
+    cfg_sibling_real_params: HashMap<String, HashSet<String>>,
+    findings: Vec<AntipatternSiteRecord>,
+    error: Option<crate::error::CordialError>,
+}
+
+impl<'a> AntipatternScanVisitor<'a> {
+    #[instrument(level = "debug", skip(local_trait_names, const_placed_types))]
+    pub(super) fn new(
+        file: PathBuf,
+        crate_root: PathBuf,
+        module_prefix: Vec<String>,
+        local_trait_names: &'a HashSet<String>,
+        const_placed_types: &'a HashSet<String>,
+    ) -> Self {
+        Self {
+            file,
+            crate_root,
+            module_prefix,
+            impl_type: None,
+            fn_stack: Vec::new(),
+            in_trait_definition: false,
+            in_foreign_trait_impl: false,
+            local_trait_names,
+            const_placed_types,
+            cfg_sibling_real_params: HashMap::new(),
+            findings: Vec::new(),
+            error: None,
+        }
+    }
+
+    #[instrument(level = "debug", skip(self))]
+    pub(super) fn into_findings(self) -> CordialResult<Vec<AntipatternSiteRecord>> {
+        if let Some(error) = self.error {
+            return Err(error);
+        }
+        Ok(self.findings)
+    }
 }
 
 impl AntipatternScanVisitor<'_> {
@@ -52,6 +88,29 @@ impl AntipatternScanVisitor<'_> {
     }
 
     #[instrument(level = "trace", skip(self))]
+    fn push_record(
+        &mut self,
+        rule_id: AntipatternRuleId,
+        context: String,
+        line: u32,
+        snippet: String,
+    ) {
+        if self.error.is_some() {
+            return;
+        }
+        match AntipatternSiteRecord::builder()
+            .rule_id(rule_id)
+            .context(context)
+            .file(self.rel_file())
+            .line(line)
+            .snippet(snippet)
+            .build()
+        {
+            Ok(record) => self.findings.push(record),
+            Err(error) => self.error = Some(error),
+        }
+    }
+
     fn rel_file(&self) -> PathBuf {
         self.file
             .strip_prefix(&self.crate_root)
@@ -64,13 +123,12 @@ impl AntipatternScanVisitor<'_> {
         let Some(trait_obj) = box_dyn_error_trait_object(ty) else {
             return;
         };
-        self.findings.push(AntipatternSiteRecord {
-            rule_id: AntipatternRuleId::BoxDynError001,
-            context: self.site_context(),
-            file: self.rel_file(),
-            line: ty.span().start().line as u32,
-            snippet: box_dyn_error_snippet(trait_obj),
-        });
+        self.push_record(
+            AntipatternRuleId::BoxDynError001,
+            self.site_context(),
+            ty.span().start().line as u32,
+            box_dyn_error_snippet(trait_obj),
+        );
     }
 
     #[instrument(level = "debug", skip(self, ty))]
@@ -81,13 +139,12 @@ impl AntipatternScanVisitor<'_> {
         if !is_stringish_error_type(error_ty) {
             return;
         }
-        self.findings.push(AntipatternSiteRecord {
-            rule_id: AntipatternRuleId::StringError001,
-            context: self.site_context(),
-            file: self.rel_file(),
-            line: ty.span().start().line as u32,
-            snippet: truncate_snippet(&result_string_error_snippet(ty), 96),
-        });
+        self.push_record(
+            AntipatternRuleId::StringError001,
+            self.site_context(),
+            ty.span().start().line as u32,
+            truncate_snippet(&result_string_error_snippet(ty), 96),
+        );
     }
 
     #[instrument(level = "debug", skip(self, ty))]
@@ -99,13 +156,12 @@ impl AntipatternScanVisitor<'_> {
         if !type_is_location_capture(ty) && self.const_placed_types.contains(type_name) {
             return;
         }
-        self.findings.push(AntipatternSiteRecord {
-            rule_id: AntipatternRuleId::StructStaticRef001,
-            context: self.adt_field_context(owner, field_name),
-            file: self.rel_file(),
-            line: ty.span().start().line as u32,
-            snippet: static_ref_field_snippet(ty),
-        });
+        self.push_record(
+            AntipatternRuleId::StructStaticRef001,
+            self.adt_field_context(owner, field_name),
+            ty.span().start().line as u32,
+            static_ref_field_snippet(ty),
+        );
     }
 
     #[instrument(level = "debug", skip(self, variant))]
@@ -156,24 +212,26 @@ impl AntipatternScanVisitor<'_> {
         let real_names_elsewhere = self
             .fn_stack
             .last()
-            .and_then(|name| self.cfg_sibling_real_params.get(name));
+            .and_then(|name| self.cfg_sibling_real_params.get(name))
+            .cloned();
         for arg in &sig.inputs {
             let FnArg::Typed(pat_type) = arg else {
                 continue;
             };
             for binding in unused_argument_bindings(&pat_type.pat) {
                 if let Some(unprefixed) = binding.snippet.strip_prefix('_')
-                    && real_names_elsewhere.is_some_and(|names| names.contains(unprefixed))
+                    && real_names_elsewhere
+                        .as_ref()
+                        .is_some_and(|names| names.contains(unprefixed))
                 {
                     continue;
                 }
-                self.findings.push(AntipatternSiteRecord {
-                    rule_id: AntipatternRuleId::UnusedUnderscoreArg001,
-                    context: self.site_context(),
-                    file: self.rel_file(),
-                    line: binding.line,
-                    snippet: binding.snippet,
-                });
+                self.push_record(
+                    AntipatternRuleId::UnusedUnderscoreArg001,
+                    self.site_context(),
+                    binding.line,
+                    binding.snippet,
+                );
             }
         }
     }

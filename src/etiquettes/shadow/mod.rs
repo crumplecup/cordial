@@ -25,7 +25,7 @@ pub use reporter::{
 };
 pub use workspace_assessor::CrossCrateShadowWorkspaceAssessor;
 
-use crate::etiquette::{EtiquetteExplain, EtiquetteRuleExplain, StaticEtiquette};
+use crate::etiquette::{EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, StaticEtiquette};
 use crate::{RustdocLoader, ShadowLinkEnricher};
 
 static RUSTDOC_LOADER: RustdocLoader = RustdocLoader;
@@ -53,24 +53,26 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in shadow mirror coverage etiquette bundle.
-pub static SHADOW_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "shadow",
-    name: "Shadow mirrors",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: Some(WORKSPACE_ASSESSORS),
-    reporters: REPORTERS,
-    is_coverage: true,
-    explain: EtiquetteExplain {
-        summary: "Do shadow crates mirror upstream items?",
-        why: "Shadow crates are the elicitation adapter for crates we do not own. Missing mirrors mean the tracked target is incomplete even when rustdoc for the upstream crate is present.",
-        logic: "Pairs an upstream crate with its shadow crate and reports types/methods that exist upstream but are not mirrored, including a workspace-level pass. Needs cordial build rustdoc.",
-        opt_out: "`[shadow] enabled = false` in cordial.toml.",
-        rules: &[EtiquetteRuleExplain {
-            id: "SHADOW-MISSING-MIRROR",
-            summary: "Upstream item lacks a shadow mirror",
-        }],
-    },
-};
+pub static SHADOW_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
+    "shadow",
+    "Shadow mirrors",
+    EtiquetteHooks::new(
+        LOADERS,
+        ENRICHERS,
+        PROBES,
+        ASSESSORS,
+        Some(WORKSPACE_ASSESSORS),
+        REPORTERS,
+    ),
+    true,
+    EtiquetteExplain::new(
+        "Do shadow crates mirror upstream items?",
+        "Shadow crates are the elicitation adapter for crates we do not own. Missing mirrors mean the tracked target is incomplete even when rustdoc for the upstream crate is present.",
+        "Pairs an upstream crate with its shadow crate and reports types/methods that exist upstream but are not mirrored, including a workspace-level pass. Needs cordial build rustdoc.",
+        "`[shadow] enabled = false` in cordial.toml.",
+        &[EtiquetteRuleExplain::new(
+            "SHADOW-MISSING-MIRROR",
+            "Upstream item lacks a shadow mirror",
+        )],
+    ),
+);

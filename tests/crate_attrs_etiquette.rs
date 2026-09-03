@@ -35,7 +35,7 @@ fn write_package(root: &Path, name: &str, lib_body: &str) -> miette::Result<()> 
 }
 
 fn has(records: &[cordial::CrateAttrsSiteRecord], rule: CrateAttrsRuleId) -> bool {
-    records.iter().any(|record| record.rule_id == rule)
+    records.iter().any(|record| record.rule_id() == rule)
 }
 
 #[test]
@@ -173,7 +173,7 @@ fn lib_path_override_is_the_root_not_src_lib_rs() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("real lib")?;
 
-    let root = library_root_rs(fixture.path()).expect("lib path");
+    let root = library_root_rs(fixture.path()).ok_or_else(|| miette::miette!("lib path"))?;
     assert!(
         root.ends_with("src/core.rs"),
         "should honor [lib] path, got {}",
@@ -216,7 +216,7 @@ fn lib_path_override_flags_the_named_file() -> miette::Result<()> {
     );
     assert!(
         records.iter().all(|record| record
-            .file
+            .file()
             .to_string_lossy()
             .replace('\\', "/")
             .ends_with("src/core.rs")),
@@ -547,9 +547,15 @@ fn apply_inserts_both_after_crate_docs() -> miette::Result<()> {
         lib.contains("#![warn(missing_docs)]"),
         "must insert warn missing_docs: {lib}"
     );
-    let docs_at = lib.find("//! Crate docs.").unwrap();
-    let forbid_at = lib.find("#![forbid(unsafe_code)]").unwrap();
-    let item_at = lib.find("pub fn ready()").unwrap();
+    let docs_at = lib
+        .find("//! Crate docs.")
+        .ok_or_else(|| miette::miette!("expected crate docs in:\n{lib}"))?;
+    let forbid_at = lib
+        .find("#![forbid(unsafe_code)]")
+        .ok_or_else(|| miette::miette!("expected forbid in:\n{lib}"))?;
+    let item_at = lib
+        .find("pub fn ready()")
+        .ok_or_else(|| miette::miette!("expected item in:\n{lib}"))?;
     assert!(docs_at < forbid_at && forbid_at < item_at, "order: {lib}");
     Ok(())
 }

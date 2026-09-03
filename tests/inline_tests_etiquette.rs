@@ -49,15 +49,15 @@ fn scan_inline_tests_skips_inner_tests_of_cfg_mod() -> miette::Result<()> {
 
     let mods = findings
         .iter()
-        .filter(|record| record.rule_id == InlineTestRuleId::Mod001)
+        .filter(|record| record.rule_id() == InlineTestRuleId::Mod001)
         .count();
     let cfgs = findings
         .iter()
-        .filter(|record| record.rule_id == InlineTestRuleId::Cfg001)
+        .filter(|record| record.rule_id() == InlineTestRuleId::Cfg001)
         .count();
     let fns = findings
         .iter()
-        .filter(|record| record.rule_id == InlineTestRuleId::Fn001)
+        .filter(|record| record.rule_id() == InlineTestRuleId::Fn001)
         .count();
     assert_eq!(mods, 1);
     assert_eq!(cfgs, 1);
@@ -65,27 +65,27 @@ fn scan_inline_tests_skips_inner_tests_of_cfg_mod() -> miette::Result<()> {
     assert!(
         findings
             .iter()
-            .any(|record| record.snippet.contains("mod tests"))
+            .any(|record| record.snippet().contains("mod tests"))
     );
     assert!(
         findings
             .iter()
-            .any(|record| record.snippet.contains("fn helper"))
+            .any(|record| record.snippet().contains("fn helper"))
     );
     assert!(
         findings
             .iter()
-            .any(|record| record.snippet.contains("fn free_test"))
+            .any(|record| record.snippet().contains("fn free_test"))
     );
     assert!(
         !findings
             .iter()
-            .any(|record| record.snippet.contains("hidden"))
+            .any(|record| record.snippet().contains("hidden"))
     );
     assert!(
         !findings
             .iter()
-            .any(|record| record.snippet.contains("production_only"))
+            .any(|record| record.snippet().contains("production_only"))
     );
     Ok(())
 }

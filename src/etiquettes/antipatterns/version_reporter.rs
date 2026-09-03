@@ -142,18 +142,19 @@ impl Reporter for VersionInMemberSummaryReporter {
         body.push_str("---\n\n");
         body.push_str(&format!(
             "Workspace totals: **{}** inline-version sites across **{}** member crates.\n\n",
-            summary.total, summary.crates_with_findings,
+            summary.total(),
+            summary.crates_with_findings(),
         ));
         body.push_str(
             "Action items live in [`version-in-member.checklist.md`](version-in-member.checklist.md).\n\n",
         );
 
-        if !summary.crates.is_empty() {
+        if !summary.crates().is_empty() {
             body.push_str("## Per crate\n\n");
             body.push_str("| Crate | Open items |\n");
             body.push_str("| --- | ---: |\n");
-            for row in &summary.crates {
-                body.push_str(&format!("| `{}` | {} |\n", row.crate_name, row.total));
+            for row in summary.crates() {
+                body.push_str(&format!("| `{}` | {} |\n", row.crate_name(), row.total()));
             }
             body.push('\n');
         }

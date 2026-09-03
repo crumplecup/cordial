@@ -90,7 +90,7 @@ fn scan_derives_rust_source_flags_trivial_getters() -> miette::Result<()> {
     assert_eq!(
         findings
             .iter()
-            .filter(|record| record.rule_id == DeriveRuleId::Getter001)
+            .filter(|record| record.rule_id() == DeriveRuleId::Getter001)
             .count(),
         2
     );
@@ -100,7 +100,7 @@ fn scan_derives_rust_source_flags_trivial_getters() -> miette::Result<()> {
 fn scan_rules(source: &str, thresholds: DerivesThresholds) -> miette::Result<Vec<DeriveRuleId>> {
     Ok(scan_findings(source, thresholds)?
         .into_iter()
-        .map(|record| record.rule_id)
+        .map(|record| record.rule_id())
         .collect())
 }
 
@@ -463,7 +463,7 @@ impl Widget {
     assert!(
         findings
             .iter()
-            .all(|record| record.rule_id != DeriveRuleId::Getter001),
+            .all(|record| record.rule_id() != DeriveRuleId::Getter001),
         "`self.field.clone()` proves nothing about Copy, and derive_getters \
          has no action that returns an owned clone of a non-Copy field \
          (only skip/rename/copy exist, confirmed against its own source) \
@@ -490,14 +490,14 @@ impl Widget {
     let findings = scan_findings(source, DerivesThresholds::default())?;
     let getter = findings
         .iter()
-        .find(|record| record.rule_id == DeriveRuleId::Getter001)
-        .expect("bare self.field return should flag DERIVE-GETTER-001");
+        .find(|record| record.rule_id() == DeriveRuleId::Getter001)
+        .ok_or_else(|| miette::miette!("bare self.field return should flag DERIVE-GETTER-001"))?;
     assert!(
-        getter.recommendation.contains("getter(copy)"),
+        getter.recommendation().contains("getter(copy)"),
         "returning the field by value (not `&self.field`) only compiles \
          because it's Copy, and a plain #[derive(Getters)] would return a \
          reference instead -- must steer to #[getter(copy)]: {}",
-        getter.recommendation
+        getter.recommendation()
     );
     Ok(())
 }
@@ -519,14 +519,14 @@ impl Widget {
     let findings = scan_findings(source, DerivesThresholds::default())?;
     let getter = findings
         .iter()
-        .find(|record| record.rule_id == DeriveRuleId::Getter001)
-        .expect("&self.field return should flag DERIVE-GETTER-001");
+        .find(|record| record.rule_id() == DeriveRuleId::Getter001)
+        .ok_or_else(|| miette::miette!("&self.field return should flag DERIVE-GETTER-001"))?;
     assert!(
-        !getter.recommendation.contains("getter(copy)"),
+        !getter.recommendation().contains("getter(copy)"),
         "returning `&self.field` is exactly what a plain #[derive(Getters)] \
          already produces -- must NOT steer to #[getter(copy)], which would \
          change the return type from &u32 to u32: {}",
-        getter.recommendation
+        getter.recommendation()
     );
     Ok(())
 }
@@ -576,12 +576,12 @@ impl Widget {
     let findings = scan_findings(source, DerivesThresholds::default())?;
     let setter = findings
         .iter()
-        .find(|record| record.rule_id == DeriveRuleId::Setter001)
-        .expect("into setter should flag DERIVE-SETTER-001");
+        .find(|record| record.rule_id() == DeriveRuleId::Setter001)
+        .ok_or_else(|| miette::miette!("into setter should flag DERIVE-SETTER-001"))?;
     assert!(
-        setter.recommendation.contains("into"),
+        setter.recommendation().contains("into"),
         "into() should steer to #[setters(into)]: {}",
-        setter.recommendation
+        setter.recommendation()
     );
     Ok(())
 }
@@ -604,12 +604,12 @@ impl Node {
     let findings = scan_findings(source, DerivesThresholds::default())?;
     let setter = findings
         .iter()
-        .find(|record| record.rule_id == DeriveRuleId::Setter001)
-        .expect("Some(arg) should flag DERIVE-SETTER-001");
+        .find(|record| record.rule_id() == DeriveRuleId::Setter001)
+        .ok_or_else(|| miette::miette!("Some(arg) should flag DERIVE-SETTER-001"))?;
     assert!(
-        setter.recommendation.contains("strip_option"),
+        setter.recommendation().contains("strip_option"),
         "Some(arg) should steer to #[setters(strip_option)]: {}",
-        setter.recommendation
+        setter.recommendation()
     );
     Ok(())
 }
@@ -690,12 +690,13 @@ impl Node {
     let findings = scan_findings(source, DerivesThresholds::default())?;
     let setter = findings
         .iter()
-        .find(|record| record.rule_id == DeriveRuleId::Setter001)
-        .expect("Some(arg.into()) should flag DERIVE-SETTER-001");
+        .find(|record| record.rule_id() == DeriveRuleId::Setter001)
+        .ok_or_else(|| miette::miette!("Some(arg.into()) should flag DERIVE-SETTER-001"))?;
     assert!(
-        setter.recommendation.contains("strip_option") && setter.recommendation.contains("into"),
+        setter.recommendation().contains("strip_option")
+            && setter.recommendation().contains("into"),
         "expected strip_option and into: {}",
-        setter.recommendation
+        setter.recommendation()
     );
     Ok(())
 }
@@ -974,7 +975,7 @@ fn path_spliced_file_without_the_dependency_is_exempt() -> miette::Result<()> {
     assert!(
         findings
             .iter()
-            .all(|record| record.rule_id != DeriveRuleId::Getter001),
+            .all(|record| record.rule_id() != DeriveRuleId::Getter001),
         "consumer splices this file in without derive_getters, so the \
          recommendation isn't actually satisfiable everywhere: {findings:?}"
     );
@@ -1000,7 +1001,7 @@ fn path_spliced_file_with_the_dependency_is_still_flagged() -> miette::Result<()
     assert!(
         findings
             .iter()
-            .any(|record| record.rule_id == DeriveRuleId::Getter001),
+            .any(|record| record.rule_id() == DeriveRuleId::Getter001),
         "consumer has derive_getters available, so adding the dependency \
          should be the only difference from the exempt fixture and the \
          finding should still fire: {findings:?}"
@@ -1055,8 +1056,8 @@ pub struct Record {
     let findings = scan_findings(source, DerivesThresholds::default())?;
     let pub_fields: Vec<&str> = findings
         .iter()
-        .filter(|record| record.rule_id == DeriveRuleId::PubField001)
-        .map(|record| record.struct_name.as_str())
+        .filter(|record| record.rule_id() == DeriveRuleId::PubField001)
+        .map(|record| record.struct_name().as_str())
         .collect();
     assert!(
         !pub_fields
@@ -1197,8 +1198,8 @@ pub struct Record {
     let findings = scan_findings(source, DerivesThresholds::default())?;
     let pub_fields: Vec<&str> = findings
         .iter()
-        .filter(|record| record.rule_id == DeriveRuleId::PubField001)
-        .map(|record| record.struct_name.as_str())
+        .filter(|record| record.rule_id() == DeriveRuleId::PubField001)
+        .map(|record| record.struct_name().as_str())
         .collect();
     assert!(
         !pub_fields.contains(&"Ledger"),
@@ -1239,8 +1240,8 @@ pub struct Record {
     let findings = scan_findings(source, DerivesThresholds::default())?;
     let pub_fields: Vec<&str> = findings
         .iter()
-        .filter(|record| record.rule_id == DeriveRuleId::PubField001)
-        .map(|record| record.struct_name.as_str())
+        .filter(|record| record.rule_id() == DeriveRuleId::PubField001)
+        .map(|record| record.struct_name().as_str())
         .collect();
     assert!(
         !pub_fields.contains(&"Ledger"),

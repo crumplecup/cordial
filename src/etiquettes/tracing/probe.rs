@@ -137,10 +137,10 @@ impl Probe for MissingInstrumentProbe {
 
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&MISSING_INSTRUMENT_QUERY) {
-            markers.push(Box::new(TracingMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-                label: MISSING_INSTRUMENT_LABEL.to_string(),
-            }) as Box<dyn Marker>);
+            markers.push(Box::new(TracingMarker::new(
+                crate::objects::NodeAnchor(node.id),
+                MISSING_INSTRUMENT_LABEL.to_string(),
+            )) as Box<dyn Marker>);
         }
         Ok(markers)
     }
@@ -171,10 +171,10 @@ impl Probe for RecipeDeltaProbe {
 
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&INSTRUMENTED_QUERY) {
-            markers.push(Box::new(TracingMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-                label: RECIPE_DELTA_LABEL.to_string(),
-            }) as Box<dyn Marker>);
+            markers.push(Box::new(TracingMarker::new(
+                crate::objects::NodeAnchor(node.id),
+                RECIPE_DELTA_LABEL.to_string(),
+            )) as Box<dyn Marker>);
         }
         Ok(markers)
     }
@@ -205,10 +205,10 @@ impl Probe for ForbiddenInstrumentProbe {
 
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&FORBIDDEN_INSTRUMENT_QUERY) {
-            markers.push(Box::new(TracingMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-                label: FORBIDDEN_INSTRUMENT_LABEL.to_string(),
-            }) as Box<dyn Marker>);
+            markers.push(Box::new(TracingMarker::new(
+                crate::objects::NodeAnchor(node.id),
+                FORBIDDEN_INSTRUMENT_LABEL.to_string(),
+            )) as Box<dyn Marker>);
         }
         Ok(markers)
     }

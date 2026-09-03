@@ -38,19 +38,23 @@ impl IrCacheDigest {
         enricher_ids: &[&str],
         load_views: &HashMap<String, Box<dyn crate::loader::LoadView>>,
     ) -> CordialResult<Self> {
-        let source_key = format!("{}:{}", target.crate_name, crate::loader::SourceLoader::ID);
+        let source_key = format!(
+            "{}:{}",
+            target.crate_name(),
+            crate::loader::SourceLoader::ID
+        );
         let source_files = load_views
             .get(&source_key)
             .and_then(|view| view.as_any().downcast_ref::<SourceLoadView>())
-            .map(|view| digest_source_files(&view.files))
+            .map(|view| digest_source_files(view.files()))
             .unwrap_or_default();
 
         let rustdoc_json = {
             #[cfg(feature = "rustdoc")]
             {
                 crate::rustdoc_loader::resolve_rustdoc_json(
-                    &target.crate_root,
-                    &target.crate_name,
+                    target.crate_root(),
+                    target.crate_name(),
                     None,
                 )
                 .ok()
@@ -63,7 +67,7 @@ impl IrCacheDigest {
         };
 
         Ok(Self {
-            crate_name: target.crate_name.clone(),
+            crate_name: target.crate_name().clone(),
             source_files,
             rustdoc_json,
             enrichers: enricher_ids.iter().map(|id| (*id).to_string()).collect(),
@@ -88,8 +92,8 @@ fn digest_source_files(files: &[crate::loader::SourceFile]) -> Vec<SourceFileDig
         .iter()
         .map(|file| {
             SourceFileDigest::new(
-                file.path.display().to_string(),
-                digest_bytes(file.source.as_bytes()),
+                file.path().display().to_string(),
+                digest_bytes(file.source().as_bytes()),
             )
         })
         .collect();

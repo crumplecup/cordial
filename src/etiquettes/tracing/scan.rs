@@ -55,10 +55,10 @@ pub fn scan_source_tree(
     }
 
     records.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.qualified_name.cmp(&b.qualified_name))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.qualified_name().cmp(b.qualified_name()))
     });
     Ok(records)
 }
@@ -95,8 +95,12 @@ pub fn scan_rust_source(
         display_types,
         never_instrument,
         records: Vec::new(),
+        error: None,
     };
     visitor.visit_file(&syntax);
+    if let Some(error) = visitor.error {
+        return Err(error);
+    }
     Ok(visitor.records)
 }
 
@@ -108,6 +112,7 @@ struct FileScanVisitor<'a> {
     display_types: DisplayTypeFacts,
     never_instrument: &'a HashSet<String>,
     records: Vec<FunctionRecord>,
+    error: Option<crate::error::CordialError>,
 }
 
 /// Every fact needed to record one function, bundled so
@@ -154,30 +159,53 @@ impl FileScanVisitor<'_> {
                 && !crate::enricher::is_gated_instrument_attr(attr)
         });
         let line = args.span.start().line as u32;
-        let ctx = classify(
+        let ctx = match classify(
             &args.sig.ident.to_string(),
             args.sig,
             args.kind,
             args.body,
             &self.display_types,
-        );
-        let recipe = instrument_recipe(&ctx, self.extra_skip);
-        self.records.push(FunctionRecord {
-            crate_name: self.crate_name.clone(),
-            qualified_name,
-            kind: args.kind,
-            visibility: visibility_label(args.visibility),
-            file: self.rel_file.clone(),
-            line,
-            instrumented,
-            proof_only,
-            prover_visible_instrument,
-            has_error_path_event: ctx.has_error_path_event,
-            param_names: ctx.param_names.clone(),
-            role: ctx.role,
-            complexity: ctx.complexity,
-            recipe,
-        });
+        ) {
+            Ok(ctx) => ctx,
+            Err(error) => {
+                if self.error.is_none() {
+                    self.error = Some(error);
+                }
+                return;
+            }
+        };
+        let recipe = match instrument_recipe(&ctx, self.extra_skip) {
+            Ok(recipe) => recipe,
+            Err(error) => {
+                if self.error.is_none() {
+                    self.error = Some(error);
+                }
+                return;
+            }
+        };
+        if self.error.is_some() {
+            return;
+        }
+        match FunctionRecord::builder()
+            .crate_name(self.crate_name.clone())
+            .qualified_name(qualified_name)
+            .kind(args.kind)
+            .visibility(visibility_label(args.visibility))
+            .file(self.rel_file.clone())
+            .line(line)
+            .instrumented(instrumented)
+            .proof_only(proof_only)
+            .prover_visible_instrument(prover_visible_instrument)
+            .has_error_path_event(ctx.has_error_path_event())
+            .param_names(ctx.param_names().clone())
+            .role(ctx.role())
+            .complexity(ctx.complexity())
+            .recipe(recipe)
+            .build()
+        {
+            Ok(record) => self.records.push(record),
+            Err(error) => self.error = Some(error),
+        }
     }
 
     #[instrument(level = "debug", skip(self, items))]

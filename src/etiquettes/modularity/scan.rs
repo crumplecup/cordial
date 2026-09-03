@@ -41,11 +41,11 @@ pub fn scan_source_tree(
 
     findings.sort_by(|left, right| {
         right
-            .lines
-            .cmp(&left.lines)
-            .then_with(|| left.kind.as_str().cmp(right.kind.as_str()))
-            .then_with(|| left.file.cmp(&right.file))
-            .then_with(|| left.context.cmp(&right.context))
+            .lines()
+            .cmp(&left.lines())
+            .then_with(|| left.kind().as_str().cmp(right.kind().as_str()))
+            .then_with(|| left.file().cmp(right.file()))
+            .then_with(|| left.context().cmp(right.context()))
     });
 
     Ok(findings)
@@ -68,7 +68,7 @@ pub fn scan_rust_source(
 
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    maybe_push_types_finding(&syntax, file, crate_root, thresholds, &mut findings);
+    maybe_push_types_finding(&syntax, file, crate_root, thresholds, &mut findings)?;
     let module_prefix = module_path_from_src_file(src_root, file);
     if !generated {
         push_module_size_records(
@@ -78,7 +78,7 @@ pub fn scan_rust_source(
             crate_root,
             &module_prefix,
             &mut findings,
-        );
+        )?;
     }
     let mut visitor = ModularityScanVisitor {
         file: file.to_path_buf(),
@@ -89,8 +89,12 @@ pub fn scan_rust_source(
         file_lines: count_source_lines(source),
         thresholds: thresholds.clone(),
         findings: Vec::new(),
+        error: None,
     };
     visitor.visit_file(&syntax);
+    if let Some(error) = visitor.error {
+        return Err(error);
+    }
     findings.append(&mut visitor.findings);
     Ok(findings)
 }
@@ -111,18 +115,24 @@ fn maybe_push_file_finding(
     if lines < thresholds.file_inventory_min_lines() {
         return Ok(());
     }
-    findings.push(ModularitySiteRecord {
-        kind: ModularityKind::File,
-        context: String::new(),
-        file: relative_source_path(file, crate_root),
-        line: 1,
-        lines,
-        inline: false,
-    });
+    findings.push(
+        ModularitySiteRecord::builder()
+            .kind(ModularityKind::File)
+            .context(String::new())
+            .file(relative_source_path(file, crate_root))
+            .line(1)
+            .lines(lines)
+            .inline(false)
+            .build()?,
+    );
     Ok(())
 }
 
-#[instrument(level = "debug", skip(source, syntax, file, findings))]
+#[instrument(
+    level = "debug",
+    skip(source, syntax, file, findings),
+    err(level = "warn")
+)]
 fn push_module_size_records(
     source: &str,
     syntax: &syn::File,
@@ -130,26 +140,28 @@ fn push_module_size_records(
     crate_root: &Path,
     module_prefix: &[String],
     findings: &mut Vec<ModularitySiteRecord>,
-) {
+) -> CordialResult<()> {
     let rel_file = relative_source_path(file, crate_root);
-    findings.push(ModularitySiteRecord {
-        kind: ModularityKind::ModuleSize,
-        context: module_path_label(module_prefix),
-        file: rel_file.clone(),
-        line: 1,
-        lines: count_source_lines(source),
-        inline: false,
-    });
-    collect_inline_module_sizes(&syntax.items, module_prefix, rel_file, findings);
+    findings.push(
+        ModularitySiteRecord::builder()
+            .kind(ModularityKind::ModuleSize)
+            .context(module_path_label(module_prefix))
+            .file(rel_file.clone())
+            .line(1)
+            .lines(count_source_lines(source))
+            .inline(false)
+            .build()?,
+    );
+    collect_inline_module_sizes(&syntax.items, module_prefix, rel_file, findings)
 }
 
-#[instrument(level = "debug", skip(items, file, findings))]
+#[instrument(level = "debug", skip(items, file, findings), err(level = "warn"))]
 fn collect_inline_module_sizes(
     items: &[syn::Item],
     module_prefix: &[String],
     file: PathBuf,
     findings: &mut Vec<ModularitySiteRecord>,
-) {
+) -> CordialResult<()> {
     for item in items {
         let syn::Item::Mod(item_mod) = item else {
             continue;
@@ -162,16 +174,19 @@ fn collect_inline_module_sizes(
         };
         let mut nested_prefix = module_prefix.to_vec();
         nested_prefix.push(item_mod.ident.to_string());
-        findings.push(ModularitySiteRecord {
-            kind: ModularityKind::ModuleSize,
-            context: module_path_label(&nested_prefix),
-            file: file.clone(),
-            line: item_mod.span().start().line as u32,
-            lines: span_line_count(item_mod.span()),
-            inline: true,
-        });
-        collect_inline_module_sizes(nested, &nested_prefix, file.clone(), findings);
+        findings.push(
+            ModularitySiteRecord::builder()
+                .kind(ModularityKind::ModuleSize)
+                .context(module_path_label(&nested_prefix))
+                .file(file.clone())
+                .line(item_mod.span().start().line as u32)
+                .lines(span_line_count(item_mod.span()))
+                .inline(true)
+                .build()?,
+        );
+        collect_inline_module_sizes(nested, &nested_prefix, file.clone(), findings)?;
     }
+    Ok(())
 }
 
 #[instrument(level = "debug")]
@@ -183,27 +198,34 @@ fn module_path_label(parts: &[String]) -> String {
     }
 }
 
-#[instrument(level = "debug", skip(syntax, file, thresholds, findings))]
+#[instrument(
+    level = "debug",
+    skip(syntax, file, thresholds, findings),
+    err(level = "warn")
+)]
 fn maybe_push_types_finding(
     syntax: &syn::File,
     file: &Path,
     crate_root: &Path,
     thresholds: &ModularityThresholds,
     findings: &mut Vec<ModularitySiteRecord>,
-) {
+) -> CordialResult<()> {
     let names = file_type_names(&syntax.items);
     let types = u32::try_from(names.len()).unwrap_or(u32::MAX);
     if types <= thresholds.max_types_per_file() {
-        return;
+        return Ok(());
     }
-    findings.push(ModularitySiteRecord {
-        kind: ModularityKind::TypesPerFile,
-        context: names.join(", "),
-        file: relative_source_path(file, crate_root),
-        line: 1,
-        lines: types,
-        inline: false,
-    });
+    findings.push(
+        ModularitySiteRecord::builder()
+            .kind(ModularityKind::TypesPerFile)
+            .context(names.join(", "))
+            .file(relative_source_path(file, crate_root))
+            .line(1)
+            .lines(types)
+            .inline(false)
+            .build()?,
+    );
+    Ok(())
 }
 
 #[instrument(level = "debug", skip(items))]
@@ -260,6 +282,7 @@ struct ModularityScanVisitor {
     file_lines: u32,
     thresholds: ModularityThresholds,
     findings: Vec<ModularitySiteRecord>,
+    error: Option<crate::error::CordialError>,
 }
 
 impl ModularityScanVisitor {
@@ -283,14 +306,21 @@ impl ModularityScanVisitor {
         if lines < self.thresholds.function_scan_min_lines(self.file_lines) {
             return;
         }
-        self.findings.push(ModularitySiteRecord {
-            kind: ModularityKind::Function,
-            context: self.site_context(),
-            file: relative_source_path(&self.file, &self.crate_root),
-            line: span.start().line as u32,
-            lines,
-            inline: false,
-        });
+        if self.error.is_some() {
+            return;
+        }
+        match ModularitySiteRecord::builder()
+            .kind(ModularityKind::Function)
+            .context(self.site_context())
+            .file(relative_source_path(&self.file, &self.crate_root))
+            .line(span.start().line as u32)
+            .lines(lines)
+            .inline(false)
+            .build()
+        {
+            Ok(record) => self.findings.push(record),
+            Err(error) => self.error = Some(error),
+        }
     }
 
     #[instrument(level = "debug", skip(self, attrs, block))]

@@ -5,10 +5,10 @@
 
 use cordial::{
     AssessView, Assessor, AttributeEnricher, CordialResult, Disposition, EdgeKind, EnrichView,
-    Etiquette, EtiquetteExplain, EtiquetteRuleExplain, FileSpan, Finding, FindingSink, IrAnchor,
-    IrEnricher, Loader, Marker, NodeAnchor, NodeKind, NodeView, NodeWeight, PluginCategory, Probe,
-    ProbeView, Query, RenderView, Reporter, Rule, ScopeEnricher, SourceLoadView, SourceLoader,
-    SourceSpan, StaticEtiquette, StaticPlugin, TextArtifact,
+    Etiquette, EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, FileSpan, Finding,
+    FindingSink, IrAnchor, IrEnricher, Loader, Marker, NodeAnchor, NodeKind, NodeView, NodeWeight,
+    PluginCategory, Probe, ProbeView, Query, RenderView, Reporter, Rule, ScopeEnricher,
+    SourceLoadView, SourceLoader, SourceSpan, StaticEtiquette, StaticPlugin, TextArtifact,
 };
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -29,27 +29,24 @@ static ASSESSORS: &[&dyn Assessor] = &[&TODO_ASSESSOR];
 static REPORTERS: &[&dyn Reporter] = &[&TODO_CSV];
 
 /// Flags leftover `todo!()` macros in source.
-pub static TODO_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "acme-todo",
-    name: "Acme leftover todos",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: false,
-    explain: EtiquetteExplain {
-        summary: "Leftover todo!() macros in source",
-        why: "Unfinished todo!() sites should not merge. This example shows a quality-family plugin wrapping one etiquette.",
-        logic: "Walks syn for todo!() macros and emits ACME-TODO-001. Not a built-in; copy examples/custom_plugins.",
-        opt_out: "Do not register ACME_STYLE. This is an example plugin, not compiled into the cordial binary.",
-        rules: &[EtiquetteRuleExplain {
-            id: "ACME-TODO-001",
-            summary: "Leftover `todo!()` macro",
-        }],
-    },
-};
+static TODO_RULES: &[EtiquetteRuleExplain] = &[EtiquetteRuleExplain::new(
+    "ACME-TODO-001",
+    "Leftover `todo!()` macro",
+)];
+
+pub static TODO_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
+    "acme-todo",
+    "Acme leftover todos",
+    EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+    false,
+    EtiquetteExplain::new(
+        "Leftover todo!() macros in source",
+        "Unfinished todo!() sites should not merge. This example shows a quality-family plugin wrapping one etiquette.",
+        "Walks syn for todo!() macros and emits ACME-TODO-001. Not a built-in; copy examples/custom_plugins.",
+        "Do not register ACME_STYLE. This is an example plugin, not compiled into the cordial binary.",
+        TODO_RULES,
+    ),
+);
 
 static ACME_STYLE_ETIQUETTES: &[&dyn Etiquette] = &[&TODO_ETIQUETTE];
 
@@ -142,8 +139,8 @@ impl Finding for TodoFinding {
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
         sink.snippet(&self.snippet);
     }
@@ -176,16 +173,16 @@ impl IrEnricher for TodoInventoryEnricher {
             return Ok(());
         };
 
-        for file in &source.files {
-            let syntax = syn::parse_file(&file.source).map_err(|err| {
-                cordial::CordialError::syn_parse(file.path.display().to_string(), err)
+        for file in source.files() {
+            let syntax = syn::parse_file(file.source()).map_err(|err| {
+                cordial::CordialError::syn_parse(file.path().display().to_string(), err)
             })?;
-            let module_prefix = cordial::module_path_from_src_file(&source.src_root, &file.path);
+            let module_prefix = cordial::module_path_from_src_file(source.src_root(), file.path());
             let mut visitor = TodoVisitor {
                 module_prefix,
                 fn_stack: Vec::new(),
                 records: Vec::new(),
-                file: file.path.clone(),
+                file: file.path().clone(),
             };
             visitor.visit_file(&syntax);
             for record in visitor.records {
@@ -202,9 +199,9 @@ impl IrEnricher for TodoInventoryEnricher {
                     node,
                     "file",
                     serde_json::Value::String(
-                        file.path
+                        file.path()
                             .strip_prefix(session.project_root())
-                            .unwrap_or(&file.path)
+                            .unwrap_or(file.path())
                             .display()
                             .to_string(),
                     ),

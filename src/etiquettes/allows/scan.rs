@@ -25,11 +25,11 @@ pub fn scan_crate_allows(crate_root: &Path) -> CordialResult<Vec<AllowSiteRecord
     }
 
     findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.context.cmp(&b.context))
-            .then(a.snippet.cmp(&b.snippet))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.context().cmp(b.context()))
+            .then(a.snippet().cmp(b.snippet()))
     });
 
     Ok(findings)
@@ -82,8 +82,12 @@ pub fn scan_rust_source(
         impl_type: None,
         fn_stack: Vec::new(),
         findings: Vec::new(),
+        error: None,
     };
     visitor.visit_file(&syntax);
+    if let Some(error) = visitor.error {
+        return Err(error);
+    }
     Ok(visitor.findings)
 }
 
@@ -94,6 +98,7 @@ struct AllowScanVisitor {
     impl_type: Option<String>,
     fn_stack: Vec<String>,
     findings: Vec<AllowSiteRecord>,
+    error: Option<crate::error::CordialError>,
 }
 
 impl AllowScanVisitor {
@@ -123,13 +128,20 @@ impl AllowScanVisitor {
         if let Ok(rel) = file.strip_prefix(&self.crate_root) {
             file = rel.to_path_buf();
         }
-        self.findings.push(AllowSiteRecord {
-            rule_id,
-            context: self.site_context(),
-            file,
-            line: attr.span().start().line as u32,
-            snippet: parsed.snippet,
-        });
+        if self.error.is_some() {
+            return;
+        }
+        match AllowSiteRecord::builder()
+            .rule_id(rule_id)
+            .context(self.site_context())
+            .file(file)
+            .line(attr.span().start().line as u32)
+            .snippet(parsed.snippet)
+            .build()
+        {
+            Ok(record) => self.findings.push(record),
+            Err(error) => self.error = Some(error),
+        }
     }
 
     #[instrument(level = "debug", skip(self, items))]

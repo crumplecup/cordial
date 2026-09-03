@@ -54,9 +54,10 @@ impl Probe for CliLayoutSiteProbe {
 
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&CLI_LAYOUT_SITES_QUERY) {
-            markers.push(Box::new(CliLayoutMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(CliLayoutMarker::new(crate::objects::NodeAnchor(node.id)))
+                    as Box<dyn Marker>,
+            );
         }
         Ok(markers)
     }

@@ -29,40 +29,43 @@ pub fn scan_crate_cfg_hygiene(
 
     let mut records = Vec::new();
     for occurrence in &occurrences {
-        if !declared.contains(&occurrence.name) {
-            records.push(record_for(occurrence, CfgHygieneRuleId::UnexpectedCfg001));
+        if !declared.contains(occurrence.name()) {
+            records.push(record_for(occurrence, CfgHygieneRuleId::UnexpectedCfg001)?);
         }
         if let Some(expected) = expected_verifier
-            && verifier_names.contains(occurrence.name.as_str())
-            && occurrence.name != expected
+            && verifier_names.contains(occurrence.name().as_str())
+            && occurrence.name() != expected
         {
             records.push(record_for(
                 occurrence,
                 CfgHygieneRuleId::CfgVerifierMismatch001,
-            ));
+            )?);
         }
     }
 
     records.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.cfg_name.cmp(&b.cfg_name))
-            .then(a.rule_id.as_str().cmp(b.rule_id.as_str()))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.cfg_name().cmp(b.cfg_name()))
+            .then(a.rule_id().as_str().cmp(b.rule_id().as_str()))
     });
     Ok(records)
 }
 
 #[instrument(level = "debug", skip(occurrence))]
-fn record_for(occurrence: &CfgNameOccurrence, rule_id: CfgHygieneRuleId) -> CfgHygieneSiteRecord {
-    CfgHygieneSiteRecord {
-        rule_id,
-        cfg_name: occurrence.name.clone(),
-        context: occurrence.context.clone(),
-        file: occurrence.file.clone(),
-        line: occurrence.line,
-        snippet: occurrence.snippet.clone(),
-    }
+fn record_for(
+    occurrence: &CfgNameOccurrence,
+    rule_id: CfgHygieneRuleId,
+) -> CordialResult<CfgHygieneSiteRecord> {
+    CfgHygieneSiteRecord::builder()
+        .rule_id(rule_id)
+        .cfg_name(occurrence.name().clone())
+        .context(occurrence.context().clone())
+        .file(occurrence.file().clone())
+        .line(occurrence.line())
+        .snippet(occurrence.snippet().clone())
+        .build()
 }
 
 #[instrument(level = "debug", err(level = "warn"))]

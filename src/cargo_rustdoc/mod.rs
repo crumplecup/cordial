@@ -48,40 +48,40 @@ pub fn build_workspace_members(
     let filter = RunAll;
     let mut targets = discover_crate_targets(project_root, &filter)?;
     if let Some(name) = only_crate {
-        targets.retain(|target| target.crate_name == name);
+        targets.retain(|target| target.crate_name() == name);
     }
 
     let mut artifacts = Vec::new();
     for target in targets {
-        let artifact_path = store.build_artifact_path(&target.crate_name);
+        let artifact_path = store.build_artifact_path(target.crate_name());
         if !force
             && artifact_path.is_file()
             && let Ok(existing) = read_build_artifact(&artifact_path)
         {
-            let cached_json = store.rustdoc_cache_path(&target.crate_name);
+            let cached_json = store.rustdoc_cache_path(target.crate_name());
             if cached_json.is_file() {
                 artifacts.push(existing);
                 continue;
             }
         }
 
-        let json_path = run_cargo_rustdoc(project_root, &target.crate_name, &[])?;
+        let json_path = run_cargo_rustdoc(project_root, target.crate_name(), &[])?;
 
-        let cached_json = store.rustdoc_cache_path(&target.crate_name);
+        let cached_json = store.rustdoc_cache_path(target.crate_name());
         copy_rustdoc_json(&json_path, &cached_json)?;
 
-        let crate_doc_dir = target.crate_root.join("doc");
+        let crate_doc_dir = target.crate_root().join("doc");
         std::fs::create_dir_all(&crate_doc_dir)?;
         let local_json =
-            crate_doc_dir.join(format!("{}.json", target.crate_name.replace('-', "_")));
+            crate_doc_dir.join(format!("{}.json", target.crate_name().replace('-', "_")));
         copy_rustdoc_json(&json_path, &local_json)?;
 
         let rustdoc_sha256 = hash_file(&cached_json)?;
         let crate_version =
             read_crate_version(&cached_json).unwrap_or_else(|| "unknown".to_string());
         let artifact = BuildArtifact::workspace_member(
-            &target.crate_name,
-            PathBuf::from(format!("cache/rustdoc/{}.json", target.crate_name)),
+            target.crate_name(),
+            PathBuf::from(format!("cache/rustdoc/{}.json", target.crate_name())),
             DocFingerprint::new(rustdoc_sha256, crate_version),
         );
         write_build_artifact(&artifact_path, &artifact)?;

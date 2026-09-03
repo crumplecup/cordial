@@ -13,7 +13,7 @@ fn non_cargo_project_uses_directory_slug() -> miette::Result<()> {
         .wrap_err("targets")?;
     assert_eq!(targets.len(), 1);
     assert_eq!(
-        targets[0].crate_name,
+        *targets[0].crate_name(),
         project_slug_from_path(fixture.path())
     );
     Ok(())
@@ -38,8 +38,8 @@ resolver = "2"
         .into_diagnostic()
         .wrap_err("targets")?;
     assert_eq!(targets.len(), 2);
-    assert!(targets.iter().any(|target| target.crate_name == "alpha"));
-    assert!(targets.iter().any(|target| target.crate_name == "beta"));
+    assert!(targets.iter().any(|target| target.crate_name() == "alpha"));
+    assert!(targets.iter().any(|target| target.crate_name() == "beta"));
     Ok(())
 }
 
@@ -63,7 +63,7 @@ resolver = "2"
         .into_diagnostic()
         .wrap_err("targets")?;
     assert_eq!(targets.len(), 1);
-    assert_eq!(targets[0].crate_name, "beta");
+    assert_eq!(targets[0].crate_name(), "beta");
     Ok(())
 }
 
@@ -86,7 +86,10 @@ fn coverage_plugin_shadow_pair_includes_both_crates_when_filtered_to_upstream() 
     let targets = discover_run_crate_targets(&plugins, &fixture, &session, &filter)
         .into_diagnostic()
         .wrap_err("targets")?;
-    let names: HashSet<String> = targets.into_iter().map(|t| t.crate_name).collect();
+    let names: HashSet<String> = targets
+        .into_iter()
+        .map(|t| t.crate_name().clone())
+        .collect();
     assert!(names.contains("url"));
     assert!(
         names.contains("elicit_url"),

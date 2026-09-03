@@ -72,55 +72,150 @@ impl<T: Etiquette + QualityReportArea + ?Sized> QualityEtiquette for T {}
 /// resolves to the etiquette page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EtiquetteRuleExplain {
+    id: &'static str,
+    summary: &'static str,
+}
+
+impl EtiquetteRuleExplain {
+    /// Bind a stable rule id to its one-line note.
+    pub const fn new(id: &'static str, summary: &'static str) -> Self {
+        Self { id, summary }
+    }
+
     /// Stable rule identifier (`DOC-WARNING-001`).
-    pub id: &'static str,
+    pub const fn id(&self) -> &'static str {
+        self.id
+    }
+
     /// One-line decision note for that rule.
-    pub summary: &'static str,
+    pub const fn summary(&self) -> &'static str {
+        self.summary
+    }
 }
 
 /// Why this etiquette exists and how to opt out.
 ///
-/// Mandatory on [`StaticEtiquette`] (no [`Default`]): a struct literal
-/// missing the field is a compile error.
+/// Mandatory on [`StaticEtiquette`] (no [`Default`]): a constructor
+/// call missing an argument is a compile error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EtiquetteExplain {
+    summary: &'static str,
+    why: &'static str,
+    logic: &'static str,
+    opt_out: &'static str,
+    rules: &'static [EtiquetteRuleExplain],
+}
+
+impl EtiquetteExplain {
+    /// Bind the explain page for a static etiquette table.
+    pub const fn new(
+        summary: &'static str,
+        why: &'static str,
+        logic: &'static str,
+        opt_out: &'static str,
+        rules: &'static [EtiquetteRuleExplain],
+    ) -> Self {
+        Self {
+            summary,
+            why,
+            logic,
+            opt_out,
+            rules,
+        }
+    }
+
     /// One line for `cordial explain` with no argument.
-    pub summary: &'static str,
+    pub const fn summary(&self) -> &'static str {
+        self.summary
+    }
+
     /// Why the check exists.
-    pub why: &'static str,
+    pub const fn why(&self) -> &'static str {
+        self.why
+    }
+
     /// What is flagged, what is ignored, how the scan works.
-    pub logic: &'static str,
+    pub const fn logic(&self) -> &'static str {
+        self.logic
+    }
+
     /// `[panics] enabled = false` in cordial.toml — not rustc lint levels.
-    pub opt_out: &'static str,
+    pub const fn opt_out(&self) -> &'static str {
+        self.opt_out
+    }
+
     /// Rule ids that alias this page.
-    pub rules: &'static [EtiquetteRuleExplain],
+    pub const fn rules(&self) -> &'static [EtiquetteRuleExplain] {
+        self.rules
+    }
+}
+
+/// The hook slices an etiquette contributes, grouped so [`StaticEtiquette`]
+/// binds them as one argument instead of six.
+///
+/// `const` statics cannot call `derive_builder::build`, so this is a
+/// hand-written `const fn new`.
+pub struct EtiquetteHooks {
+    loaders: &'static [&'static dyn Loader],
+    enrichers: &'static [&'static dyn IrEnricher],
+    probes: &'static [&'static dyn Probe],
+    assessors: &'static [&'static dyn Assessor],
+    workspace_assessors: Option<&'static [&'static dyn WorkspaceAssessor]>,
+    reporters: &'static [&'static dyn Reporter],
+}
+
+impl EtiquetteHooks {
+    /// Bind the hook slices for an etiquette table.
+    pub const fn new(
+        loaders: &'static [&'static dyn Loader],
+        enrichers: &'static [&'static dyn IrEnricher],
+        probes: &'static [&'static dyn Probe],
+        assessors: &'static [&'static dyn Assessor],
+        workspace_assessors: Option<&'static [&'static dyn WorkspaceAssessor]>,
+        reporters: &'static [&'static dyn Reporter],
+    ) -> Self {
+        Self {
+            loaders,
+            enrichers,
+            probes,
+            assessors,
+            workspace_assessors,
+            reporters,
+        }
+    }
 }
 
 /// Static etiquette declaration backed by slices of trait object references.
 ///
 /// Does not implement [`Default`]: `explain` (and the rest) must be
 /// written out so a new bundle cannot ship without an explanation.
+/// `derive_builder` is not `const`, so this table uses [`Self::new`].
 pub struct StaticEtiquette {
-    /// Stable identifier.
-    pub id: &'static str,
-    /// Human-readable name.
-    pub name: &'static str,
-    /// Loaders in this etiquette.
-    pub loaders: &'static [&'static dyn Loader],
-    /// Enrichers in this etiquette.
-    pub enrichers: &'static [&'static dyn IrEnricher],
-    /// Probes in this etiquette.
-    pub probes: &'static [&'static dyn Probe],
-    /// Assessors in this etiquette.
-    pub assessors: &'static [&'static dyn Assessor],
-    /// Workspace-scoped assessors, if any.
-    pub workspace_assessors: Option<&'static [&'static dyn WorkspaceAssessor]>,
-    /// Reporters in this etiquette.
-    pub reporters: &'static [&'static dyn Reporter],
-    /// Whether this bundle is a coverage etiquette.
-    pub is_coverage: bool,
-    /// Why this check exists and how to opt out.
-    pub explain: EtiquetteExplain,
+    id: &'static str,
+    name: &'static str,
+    hooks: EtiquetteHooks,
+    is_coverage: bool,
+    explain: EtiquetteExplain,
+}
+
+impl StaticEtiquette {
+    /// Bind a static hook table. Not a builder: `const` statics cannot
+    /// call `derive_builder::build`.
+    pub const fn new(
+        id: &'static str,
+        name: &'static str,
+        hooks: EtiquetteHooks,
+        is_coverage: bool,
+        explain: EtiquetteExplain,
+    ) -> Self {
+        Self {
+            id,
+            name,
+            hooks,
+            is_coverage,
+            explain,
+        }
+    }
 }
 
 impl Etiquette for StaticEtiquette {
@@ -141,32 +236,32 @@ impl Etiquette for StaticEtiquette {
 
     #[instrument(level = "trace", skip(self))]
     fn loaders(&self) -> &[&dyn Loader] {
-        self.loaders
+        self.hooks.loaders
     }
 
     #[instrument(level = "trace", skip(self))]
     fn enrichers(&self) -> &[&dyn IrEnricher] {
-        self.enrichers
+        self.hooks.enrichers
     }
 
     #[instrument(level = "trace", skip(self))]
     fn probes(&self) -> &[&dyn Probe] {
-        self.probes
+        self.hooks.probes
     }
 
     #[instrument(level = "trace", skip(self))]
     fn assessors(&self) -> &[&dyn Assessor] {
-        self.assessors
+        self.hooks.assessors
     }
 
     #[instrument(level = "trace", skip(self))]
     fn workspace_assessors(&self) -> &[&dyn WorkspaceAssessor] {
-        self.workspace_assessors.unwrap_or(&[])
+        self.hooks.workspace_assessors.unwrap_or(&[])
     }
 
     #[instrument(level = "trace", skip(self))]
     fn reporters(&self) -> &[&dyn Reporter] {
-        self.reporters
+        self.hooks.reporters
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -179,18 +274,47 @@ impl Etiquette for StaticEtiquette {
 /// workspace `quality-report.md` rollup.
 #[derive(Debug, Clone, Copy)]
 pub struct QualityAreaSpec {
+    title: &'static str,
+    checklist: &'static str,
+    summary: &'static str,
+    compute: fn(&[&dyn Finding]) -> (usize, String),
+}
+
+impl QualityAreaSpec {
+    /// Bind a quality-report row for a static etiquette table.
+    pub const fn new(
+        title: &'static str,
+        checklist: &'static str,
+        summary: &'static str,
+        compute: fn(&[&dyn Finding]) -> (usize, String),
+    ) -> Self {
+        Self {
+            title,
+            checklist,
+            summary,
+            compute,
+        }
+    }
+
     /// Display title for the resolution-order table ("Proof patterns").
-    pub title: &'static str,
+    pub const fn title(&self) -> &'static str {
+        self.title
+    }
+
     /// Checklist artifact filename this etiquette's own reporter writes.
-    pub checklist: &'static str,
+    pub const fn checklist(&self) -> &'static str {
+        self.checklist
+    }
+
     /// Summary artifact filename this etiquette's own reporter writes.
-    pub summary: &'static str,
-    /// Computes this area's own open-item count and one-line breakdown
-    /// detail from the full session finding pool (not just this
-    /// etiquette's own findings -- an area may need to look past its own
-    /// category, the way none of the built-in areas currently do, but a
-    /// third-party one might).
-    pub compute: fn(&[&dyn Finding]) -> (usize, String),
+    pub const fn summary(&self) -> &'static str {
+        self.summary
+    }
+
+    /// Computes this area's own open-item count and one-line breakdown.
+    pub const fn compute(&self) -> fn(&[&dyn Finding]) -> (usize, String) {
+        self.compute
+    }
 }
 
 /// Static quality-etiquette declaration: a [`StaticEtiquette`] plus its
@@ -198,10 +322,18 @@ pub struct QualityAreaSpec {
 /// `id`/`loaders`/etc. delegate straight through to the wrapped
 /// `StaticEtiquette`.
 pub struct StaticQualityEtiquette {
-    /// Hook bundle this quality etiquette wraps.
-    pub etiquette: StaticEtiquette,
-    /// Optional quality-report rollup contribution.
-    pub quality_area: Option<QualityAreaSpec>,
+    etiquette: StaticEtiquette,
+    quality_area: Option<QualityAreaSpec>,
+}
+
+impl StaticQualityEtiquette {
+    /// Wrap a hook table with its optional quality-report row.
+    pub const fn new(etiquette: StaticEtiquette, quality_area: Option<QualityAreaSpec>) -> Self {
+        Self {
+            etiquette,
+            quality_area,
+        }
+    }
 }
 
 impl Etiquette for StaticQualityEtiquette {
@@ -317,9 +449,9 @@ pub fn lookup_etiquette<'a>(
             etiquettes.iter().copied().find(|etiquette| {
                 etiquette
                     .explain()
-                    .rules
+                    .rules()
                     .iter()
-                    .any(|rule| rule.id == query)
+                    .any(|rule| rule.id() == query)
             })
         })
 }
@@ -329,7 +461,7 @@ pub fn lookup_etiquette<'a>(
 pub fn render_explain_list(etiquettes: &[&dyn Etiquette]) -> String {
     let mut rows: Vec<(&str, &str)> = etiquettes
         .iter()
-        .map(|etiquette| (etiquette.id(), etiquette.explain().summary))
+        .map(|etiquette| (etiquette.id(), etiquette.explain().summary()))
         .collect();
     rows.sort_by(|left, right| left.0.cmp(right.0));
     let width = rows.iter().map(|(id, _)| id.len()).max().unwrap_or(0);
@@ -348,15 +480,15 @@ pub fn render_explain_page(etiquette: &dyn Etiquette) -> String {
         "# {} (`{}`)\n\n{}\n\n## Why\n\n{}\n\n## Logic\n\n{}\n\n## Opt out\n\n{}\n",
         etiquette.name(),
         etiquette.id(),
-        explain.summary,
-        explain.why,
-        explain.logic,
-        explain.opt_out,
+        explain.summary(),
+        explain.why(),
+        explain.logic(),
+        explain.opt_out(),
     );
-    if !explain.rules.is_empty() {
+    if !explain.rules().is_empty() {
         body.push_str("\n## Rules\n\n");
-        for rule in explain.rules {
-            let _ = writeln!(body, "- `{}` — {}", rule.id, rule.summary);
+        for rule in explain.rules() {
+            let _ = writeln!(body, "- `{}` — {}", rule.id(), rule.summary());
         }
     }
     body

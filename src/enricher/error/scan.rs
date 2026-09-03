@@ -22,19 +22,19 @@ use crate::etiquettes::internal_error_chain::{
 };
 
 /// Combined scan output for one crate (one parse + unified walk per file).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, derive_getters::Getters)]
 pub struct ErrorIrScanReport {
     /// Error-site records from this crate.
-    pub sites: Vec<ErrorSiteRecord>,
+    sites: Vec<ErrorSiteRecord>,
     /// Error-chain records from this crate.
     #[cfg(feature = "error_chain")]
-    pub chain: Vec<ErrorChainRecord>,
+    chain: Vec<ErrorChainRecord>,
     /// Type-relationship graph for this crate.
     #[cfg(feature = "internal_error_chain")]
-    pub type_graph: InternalErrorTypeGraphReport,
+    type_graph: InternalErrorTypeGraphReport,
     /// Compliance findings for this crate.
     #[cfg(feature = "internal_error_chain")]
-    pub compliance: Vec<InternalErrorComplianceFinding>,
+    compliance: Vec<InternalErrorComplianceFinding>,
 }
 
 impl ErrorIrScanReport {
@@ -42,14 +42,11 @@ impl ErrorIrScanReport {
     #[instrument(level = "trace", skip(self))]
     #[cfg(feature = "internal_error_chain")]
     pub fn internal_report(&self, crate_name: &str) -> InternalErrorChainScanReport {
-        InternalErrorChainScanReport {
-            crate_name: crate_name.to_string(),
-            type_graph: self.type_graph.clone(),
-            compliance: InternalErrorComplianceReport {
-                crate_name: crate_name.to_string(),
-                findings: self.compliance.clone(),
-            },
-        }
+        InternalErrorChainScanReport::new(
+            crate_name.to_string(),
+            self.type_graph.clone(),
+            InternalErrorComplianceReport::new(crate_name.to_string(), self.compliance.clone()),
+        )
     }
 }
 
@@ -98,41 +95,36 @@ pub fn scan_crate_error_ir(
                 crate_root,
                 crate_name,
                 ErrorIrScanLayers::for_unified_file(under_src),
-            );
+            )?;
 
-            report.sites.extend(file_scan.sites);
+            report.sites.extend(file_scan.sites().iter().cloned());
             #[cfg(feature = "error_chain")]
-            report.chain.extend(file_scan.chain);
+            report.chain.extend(file_scan.chain().iter().cloned());
             #[cfg(feature = "internal_error_chain")]
             {
-                report.compliance.extend(file_scan.compliance);
-                type_graph_raw.extend(file_scan.type_graph_raw);
-                error_impls.extend(file_scan.error_impls);
+                report
+                    .compliance
+                    .extend(file_scan.compliance().iter().cloned());
+                type_graph_raw.extend(file_scan.type_graph_raw().iter().cloned());
+                error_impls.extend(file_scan.error_impls().iter().cloned());
             }
         }
     }
 
     #[cfg(feature = "internal_error_chain")]
     {
-        type_graph_raw.retain(|node| type_path_is_error_related(&node.type_path, &error_impls));
-        let mut nodes = finalize_type_graph(type_graph_raw, crate_name);
+        type_graph_raw.retain(|node| type_path_is_error_related(node.type_path(), &error_impls));
+        let mut nodes = finalize_type_graph(type_graph_raw, crate_name)?;
         for node in &mut nodes {
-            if let Ok(rel) = node.file.strip_prefix(crate_root) {
-                node.file = rel.to_path_buf();
-            }
+            node.strip_file_prefix(crate_root);
         }
-        report.type_graph = InternalErrorTypeGraphReport {
-            crate_name: crate_name.to_string(),
-            nodes,
-        };
+        report.type_graph = InternalErrorTypeGraphReport::new(crate_name.to_string(), nodes);
         report
             .compliance
             .extend(scan_crate_error_architecture(crate_root, crate_name)?);
         compliance_sort::sort_compliance(&mut report.compliance);
         for finding in &mut report.compliance {
-            if let Ok(rel) = finding.file.strip_prefix(crate_root) {
-                finding.file = rel.to_path_buf();
-            }
+            finding.strip_file_prefix(crate_root);
         }
     }
 
@@ -146,11 +138,11 @@ pub fn scan_crate_error_ir(
 #[instrument(level = "debug", skip(sites))]
 fn sort_sites(sites: &mut [ErrorSiteRecord]) {
     sites.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.kind.to_string().cmp(&b.kind.to_string()))
-            .then(a.source_snippet.cmp(&b.source_snippet))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.kind().to_string().cmp(&b.kind().to_string()))
+            .then(a.source_snippet().cmp(b.source_snippet()))
     });
 }
 
@@ -162,10 +154,10 @@ mod chain_sort {
     #[instrument(level = "debug", skip(chain))]
     pub(super) fn sort_chain(chain: &mut [ErrorChainRecord]) {
         chain.sort_by(|a, b| {
-            a.file
-                .cmp(&b.file)
-                .then(a.line.cmp(&b.line))
-                .then(a.rule_id.to_string().cmp(&b.rule_id.to_string()))
+            a.file()
+                .cmp(b.file())
+                .then(a.line().cmp(&b.line()))
+                .then(a.rule_id().to_string().cmp(&b.rule_id().to_string()))
         });
     }
 }
@@ -178,10 +170,10 @@ mod compliance_sort {
     #[instrument(level = "debug", skip(findings))]
     pub(super) fn sort_compliance(findings: &mut [InternalErrorComplianceFinding]) {
         findings.sort_by(|a, b| {
-            a.file
-                .cmp(&b.file)
-                .then(a.line.cmp(&b.line))
-                .then(a.rule_id.to_string().cmp(&b.rule_id.to_string()))
+            a.file()
+                .cmp(b.file())
+                .then(a.line().cmp(&b.line()))
+                .then(a.rule_id().to_string().cmp(&b.rule_id().to_string()))
         });
     }
 }

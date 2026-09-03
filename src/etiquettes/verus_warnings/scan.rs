@@ -31,7 +31,7 @@ pub fn scan_crate_verus_warnings(crate_root: &Path) -> CordialResult<Vec<VerusWa
         return Ok(Vec::new());
     };
     let output = run_verus(&verus, crate_root, &entry)?;
-    let records = parse_verus_compiler_output(&output, crate_root);
+    let records = parse_verus_compiler_output(&output, crate_root)?;
     retain_real_warnings(records, crate_root)
 }
 
@@ -53,8 +53,8 @@ fn retain_real_warnings(
     Ok(records
         .into_iter()
         .filter(|record| {
-            !(record.snippet == "missing documentation for a method"
-                && ir.is_documented_pattern_projection_enum(&record.file, record.line))
+            !(record.snippet() == "missing documentation for a method"
+                && ir.is_documented_pattern_projection_enum(record.file(), record.line()))
         })
         .collect())
 }
@@ -184,8 +184,11 @@ fn run_verus(verus: &Path, crate_root: &Path, entry: &VerusEntry) -> CordialResu
 
 /// Parse rustc-style Verus diagnostics. Summary lines (`N warnings emitted`)
 /// are dropped; the same span+message is kept once.
-#[instrument(level = "debug", skip(output))]
-pub fn parse_verus_compiler_output(output: &str, crate_root: &Path) -> Vec<VerusWarningRecord> {
+#[instrument(level = "debug", skip(output), err(level = "warn"))]
+pub fn parse_verus_compiler_output(
+    output: &str,
+    crate_root: &Path,
+) -> CordialResult<Vec<VerusWarningRecord>> {
     let mut records = Vec::new();
     let mut seen = BTreeSet::new();
     let lines: Vec<&str> = output.lines().collect();
@@ -205,22 +208,24 @@ pub fn parse_verus_compiler_output(output: &str, crate_root: &Path) -> Vec<Verus
             continue;
         }
         let resolved = resolve_diagnostic_file(crate_root, &file);
-        records.push(VerusWarningRecord {
-            rule_id: VerusWarningRuleId::Warning001,
-            context: file.clone(),
-            file: resolved,
-            line,
-            snippet: truncate_snippet(&message, 96),
-        });
+        records.push(
+            VerusWarningRecord::builder()
+                .rule_id(VerusWarningRuleId::Warning001)
+                .context(file.clone())
+                .file(resolved)
+                .line(line)
+                .snippet(truncate_snippet(&message, 96))
+                .build()?,
+        );
         index += 1;
     }
     records.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.snippet.cmp(&b.snippet))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.snippet().cmp(b.snippet()))
     });
-    records
+    Ok(records)
 }
 
 #[instrument(level = "trace")]

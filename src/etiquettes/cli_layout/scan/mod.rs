@@ -81,7 +81,7 @@ pub fn scan_crate_cli_layout(
     for item in catalog.types.values() {
         if item.in_library {
             if item.parser || item.subcommand {
-                lint_act(crate_name, item, &catalog, &clap_idents, &mut findings);
+                lint_act(crate_name, item, &catalog, &clap_idents, &mut findings)?;
             }
             continue;
         }
@@ -96,7 +96,7 @@ pub fn scan_crate_cli_layout(
                     "{} — CLI and error types belong in the library, not a binary island",
                     item.snippet
                 ),
-            ));
+            )?);
         }
     }
 
@@ -117,7 +117,7 @@ pub fn scan_crate_cli_layout(
                             "fn {} — dispatch `{ident}` with `{ident}::act`, not a free function",
                             func.name
                         ),
-                    ));
+                    )?);
                     break;
                 }
             }
@@ -130,14 +130,18 @@ pub fn scan_crate_cli_layout(
     Ok(findings)
 }
 
-#[instrument(level = "debug", skip(item, catalog, clap_idents, findings))]
+#[instrument(
+    level = "debug",
+    skip(item, catalog, clap_idents, findings),
+    err(level = "warn")
+)]
 fn lint_act(
     crate_name: &str,
     item: &TypeRec,
     catalog: &LayoutCatalog,
     clap_idents: &BTreeSet<String>,
     findings: &mut Vec<CliLayoutRecord>,
-) {
+) -> CordialResult<()> {
     let Some(act) = catalog.acts.get(&item.ident) else {
         findings.push(finding(
             crate_name,
@@ -149,8 +153,8 @@ fn lint_act(
                 "{} — write `fn act(self, …) -> Result<_, _>` on this clap type",
                 item.snippet
             ),
-        ));
-        return;
+        )?);
+        return Ok(());
     };
     let nested = nested_clap_types(item, clap_idents);
     let missing: Vec<String> = nested
@@ -158,7 +162,7 @@ fn lint_act(
         .filter(|name| !act.called_on.contains(name))
         .collect();
     if missing.is_empty() {
-        return;
+        return Ok(());
     }
     let names = missing.join(", ");
     findings.push(finding(
@@ -171,7 +175,8 @@ fn lint_act(
             "{}::act must call `act` on nested clap type(s) `{names}`",
             item.ident
         ),
-    ));
+    )?);
+    Ok(())
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
@@ -213,7 +218,7 @@ fn lint_thin_main(
         match item {
             Item::Use(_) | Item::ExternCrate(_) => {}
             Item::Fn(func) if func.sig.ident == "main" => {
-                lint_main_fn(crate_name, file, func, findings);
+                lint_main_fn(crate_name, file, func, findings)?;
             }
             Item::Fn(func) => findings.push(finding(
                 crate_name,
@@ -225,7 +230,7 @@ fn lint_thin_main(
                     "fn {} — `main` should parse, call `act`, and convert to miette",
                     func.sig.ident
                 ),
-            )),
+            )?),
             Item::Mod(module) => findings.push(finding(
                 crate_name,
                 CliLayoutId::Main001,
@@ -236,7 +241,7 @@ fn lint_thin_main(
                     "mod {} — dispatch and CLI types belong in the library",
                     module.ident
                 ),
-            )),
+            )?),
             Item::Struct(item) => findings.push(finding(
                 crate_name,
                 CliLayoutId::Main001,
@@ -244,7 +249,7 @@ fn lint_thin_main(
                 file.to_path_buf(),
                 item.span().start().line as u32,
                 format!("struct {} — keep `main` thin", item.ident),
-            )),
+            )?),
             Item::Enum(item) => findings.push(finding(
                 crate_name,
                 CliLayoutId::Main001,
@@ -252,7 +257,7 @@ fn lint_thin_main(
                 file.to_path_buf(),
                 item.span().start().line as u32,
                 format!("enum {} — keep `main` thin", item.ident),
-            )),
+            )?),
             Item::Impl(item) => findings.push(finding(
                 crate_name,
                 CliLayoutId::Main001,
@@ -260,15 +265,20 @@ fn lint_thin_main(
                 file.to_path_buf(),
                 item.span().start().line as u32,
                 "impl in `main` — dispatch belongs on library types".to_string(),
-            )),
+            )?),
             _ => {}
         }
     }
     Ok(())
 }
 
-#[instrument(level = "debug", skip(file, func, findings))]
-fn lint_main_fn(crate_name: &str, file: &Path, func: &ItemFn, findings: &mut Vec<CliLayoutRecord>) {
+#[instrument(level = "debug", skip(file, func, findings), err(level = "warn"))]
+fn lint_main_fn(
+    crate_name: &str,
+    file: &Path,
+    func: &ItemFn,
+    findings: &mut Vec<CliLayoutRecord>,
+) -> CordialResult<()> {
     let mut hunt = MainHunt {
         has_match: false,
         has_parse: false,
@@ -285,7 +295,7 @@ fn lint_main_fn(crate_name: &str, file: &Path, func: &ItemFn, findings: &mut Vec
             file.to_path_buf(),
             func.span().start().line as u32,
             "match in `main` — dispatch with `Cli::act`, not in `main`".to_string(),
-        ));
+        )?);
     }
     if !hunt.has_parse || !hunt.has_act {
         findings.push(finding(
@@ -295,8 +305,9 @@ fn lint_main_fn(crate_name: &str, file: &Path, func: &ItemFn, findings: &mut Vec
             file.to_path_buf(),
             func.span().start().line as u32,
             "`main` must call `parse` and `act` (then miette)".to_string(),
-        ));
+        )?);
     }
+    Ok(())
 }
 
 struct MainHunt {
@@ -346,13 +357,13 @@ fn finding(
     file: PathBuf,
     line: u32,
     snippet: String,
-) -> CliLayoutRecord {
-    CliLayoutRecord {
-        crate_name: crate_name.to_string(),
-        rule_id,
-        context,
-        file,
-        line,
-        snippet,
-    }
+) -> CordialResult<CliLayoutRecord> {
+    CliLayoutRecord::builder()
+        .crate_name(crate_name.to_string())
+        .rule_id(rule_id)
+        .context(context)
+        .file(file)
+        .line(line)
+        .snippet(snippet)
+        .build()
 }

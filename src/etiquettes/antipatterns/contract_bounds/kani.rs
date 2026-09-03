@@ -76,8 +76,13 @@ impl KaniVisitor<'_> {
             return;
         }
         let context = site_context(&self.module_prefix, &self.fn_stack.join("::"));
-        self.findings
-            .push(make_finding(context, &self.file, line, &normalized));
+        if self.error.is_some() {
+            return;
+        }
+        match make_finding(context, &self.file, line, &normalized) {
+            Ok(record) => self.findings.push(record),
+            Err(error) => self.error = Some(error),
+        }
     }
 
     /// `assert!(EXPR, ..)`/`assert_eq!(A, B, ..)` — both ensures-shaped.

@@ -49,22 +49,26 @@ pub fn scan_crate_attrs(
         && !presence.forbid_unsafe_code
         && !is_unsafe_forbid_exempt_verus_target(crate_root)
     {
-        records.push(CrateAttrsSiteRecord {
-            rule_id: CrateAttrsRuleId::ForbidUnsafe001,
-            context: crate_name.to_string(),
-            file: file.clone(),
-            line,
-            snippet: "add `#![forbid(unsafe_code)]`".to_string(),
-        });
+        records.push(
+            CrateAttrsSiteRecord::builder()
+                .rule_id(CrateAttrsRuleId::ForbidUnsafe001)
+                .context(crate_name.to_string())
+                .file(file.clone())
+                .line(line)
+                .snippet("add `#![forbid(unsafe_code)]`".to_string())
+                .build()?,
+        );
     }
     if !policy.skip_missing_docs(crate_name) && !presence.missing_docs_at_least_warn {
-        records.push(CrateAttrsSiteRecord {
-            rule_id: CrateAttrsRuleId::MissingDocs001,
-            context: crate_name.to_string(),
-            file,
-            line,
-            snippet: "add `#![warn(missing_docs)]`".to_string(),
-        });
+        records.push(
+            CrateAttrsSiteRecord::builder()
+                .rule_id(CrateAttrsRuleId::MissingDocs001)
+                .context(crate_name.to_string())
+                .file(file)
+                .line(line)
+                .snippet("add `#![warn(missing_docs)]`".to_string())
+                .build()?,
+        );
     }
     Ok(records)
 }

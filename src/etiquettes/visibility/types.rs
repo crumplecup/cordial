@@ -78,9 +78,9 @@ impl Rule for VisibilityRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct VisibilityMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for VisibilityMarker {
@@ -105,17 +105,27 @@ impl Marker for VisibilityMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct VisibilityFinding {
-    pub rule: VisibilityRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub module_path: String,
-    pub span: FileSpan,
-    pub name_count: usize,
-    pub parent_vis: String,
-    pub declared_vis: String,
+    rule: VisibilityRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    module_path: String,
+    span: FileSpan,
+    #[getter(copy)]
+    name_count: usize,
+    parent_vis: String,
+    declared_vis: String,
+}
+
+impl VisibilityFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> VisibilityFindingBuilder {
+        VisibilityFindingBuilder::default()
+    }
 }
 
 impl Finding for VisibilityFinding {
@@ -139,8 +149,8 @@ impl Finding for VisibilityFinding {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);
         sink.field("module_path", &self.module_path);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("name_count", &self.name_count.to_string());
         sink.field("parent_vis", &self.parent_vis);
         sink.field("declared_vis", &self.declared_vis);
@@ -148,20 +158,31 @@ impl Finding for VisibilityFinding {
 }
 
 /// One visibility finding from the crate-tree scan.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct VisibilityRecord {
     /// Stable probe rule identifier.
-    pub rule_id: VisibilityRuleId,
+    #[getter(copy)]
+    rule_id: VisibilityRuleId,
     /// Module path this visibility finding refers to.
-    pub module_path: String,
+    module_path: String,
     /// Source file path, usually crate-relative.
-    pub file: PathBuf,
+    file: PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// How many leaf names this module exposes.
-    pub name_count: usize,
+    #[getter(copy)]
+    name_count: usize,
     /// Visibility of the parent module.
-    pub parent_vis: String,
+    parent_vis: String,
     /// Visibility declared on this item.
-    pub declared_vis: String,
+    declared_vis: String,
+}
+
+impl VisibilityRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> VisibilityRecordBuilder {
+        VisibilityRecordBuilder::default()
+    }
 }

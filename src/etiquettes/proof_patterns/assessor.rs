@@ -78,18 +78,20 @@ impl Assessor for ProofPatternAssessor {
                 .map(|value| value.split(", ").map(str::to_string).collect())
                 .unwrap_or_default();
 
-            findings.push(Box::new(ProofPatternFinding {
-                rule: ProofPatternRule::new(kind),
-                disposition: Disposition::Open,
-                anchor: crate::objects::NodeAnchor(node_id),
-                crate_name: ir.crate_name().to_string(),
-                context,
-                span,
-                snippet,
-                cfg_test,
-                tracked_params,
-                recommends,
-            }) as Box<dyn Finding>);
+            findings.push(Box::new(
+                ProofPatternFinding::builder()
+                    .rule(ProofPatternRule::new(kind))
+                    .disposition(Disposition::Open)
+                    .anchor(crate::objects::NodeAnchor(node_id))
+                    .crate_name(ir.crate_name().to_string())
+                    .context(context)
+                    .span(span)
+                    .snippet(snippet)
+                    .cfg_test(cfg_test)
+                    .tracked_params(tracked_params)
+                    .recommends(recommends)
+                    .build()?,
+            ) as Box<dyn Finding>);
         }
         Ok(findings)
     }

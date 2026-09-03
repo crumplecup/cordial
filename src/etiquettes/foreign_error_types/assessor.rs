@@ -106,25 +106,27 @@ impl Assessor for ForeignErrorTypeAssessor {
                         .unwrap_or(false)
                         && site_kind.map_err_is_chain_break(false);
 
-                    findings.push(Box::new(ForeignErrorTypeFinding {
-                        rule: ForeignErrorTypeRule::new(inference_rule_id.clone()),
-                        disposition: Disposition::Open,
-                        anchor: crate::objects::NodeAnchor(node_id),
-                        record_kind,
-                        crate_name: crate_name.clone(),
-                        foreign_error_type,
-                        inference_rule_id,
-                        confidence,
-                        chain_break,
-                        kind: site_kind,
-                        context,
-                        span,
-                        source_snippet,
-                        site_snippet,
-                        origin_class: ErrorOriginClass::Other,
-                        origin_detail: String::new(),
-                        rationale: String::new(),
-                    }) as Box<dyn Finding>);
+                    findings.push(Box::new(
+                        ForeignErrorTypeFinding::builder()
+                            .rule(ForeignErrorTypeRule::new(inference_rule_id.clone()))
+                            .disposition(Disposition::Open)
+                            .anchor(crate::objects::NodeAnchor(node_id))
+                            .record_kind(record_kind)
+                            .crate_name(crate_name.clone())
+                            .foreign_error_type(foreign_error_type)
+                            .inference_rule_id(inference_rule_id)
+                            .confidence(confidence)
+                            .chain_break(chain_break)
+                            .kind(site_kind)
+                            .context(context)
+                            .span(span)
+                            .source_snippet(source_snippet)
+                            .site_snippet(site_snippet)
+                            .origin_class(ErrorOriginClass::Other)
+                            .origin_detail(String::new())
+                            .rationale(String::new())
+                            .build()?,
+                    ) as Box<dyn Finding>);
                 }
                 ForeignErrorRecordKind::Candidate => {
                     let origin_class = node
@@ -143,25 +145,27 @@ impl Assessor for ForeignErrorTypeAssessor {
                         .unwrap_or("")
                         .to_string();
 
-                    findings.push(Box::new(ForeignErrorTypeFinding {
-                        rule: ForeignErrorTypeRule::new("FOREIGN-ERROR-CANDIDATE"),
-                        disposition: Disposition::Open,
-                        anchor: crate::objects::NodeAnchor(node_id),
-                        record_kind: ForeignErrorRecordKind::Candidate,
-                        crate_name: crate_name.clone(),
-                        foreign_error_type: String::new(),
-                        inference_rule_id: String::new(),
-                        confidence: ForeignTypeConfidence::High,
-                        chain_break: false,
-                        kind: site_kind,
-                        context,
-                        span,
-                        source_snippet,
-                        site_snippet,
-                        origin_class,
-                        origin_detail,
-                        rationale,
-                    }) as Box<dyn Finding>);
+                    findings.push(Box::new(
+                        ForeignErrorTypeFinding::builder()
+                            .rule(ForeignErrorTypeRule::new("FOREIGN-ERROR-CANDIDATE"))
+                            .disposition(Disposition::Open)
+                            .anchor(crate::objects::NodeAnchor(node_id))
+                            .record_kind(ForeignErrorRecordKind::Candidate)
+                            .crate_name(crate_name.clone())
+                            .foreign_error_type(String::new())
+                            .inference_rule_id(String::new())
+                            .confidence(ForeignTypeConfidence::High)
+                            .chain_break(false)
+                            .kind(site_kind)
+                            .context(context)
+                            .span(span)
+                            .source_snippet(source_snippet)
+                            .site_snippet(site_snippet)
+                            .origin_class(origin_class)
+                            .origin_detail(origin_detail)
+                            .rationale(rationale)
+                            .build()?,
+                    ) as Box<dyn Finding>);
                 }
             }
         }

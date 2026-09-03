@@ -82,15 +82,15 @@ framework itself.
 | `crate_attrs` | Crate-root `#![forbid(unsafe_code)]` / `#![warn(missing_docs)]` ([crate-attrs-etiquette.md](docs/planning/crate-attrs-etiquette.md)) |
 | `doc_warnings` | rustdoc diagnostics from `cargo doc` ([doc-warnings-etiquette.md](docs/planning/doc-warnings-etiquette.md)) |
 | `pageantry` | File-level type arrangement; traits in a leading block ([pageantry-etiquette.md](docs/planning/pageantry-etiquette.md)) |
-| `quality` (default) | All source-quality scanners (panics, tracing, error stack, derives, allows, modularity, antipatterns, cfg_scatter, cfg_hygiene, visibility, cli_layout, crate_attrs, doc_warnings, glob_imports, inline_tests, verus_warnings, pageantry) |
+| `quality` | All source-quality scanners (panics, tracing, error stack, derives, allows, modularity, antipatterns, cfg_scatter, cfg_hygiene, visibility, cli_layout, crate_attrs, doc_warnings, glob_imports, inline_tests, verus_warnings, pageantry) |
 | `impl_coverage` | Trait impl coverage (requires `rustdoc`) |
 | `trenchcoat` | Trenchcoat wrapper coverage |
 | `shadow` | Shadow mirror coverage |
 | `elicitation` | All coverage plugins (`impl_coverage`, `trenchcoat`, `shadow`) |
-| `full` | Every built-in plugin |
+| `full` (default) | Every built-in plugin (`quality` + coverage + `cli`) |
 
-Downstream: enable `cordial/elicitation` (and `cli` for the binary). Default
-features are `quality` and `cli`.
+Downstream: default features are `full`. Slim quality-only:
+`--no-default-features --features quality,cli`.
 
 Usage: *"run the panics etiquette"*, *"register a custom etiquette"*.
 

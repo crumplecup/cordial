@@ -118,22 +118,32 @@ impl Display for CfgSiteKind {
 pub use crate::config::CfgScatterThresholds;
 
 /// One raw `#[cfg(...)]` occurrence collected while scanning a file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct CfgSiteOccurrence {
-    pub kind: CfgSiteKind,
-    pub context: String,
-    pub line: u32,
-    pub snippet: String,
+    #[getter(copy)]
+    kind: CfgSiteKind,
+    context: String,
+    #[getter(copy)]
+    line: u32,
+    snippet: String,
+}
+
+impl CfgSiteOccurrence {
+    /// Start a builder for this value.
+    pub fn builder() -> CfgSiteOccurrenceBuilder {
+        CfgSiteOccurrenceBuilder::default()
+    }
 }
 
 /// All `#[cfg(...)]` occurrences in one file that share the same predicate.
 /// `mod` declarations are never collected here — gating a whole module is
 /// the pattern this lint recommends, not an antipattern.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct CfgScatterGroup {
-    pub file: PathBuf,
-    pub predicate: String,
-    pub occurrences: Vec<CfgSiteOccurrence>,
+    file: PathBuf,
+    predicate: String,
+    occurrences: Vec<CfgSiteOccurrence>,
 }
 
 impl CfgScatterGroup {
@@ -185,9 +195,9 @@ impl Rule for CfgScatterRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct CfgScatterMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for CfgScatterMarker {
@@ -212,17 +222,27 @@ impl Marker for CfgScatterMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct CfgScatterFinding {
-    pub rule: CfgScatterRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub predicate: String,
-    pub span: FileSpan,
-    pub distinct_kinds: Vec<String>,
-    pub occurrence_count: usize,
-    pub sample_snippets: Vec<String>,
+    rule: CfgScatterRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    predicate: String,
+    span: FileSpan,
+    distinct_kinds: Vec<String>,
+    #[getter(copy)]
+    occurrence_count: usize,
+    sample_snippets: Vec<String>,
+}
+
+impl CfgScatterFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> CfgScatterFindingBuilder {
+        CfgScatterFindingBuilder::default()
+    }
 }
 
 impl Finding for CfgScatterFinding {
@@ -246,7 +266,7 @@ impl Finding for CfgScatterFinding {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);
         sink.field("predicate", &self.predicate);
-        sink.field("file", &self.span.file.display().to_string());
+        sink.field("file", &self.span.file().display().to_string());
         sink.field("kinds", &self.distinct_kinds.join("+"));
         sink.field("occurrences", &self.occurrence_count.to_string());
         sink.field("sample", &self.sample_snippets.join("; "));
@@ -254,31 +274,40 @@ impl Finding for CfgScatterFinding {
 }
 
 /// Raw scan row used while building IR nodes: one per scattered group.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct CfgScatterRecord {
-    pub file: PathBuf,
-    pub predicate: String,
-    pub distinct_kinds: Vec<CfgSiteKind>,
-    pub occurrence_count: usize,
-    pub sample_snippets: Vec<String>,
+    file: PathBuf,
+    predicate: String,
+    distinct_kinds: Vec<CfgSiteKind>,
+    #[getter(copy)]
+    occurrence_count: usize,
+    sample_snippets: Vec<String>,
 }
 
-impl From<&CfgScatterGroup> for CfgScatterRecord {
-    #[instrument(level = "debug", skip(group), ret)]
-    fn from(group: &CfgScatterGroup) -> Self {
+impl CfgScatterRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> CfgScatterRecordBuilder {
+        CfgScatterRecordBuilder::default()
+    }
+}
+
+impl CfgScatterRecord {
+    #[instrument(level = "debug", skip(group), err(level = "warn"))]
+    pub fn from_group(group: &CfgScatterGroup) -> crate::error::CordialResult<Self> {
         let distinct_kinds: Vec<CfgSiteKind> =
             group.distinct_non_field_kinds().into_iter().collect();
         let sample_snippets = group
             .non_field_occurrences()
             .take(5)
-            .map(|o| format!("{}:{} {}", o.context, o.line, o.snippet))
+            .map(|o| format!("{}:{} {}", o.context(), o.line(), o.snippet()))
             .collect();
-        Self {
-            file: group.file.clone(),
-            predicate: group.predicate.clone(),
-            distinct_kinds,
-            occurrence_count: group.non_field_count(),
-            sample_snippets,
-        }
+        Self::builder()
+            .file(group.file().clone())
+            .predicate(group.predicate().clone())
+            .distinct_kinds(distinct_kinds)
+            .occurrence_count(group.non_field_count())
+            .sample_snippets(sample_snippets)
+            .build()
     }
 }

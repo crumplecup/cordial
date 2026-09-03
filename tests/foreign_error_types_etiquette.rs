@@ -67,14 +67,17 @@ fn scan_fixture() -> miette::Result<Vec<ErrorSiteScanRow>> {
     .map(|records| {
         records
             .into_iter()
-            .map(|record| ErrorSiteScanRow {
-                crate_name: "fixture".to_string(),
-                kind: record.kind,
-                context: record.context,
-                file: record.file,
-                line: record.line,
-                source_snippet: record.source_snippet,
-                site_snippet: record.site_snippet,
+            .map(|record| {
+                ErrorSiteScanRow::builder()
+                    .crate_name("fixture".to_string())
+                    .kind(record.kind())
+                    .context(record.context().clone())
+                    .file(record.file().clone())
+                    .line(record.line())
+                    .source_snippet(record.source_snippet().clone())
+                    .site_snippet(record.site_snippet().clone())
+                    .build()
+                    .expect("scan row")
             })
             .collect()
     })
@@ -84,13 +87,13 @@ fn scan_fixture() -> miette::Result<Vec<ErrorSiteScanRow>> {
 fn foreign_error_types_detect_chain_breaks() -> miette::Result<()> {
     cordial::init_tracing();
     let scan_rows = scan_fixture()?;
-    let partition_rows = partition_error_site_records(&scan_rows, "fixture");
+    let partition_rows = partition_error_site_records(&scan_rows, "fixture").into_diagnostic()?;
     let partition = build_error_site_partition_report("fixture", partition_rows);
-    let foreign_types = build_foreign_error_type_report(&partition);
+    let foreign_types = build_foreign_error_type_report(&partition).into_diagnostic()?;
     let io_breaks = foreign_types
-        .findings
+        .findings()
         .iter()
-        .filter(|finding| finding.chain_break && finding.foreign_error_type == "std::io::Error")
+        .filter(|finding| finding.chain_break() && finding.foreign_error_type() == "std::io::Error")
         .count();
     assert!(
         io_breaks >= 1,

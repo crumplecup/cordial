@@ -46,10 +46,10 @@ pub fn scan_source_tree(
     }
 
     findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.snippet.cmp(&b.snippet))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.snippet().cmp(b.snippet()))
     });
 
     Ok(findings)
@@ -72,8 +72,12 @@ pub fn scan_rust_source(
         module_prefix,
         cfg_test_depth: 0,
         findings: Vec::new(),
+        error: None,
     };
     visitor.visit_file(&syntax);
+    if let Some(error) = visitor.error {
+        return Err(error);
+    }
     Ok(visitor.findings)
 }
 
@@ -83,6 +87,7 @@ struct InlineTestVisitor {
     module_prefix: Vec<String>,
     cfg_test_depth: usize,
     findings: Vec<InlineTestSiteRecord>,
+    error: Option<crate::error::CordialError>,
 }
 
 impl InlineTestVisitor {
@@ -101,13 +106,20 @@ impl InlineTestVisitor {
         if let Ok(rel) = file.strip_prefix(&self.crate_root) {
             file = rel.to_path_buf();
         }
-        self.findings.push(InlineTestSiteRecord {
-            rule_id,
-            context: self.site_context(),
-            file,
-            line: attr.span().start().line as u32,
-            snippet,
-        });
+        if self.error.is_some() {
+            return;
+        }
+        match InlineTestSiteRecord::builder()
+            .rule_id(rule_id)
+            .context(self.site_context())
+            .file(file)
+            .line(attr.span().start().line as u32)
+            .snippet(snippet)
+            .build()
+        {
+            Ok(record) => self.findings.push(record),
+            Err(error) => self.error = Some(error),
+        }
     }
 
     #[instrument(level = "debug", skip(self, attrs, ident))]

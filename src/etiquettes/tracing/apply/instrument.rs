@@ -2,6 +2,8 @@
 
 use tracing::instrument;
 
+use crate::error::{CordialError, CordialResult};
+
 use super::super::types::{FunctionRecord, InstrumentRecipe};
 use super::InstrumentGap;
 use super::verifier_policy::{TracingApplyPolicy, gate_predicate};
@@ -36,28 +38,26 @@ pub(super) fn attr_style(lines: &[String]) -> InstrumentAttrStyle {
     }
 }
 
-#[instrument(level = "debug", skip(gap, recipe, style, policy))]
+#[instrument(level = "debug", skip(gap, recipe, style, policy), err(level = "warn"))]
 pub(super) fn apply_gap(
     lines: &mut Vec<String>,
     gap: &InstrumentGap,
     recipe: &InstrumentRecipe,
     style: InstrumentAttrStyle,
     policy: &TracingApplyPolicy,
-) -> GapApplyOutcome {
-    if *policy == TracingApplyPolicy::Skip {
-        return GapApplyOutcome::SkippedPolicy;
-    }
-
-    let Some(fn_idx) = find_fn_line(lines, gap.line, &gap.qualified_name) else {
+) -> CordialResult<GapApplyOutcome> {
+    let Some(fn_idx) = find_fn_line(lines, gap.line(), gap.qualified_name()) else {
         tracing::warn!(
-            path = %gap.rel_path.display(),
-            line = gap.line,
-            qualified_name = %gap.qualified_name,
+            path = %gap.rel_path().display(),
+            line = gap.line(),
+            qualified_name = %gap.qualified_name(),
             "no fn near checklist line"
         );
-        return GapApplyOutcome::Unresolved;
+        return Ok(GapApplyOutcome::Unresolved);
     };
 
+    // Skip is not a write policy: the caller strips via `strip_instrument`.
+    // Returning an error keeps control in that decision chain instead of aborting.
     let attr = match policy {
         TracingApplyPolicy::Bare => recipe_attr(recipe, style),
         TracingApplyPolicy::Gated(cfgs) => {
@@ -78,16 +78,20 @@ pub(super) fn apply_gap(
             };
             gate_attr(&qualified, &gate_predicate(cfgs))
         }
-        TracingApplyPolicy::Skip => unreachable!("handled above"),
+        TracingApplyPolicy::Skip => {
+            return Err(CordialError::unreachable(
+                "apply_gap is the write path; Skip is handled by strip_instrument",
+            ));
+        }
     };
     if let Some((start, end)) = instrument_attr_range(lines, fn_idx) {
         if attrs_match_recipe(&lines[start..=end], &attr) {
-            return GapApplyOutcome::AlreadyInstrumented;
+            return Ok(GapApplyOutcome::AlreadyInstrumented);
         }
         let indent = leading_indent(&lines[start]);
         lines.drain(start..=end);
         lines.insert(start, format!("{indent}{attr}"));
-        return GapApplyOutcome::Applied;
+        return Ok(GapApplyOutcome::Applied);
     }
 
     let attr_indices = collect_attr_indices(lines, fn_idx);
@@ -98,18 +102,18 @@ pub(super) fn apply_gap(
         .unwrap_or(indent);
     let insert_at = insert_after_track_caller(lines, &attr_indices).unwrap_or(fn_idx);
     lines.insert(insert_at, format!("{indent}{attr}"));
-    GapApplyOutcome::Applied
+    Ok(GapApplyOutcome::Applied)
 }
 
 /// Remove an existing `#[instrument]` / `#[cfg_attr(.., instrument)]` from
 /// `gap` — attenuation for proof-only functions and skip-policy files.
 #[instrument(level = "debug", skip(lines, gap))]
 pub(super) fn strip_instrument(lines: &mut Vec<String>, gap: &InstrumentGap) -> GapApplyOutcome {
-    let Some(fn_idx) = find_fn_line(lines, gap.line, &gap.qualified_name) else {
+    let Some(fn_idx) = find_fn_line(lines, gap.line(), gap.qualified_name()) else {
         tracing::warn!(
-            path = %gap.rel_path.display(),
-            line = gap.line,
-            qualified_name = %gap.qualified_name,
+            path = %gap.rel_path().display(),
+            line = gap.line(),
+            qualified_name = %gap.qualified_name(),
             "no fn near checklist line"
         );
         return GapApplyOutcome::Unresolved;
@@ -150,32 +154,32 @@ pub(super) fn recipe_for_gap<'a>(
     records: &'a [FunctionRecord],
     gap: &InstrumentGap,
 ) -> Option<&'a InstrumentRecipe> {
-    let rel = gap.rel_path.to_string_lossy().replace('\\', "/");
+    let rel = gap.rel_path().to_string_lossy().replace('\\', "/");
     let named: Vec<_> = records
         .iter()
-        .filter(|record| record.qualified_name == gap.qualified_name)
+        .filter(|record| record.qualified_name() == gap.qualified_name())
         .collect();
     if let Some(record) = named
         .iter()
         .copied()
-        .filter(|record| file_matches(&record.file, &rel))
-        .min_by_key(|record| record.line.abs_diff(gap.line))
+        .filter(|record| file_matches(record.file(), &rel))
+        .min_by_key(|record| record.line().abs_diff(gap.line()))
     {
-        return Some(&record.recipe);
+        return Some(record.recipe());
     }
     if let Some(record) = named.first().copied() {
-        return Some(&record.recipe);
+        return Some(record.recipe());
     }
 
-    let local = local_fn_name(&gap.qualified_name);
+    let local = local_fn_name(gap.qualified_name());
     records
         .iter()
         .filter(|record| {
-            local_fn_name(&record.qualified_name) == local && file_matches(&record.file, &rel)
+            local_fn_name(record.qualified_name()) == local && file_matches(record.file(), &rel)
         })
-        .min_by_key(|record| record.line.abs_diff(gap.line))
-        .filter(|record| record.line.abs_diff(gap.line) <= 24)
-        .map(|record| &record.recipe)
+        .min_by_key(|record| record.line().abs_diff(gap.line()))
+        .filter(|record| record.line().abs_diff(gap.line()) <= 24)
+        .map(|record| record.recipe())
 }
 
 #[instrument(level = "debug")]

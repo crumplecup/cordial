@@ -38,7 +38,7 @@ pub use homecoming::framework_report_from_findings;
 pub use probe::HomecomingStdScopeProbe;
 pub use reporter::HomecomingStdReporter;
 
-use crate::etiquette::{EtiquetteExplain, EtiquetteRuleExplain, StaticEtiquette};
+use crate::etiquette::{EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, StaticEtiquette};
 
 static HOMECOMING_STD_PROBE: HomecomingStdScopeProbe = HomecomingStdScopeProbe;
 static HOMECOMING_STD_ASSESSOR: HomecomingStdAssessor = HomecomingStdAssessor;
@@ -48,34 +48,38 @@ static HOMECOMING_PROBES: &[&'static dyn crate::Probe] = &[&HOMECOMING_STD_PROBE
 static HOMECOMING_ASSESSORS: &[&'static dyn crate::Assessor] = &[&HOMECOMING_STD_ASSESSOR];
 
 /// Workspace-scoped framework std coverage (homecoming `Code` reporter).
-pub static HOMECOMING_STD_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "homecoming-std",
-    name: "Homecoming std coverage",
-    loaders: &[],
-    enrichers: &[],
-    probes: HOMECOMING_PROBES,
-    assessors: HOMECOMING_ASSESSORS,
-    workspace_assessors: None,
-    reporters: &[&HOMECOMING_STD_REPORTER],
-    is_coverage: true,
-    explain: EtiquetteExplain {
-        summary: "How much of Rust std / core / alloc implements homecoming Code?",
-        why: "Framework coverage is a different denominator from project elicitation: which std types are first-class in this ecosystem, not did this workspace crate wrap its foreign types.",
-        logic: "Workspace-scoped; no source loaders. Consumes sysroot rustdoc already in the store (cordial build sysroot). Artifact: std.checklist.md.",
-        opt_out: "`[homecoming-std] enabled = false` in cordial.toml.",
-        rules: &[EtiquetteRuleExplain {
-            id: "FRAMEWORK-STD-ROW",
-            summary: "Std inventory row assessed for Code coverage",
-        }],
-    },
-};
+pub static HOMECOMING_STD_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
+    "homecoming-std",
+    "Homecoming std coverage",
+    EtiquetteHooks::new(
+        &[],
+        &[],
+        HOMECOMING_PROBES,
+        HOMECOMING_ASSESSORS,
+        None,
+        &[&HOMECOMING_STD_REPORTER],
+    ),
+    true,
+    EtiquetteExplain::new(
+        "How much of Rust std / core / alloc implements homecoming Code?",
+        "Framework coverage is a different denominator from project elicitation: which std types are first-class in this ecosystem, not did this workspace crate wrap its foreign types.",
+        "Workspace-scoped; no source loaders. Consumes sysroot rustdoc already in the store (cordial build sysroot). Artifact: std.checklist.md.",
+        "`[homecoming-std] enabled = false` in cordial.toml.",
+        &[EtiquetteRuleExplain::new(
+            "FRAMEWORK-STD-ROW",
+            "Std inventory row assessed for Code coverage",
+        )],
+    ),
+);
 
 /// Workspace-scoped amenable std registry coverage reporter, gated as a
 /// whole unit — see `docs/planning/cfg-scatter-etiquette.md` for the pattern.
 #[cfg(feature = "amenable_std")]
 mod amenable_etiquette {
     use super::{AmenableStdAssessor, AmenableStdReporter, AmenableStdScopeProbe};
-    use crate::etiquette::{EtiquetteExplain, EtiquetteRuleExplain, StaticEtiquette};
+    use crate::etiquette::{
+        EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, StaticEtiquette,
+    };
 
     static AMENABLE_STD_PROBE: AmenableStdScopeProbe = AmenableStdScopeProbe;
     static AMENABLE_STD_ASSESSOR: AmenableStdAssessor = AmenableStdAssessor;
@@ -85,27 +89,29 @@ mod amenable_etiquette {
     static AMENABLE_ASSESSORS: &[&'static dyn crate::Assessor] = &[&AMENABLE_STD_ASSESSOR];
 
     /// `AMENABLE_STD_ETIQUETTE`.
-    pub static AMENABLE_STD_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-        id: "amenable-std",
-        name: "Amenable std coverage",
-        loaders: &[],
-        enrichers: &[],
-        probes: AMENABLE_PROBES,
-        assessors: AMENABLE_ASSESSORS,
-        workspace_assessors: None,
-        reporters: &[&AMENABLE_STD_REPORTER],
-        is_coverage: true,
-        explain: EtiquetteExplain {
-            summary: "How much of that std surface is in the amenable registry?",
-            why: "Same std-family denominator as homecoming-std; this page is the registry coverage half.",
-            logic: "Workspace-scoped; no source loaders. Consumes sysroot rustdoc already in the store. Feature amenable_std.",
-            opt_out: "`[amenable-std] enabled = false` in cordial.toml.",
-            rules: &[EtiquetteRuleExplain {
-                id: "AMENABLE-STD-ROW",
-                summary: "Std inventory row assessed for amenable registry coverage",
-            }],
-        },
-    };
+    pub static AMENABLE_STD_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
+        "amenable-std",
+        "Amenable std coverage",
+        EtiquetteHooks::new(
+            &[],
+            &[],
+            AMENABLE_PROBES,
+            AMENABLE_ASSESSORS,
+            None,
+            &[&AMENABLE_STD_REPORTER],
+        ),
+        true,
+        EtiquetteExplain::new(
+            "How much of that std surface is in the amenable registry?",
+            "Same std-family denominator as homecoming-std; this page is the registry coverage half.",
+            "Workspace-scoped; no source loaders. Consumes sysroot rustdoc already in the store. Feature amenable_std.",
+            "`[amenable-std] enabled = false` in cordial.toml.",
+            &[EtiquetteRuleExplain::new(
+                "AMENABLE-STD-ROW",
+                "Std inventory row assessed for amenable registry coverage",
+            )],
+        ),
+    );
 }
 
 #[cfg(feature = "amenable_std")]

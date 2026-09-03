@@ -112,9 +112,9 @@ fn internal_leaf_is_detected_in_type_graph() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("scan type graph")?;
     assert!(nodes.iter().any(|node| {
-        node.probe_id == InternalErrorTypeProbeId::InternalLeaf001
-            && node.node_class == InternalErrorNodeClass::InternalLeaf
-            && node.type_path.contains("Invariant")
+        node.probe_id() == InternalErrorTypeProbeId::InternalLeaf001
+            && node.node_class() == InternalErrorNodeClass::InternalLeaf
+            && node.type_path().contains("Invariant")
     }));
     Ok(())
 }
@@ -134,8 +134,8 @@ fn foreign_bridge_is_detected_in_type_graph() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("scan type graph")?;
     assert!(nodes.iter().any(|node| {
-        node.node_class == InternalErrorNodeClass::ForeignBridge
-            && node.type_path.ends_with("InnerSource")
+        node.node_class() == InternalErrorNodeClass::ForeignBridge
+            && node.type_path().ends_with("InnerSource")
     }));
     Ok(())
 }
@@ -155,8 +155,8 @@ fn nested_source_impl_is_detected() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("scan type graph")?;
     assert!(nodes.iter().any(|node| {
-        node.probe_id == InternalErrorTypeProbeId::InternalNested001
-            && node.type_path == "DomainError"
+        node.probe_id() == InternalErrorTypeProbeId::InternalNested001
+            && node.type_path() == "DomainError"
     }));
     Ok(())
 }
@@ -176,8 +176,8 @@ fn stringify_map_err_is_compliance_violation() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("scan")?;
     assert!(findings.iter().any(|finding| {
-        finding.rule_id == InternalErrorComplianceId::StringifyForeign001
-            && finding.context.contains("stringify_foreign")
+        finding.rule_id() == InternalErrorComplianceId::StringifyForeign001
+            && finding.context().contains("stringify_foreign")
     }));
     Ok(())
 }
@@ -197,12 +197,12 @@ fn discard_typed_error_is_compliance_violation() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("scan")?;
     assert!(findings.iter().any(|finding| {
-        finding.rule_id == InternalErrorComplianceId::DiscardTyped001
-            && finding.context.contains("discard_typed")
+        finding.rule_id() == InternalErrorComplianceId::DiscardTyped001
+            && finding.context().contains("discard_typed")
     }));
     assert!(findings.iter().any(|finding| {
-        finding.rule_id == InternalErrorComplianceId::DiscardTyped001
-            && finding.context.contains("if_let_discard")
+        finding.rule_id() == InternalErrorComplianceId::DiscardTyped001
+            && finding.context().contains("if_let_discard")
     }));
     Ok(())
 }
@@ -224,7 +224,7 @@ fn preserved_foreign_propagation_is_not_compliance_violation() -> miette::Result
     assert!(
         !findings
             .iter()
-            .any(|finding| finding.context.contains("preserved"))
+            .any(|finding| finding.context().contains("preserved"))
     );
     Ok(())
 }
@@ -246,10 +246,10 @@ fn syn_parse_and_from_wrappers_are_not_compliance_violations() -> miette::Result
     assert!(
         !findings
             .iter()
-            .any(|finding| finding.context.contains("wrap_syn")
-                || finding.context.contains("wrap_from")
-                || finding.context.contains("wrap_json")
-                || finding.context.contains("wrap_cargo_metadata")),
+            .any(|finding| finding.context().contains("wrap_syn")
+                || finding.context().contains("wrap_from")
+                || finding.context().contains("wrap_json")
+                || finding.context().contains("wrap_cargo_metadata")),
         "typed wrappers that keep the foreign error must not be discards: {findings:?}"
     );
     Ok(())
@@ -271,9 +271,9 @@ fn format_interpolation_of_error_binding_is_compliance_violation() -> miette::Re
         .wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
-            finding.context.contains("stringify_via_format")
+            finding.context().contains("stringify_via_format")
                 && matches!(
-                    finding.rule_id,
+                    finding.rule_id(),
                     InternalErrorComplianceId::DiscardTyped001
                         | InternalErrorComplianceId::StringifyForeign001
                 )
@@ -326,47 +326,47 @@ fn type_graph_scans_src_error_rs() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("scan")?;
     assert!(
-        report.type_graph.nodes.iter().any(|node| {
-            node.type_path.contains("SynParse")
-                && node.node_class != InternalErrorNodeClass::InternalLeaf
+        report.type_graph().nodes().iter().any(|node| {
+            node.type_path().contains("SynParse")
+                && node.node_class() != InternalErrorNodeClass::InternalLeaf
         }),
         "SynParse {{ err }} should keep the foreign error: {:?}",
-        report.type_graph.nodes
+        report.type_graph().nodes()
     );
     assert!(
         report
-            .type_graph
-            .nodes
+            .type_graph()
+            .nodes()
             .iter()
-            .any(|node| node.type_path.contains("Io")),
+            .any(|node| node.type_path().contains("Io")),
         "Io(std::io::Error) should appear in the type graph: {:?}",
-        report.type_graph.nodes
+        report.type_graph().nodes()
     );
     assert!(
         report
-            .type_graph
-            .nodes
+            .type_graph()
+            .nodes()
             .iter()
-            .any(|node| node.type_path.contains("Invariant")
-                && node.node_class == InternalErrorNodeClass::InternalLeaf),
+            .any(|node| node.type_path().contains("Invariant")
+                && node.node_class() == InternalErrorNodeClass::InternalLeaf),
         "Invariant should remain a leaf: {:?}",
-        report.type_graph.nodes
+        report.type_graph().nodes()
     );
     assert!(
-        report.type_graph.nodes.iter().any(|node| {
-            node.type_path.contains("JsonParse")
-                && node.node_class != InternalErrorNodeClass::InternalLeaf
+        report.type_graph().nodes().iter().any(|node| {
+            node.type_path().contains("JsonParse")
+                && node.node_class() != InternalErrorNodeClass::InternalLeaf
         }),
         "JsonParse {{ err }} should keep the foreign error: {:?}",
-        report.type_graph.nodes
+        report.type_graph().nodes()
     );
     assert!(
-        report.type_graph.nodes.iter().any(|node| {
-            node.type_path.contains("CargoMetadata")
-                && node.node_class != InternalErrorNodeClass::InternalLeaf
+        report.type_graph().nodes().iter().any(|node| {
+            node.type_path().contains("CargoMetadata")
+                && node.node_class() != InternalErrorNodeClass::InternalLeaf
         }),
         "CargoMetadata(cargo_metadata::Error) should keep the foreign error: {:?}",
-        report.type_graph.nodes
+        report.type_graph().nodes()
     );
     Ok(())
 }
@@ -455,8 +455,8 @@ fn scan_crate_internal_error_chain_combines_both_scans() -> miette::Result<()> {
     let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
         .into_diagnostic()
         .wrap_err("combined scan")?;
-    assert!(!report.type_graph.nodes.is_empty());
-    assert!(!report.compliance.findings.is_empty());
+    assert!(!report.type_graph().nodes().is_empty());
+    assert!(!report.compliance().findings().is_empty());
     Ok(())
 }
 
@@ -591,20 +591,20 @@ fn incomplete_source_wrapper_is_shape_and_track_caller_violation() -> miette::Re
         .into_diagnostic()
         .wrap_err("scan")?;
     assert!(
-        report.compliance.findings.iter().any(|finding| {
-            finding.rule_id == InternalErrorComplianceId::SourceShape001
-                && finding.context.contains("InnerSource")
+        report.compliance().findings().iter().any(|finding| {
+            finding.rule_id() == InternalErrorComplianceId::SourceShape001
+                && finding.context().contains("InnerSource")
         }),
         "InnerSource without file/line must be SOURCE-SHAPE: {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     assert!(
-        report.compliance.findings.iter().any(|finding| {
-            finding.rule_id == InternalErrorComplianceId::SourceTrackCaller001
-                && finding.context.contains("InnerSource")
+        report.compliance().findings().iter().any(|finding| {
+            finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001
+                && finding.context().contains("InnerSource")
         }),
         "InnerSource without #[track_caller] constructor must be TRACK-CALLER: {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     Ok(())
 }
@@ -617,12 +617,12 @@ fn well_formed_source_wrapper_is_not_a_compliance_violation() -> miette::Result<
         .into_diagnostic()
         .wrap_err("scan")?;
     let source_findings: Vec<_> = report
-        .compliance
-        .findings
+        .compliance()
+        .findings()
         .iter()
         .filter(|finding| {
             matches!(
-                finding.rule_id,
+                finding.rule_id(),
                 InternalErrorComplianceId::SourceShape001
                     | InternalErrorComplianceId::SourceTrackCaller001
             )
@@ -633,9 +633,9 @@ fn well_formed_source_wrapper_is_not_a_compliance_violation() -> miette::Result<
         "well-formed IoSource must not be flagged: {source_findings:?}"
     );
     assert!(
-        !report.compliance.findings.iter().any(|finding| {
+        !report.compliance().findings().iter().any(|finding| {
             matches!(
-                finding.rule_id,
+                finding.rule_id(),
                 InternalErrorComplianceId::ArchParent001
                     | InternalErrorComplianceId::ArchKindBox001
                     | InternalErrorComplianceId::ArchKindVariant001
@@ -643,7 +643,7 @@ fn well_formed_source_wrapper_is_not_a_compliance_violation() -> miette::Result<
             )
         }),
         "well-formed parent/Kind/source must not be architecture-flagged: {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     Ok(())
 }
@@ -656,13 +656,13 @@ fn location_field_is_rejected_in_favor_of_owned_file_and_line() -> miette::Resul
         .into_diagnostic()
         .wrap_err("scan")?;
     assert!(
-        report.compliance.findings.iter().any(|finding| {
-            finding.rule_id == InternalErrorComplianceId::SourceShape001
-                && finding.context.contains("IoSource")
-                && finding.snippet.contains("copy owned `file` and `line`")
+        report.compliance().findings().iter().any(|finding| {
+            finding.rule_id() == InternalErrorComplianceId::SourceShape001
+                && finding.context().contains("IoSource")
+                && finding.snippet().contains("copy owned `file` and `line`")
         }),
         "location: &'static Location must be SOURCE-SHAPE: {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     Ok(())
 }
@@ -675,21 +675,21 @@ fn constructor_without_track_caller_is_a_violation() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("scan")?;
     assert!(
-        report.compliance.findings.iter().any(|finding| {
-            finding.rule_id == InternalErrorComplianceId::SourceTrackCaller001
-                && finding.context.contains("IoSource")
+        report.compliance().findings().iter().any(|finding| {
+            finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001
+                && finding.context().contains("IoSource")
         }),
         "new(source, file, line) without #[track_caller] must be flagged: {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     assert!(
         !report
-            .compliance
-            .findings
+            .compliance()
+            .findings()
             .iter()
-            .any(|finding| finding.rule_id == InternalErrorComplianceId::SourceShape001),
+            .any(|finding| finding.rule_id() == InternalErrorComplianceId::SourceShape001),
         "file+line fields are present: {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     Ok(())
 }
@@ -737,15 +737,15 @@ impl std::error::Error for IoSource {}
         .into_diagnostic()
         .wrap_err("scan")?;
     assert!(
-        report.compliance.findings.iter().any(|finding| {
-            finding.rule_id == InternalErrorComplianceId::SourceTrackCaller001
+        report.compliance().findings().iter().any(|finding| {
+            finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001
                 && finding
-                    .internal_constructor
+                    .internal_constructor()
                     .as_deref()
                     .is_some_and(|name| name.contains("From"))
         }),
         "From::from without #[track_caller] must be flagged: {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     Ok(())
 }
@@ -787,13 +787,13 @@ impl std::error::Error for IoSource {}
         .into_diagnostic()
         .wrap_err("scan")?;
     assert!(
-        report.compliance.findings.iter().any(|finding| {
-            finding.rule_id == InternalErrorComplianceId::SourceTrackCaller001
-                && finding.context.contains("IoSource")
-                && finding.snippet.contains("fn new")
+        report.compliance().findings().iter().any(|finding| {
+            finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001
+                && finding.context().contains("IoSource")
+                && finding.snippet().contains("fn new")
         }),
         "From::from with Location::caller() must not stand in for new: {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     Ok(())
 }
@@ -835,16 +835,18 @@ impl std::error::Error for IoSource {}
         .into_diagnostic()
         .wrap_err("scan")?;
     assert!(
-        report.compliance.findings.iter().any(|finding| {
-            finding.rule_id == InternalErrorComplianceId::SourceTrackCaller001
+        report.compliance().findings().iter().any(|finding| {
+            finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001
                 && finding
-                    .internal_constructor
+                    .internal_constructor()
                     .as_deref()
                     .is_some_and(|name| name == "new")
-                && finding.snippet.contains("must not take file/line/location")
+                && finding
+                    .snippet()
+                    .contains("must not take file/line/location")
         }),
         "new(source, file, line) must be flagged even with Location::caller(): {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     Ok(())
 }
@@ -892,16 +894,16 @@ impl std::error::Error for IoSource {}
         .into_diagnostic()
         .wrap_err("scan")?;
     assert!(
-        report.compliance.findings.iter().any(|finding| {
-            finding.rule_id == InternalErrorComplianceId::SourceTrackCaller001
-                && finding.context.contains("Error")
+        report.compliance().findings().iter().any(|finding| {
+            finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001
+                && finding.context().contains("Error")
                 && finding
-                    .internal_constructor
+                    .internal_constructor()
                     .as_deref()
                     .is_some_and(|name| name.contains("From"))
         }),
         "parent From without #[track_caller] hides the call site: {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     Ok(())
 }
@@ -914,23 +916,23 @@ fn error_enum_is_not_a_parent() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("scan")?;
     assert!(
-        report.compliance.findings.iter().any(|finding| {
-            finding.rule_id == InternalErrorComplianceId::ArchParent001
-                && finding.context.contains("CordialError")
+        report.compliance().findings().iter().any(|finding| {
+            finding.rule_id() == InternalErrorComplianceId::ArchParent001
+                && finding.context().contains("CordialError")
         }),
         "error enum must not stand in for parent+Kind: {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     assert!(
-        report.compliance.findings.iter().any(|finding| {
-            finding.rule_id == InternalErrorComplianceId::ArchKindVariant001
+        report.compliance().findings().iter().any(|finding| {
+            finding.rule_id() == InternalErrorComplianceId::ArchKindVariant001
                 && finding
-                    .foreign_error_type
+                    .foreign_error_type()
                     .as_deref()
                     .is_some_and(|ty| ty.contains("io"))
         }),
         "naked foreign variant must be KIND-VARIANT: {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     Ok(())
 }
@@ -973,12 +975,12 @@ impl std::error::Error for IoSource {}
         .wrap_err("scan")?;
     assert!(
         report
-            .compliance
-            .findings
+            .compliance()
+            .findings()
             .iter()
-            .any(|finding| finding.rule_id == InternalErrorComplianceId::ArchKindBox001),
+            .any(|finding| finding.rule_id() == InternalErrorComplianceId::ArchKindBox001),
         "unboxed kind must be KIND-BOX: {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     Ok(())
 }
@@ -1039,12 +1041,12 @@ impl std::error::Error for IoSource {}
         .into_diagnostic()
         .wrap_err("scan")?;
     let arch: Vec<_> = report
-        .compliance
-        .findings
+        .compliance()
+        .findings()
         .iter()
         .filter(|finding| {
             matches!(
-                finding.rule_id,
+                finding.rule_id(),
                 InternalErrorComplianceId::ArchParent001
                     | InternalErrorComplianceId::ArchKindBox001
                     | InternalErrorComplianceId::ArchKindVariant001
@@ -1122,12 +1124,12 @@ impl std::error::Error for IoSource {}
         .into_diagnostic()
         .wrap_err("scan")?;
     let arch: Vec<_> = report
-        .compliance
-        .findings
+        .compliance()
+        .findings()
         .iter()
         .filter(|finding| {
             matches!(
-                finding.rule_id,
+                finding.rule_id(),
                 InternalErrorComplianceId::ArchParent001
                     | InternalErrorComplianceId::ArchKindBox001
                     | InternalErrorComplianceId::ArchKindVariant001
@@ -1142,12 +1144,12 @@ impl std::error::Error for IoSource {}
         "IoSource next to its call site must connect to parent/Kind: {arch:?}"
     );
     assert!(
-        report.type_graph.nodes.iter().any(|node| {
-            node.type_path.contains("IoSource")
-                && node.node_class == InternalErrorNodeClass::ForeignBridge
+        report.type_graph().nodes().iter().any(|node| {
+            node.type_path().contains("IoSource")
+                && node.node_class() == InternalErrorNodeClass::ForeignBridge
         }),
         "type graph must include the out-of-error-module source: {:?}",
-        report.type_graph.nodes
+        report.type_graph().nodes()
     );
     Ok(())
 }
@@ -1197,12 +1199,12 @@ impl std::error::Error for IoSource {}
         .wrap_err("scan")?;
     assert!(
         !report
-            .compliance
-            .findings
+            .compliance()
+            .findings()
             .iter()
-            .any(|finding| finding.context.contains("NotAnError")),
+            .any(|finding| finding.context().contains("NotAnError")),
         "structs that do not implement Error are not in the error set: {:?}",
-        report.compliance.findings
+        report.compliance().findings()
     );
     Ok(())
 }
@@ -1215,12 +1217,12 @@ fn dogfood_cordial_follows_error_architecture() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("scan cordial")?;
     let arch: Vec<_> = report
-        .compliance
-        .findings
+        .compliance()
+        .findings()
         .iter()
         .filter(|finding| {
             matches!(
-                finding.rule_id,
+                finding.rule_id(),
                 InternalErrorComplianceId::ArchParent001
                     | InternalErrorComplianceId::ArchKindBox001
                     | InternalErrorComplianceId::ArchKindVariant001

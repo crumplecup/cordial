@@ -75,7 +75,7 @@ pub fn scan_crate_tracing_subscriber(
                 SubscriberRuleId::Main,
                 site,
                 "fn main never installs a tracing subscriber — call the library helper",
-            ));
+            )?);
         }
         if policy.init_in_tests()
             && !skip_program_lints
@@ -87,7 +87,7 @@ pub fn scan_crate_tracing_subscriber(
                 SubscriberRuleId::Test,
                 site,
                 "#[test] never installs a tracing subscriber — call the library helper",
-            ));
+            )?);
         }
         if policy.helper_in_lib()
             && has_lib
@@ -98,43 +98,47 @@ pub fn scan_crate_tracing_subscriber(
                 SubscriberRuleId::Lib,
                 site,
                 "subscriber init lives outside the library — move it to one documented helper",
-            ));
+            )?);
         }
         if policy.rust_log_fallback() && site.facts.calls_install && !site.facts.rust_log_ok() {
             findings.push(record(
                 SubscriberRuleId::RustLog,
                 site,
                 "init helper must read RUST_LOG with a fallback (try_from_default_env + unwrap_or)",
-            ));
+            )?);
         }
         if policy.idempotent() && site.facts.calls_install && !site.facts.idempotent_ok() {
             findings.push(record(
                 SubscriberRuleId::Idempotent,
                 site,
                 "init helper uses init() without Once/OnceLock — use try_init() or wrap in Once",
-            ));
+            )?);
         }
     }
 
     findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.rule_id.as_str().cmp(b.rule_id.as_str()))
-            .then(a.snippet.cmp(&b.snippet))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.rule_id().as_str().cmp(b.rule_id().as_str()))
+            .then(a.snippet().cmp(b.snippet()))
     });
     Ok(findings)
 }
 
-#[instrument(level = "debug", skip(site))]
-fn record(rule_id: SubscriberRuleId, site: &FnSite, snippet: &str) -> SubscriberSiteRecord {
-    SubscriberSiteRecord {
-        rule_id,
-        context: site.context.clone(),
-        file: site.file.clone(),
-        line: site.line,
-        snippet: snippet.to_string(),
-    }
+#[instrument(level = "debug", skip(site), err(level = "warn"))]
+fn record(
+    rule_id: SubscriberRuleId,
+    site: &FnSite,
+    snippet: &str,
+) -> CordialResult<SubscriberSiteRecord> {
+    SubscriberSiteRecord::builder()
+        .rule_id(rule_id)
+        .context(site.context.clone())
+        .file(site.file.clone())
+        .line(site.line)
+        .snippet(snippet.to_string())
+        .build()
 }
 
 #[instrument(level = "debug", skip(known_helper_paths), err(level = "warn"))]

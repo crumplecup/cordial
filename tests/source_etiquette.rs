@@ -1,5 +1,5 @@
 use cordial::{
-    EtiquetteExplain, RunAll, ScopeEnricher, Session, SessionBuilder, SourceLoader,
+    EtiquetteExplain, EtiquetteHooks, RunAll, ScopeEnricher, Session, SessionBuilder, SourceLoader,
     StaticEtiquette, project_slug_from_path,
 };
 use miette::{IntoDiagnostic, WrapErr};
@@ -10,24 +10,19 @@ static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
 static LOADERS: &[&'static dyn cordial::Loader] = &[&SOURCE_LOADER];
 static ENRICHERS: &[&'static dyn cordial::IrEnricher] = &[&SCOPE_ENRICHER];
 
-static SOURCE_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "source",
-    name: "Source inventory",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: &[],
-    assessors: &[],
-    workspace_assessors: None,
-    reporters: &[],
-    is_coverage: false,
-    explain: EtiquetteExplain {
-        summary: "Test inventory (not a product lint)",
-        why: "Session fixture used by cordial's own tests.",
-        logic: "Loads source (and optionally rustdoc) into IR; emits no findings.",
-        opt_out: "Not registered in the cordial binary.",
-        rules: &[],
-    },
-};
+static SOURCE_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
+    "source",
+    "Source inventory",
+    EtiquetteHooks::new(LOADERS, ENRICHERS, &[], &[], None, &[]),
+    false,
+    EtiquetteExplain::new(
+        "Test inventory (not a product lint)",
+        "Session fixture used by cordial's own tests.",
+        "Loads source (and optionally rustdoc) into IR; emits no findings.",
+        "Not registered in the cordial binary.",
+        &[],
+    ),
+);
 
 #[test]
 fn source_loader_builds_ir_and_cache() -> miette::Result<()> {

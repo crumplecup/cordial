@@ -42,21 +42,21 @@ impl IrEnricher for AttributeEnricher {
             return Ok(());
         };
 
-        for file in &source.files {
-            let syntax = syn::parse_file(&file.source).map_err(|err| {
-                crate::error::CordialError::syn_parse(file.path.display().to_string(), err)
+        for file in source.files() {
+            let syntax = syn::parse_file(file.source()).map_err(|err| {
+                crate::error::CordialError::syn_parse(file.path().display().to_string(), err)
             })?;
             let module_prefix =
-                crate::loader::module_path_from_src_file(&source.src_root, &file.path);
+                crate::loader::module_path_from_src_file(source.src_root(), file.path());
             let mut visitor = AttributeVisitor {
                 ir,
                 _session: session,
-                file: &file.path,
+                file: file.path(),
                 module_prefix,
                 rel_file: file
-                    .path
+                    .path()
                     .strip_prefix(session.project_root())
-                    .unwrap_or(&file.path)
+                    .unwrap_or(file.path())
                     .to_string_lossy()
                     .replace('\\', "/"),
                 error: None,
@@ -263,7 +263,7 @@ pub(crate) fn resolve_parent(ir: &dyn IrMut, context: &str) -> CordialResult<cra
 #[instrument(level = "debug", skip(source, session))]
 pub(crate) fn member_crate_root(source: &SourceLoadView, session: &dyn SessionView) -> PathBuf {
     source
-        .src_root
+        .src_root()
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| session.project_root().to_path_buf())

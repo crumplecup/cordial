@@ -67,16 +67,18 @@ impl Assessor for ErrorChainAssessor {
                 .map(str::to_string);
             let span = FileSpan::new(file, line, 1);
 
-            findings.push(Box::new(ErrorChainFinding {
-                rule: ErrorChainRule::new(rule_id),
-                disposition: Disposition::Open,
-                anchor: crate::objects::NodeAnchor(node_id),
-                crate_name: crate_name.clone(),
-                context,
-                span,
-                snippet,
-                foreign_error_type,
-            }) as Box<dyn Finding>);
+            findings.push(Box::new(
+                ErrorChainFinding::builder()
+                    .rule(ErrorChainRule::new(rule_id))
+                    .disposition(Disposition::Open)
+                    .anchor(crate::objects::NodeAnchor(node_id))
+                    .crate_name(crate_name.clone())
+                    .context(context)
+                    .span(span)
+                    .snippet(snippet)
+                    .foreign_error_type(foreign_error_type)
+                    .build()?,
+            ) as Box<dyn Finding>);
         }
         Ok(findings)
     }

@@ -21,22 +21,32 @@ fn fixture(name: &str) -> miette::Result<String> {
         .wrap_err_with(|| format!("read fixture {name}"))
 }
 
+fn contract_record_dump(
+    evidence: impl Into<String>,
+    verifier: impl Into<String>,
+    kind: impl Into<String>,
+    fragment: impl Into<String>,
+) -> ContractRecordDump {
+    ContractRecordDump::builder()
+        .evidence(evidence.into())
+        .verifier(verifier.into())
+        .kind(kind.into())
+        .fragment(fragment.into())
+        .build()
+        .expect("contract record dump")
+}
+
 fn logic_fn_record(verifier: &str, kind: &str, fn_name: &str) -> ContractRecordDump {
-    ContractRecordDump {
-        evidence: format!("fixture::{fn_name}"),
-        verifier: verifier.to_string(),
-        kind: kind.to_string(),
-        fragment: format!("#[logic(open)]\nfn {fn_name}(c: char) -> bool {{\n    true\n}}"),
-    }
+    contract_record_dump(
+        format!("fixture::{fn_name}"),
+        verifier,
+        kind,
+        format!("#[logic(open)]\nfn {fn_name}(c: char) -> bool {{\n    true\n}}"),
+    )
 }
 
 fn kani_type_record(kind: &str, evidence: &str) -> ContractRecordDump {
-    ContractRecordDump {
-        evidence: evidence.to_string(),
-        verifier: "kani".to_string(),
-        kind: kind.to_string(),
-        fragment: "value >= 0".to_string(),
-    }
+    contract_record_dump(evidence, "kani", kind, "value >= 0")
 }
 
 // ---------------------------------------------------------------------
@@ -82,21 +92,21 @@ fn empty_registry() -> Vec<ContractRecordDump> {
 }
 
 fn abbreviated_ensures_registry() -> Vec<ContractRecordDump> {
-    vec![ContractRecordDump {
-        evidence: "amenable_std::rust_std::RustStdStandard<i32>".to_string(),
-        verifier: "kani".to_string(),
-        kind: "ensures".to_string(),
-        fragment: "value >= 0".to_string(),
-    }]
+    vec![contract_record_dump(
+        "amenable_std::rust_std::RustStdStandard<i32>",
+        "kani",
+        "ensures",
+        "value >= 0",
+    )]
 }
 
 fn nested_generic_cell_registry() -> Vec<ContractRecordDump> {
-    vec![ContractRecordDump {
-        evidence: "amenable_std::rust_std::RustStdStandard<Cell<i32>>".to_string(),
-        verifier: "kani".to_string(),
-        kind: "ensures".to_string(),
-        fragment: "actual == expected".to_string(),
-    }]
+    vec![contract_record_dump(
+        "amenable_std::rust_std::RustStdStandard<Cell<i32>>",
+        "kani",
+        "ensures",
+        "actual == expected",
+    )]
 }
 
 fn nonnegative_ensures_registry() -> Vec<ContractRecordDump> {
@@ -112,30 +122,28 @@ fn write_stores_new_value_registry() -> Vec<ContractRecordDump> {
 }
 
 fn value_to_owned_identity_registry() -> Vec<ContractRecordDump> {
-    vec![ContractRecordDump {
-        evidence: "fixture::value_to_owned_is_identity".to_string(),
-        verifier: "verus".to_string(),
-        kind: "ensures".to_string(),
-        fragment: "pub open spec fn value_to_owned_is_identity(value: i32) -> bool { to_owned_spec(value) == value }".to_string(),
-    }]
+    vec![contract_record_dump(
+        "fixture::value_to_owned_is_identity",
+        "verus",
+        "ensures",
+        "pub open spec fn value_to_owned_is_identity(value: i32) -> bool { to_owned_spec(value) == value }",
+    )]
 }
 
 fn into_i32_identity_registry() -> Vec<ContractRecordDump> {
-    vec![ContractRecordDump {
-        evidence: "fixture::into_i32_spec_matches_input".to_string(),
-        verifier: "verus".to_string(),
-        kind: "ensures".to_string(),
-        fragment:
-            "pub open spec fn into_i32_spec_matches_input(v: i32) -> bool { into_i32_spec(v) == v }"
-                .to_string(),
-    }]
+    vec![contract_record_dump(
+        "fixture::into_i32_spec_matches_input",
+        "verus",
+        "ensures",
+        "pub open spec fn into_i32_spec_matches_input(v: i32) -> bool { into_i32_spec(v) == v }",
+    )]
 }
 
 fn i32_and_bool_type_ids_differ_registry() -> Vec<ContractRecordDump> {
-    vec![ContractRecordDump {
-        evidence: "fixture::i32_and_bool_type_ids_differ".to_string(),
-        verifier: "verus".to_string(),
-        kind: "ensures".to_string(),
+    vec![contract_record_dump(
+        "fixture::i32_and_bool_type_ids_differ",
+        "verus",
+        "ensures",
         // Deliberately spaced turbofish (`:: <`, not `::<`) -- matches
         // how `verus_ensures_predicate!`'s real codegen actually
         // renders a fragment (re-emitted via a fresh `TokenStream`,
@@ -147,8 +155,8 @@ fn i32_and_bool_type_ids_differ_registry() -> Vec<ContractRecordDump> {
         // `canonicalize_type_text` comparison exists to paper over --
         // a compact `::<` fragment string would parse back with the
         // same spacing as the clause and pass even without that fix.
-        fragment: "open spec fn i32_and_bool_type_ids_differ() -> bool { type_id_spec :: < i32 > () != type_id_spec :: < bool > () }".to_string(),
-    }]
+        "open spec fn i32_and_bool_type_ids_differ() -> bool { type_id_spec :: < i32 > () != type_id_spec :: < bool > () }",
+    )]
 }
 
 fn bytes_lifetime_registry() -> Vec<ContractRecordDump> {
@@ -714,19 +722,19 @@ fn creusot_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::
     assert!(
         findings
             .iter()
-            .any(|finding| finding.context.contains("verify_something_raw")
-                && finding.snippet.contains("result >= 0"))
+            .any(|finding| finding.context().contains("verify_something_raw")
+                && finding.snippet().contains("result >= 0"))
     );
     assert!(
         findings
             .iter()
-            .any(|finding| finding.context.contains("verify_pearlite_only")
-                && finding.snippet.contains("0xD7FF"))
+            .any(|finding| finding.context().contains("verify_pearlite_only")
+                && finding.snippet().contains("0xD7FF"))
     );
     assert!(
         !findings
             .iter()
-            .any(|finding| finding.context.contains("verify_char_roundtrip"))
+            .any(|finding| finding.context().contains("verify_char_roundtrip"))
     );
     Ok(())
 }
@@ -743,8 +751,8 @@ fn creusot_named_call_to_an_unregistered_fn_name_is_flagged() -> miette::Result<
 
     assert_eq!(findings.len(), 3);
     assert!(findings.iter().any(|finding| {
-        finding.context.contains("verify_char_roundtrip")
-            && finding.snippet.contains("char_roundtrips")
+        finding.context().contains("verify_char_roundtrip")
+            && finding.snippet().contains("char_roundtrips")
     }));
     Ok(())
 }
@@ -759,7 +767,7 @@ fn creusot_trivial_requires_true_is_never_flagged() -> miette::Result<()> {
             .into_diagnostic()
             .wrap_err("scan creusot fixture")?;
 
-    assert!(!findings.iter().any(|finding| finding.snippet == "true"));
+    assert!(!findings.iter().any(|finding| finding.snippet() == "true"));
     Ok(())
 }
 
@@ -779,8 +787,8 @@ fn verus_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::Re
     .wrap_err("scan verus fixture")?;
 
     assert_eq!(findings.len(), 1);
-    assert!(findings[0].context.contains("verify_something_raw"));
-    assert!(findings[0].snippet.contains("value >= 0"));
+    assert!(findings[0].context().contains("verify_something_raw"));
+    assert!(findings[0].snippet().contains("value >= 0"));
     Ok(())
 }
 
@@ -836,8 +844,8 @@ pub fn verify_something(value: i32) -> (result: i32)
     // `verify_something`'s own `result == value` -- never a phantom
     // "clause" made of the semicolon, doc comment, and next signature.
     assert_eq!(findings.len(), 1);
-    assert!(findings[0].context.contains("verify_something"));
-    assert!(findings[0].snippet.contains("result == value"));
+    assert!(findings[0].context().contains("verify_something"));
+    assert!(findings[0].snippet().contains("result == value"));
     Ok(())
 }
 
@@ -861,11 +869,11 @@ fn kani_named_call_matching_a_registered_type_is_not_flagged() -> miette::Result
 
     assert_eq!(findings.len(), 1);
     assert_eq!(
-        findings[0].rule_id,
+        findings[0].rule_id(),
         AntipatternRuleId::UnnamedContractBound001
     );
-    assert!(findings[0].context.contains("verify_raw"));
-    assert!(findings[0].snippet.contains("value < 100"));
+    assert!(findings[0].context().contains("verify_raw"));
+    assert!(findings[0].snippet().contains("value < 100"));
     Ok(())
 }
 
@@ -883,12 +891,12 @@ fn kani_named_call_to_an_unregistered_type_is_flagged() -> miette::Result<()> {
     assert!(
         findings
             .iter()
-            .any(|finding| finding.snippet.contains("NonNegative :: requires"))
+            .any(|finding| finding.snippet().contains("NonNegative :: requires"))
     );
     assert!(
         findings
             .iter()
-            .any(|finding| finding.snippet.contains("NonNegative :: ensures"))
+            .any(|finding| finding.snippet().contains("NonNegative :: ensures"))
     );
     Ok(())
 }
@@ -925,19 +933,19 @@ pub fn verify_something() -> (result: (Option<i32>, Option<i32>, Option<i32>))
 
     assert_eq!(findings.len(), 2);
     assert!(findings.iter().any(|finding| {
-        finding.snippet.contains("Some")
-            && finding.snippet.contains('1')
-            && finding.snippet.contains("result . 0")
+        finding.snippet().contains("Some")
+            && finding.snippet().contains('1')
+            && finding.snippet().contains("result . 0")
     }));
     assert!(findings.iter().any(|finding| {
-        finding.snippet.contains("Some")
-            && finding.snippet.contains('2')
-            && finding.snippet.contains("result . 1")
+        finding.snippet().contains("Some")
+            && finding.snippet().contains('2')
+            && finding.snippet().contains("result . 1")
     }));
     assert!(
         !findings
             .iter()
-            .any(|finding| finding.snippet.contains("is None"))
+            .any(|finding| finding.snippet().contains("is None"))
     );
     Ok(())
 }
@@ -974,7 +982,7 @@ pub fn verify_something(initial: i32, updated: i32) -> (result: (bool, bool, i32
     .wrap_err("scan verus tuple")?;
 
     assert_eq!(findings.len(), 1);
-    assert!(findings[0].snippet.contains("result . 2 == updated"));
+    assert!(findings[0].snippet().contains("result . 2 == updated"));
     Ok(())
 }
 
@@ -1004,10 +1012,10 @@ amenable_derive::harness! {
 
     assert_eq!(findings.len(), 1);
     assert_eq!(
-        findings[0].rule_id,
+        findings[0].rule_id(),
         AntipatternRuleId::UnnamedContractBound001
     );
-    assert!(findings[0].snippet.contains("value == value + 0"));
+    assert!(findings[0].snippet().contains("value == value + 0"));
     Ok(())
 }
 
@@ -1037,7 +1045,7 @@ amenable_derive::harness! {
     .wrap_err("scan raw assume kani")?;
 
     assert_eq!(findings.len(), 1);
-    assert!(findings[0].snippet.contains("value != 42"));
+    assert!(findings[0].snippet().contains("value != 42"));
     Ok(())
 }
 
@@ -1090,8 +1098,8 @@ amenable_derive::harness! {
         .wrap_err("scan crate")?;
 
     assert_eq!(findings.len(), 1);
-    assert!(findings[0].context.contains("verify_production"));
-    assert!(!findings[0].file.starts_with("src/gallery"));
+    assert!(findings[0].context().contains("verify_production"));
+    assert!(!findings[0].file().starts_with("src/gallery"));
     Ok(())
 }
 

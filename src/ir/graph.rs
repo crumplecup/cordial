@@ -121,7 +121,7 @@ impl CrateIr {
         let index = node.to_index();
         self.graph
             .edges_directed(index, direction)
-            .filter(|edge| edge.weight().kind == kind)
+            .filter(|edge| edge.weight().kind() == kind)
             .map(|edge| {
                 let target = match direction {
                     Direction::Outgoing => edge.target(),

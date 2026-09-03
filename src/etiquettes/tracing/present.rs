@@ -6,14 +6,19 @@ use super::types::InstrumentLevel;
 
 use tracing::instrument;
 /// Arguments recorded on an existing `#[instrument]` attribute.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct PresentInstrument {
-    pub level: InstrumentLevel,
-    pub skip: Vec<String>,
-    pub skip_all: bool,
-    pub fields: Vec<String>,
-    pub err: bool,
-    pub ret: bool,
+    #[getter(copy)]
+    level: InstrumentLevel,
+    skip: Vec<String>,
+    #[getter(copy)]
+    skip_all: bool,
+    fields: Vec<String>,
+    #[getter(copy)]
+    err: bool,
+    #[getter(copy)]
+    ret: bool,
 }
 
 impl Default for PresentInstrument {

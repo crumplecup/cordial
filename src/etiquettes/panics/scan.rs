@@ -17,6 +17,7 @@ use super::verus_reach;
 use super::verus_recover::{VerusFunctionChunk, collect_verus_functions};
 use crate::error::CordialResult;
 use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
+use crate::objects::SourceSpan;
 
 use tracing::instrument;
 /// Scan `src/` and `tests/` under `crate_root`, excluding `fixtures/` paths.
@@ -27,6 +28,12 @@ use tracing::instrument;
 /// that's part of a proof's own failure mechanism must never be flagged
 /// regardless of which file it's found in relative to which file
 /// declares the harness that reaches it.
+///
+/// String literals that themselves parse as Rust and contain abort
+/// macros or `.unwrap` / `.expect` are scanned too: an inline fixture
+/// program is still an abort site until it lives under `tests/fixtures/`
+/// or `tests/parity/` (the path skip above). Assertion messages like
+/// `"panic!"` do not parse as a file and are not flagged.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_panics(crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord>> {
     let mut parsed = Vec::new();
@@ -37,19 +44,19 @@ pub fn scan_crate_panics(crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord
 
     let mut findings = Vec::new();
     for file in &parsed {
-        findings.extend(scan_parsed_file(file, crate_root, &reachability));
+        findings.extend(scan_parsed_file(file, crate_root, &reachability)?);
     }
     #[cfg(feature = "verus_ir")]
     {
         let verus_ir = crate::verus_ir::scan_crate_verus_ir(crate_root)?;
-        findings.extend(verus_ir_findings(&verus_ir, crate_root));
+        findings.extend(verus_ir_findings(&verus_ir, crate_root)?);
     }
     findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.context.cmp(&b.context))
-            .then(a.snippet.cmp(&b.snippet))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.context().cmp(b.context()))
+            .then(a.snippet().cmp(b.snippet()))
     });
     Ok(findings)
 }
@@ -61,7 +68,7 @@ pub fn scan_source_tree(src_root: &Path, crate_root: &Path) -> CordialResult<Vec
     let reachability = build_kani_reachability(parsed.iter().map(|file| &file.syntax));
     let mut findings = Vec::new();
     for file in &parsed {
-        findings.extend(scan_parsed_file(file, crate_root, &reachability));
+        findings.extend(scan_parsed_file(file, crate_root, &reachability)?);
     }
     Ok(findings)
 }
@@ -120,13 +127,13 @@ pub fn scan_rust_source(
         src_root: src_root.to_path_buf(),
         syntax,
     };
-    let findings = scan_parsed_file(&parsed, crate_root, &reachability);
+    let findings = scan_parsed_file(&parsed, crate_root, &reachability)?;
     #[cfg(feature = "verus_ir")]
     let findings = {
         let mut findings = findings;
         let module_path = module_path_from_src_file(src_root, file).join("::");
         let verus_ir = crate::verus_ir::scan_verus_rust_source(source, file, &module_path);
-        findings.extend(verus_ir_findings(&verus_ir, crate_root));
+        findings.extend(verus_ir_findings(&verus_ir, crate_root)?);
         findings
     };
     Ok(findings)
@@ -153,38 +160,44 @@ pub fn scan_rust_source(
 /// keyed on structural facts Verus's own grammar makes visible instead
 /// of call-graph reachability from a `#[kani::proof]` root.
 #[cfg(feature = "verus_ir")]
-#[instrument(level = "debug", skip(ir))]
+#[instrument(level = "debug", skip(ir), err(level = "warn"))]
 fn verus_ir_findings(
     ir: &crate::verus_ir::VerusCrateIr,
     crate_root: &Path,
-) -> Vec<PanicSiteRecord> {
+) -> CordialResult<Vec<PanicSiteRecord>> {
     let reachability = verus_reach::build_verus_reachability(ir);
-    ir.functions
+    let mut findings = Vec::new();
+    for function in ir
+        .functions
         .iter()
         .filter(|function| !reachability.is_verification_leaf(&function.name))
-        .flat_map(|function| {
-            let context = format!("{}::{}", function.module_path, function.name);
-            let file = function
-                .span
-                .file
-                .strip_prefix(crate_root)
-                .unwrap_or(&function.span.file)
-                .to_path_buf();
-            let cfg_test = function.cfg_test;
-            function
-                .panic_sites
-                .iter()
-                .filter(|site| !site.proven_unreachable_by_ghost_sibling)
-                .map(move |site| PanicSiteRecord {
-                    kind: verus_panic_kind(site.kind),
-                    context: context.clone(),
-                    file: file.clone(),
-                    line: site.line,
-                    snippet: site.snippet.clone(),
-                    cfg_test,
-                })
-        })
-        .collect()
+    {
+        let context = format!("{}::{}", function.module_path, function.name);
+        let file = function
+            .span
+            .file()
+            .strip_prefix(crate_root)
+            .unwrap_or(function.span.file())
+            .to_path_buf();
+        let cfg_test = function.cfg_test;
+        for site in function
+            .panic_sites
+            .iter()
+            .filter(|site| !site.proven_unreachable_by_ghost_sibling)
+        {
+            findings.push(
+                PanicSiteRecord::builder()
+                    .kind(verus_panic_kind(site.kind))
+                    .context(context.clone())
+                    .file(file.clone())
+                    .line(site.line)
+                    .snippet(site.snippet.clone())
+                    .cfg_test(cfg_test)
+                    .build()?,
+            );
+        }
+    }
+    Ok(findings)
 }
 
 #[cfg(feature = "verus_ir")]
@@ -199,12 +212,12 @@ fn verus_panic_kind(kind: crate::verus_ir::VerusPanicKind) -> PanicKind {
     }
 }
 
-#[instrument(level = "debug", skip(file, reachability))]
+#[instrument(level = "debug", skip(file, reachability), err(level = "warn"))]
 fn scan_parsed_file(
     file: &ParsedFile,
     crate_root: &Path,
     reachability: &KaniReachability,
-) -> Vec<PanicSiteRecord> {
+) -> CordialResult<Vec<PanicSiteRecord>> {
     let module_prefix = module_path_from_src_file(&file.src_root, &file.path);
     let mut visitor = PanicScanVisitor {
         file: file.path.clone(),
@@ -217,9 +230,14 @@ fn scan_parsed_file(
         reachability,
         findings: Vec::new(),
         exempt_error_assertion_lines: std::collections::HashSet::new(),
+        in_embedded_source: false,
+        error: None,
     };
     visitor.visit_file(&file.syntax);
-    visitor.findings
+    if let Some(error) = visitor.error {
+        return Err(error);
+    }
+    Ok(visitor.findings)
 }
 
 struct PanicScanVisitor<'a> {
@@ -245,6 +263,10 @@ struct PanicScanVisitor<'a> {
     /// `visit_block` before it descends into that block's own
     /// statements.
     exempt_error_assertion_lines: std::collections::HashSet<u32>,
+    /// True while visiting a string literal that parsed as Rust. Nested
+    /// strings inside that program are not scanned again.
+    in_embedded_source: bool,
+    error: Option<crate::error::CordialError>,
 }
 
 impl PanicScanVisitor<'_> {
@@ -283,19 +305,117 @@ impl PanicScanVisitor<'_> {
         }
         if kind == PanicKind::Unwrap
             && self.findings.last().is_some_and(|last| {
-                last.kind == PanicKind::Unwrap && last.line == line && last.file == file
+                last.kind() == PanicKind::Unwrap && last.line() == line && last.file() == &file
             })
         {
             return;
         }
-        self.findings.push(PanicSiteRecord {
-            kind,
-            context: self.site_context(),
-            file,
-            line,
-            snippet,
-            cfg_test: self.in_cfg_test,
-        });
+        if self.error.is_some() {
+            return;
+        }
+        match PanicSiteRecord::builder()
+            .kind(kind)
+            .context(self.site_context())
+            .file(file)
+            .line(line)
+            .snippet(snippet)
+            .cfg_test(self.in_cfg_test)
+            .build()
+        {
+            Ok(record) => self.findings.push(record),
+            Err(error) => self.error = Some(error),
+        }
+    }
+
+    /// A string that parses as a Rust file and contains abort APIs is a
+    /// fixture program smuggled into the scanning crate. Scan it with its
+    /// own Kani/Verus reachability so the findings are the same as if the
+    /// program lived in a real `.rs` file, then map lines back onto the
+    /// literal in the outer file.
+    #[instrument(level = "debug", skip(self, lit))]
+    fn scan_embedded_source(&mut self, lit: &syn::LitStr) {
+        if self.in_embedded_source {
+            return;
+        }
+        let value = lit.value();
+        if !looks_like_embedded_panic_source(&value) {
+            return;
+        }
+        let origin = lit.span().start().line as u32;
+        if let Ok(syntax) = syn::parse_file(&value) {
+            let inner_reach = build_kani_reachability(std::iter::once(&syntax));
+            let mut nested = PanicScanVisitor {
+                file: self.file.clone(),
+                crate_root: self.crate_root.clone(),
+                module_prefix: self.module_prefix.clone(),
+                impl_type: self.impl_type.clone(),
+                fn_stack: self.fn_stack.clone(),
+                in_cfg_test: self.in_cfg_test,
+                in_cfg_not_kani: false,
+                reachability: &inner_reach,
+                findings: Vec::new(),
+                exempt_error_assertion_lines: std::collections::HashSet::new(),
+                in_embedded_source: true,
+                error: None,
+            };
+            nested.visit_file(&syntax);
+            if let Some(error) = nested.error {
+                self.error = Some(error);
+                return;
+            }
+            for finding in nested.findings {
+                if self.error.is_some() {
+                    return;
+                }
+                match PanicSiteRecord::builder()
+                    .kind(finding.kind())
+                    .context(finding.context().clone())
+                    .file(finding.file().clone())
+                    .line(origin.saturating_add(finding.line().saturating_sub(1)))
+                    .snippet(finding.snippet().clone())
+                    .cfg_test(finding.cfg_test())
+                    .build()
+                {
+                    Ok(record) => self.findings.push(record),
+                    Err(error) => {
+                        self.error = Some(error);
+                        return;
+                    }
+                }
+            }
+        }
+        #[cfg(feature = "verus_ir")]
+        {
+            let module_path = self.site_context();
+            let ir = crate::verus_ir::scan_verus_rust_source(&value, &self.file, &module_path);
+            let records = match verus_ir_findings(&ir, &self.crate_root) {
+                Ok(records) => records,
+                Err(error) => {
+                    self.error = Some(error);
+                    return;
+                }
+            };
+            for record in records {
+                if self.error.is_some() {
+                    return;
+                }
+                match PanicSiteRecord::builder()
+                    .kind(record.kind())
+                    .context(record.context().clone())
+                    .file(record.file().clone())
+                    .line(origin.saturating_add(record.line().saturating_sub(1)))
+                    .snippet(record.snippet().clone())
+                    .cfg_test(self.in_cfg_test)
+                    .build()
+                {
+                    Ok(adjusted) => self.findings.push(adjusted),
+                    Err(error) => {
+                        self.error = Some(error);
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     #[instrument(level = "debug", skip(self, mac))]
@@ -465,6 +585,13 @@ impl<'ast> Visit<'ast> for PanicScanVisitor<'_> {
     }
 
     #[instrument(level = "debug", skip(self, node))]
+    fn visit_expr_lit(&mut self, node: &'ast ExprLit) {
+        if let Lit::Str(lit) = &node.lit {
+            self.scan_embedded_source(lit);
+        }
+    }
+
+    #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_block(&mut self, node: &'ast syn::ExprBlock) {
         let prev = self.in_cfg_not_kani;
         if has_cfg_not_flag(&node.attrs, "kani") {
@@ -524,6 +651,18 @@ pub(super) fn has_cfg_not_flag(attrs: &[syn::Attribute], flag: &str) -> bool {
         }
         list.tokens.to_string().replace(' ', "") == format!("not({flag})")
     })
+}
+
+/// Cheap prefilter so every string literal is not run through `syn`.
+#[instrument(level = "trace", ret)]
+fn looks_like_embedded_panic_source(source: &str) -> bool {
+    source.contains("panic!")
+        || source.contains("unreachable!")
+        || source.contains("compile_error!")
+        || source.contains(".unwrap(")
+        || source.contains(".unwrap_err(")
+        || source.contains(".expect(")
+        || source.contains(".expect_err(")
 }
 
 #[instrument(level = "debug", skip(path))]

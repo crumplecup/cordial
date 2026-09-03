@@ -58,15 +58,15 @@ fn materialize_error_ir(
 ) -> CordialResult<()> {
     let mut site_nodes: HashMap<(String, u32), Vec<crate::ir::NodeId>> = HashMap::new();
 
-    for record in &report.sites {
+    for record in report.sites() {
         let node = insert_error_site_node(ir, crate_root, record)?;
-        let key = site_key(&record.file, record.line);
+        let key = site_key(record.file(), record.line());
         site_nodes.entry(key).or_default().push(node);
     }
 
     #[cfg(feature = "error_chain")]
-    for record in &report.chain {
-        let key = site_key(&record.file, record.line);
+    for record in report.chain() {
+        let key = site_key(record.file(), record.line());
         if let Some(nodes) = site_nodes.get(&key) {
             for &node in nodes {
                 chain::apply_chain_attrs(ir, node, record)?;
@@ -78,14 +78,14 @@ fn materialize_error_ir(
 
     #[cfg(feature = "internal_error_chain")]
     {
-        for node in &report.type_graph.nodes {
-            let parent = resolve_parent(ir, &node.type_path)?;
-            let file = crate_root.join(&node.file);
-            let span = FileSpan::new(file.clone(), node.line, 1);
+        for node in report.type_graph().nodes() {
+            let parent = resolve_parent(ir, node.type_path())?;
+            let file = crate_root.join(node.file());
+            let span = FileSpan::new(file.clone(), node.line(), 1);
             let ir_node = ir.insert_node(
                 NodeWeight::new(NodeKind::Expr)
                     .with_span(span.clone())
-                    .with_name(node.snippet.clone()),
+                    .with_name(node.snippet().clone()),
             )?;
             ir.set_attr(
                 ir_node,
@@ -95,85 +95,37 @@ fn materialize_error_ir(
             ir.set_attr(
                 ir_node,
                 "type_path",
-                serde_json::Value::String(node.type_path.clone()),
+                serde_json::Value::String(node.type_path().clone()),
             )?;
             ir.set_attr(
                 ir_node,
                 "node_class",
-                serde_json::Value::String(node.node_class.to_string()),
+                serde_json::Value::String(node.node_class().to_string()),
             )?;
             ir.set_attr(
                 ir_node,
                 "probe_id",
-                serde_json::Value::String(node.probe_id.to_string()),
+                serde_json::Value::String(node.probe_id().to_string()),
             )?;
             ir.set_attr(
                 ir_node,
                 "source_target",
-                serde_json::Value::String(node.source_target.clone().unwrap_or_default()),
+                serde_json::Value::String(node.source_target().clone().unwrap_or_default()),
             )?;
             ir.set_attr(
                 ir_node,
                 "reaches_foreign",
-                serde_json::Value::Bool(node.reaches_foreign),
+                serde_json::Value::Bool(node.reaches_foreign()),
             )?;
             ir.set_attr(
                 ir_node,
                 "chain_depth",
-                serde_json::Value::Number(node.chain_depth.into()),
+                serde_json::Value::Number(node.chain_depth().into()),
             )?;
             ir.set_attr(
                 ir_node,
                 "snippet",
-                serde_json::Value::String(node.snippet.clone()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "file",
-                serde_json::Value::String(file.display().to_string()),
-            )?;
-            ir.set_attr(ir_node, "line", serde_json::Value::Number(node.line.into()))?;
-            ir.insert_edge(parent, ir_node, EdgeKind::Contains)?;
-        }
-
-        for finding in &report.compliance {
-            let parent = resolve_parent(ir, &finding.context)?;
-            let file = crate_root.join(&finding.file);
-            let span = FileSpan::new(file.clone(), finding.line, 1);
-            let ir_node = ir.insert_node(
-                NodeWeight::new(NodeKind::Expr)
-                    .with_span(span.clone())
-                    .with_name(finding.snippet.clone()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "internal_error_record_kind",
-                serde_json::Value::String("compliance".to_string()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "rule_id",
-                serde_json::Value::String(finding.rule_id.to_string()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "context",
-                serde_json::Value::String(finding.context.clone()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "foreign_error_type",
-                serde_json::Value::String(finding.foreign_error_type.clone().unwrap_or_default()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "internal_constructor",
-                serde_json::Value::String(finding.internal_constructor.clone().unwrap_or_default()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "snippet",
-                serde_json::Value::String(finding.snippet.clone()),
+                serde_json::Value::String(node.snippet().clone()),
             )?;
             ir.set_attr(
                 ir_node,
@@ -183,7 +135,61 @@ fn materialize_error_ir(
             ir.set_attr(
                 ir_node,
                 "line",
-                serde_json::Value::Number(finding.line.into()),
+                serde_json::Value::Number(node.line().into()),
+            )?;
+            ir.insert_edge(parent, ir_node, EdgeKind::Contains)?;
+        }
+
+        for finding in report.compliance() {
+            let parent = resolve_parent(ir, finding.context())?;
+            let file = crate_root.join(finding.file());
+            let span = FileSpan::new(file.clone(), finding.line(), 1);
+            let ir_node = ir.insert_node(
+                NodeWeight::new(NodeKind::Expr)
+                    .with_span(span.clone())
+                    .with_name(finding.snippet().clone()),
+            )?;
+            ir.set_attr(
+                ir_node,
+                "internal_error_record_kind",
+                serde_json::Value::String("compliance".to_string()),
+            )?;
+            ir.set_attr(
+                ir_node,
+                "rule_id",
+                serde_json::Value::String(finding.rule_id().to_string()),
+            )?;
+            ir.set_attr(
+                ir_node,
+                "context",
+                serde_json::Value::String(finding.context().clone()),
+            )?;
+            ir.set_attr(
+                ir_node,
+                "foreign_error_type",
+                serde_json::Value::String(finding.foreign_error_type().clone().unwrap_or_default()),
+            )?;
+            ir.set_attr(
+                ir_node,
+                "internal_constructor",
+                serde_json::Value::String(
+                    finding.internal_constructor().clone().unwrap_or_default(),
+                ),
+            )?;
+            ir.set_attr(
+                ir_node,
+                "snippet",
+                serde_json::Value::String(finding.snippet().clone()),
+            )?;
+            ir.set_attr(
+                ir_node,
+                "file",
+                serde_json::Value::String(file.display().to_string()),
+            )?;
+            ir.set_attr(
+                ir_node,
+                "line",
+                serde_json::Value::Number(finding.line().into()),
             )?;
             ir.insert_edge(parent, ir_node, EdgeKind::Contains)?;
         }
@@ -203,40 +209,44 @@ fn insert_error_site_node(
     crate_root: &std::path::Path,
     record: &ErrorSiteRecord,
 ) -> CordialResult<crate::ir::NodeId> {
-    let parent = resolve_parent(ir, &record.context)?;
-    let file = crate_root.join(&record.file);
-    let span = FileSpan::new(file.clone(), record.line, 1);
+    let parent = resolve_parent(ir, record.context())?;
+    let file = crate_root.join(record.file());
+    let span = FileSpan::new(file.clone(), record.line(), 1);
     let node = ir.insert_node(
         NodeWeight::new(NodeKind::Expr)
             .with_span(span.clone())
-            .with_name(record.site_snippet.clone()),
+            .with_name(record.site_snippet().clone()),
     )?;
     ir.set_attr(
         node,
         "error_site_kind",
-        serde_json::Value::String(record.kind.as_attr().to_string()),
+        serde_json::Value::String(record.kind().as_attr().to_string()),
     )?;
     ir.set_attr(
         node,
         "context",
-        serde_json::Value::String(record.context.clone()),
+        serde_json::Value::String(record.context().clone()),
     )?;
     ir.set_attr(
         node,
         "source_snippet",
-        serde_json::Value::String(record.source_snippet.clone()),
+        serde_json::Value::String(record.source_snippet().clone()),
     )?;
     ir.set_attr(
         node,
         "site_snippet",
-        serde_json::Value::String(record.site_snippet.clone()),
+        serde_json::Value::String(record.site_snippet().clone()),
     )?;
     ir.set_attr(
         node,
         "file",
         serde_json::Value::String(file.display().to_string()),
     )?;
-    ir.set_attr(node, "line", serde_json::Value::Number(record.line.into()))?;
+    ir.set_attr(
+        node,
+        "line",
+        serde_json::Value::Number(record.line().into()),
+    )?;
     ir.insert_edge(parent, node, EdgeKind::Contains)?;
     Ok(node)
 }
@@ -261,24 +271,24 @@ mod chain {
         ir.set_attr(
             node,
             "error_chain_rule_id",
-            serde_json::Value::String(record.rule_id.as_str().to_string()),
+            serde_json::Value::String(record.rule_id().as_str().to_string()),
         )?;
         if !ir.node(node).is_some_and(|n| n.attr("context").is_some()) {
             ir.set_attr(
                 node,
                 "context",
-                serde_json::Value::String(record.context.clone()),
+                serde_json::Value::String(record.context().clone()),
             )?;
         }
         ir.set_attr(
             node,
             "snippet",
-            serde_json::Value::String(record.snippet.clone()),
+            serde_json::Value::String(record.snippet().clone()),
         )?;
         ir.set_attr(
             node,
             "foreign_error_type",
-            serde_json::Value::String(record.foreign_error_type.clone().unwrap_or_default()),
+            serde_json::Value::String(record.foreign_error_type().clone().unwrap_or_default()),
         )?;
         Ok(())
     }
@@ -289,13 +299,13 @@ mod chain {
         crate_root: &std::path::Path,
         record: &ErrorChainRecord,
     ) -> CordialResult<()> {
-        let parent = resolve_parent(ir, &record.context)?;
-        let file = crate_root.join(&record.file);
-        let span = FileSpan::new(file.clone(), record.line, 1);
+        let parent = resolve_parent(ir, record.context())?;
+        let file = crate_root.join(record.file());
+        let span = FileSpan::new(file.clone(), record.line(), 1);
         let node = ir.insert_node(
             NodeWeight::new(NodeKind::Expr)
                 .with_span(span.clone())
-                .with_name(record.snippet.clone()),
+                .with_name(record.snippet().clone()),
         )?;
         apply_chain_attrs(ir, node, record)?;
         ir.set_attr(
@@ -303,7 +313,11 @@ mod chain {
             "file",
             serde_json::Value::String(file.display().to_string()),
         )?;
-        ir.set_attr(node, "line", serde_json::Value::Number(record.line.into()))?;
+        ir.set_attr(
+            node,
+            "line",
+            serde_json::Value::Number(record.line().into()),
+        )?;
         ir.insert_edge(parent, node, EdgeKind::Contains)?;
         Ok(())
     }

@@ -410,7 +410,7 @@ fn has_cross_crate_mirror(
         .cross_crate_edges
         .iter()
         .any(|(from_crate, from, to_crate, to, weight)| {
-            weight.kind == EdgeKind::Mirrors
+            weight.kind() == EdgeKind::Mirrors
                 && from_crate == upstream
                 && *from == target_node
                 && to_crate == shadow

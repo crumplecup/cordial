@@ -105,7 +105,7 @@ fn wrapper_source_field_is_detected() -> miette::Result<()> {
     cordial::init_tracing();
     let findings = scan_fixture()?;
     assert!(findings.iter().any(|f| {
-        f.rule_id == ErrorChainProbeId::WrapperSourceField001 && f.snippet.contains("IoSource")
+        f.rule_id() == ErrorChainProbeId::WrapperSourceField001 && f.snippet().contains("IoSource")
     }));
     Ok(())
 }
@@ -117,7 +117,7 @@ fn from_bridge_is_detected() -> miette::Result<()> {
     assert!(
         findings
             .iter()
-            .any(|f| f.rule_id == ErrorChainProbeId::FromBridge001)
+            .any(|f| f.rule_id() == ErrorChainProbeId::FromBridge001)
     );
     Ok(())
 }
@@ -127,8 +127,8 @@ fn preserved_question_mark_on_foreign_call() -> miette::Result<()> {
     cordial::init_tracing();
     let findings = scan_fixture()?;
     assert!(findings.iter().any(|f| {
-        f.rule_id == ErrorChainProbeId::PreservedQuestionMark001
-            && f.context.contains("preserved_direct")
+        f.rule_id() == ErrorChainProbeId::PreservedQuestionMark001
+            && f.context().contains("preserved_direct")
     }));
     Ok(())
 }
@@ -138,28 +138,28 @@ fn preserved_map_err_propagation_is_detected() -> miette::Result<()> {
     cordial::init_tracing();
     let findings = scan_fixture()?;
     assert!(findings.iter().any(|f| {
-        f.rule_id == ErrorChainProbeId::PreservedMapErr001
-            && f.context.contains("preserved_map_err_from")
+        f.rule_id() == ErrorChainProbeId::PreservedMapErr001
+            && f.context().contains("preserved_map_err_from")
     }));
     assert!(findings.iter().any(|f| {
-        f.rule_id == ErrorChainProbeId::PreservedMapErr001
-            && f.context.contains("preserved_map_err_closure")
+        f.rule_id() == ErrorChainProbeId::PreservedMapErr001
+            && f.context().contains("preserved_map_err_closure")
     }));
     assert!(findings.iter().any(|f| {
-        f.rule_id == ErrorChainProbeId::PreservedMapErr001
-            && f.context.contains("preserved_map_err_forwarding_ctor")
+        f.rule_id() == ErrorChainProbeId::PreservedMapErr001
+            && f.context().contains("preserved_map_err_forwarding_ctor")
     }));
     assert!(findings.iter().any(|f| {
-        f.rule_id == ErrorChainProbeId::PreservedMapErr001
-            && f.context.contains("preserved_map_err_ctor_fn")
+        f.rule_id() == ErrorChainProbeId::PreservedMapErr001
+            && f.context().contains("preserved_map_err_ctor_fn")
     }));
     assert!(findings.iter().any(|f| {
-        f.rule_id == ErrorChainProbeId::PreservedMapErr001
-            && f.context.contains("preserved_map_err_tail")
+        f.rule_id() == ErrorChainProbeId::PreservedMapErr001
+            && f.context().contains("preserved_map_err_tail")
     }));
     assert!(findings.iter().any(|f| {
-        f.rule_id == ErrorChainProbeId::PreservedMapErr001
-            && f.context.contains("preserved_map_err_syn_parse")
+        f.rule_id() == ErrorChainProbeId::PreservedMapErr001
+            && f.context().contains("preserved_map_err_syn_parse")
     }));
     Ok(())
 }
@@ -171,7 +171,7 @@ fn stringifying_map_err_is_not_preserved() -> miette::Result<()> {
     assert!(
         !findings
             .iter()
-            .any(|f| f.context.contains("broken_stringify"))
+            .any(|f| f.context().contains("broken_stringify"))
     );
     Ok(())
 }

@@ -66,9 +66,9 @@ impl Rule for DocWarningRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct DocWarningMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for DocWarningMarker {
@@ -93,15 +93,23 @@ impl Marker for DocWarningMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct DocWarningFinding {
-    pub rule: DocWarningRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub context: String,
-    pub span: FileSpan,
-    pub snippet: String,
+    rule: DocWarningRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    context: String,
+    span: FileSpan,
+    snippet: String,
+}
+
+impl DocWarningFinding {
+    pub fn builder() -> DocWarningFindingBuilder {
+        DocWarningFindingBuilder::default()
+    }
 }
 
 impl Finding for DocWarningFinding {
@@ -125,24 +133,34 @@ impl Finding for DocWarningFinding {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
         sink.snippet(&self.snippet);
     }
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct DocWarningRecord {
     /// Stable probe rule identifier.
-    pub rule_id: DocWarningRuleId,
+    #[getter(copy)]
+    rule_id: DocWarningRuleId,
     /// rustdoc lint code (`rustdoc::broken_intra_doc_links`, …).
-    pub context: String,
+    context: String,
     /// Source file path, usually crate-relative.
-    pub file: PathBuf,
+    file: PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// rustdoc warning / error message.
-    pub snippet: String,
+    snippet: String,
+}
+
+impl DocWarningRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> DocWarningRecordBuilder {
+        DocWarningRecordBuilder::default()
+    }
 }

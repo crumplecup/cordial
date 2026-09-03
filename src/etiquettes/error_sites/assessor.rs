@@ -83,20 +83,22 @@ impl Assessor for ErrorSiteAssessor {
                 .unwrap_or("")
                 .to_string();
 
-            findings.push(Box::new(ErrorSiteFinding {
-                rule: ErrorSiteRule::new(kind),
-                disposition: Disposition::Open,
-                anchor: crate::objects::NodeAnchor(node_id),
-                crate_name: crate_name.clone(),
-                kind,
-                context,
-                span,
-                source_snippet,
-                site_snippet,
-                origin_class,
-                origin_detail,
-                rationale,
-            }) as Box<dyn Finding>);
+            findings.push(Box::new(
+                ErrorSiteFinding::builder()
+                    .rule(ErrorSiteRule::new(kind))
+                    .disposition(Disposition::Open)
+                    .anchor(crate::objects::NodeAnchor(node_id))
+                    .crate_name(crate_name.clone())
+                    .kind(kind)
+                    .context(context)
+                    .span(span)
+                    .source_snippet(source_snippet)
+                    .site_snippet(site_snippet)
+                    .origin_class(origin_class)
+                    .origin_detail(origin_detail)
+                    .rationale(rationale)
+                    .build()?,
+            ) as Box<dyn Finding>);
         }
         Ok(findings)
     }

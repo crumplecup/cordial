@@ -183,7 +183,7 @@ impl TargetProvider for WorkspaceMembersTargetProvider {
         let members = discover_crate_targets(session.project_root(), filter)?;
         Ok(members
             .into_iter()
-            .map(|target: CrateTarget| CoverageTarget::workspace_member(target.crate_name))
+            .map(|target: CrateTarget| CoverageTarget::workspace_member(target.crate_name()))
             .collect())
     }
 }

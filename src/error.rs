@@ -9,8 +9,8 @@ use std::path::{PathBuf, StripPrefixError};
 
 use io::{FmtSource, IoSource, PrefixSource};
 use local::{
-    CargoMetadataSource, InvariantSource, NoCachedIrSource, NoExceptionsSource, NotFoundSource,
-    UnknownEtiquetteSource,
+    BuilderSource, CargoMetadataSource, InvariantSource, NoCachedIrSource, NoExceptionsSource,
+    NotFoundSource, UnknownEtiquetteSource, UnreachableSource,
 };
 pub use parse::TokenStreamParseError;
 use parse::{ConfigSource, JsonParseSource, JsonSource, SynParseSource};
@@ -38,6 +38,10 @@ pub enum CordialErrorKind {
     SynParse(SynParseSource),
     /// An internal invariant was violated.
     Invariant(InvariantSource),
+    /// A match arm (or equivalent control path) that must not execute.
+    Unreachable(UnreachableSource),
+    /// A [`derive_builder`] `build()` left a required field unset.
+    Builder(BuilderSource),
     /// No etiquette is registered under that id.
     UnknownEtiquette(UnknownEtiquetteSource),
     /// `cargo metadata` failed.
@@ -79,6 +83,25 @@ impl CordialError {
     #[instrument(level = "debug", skip(message))]
     pub fn invariant(message: impl Into<String>) -> Self {
         Self::from_kind(CordialErrorKind::Invariant(InvariantSource::new(message)))
+    }
+
+    /// A match arm (or equivalent control path) that must not execute.
+    ///
+    /// Use this instead of `unreachable!` / `panic!` so the location stays on
+    /// the error and callers can keep control through `?`.
+    #[track_caller]
+    #[instrument(level = "debug", skip(message))]
+    pub fn unreachable(message: impl Into<String>) -> Self {
+        Self::from_kind(CordialErrorKind::Unreachable(UnreachableSource::new(
+            message,
+        )))
+    }
+
+    /// A [`derive_builder`] `build()` left a required field unset.
+    #[track_caller]
+    #[instrument(level = "debug", skip(source))]
+    pub fn builder(source: derive_builder::UninitializedFieldError) -> Self {
+        Self::from(source)
     }
 
     /// No etiquette is registered under this id.
@@ -154,7 +177,9 @@ impl std::error::Error for CordialError {
             CordialErrorKind::Fmt(source) => Some(source),
             CordialErrorKind::TokenStreamParse(source) => Some(source),
             CordialErrorKind::Prefix(source) => Some(source),
+            CordialErrorKind::Builder(source) => Some(source),
             CordialErrorKind::Invariant(_)
+            | CordialErrorKind::Unreachable(_)
             | CordialErrorKind::UnknownEtiquette(_)
             | CordialErrorKind::NotFound(_)
             | CordialErrorKind::NoExceptions(_)
@@ -173,6 +198,8 @@ impl Display for CordialErrorKind {
             Self::Config(source) => source.fmt(formatter),
             Self::SynParse(source) => source.fmt(formatter),
             Self::Invariant(source) => source.fmt(formatter),
+            Self::Unreachable(source) => source.fmt(formatter),
+            Self::Builder(source) => source.fmt(formatter),
             Self::UnknownEtiquette(source) => source.fmt(formatter),
             Self::CargoMetadata(source) => source.fmt(formatter),
             Self::Fmt(source) => source.fmt(formatter),
@@ -228,6 +255,14 @@ impl From<proc_macro2::LexError> for CordialError {
         Self::from_kind(CordialErrorKind::TokenStreamParse(
             TokenStreamParseError::from(value),
         ))
+    }
+}
+
+impl From<derive_builder::UninitializedFieldError> for CordialError {
+    #[track_caller]
+    #[instrument(level = "debug", skip(value), ret)]
+    fn from(value: derive_builder::UninitializedFieldError) -> Self {
+        Self::from_kind(CordialErrorKind::Builder(BuilderSource::from(value)))
     }
 }
 

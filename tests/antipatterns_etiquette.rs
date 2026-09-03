@@ -33,7 +33,7 @@ fn box_dyn_error_sites_are_detected() -> miette::Result<()> {
     assert_eq!(
         findings
             .iter()
-            .filter(|f| f.rule_id == AntipatternRuleId::BoxDynError001)
+            .filter(|f| f.rule_id() == AntipatternRuleId::BoxDynError001)
             .count(),
         4
     );
@@ -46,10 +46,10 @@ fn box_dyn_error_context_includes_enclosing_fn() -> miette::Result<()> {
     let findings = scan_fixture("box_dyn_error.rs")?;
     let accepts = findings
         .iter()
-        .find(|f| f.context.contains("accepts"))
+        .find(|f| f.context().contains("accepts"))
         .ok_or_else(|| miette::miette!("accepts finding"))?;
-    assert_eq!(accepts.rule_id, AntipatternRuleId::BoxDynError001);
-    assert!(accepts.snippet.contains("Box<dyn Error>"));
+    assert_eq!(accepts.rule_id(), AntipatternRuleId::BoxDynError001);
+    assert!(accepts.snippet().contains("Box<dyn Error>"));
     Ok(())
 }
 
@@ -60,7 +60,7 @@ fn non_box_dyn_error_types_are_ignored() -> miette::Result<()> {
     assert!(
         !findings
             .iter()
-            .any(|f| f.snippet.contains("Display") || f.snippet.contains("&'static"))
+            .any(|f| f.snippet().contains("Display") || f.snippet().contains("&'static"))
     );
     Ok(())
 }
@@ -71,33 +71,33 @@ fn string_error_result_types_are_detected() -> miette::Result<()> {
     let findings = scan_fixture("string_error.rs")?;
     let string_errors: Vec<_> = findings
         .iter()
-        .filter(|f| f.rule_id == AntipatternRuleId::StringError001)
+        .filter(|f| f.rule_id() == AntipatternRuleId::StringError001)
         .collect();
     assert_eq!(string_errors.len(), 4, "{string_errors:?}");
     assert!(
         string_errors
             .iter()
-            .any(|f| f.context.contains("returns_string"))
+            .any(|f| f.context().contains("returns_string"))
     );
     assert!(
         string_errors
             .iter()
-            .any(|f| f.context.contains("returns_str"))
+            .any(|f| f.context().contains("returns_str"))
     );
     assert!(
         string_errors
             .iter()
-            .any(|f| f.context.contains("returns_std_string"))
+            .any(|f| f.context().contains("returns_std_string"))
     );
     assert!(
         string_errors
             .iter()
-            .any(|f| f.context.contains("StringResult"))
+            .any(|f| f.context().contains("StringResult"))
     );
     assert!(
         !string_errors
             .iter()
-            .any(|f| f.context.contains("ok_is_string") || f.context.contains("typed_error"))
+            .any(|f| f.context().contains("ok_is_string") || f.context().contains("typed_error"))
     );
     Ok(())
 }
@@ -108,28 +108,28 @@ fn unused_underscore_arguments_are_detected() -> miette::Result<()> {
     let findings = scan_fixture("unused_underscore_args.rs")?;
     let unused = findings
         .iter()
-        .filter(|f| f.rule_id == AntipatternRuleId::UnusedUnderscoreArg001)
+        .filter(|f| f.rule_id() == AntipatternRuleId::UnusedUnderscoreArg001)
         .collect::<Vec<_>>();
     assert_eq!(unused.len(), 6);
     assert!(
         unused
             .iter()
-            .any(|f| f.context.contains("Bot") && f.context.contains("handle"))
+            .any(|f| f.context().contains("Bot") && f.context().contains("handle"))
     );
     assert!(
         unused
             .iter()
-            .any(|f| f.context.contains("free_fn") && f.snippet == "_x")
+            .any(|f| f.context().contains("free_fn") && f.snippet() == "_x")
     );
     assert!(
         unused
             .iter()
-            .any(|f| f.context.contains("tuple") && f.snippet == "_c")
+            .any(|f| f.context().contains("tuple") && f.snippet() == "_c")
     );
     assert!(
         !unused
             .iter()
-            .any(|f| f.context.contains("test_fn") || f.snippet == "y" || f.snippet == "b")
+            .any(|f| f.context().contains("test_fn") || f.snippet() == "y" || f.snippet() == "b")
     );
     Ok(())
 }
@@ -140,19 +140,19 @@ fn foreign_trait_impl_unused_args_are_skipped() -> miette::Result<()> {
     let findings = scan_fixture("foreign_trait_unused_args.rs")?;
     let unused = findings
         .iter()
-        .filter(|f| f.rule_id == AntipatternRuleId::UnusedUnderscoreArg001)
+        .filter(|f| f.rule_id() == AntipatternRuleId::UnusedUnderscoreArg001)
         .collect::<Vec<_>>();
     assert_eq!(unused.len(), 2, "{unused:?}");
     assert!(
         unused
             .iter()
-            .any(|f| f.context.contains("Mine") && f.snippet == "_arg")
+            .any(|f| f.context().contains("Mine") && f.snippet() == "_arg")
     );
-    assert!(unused.iter().any(|f| f.snippet == "_z"));
+    assert!(unused.iter().any(|f| f.snippet() == "_z"));
     assert!(
         !unused
             .iter()
-            .any(|f| f.context.contains("visit_expr_closure") || f.snippet == "_node")
+            .any(|f| f.context().contains("visit_expr_closure") || f.snippet() == "_node")
     );
     Ok(())
 }
@@ -163,27 +163,27 @@ fn proc_macro_abi_and_creusot_opaque_stub_unused_args_are_skipped() -> miette::R
     let findings = scan_fixture("unused_underscore_args_exempt_signatures.rs")?;
     let unused = findings
         .iter()
-        .filter(|f| f.rule_id == AntipatternRuleId::UnusedUnderscoreArg001)
+        .filter(|f| f.rule_id() == AntipatternRuleId::UnusedUnderscoreArg001)
         .collect::<Vec<_>>();
 
     // Exempt: proc-macro ABI functions and the real #[logic(opaque)] +
     // `dead`-body Creusot idiom.
     assert!(
-        !unused.iter().any(|f| f.context.contains("my_attr")),
+        !unused.iter().any(|f| f.context().contains("my_attr")),
         "{unused:?}"
     );
     assert!(
-        !unused.iter().any(|f| f.context.contains("my_derive")),
+        !unused.iter().any(|f| f.context().contains("my_derive")),
         "{unused:?}"
     );
     assert!(
-        !unused.iter().any(|f| f.context.contains("my_macro")),
+        !unused.iter().any(|f| f.context().contains("my_macro")),
         "{unused:?}"
     );
     assert!(
         !unused
             .iter()
-            .any(|f| f.context.contains("opaque_len") && !f.context.contains("real_body")),
+            .any(|f| f.context().contains("opaque_len") && !f.context().contains("real_body")),
         "{unused:?}"
     );
 
@@ -193,13 +193,13 @@ fn proc_macro_abi_and_creusot_opaque_stub_unused_args_are_skipped() -> miette::R
     assert!(
         unused
             .iter()
-            .any(|f| f.context.contains("opaque_len_with_real_body")),
+            .any(|f| f.context().contains("opaque_len_with_real_body")),
         "{unused:?}"
     );
     assert!(
         unused
             .iter()
-            .any(|f| f.context.contains("looks_like_dead_but_is_not")),
+            .any(|f| f.context().contains("looks_like_dead_but_is_not")),
         "{unused:?}"
     );
     Ok(())
@@ -211,7 +211,7 @@ fn cfg_sibling_unused_args_are_skipped_when_a_sibling_reads_them() -> miette::Re
     let findings = scan_fixture("unused_underscore_args_cfg_siblings.rs")?;
     let unused = findings
         .iter()
-        .filter(|f| f.rule_id == AntipatternRuleId::UnusedUnderscoreArg001)
+        .filter(|f| f.rule_id() == AntipatternRuleId::UnusedUnderscoreArg001)
         .collect::<Vec<_>>();
 
     // Exempt: a cfg sibling (free fn and impl method) genuinely reads
@@ -219,13 +219,13 @@ fn cfg_sibling_unused_args_are_skipped_when_a_sibling_reads_them() -> miette::Re
     assert!(
         !unused
             .iter()
-            .any(|f| f.context.contains("decide") && f.snippet == "_bytes"),
+            .any(|f| f.context().contains("decide") && f.snippet() == "_bytes"),
         "{unused:?}"
     );
     assert!(
         !unused
             .iter()
-            .any(|f| f.context.contains("read") && f.snippet == "_source"),
+            .any(|f| f.context().contains("read") && f.snippet() == "_source"),
         "{unused:?}"
     );
 
@@ -234,7 +234,7 @@ fn cfg_sibling_unused_args_are_skipped_when_a_sibling_reads_them() -> miette::Re
     assert!(
         unused
             .iter()
-            .filter(|f| f.context.contains("unrelated") && f.snippet == "_extra")
+            .filter(|f| f.context().contains("unrelated") && f.snippet() == "_extra")
             .count()
             == 2,
         "{unused:?}"
@@ -242,7 +242,7 @@ fn cfg_sibling_unused_args_are_skipped_when_a_sibling_reads_them() -> miette::Re
     assert!(
         unused
             .iter()
-            .any(|f| f.context.contains("solo") && f.snippet == "_alone"),
+            .any(|f| f.context().contains("solo") && f.snippet() == "_alone"),
         "{unused:?}"
     );
     Ok(())
@@ -288,18 +288,18 @@ fn crate_local_traits_apply_across_files() -> miette::Result<()> {
         .wrap_err("scan crate")?;
     let unused: Vec<_> = findings
         .iter()
-        .filter(|f| f.rule_id == AntipatternRuleId::UnusedUnderscoreArg001)
+        .filter(|f| f.rule_id() == AntipatternRuleId::UnusedUnderscoreArg001)
         .collect();
     assert!(
         unused
             .iter()
-            .any(|f| f.snippet == "_node" && f.context.contains("matches_node")),
+            .any(|f| f.snippet() == "_node" && f.context().contains("matches_node")),
         "{unused:?}"
     );
     assert!(
         !unused
             .iter()
-            .any(|f| f.context.contains("visit_expr_closure")),
+            .any(|f| f.context().contains("visit_expr_closure")),
         "{unused:?}"
     );
     Ok(())
@@ -310,9 +310,9 @@ fn trait_declarations_do_not_flag_placeholder_params() -> miette::Result<()> {
     cordial::init_tracing();
     let findings = scan_fixture("unused_underscore_args.rs")?;
     assert!(!findings.iter().any(|f| {
-        f.rule_id == AntipatternRuleId::UnusedUnderscoreArg001
-            && f.context.contains("Declared")
-            && f.context.contains("placeholder")
+        f.rule_id() == AntipatternRuleId::UnusedUnderscoreArg001
+            && f.context().contains("Declared")
+            && f.context().contains("placeholder")
     }));
     Ok(())
 }
@@ -323,29 +323,29 @@ fn static_struct_fields_are_detected() -> miette::Result<()> {
     let findings = scan_fixture("static_struct_fields.rs")?;
     let static_refs = findings
         .iter()
-        .filter(|f| f.rule_id == AntipatternRuleId::StructStaticRef001)
+        .filter(|f| f.rule_id() == AntipatternRuleId::StructStaticRef001)
         .collect::<Vec<_>>();
     assert_eq!(static_refs.len(), 9);
     assert!(
         static_refs
             .iter()
-            .any(|f| f.context.contains("BorrowsStatic") && f.context.ends_with("::name"))
+            .any(|f| f.context().contains("BorrowsStatic") && f.context().ends_with("::name"))
     );
     assert!(
         static_refs
             .iter()
-            .any(|f| f.context.contains("CapturesLocation")
-                && f.snippet.contains("copy `file` and `line` from Location"))
+            .any(|f| f.context().contains("CapturesLocation")
+                && f.snippet().contains("copy `file` and `line` from Location"))
     );
     assert!(
         static_refs
             .iter()
-            .any(|f| f.context.contains("Message::Inline") && f.context.ends_with("::_0"))
+            .any(|f| f.context().contains("Message::Inline") && f.context().ends_with("::_0"))
     );
     assert!(
         !static_refs
             .iter()
-            .any(|f| f.context.contains("OwnsData") || f.context.contains("Named::detail"))
+            .any(|f| f.context().contains("OwnsData") || f.context().contains("Named::detail"))
     );
     Ok(())
 }
@@ -357,8 +357,8 @@ fn enum_variant_tuple_and_struct_payloads_are_detected() -> miette::Result<()> {
     let variant_findings: Vec<_> = findings
         .iter()
         .filter(|f| {
-            f.rule_id == AntipatternRuleId::StructStaticRef001
-                && (f.context.contains("Message::") || f.context.contains("Payload::"))
+            f.rule_id() == AntipatternRuleId::StructStaticRef001
+                && (f.context().contains("Message::") || f.context().contains("Payload::"))
         })
         .collect();
     assert_eq!(variant_findings.len(), 5);
@@ -370,8 +370,8 @@ fn fn_signatures_with_static_refs_are_not_struct_fields() -> miette::Result<()> 
     cordial::init_tracing();
     let findings = scan_fixture("static_struct_fields.rs")?;
     assert!(!findings.iter().any(|f| {
-        f.rule_id == AntipatternRuleId::StructStaticRef001
-            && (f.context.contains("accepts") || f.context.contains("returns"))
+        f.rule_id() == AntipatternRuleId::StructStaticRef001
+            && (f.context().contains("accepts") || f.context().contains("returns"))
     }));
     Ok(())
 }
@@ -382,25 +382,27 @@ fn crate_local_dyn_trait_static_refs_are_exempt() -> miette::Result<()> {
     let findings = scan_fixture("local_dyn_trait_static_refs.rs")?;
     let static_refs: Vec<_> = findings
         .iter()
-        .filter(|f| f.rule_id == AntipatternRuleId::StructStaticRef001)
+        .filter(|f| f.rule_id() == AntipatternRuleId::StructStaticRef001)
         .collect();
     assert!(
         !static_refs.iter().any(|f| {
-            f.context.contains("View")
-                || f.context.contains("Registry")
-                || f.context.contains("Plugin")
-                || f.context.ends_with("Mixed::probes")
+            f.context().contains("View")
+                || f.context().contains("Registry")
+                || f.context().contains("Plugin")
+                || f.context().ends_with("Mixed::probes")
         }),
         "local dyn trait tables must be exempt: {static_refs:?}"
     );
     assert!(
         static_refs
             .iter()
-            .any(|f| f.context.ends_with("Mixed::name")),
+            .any(|f| f.context().ends_with("Mixed::name")),
         "{static_refs:?}"
     );
     assert!(
-        static_refs.iter().any(|f| f.context.contains("ForeignDyn")),
+        static_refs
+            .iter()
+            .any(|f| f.context().contains("ForeignDyn")),
         "{static_refs:?}"
     );
     assert_eq!(static_refs.len(), 2);
@@ -413,28 +415,28 @@ fn const_static_only_types_may_store_static_str() -> miette::Result<()> {
     let findings = scan_fixture("const_table_static_refs.rs")?;
     let static_refs: Vec<_> = findings
         .iter()
-        .filter(|f| f.rule_id == AntipatternRuleId::StructStaticRef001)
+        .filter(|f| f.rule_id() == AntipatternRuleId::StructStaticRef001)
         .collect();
     assert!(
-        !static_refs.iter().any(|f| f.context.contains("ConstRow")),
+        !static_refs.iter().any(|f| f.context().contains("ConstRow")),
         "const/static tables must be exempt: {static_refs:?}"
     );
     assert!(
         static_refs
             .iter()
-            .any(|f| f.context.ends_with("RuntimeRow::name")),
+            .any(|f| f.context().ends_with("RuntimeRow::name")),
         "{static_refs:?}"
     );
     assert!(
         static_refs
             .iter()
-            .any(|f| f.context.ends_with("MixedUse::name")),
+            .any(|f| f.context().ends_with("MixedUse::name")),
         "mixed const+runtime construction must own: {static_refs:?}"
     );
     assert!(
         static_refs.iter().any(|f| {
-            f.context.contains("ConstLoc")
-                && f.snippet.contains("copy `file` and `line` from Location")
+            f.context().contains("ConstLoc")
+                && f.snippet().contains("copy `file` and `line` from Location")
         }),
         "Location on a const type must still be copied out: {static_refs:?}"
     );
@@ -448,18 +450,18 @@ fn inventory_collect_registered_types_may_store_static_str() -> miette::Result<(
     let findings = scan_fixture("inventory_collect_static_refs.rs")?;
     let static_refs: Vec<_> = findings
         .iter()
-        .filter(|f| f.rule_id == AntipatternRuleId::StructStaticRef001)
+        .filter(|f| f.rule_id() == AntipatternRuleId::StructStaticRef001)
         .collect();
     assert!(
         !static_refs
             .iter()
-            .any(|f| f.context.ends_with("::Registered::name")),
+            .any(|f| f.context().ends_with("::Registered::name")),
         "inventory::collect!'d types must be exempt: {static_refs:?}"
     );
     assert!(
         static_refs
             .iter()
-            .any(|f| f.context.ends_with("::NotRegistered::name")),
+            .any(|f| f.context().ends_with("::NotRegistered::name")),
         "types with no inventory::collect! and real runtime construction must still be flagged: {static_refs:?}"
     );
     assert_eq!(static_refs.len(), 1);
@@ -472,19 +474,19 @@ fn trait_static_slice_or_ref_return_types_may_store_static_str() -> miette::Resu
     let findings = scan_fixture("trait_static_slice_return_static_refs.rs")?;
     let static_refs: Vec<_> = findings
         .iter()
-        .filter(|f| f.rule_id == AntipatternRuleId::StructStaticRef001)
+        .filter(|f| f.rule_id() == AntipatternRuleId::StructStaticRef001)
         .collect();
     assert!(
         !static_refs
             .iter()
-            .any(|f| f.context.ends_with("::Transition::name")),
+            .any(|f| f.context().ends_with("::Transition::name")),
         "a type promised by a trait's own -> &'static [Type]/&'static Type \
          return signature must be exempt: {static_refs:?}"
     );
     assert!(
         static_refs
             .iter()
-            .any(|f| f.context.ends_with("::NotPromised::name")),
+            .any(|f| f.context().ends_with("::NotPromised::name")),
         "{static_refs:?}"
     );
     assert_eq!(static_refs.len(), 1);
@@ -551,7 +553,7 @@ fn aliased_one_arg_result_is_not_a_string_error() -> miette::Result<()> {
     assert!(
         findings
             .iter()
-            .all(|finding| finding.rule_id != AntipatternRuleId::StringError001),
+            .all(|finding| finding.rule_id() != AntipatternRuleId::StringError001),
         "one-arg Result aliases are not Result<_, String>: {findings:?}"
     );
     Ok(())

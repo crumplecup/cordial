@@ -5,10 +5,10 @@ use cordial::{
 
 fn assert_explain_filled(etiquette: &dyn Etiquette) {
     let explain = etiquette.explain();
-    assert!(!explain.summary.is_empty(), "{} summary", etiquette.id());
-    assert!(!explain.why.is_empty(), "{} why", etiquette.id());
-    assert!(!explain.logic.is_empty(), "{} logic", etiquette.id());
-    assert!(!explain.opt_out.is_empty(), "{} opt_out", etiquette.id());
+    assert!(!explain.summary().is_empty(), "{} summary", etiquette.id());
+    assert!(!explain.why().is_empty(), "{} why", etiquette.id());
+    assert!(!explain.logic().is_empty(), "{} logic", etiquette.id());
+    assert!(!explain.opt_out().is_empty(), "{} opt_out", etiquette.id());
 }
 
 #[test]
@@ -22,25 +22,31 @@ fn every_quality_etiquette_fills_explain() {
 }
 
 #[test]
-fn lookup_accepts_etiquette_id_and_rule_id() {
+fn lookup_accepts_etiquette_id_and_rule_id() -> miette::Result<()> {
     cordial::init_tracing();
     let etiquettes = quality_etiquettes();
-    let by_id = lookup_etiquette(&etiquettes, "doc_warnings").expect("doc_warnings");
-    let by_rule = lookup_etiquette(&etiquettes, "DOC-WARNING-001").expect("DOC-WARNING-001");
+    let by_id = lookup_etiquette(&etiquettes, "doc_warnings")
+        .ok_or_else(|| miette::miette!("doc_warnings"))?;
+    let by_rule = lookup_etiquette(&etiquettes, "DOC-WARNING-001")
+        .ok_or_else(|| miette::miette!("DOC-WARNING-001"))?;
     assert_eq!(by_id.id(), by_rule.id());
     assert_eq!(by_id.id(), "doc_warnings");
     assert!(lookup_etiquette(&etiquettes, "not-a-real-lint").is_none());
+    Ok(())
 }
 
 #[test]
-fn render_list_and_page() {
+fn render_list_and_page() -> miette::Result<()> {
     cordial::init_tracing();
     let etiquettes = quality_etiquettes();
     let list = render_explain_list(&etiquettes);
     assert!(list.contains("doc_warnings"));
     assert!(list.contains("Does cargo doc emit rustdoc::* diagnostics rustc never sees?"));
 
-    let page = render_explain_page(lookup_etiquette(&etiquettes, "doc_warnings").unwrap());
+    let page = render_explain_page(
+        lookup_etiquette(&etiquettes, "doc_warnings")
+            .ok_or_else(|| miette::miette!("doc_warnings"))?,
+    );
     assert!(page.contains("# rustdoc warnings (`doc_warnings`)"));
     assert!(page.contains("## Why"));
     assert!(page.contains("## Logic"));
@@ -48,13 +54,14 @@ fn render_list_and_page() {
     assert!(page.contains("`DOC-WARNING-001`"));
     assert!(page.contains("[doc_warnings] enabled = false"));
     assert!(page.contains("cordial.toml"));
+    Ok(())
 }
 
 #[test]
 fn compiled_opt_out_points_at_cordial_toml() {
     cordial::init_tracing();
     for etiquette in etiquettes_from_plugins(&all_plugins()) {
-        let opt_out = etiquette.explain().opt_out;
+        let opt_out = etiquette.explain().opt_out();
         assert!(
             opt_out.contains("cordial.toml"),
             "{} opt_out should name cordial.toml, got {opt_out}",

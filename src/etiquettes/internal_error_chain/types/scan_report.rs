@@ -1,12 +1,12 @@
 use super::{InternalErrorComplianceReport, InternalErrorTypeGraphReport};
 
 /// Combined internal error-chain scan for one crate.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, derive_new::new, derive_getters::Getters)]
 pub struct InternalErrorChainScanReport {
     /// Cargo package name.
-    pub crate_name: String,
+    crate_name: String,
     /// Type-relationship graph for this crate.
-    pub type_graph: InternalErrorTypeGraphReport,
+    type_graph: InternalErrorTypeGraphReport,
     /// Compliance findings for this crate.
-    pub compliance: InternalErrorComplianceReport,
+    compliance: InternalErrorComplianceReport,
 }

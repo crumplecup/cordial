@@ -34,7 +34,7 @@ pub fn scan_crate_error_architecture(
     for_each_src_rust_file(crate_root, |path, src_root| {
         load_src_file(&mut catalog, path, src_root)
     })?;
-    Ok(catalog.into_findings())
+    catalog.into_findings()
 }
 
 #[instrument(level = "info", skip(catalog, file), err(level = "warn"))]
@@ -43,15 +43,15 @@ fn load_src_file(catalog: &mut Catalog, file: &Path, src_root: &Path) -> Cordial
     let syntax = syn::parse_file(&source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
     let module_prefix = module_path_from_src_file(src_root, file);
-    let mut visitor = CatalogVisitor {
-        file: file.to_path_buf(),
+    let mut visitor = CatalogVisitor::new(
+        file.to_path_buf(),
         module_prefix,
         catalog,
-        phase: CatalogPhase::Types,
-    };
+        CatalogPhase::Types,
+    );
     visitor.visit_file(&syntax);
-    visitor.phase = CatalogPhase::Impls;
-    visitor.module_prefix = module_path_from_src_file(src_root, file);
+    visitor.set_phase(CatalogPhase::Impls);
+    visitor.reset_module_prefix(module_path_from_src_file(src_root, file));
     visitor.visit_file(&syntax);
     Ok(())
 }

@@ -61,9 +61,9 @@ impl Probe for AllowSiteProbe {
                 continue;
             }
 
-            markers.push(Box::new(AllowMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(AllowMarker::new(crate::objects::NodeAnchor(node.id))) as Box<dyn Marker>,
+            );
         }
         Ok(markers)
     }

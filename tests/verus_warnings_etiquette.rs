@@ -20,22 +20,20 @@ fn canary_path() -> PathBuf {
 fn parse_amenable_canary_keeps_two_unique_warnings() {
     cordial::init_tracing();
     let crate_root = PathBuf::from("/workspace");
-    let records = parse_verus_compiler_output(CANARY, &crate_root);
+    let records = parse_verus_compiler_output(CANARY, &crate_root).expect("parse canary");
     assert_eq!(records.len(), 2);
     assert!(
         records
             .iter()
-            .all(|record| record.rule_id == VerusWarningRuleId::Warning001)
+            .all(|record| record.rule_id() == VerusWarningRuleId::Warning001)
     );
+    assert!(records.iter().any(|record| {
+        record.line() == 132 && record.snippet().contains("impl_tuple_evidence")
+    }));
     assert!(
         records
             .iter()
-            .any(|record| record.line == 132 && record.snippet.contains("impl_tuple_evidence"))
-    );
-    assert!(
-        records
-            .iter()
-            .any(|record| record.line == 446 && record.snippet.contains("autoderive Clone"))
+            .any(|record| record.line() == 446 && record.snippet().contains("autoderive Clone"))
     );
 }
 
@@ -48,7 +46,7 @@ error: expected `;`
 
 warning: 3 warnings emitted
 ";
-    let records = parse_verus_compiler_output(output, &PathBuf::from("/workspace"));
+    let records = parse_verus_compiler_output(output, &PathBuf::from("/workspace")).expect("parse");
     assert!(records.is_empty());
 }
 
@@ -145,7 +143,9 @@ fn pattern_projection_warning_is_suppressed_only_when_fully_documented() -> miet
     let documented_root = fixture.path().join("documented_verus");
     fs::create_dir_all(documented_root.join("src")).into_diagnostic()?;
     fs::write(documented_root.join("src/lib.rs"), documented_source).into_diagnostic()?;
-    let documented_parsed = parse_verus_compiler_output(fake_compiler_output, &documented_root);
+    let documented_parsed = parse_verus_compiler_output(fake_compiler_output, &documented_root)
+        .into_diagnostic()
+        .wrap_err("parse documented")?;
     assert_eq!(documented_parsed.len(), 1, "sanity: the fake output parses");
     let documented_ir = scan_crate_verus_ir(&documented_root)
         .into_diagnostic()
@@ -153,8 +153,9 @@ fn pattern_projection_warning_is_suppressed_only_when_fully_documented() -> miet
     let documented_kept: Vec<_> = documented_parsed
         .iter()
         .filter(|record| {
-            !(record.snippet == "missing documentation for a method"
-                && documented_ir.is_documented_pattern_projection_enum(&record.file, record.line))
+            !(record.snippet() == "missing documentation for a method"
+                && documented_ir
+                    .is_documented_pattern_projection_enum(record.file(), record.line()))
         })
         .collect();
     assert!(
@@ -165,15 +166,17 @@ fn pattern_projection_warning_is_suppressed_only_when_fully_documented() -> miet
     let undocumented_root = fixture.path().join("undocumented_verus");
     fs::create_dir_all(undocumented_root.join("src")).into_diagnostic()?;
     fs::write(undocumented_root.join("src/lib.rs"), undocumented_source).into_diagnostic()?;
-    let undocumented_parsed = parse_verus_compiler_output(fake_compiler_output, &undocumented_root);
+    let undocumented_parsed = parse_verus_compiler_output(fake_compiler_output, &undocumented_root)
+        .expect("parse undocumented");
     let undocumented_ir = scan_crate_verus_ir(&undocumented_root)
         .into_diagnostic()
         .wrap_err("scan undocumented ir")?;
     let undocumented_kept: Vec<_> = undocumented_parsed
         .iter()
         .filter(|record| {
-            !(record.snippet == "missing documentation for a method"
-                && undocumented_ir.is_documented_pattern_projection_enum(&record.file, record.line))
+            !(record.snippet() == "missing documentation for a method"
+                && undocumented_ir
+                    .is_documented_pattern_projection_enum(record.file(), record.line()))
         })
         .collect();
     assert_eq!(

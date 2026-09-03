@@ -56,7 +56,7 @@ fn scan_cfg_scatter_rust_source_flags_scattered_predicate_not_fields() -> miette
 
     let widgets = groups
         .iter()
-        .find(|group| group.predicate.contains("widgets"))
+        .find(|group| group.predicate().contains("widgets"))
         .ok_or_else(|| miette::miette!("widgets predicate group present"))?;
     assert!(
         widgets.is_scatter(&test_thresholds()),
@@ -65,7 +65,7 @@ fn scan_cfg_scatter_rust_source_flags_scattered_predicate_not_fields() -> miette
 
     let gizmo_flagged = groups
         .iter()
-        .find(|group| group.predicate.contains("gizmo"))
+        .find(|group| group.predicate().contains("gizmo"))
         .map(|group| group.is_scatter(&test_thresholds()))
         .unwrap_or(false);
     assert!(
@@ -158,10 +158,10 @@ fn scan_cfg_scatter_rust_source_flags_trait_default_methods() -> miette::Result<
 
     let reporting = groups
         .iter()
-        .find(|group| group.predicate.contains("reporting"))
+        .find(|group| group.predicate().contains("reporting"))
         .ok_or_else(|| miette::miette!("reporting predicate group present"))?;
 
-    let kinds: Vec<_> = reporting.occurrences.iter().map(|o| o.kind).collect();
+    let kinds: Vec<_> = reporting.occurrences().iter().map(|o| o.kind()).collect();
     assert!(
         kinds.contains(&CfgSiteKind::TraitFn),
         "cfg on a trait default method must be visible to the scanner, got {kinds:?}"
@@ -219,7 +219,7 @@ fn scan_cfg_scatter_rust_source_never_flags_proc_macro_entry_points() -> miette:
 
     let verus_flagged = groups
         .iter()
-        .find(|group| group.predicate.contains("verus"))
+        .find(|group| group.predicate().contains("verus"))
         .map(|group| group.is_scatter(&test_thresholds()))
         .unwrap_or(false);
     assert!(

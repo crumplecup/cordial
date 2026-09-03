@@ -62,9 +62,10 @@ impl Probe for ProofPatternSiteProbe {
                 continue;
             }
 
-            markers.push(Box::new(ProofPatternMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(ProofPatternMarker::new(crate::objects::NodeAnchor(node.id)))
+                    as Box<dyn Marker>,
+            );
         }
         Ok(markers)
     }

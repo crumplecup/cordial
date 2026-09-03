@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::path::PathBuf;
 
+use crate::error::CordialResult;
 use crate::etiquettes::error_sites::{ErrorSiteKind, ForeignTypeConfidence};
 use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
@@ -58,32 +59,45 @@ impl Display for ErrorHandlingResolutionId {
 }
 
 /// One foreign error site with positive/negative classification and resolution.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ForeignErrorAttenuationRecord {
-    pub crate_name: String,
-    pub foreign_error_type: String,
-    pub inference_rule_id: String,
-    pub confidence: ForeignTypeConfidence,
-    pub handling_class: ForeignErrorHandlingClass,
-    pub resolution_id: ErrorHandlingResolutionId,
-    pub resolution: String,
-    pub kind: ErrorSiteKind,
-    pub context: String,
-    pub file: PathBuf,
-    pub line: u32,
-    pub source_snippet: String,
-    pub site_snippet: String,
-    pub good_pattern: String,
-    pub bad_pattern: String,
+    crate_name: String,
+    foreign_error_type: String,
+    inference_rule_id: String,
+    #[getter(copy)]
+    confidence: ForeignTypeConfidence,
+    #[getter(copy)]
+    handling_class: ForeignErrorHandlingClass,
+    #[getter(copy)]
+    resolution_id: ErrorHandlingResolutionId,
+    resolution: String,
+    #[getter(copy)]
+    kind: ErrorSiteKind,
+    context: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    source_snippet: String,
+    site_snippet: String,
+    good_pattern: String,
+    bad_pattern: String,
+}
+
+impl ForeignErrorAttenuationRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> ForeignErrorAttenuationRecordBuilder {
+        ForeignErrorAttenuationRecordBuilder::default()
+    }
 }
 
 /// Attenuation report for one crate.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub struct ForeignErrorAttenuationReport {
     /// Cargo package name.
-    pub crate_name: String,
+    crate_name: String,
     /// Findings produced by assessors in this session.
-    pub findings: Vec<ForeignErrorAttenuationRecord>,
+    findings: Vec<ForeignErrorAttenuationRecord>,
 }
 
 /// Count rows by handling class.
@@ -100,8 +114,8 @@ impl ForeignErrorAttenuationReport {
     #[instrument(level = "debug", skip(self))]
     pub fn handling_counts(&self) -> ForeignErrorHandlingCounts {
         let mut counts = ForeignErrorHandlingCounts::default();
-        for finding in &self.findings {
-            match finding.handling_class {
+        for finding in self.findings() {
+            match finding.handling_class() {
                 ForeignErrorHandlingClass::ChainPreserved => counts.chain_preserved += 1,
                 ForeignErrorHandlingClass::ChainBreak => counts.chain_break += 1,
                 ForeignErrorHandlingClass::PendingInfrastructure => {
@@ -126,45 +140,74 @@ impl ForeignErrorAttenuationReport {
 }
 
 /// Per foreign-type attenuation rollup.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ForeignErrorAttenuationTypeRow {
-    pub foreign_error_type: String,
-    pub chain_preserved: usize,
-    pub chain_breaks: usize,
-    pub pending_infrastructure: usize,
-    pub total: usize,
-    pub preservation_rate: Option<f64>,
-    pub primary_resolution_id: ErrorHandlingResolutionId,
+    foreign_error_type: String,
+    #[getter(copy)]
+    chain_preserved: usize,
+    #[getter(copy)]
+    chain_breaks: usize,
+    #[getter(copy)]
+    pending_infrastructure: usize,
+    #[getter(copy)]
+    total: usize,
+    #[getter(copy)]
+    preservation_rate: Option<f64>,
+    #[getter(copy)]
+    primary_resolution_id: ErrorHandlingResolutionId,
+}
+
+impl ForeignErrorAttenuationTypeRow {
+    /// Start a builder for this value.
+    pub fn builder() -> ForeignErrorAttenuationTypeRowBuilder {
+        ForeignErrorAttenuationTypeRowBuilder::default()
+    }
 }
 
 /// Workspace attenuation metrics.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct WorkspaceForeignErrorAttenuationSummary {
     /// Sites that still have a typed foreign error.
-    pub typed_sites: usize,
+    #[getter(copy)]
+    typed_sites: usize,
     /// Sites that keep the foreign error in `source()`.
-    pub chain_preserved: usize,
+    #[getter(copy)]
+    chain_preserved: usize,
     /// Places the `source()` chain is dropped.
-    pub chain_breaks: usize,
+    #[getter(copy)]
+    chain_breaks: usize,
     /// Sites waiting on infrastructure before they can preserve the chain.
-    pub pending_infrastructure: usize,
+    #[getter(copy)]
+    pending_infrastructure: usize,
     /// Sites that are neither a break nor a preservation.
-    pub neutral: usize,
+    #[getter(copy)]
+    neutral: usize,
     /// Fraction of typed sites that preserve the chain.
-    pub preservation_rate: Option<f64>,
+    #[getter(copy)]
+    preservation_rate: Option<f64>,
     /// Sites still needing a typed wrap.
-    pub migration_backlog: usize,
+    #[getter(copy)]
+    migration_backlog: usize,
     /// Type names collected for this row.
-    pub types: Vec<ForeignErrorAttenuationTypeRow>,
+    types: Vec<ForeignErrorAttenuationTypeRow>,
     /// Counts keyed by resolution label.
-    pub resolutions: BTreeMap<String, usize>,
+    resolutions: BTreeMap<String, usize>,
+}
+
+impl WorkspaceForeignErrorAttenuationSummary {
+    /// Start a builder for this value.
+    pub fn builder() -> WorkspaceForeignErrorAttenuationSummaryBuilder {
+        WorkspaceForeignErrorAttenuationSummaryBuilder::default()
+    }
 }
 
 /// Build workspace foreign error attenuation summary.
 #[instrument(level = "debug", skip(reports))]
 pub fn build_workspace_foreign_error_attenuation_summary(
     reports: &[ForeignErrorAttenuationReport],
-) -> WorkspaceForeignErrorAttenuationSummary {
+) -> CordialResult<WorkspaceForeignErrorAttenuationSummary> {
     let mut chain_preserved = 0usize;
     let mut chain_breaks = 0usize;
     let mut pending_infrastructure = 0usize;
@@ -173,24 +216,24 @@ pub fn build_workspace_foreign_error_attenuation_summary(
     let mut resolutions: BTreeMap<String, usize> = BTreeMap::new();
 
     for report in reports {
-        for finding in &report.findings {
+        for finding in report.findings() {
             chain_preserved +=
-                usize::from(finding.handling_class == ForeignErrorHandlingClass::ChainPreserved);
+                usize::from(finding.handling_class() == ForeignErrorHandlingClass::ChainPreserved);
             chain_breaks +=
-                usize::from(finding.handling_class == ForeignErrorHandlingClass::ChainBreak);
+                usize::from(finding.handling_class() == ForeignErrorHandlingClass::ChainBreak);
             pending_infrastructure += usize::from(
-                finding.handling_class == ForeignErrorHandlingClass::PendingInfrastructure,
+                finding.handling_class() == ForeignErrorHandlingClass::PendingInfrastructure,
             );
-            neutral += usize::from(finding.handling_class == ForeignErrorHandlingClass::Neutral);
+            neutral += usize::from(finding.handling_class() == ForeignErrorHandlingClass::Neutral);
             *resolutions
-                .entry(finding.resolution_id.to_string())
+                .entry(finding.resolution_id().to_string())
                 .or_default() += 1;
 
             let entry = by_type
-                .entry(finding.foreign_error_type.clone())
+                .entry(finding.foreign_error_type().clone())
                 .or_default();
             entry.3 += 1;
-            match finding.handling_class {
+            match finding.handling_class() {
                 ForeignErrorHandlingClass::ChainPreserved => entry.0 += 1,
                 ForeignErrorHandlingClass::ChainBreak => entry.1 += 1,
                 ForeignErrorHandlingClass::PendingInfrastructure => entry.2 += 1,
@@ -209,57 +252,55 @@ pub fn build_workspace_foreign_error_attenuation_summary(
         }
     };
 
-    let mut types: Vec<ForeignErrorAttenuationTypeRow> = by_type
-        .into_iter()
-        .map(
-            |(foreign_error_type, (preserved, breaks, pending, total))| {
-                let rate = {
-                    let denominator = preserved + breaks;
-                    if denominator == 0 {
-                        None
-                    } else {
-                        Some(preserved as f64 / denominator as f64)
-                    }
-                };
-                let primary_resolution_id = if preserved > 0 && breaks == 0 && pending == 0 {
-                    ErrorHandlingResolutionId::MaintainExemplar
-                } else if breaks > 0 {
-                    ErrorHandlingResolutionId::ReplaceStringifyingMapErr
-                } else if pending > 0 {
-                    ErrorHandlingResolutionId::AddInfrastructureThenQuestionMark
-                } else {
-                    ErrorHandlingResolutionId::ManualReview
-                };
-                ForeignErrorAttenuationTypeRow {
-                    foreign_error_type,
-                    chain_preserved: preserved,
-                    chain_breaks: breaks,
-                    pending_infrastructure: pending,
-                    total,
-                    preservation_rate: rate,
-                    primary_resolution_id,
-                }
-            },
-        )
-        .collect();
+    let mut types = Vec::new();
+    for (foreign_error_type, (preserved, breaks, pending, total)) in by_type {
+        let rate = {
+            let denominator = preserved + breaks;
+            if denominator == 0 {
+                None
+            } else {
+                Some(preserved as f64 / denominator as f64)
+            }
+        };
+        let primary_resolution_id = if preserved > 0 && breaks == 0 && pending == 0 {
+            ErrorHandlingResolutionId::MaintainExemplar
+        } else if breaks > 0 {
+            ErrorHandlingResolutionId::ReplaceStringifyingMapErr
+        } else if pending > 0 {
+            ErrorHandlingResolutionId::AddInfrastructureThenQuestionMark
+        } else {
+            ErrorHandlingResolutionId::ManualReview
+        };
+        types.push(
+            ForeignErrorAttenuationTypeRow::builder()
+                .foreign_error_type(foreign_error_type)
+                .chain_preserved(preserved)
+                .chain_breaks(breaks)
+                .pending_infrastructure(pending)
+                .total(total)
+                .preservation_rate(rate)
+                .primary_resolution_id(primary_resolution_id)
+                .build()?,
+        );
+    }
     types.sort_by(|a, b| {
-        b.chain_breaks
-            .cmp(&a.chain_breaks)
-            .then(b.total.cmp(&a.total))
-            .then(a.foreign_error_type.cmp(&b.foreign_error_type))
+        b.chain_breaks()
+            .cmp(&a.chain_breaks())
+            .then(b.total().cmp(&a.total()))
+            .then(a.foreign_error_type().cmp(b.foreign_error_type()))
     });
 
-    WorkspaceForeignErrorAttenuationSummary {
-        typed_sites,
-        chain_preserved,
-        chain_breaks,
-        pending_infrastructure,
-        neutral,
-        preservation_rate,
-        migration_backlog: chain_breaks + pending_infrastructure,
-        types,
-        resolutions,
-    }
+    WorkspaceForeignErrorAttenuationSummary::builder()
+        .typed_sites(typed_sites)
+        .chain_preserved(chain_preserved)
+        .chain_breaks(chain_breaks)
+        .pending_infrastructure(pending_infrastructure)
+        .neutral(neutral)
+        .preservation_rate(preservation_rate)
+        .migration_backlog(chain_breaks + pending_infrastructure)
+        .types(types)
+        .resolutions(resolutions)
+        .build()
 }
 
 #[derive(Debug, Clone, derive_new::new)]
@@ -289,9 +330,9 @@ impl Rule for ForeignErrorAttenuationRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct ForeignErrorAttenuationMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for ForeignErrorAttenuationMarker {
@@ -316,25 +357,38 @@ impl Marker for ForeignErrorAttenuationMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ForeignErrorAttenuationFinding {
-    pub rule: ForeignErrorAttenuationRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub foreign_error_type: String,
-    pub inference_rule_id: String,
-    pub confidence: ForeignTypeConfidence,
-    pub handling_class: ForeignErrorHandlingClass,
-    pub resolution_id: ErrorHandlingResolutionId,
-    pub resolution: String,
-    pub kind: ErrorSiteKind,
-    pub context: String,
-    pub span: FileSpan,
-    pub source_snippet: String,
-    pub site_snippet: String,
-    pub good_pattern: String,
-    pub bad_pattern: String,
+    rule: ForeignErrorAttenuationRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    foreign_error_type: String,
+    inference_rule_id: String,
+    #[getter(copy)]
+    confidence: ForeignTypeConfidence,
+    #[getter(copy)]
+    handling_class: ForeignErrorHandlingClass,
+    #[getter(copy)]
+    resolution_id: ErrorHandlingResolutionId,
+    resolution: String,
+    #[getter(copy)]
+    kind: ErrorSiteKind,
+    context: String,
+    span: FileSpan,
+    source_snippet: String,
+    site_snippet: String,
+    good_pattern: String,
+    bad_pattern: String,
+}
+
+impl ForeignErrorAttenuationFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> ForeignErrorAttenuationFindingBuilder {
+        ForeignErrorAttenuationFindingBuilder::default()
+    }
 }
 
 impl Finding for ForeignErrorAttenuationFinding {
@@ -362,8 +416,8 @@ impl Finding for ForeignErrorAttenuationFinding {
         sink.field("inference_rule_id", &self.inference_rule_id);
         sink.field("confidence", &self.confidence.to_string());
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("site_kind", &self.kind.to_string());
         sink.field("source_snippet", &self.source_snippet);
         sink.field("site_snippet", &self.site_snippet);

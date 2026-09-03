@@ -63,9 +63,10 @@ impl Probe for DocWarningSiteProbe {
                 continue;
             }
 
-            markers.push(Box::new(DocWarningMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(DocWarningMarker::new(crate::objects::NodeAnchor(node.id)))
+                    as Box<dyn Marker>,
+            );
         }
         Ok(markers)
     }

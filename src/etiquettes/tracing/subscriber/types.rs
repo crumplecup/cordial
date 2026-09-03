@@ -109,9 +109,9 @@ impl Rule for SubscriberRule {
 
 pub const SUBSCRIBER_SITE_LABEL: &str = "tracing-subscriber-site";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct SubscriberMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for SubscriberMarker {
@@ -136,15 +136,24 @@ impl Marker for SubscriberMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct SubscriberFinding {
-    pub rule: SubscriberRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub context: String,
-    pub span: FileSpan,
-    pub snippet: String,
+    rule: SubscriberRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    context: String,
+    span: FileSpan,
+    snippet: String,
+}
+
+impl SubscriberFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> SubscriberFindingBuilder {
+        SubscriberFindingBuilder::default()
+    }
 }
 
 impl Finding for SubscriberFinding {
@@ -169,24 +178,34 @@ impl Finding for SubscriberFinding {
         sink.field("rule_id", &self.rule.rule_id);
         sink.field("rule", &self.rule.rule_id);
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
         sink.snippet(&self.snippet);
     }
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct SubscriberSiteRecord {
     /// Stable probe rule identifier.
-    pub rule_id: SubscriberRuleId,
+    #[getter(copy)]
+    rule_id: SubscriberRuleId,
     /// Qualified name or extra locator for this site.
-    pub context: String,
+    context: String,
     /// Source file path, usually crate-relative.
-    pub file: PathBuf,
+    file: PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// Source snippet captured at the site.
-    pub snippet: String,
+    snippet: String,
+}
+
+impl SubscriberSiteRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> SubscriberSiteRecordBuilder {
+        SubscriberSiteRecordBuilder::default()
+    }
 }

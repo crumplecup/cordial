@@ -3,8 +3,9 @@
 use std::path::PathBuf;
 
 use cordial::{
-    ATTR_IR_ORIGIN, BasicQuery, EtiquetteExplain, IrView, ORIGIN_RUSTDOC, ORIGIN_SOURCE, RunAll,
-    RustdocLoader, Session, SessionBuilder, SourceLoader, StaticEtiquette, syn_doc_peer,
+    ATTR_IR_ORIGIN, BasicQuery, EtiquetteExplain, EtiquetteHooks, IrView, ORIGIN_RUSTDOC,
+    ORIGIN_SOURCE, RunAll, RustdocLoader, Session, SessionBuilder, SourceLoader, StaticEtiquette,
+    syn_doc_peer,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -13,24 +14,19 @@ static RUSTDOC_LOADER: RustdocLoader = RustdocLoader;
 
 static LOADERS: &[&'static dyn cordial::Loader] = &[&SOURCE_LOADER, &RUSTDOC_LOADER];
 
-static DUAL_INVENTORY_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "dual-inventory",
-    name: "Dual inventory",
-    loaders: LOADERS,
-    enrichers: &[],
-    probes: &[],
-    assessors: &[],
-    workspace_assessors: None,
-    reporters: &[],
-    is_coverage: false,
-    explain: EtiquetteExplain {
-        summary: "Test inventory (not a product lint)",
-        why: "Session fixture used by cordial's own tests.",
-        logic: "Loads source (and optionally rustdoc) into IR; emits no findings.",
-        opt_out: "Not registered in the cordial binary.",
-        rules: &[],
-    },
-};
+static DUAL_INVENTORY_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
+    "dual-inventory",
+    "Dual inventory",
+    EtiquetteHooks::new(LOADERS, &[], &[], &[], None, &[]),
+    false,
+    EtiquetteExplain::new(
+        "Test inventory (not a product lint)",
+        "Session fixture used by cordial's own tests.",
+        "Loads source (and optionally rustdoc) into IR; emits no findings.",
+        "Not registered in the cordial binary.",
+        &[],
+    ),
+);
 
 #[test]
 fn syn_doc_link_connects_widget_source_and_rustdoc_nodes() -> miette::Result<()> {

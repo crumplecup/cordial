@@ -83,9 +83,9 @@ impl Rule for BoundaryRule {
 
 pub const BOUNDARY_SITE_LABEL: &str = "tracing-boundary-site";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct BoundaryMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for BoundaryMarker {
@@ -110,15 +110,24 @@ impl Marker for BoundaryMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct BoundaryFinding {
-    pub rule: BoundaryRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub context: String,
-    pub span: FileSpan,
-    pub snippet: String,
+    rule: BoundaryRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    context: String,
+    span: FileSpan,
+    snippet: String,
+}
+
+impl BoundaryFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> BoundaryFindingBuilder {
+        BoundaryFindingBuilder::default()
+    }
 }
 
 impl Finding for BoundaryFinding {
@@ -143,24 +152,34 @@ impl Finding for BoundaryFinding {
         sink.field("rule_id", &self.rule.rule_id);
         sink.field("rule", &self.rule.rule_id);
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
         sink.snippet(&self.snippet);
     }
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct BoundarySiteRecord {
     /// Stable probe rule identifier.
-    pub rule_id: BoundaryRuleId,
+    #[getter(copy)]
+    rule_id: BoundaryRuleId,
     /// Qualified name or extra locator for this site.
-    pub context: String,
+    context: String,
     /// Source file path, usually crate-relative.
-    pub file: PathBuf,
+    file: PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// Source snippet captured at the site.
-    pub snippet: String,
+    snippet: String,
+}
+
+impl BoundarySiteRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> BoundarySiteRecordBuilder {
+        BoundarySiteRecordBuilder::default()
+    }
 }

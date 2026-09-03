@@ -70,7 +70,7 @@ pub(super) fn scan_verus_source(
                     format!("verus!::{harness}")
                 };
                 let context = site_context(&module_prefix, &leaf);
-                findings.push(make_finding(context, file, line, &normalized));
+                findings.push(make_finding(context, file, line, &normalized)?);
             }
         }
     }

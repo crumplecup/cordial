@@ -54,9 +54,9 @@ impl Probe for ForeignErrorAttenuationProbe {
 
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&FOREIGN_ERROR_ATTENUATION_QUERY) {
-            markers.push(Box::new(ForeignErrorAttenuationMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(Box::new(ForeignErrorAttenuationMarker::new(
+                crate::objects::NodeAnchor(node.id),
+            )) as Box<dyn Marker>);
         }
         Ok(markers)
     }

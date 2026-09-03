@@ -57,7 +57,7 @@ fn scan(
     )
     .into_diagnostic()
     .wrap_err("scan")?;
-    Ok(records.into_iter().map(|record| record.rule_id).collect())
+    Ok(records.into_iter().map(|record| record.rule_id()).collect())
 }
 
 fn has(rules: &[SubscriberRuleId], rule: SubscriberRuleId) -> bool {
@@ -80,7 +80,7 @@ fn scan_with_known_helpers(
     let records = scan_crate_tracing_subscriber(root, crate_name, &policy, false)
         .into_diagnostic()
         .wrap_err("scan")?;
-    Ok(records.into_iter().map(|record| record.rule_id).collect())
+    Ok(records.into_iter().map(|record| record.rule_id()).collect())
 }
 
 #[test]
@@ -340,7 +340,7 @@ fn main() {
         "all knobs off must be silent: {:?}",
         records
             .iter()
-            .map(|record| record.rule_id)
+            .map(|record| record.rule_id())
             .collect::<Vec<_>>()
     );
     Ok(())

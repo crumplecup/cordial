@@ -1,6 +1,6 @@
 //! syn-based scan for antipattern probes (`Box<dyn Error>`, `Result<_, String>`, `&'static` struct fields except crate-local `dyn Trait` and const/static-only tables, …).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use syn::visit::Visit;
@@ -52,7 +52,7 @@ pub fn scan_crate_trees(crate_root: &Path) -> CordialResult<Vec<AntipatternSiteR
             crate_root,
             &local_trait_names,
             &const_placed_types,
-        ));
+        )?);
     }
     Ok(findings)
 }
@@ -73,14 +73,14 @@ pub fn scan_rust_source(
     collect_constructions(&syntax, &mut const_constructed, &mut runtime_constructed);
     let const_placed_types =
         types_only_constructed_in_const(&const_constructed, &runtime_constructed);
-    Ok(scan_parsed(
+    scan_parsed(
         syntax,
         file,
         src_root,
         crate_root,
         &local_trait_names,
         &const_placed_types,
-    ))
+    )
 }
 
 #[instrument(
@@ -94,23 +94,17 @@ fn scan_parsed(
     crate_root: &Path,
     local_trait_names: &HashSet<String>,
     const_placed_types: &HashSet<String>,
-) -> Vec<AntipatternSiteRecord> {
+) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let module_prefix = module_path_from_src_file(src_root, file);
-    let mut visitor = AntipatternScanVisitor {
-        file: file.to_path_buf(),
-        crate_root: crate_root.to_path_buf(),
+    let mut visitor = AntipatternScanVisitor::new(
+        file.to_path_buf(),
+        crate_root.to_path_buf(),
         module_prefix,
-        impl_type: None,
-        fn_stack: Vec::new(),
-        in_trait_definition: false,
-        in_foreign_trait_impl: false,
         local_trait_names,
         const_placed_types,
-        cfg_sibling_real_params: HashMap::new(),
-        findings: Vec::new(),
-    };
+    );
     visitor.visit_file(&syntax);
-    visitor.findings
+    visitor.into_findings()
 }
 
 #[instrument(level = "debug", skip(tree_root, crate_root), err(level = "warn"))]

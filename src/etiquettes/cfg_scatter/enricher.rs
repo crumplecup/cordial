@@ -35,21 +35,21 @@ impl IrEnricher for CfgScatterInventoryEnricher {
 
         let crate_root = member_crate_root(source, session);
         let thresholds = *crate::config::load_session_config(session).cfg_scatter();
-        let groups = scan_source_tree(&source.src_root, &crate_root, thresholds)?;
+        let groups = scan_source_tree(source.src_root(), &crate_root, thresholds)?;
 
         for group in &groups {
-            let record = CfgScatterRecord::from(group);
-            let file = crate_root.join(&record.file);
+            let record = CfgScatterRecord::from_group(group)?;
+            let file = crate_root.join(record.file());
             let span = FileSpan::new(file.clone(), 1, 1);
             let node = ir.insert_node(
                 NodeWeight::new(NodeKind::Expr)
                     .with_span(span)
-                    .with_name(format!("cfg({})", record.predicate)),
+                    .with_name(format!("cfg({})", record.predicate())),
             )?;
             ir.set_attr(
                 node,
                 "cfg_scatter_predicate",
-                serde_json::Value::String(record.predicate.clone()),
+                serde_json::Value::String(record.predicate().clone()),
             )?;
             ir.set_attr(
                 node,
@@ -61,7 +61,7 @@ impl IrEnricher for CfgScatterInventoryEnricher {
                 "kinds",
                 serde_json::Value::String(
                     record
-                        .distinct_kinds
+                        .distinct_kinds()
                         .iter()
                         .map(|kind| kind.as_str())
                         .collect::<Vec<_>>()
@@ -71,12 +71,12 @@ impl IrEnricher for CfgScatterInventoryEnricher {
             ir.set_attr(
                 node,
                 "occurrences",
-                serde_json::Value::Number(record.occurrence_count.into()),
+                serde_json::Value::Number(record.occurrence_count().into()),
             )?;
             ir.set_attr(
                 node,
                 "sample",
-                serde_json::Value::String(record.sample_snippets.join("; ")),
+                serde_json::Value::String(record.sample_snippets().join("; ")),
             )?;
             ir.insert_edge(ir.root()?, node, EdgeKind::Contains)?;
         }

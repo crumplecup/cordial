@@ -91,9 +91,9 @@ impl Rule for DeriveRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct DeriveMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for DeriveMarker {
@@ -118,18 +118,27 @@ impl Marker for DeriveMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct DeriveFinding {
-    pub rule: DeriveRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub struct_name: String,
-    pub method_name: Option<String>,
-    pub qualified_name: String,
-    pub recommendation: String,
-    pub span: FileSpan,
-    pub evidence: String,
+    rule: DeriveRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    struct_name: String,
+    method_name: Option<String>,
+    qualified_name: String,
+    recommendation: String,
+    span: FileSpan,
+    evidence: String,
+}
+
+impl DeriveFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> DeriveFindingBuilder {
+        DeriveFindingBuilder::default()
+    }
 }
 
 impl Finding for DeriveFinding {
@@ -156,29 +165,39 @@ impl Finding for DeriveFinding {
         sink.field("method_name", &self.method_name.clone().unwrap_or_default());
         sink.field("qualified_name", &self.qualified_name);
         sink.field("recommendation", &self.recommendation);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("evidence", &self.evidence);
     }
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct DeriveSiteRecord {
     /// Stable probe rule identifier.
-    pub rule_id: DeriveRuleId,
+    #[getter(copy)]
+    rule_id: DeriveRuleId,
     /// Struct the derive pattern was found on.
-    pub struct_name: String,
+    struct_name: String,
     /// Method name, when the pattern is a method.
-    pub method_name: Option<String>,
+    method_name: Option<String>,
     /// Fully qualified item name.
-    pub qualified_name: String,
+    qualified_name: String,
     /// Suggested fix for this derive pattern.
-    pub recommendation: String,
+    recommendation: String,
     /// Source file path, usually crate-relative.
-    pub file: PathBuf,
+    file: PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// Supporting evidence paths or labels.
-    pub evidence: String,
+    evidence: String,
+}
+
+impl DeriveSiteRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> DeriveSiteRecordBuilder {
+        DeriveSiteRecordBuilder::default()
+    }
 }

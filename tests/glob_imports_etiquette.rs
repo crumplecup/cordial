@@ -38,25 +38,29 @@ fn scan_glob_imports_finds_three_stars() -> miette::Result<()> {
     assert_eq!(
         findings
             .iter()
-            .filter(|record| record.rule_id == GlobImportRuleId::Import001)
+            .filter(|record| record.rule_id() == GlobImportRuleId::Import001)
             .count(),
         3
     );
     assert!(
         findings
             .iter()
-            .any(|record| record.snippet == "std::collections::*")
+            .any(|record| record.snippet() == "std::collections::*")
     );
-    assert!(findings.iter().any(|record| record.snippet == "std::io::*"));
     assert!(
         findings
             .iter()
-            .any(|record| record.snippet == "crate::inner::*")
+            .any(|record| record.snippet() == "std::io::*")
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|record| record.snippet() == "crate::inner::*")
     );
     assert!(
         !findings
             .iter()
-            .any(|record| record.snippet.contains("Path"))
+            .any(|record| record.snippet().contains("Path"))
     );
     Ok(())
 }
@@ -124,7 +128,7 @@ fn glob_imports_in_tests_tree_count() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("scan crate")?;
     assert_eq!(records.len(), 1);
-    assert_eq!(records[0].snippet, "crate::helper::*");
+    assert_eq!(records[0].snippet(), "crate::helper::*");
     Ok(())
 }
 
@@ -157,7 +161,7 @@ use crate::inner::*;
     )
     .into_diagnostic()
     .wrap_err("scan")?;
-    let snippets: Vec<_> = findings.iter().map(|row| row.snippet.as_str()).collect();
+    let snippets: Vec<_> = findings.iter().map(|row| row.snippet().as_str()).collect();
     assert_eq!(
         snippets,
         ["super::*", "std::collections::*", "crate::inner::*"]
@@ -194,7 +198,7 @@ use std::collections::*;
     )
     .into_diagnostic()
     .wrap_err("scan")?;
-    let snippets: Vec<_> = findings.iter().map(|row| row.snippet.as_str()).collect();
+    let snippets: Vec<_> = findings.iter().map(|row| row.snippet().as_str()).collect();
     assert_eq!(
         snippets,
         ["crate::preludes::*", "std::collections::*"],
@@ -248,6 +252,6 @@ fn sibling_super_glob_is_flagged() -> miette::Result<()> {
     .into_diagnostic()
     .wrap_err("scan")?;
     assert_eq!(findings.len(), 1);
-    assert_eq!(findings[0].snippet, "super::helper::*");
+    assert_eq!(findings[0].snippet(), "super::helper::*");
     Ok(())
 }

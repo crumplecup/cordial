@@ -37,28 +37,28 @@ impl IrEnricher for DeriveInventoryEnricher {
         let thresholds = *crate::config::load_session_config(session).derives();
         let path_inclusions = workspace_path_inclusions(session.project_root());
         let records =
-            scan_source_tree(&source.src_root, &crate_root, thresholds, &path_inclusions)?;
+            scan_source_tree(source.src_root(), &crate_root, thresholds, &path_inclusions)?;
 
         for record in records {
-            let parent = resolve_parent(ir, &record.qualified_name)?;
-            let file = crate_root.join(&record.file);
-            let span = FileSpan::new(file.clone(), record.line, 1);
+            let parent = resolve_parent(ir, record.qualified_name())?;
+            let file = crate_root.join(record.file());
+            let span = FileSpan::new(file.clone(), record.line(), 1);
             let node = ir.insert_node(
                 NodeWeight::new(NodeKind::Expr)
                     .with_span(span.clone())
-                    .with_name(record.qualified_name.clone()),
+                    .with_name(record.qualified_name().clone()),
             )?;
             ir.set_attr(
                 node,
                 "derive_rule_id",
-                serde_json::Value::String(record.rule_id.as_str().to_string()),
+                serde_json::Value::String(record.rule_id().as_str().to_string()),
             )?;
             ir.set_attr(
                 node,
                 "struct_name",
-                serde_json::Value::String(record.struct_name.clone()),
+                serde_json::Value::String(record.struct_name().clone()),
             )?;
-            if let Some(method_name) = &record.method_name {
+            if let Some(method_name) = record.method_name() {
                 ir.set_attr(
                     node,
                     "method_name",
@@ -68,23 +68,27 @@ impl IrEnricher for DeriveInventoryEnricher {
             ir.set_attr(
                 node,
                 "qualified_name",
-                serde_json::Value::String(record.qualified_name.clone()),
+                serde_json::Value::String(record.qualified_name().clone()),
             )?;
             ir.set_attr(
                 node,
                 "recommendation",
-                serde_json::Value::String(record.recommendation.clone()),
+                serde_json::Value::String(record.recommendation().clone()),
             )?;
             ir.set_attr(
                 node,
                 "file",
                 serde_json::Value::String(file.display().to_string()),
             )?;
-            ir.set_attr(node, "line", serde_json::Value::Number(record.line.into()))?;
+            ir.set_attr(
+                node,
+                "line",
+                serde_json::Value::Number(record.line().into()),
+            )?;
             ir.set_attr(
                 node,
                 "evidence",
-                serde_json::Value::String(record.evidence.clone()),
+                serde_json::Value::String(record.evidence().clone()),
             )?;
             ir.insert_edge(parent, node, EdgeKind::Contains)?;
         }

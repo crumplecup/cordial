@@ -9,6 +9,7 @@ use syn::spanned::Spanned;
 use syn::{Expr, ExprCall, ExprIf, ExprMatch, ExprPath, Stmt};
 
 use super::visitor::{SiteCtx, pat_is_err, raw_expr_snippet, truncate_snippet};
+use crate::error::CordialResult;
 use crate::etiquettes::error_sites::infer_foreign_error_type;
 use crate::etiquettes::internal_error_chain::{
     InternalErrorComplianceFinding, InternalErrorComplianceId,
@@ -19,6 +20,7 @@ use tracing::instrument;
 #[derive(Default)]
 pub(super) struct ComplianceLayer {
     findings: Vec<InternalErrorComplianceFinding>,
+    error: Option<crate::error::CordialError>,
 }
 
 impl ComplianceLayer {
@@ -37,16 +39,23 @@ impl ComplianceLayer {
         internal_constructor: Option<String>,
         ctx: &SiteCtx,
     ) {
-        self.findings.push(InternalErrorComplianceFinding {
-            crate_name: ctx.crate_name.clone(),
-            rule_id,
-            context: ctx.context.clone(),
-            file: ctx.file.clone(),
-            line,
-            snippet,
-            foreign_error_type,
-            internal_constructor,
-        });
+        if self.error.is_some() {
+            return;
+        }
+        match InternalErrorComplianceFinding::builder()
+            .crate_name(ctx.crate_name().clone())
+            .rule_id(rule_id)
+            .context(ctx.context().clone())
+            .file(ctx.file().clone())
+            .line(line)
+            .snippet(snippet)
+            .foreign_error_type(foreign_error_type)
+            .internal_constructor(internal_constructor)
+            .build()
+        {
+            Ok(finding) => self.findings.push(finding),
+            Err(error) => self.error = Some(error),
+        }
     }
 
     #[instrument(level = "debug", skip(self, receiver, converter, ctx))]
@@ -170,8 +179,11 @@ impl ComplianceLayer {
     }
 
     #[instrument(level = "debug", skip(self))]
-    pub(super) fn into_findings(self) -> Vec<InternalErrorComplianceFinding> {
-        self.findings
+    pub(super) fn into_findings(self) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
+        if let Some(error) = self.error {
+            return Err(error);
+        }
+        Ok(self.findings)
     }
 }
 

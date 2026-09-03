@@ -61,9 +61,10 @@ impl Probe for ErrorSiteProbe {
                 continue;
             }
 
-            markers.push(Box::new(ErrorSiteMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(ErrorSiteMarker::new(crate::objects::NodeAnchor(node.id)))
+                    as Box<dyn Marker>,
+            );
         }
         Ok(markers)
     }

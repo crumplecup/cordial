@@ -10,35 +10,42 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use tracing::instrument;
 /// One file-backed module, keyed by its `foo::bar` path (`<crate>` for root).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub struct ModuleSizeInput {
     /// Module path (`foo::bar`, or `<crate>` for the root).
-    pub path: String,
+    path: String,
     /// Source file path, usually crate-relative.
-    pub file: String,
+    file: String,
     /// Line count of this file.
-    pub lines: u32,
+    #[getter(copy)]
+    lines: u32,
 }
 
 /// A node in the module tree after order and subtree sizes are filled in.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ModuleHierarchyNode {
     /// Module path (`foo::bar`, or `<crate>` for the root).
-    pub path: String,
+    path: String,
     /// Source file path, usually crate-relative.
-    pub file: String,
+    file: String,
     /// Lines in this module's own file.
-    pub own_lines: u32,
+    #[getter(copy)]
+    own_lines: u32,
     /// Lines in this module and all descendants.
-    pub subtree_lines: u32,
+    #[getter(copy)]
+    subtree_lines: u32,
     /// Horton–Strahler order of this module.
-    pub order: u32,
+    #[getter(copy)]
+    order: u32,
     /// Depth from the crate root (0 at `<crate>`).
-    pub depth: u32,
+    #[getter(copy)]
+    depth: u32,
     /// Number of direct child modules.
-    pub child_count: usize,
+    #[getter(copy)]
+    child_count: usize,
     /// Direct child module paths (file modules only).
-    pub children: Vec<String>,
+    children: Vec<String>,
 }
 
 impl ModuleHierarchyNode {
@@ -261,22 +268,27 @@ pub fn top_heavy_parents(nodes: &[ModuleHierarchyNode]) -> Vec<&ModuleHierarchyN
 }
 
 /// One child dominating its siblings' combined subtree.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct SiblingImbalance {
     /// Parent identifier, when this node is nested.
-    pub parent: String,
+    parent: String,
     /// Child with the largest subtree.
-    pub largest: String,
+    largest: String,
     /// Subtree line count of the largest child.
-    pub largest_subtree: u32,
+    #[getter(copy)]
+    largest_subtree: u32,
     /// Combined subtree lines of all siblings.
-    pub sibling_total: u32,
+    #[getter(copy)]
+    sibling_total: u32,
     /// Largest child's fraction of sibling subtree lines.
-    pub share: f64,
+    #[getter(copy)]
+    share: f64,
     /// How many siblings were compared.
-    pub sibling_count: usize,
+    #[getter(copy)]
+    sibling_count: usize,
     /// Sibling module paths with their subtree line counts.
-    pub siblings: Vec<(String, u32)>,
+    siblings: Vec<(String, u32)>,
 }
 
 /// Parents with two or more children, ranked by the largest child's share of
@@ -337,18 +349,21 @@ pub fn lopsided_siblings(
 }
 
 /// A parent whose only child is itself a branch: an extra hop with no fork.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct UnaryNest {
     /// Parent identifier, when this node is nested.
-    pub parent: String,
+    parent: String,
     /// Unary nest whose only child is itself a branch.
-    pub passthrough: String,
+    passthrough: String,
     /// Own-file lines of the passthrough module.
-    pub passthrough_own: u32,
+    #[getter(copy)]
+    passthrough_own: u32,
     /// Subtree lines of the passthrough module.
-    pub passthrough_subtree: u32,
+    #[getter(copy)]
+    passthrough_subtree: u32,
     /// Children of the passthrough's only child.
-    pub grandchildren: Vec<(String, u32)>,
+    grandchildren: Vec<(String, u32)>,
 }
 
 /// Parents (not the crate root) with exactly one child, when that child has
@@ -447,14 +462,19 @@ pub fn order_bands(nodes: &[ModuleHierarchyNode]) -> Vec<OrderBand> {
 }
 
 /// A Strahler-order band used when grouping hierarchy findings.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct OrderBand {
     /// Horton–Strahler order of this module.
-    pub order: u32,
+    #[getter(copy)]
+    order: u32,
     /// How many modules fall in this order band.
-    pub count: usize,
+    #[getter(copy)]
+    count: usize,
     /// Mean own-file lines in this band.
-    pub mean_own: f64,
+    #[getter(copy)]
+    mean_own: f64,
     /// Mean subtree lines in this band.
-    pub mean_subtree: f64,
+    #[getter(copy)]
+    mean_subtree: f64,
 }

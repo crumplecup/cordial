@@ -31,8 +31,9 @@ mod version_reporter;
 
 pub use assessor::AntipatternAssessor;
 pub use contract_bounds::{
-    ContractRecordDump, scan_crate_contract_bounds, scan_creusot_contract_bounds_source,
-    scan_kani_contract_bounds_source, scan_verus_contract_bounds_source,
+    ContractRecordDump, ContractRecordDumpBuilder, scan_crate_contract_bounds,
+    scan_creusot_contract_bounds_source, scan_kani_contract_bounds_source,
+    scan_verus_contract_bounds_source,
 };
 pub use enricher::AntipatternInventoryEnricher;
 pub use probe::AntipatternSiteProbe;
@@ -47,7 +48,7 @@ pub use version_reporter::{
 };
 
 use crate::etiquette::{
-    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_rule,
 };
 use crate::objects::Finding;
@@ -84,57 +85,52 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in antipatterns etiquette bundle.
-pub static ANTIPATTERNS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
-    etiquette: StaticEtiquette {
-        id: "antipatterns",
-        name: "Antipatterns",
-        loaders: LOADERS,
-        enrichers: ENRICHERS,
-        probes: PROBES,
-        assessors: ASSESSORS,
-        workspace_assessors: None,
-        reporters: REPORTERS,
-        is_coverage: false,
-        explain: EtiquetteExplain {
-            summary: "Untyped error carriers and related source smells?",
-            why: "These are quality problems adjacent to error handling that are not site/chain/foreign layers: they erase types, hide unused work, or fight workspace versioning.",
-            logic: "Flags Box<dyn Error>, Result<_, String>, unused _arg (except on impls of foreign traits), struct &'static fields where an owned type would do, unnamed contract bounds (Kani/Creusot/Verus), and workspace members that pin a version. Some Box<dyn Error> / unused-arg rows feed the Error handling quality-report area.",
-            opt_out: "`[antipatterns] enabled = false` in cordial.toml.",
-            rules: &[
-                EtiquetteRuleExplain {
-                    id: "ANTIPATTERN-BOX-DYN-ERROR-001",
-                    summary: "`Box<dyn Error>` carrier",
-                },
-                EtiquetteRuleExplain {
-                    id: "ANTIPATTERN-STRING-ERROR-001",
-                    summary: "`Result<_, String>` carrier",
-                },
-                EtiquetteRuleExplain {
-                    id: "ANTIPATTERN-UNUSED-UNDERSCORE-ARG-001",
-                    summary: "Unused `_arg` parameter",
-                },
-                EtiquetteRuleExplain {
-                    id: "ANTIPATTERN-STRUCT-STATIC-REF-001",
-                    summary: "`&'static` field that should be owned",
-                },
-                EtiquetteRuleExplain {
-                    id: "ANTIPATTERN-UNNAMED-CONTRACT-BOUND-001",
-                    summary: "Unnamed verifier contract bound",
-                },
-                EtiquetteRuleExplain {
-                    id: "ANTIPATTERN-VERSION-IN-MEMBER-001",
-                    summary: "Version pin on a workspace member",
-                },
+pub static ANTIPATTERNS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
+    StaticEtiquette::new(
+        "antipatterns",
+        "Antipatterns",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        false,
+        EtiquetteExplain::new(
+            "Untyped error carriers and related source smells?",
+            "These are quality problems adjacent to error handling that are not site/chain/foreign layers: they erase types, hide unused work, or fight workspace versioning.",
+            "Flags Box<dyn Error>, Result<_, String>, unused _arg (except on impls of foreign traits), struct &'static fields where an owned type would do, unnamed contract bounds (Kani/Creusot/Verus), and workspace members that pin a version. Some Box<dyn Error> / unused-arg rows feed the Error handling quality-report area.",
+            "`[antipatterns] enabled = false` in cordial.toml.",
+            &[
+                EtiquetteRuleExplain::new(
+                    "ANTIPATTERN-BOX-DYN-ERROR-001",
+                    "`Box<dyn Error>` carrier",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ANTIPATTERN-STRING-ERROR-001",
+                    "`Result<_, String>` carrier",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ANTIPATTERN-UNUSED-UNDERSCORE-ARG-001",
+                    "Unused `_arg` parameter",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ANTIPATTERN-STRUCT-STATIC-REF-001",
+                    "`&'static` field that should be owned",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ANTIPATTERN-UNNAMED-CONTRACT-BOUND-001",
+                    "Unnamed verifier contract bound",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ANTIPATTERN-VERSION-IN-MEMBER-001",
+                    "Version pin on a workspace member",
+                ),
             ],
-        },
-    },
-    quality_area: Some(QualityAreaSpec {
-        title: "Antipatterns",
-        checklist: "antipatterns.checklist.md",
-        summary: "antipatterns-summary.md",
-        compute: quality_area_compute,
-    }),
-};
+        ),
+    ),
+    Some(QualityAreaSpec::new(
+        "Antipatterns",
+        "antipatterns.checklist.md",
+        "antipatterns-summary.md",
+        quality_area_compute,
+    )),
+);
 
 /// `Box<dyn Error>`/`Result<_, String>` (`ANTIPATTERN-BOX-DYN-ERROR-001`/
 /// `ANTIPATTERN-STRING-ERROR-001`) are deliberately excluded here -- they

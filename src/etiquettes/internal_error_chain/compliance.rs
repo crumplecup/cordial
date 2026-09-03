@@ -16,10 +16,10 @@ pub fn scan_crate_internal_error_compliance(
 ) -> CordialResult<InternalErrorComplianceReport> {
     let src_root = crate_root.join("src");
     if !src_root.is_dir() {
-        return Ok(InternalErrorComplianceReport {
-            crate_name: crate_name.to_string(),
-            findings: Vec::new(),
-        });
+        return Ok(InternalErrorComplianceReport::new(
+            crate_name.to_string(),
+            Vec::new(),
+        ));
     }
 
     let mut findings = Vec::new();
@@ -37,22 +37,21 @@ pub fn scan_crate_internal_error_compliance(
     }
 
     findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.rule_id.to_string().cmp(&b.rule_id.to_string()))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.rule_id().to_string().cmp(&b.rule_id().to_string()))
     });
 
-    for finding in &mut findings {
-        if let Ok(rel) = finding.file.strip_prefix(crate_root) {
-            finding.file = rel.to_path_buf();
-        }
-    }
+    let findings = findings
+        .into_iter()
+        .map(|finding| relativize_compliance_finding(finding, crate_root))
+        .collect::<CordialResult<Vec<_>>>()?;
 
-    Ok(InternalErrorComplianceReport {
-        crate_name: crate_name.to_string(),
+    Ok(InternalErrorComplianceReport::new(
+        crate_name.to_string(),
         findings,
-    })
+    ))
 }
 
 /// Parse one source file (used by tests).
@@ -65,20 +64,18 @@ pub fn scan_compliance_rust_source(
 ) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    Ok(scan_compliance_rust_syntax(
-        &syntax, file, src_root, crate_name,
-    ))
+    scan_compliance_rust_syntax(&syntax, file, src_root, crate_name)
 }
 
 /// Scan a pre-parsed file for internal error compliance (via unified error IR visitor).
-#[instrument(level = "debug", skip(syntax, file))]
+#[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
 pub fn scan_compliance_rust_syntax(
     syntax: &syn::File,
     file: &Path,
     src_root: &Path,
     crate_name: &str,
-) -> Vec<InternalErrorComplianceFinding> {
-    crate::etiquettes::scan_rust_file_syntax(
+) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
+    Ok(crate::etiquettes::scan_rust_file_syntax(
         syntax,
         file,
         src_root,
@@ -86,8 +83,31 @@ pub fn scan_compliance_rust_syntax(
         src_root.parent().unwrap_or(src_root),
         crate_name,
         crate::etiquettes::ErrorIrScanLayers::COMPLIANCE_ONLY,
-    )
-    .compliance
+    )?
+    .compliance()
+    .clone())
+}
+
+#[instrument(level = "debug", skip(finding))]
+fn relativize_compliance_finding(
+    finding: InternalErrorComplianceFinding,
+    crate_root: &Path,
+) -> CordialResult<InternalErrorComplianceFinding> {
+    let file = finding
+        .file()
+        .strip_prefix(crate_root)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|_| finding.file().clone());
+    InternalErrorComplianceFinding::builder()
+        .crate_name(finding.crate_name().clone())
+        .rule_id(finding.rule_id())
+        .context(finding.context().clone())
+        .file(file)
+        .line(finding.line())
+        .snippet(finding.snippet().clone())
+        .foreign_error_type(finding.foreign_error_type().clone())
+        .internal_constructor(finding.internal_constructor().clone())
+        .build()
 }
 
 #[instrument(level = "debug", skip(file), err(level = "warn"))]

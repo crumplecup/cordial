@@ -21,12 +21,15 @@ use vis::VisKind;
 
 /// Cached branching floor from a previous peel. Digest is a hash of the
 /// scanned crate files; a source edit invalidates it and forces a re-peel.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+)]
 pub struct BranchingCache {
     /// Visibility digest of names in this module.
-    pub digest: String,
+    digest: String,
     /// Minimum leaf-name count for a visible module.
-    pub floor: usize,
+    #[getter(copy)]
+    floor: usize,
 }
 
 impl BranchingCache {
@@ -80,7 +83,7 @@ pub fn scan_crate_visibility_with_cache(
         true,
     )?;
     let (eval, new_cache) = resolve_eval(&root, thresholds, cached);
-    Ok((collect_findings(&root, thresholds, eval), new_cache))
+    Ok((collect_findings(&root, thresholds, eval)?, new_cache))
 }
 
 #[instrument(level = "debug")]

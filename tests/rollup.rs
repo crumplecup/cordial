@@ -12,13 +12,7 @@ fn quality_cli_filter_runs_both_etiquettes() -> miette::Result<()> {
         .wrap_err("src dir")?;
     fs::write(
         fixture.path().join("src/lib.rs"),
-        r#"
-pub fn noisy() {
-    panic!("boom");
-}
-
-pub fn quiet() {}
-"#,
+        include_str!("fixtures/panics/rollup_filter.rs"),
     )
     .into_diagnostic()
     .wrap_err("write fixture")?;
@@ -56,7 +50,7 @@ fn rollup_summary_lists_open_findings_by_etiquette() -> miette::Result<()> {
         .wrap_err("src dir")?;
     fs::write(
         fixture.path().join("src/lib.rs"),
-        "pub fn boom() { panic!(\"x\"); }",
+        include_str!("fixtures/panics/boom_x.rs"),
     )
     .into_diagnostic()
     .wrap_err("write fixture")?;

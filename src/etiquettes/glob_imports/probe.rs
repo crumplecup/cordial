@@ -62,9 +62,10 @@ impl Probe for GlobImportSiteProbe {
                 continue;
             }
 
-            markers.push(Box::new(GlobImportMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(GlobImportMarker::new(crate::objects::NodeAnchor(node.id)))
+                    as Box<dyn Marker>,
+            );
         }
         Ok(markers)
     }

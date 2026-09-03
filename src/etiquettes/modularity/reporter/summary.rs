@@ -120,10 +120,10 @@ impl Reporter for ModularitySummaryReporter {
                  σ **{:.1}**. Outliers first, then the next-largest; |z| > {sigma} is a \
                  checklist lint on the upper tail only when lines >= {}{}. \
                  Full inventory is `modularity.csv`.\n\n",
-                stats.n,
+                stats.n(),
                 min_lines,
-                stats.mean,
-                stats.stddev,
+                stats.mean(),
+                stats.stddev(),
                 thresholds.file_inventory_min_lines(),
                 if thresholds.module_size_ignore_lower_tail() {
                     "; lower tail ignored"

@@ -342,47 +342,47 @@ impl Reporter for AntipatternSummaryReporter {
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings;
 
-        let summary = build_workspace_antipatterns_summary(findings);
+        let summary = build_workspace_antipatterns_summary(findings)?;
         let mut body = String::new();
         body.push_str("# Antipatterns summary\n\n");
         body.push_str("---\n\n");
         body.push_str(&format!(
             "Workspace totals: **{}** sites — box_dyn_error **{}**, string_error **{}**, unused_underscore_arg **{}**, \
              struct_static_ref **{}**, unnamed_contract_bound **{}**, version_in_member **{}**.\n\n",
-            summary.total,
-            summary.box_dyn_error,
-            summary.string_error,
-            summary.unused_underscore_arg,
-            summary.struct_static_ref,
-            summary.unnamed_contract_bound,
-            summary.version_in_member
+            summary.total(),
+            summary.box_dyn_error(),
+            summary.string_error(),
+            summary.unused_underscore_arg(),
+            summary.struct_static_ref(),
+            summary.unnamed_contract_bound(),
+            summary.version_in_member()
         ));
         body.push_str(
             "| Crate | Total | Box dyn error | String error | Unused underscore arg | Struct static ref | Unnamed contract bound | Version in member |\n",
         );
         body.push_str("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
-        for row in &summary.crates {
+        for row in summary.crates() {
             body.push_str(&format!(
                 "| `{}` | {} | {} | {} | {} | {} | {} | {} |\n",
-                row.crate_name,
-                row.total,
-                row.box_dyn_error,
-                row.string_error,
-                row.unused_underscore_arg,
-                row.struct_static_ref,
-                row.unnamed_contract_bound,
-                row.version_in_member
+                row.crate_name(),
+                row.total(),
+                row.box_dyn_error(),
+                row.string_error(),
+                row.unused_underscore_arg(),
+                row.struct_static_ref(),
+                row.unnamed_contract_bound(),
+                row.version_in_member()
             ));
         }
         body.push_str(&format!(
             "\n| **Total** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** |\n",
-            summary.total,
-            summary.box_dyn_error,
-            summary.string_error,
-            summary.unused_underscore_arg,
-            summary.struct_static_ref,
-            summary.unnamed_contract_bound,
-            summary.version_in_member
+            summary.total(),
+            summary.box_dyn_error(),
+            summary.string_error(),
+            summary.unused_underscore_arg(),
+            summary.struct_static_ref(),
+            summary.unnamed_contract_bound(),
+            summary.version_in_member()
         ));
 
         Ok(vec![Box::new(TextArtifact {

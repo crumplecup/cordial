@@ -64,9 +64,9 @@ impl Rule for GlobImportRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct GlobImportMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for GlobImportMarker {
@@ -91,15 +91,23 @@ impl Marker for GlobImportMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct GlobImportFinding {
-    pub rule: GlobImportRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub context: String,
-    pub span: FileSpan,
-    pub snippet: String,
+    rule: GlobImportRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    context: String,
+    span: FileSpan,
+    snippet: String,
+}
+
+impl GlobImportFinding {
+    pub fn builder() -> GlobImportFindingBuilder {
+        GlobImportFindingBuilder::default()
+    }
 }
 
 impl Finding for GlobImportFinding {
@@ -123,19 +131,28 @@ impl Finding for GlobImportFinding {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
         sink.snippet(&self.snippet);
     }
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct GlobImportSiteRecord {
-    pub rule_id: GlobImportRuleId,
-    pub context: String,
-    pub file: PathBuf,
-    pub line: u32,
-    pub snippet: String,
+    #[getter(copy)]
+    rule_id: GlobImportRuleId,
+    context: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    snippet: String,
+}
+
+impl GlobImportSiteRecord {
+    pub fn builder() -> GlobImportSiteRecordBuilder {
+        GlobImportSiteRecordBuilder::default()
+    }
 }

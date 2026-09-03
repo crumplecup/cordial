@@ -128,9 +128,9 @@ impl Assessor for ModularityAssessor {
                     share: None,
                     detail: String::new(),
                 },
-            ));
+            )?);
         }
-        findings.extend(hierarchy_findings(&pending, &crate_name, thresholds));
+        findings.extend(hierarchy_findings(&pending, &crate_name, thresholds)?);
         Ok(findings)
     }
 }
@@ -140,18 +140,20 @@ fn hierarchy_findings(
     pending: &[PendingSite],
     crate_name: &str,
     thresholds: &crate::config::ModularityThresholds,
-) -> Vec<Box<dyn Finding>> {
+) -> CordialResult<Vec<Box<dyn Finding>>> {
     let inputs: Vec<ModuleSizeInput> = pending
         .iter()
         .filter(|site| site.kind == ModularityKind::ModuleSize && !site.inline)
-        .map(|site| ModuleSizeInput {
-            path: site.context.clone(),
-            file: site.file.display().to_string(),
-            lines: site.lines,
+        .map(|site| {
+            ModuleSizeInput::new(
+                site.context.clone(),
+                site.file.display().to_string(),
+                site.lines,
+            )
         })
         .collect();
     if inputs.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     let tree = build_module_hierarchy(&inputs);
     let by_path: HashMap<&str, &PendingSite> = pending
@@ -162,85 +164,85 @@ fn hierarchy_findings(
 
     let mut findings = Vec::new();
     for node in top_heavy_parents(&tree) {
-        if !thresholds.is_top_heavy_hit(node.own_lines, node.subtree_lines) {
+        if !thresholds.is_top_heavy_hit(node.own_lines(), node.subtree_lines()) {
             continue;
         }
-        let Some(site) = by_path.get(node.path.as_str()).copied() else {
+        let Some(site) = by_path.get(node.path().as_str()).copied() else {
             continue;
         };
         let children = child_mass_list(node, &tree);
         let detail = if children.is_empty() {
-            format!("subtree {}", node.subtree_lines)
+            format!("subtree {}", node.subtree_lines())
         } else {
-            format!("subtree {}; {}", node.subtree_lines, children)
+            format!("subtree {}; {}", node.subtree_lines(), children)
         };
         findings.push(finding_from_site(
             site,
             FindingArgs {
                 kind: ModularityKind::TopHeavy,
                 crate_name,
-                context: node.path.clone(),
-                lines: node.own_lines,
+                context: node.path().clone(),
+                lines: node.own_lines(),
                 checklist: true,
                 zscore: None,
                 share: Some(node.top_heavy()),
                 detail,
             },
-        ));
+        )?);
     }
     for imbalance in lopsided_siblings(&tree, thresholds.hierarchy_min_lines()) {
-        if !thresholds.is_lopsided_hit(imbalance.largest_subtree, imbalance.sibling_total) {
+        if !thresholds.is_lopsided_hit(imbalance.largest_subtree(), imbalance.sibling_total()) {
             continue;
         }
-        let Some(site) = by_path.get(imbalance.largest.as_str()).copied() else {
+        let Some(site) = by_path.get(imbalance.largest().as_str()).copied() else {
             continue;
         };
         let detail = format!(
             "under {}; {}",
-            imbalance.parent,
-            format_mass_list(&imbalance.siblings)
+            imbalance.parent(),
+            format_mass_list(imbalance.siblings())
         );
         findings.push(finding_from_site(
             site,
             FindingArgs {
                 kind: ModularityKind::Lopsided,
                 crate_name,
-                context: imbalance.largest.clone(),
-                lines: imbalance.largest_subtree,
+                context: imbalance.largest().clone(),
+                lines: imbalance.largest_subtree(),
                 checklist: true,
                 zscore: None,
-                share: Some(imbalance.share),
+                share: Some(imbalance.share()),
                 detail,
             },
-        ));
+        )?);
     }
     for nest in unary_nests(&tree, thresholds.hierarchy_min_lines()) {
-        if !thresholds.is_collapse_hit(nest.passthrough_subtree) {
+        if !thresholds.is_collapse_hit(nest.passthrough_subtree()) {
             continue;
         }
-        let Some(site) = by_path.get(nest.passthrough.as_str()).copied() else {
+        let Some(site) = by_path.get(nest.passthrough().as_str()).copied() else {
             continue;
         };
         let detail = format!(
             "under {}; lift {}",
-            nest.parent,
-            format_mass_list(&nest.grandchildren)
+            nest.parent(),
+            format_mass_list(nest.grandchildren())
         );
         findings.push(finding_from_site(
             site,
             FindingArgs {
                 kind: ModularityKind::Collapse,
                 crate_name,
-                context: nest.passthrough.clone(),
-                lines: nest.passthrough_subtree,
+                context: nest.passthrough().clone(),
+                lines: nest.passthrough_subtree(),
                 checklist: true,
                 zscore: None,
                 share: None,
                 detail,
             },
-        ));
+        )?);
     }
-    findings
+    Ok(findings)
 }
 
 /// Every fact needed to build one finding from a [`PendingSite`], bundled
@@ -259,19 +261,21 @@ struct FindingArgs<'a> {
 }
 
 #[instrument(level = "debug", skip(site, args))]
-fn finding_from_site(site: &PendingSite, args: FindingArgs<'_>) -> Box<dyn Finding> {
-    Box::new(ModularityFinding {
-        rule: ModularityRule::new(args.kind),
-        disposition: Disposition::Open,
-        anchor: crate::objects::NodeAnchor(site.node_id),
-        crate_name: args.crate_name.to_string(),
-        context: args.context,
-        span: FileSpan::new(site.file.clone(), site.line, 1),
-        lines: args.lines,
-        checklist: args.checklist,
-        zscore: args.zscore,
-        inline: site.inline,
-        share: args.share,
-        detail: args.detail,
-    })
+fn finding_from_site(site: &PendingSite, args: FindingArgs<'_>) -> CordialResult<Box<dyn Finding>> {
+    Ok(Box::new(
+        ModularityFinding::builder()
+            .rule(ModularityRule::new(args.kind))
+            .disposition(Disposition::Open)
+            .anchor(crate::objects::NodeAnchor(site.node_id))
+            .crate_name(args.crate_name.to_string())
+            .context(args.context)
+            .span(FileSpan::new(site.file.clone(), site.line, 1))
+            .lines(args.lines)
+            .checklist(args.checklist)
+            .zscore(args.zscore)
+            .inline(site.inline)
+            .share(args.share)
+            .detail(args.detail)
+            .build()?,
+    ))
 }

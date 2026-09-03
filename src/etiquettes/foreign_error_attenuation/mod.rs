@@ -42,7 +42,7 @@ pub use types::{
 use crate::SourceLoader;
 use crate::enricher::ERROR_IR_ENRICHERS;
 use crate::etiquette::{
-    EtiquetteExplain, EtiquetteRuleExplain, StaticEtiquette, StaticQualityEtiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, StaticEtiquette, StaticQualityEtiquette,
 };
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
@@ -67,44 +67,37 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in foreign error attenuation etiquette bundle.
-pub static FOREIGN_ERROR_ATTENUATION_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
-    etiquette: StaticEtiquette {
-        id: "foreign_error_attenuation",
-        name: "Foreign error attenuation",
-        loaders: LOADERS,
-        enrichers: ENRICHERS,
-        probes: PROBES,
-        assessors: ASSESSORS,
-        workspace_assessors: None,
-        reporters: REPORTERS,
-        is_coverage: false,
-        explain: EtiquetteExplain {
-            summary: "How should those foreign error sites be wrapped, mapped, or deferred?",
-            why: "Listing foreign types is not enough; the actionable question is what to do at this site.",
-            logic: "Classifies each typed foreign site: chain already preserved, chain break, pending infrastructure, or neutral. Suggests keep the exemplar, replace a stringifying map_err, add infrastructure then ?, or review by hand. Feeds the hand-composed Error handling quality-report area.",
-            opt_out: "`[foreign_error_attenuation] enabled = false` in cordial.toml.",
-            rules: &[
-                EtiquetteRuleExplain {
-                    id: "ERROR-HANDLING-CHAIN-PRESERVED",
-                    summary: "Contrast: chain already preserved",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-HANDLING-CHAIN-BREAK",
-                    summary: "Site drops the source() chain",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-HANDLING-PENDING-INFRA",
-                    summary: "Needs a From / wrapper before ?",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-HANDLING-NEUTRAL",
-                    summary: "Review by hand; not auto-classified",
-                },
-            ],
-        },
-    },
-    // Declines a dedicated row on purpose: its migration-backlog
-    // (chain-break + pending-infra) counts feed the hand-composed
-    // "Error handling" area instead (see reporter::quality_report).
-    quality_area: None,
-};
+pub static FOREIGN_ERROR_ATTENUATION_ETIQUETTE: StaticQualityEtiquette =
+    StaticQualityEtiquette::new(
+        StaticEtiquette::new(
+            "foreign_error_attenuation",
+            "Foreign error attenuation",
+            EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+            false,
+            EtiquetteExplain::new(
+                "How should those foreign error sites be wrapped, mapped, or deferred?",
+                "Listing foreign types is not enough; the actionable question is what to do at this site.",
+                "Classifies each typed foreign site: chain already preserved, chain break, pending infrastructure, or neutral. Suggests keep the exemplar, replace a stringifying map_err, add infrastructure then ?, or review by hand. Feeds the hand-composed Error handling quality-report area.",
+                "`[foreign_error_attenuation] enabled = false` in cordial.toml.",
+                &[
+                    EtiquetteRuleExplain::new(
+                        "ERROR-HANDLING-CHAIN-PRESERVED",
+                        "Contrast: chain already preserved",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ERROR-HANDLING-CHAIN-BREAK",
+                        "Site drops the source() chain",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ERROR-HANDLING-PENDING-INFRA",
+                        "Needs a From / wrapper before ?",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ERROR-HANDLING-NEUTRAL",
+                        "Review by hand; not auto-classified",
+                    ),
+                ],
+            ),
+        ),
+        None,
+    );

@@ -161,36 +161,62 @@ impl Display for InstrumentLevel {
 }
 
 /// Inputs the per-role recipe strategies read.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct FnContext {
-    pub role: FunctionRole,
-    pub complexity: FunctionComplexity,
-    pub param_names: Vec<String>,
+    #[getter(copy)]
+    role: FunctionRole,
+    #[getter(copy)]
+    complexity: FunctionComplexity,
+    param_names: Vec<String>,
     /// Params tracing cannot record (`impl Trait`, `dyn`, generics, non-Debug types).
-    pub unrecordable_params: Vec<String>,
-    pub returns_result: bool,
-    pub return_unrecordable: bool,
+    unrecordable_params: Vec<String>,
+    #[getter(copy)]
+    returns_result: bool,
+    #[getter(copy)]
+    return_unrecordable: bool,
     /// `true` when the return type (or a `Result`/`Option` payload) borrows.
     /// `#[instrument(err)]` wraps the body in a closure and cannot return those.
-    pub return_borrowed: bool,
+    #[getter(copy)]
+    return_borrowed: bool,
     /// `true` when `returns_result` is set and the `Err` payload's type is
     /// positively known to implement `Display` -- `#[instrument(err)]`
     /// renders it via `tracing_core::field::display`, which requires that
     /// bound. `false` (not just "unresolved") whenever this can't be
     /// confirmed from the file's own text, so a missing `Display` never
     /// gets a proposed `err()` that can't compile.
-    pub err_is_displayable: bool,
-    pub has_error_path_event: bool,
+    #[getter(copy)]
+    err_is_displayable: bool,
+    #[getter(copy)]
+    has_error_path_event: bool,
+}
+
+impl FnContext {
+    /// Start a builder for this value.
+    pub fn builder() -> FnContextBuilder {
+        FnContextBuilder::default()
+    }
 }
 
 /// Target `#[instrument]` shape for a classified function.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct InstrumentRecipe {
-    pub level: InstrumentLevel,
-    pub skip: Vec<String>,
-    pub fields: Vec<String>,
-    pub err: Option<InstrumentLevel>,
-    pub ret: bool,
+    #[getter(copy)]
+    level: InstrumentLevel,
+    skip: Vec<String>,
+    fields: Vec<String>,
+    #[getter(copy)]
+    err: Option<InstrumentLevel>,
+    #[getter(copy)]
+    ret: bool,
+}
+
+impl InstrumentRecipe {
+    /// Start a builder for this value.
+    pub fn builder() -> InstrumentRecipeBuilder {
+        InstrumentRecipeBuilder::default()
+    }
 }
 
 impl InstrumentRecipe {

@@ -65,17 +65,19 @@ impl Assessor for CfgScatterAssessor {
                 .unwrap_or_else(|| session.project_root().to_path_buf());
             let span = FileSpan::new(file, 1, 1);
 
-            findings.push(Box::new(CfgScatterFinding {
-                rule: CfgScatterRule::new(CfgScatterRuleId::Scatter001),
-                disposition: Disposition::Open,
-                anchor: crate::objects::NodeAnchor(node_id),
-                crate_name: ir.crate_name().to_string(),
-                predicate,
-                span,
-                distinct_kinds,
-                occurrence_count,
-                sample_snippets,
-            }) as Box<dyn Finding>);
+            findings.push(Box::new(
+                CfgScatterFinding::builder()
+                    .rule(CfgScatterRule::new(CfgScatterRuleId::Scatter001))
+                    .disposition(Disposition::Open)
+                    .anchor(crate::objects::NodeAnchor(node_id))
+                    .crate_name(ir.crate_name().to_string())
+                    .predicate(predicate)
+                    .span(span)
+                    .distinct_kinds(distinct_kinds)
+                    .occurrence_count(occurrence_count)
+                    .sample_snippets(sample_snippets)
+                    .build()?,
+            ) as Box<dyn Finding>);
         }
         Ok(findings)
     }

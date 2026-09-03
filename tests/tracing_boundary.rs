@@ -31,7 +31,7 @@ fn scan(
     )
     .into_diagnostic()
     .wrap_err("scan")?;
-    Ok(records.into_iter().map(|record| record.rule_id).collect())
+    Ok(records.into_iter().map(|record| record.rule_id()).collect())
 }
 
 fn has(rules: &[BoundaryRuleId], rule: BoundaryRuleId) -> bool {
@@ -176,7 +176,7 @@ fn known_cross_crate_helper_is_trusted() -> miette::Result<()> {
     let records = scan_crate_tracing_boundary(fixture.path(), "fixture", &policy, false)
         .into_diagnostic()
         .wrap_err("scan")?;
-    let rules: Vec<_> = records.into_iter().map(|record| record.rule_id).collect();
+    let rules: Vec<_> = records.into_iter().map(|record| record.rule_id()).collect();
     assert!(
         rules.is_empty(),
         "a configured cross-crate helper is trusted, same as subscriber's known_helper_paths: {rules:?}"

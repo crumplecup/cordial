@@ -36,11 +36,11 @@ impl Loader for RustdocLoader {
         let target = view.target;
 
         let json_path = resolve_rustdoc_json(
-            &target.crate_root,
-            &target.crate_name,
+            target.crate_root(),
+            target.crate_name(),
             Some(session.store_root()),
         )?;
-        let inventory = crate::rustdoc::parse_rustdoc_json(&json_path, &target.crate_name)?;
+        let inventory = crate::rustdoc::parse_rustdoc_json(&json_path, target.crate_name())?;
         Ok(Box::new(RustdocLoadView::from_inventory(inventory)))
     }
 }

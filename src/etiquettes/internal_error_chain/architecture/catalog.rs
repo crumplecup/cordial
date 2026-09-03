@@ -21,6 +21,7 @@ use super::super::type_graph::{
 };
 
 use tracing::instrument;
+#[derive(Debug, Clone, Copy)]
 pub(super) enum CatalogPhase {
     Types,
     Impls,
@@ -179,10 +180,37 @@ impl Catalog {
 }
 
 pub(super) struct CatalogVisitor<'a> {
-    pub(super) file: PathBuf,
-    pub(super) module_prefix: Vec<String>,
-    pub(super) catalog: &'a mut Catalog,
-    pub(super) phase: CatalogPhase,
+    file: PathBuf,
+    module_prefix: Vec<String>,
+    catalog: &'a mut Catalog,
+    phase: CatalogPhase,
+}
+
+impl<'a> CatalogVisitor<'a> {
+    #[instrument(level = "debug", skip(catalog))]
+    pub(super) fn new(
+        file: PathBuf,
+        module_prefix: Vec<String>,
+        catalog: &'a mut Catalog,
+        phase: CatalogPhase,
+    ) -> Self {
+        Self {
+            file,
+            module_prefix,
+            catalog,
+            phase,
+        }
+    }
+
+    #[instrument(level = "debug", skip(self))]
+    pub(super) fn set_phase(&mut self, phase: CatalogPhase) {
+        self.phase = phase;
+    }
+
+    #[instrument(level = "debug", skip(self, module_prefix))]
+    pub(super) fn reset_module_prefix(&mut self, module_prefix: Vec<String>) {
+        self.module_prefix = module_prefix;
+    }
 }
 
 impl CatalogVisitor<'_> {

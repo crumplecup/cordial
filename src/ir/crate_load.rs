@@ -93,18 +93,18 @@ pub fn load_rustdoc_view(
 ) -> CordialResult<Box<dyn LoadView>> {
     if let Some(shadow) = shadow_for_upstream
         && let Some(path) =
-            shadow_dep_rustdoc_path(session.store_root(), shadow, &target.crate_name)
+            shadow_dep_rustdoc_path(session.store_root(), shadow, target.crate_name())
     {
-        let inventory = parse_rustdoc_json(&path, &target.crate_name)?;
+        let inventory = parse_rustdoc_json(&path, target.crate_name())?;
         return Ok(Box::new(RustdocLoadView::from_inventory(inventory)));
     }
 
     let json_path = crate::rustdoc_loader::resolve_rustdoc_json(
-        &target.crate_root,
-        &target.crate_name,
+        target.crate_root(),
+        target.crate_name(),
         Some(session.store_root()),
     )?;
-    let inventory = parse_rustdoc_json(&json_path, &target.crate_name)?;
+    let inventory = parse_rustdoc_json(&json_path, target.crate_name())?;
     Ok(Box::new(RustdocLoadView::from_inventory(inventory)))
 }
 

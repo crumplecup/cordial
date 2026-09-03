@@ -2,7 +2,9 @@
 //!
 //! **What.** Inventories `panic!`, `unwrap`, `expect`, `unreachable!`, and
 //! `compile_error!`. Each site is a [`PanicKind`] with a stable rule id
-//! (`PANIC-SOURCE-*`).
+//! (`PANIC-SOURCE-*`). String literals that parse as Rust and contain those
+//! APIs are treated as embedded fixture programs; keep samples under
+//! `tests/fixtures/` or `tests/parity/`.
 //!
 //! **Why.** Abort sites are the first error-handling layer. Library code
 //! should return the crate’s internal error type (preserving `source()`);
@@ -38,7 +40,7 @@ pub use scan::{scan_crate_panics, scan_rust_source, scan_source_tree};
 pub use types::PanicKind;
 
 use crate::etiquette::{
-    EtiquetteExplain, EtiquetteRuleExplain, StaticEtiquette, StaticQualityEtiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, StaticEtiquette, StaticQualityEtiquette,
 };
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 
@@ -60,51 +62,28 @@ static ASSESSORS: &[&'static dyn crate::Assessor] = &[&PANIC_ASSESSOR];
 static REPORTERS: &[&'static dyn crate::Reporter] = &[&PANIC_CSV, &PANIC_CHECKLIST, &PANIC_SUMMARY];
 
 /// Built-in panics etiquette bundle.
-pub static PANICS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
-    etiquette: StaticEtiquette {
-        id: "panics",
-        name: "Panic sources",
-        loaders: LOADERS,
-        enrichers: ENRICHERS,
-        probes: PROBES,
-        assessors: ASSESSORS,
-        workspace_assessors: None,
-        reporters: REPORTERS,
-        is_coverage: false,
-        explain: EtiquetteExplain {
-            summary: "Where does this crate abort?",
-            why: "Abort sites are the first error-handling layer. Library code should return the crate's internal error type (preserving source()); binaries and tests should surface through miette.",
-            logic: "Inventories panic!, unwrap, expect, unreachable!, and compile_error!. Test unwrap/expect (including #[cfg(test)] modules under src/) stay on the checklist rather than becoming CSV-only inventory.",
-            opt_out: "`[panics] enabled = false` in cordial.toml.",
-            rules: &[
-                EtiquetteRuleExplain {
-                    id: "PANIC-SOURCE-PANIC",
-                    summary: "`panic!` in source",
-                },
-                EtiquetteRuleExplain {
-                    id: "PANIC-SOURCE-UNREACHABLE",
-                    summary: "`unreachable!` in source",
-                },
-                EtiquetteRuleExplain {
-                    id: "PANIC-SOURCE-EXPECT",
-                    summary: "`.expect(...)` in source",
-                },
-                EtiquetteRuleExplain {
-                    id: "PANIC-SOURCE-UNWRAP",
-                    summary: "`.unwrap()` in source",
-                },
-                EtiquetteRuleExplain {
-                    id: "PANIC-SOURCE-COMPILE-ERROR",
-                    summary: "`compile_error!` in source",
-                },
+pub static PANICS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
+    StaticEtiquette::new(
+        "panics",
+        "Panic sources",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        false,
+        EtiquetteExplain::new(
+            "Where does this crate abort?",
+            "Abort sites are the first error-handling layer. Library code should return the crate's internal error type (preserving source()); binaries and tests should surface through miette.",
+            "Inventories panic!, unwrap, expect, unreachable!, and compile_error!. String literals that parse as Rust and contain those APIs are scanned as embedded fixture programs; keep samples under tests/fixtures or tests/parity (path skip). Test unwrap/expect (including #[cfg(test)] modules under src/) stay on the checklist rather than becoming CSV-only inventory.",
+            "`[panics] enabled = false` in cordial.toml.",
+            &[
+                EtiquetteRuleExplain::new("PANIC-SOURCE-PANIC", "`panic!` in source"),
+                EtiquetteRuleExplain::new("PANIC-SOURCE-UNREACHABLE", "`unreachable!` in source"),
+                EtiquetteRuleExplain::new("PANIC-SOURCE-EXPECT", "`.expect(...)` in source"),
+                EtiquetteRuleExplain::new("PANIC-SOURCE-UNWRAP", "`.unwrap()` in source"),
+                EtiquetteRuleExplain::new(
+                    "PANIC-SOURCE-COMPILE-ERROR",
+                    "`compile_error!` in source",
+                ),
             ],
-        },
-    },
-    // Declines a dedicated row on purpose: its own checklist_total feeds
-    // the hand-composed "Error handling" area instead (see
-    // reporter::quality_report), which also pulls from
-    // foreign_error_attenuation/internal_error_chain/antipatterns --
-    // genuinely a merge of several etiquettes into one area, not
-    // representable as any single etiquette's own contribution.
-    quality_area: None,
-};
+        ),
+    ),
+    None,
+);

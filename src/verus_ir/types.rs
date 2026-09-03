@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::objects::FileSpan;
+use crate::objects::{FileSpan, SourceSpan};
 
 use tracing::instrument;
 
@@ -306,8 +306,8 @@ impl VerusCrateIr {
     #[instrument(level = "debug", skip(self), ret)]
     pub fn is_documented_pattern_projection_enum(&self, file: &Path, line: u32) -> bool {
         self.enums.iter().any(|item| {
-            item.span.file.as_path() == file
-                && item.span.line == line
+            item.span.file() == file
+                && item.span.line() == line
                 && item.synthesizes_pattern_projection_accessors()
                 && item.fully_documented()
         })

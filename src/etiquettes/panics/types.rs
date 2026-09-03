@@ -93,9 +93,9 @@ impl Rule for PanicRule {
 }
 
 /// Marker emitted by [`super::probe::PanicSiteProbe`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct PanicMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for PanicMarker {
@@ -121,17 +121,27 @@ impl Marker for PanicMarker {
 }
 
 /// Assessed panic-site finding.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct PanicFinding {
-    pub rule: PanicRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub context: String,
-    pub span: FileSpan,
-    pub snippet: String,
-    pub surface: crate::plugin::ErrorSurface,
-    pub checklist: bool,
+    rule: PanicRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    context: String,
+    span: FileSpan,
+    snippet: String,
+    surface: crate::plugin::ErrorSurface,
+    #[getter(copy)]
+    checklist: bool,
+}
+
+impl PanicFinding {
+    /// Start a builder for this finding.
+    pub fn builder() -> PanicFindingBuilder {
+        PanicFindingBuilder::default()
+    }
 }
 
 impl Finding for PanicFinding {
@@ -156,8 +166,8 @@ impl Finding for PanicFinding {
         sink.field("kind", &self.rule.kind);
         sink.field("surface", &self.surface);
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
         sink.field("checklist", &self.checklist.to_string());
         sink.snippet(&self.snippet);
@@ -165,12 +175,23 @@ impl Finding for PanicFinding {
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct PanicSiteRecord {
-    pub kind: PanicKind,
-    pub context: String,
-    pub file: PathBuf,
-    pub line: u32,
-    pub snippet: String,
-    pub cfg_test: bool,
+    #[getter(copy)]
+    kind: PanicKind,
+    context: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    snippet: String,
+    #[getter(copy)]
+    cfg_test: bool,
+}
+
+impl PanicSiteRecord {
+    /// Start a builder for this scan row.
+    pub fn builder() -> PanicSiteRecordBuilder {
+        PanicSiteRecordBuilder::default()
+    }
 }

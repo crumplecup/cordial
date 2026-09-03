@@ -81,28 +81,28 @@ pub fn scan_crate_tracing_boundary(
                 "fallible fn main never converts its error to a tracing warn/error emission \
                  before returning — add #[instrument(err(...))] or emit tracing::warn!/error! \
                  on the error path",
-            ));
+            )?);
         }
     }
 
     findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.rule_id.as_str().cmp(b.rule_id.as_str()))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.rule_id().as_str().cmp(b.rule_id().as_str()))
     });
     Ok(findings)
 }
 
-#[instrument(level = "debug", skip(site))]
-fn record(site: &FnSite, snippet: &str) -> BoundarySiteRecord {
-    BoundarySiteRecord {
-        rule_id: BoundaryRuleId::MainSilent,
-        context: site.context.clone(),
-        file: site.file.clone(),
-        line: site.line,
-        snippet: snippet.to_string(),
-    }
+#[instrument(level = "debug", skip(site), err(level = "warn"))]
+fn record(site: &FnSite, snippet: &str) -> CordialResult<BoundarySiteRecord> {
+    BoundarySiteRecord::builder()
+        .rule_id(BoundaryRuleId::MainSilent)
+        .context(site.context.clone())
+        .file(site.file.clone())
+        .line(site.line)
+        .snippet(snippet.to_string())
+        .build()
 }
 
 #[instrument(level = "debug", skip(known_helper_paths), err(level = "warn"))]

@@ -112,25 +112,27 @@ impl Assessor for ForeignErrorAttenuationAssessor {
                 .and_then(ErrorSiteKind::from_attr)
                 .unwrap_or(ErrorSiteKind::QuestionMark);
 
-            findings.push(Box::new(ForeignErrorAttenuationFinding {
-                rule: ForeignErrorAttenuationRule::new(handling_class),
-                disposition: Disposition::Open,
-                anchor: crate::objects::NodeAnchor(node_id),
-                crate_name: crate_name.clone(),
-                foreign_error_type,
-                inference_rule_id,
-                confidence,
-                handling_class,
-                resolution_id,
-                resolution,
-                kind: site_kind,
-                context,
-                span,
-                source_snippet,
-                site_snippet,
-                good_pattern,
-                bad_pattern,
-            }) as Box<dyn Finding>);
+            findings.push(Box::new(
+                ForeignErrorAttenuationFinding::builder()
+                    .rule(ForeignErrorAttenuationRule::new(handling_class))
+                    .disposition(Disposition::Open)
+                    .anchor(crate::objects::NodeAnchor(node_id))
+                    .crate_name(crate_name.clone())
+                    .foreign_error_type(foreign_error_type)
+                    .inference_rule_id(inference_rule_id)
+                    .confidence(confidence)
+                    .handling_class(handling_class)
+                    .resolution_id(resolution_id)
+                    .resolution(resolution)
+                    .kind(site_kind)
+                    .context(context)
+                    .span(span)
+                    .source_snippet(source_snippet)
+                    .site_snippet(site_snippet)
+                    .good_pattern(good_pattern)
+                    .bad_pattern(bad_pattern)
+                    .build()?,
+            ) as Box<dyn Finding>);
         }
         Ok(findings)
     }

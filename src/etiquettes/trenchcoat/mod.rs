@@ -21,7 +21,7 @@ pub use assessor::TrenchcoatAssessor;
 pub use probe::UnwrappedForeignProbe;
 pub use reporter::TrenchcoatCsvReporter;
 
-use crate::etiquette::{EtiquetteExplain, EtiquetteRuleExplain, StaticEtiquette};
+use crate::etiquette::{EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, StaticEtiquette};
 use crate::{RustdocLoader, TrenchcoatEnricher};
 
 static RUSTDOC_LOADER: RustdocLoader = RustdocLoader;
@@ -37,24 +37,19 @@ static ASSESSORS: &[&'static dyn crate::Assessor] = &[&TRENCHCOAT_ASSESSOR];
 static REPORTERS: &[&'static dyn crate::Reporter] = &[&TRENCHCOAT_CSV];
 
 /// Built-in trenchcoat wrapper coverage etiquette bundle.
-pub static TRENCHCOAT_ETIQUETTE: StaticEtiquette = StaticEtiquette {
-    id: "trenchcoat",
-    name: "Trenchcoat wrappers",
-    loaders: LOADERS,
-    enrichers: ENRICHERS,
-    probes: PROBES,
-    assessors: ASSESSORS,
-    workspace_assessors: None,
-    reporters: REPORTERS,
-    is_coverage: true,
-    explain: EtiquetteExplain {
-        summary: "Are foreign types wrapped before they reach our traits?",
-        why: "Binding a foreign type directly to an elicitation trait couples our surface to upstream layout and orphan-rule limits. Wrappers are the seam that impl-coverage and shadow then measure.",
-        logic: "From rustdoc JSON, finds types that implement (or should implement) our traits while still exposing an unwrapped foreign type. Needs cordial build rustdoc.",
-        opt_out: "`[trenchcoat] enabled = false` in cordial.toml.",
-        rules: &[EtiquetteRuleExplain {
-            id: "TRENCHCOAT-MISSING-WRAP",
-            summary: "Foreign type lacks a trenchcoat wrapper",
-        }],
-    },
-};
+pub static TRENCHCOAT_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
+    "trenchcoat",
+    "Trenchcoat wrappers",
+    EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+    true,
+    EtiquetteExplain::new(
+        "Are foreign types wrapped before they reach our traits?",
+        "Binding a foreign type directly to an elicitation trait couples our surface to upstream layout and orphan-rule limits. Wrappers are the seam that impl-coverage and shadow then measure.",
+        "From rustdoc JSON, finds types that implement (or should implement) our traits while still exposing an unwrapped foreign type. Needs cordial build rustdoc.",
+        "`[trenchcoat] enabled = false` in cordial.toml.",
+        &[EtiquetteRuleExplain::new(
+            "TRENCHCOAT-MISSING-WRAP",
+            "Foreign type lacks a trenchcoat wrapper",
+        )],
+    ),
+);

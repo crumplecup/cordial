@@ -80,21 +80,21 @@ fn branches_csv_artifact(all_rows: &[ModularityRow]) -> Box<dyn Artifact> {
             right
                 .top_heavy()
                 .total_cmp(&left.top_heavy())
-                .then_with(|| right.own_lines.cmp(&left.own_lines))
-                .then_with(|| left.path.cmp(&right.path))
+                .then_with(|| right.own_lines().cmp(&left.own_lines()))
+                .then_with(|| left.path().cmp(right.path()))
         });
         for node in nodes {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{:.3},{}\n",
                 csv_field(&crate_name),
-                csv_field(&node.path),
-                csv_field(&node.file),
-                node.order,
-                node.depth,
-                node.own_lines,
-                node.subtree_lines,
+                csv_field(node.path()),
+                csv_field(node.file()),
+                node.order(),
+                node.depth(),
+                node.own_lines(),
+                node.subtree_lines(),
                 node.top_heavy(),
-                node.child_count,
+                node.child_count(),
             ));
         }
     }

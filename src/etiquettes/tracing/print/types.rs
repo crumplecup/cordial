@@ -113,9 +113,9 @@ impl Rule for PrintRule {
 
 pub const PRINT_SITE_LABEL: &str = "tracing-print-site";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct PrintMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for PrintMarker {
@@ -140,15 +140,24 @@ impl Marker for PrintMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct PrintFinding {
-    pub rule: PrintRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub context: String,
-    pub span: FileSpan,
-    pub snippet: String,
+    rule: PrintRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    context: String,
+    span: FileSpan,
+    snippet: String,
+}
+
+impl PrintFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> PrintFindingBuilder {
+        PrintFindingBuilder::default()
+    }
 }
 
 impl Finding for PrintFinding {
@@ -173,24 +182,34 @@ impl Finding for PrintFinding {
         sink.field("rule_id", &self.rule.rule_id);
         sink.field("rule", &self.rule.rule_id);
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
         sink.snippet(&self.snippet);
     }
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct PrintSiteRecord {
     /// Stable probe rule identifier.
-    pub rule_id: PrintRuleId,
+    #[getter(copy)]
+    rule_id: PrintRuleId,
     /// Qualified module path for this site.
-    pub context: String,
+    context: String,
     /// Source file path, usually crate-relative.
-    pub file: PathBuf,
+    file: PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// Captured macro name (`println!`, `print!`, `dbg!`, …).
-    pub snippet: String,
+    snippet: String,
+}
+
+impl PrintSiteRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> PrintSiteRecordBuilder {
+        PrintSiteRecordBuilder::default()
+    }
 }

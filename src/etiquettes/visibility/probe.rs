@@ -56,9 +56,8 @@ impl Probe for VisibilitySiteProbe {
             .nodes_matching(&VISIBILITY_SITES_QUERY)
             .into_iter()
             .map(|node| {
-                Box::new(VisibilityMarker {
-                    anchor: crate::objects::NodeAnchor(node.id),
-                }) as Box<dyn Marker>
+                Box::new(VisibilityMarker::new(crate::objects::NodeAnchor(node.id)))
+                    as Box<dyn Marker>
             })
             .collect())
     }

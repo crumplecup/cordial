@@ -54,10 +54,10 @@ pub fn scan_source_tree(
     }
 
     findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.qualified_name.cmp(&b.qualified_name))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.qualified_name().cmp(b.qualified_name()))
     });
 
     Ok(findings)
@@ -90,8 +90,12 @@ pub fn scan_rust_source(
         path_inclusions,
         findings: Vec::new(),
         in_cfg_creusot_mod: false,
+        error: None,
     };
     visitor.walk_items(&syntax.items);
+    if let Some(error) = visitor.error {
+        return Err(error);
+    }
     Ok(visitor.findings)
 }
 
@@ -149,6 +153,7 @@ struct DeriveScanVisitor<'a> {
     /// alone (checking only an item's own attrs) never matches that
     /// shape at all.
     in_cfg_creusot_mod: bool,
+    error: Option<crate::error::CordialError>,
 }
 
 impl DeriveScanVisitor<'_> {
@@ -182,25 +187,38 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "trace", skip(self, args))]
-    fn site(&self, args: SiteArgs) -> DeriveSiteRecord {
-        DeriveSiteRecord {
-            rule_id: args.rule_id,
-            struct_name: args.struct_name,
-            method_name: args.method_name,
-            qualified_name: self.qualify(&args.qualified_local),
-            recommendation: args.recommendation,
-            file: self.file.clone(),
-            line: args.line,
-            evidence: args.evidence,
+    fn site(&mut self, args: SiteArgs) -> Option<DeriveSiteRecord> {
+        if self.error.is_some() {
+            return None;
+        }
+        let mut file = self.file.clone();
+        if let Ok(rel) = file.strip_prefix(&self.crate_root) {
+            file = rel.to_path_buf();
+        }
+        match DeriveSiteRecord::builder()
+            .rule_id(args.rule_id)
+            .struct_name(args.struct_name)
+            .method_name(args.method_name)
+            .qualified_name(self.qualify(&args.qualified_local))
+            .recommendation(args.recommendation)
+            .file(file)
+            .line(args.line)
+            .evidence(args.evidence)
+            .build()
+        {
+            Ok(record) => Some(record),
+            Err(error) => {
+                self.error = Some(error);
+                None
+            }
         }
     }
 
-    #[instrument(level = "debug", skip(self, record))]
-    fn push_finding(&mut self, mut record: DeriveSiteRecord) {
-        if let Ok(rel) = record.file.strip_prefix(&self.crate_root) {
-            record.file = rel.to_path_buf();
+    #[instrument(level = "debug", skip(self, args))]
+    fn push_site(&mut self, args: SiteArgs) {
+        if let Some(record) = self.site(args) {
+            self.findings.push(record);
         }
-        self.findings.push(record);
     }
 
     #[instrument(level = "debug", skip(self, items))]
@@ -274,7 +292,7 @@ impl DeriveScanVisitor<'_> {
             .map(|field| format!("`{field}`"))
             .collect::<Vec<_>>()
             .join(", ");
-        let record = self.site(SiteArgs::new(
+        self.push_site(SiteArgs::new(
             DeriveRuleId::PubField001,
             name.clone(),
             None,
@@ -284,7 +302,6 @@ impl DeriveScanVisitor<'_> {
             item_struct.span().start().line as u32,
             format!("non-private fields: {field_list}"),
         ));
-        self.push_finding(record);
     }
 
     #[instrument(level = "debug", skip(self, item_impl))]
@@ -360,7 +377,7 @@ impl DeriveScanVisitor<'_> {
     ) {
         let recommendation = "Use #[derive(derive_builder::Builder)] on the built type";
         if self_ty.ends_with("Builder") {
-            let record = self.site(SiteArgs::new(
+            self.push_site(SiteArgs::new(
                 DeriveRuleId::Builder001,
                 self_ty,
                 None,
@@ -369,7 +386,6 @@ impl DeriveScanVisitor<'_> {
                 item_impl.span().start().line as u32,
                 format!("type `{self_ty}` ends with `Builder`"),
             ));
-            self.push_finding(record);
             return;
         }
         if let Some((line, is_const)) = build_line {
@@ -381,7 +397,7 @@ impl DeriveScanVisitor<'_> {
             // `const`-evaluable expression), not an oversight `derive_
             // builder` would just as well replace.
             if !is_const {
-                let record = self.site(SiteArgs::new(
+                self.push_site(SiteArgs::new(
                     DeriveRuleId::Builder001,
                     self_ty,
                     Some("build".to_string()),
@@ -390,7 +406,6 @@ impl DeriveScanVisitor<'_> {
                     line,
                     format!("`{self_ty}::build(self) -> …`"),
                 ));
-                self.push_finding(record);
             }
             return;
         }
@@ -407,7 +422,7 @@ impl DeriveScanVisitor<'_> {
                 return;
             }
             let (name, line, _) = &fluent_setters[0];
-            let record = self.site(SiteArgs::new(
+            self.push_site(SiteArgs::new(
                 DeriveRuleId::Builder001,
                 self_ty,
                 Some(name.clone()),
@@ -419,7 +434,6 @@ impl DeriveScanVisitor<'_> {
                     fluent_setters.len()
                 ),
             ));
-            self.push_finding(record);
         }
     }
 
@@ -482,7 +496,7 @@ impl DeriveScanVisitor<'_> {
             FieldRead::Clone | FieldRead::AsStr | FieldRead::AsRef => return,
         };
 
-        let record = self.site(SiteArgs::new(
+        self.push_site(SiteArgs::new(
             DeriveRuleId::Getter001,
             self_ty,
             Some(method_name.to_string()),
@@ -491,7 +505,6 @@ impl DeriveScanVisitor<'_> {
             method.span().start().line as u32,
             format!("`fn {method_name}(&self)` returns private field `{method_name}`"),
         ));
-        self.push_finding(record);
     }
 
     #[instrument(level = "debug", skip(self, struct_info, method))]
@@ -552,7 +565,7 @@ impl DeriveScanVisitor<'_> {
             FieldRead::Direct | FieldRead::DirectOwned | FieldRead::Clone => return,
         };
 
-        let record = self.site(SiteArgs::new(
+        self.push_site(SiteArgs::new(
             rule_id,
             self_ty,
             Some(method_name.to_string()),
@@ -561,7 +574,6 @@ impl DeriveScanVisitor<'_> {
             method.span().start().line as u32,
             evidence,
         ));
-        self.push_finding(record);
     }
 
     #[instrument(level = "debug", skip(self, struct_info, method))]
@@ -603,7 +615,7 @@ impl DeriveScanVisitor<'_> {
             return;
         };
 
-        let record = self.site(SiteArgs::new(
+        self.push_site(SiteArgs::new(
             DeriveRuleId::Setter001,
             self_ty,
             Some(method_name.to_string()),
@@ -612,7 +624,6 @@ impl DeriveScanVisitor<'_> {
             method.span().start().line as u32,
             format!("manual setter `{method_name}` on `{self_ty}`"),
         ));
-        self.push_finding(record);
     }
 
     #[instrument(level = "debug", skip(self, struct_info, method))]
@@ -667,7 +678,7 @@ impl DeriveScanVisitor<'_> {
             if self.blocked_by_path_inclusion("derive_builder") {
                 return;
             }
-            let record = self.site(SiteArgs::new(
+            self.push_site(SiteArgs::new(
                 DeriveRuleId::UseBuilder001,
                 self_ty,
                 Some(method_name.to_string()),
@@ -682,7 +693,6 @@ impl DeriveScanVisitor<'_> {
                     self.thresholds.max_constructor_args()
                 ),
             ));
-            self.push_finding(record);
             return;
         }
 
@@ -693,7 +703,7 @@ impl DeriveScanVisitor<'_> {
             return;
         }
 
-        let record = self.site(SiteArgs::new(
+        self.push_site(SiteArgs::new(
             DeriveRuleId::New001,
             self_ty,
             Some(method_name.to_string()),
@@ -705,7 +715,6 @@ impl DeriveScanVisitor<'_> {
                 self.thresholds.max_constructor_args()
             ),
         ));
-        self.push_finding(record);
     }
 
     #[instrument(level = "debug", skip(self, method))]

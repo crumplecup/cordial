@@ -62,9 +62,10 @@ impl Probe for CrateAttrsSiteProbe {
                 continue;
             }
 
-            markers.push(Box::new(CrateAttrsMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(CrateAttrsMarker::new(crate::objects::NodeAnchor(node.id)))
+                    as Box<dyn Marker>,
+            );
         }
         Ok(markers)
     }

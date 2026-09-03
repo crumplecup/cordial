@@ -12,7 +12,6 @@ use syn::spanned::Spanned;
 
 use crate::config::load_cordial_config;
 use crate::error::CordialResult;
-use crate::loader::CrateTarget;
 use crate::session::RunAll;
 use crate::targets::discover_crate_targets;
 
@@ -56,23 +55,21 @@ pub fn run_crate_attrs_apply(
     };
 
     for target in targets {
-        let CrateTarget {
-            crate_name,
-            crate_root,
-        } = target;
-        if only_crate.is_some_and(|name| name != crate_name) {
+        let crate_name = target.crate_name();
+        let crate_root = target.crate_root();
+        if only_crate.is_some_and(|name| name != crate_name.as_str()) {
             continue;
         }
-        if library_root_rs(&crate_root).is_none() {
+        if library_root_rs(crate_root).is_none() {
             continue;
         }
-        let records = scan_crate_attrs(&crate_root, &crate_name, &policy)?;
+        let records = scan_crate_attrs(crate_root, crate_name, &policy)?;
         if records.is_empty() {
             summary.skipped_existing += 1;
             continue;
         }
 
-        let Some(lib) = library_root_rs(&crate_root) else {
+        let Some(lib) = library_root_rs(crate_root) else {
             continue;
         };
         if !lib.is_file() {
@@ -134,13 +131,13 @@ fn attr_lines_for(records: &[super::types::CrateAttrsSiteRecord]) -> Vec<String>
     let mut lines = Vec::new();
     if records
         .iter()
-        .any(|record| record.rule_id == CrateAttrsRuleId::ForbidUnsafe001)
+        .any(|record| record.rule_id() == CrateAttrsRuleId::ForbidUnsafe001)
     {
         lines.push("#![forbid(unsafe_code)]".to_string());
     }
     if records
         .iter()
-        .any(|record| record.rule_id == CrateAttrsRuleId::MissingDocs001)
+        .any(|record| record.rule_id() == CrateAttrsRuleId::MissingDocs001)
     {
         lines.push("#![warn(missing_docs)]".to_string());
     }

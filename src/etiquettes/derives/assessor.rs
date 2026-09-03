@@ -75,18 +75,20 @@ impl Assessor for DeriveAssessor {
                 .unwrap_or_else(|| session.project_root().to_path_buf());
             let span = FileSpan::new(file, line, 1);
 
-            findings.push(Box::new(DeriveFinding {
-                rule: DeriveRule::new(rule_id),
-                disposition: Disposition::Open,
-                anchor: crate::objects::NodeAnchor(node_id),
-                crate_name: ir.crate_name().to_string(),
-                struct_name,
-                method_name,
-                qualified_name,
-                recommendation,
-                span,
-                evidence,
-            }) as Box<dyn Finding>);
+            findings.push(Box::new(
+                DeriveFinding::builder()
+                    .rule(DeriveRule::new(rule_id))
+                    .disposition(Disposition::Open)
+                    .anchor(crate::objects::NodeAnchor(node_id))
+                    .crate_name(ir.crate_name().to_string())
+                    .struct_name(struct_name)
+                    .method_name(method_name)
+                    .qualified_name(qualified_name)
+                    .recommendation(recommendation)
+                    .span(span)
+                    .evidence(evidence)
+                    .build()?,
+            ) as Box<dyn Finding>);
         }
         Ok(findings)
     }

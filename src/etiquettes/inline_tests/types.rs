@@ -72,9 +72,9 @@ impl Rule for InlineTestRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct InlineTestMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for InlineTestMarker {
@@ -99,15 +99,23 @@ impl Marker for InlineTestMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct InlineTestFinding {
-    pub rule: InlineTestRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub context: String,
-    pub span: FileSpan,
-    pub snippet: String,
+    rule: InlineTestRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    context: String,
+    span: FileSpan,
+    snippet: String,
+}
+
+impl InlineTestFinding {
+    pub fn builder() -> InlineTestFindingBuilder {
+        InlineTestFindingBuilder::default()
+    }
 }
 
 impl Finding for InlineTestFinding {
@@ -131,19 +139,28 @@ impl Finding for InlineTestFinding {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
         sink.snippet(&self.snippet);
     }
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct InlineTestSiteRecord {
-    pub rule_id: InlineTestRuleId,
-    pub context: String,
-    pub file: PathBuf,
-    pub line: u32,
-    pub snippet: String,
+    #[getter(copy)]
+    rule_id: InlineTestRuleId,
+    context: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    snippet: String,
+}
+
+impl InlineTestSiteRecord {
+    pub fn builder() -> InlineTestSiteRecordBuilder {
+        InlineTestSiteRecordBuilder::default()
+    }
 }

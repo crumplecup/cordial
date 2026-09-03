@@ -45,15 +45,15 @@ fn small_crate_with_pub_mod_flags_flat_and_thin_when_thresholds_say_so() -> miet
     assert!(
         records
             .iter()
-            .any(|r| r.rule_id == VisibilityRuleId::CrateFlat001
-                && r.module_path == "crate::widgets"),
+            .any(|r| r.rule_id() == VisibilityRuleId::CrateFlat001
+                && r.module_path() == "crate::widgets"),
         "small crate must not grow a pub mod: {records:?}"
     );
     assert!(
         records
             .iter()
-            .any(|r| r.rule_id == VisibilityRuleId::ModThin001
-                && r.module_path == "crate::widgets"),
+            .any(|r| r.rule_id() == VisibilityRuleId::ModThin001
+                && r.module_path() == "crate::widgets"),
         "widgets has one name, below floor 10: {records:?}"
     );
     Ok(())
@@ -97,9 +97,10 @@ fn pub_mod_under_private_mod_is_mismatch() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("scan")?;
     assert!(
-        records.iter().any(
-            |r| r.rule_id == VisibilityRuleId::ModMismatch001 && r.module_path.contains("hole")
-        ),
+        records
+            .iter()
+            .any(|r| r.rule_id() == VisibilityRuleId::ModMismatch001
+                && r.module_path().contains("hole")),
         "pub mod under private inner must flag mismatch: {records:?}"
     );
     Ok(())
@@ -156,13 +157,13 @@ min_module_names = 100
     assert!(
         records
             .iter()
-            .any(|r| r.rule_id == VisibilityRuleId::ModThin001),
+            .any(|r| r.rule_id() == VisibilityRuleId::ModThin001),
         "config min_module_names=100 must flag the one-name pub mod: {records:?}"
     );
     assert!(
         records
             .iter()
-            .all(|r| r.rule_id != VisibilityRuleId::CrateFlat001),
+            .all(|r| r.rule_id() != VisibilityRuleId::CrateFlat001),
         "max_crate_names_for_flat=0 means never require a flat crate: {records:?}"
     );
     Ok(())
@@ -232,8 +233,8 @@ fn write_thin_overflow_crate(root: &std::path::Path, root_fns: usize) -> miette:
 fn thin_paths(records: &[VisibilityRecord]) -> Vec<&str> {
     records
         .iter()
-        .filter(|r| r.rule_id == VisibilityRuleId::ModThin001)
-        .map(|r| r.module_path.as_str())
+        .filter(|r| r.rule_id() == VisibilityRuleId::ModThin001)
+        .map(|r| r.module_path().as_str())
         .collect()
 }
 
@@ -250,7 +251,7 @@ fn prefer_root_accepts_fat_root_and_still_flags_thin_modules() -> miette::Result
     assert!(
         records
             .iter()
-            .all(|r| r.rule_id != VisibilityRuleId::CrateFlat001),
+            .all(|r| r.rule_id() != VisibilityRuleId::CrateFlat001),
         "68-name crate is above max; fat root is the preferred resolution: {records:?}"
     );
     let thin = thin_paths(&records);
@@ -302,13 +303,13 @@ fn branching_cache_reuses_floor_until_sources_change() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("scan")?;
     let cache = cache.ok_or_else(|| miette::miette!("branching writes a cache"))?;
-    assert_eq!(cache.floor, 7);
+    assert_eq!(cache.floor(), 7);
     let (second, reused) =
         scan_crate_visibility_with_cache(fixture.path(), thresholds, Some(cache.clone()))
             .into_diagnostic()
             .wrap_err("cached scan")?;
     let reused = reused.ok_or_else(|| miette::miette!("cache hit"))?;
-    assert_eq!(reused.digest, cache.digest);
+    assert_eq!(reused.digest(), cache.digest());
     assert_eq!(thin_paths(&second), thin_paths(&first));
 
     std::fs::write(fixture.path().join("src/d.rs"), pub_fns("d", 8))
@@ -319,7 +320,7 @@ fn branching_cache_reuses_floor_until_sources_change() -> miette::Result<()> {
             .into_diagnostic()
             .wrap_err("re-peel")?;
     let recomputed = recomputed.ok_or_else(|| miette::miette!("digest mismatch recomputes"))?;
-    assert_ne!(recomputed.digest, reused.digest);
+    assert_ne!(recomputed.digest(), reused.digest());
     assert!(
         thin_paths(&third).is_empty(),
         "after edit, 8 >= floor 7 so d is no longer thin: {third:?}"

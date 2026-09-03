@@ -53,7 +53,7 @@ pub use types::{
 use crate::SourceLoader;
 use crate::enricher::ERROR_IR_ENRICHERS;
 use crate::etiquette::{
-    EtiquetteExplain, EtiquetteRuleExplain, StaticEtiquette, StaticQualityEtiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, StaticEtiquette, StaticQualityEtiquette,
 };
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
@@ -80,72 +80,64 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in internal error chain etiquette bundle.
-pub static INTERNAL_ERROR_CHAIN_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
-    etiquette: StaticEtiquette {
-        id: "internal_error_chain",
-        name: "Internal error chain",
-        loaders: LOADERS,
-        enrichers: ENRICHERS,
-        probes: PROBES,
-        assessors: ASSESSORS,
-        workspace_assessors: None,
-        reporters: REPORTERS,
-        is_coverage: false,
-        explain: EtiquetteExplain {
-            summary: "Do this crate's error types form the parent / Kind / native-source architecture?",
-            why: "Foreign-error etiquettes ask what leaks in. This one asks whether our error types are a place those leaks can land.",
-            logic: "Catalogs every type that implements Error under src/. A parent boxes an umbrella *Kind enum; every Kind variant holds a native source; native sources that wrap a foreign error keep it in source with owned file/line from Location::caller() and #[track_caller]. Nested native sources may box another Kind. Feeds the hand-composed Error handling quality-report area.",
-            opt_out: "`[internal_error_chain] enabled = false` in cordial.toml.",
-            rules: &[
-                EtiquetteRuleExplain {
-                    id: "ERROR-CHAIN-COMPLIANCE-STRINGIFY-001",
-                    summary: "Stringifies a foreign error",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-CHAIN-COMPLIANCE-DISCARD-TYPED-001",
-                    summary: "Discards a typed error",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-CHAIN-COMPLIANCE-SOURCE-SHAPE-001",
-                    summary: "Native source shape is wrong",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001",
-                    summary: "Native source missing #[track_caller]",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-CHAIN-COMPLIANCE-ARCH-PARENT-001",
-                    summary: "Parent does not box Kind",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-BOX-001",
-                    summary: "Kind is not boxed",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-VARIANT-001",
-                    summary: "Kind variant is not a native source",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-CHAIN-COMPLIANCE-ARCH-ORPHAN-SOURCE-001",
-                    summary: "Orphan native source",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-CHAIN-INTERNAL-LEAF-001",
-                    summary: "Internal leaf in the type graph",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-CHAIN-INTERNAL-LINK-001",
-                    summary: "Internal link in the type graph",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-CHAIN-INTERNAL-NESTED-001",
-                    summary: "Nested internal error",
-                },
+pub static INTERNAL_ERROR_CHAIN_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
+    StaticEtiquette::new(
+        "internal_error_chain",
+        "Internal error chain",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        false,
+        EtiquetteExplain::new(
+            "Do this crate's error types form the parent / Kind / native-source architecture?",
+            "Foreign-error etiquettes ask what leaks in. This one asks whether our error types are a place those leaks can land.",
+            "Catalogs every type that implements Error under src/. A parent boxes an umbrella *Kind enum; every Kind variant holds a native source; native sources that wrap a foreign error keep it in source with owned file/line from Location::caller() and #[track_caller]. Nested native sources may box another Kind. Feeds the hand-composed Error handling quality-report area.",
+            "`[internal_error_chain] enabled = false` in cordial.toml.",
+            &[
+                EtiquetteRuleExplain::new(
+                    "ERROR-CHAIN-COMPLIANCE-STRINGIFY-001",
+                    "Stringifies a foreign error",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ERROR-CHAIN-COMPLIANCE-DISCARD-TYPED-001",
+                    "Discards a typed error",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ERROR-CHAIN-COMPLIANCE-SOURCE-SHAPE-001",
+                    "Native source shape is wrong",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001",
+                    "Native source missing #[track_caller]",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ERROR-CHAIN-COMPLIANCE-ARCH-PARENT-001",
+                    "Parent does not box Kind",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-BOX-001",
+                    "Kind is not boxed",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-VARIANT-001",
+                    "Kind variant is not a native source",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ERROR-CHAIN-COMPLIANCE-ARCH-ORPHAN-SOURCE-001",
+                    "Orphan native source",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ERROR-CHAIN-INTERNAL-LEAF-001",
+                    "Internal leaf in the type graph",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ERROR-CHAIN-INTERNAL-LINK-001",
+                    "Internal link in the type graph",
+                ),
+                EtiquetteRuleExplain::new(
+                    "ERROR-CHAIN-INTERNAL-NESTED-001",
+                    "Nested internal error",
+                ),
             ],
-        },
-    },
-    // Declines a dedicated row on purpose: its COMPLIANCE violation
-    // count feeds the hand-composed "Error handling" area instead (see
-    // reporter::quality_report).
-    quality_area: None,
-};
+        ),
+    ),
+    None,
+);

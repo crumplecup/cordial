@@ -30,7 +30,7 @@ pub use scan::{scan_crate_inline_tests, scan_rust_source};
 pub use types::InlineTestRuleId;
 
 use crate::etiquette::{
-    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_category,
 };
 use crate::objects::Finding;
@@ -60,45 +60,31 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in inline-tests etiquette bundle.
-pub static INLINE_TESTS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
-    etiquette: StaticEtiquette {
-        id: "inline_tests",
-        name: "Inline tests",
-        loaders: LOADERS,
-        enrichers: ENRICHERS,
-        probes: PROBES,
-        assessors: ASSESSORS,
-        workspace_assessors: None,
-        reporters: REPORTERS,
-        is_coverage: false,
-        explain: EtiquetteExplain {
-            summary: "Are tests mixed into src/ instead of tests/?",
-            why: "Inline tests hide cases from readers of the library and mix test-only helpers into production modules.",
-            logic: "Flags #[cfg(test)] modules and leftover #[test] functions under src/. Crate tests/ is the destination, not a finding.",
-            opt_out: "`[inline_tests] enabled = false` in cordial.toml.",
-            rules: &[
-                EtiquetteRuleExplain {
-                    id: "INLINE-TEST-MOD",
-                    summary: "`#[cfg(test)]` module under src/",
-                },
-                EtiquetteRuleExplain {
-                    id: "INLINE-TEST-CFG",
-                    summary: "`#[cfg(test)]` item under src/",
-                },
-                EtiquetteRuleExplain {
-                    id: "INLINE-TEST-FN",
-                    summary: "`#[test]` function under src/",
-                },
+pub static INLINE_TESTS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
+    StaticEtiquette::new(
+        "inline_tests",
+        "Inline tests",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        false,
+        EtiquetteExplain::new(
+            "Are tests mixed into src/ instead of tests/?",
+            "Inline tests hide cases from readers of the library and mix test-only helpers into production modules.",
+            "Flags #[cfg(test)] modules and leftover #[test] functions under src/. Crate tests/ is the destination, not a finding.",
+            "`[inline_tests] enabled = false` in cordial.toml.",
+            &[
+                EtiquetteRuleExplain::new("INLINE-TEST-MOD", "`#[cfg(test)]` module under src/"),
+                EtiquetteRuleExplain::new("INLINE-TEST-CFG", "`#[cfg(test)]` item under src/"),
+                EtiquetteRuleExplain::new("INLINE-TEST-FN", "`#[test]` function under src/"),
             ],
-        },
-    },
-    quality_area: Some(QualityAreaSpec {
-        title: "Inline tests",
-        checklist: "inline-tests.checklist.md",
-        summary: "inline-tests-summary.md",
-        compute: quality_area_compute,
-    }),
-};
+        ),
+    ),
+    Some(QualityAreaSpec::new(
+        "Inline tests",
+        "inline-tests.checklist.md",
+        "inline-tests-summary.md",
+        quality_area_compute,
+    )),
+);
 
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {

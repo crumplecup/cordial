@@ -50,47 +50,51 @@ impl IrEnricher for VisibilityInventoryEnricher {
         }
 
         for record in records {
-            let file = if record.file.is_absolute() {
-                record.file.clone()
+            let file = if record.file().is_absolute() {
+                record.file().clone()
             } else {
-                crate_root.join(&record.file)
+                crate_root.join(record.file())
             };
-            let span = FileSpan::new(file.clone(), record.line, 1);
+            let span = FileSpan::new(file.clone(), record.line(), 1);
             let node = ir.insert_node(
                 NodeWeight::new(NodeKind::Expr)
                     .with_span(span)
-                    .with_name(record.module_path.clone()),
+                    .with_name(record.module_path().clone()),
             )?;
             ir.set_attr(
                 node,
                 "visibility_rule_id",
-                serde_json::Value::String(record.rule_id.as_str().to_string()),
+                serde_json::Value::String(record.rule_id().as_str().to_string()),
             )?;
             ir.set_attr(
                 node,
                 "module_path",
-                serde_json::Value::String(record.module_path),
+                serde_json::Value::String(record.module_path().clone()),
             )?;
             ir.set_attr(
                 node,
                 "file",
                 serde_json::Value::String(file.display().to_string()),
             )?;
-            ir.set_attr(node, "line", serde_json::Value::Number(record.line.into()))?;
+            ir.set_attr(
+                node,
+                "line",
+                serde_json::Value::Number(record.line().into()),
+            )?;
             ir.set_attr(
                 node,
                 "name_count",
-                serde_json::Value::Number(record.name_count.into()),
+                serde_json::Value::Number(record.name_count().into()),
             )?;
             ir.set_attr(
                 node,
                 "parent_vis",
-                serde_json::Value::String(record.parent_vis),
+                serde_json::Value::String(record.parent_vis().clone()),
             )?;
             ir.set_attr(
                 node,
                 "declared_vis",
-                serde_json::Value::String(record.declared_vis),
+                serde_json::Value::String(record.declared_vis().clone()),
             )?;
             ir.insert_edge(ir.root()?, node, EdgeKind::Contains)?;
         }

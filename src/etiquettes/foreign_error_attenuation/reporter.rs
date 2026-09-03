@@ -93,40 +93,41 @@ fn crate_names(rows: &[ForeignErrorAttenuationRow]) -> Vec<String> {
     names
 }
 
-#[instrument(level = "debug", skip(rows))]
-fn report_from_rows(rows: &[ForeignErrorAttenuationRow]) -> ForeignErrorAttenuationReport {
+#[instrument(level = "debug", skip(rows), err(level = "warn"))]
+fn report_from_rows(
+    rows: &[ForeignErrorAttenuationRow],
+) -> CordialResult<ForeignErrorAttenuationReport> {
     let crate_name = rows
         .first()
         .map(|row| row.crate_name.clone())
         .unwrap_or_default();
     let findings = rows
         .iter()
-        .map(|row| ForeignErrorAttenuationRecord {
-            crate_name: row.crate_name.clone(),
-            foreign_error_type: row.foreign_error_type.clone(),
-            inference_rule_id: row.inference_rule_id.clone(),
-            confidence: if row.confidence.contains("MEDIUM") {
-                crate::etiquettes::error_sites::ForeignTypeConfidence::Medium
-            } else {
-                crate::etiquettes::error_sites::ForeignTypeConfidence::High
-            },
-            handling_class: parse_handling_class(&row.handling_class),
-            resolution_id: parse_resolution_id(&row.resolution_id),
-            resolution: row.resolution.clone(),
-            kind: parse_site_kind(&row.site_kind),
-            context: row.context.clone(),
-            file: std::path::PathBuf::from(&row.file),
-            line: row.line.parse().unwrap_or(0),
-            source_snippet: row.source_snippet.clone(),
-            site_snippet: row.site_snippet.clone(),
-            good_pattern: row.good_pattern.clone(),
-            bad_pattern: row.bad_pattern.clone(),
+        .map(|row| {
+            ForeignErrorAttenuationRecord::builder()
+                .crate_name(row.crate_name.clone())
+                .foreign_error_type(row.foreign_error_type.clone())
+                .inference_rule_id(row.inference_rule_id.clone())
+                .confidence(if row.confidence.contains("MEDIUM") {
+                    crate::etiquettes::error_sites::ForeignTypeConfidence::Medium
+                } else {
+                    crate::etiquettes::error_sites::ForeignTypeConfidence::High
+                })
+                .handling_class(parse_handling_class(&row.handling_class))
+                .resolution_id(parse_resolution_id(&row.resolution_id))
+                .resolution(row.resolution.clone())
+                .kind(parse_site_kind(&row.site_kind))
+                .context(row.context.clone())
+                .file(std::path::PathBuf::from(&row.file))
+                .line(row.line.parse().unwrap_or(0))
+                .source_snippet(row.source_snippet.clone())
+                .site_snippet(row.site_snippet.clone())
+                .good_pattern(row.good_pattern.clone())
+                .bad_pattern(row.bad_pattern.clone())
+                .build()
         })
-        .collect();
-    ForeignErrorAttenuationReport {
-        crate_name,
-        findings,
-    }
+        .collect::<CordialResult<Vec<_>>>()?;
+    Ok(ForeignErrorAttenuationReport::new(crate_name, findings))
 }
 
 #[instrument(level = "debug")]
@@ -249,7 +250,7 @@ impl Reporter for ForeignErrorAttenuationChecklistReporter {
                 .filter(|row| row.crate_name == crate_name)
                 .cloned()
                 .collect();
-            let report = report_from_rows(&crate_rows);
+            let report = report_from_rows(&crate_rows)?;
             body.push_str(&format!("## `{crate_name}`\n\n"));
 
             write_class_section(
@@ -294,9 +295,9 @@ fn write_class_section(
     checked: bool,
 ) {
     let rows: Vec<_> = report
-        .findings
+        .findings()
         .iter()
-        .filter(|finding| finding.handling_class == class)
+        .filter(|finding| finding.handling_class() == class)
         .collect();
     if rows.is_empty() {
         return;
@@ -315,7 +316,7 @@ fn write_class_section(
     let mut by_type: BTreeMap<&str, Vec<&ForeignErrorAttenuationRecord>> = BTreeMap::new();
     for row in rows {
         by_type
-            .entry(row.foreign_error_type.as_str())
+            .entry(row.foreign_error_type().as_str())
             .or_default()
             .push(row);
     }
@@ -326,18 +327,18 @@ fn write_class_section(
             let mark = if checked { 'x' } else { ' ' };
             body.push_str(&format!(
                 "- [{mark}] `{context}` — `{file}:{line}` — `{resolution_id}`\n",
-                context = row.context,
-                file = row.file.display(),
-                line = row.line,
-                resolution_id = row.resolution_id,
+                context = row.context(),
+                file = row.file().display(),
+                line = row.line(),
+                resolution_id = row.resolution_id(),
             ));
-            if !row.bad_pattern.is_empty() {
-                body.push_str(&format!("  - bad: `{}`\n", row.bad_pattern));
+            if !row.bad_pattern().is_empty() {
+                body.push_str(&format!("  - bad: `{}`\n", row.bad_pattern()));
             }
-            if !row.good_pattern.is_empty() {
-                body.push_str(&format!("  - good: `{}`\n", row.good_pattern));
+            if !row.good_pattern().is_empty() {
+                body.push_str(&format!("  - good: `{}`\n", row.good_pattern()));
             }
-            body.push_str(&format!("  - resolution: {}\n", row.resolution));
+            body.push_str(&format!("  - resolution: {}\n", row.resolution()));
         }
         body.push('\n');
     }
@@ -362,8 +363,8 @@ impl Reporter for ForeignErrorAttenuationSummaryReporter {
         let findings = view.findings;
 
         let rows = attenuation_rows(findings);
-        let report = report_from_rows(&rows);
-        let summary = build_workspace_foreign_error_attenuation_summary(&[report]);
+        let report = report_from_rows(&rows)?;
+        let summary = build_workspace_foreign_error_attenuation_summary(&[report])?;
         let body = render_summary(&summary);
 
         Ok(vec![Box::new(TextArtifact {
@@ -381,26 +382,26 @@ fn render_summary(summary: &WorkspaceForeignErrorAttenuationSummary) -> String {
     body.push_str("---\n\n");
 
     let rate = summary
-        .preservation_rate
+        .preservation_rate()
         .map(|value| format!("{:.1}%", value * 100.0))
         .unwrap_or_else(|| "n/a".to_string());
     body.push_str(&format!(
         "Typed foreign sites: **{}** — preserved **{}**, chain breaks **{}**, pending infra **{}**, \
          neutral **{}**.\n\n",
-        summary.typed_sites,
-        summary.chain_preserved,
-        summary.chain_breaks,
-        summary.pending_infrastructure,
-        summary.neutral,
+        summary.typed_sites(),
+        summary.chain_preserved(),
+        summary.chain_breaks(),
+        summary.pending_infrastructure(),
+        summary.neutral(),
     ));
     body.push_str(&format!(
         "**Preservation rate** (preserved / (preserved + chain breaks)): **{rate}**. \
          **Migration backlog** (chain breaks + pending infra): **{}**.\n\n",
-        summary.migration_backlog,
+        summary.migration_backlog(),
     ));
 
     body.push_str("## Resolution strategies\n\n");
-    for (resolution_id, count) in &summary.resolutions {
+    for (resolution_id, count) in summary.resolutions() {
         body.push_str(&format!("- `{resolution_id}`: {count}\n"));
     }
     body.push('\n');
@@ -410,20 +411,20 @@ fn render_summary(summary: &WorkspaceForeignErrorAttenuationSummary) -> String {
         "| Foreign error type | Preserved | Chain breaks | Pending infra | Total | Preservation rate | Primary resolution |",
     );
     body.push_str("\n| --- | ---: | ---: | ---: | ---: | ---: | --- |");
-    for row in &summary.types {
+    for row in summary.types() {
         let rate = row
-            .preservation_rate
+            .preservation_rate()
             .map(|value| format!("{:.0}%", value * 100.0))
             .unwrap_or_else(|| "n/a".to_string());
         body.push_str(&format!(
             "\n| `{}` | {} | {} | {} | {} | {} | `{}` |",
-            row.foreign_error_type,
-            row.chain_preserved,
-            row.chain_breaks,
-            row.pending_infrastructure,
-            row.total,
+            row.foreign_error_type(),
+            row.chain_preserved(),
+            row.chain_breaks(),
+            row.pending_infrastructure(),
+            row.total(),
             rate,
-            row.primary_resolution_id,
+            row.primary_resolution_id(),
         ));
     }
     body

@@ -41,7 +41,20 @@ items, not CSV-only inventory. Library abort sites wrap the associated
 error in the crate's internal type (`From` / `map_err` / `?`, preserving
 `source()`) — including `fmt::Error` from `write!`/`writeln!` and
 `proc_macro2::LexError` from `parse::<TokenStream>()`. There is no
-inventory-only exemption for Result-returning abort sites.
+inventory-only exemption for Result-returning abort sites. A match arm that
+must not execute is `CordialErrorKind::Unreachable` (`CordialError::unreachable`),
+not `unreachable!` / `panic!`: the source copies `file`/`line` from
+`Location::caller()` so callers keep control through `?`. Prefer making every
+arm of a sum type meaningful; `Unreachable` is the fallback when the type still
+requires the arm.
+
+Sample programs used by tests (a `panic!` inside a raw string that is later
+written to a tempfile) are still abort sites in the scanning crate. The panics
+scanner parses string literals that are themselves Rust and contain abort APIs.
+Keep those samples under `tests/fixtures/` or `tests/parity/` — the same path
+skip every quality scanner already uses — and `include_str!` them from the
+test. Assertion messages such as `"panic!"` do not parse as a file and are
+not flagged.
 
 ---
 
@@ -242,9 +255,11 @@ merge cross-cutting, feature-optional logic; prefer plain mod-level gating
 | Library Result-returning abort sites → `CordialError` (`From` wrap of associated error, including `fmt::Error` / `LexError`) | done |
 | Binary: `cordial_cli` surfaces failures with miette (`src/boundary.rs`, linked from `main` only) | superseded — one crate, thin `main`, no `BinaryError` |
 | Tests: harness abort sites → `miette::Result` + `into_diagnostic` / `ok_or_else` | done |
+| Embedded fixture programs in string literals are scanned; samples live under `tests/fixtures/` | done |
 | `IrView::root`, `IrMut::insert_node`, `rebuild_path_index` return `CordialResult` | done |
 | Dogfood panics: checklist **0**; tests **0** miette items; no inventory-only abort sites; abort-site action items **0** | done |
 | Source-wrapper shape (`source` + owned `file`/`line` copied from `Location::caller()`; do not store `Location`) | done |
+| Dead match arms → `CordialErrorKind::Unreachable` (location on the source; no `unreachable!`) | done |
 | Error architecture suite (`Error` impls under `src/`; parent boxes Kind; native sources; recurse) | done |
 | Dogfood: `CordialError` / `CliError` follow parent + boxed Kind + native sources; bin miette wrappers excluded | superseded — `CliError` folded into `CordialError` |
 | One crate: CLI native sources on `CordialErrorKind`; `Cli::act`; miette only in `main` | done |

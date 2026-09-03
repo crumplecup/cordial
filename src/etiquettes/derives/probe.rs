@@ -61,9 +61,9 @@ impl Probe for DeriveSiteProbe {
                 continue;
             }
 
-            markers.push(Box::new(DeriveMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(DeriveMarker::new(crate::objects::NodeAnchor(node.id))) as Box<dyn Marker>,
+            );
         }
         Ok(markers)
     }

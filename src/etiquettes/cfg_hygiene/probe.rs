@@ -60,9 +60,10 @@ impl Probe for CfgHygieneSiteProbe {
                 continue;
             }
 
-            markers.push(Box::new(CfgHygieneMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(CfgHygieneMarker::new(crate::objects::NodeAnchor(node.id)))
+                    as Box<dyn Marker>,
+            );
         }
         Ok(markers)
     }

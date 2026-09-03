@@ -19,13 +19,13 @@ resolver = "2"
         fixture.path(),
         "crates/alpha",
         "alpha",
-        "pub fn alpha_panic() { panic!(\"alpha\"); }",
+        include_str!("fixtures/panics/workspace_alpha.rs"),
     )?;
     write_member(
         fixture.path(),
         "crates/beta",
         "beta",
-        "pub fn beta_panic() { panic!(\"beta\"); }",
+        include_str!("fixtures/panics/workspace_beta.rs"),
     )?;
 
     let store = tempfile::tempdir()

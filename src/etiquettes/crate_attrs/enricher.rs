@@ -41,26 +41,38 @@ impl IrEnricher for CrateAttrsInventoryEnricher {
 
         for record in records {
             let parent = resolve_parent(ir, "<crate>")?;
-            let file = crate_root.join(&record.file);
-            let span = FileSpan::new(file.clone(), record.line, 1);
+            let file = crate_root.join(record.file());
+            let span = FileSpan::new(file.clone(), record.line(), 1);
             let node = ir.insert_node(
                 NodeWeight::new(NodeKind::Expr)
                     .with_span(span)
-                    .with_name(record.snippet.clone()),
+                    .with_name(record.snippet().clone()),
             )?;
             ir.set_attr(
                 node,
                 "crate_attrs_rule_id",
-                serde_json::Value::String(record.rule_id.as_str().to_string()),
+                serde_json::Value::String(record.rule_id().as_str().to_string()),
             )?;
-            ir.set_attr(node, "context", serde_json::Value::String(record.context))?;
-            ir.set_attr(node, "snippet", serde_json::Value::String(record.snippet))?;
+            ir.set_attr(
+                node,
+                "context",
+                serde_json::Value::String(record.context().clone()),
+            )?;
+            ir.set_attr(
+                node,
+                "snippet",
+                serde_json::Value::String(record.snippet().clone()),
+            )?;
             ir.set_attr(
                 node,
                 "file",
                 serde_json::Value::String(file.display().to_string()),
             )?;
-            ir.set_attr(node, "line", serde_json::Value::Number(record.line.into()))?;
+            ir.set_attr(
+                node,
+                "line",
+                serde_json::Value::Number(record.line().into()),
+            )?;
             ir.insert_edge(parent, node, EdgeKind::Contains)?;
         }
 

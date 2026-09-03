@@ -245,7 +245,7 @@ fn load_and_probe(
     let _ = filter;
 
     for target in targets {
-        let mut crate_ir = CrateIr::new(&target.crate_name);
+        let mut crate_ir = CrateIr::new(target.crate_name());
 
         for loader in loaders {
             let view = loader.load(LoadContext { session, target })?;
@@ -261,19 +261,19 @@ fn load_and_probe(
                 rustdoc.populate_ir(&mut crate_ir)?;
             }
             load_views
-                .entry(format!("{}:{}", target.crate_name, loader.id()))
+                .entry(format!("{}:{}", target.crate_name(), loader.id()))
                 .or_insert(view);
         }
 
-        if !workspace.crates.contains_key(&target.crate_name) {
+        if !workspace.crates.contains_key(target.crate_name()) {
             workspace.insert_crate(crate_ir);
         }
 
         for enricher in enrichers {
-            let load = select_load_view(*enricher, &load_views, &target.crate_name)?;
+            let load = select_load_view(*enricher, &load_views, target.crate_name())?;
             let mut view = CrateViewMut {
                 workspace: &mut workspace,
-                crate_name: target.crate_name.clone(),
+                crate_name: target.crate_name().clone(),
             };
             enricher.enrich(EnrichView {
                 ir: &mut view,
@@ -283,19 +283,19 @@ fn load_and_probe(
         }
 
         let cached = workspace
-            .crate_ir(&target.crate_name)
+            .crate_ir(target.crate_name())
             .ok_or_else(|| CordialError::invariant("crate ir must exist"))?;
-        cached.write_cache(&store.ir_cache_path(&target.crate_name))?;
+        cached.write_cache(&store.ir_cache_path(target.crate_name()))?;
         let digest =
             crate::cache_digest::IrCacheDigest::compute(target, &enricher_id_refs, &load_views)?;
         digest.write(&crate::cache_digest::IrCacheDigest::cache_path(
             &store.cache_dir(),
-            &target.crate_name,
+            target.crate_name(),
         ))?;
 
         let crate_view = CrateView {
             workspace: &workspace,
-            crate_name: target.crate_name.clone(),
+            crate_name: target.crate_name().clone(),
         };
         for probe in probes {
             let mut found = probe.probe(ProbeView {
@@ -303,7 +303,7 @@ fn load_and_probe(
                 session,
             })?;
             markers_by_crate
-                .entry(target.crate_name.clone())
+                .entry(target.crate_name().clone())
                 .or_default()
                 .append(&mut found);
         }
@@ -333,7 +333,7 @@ fn assess_targets(
 
     for target in targets {
         let markers = markers_by_crate
-            .get(&target.crate_name)
+            .get(target.crate_name())
             .map(Vec::as_slice)
             .unwrap_or(&[]);
         let marker_refs: Vec<&dyn Marker> = markers
@@ -342,7 +342,7 @@ fn assess_targets(
             .collect();
         let crate_view = CrateView {
             workspace,
-            crate_name: target.crate_name.clone(),
+            crate_name: target.crate_name().clone(),
         };
 
         let mut crate_findings: Vec<Box<dyn Finding>> = Vec::new();
@@ -361,7 +361,7 @@ fn assess_targets(
         }
 
         let exception_sets =
-            crate::exceptions::load_exception_sets(store, etiquette_ids, &target.crate_name)?;
+            crate::exceptions::load_exception_sets(store, etiquette_ids, target.crate_name())?;
         crate_findings = crate::exceptions::apply_exception_sets(crate_findings, &exception_sets);
         all_findings.extend(crate_findings);
     }
@@ -396,7 +396,7 @@ fn render_and_write(
     } = pass;
     let primary_name = targets
         .first()
-        .map(|target| target.crate_name.clone())
+        .map(|target| target.crate_name().clone())
         .ok_or_else(|| CordialError::invariant("workspace missing crate targets"))?;
     let crate_view = CrateView {
         workspace,

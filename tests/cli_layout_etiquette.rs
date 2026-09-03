@@ -41,7 +41,7 @@ fn main() {}
         .wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
-            finding.rule_id == CliLayoutId::Island001 && finding.context.contains("Cli")
+            finding.rule_id() == CliLayoutId::Island001 && finding.context().contains("Cli")
         }),
         "Parser in main.rs must be CLI-ISLAND: {:?}",
         findings
@@ -68,7 +68,7 @@ pub struct Cli {
         .wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
-            finding.rule_id == CliLayoutId::Act001 && finding.context.contains("Cli")
+            finding.rule_id() == CliLayoutId::Act001 && finding.context().contains("Cli")
         }),
         "Parser without act must be CLI-ACT: {:?}",
         findings
@@ -122,7 +122,7 @@ fn main() {
     assert!(
         findings
             .iter()
-            .any(|finding| finding.rule_id == CliLayoutId::Main001),
+            .any(|finding| finding.rule_id() == CliLayoutId::Main001),
         "match in main must be CLI-MAIN: {:?}",
         findings
     );
@@ -152,7 +152,7 @@ fn main() {}
         .wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
-            finding.rule_id == CliLayoutId::Island001 && finding.context.contains("BinaryError")
+            finding.rule_id() == CliLayoutId::Island001 && finding.context().contains("BinaryError")
         }),
         "Error type in main.rs must be CLI-ISLAND: {:?}",
         findings
@@ -202,7 +202,7 @@ fn main() -> Result<(), std::io::Error> {
     assert!(
         !findings.iter().any(|finding| {
             matches!(
-                finding.rule_id,
+                finding.rule_id(),
                 CliLayoutId::Island001 | CliLayoutId::Act001 | CliLayoutId::Main001
             )
         }),
@@ -267,7 +267,7 @@ fn main() -> Result<(), std::io::Error> {
     assert!(
         !findings.iter().any(|finding| {
             matches!(
-                finding.rule_id,
+                finding.rule_id(),
                 CliLayoutId::Island001 | CliLayoutId::Act001 | CliLayoutId::Main001
             )
         }),
@@ -322,7 +322,7 @@ fn main() -> Result<(), std::io::Error> {
     assert!(
         !findings.iter().any(|finding| {
             matches!(
-                finding.rule_id,
+                finding.rule_id(),
                 CliLayoutId::Island001 | CliLayoutId::Act001 | CliLayoutId::Main001
             )
         }),
@@ -367,7 +367,7 @@ fn main() -> Result<(), std::io::Error> {
         .wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
-            finding.rule_id == CliLayoutId::Act001 && finding.context.contains("Commands")
+            finding.rule_id() == CliLayoutId::Act001 && finding.context().contains("Commands")
         }),
         "Subcommand without act must be CLI-ACT: {:?}",
         findings
@@ -416,7 +416,7 @@ fn main() -> Result<(), std::io::Error> {
         .wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
-            finding.rule_id == CliLayoutId::Act001 && finding.snippet.contains("nested clap")
+            finding.rule_id() == CliLayoutId::Act001 && finding.snippet().contains("nested clap")
         }),
         "Parser::act that does not call Commands::act must be CLI-ACT: {:?}",
         findings
@@ -469,7 +469,7 @@ fn main() -> Result<(), std::io::Error> {
         .wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
-            finding.rule_id == CliLayoutId::Act001 && finding.snippet.contains("free function")
+            finding.rule_id() == CliLayoutId::Act001 && finding.snippet().contains("free function")
         }),
         "free fn taking Cli must be CLI-ACT: {:?}",
         findings
@@ -525,7 +525,7 @@ fn main() -> Result<(), std::io::Error> {
         .wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
-            finding.rule_id == CliLayoutId::Act001 && finding.snippet.contains("free function")
+            finding.rule_id() == CliLayoutId::Act001 && finding.snippet().contains("free function")
         }),
         "free fn taking Option<Cli> must be CLI-ACT: {:?}",
         findings
@@ -606,9 +606,9 @@ fn main() -> Result<(), std::io::Error> {
         .wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
-            finding.rule_id == CliLayoutId::Act001
-                && finding.snippet.contains("ExportCommands")
-                && !finding.snippet.contains("ExceptionCommands")
+            finding.rule_id() == CliLayoutId::Act001
+                && finding.snippet().contains("ExportCommands")
+                && !finding.snippet().contains("ExceptionCommands")
         }),
         "skipping one nested clap type must be CLI-ACT: {:?}",
         findings

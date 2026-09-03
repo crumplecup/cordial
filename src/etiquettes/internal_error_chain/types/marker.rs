@@ -1,9 +1,9 @@
 use crate::objects::{IrAnchor, Marker, SourceSpan};
 
 use tracing::instrument;
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct InternalErrorChainMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for InternalErrorChainMarker {

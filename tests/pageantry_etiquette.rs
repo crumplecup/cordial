@@ -16,7 +16,7 @@ fn scan(source: &str) -> miette::Result<Vec<PageantryRuleId>> {
     let records = scan_pageantry_rust_source(source, &file, fixture.path(), fixture.path())
         .into_diagnostic()
         .wrap_err("scan")?;
-    Ok(records.into_iter().map(|record| record.rule_id).collect())
+    Ok(records.into_iter().map(|record| record.rule_id()).collect())
 }
 
 #[test]
@@ -143,9 +143,9 @@ mod nested {
         .into_diagnostic()
         .wrap_err("scan")?;
     assert_eq!(records.len(), 1);
-    assert_eq!(records[0].rule_id, PageantryRuleId::Trait001);
-    assert_eq!(records[0].context, "sample::nested");
-    assert_eq!(records[0].snippet, "trait Buried");
+    assert_eq!(records[0].rule_id(), PageantryRuleId::Trait001);
+    assert_eq!(records[0].context(), "sample::nested");
+    assert_eq!(records[0].snippet(), "trait Buried");
     Ok(())
 }
 
@@ -210,10 +210,10 @@ fn dogfood_cordial_traits_are_at_the_top() -> miette::Result<()> {
         .map(|record| {
             format!(
                 "{}:{} {} ({})",
-                record.file.display(),
-                record.line,
-                record.snippet,
-                record.context
+                record.file().display(),
+                record.line(),
+                record.snippet(),
+                record.context()
             )
         })
         .collect();

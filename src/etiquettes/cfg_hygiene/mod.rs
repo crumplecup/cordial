@@ -43,7 +43,7 @@ pub use scan_crate::scan_crate_cfg_hygiene;
 pub use types::{CfgHygieneRuleId, CfgHygieneSiteRecord};
 
 use crate::etiquette::{
-    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_rule,
 };
 use crate::objects::Finding;
@@ -74,41 +74,33 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 
 /// Built-in cfg-hygiene etiquette bundle: undeclared cfg names, and
 /// verifier cfg names leaking into the wrong backend crate.
-pub static CFG_HYGIENE_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
-    etiquette: StaticEtiquette {
-        id: "cfg_hygiene",
-        name: "Cfg hygiene",
-        loaders: LOADERS,
-        enrichers: ENRICHERS,
-        probes: PROBES,
-        assessors: ASSESSORS,
-        workspace_assessors: None,
-        reporters: REPORTERS,
-        is_coverage: false,
-        explain: EtiquetteExplain {
-            summary: "Is every cfg name declared, and does each verifier crate only use its own?",
-            why: "A workspace-wide --check-cfg union makes a copy-pasted #[cfg(creusot)] in a Kani-only crate invisible to rustc. Nothing short of a project-aware scan can catch it.",
-            logic: "UNEXPECTED-CFG-001: a cfg(X) / cfg_attr(X) whose X is not declared anywhere reachable by that crate. CFG-VERIFIER-MISMATCH-001: a crate in [cfg_hygiene] crate_verifier using a different verifier's cfg name than its configured identity (inert until crate_verifier is filled).",
-            opt_out: "`[cfg_hygiene] enabled = false` in cordial.toml.",
-            rules: &[
-                EtiquetteRuleExplain {
-                    id: "UNEXPECTED-CFG-001",
-                    summary: "cfg name rustc would not expect",
-                },
-                EtiquetteRuleExplain {
-                    id: "CFG-VERIFIER-MISMATCH-001",
-                    summary: "Verifier cfg used in the wrong crate",
-                },
+pub static CFG_HYGIENE_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
+    StaticEtiquette::new(
+        "cfg_hygiene",
+        "Cfg hygiene",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        false,
+        EtiquetteExplain::new(
+            "Is every cfg name declared, and does each verifier crate only use its own?",
+            "A workspace-wide --check-cfg union makes a copy-pasted #[cfg(creusot)] in a Kani-only crate invisible to rustc. Nothing short of a project-aware scan can catch it.",
+            "UNEXPECTED-CFG-001: a cfg(X) / cfg_attr(X) whose X is not declared anywhere reachable by that crate. CFG-VERIFIER-MISMATCH-001: a crate in [cfg_hygiene] crate_verifier using a different verifier's cfg name than its configured identity (inert until crate_verifier is filled).",
+            "`[cfg_hygiene] enabled = false` in cordial.toml.",
+            &[
+                EtiquetteRuleExplain::new("UNEXPECTED-CFG-001", "cfg name rustc would not expect"),
+                EtiquetteRuleExplain::new(
+                    "CFG-VERIFIER-MISMATCH-001",
+                    "Verifier cfg used in the wrong crate",
+                ),
             ],
-        },
-    },
-    quality_area: Some(QualityAreaSpec {
-        title: "Cfg hygiene",
-        checklist: "cfg-hygiene.checklist.md",
-        summary: "cfg-hygiene-summary.md",
-        compute: quality_area_compute,
-    }),
-};
+        ),
+    ),
+    Some(QualityAreaSpec::new(
+        "Cfg hygiene",
+        "cfg-hygiene.checklist.md",
+        "cfg-hygiene-summary.md",
+        quality_area_compute,
+    )),
+);
 
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {

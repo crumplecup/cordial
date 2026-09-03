@@ -34,7 +34,7 @@ pub use scan::{scan_crate_pageantry, scan_rust_source};
 pub use types::PageantryRuleId;
 
 use crate::etiquette::{
-    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_category,
 };
 use crate::objects::Finding;
@@ -61,35 +61,30 @@ static REPORTERS: &[&'static dyn crate::Reporter] =
     &[&PAGEANTRY_CSV, &PAGEANTRY_CHECKLIST, &PAGEANTRY_SUMMARY];
 
 /// Built-in pageantry etiquette bundle.
-pub static PAGEANTRY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
-    etiquette: StaticEtiquette {
-        id: "pageantry",
-        name: "Pageantry",
-        loaders: LOADERS,
-        enrichers: ENRICHERS,
-        probes: PROBES,
-        assessors: ASSESSORS,
-        workspace_assessors: None,
-        reporters: REPORTERS,
-        is_coverage: false,
-        explain: EtiquetteExplain {
-            summary: "Are traits defined in a leading block just below the import / mod header?",
-            why: "Contracts belong at the top of the file. A trait after types have already started is ceremony in the middle of the show.",
-            logic: "Walks each file and inline mod item list in source order. use / extern crate / mod are header. A run of traits at the front is fine. After any other item (struct, enum, impl, fn, …), every later trait is PAGEANTRY-TRAIT-001. #[cfg(test)] items are skipped.",
-            opt_out: "`[pageantry] enabled = false` in cordial.toml.",
-            rules: &[EtiquetteRuleExplain {
-                id: "PAGEANTRY-TRAIT-001",
-                summary: "A trait defined after the leading trait block has ended",
-            }],
-        },
-    },
-    quality_area: Some(QualityAreaSpec {
-        title: "Pageantry",
-        checklist: "pageantry.checklist.md",
-        summary: "pageantry-summary.md",
-        compute: quality_area_compute,
-    }),
-};
+pub static PAGEANTRY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
+    StaticEtiquette::new(
+        "pageantry",
+        "Pageantry",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        false,
+        EtiquetteExplain::new(
+            "Are traits defined in a leading block just below the import / mod header?",
+            "Contracts belong at the top of the file. A trait after types have already started is ceremony in the middle of the show.",
+            "Walks each file and inline mod item list in source order. use / extern crate / mod are header. A run of traits at the front is fine. After any other item (struct, enum, impl, fn, …), every later trait is PAGEANTRY-TRAIT-001. #[cfg(test)] items are skipped.",
+            "`[pageantry] enabled = false` in cordial.toml.",
+            &[EtiquetteRuleExplain::new(
+                "PAGEANTRY-TRAIT-001",
+                "A trait defined after the leading trait block has ended",
+            )],
+        ),
+    ),
+    Some(QualityAreaSpec::new(
+        "Pageantry",
+        "pageantry.checklist.md",
+        "pageantry-summary.md",
+        quality_area_compute,
+    )),
+);
 
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {

@@ -33,7 +33,7 @@ pub use scan::{BranchingCache, scan_crate_visibility, scan_crate_visibility_with
 pub use types::{VisibilityRecord, VisibilityRuleId};
 
 use crate::etiquette::{
-    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_rule,
 };
 use crate::objects::Finding;
@@ -60,45 +60,37 @@ static REPORTERS: &[&'static dyn crate::Reporter] =
     &[&VISIBILITY_CSV, &VISIBILITY_CHECKLIST, &VISIBILITY_SUMMARY];
 
 /// Built-in visibility etiquette: `pub mod` paths must earn their existence.
-pub static VISIBILITY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
-    etiquette: StaticEtiquette {
-        id: "visibility",
-        name: "Module visibility",
-        loaders: LOADERS,
-        enrichers: ENRICHERS,
-        probes: PROBES,
-        assessors: ASSESSORS,
-        workspace_assessors: None,
-        reporters: REPORTERS,
-        is_coverage: false,
-        explain: EtiquetteExplain {
-            summary: "Do pub mod paths earn their existence?",
-            why: "pub mod is a promise of a public path. A thin module or a pub child of a private parent splits crate-internal navigation without buying a real API.",
-            logic: "A small crate stays flat; a visible module needs enough leaf names; a child's visibility must not exceed its parent. Pub fields stay in derives. Thresholds: [visibility] in cordial.toml. prefer_root (default true) keeps a fat root when flattening would overflow the crate-name cap.",
-            opt_out: "`[visibility] enabled = false` in cordial.toml.",
-            rules: &[
-                EtiquetteRuleExplain {
-                    id: "VIS-CRATE-FLAT-001",
-                    summary: "Small crate should stay flat",
-                },
-                EtiquetteRuleExplain {
-                    id: "VIS-MOD-THIN-001",
-                    summary: "Visible module has too few leaf names",
-                },
-                EtiquetteRuleExplain {
-                    id: "VIS-MOD-MISMATCH-001",
-                    summary: "Child visibility exceeds its parent",
-                },
+pub static VISIBILITY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
+    StaticEtiquette::new(
+        "visibility",
+        "Module visibility",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        false,
+        EtiquetteExplain::new(
+            "Do pub mod paths earn their existence?",
+            "pub mod is a promise of a public path. A thin module or a pub child of a private parent splits crate-internal navigation without buying a real API.",
+            "A small crate stays flat; a visible module needs enough leaf names; a child's visibility must not exceed its parent. Pub fields stay in derives. Thresholds: [visibility] in cordial.toml. prefer_root (default true) keeps a fat root when flattening would overflow the crate-name cap.",
+            "`[visibility] enabled = false` in cordial.toml.",
+            &[
+                EtiquetteRuleExplain::new("VIS-CRATE-FLAT-001", "Small crate should stay flat"),
+                EtiquetteRuleExplain::new(
+                    "VIS-MOD-THIN-001",
+                    "Visible module has too few leaf names",
+                ),
+                EtiquetteRuleExplain::new(
+                    "VIS-MOD-MISMATCH-001",
+                    "Child visibility exceeds its parent",
+                ),
             ],
-        },
-    },
-    quality_area: Some(QualityAreaSpec {
-        title: "Module visibility",
-        checklist: "visibility.checklist.md",
-        summary: "visibility-summary.md",
-        compute: quality_area_compute,
-    }),
-};
+        ),
+    ),
+    Some(QualityAreaSpec::new(
+        "Module visibility",
+        "visibility.checklist.md",
+        "visibility-summary.md",
+        quality_area_compute,
+    )),
+);
 
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {

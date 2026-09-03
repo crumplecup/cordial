@@ -23,8 +23,7 @@ why / how) live on each etiquette in `src/etiquettes/`.
 
 ```sh
 cargo install --path .
-# coverage commands also need --features elicitation
-# std-family coverage: --features full
+# Quality-only binary: cargo install --path . --no-default-features --features quality,cli
 ```
 
 ```text
@@ -103,8 +102,8 @@ as `add_exception` / `add_coverage_skip`.
 ## Quality etiquettes
 
 `cordial quality` runs every source-quality etiquette (Cargo feature `quality`,
-on by default). Opt out with `--no-default-features --features cli` plus the
-scanners you want.
+included in the default `full` install). A quality-only binary:
+`--no-default-features --features quality,cli`.
 
 | Id | What it asks |
 | --- | --- |
@@ -136,8 +135,8 @@ crate-attrs (crate-root lint attributes; scans the tree, no checklist).
 ## Coverage etiquettes
 
 `cordial build rustdoc` (and `cordial build sysroot` for std-family), then
-`cordial coverage`. Features: `elicitation` (impl / trenchcoat / shadow),
-`homecoming_std`, `amenable_std`.
+`cordial coverage`. The default `full` install includes `elicitation`
+(impl / trenchcoat / shadow), `homecoming_std`, and `amenable_std`.
 
 | Id | What it asks |
 | --- | --- |

@@ -62,9 +62,10 @@ impl Probe for InlineTestSiteProbe {
                 continue;
             }
 
-            markers.push(Box::new(InlineTestMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(InlineTestMarker::new(crate::objects::NodeAnchor(node.id)))
+                    as Box<dyn Marker>,
+            );
         }
         Ok(markers)
     }

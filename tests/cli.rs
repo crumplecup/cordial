@@ -35,7 +35,7 @@ fn cli_quality_writes_reports_and_rollup() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_minimal_crate(
         fixture.path(),
-        "pub fn boom() { panic!(\"x\"); }\n\npub fn quiet() {}",
+        include_str!("fixtures/panics/cli_quality.rs"),
     )?;
 
     let store = tempfile::tempdir()

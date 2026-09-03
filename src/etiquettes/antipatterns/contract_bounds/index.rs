@@ -8,16 +8,33 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 /// One registered `amenable_core::Ensures`/`Requires` contract fragment.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    derive_builder::Builder,
+    derive_getters::Getters,
+)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ContractRecordDump {
     /// Supporting evidence paths or labels.
-    pub evidence: String,
+    evidence: String,
     /// Proof verifier this row is about (`kani`, `creusot`, …).
-    pub verifier: String,
+    verifier: String,
     /// Contract kind (`ensures`, `requires`, …).
-    pub kind: String,
+    kind: String,
     /// Source fragment of the contract bound.
-    pub fragment: String,
+    fragment: String,
+}
+
+impl ContractRecordDump {
+    /// Start a builder for this value.
+    pub fn builder() -> ContractRecordDumpBuilder {
+        ContractRecordDumpBuilder::default()
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -43,9 +60,9 @@ impl ContractIndex {
         let mut by_key: ContractRecordMap = HashMap::new();
         for record in records {
             by_key
-                .entry((record.verifier.clone(), record.kind.clone()))
+                .entry((record.verifier().clone(), record.kind().clone()))
                 .or_default()
-                .push((record.evidence.clone(), record.fragment.clone()));
+                .push((record.evidence().clone(), record.fragment().clone()));
         }
         Self { records: by_key }
     }
@@ -407,8 +424,14 @@ fn named_call_name_allowing_leading_attr(clause: TokenStream) -> Option<String> 
     let syn::Expr::Path(func_path) = call.func.as_ref() else {
         return None;
     };
-    (func_path.qself.is_none() && func_path.path.segments.len() == 1)
-        .then(|| func_path.path.segments.last().unwrap().ident.to_string())
+    if func_path.qself.is_some() {
+        return None;
+    }
+    let mut segs = func_path.path.segments.iter();
+    match (segs.next(), segs.next()) {
+        (Some(seg), None) => Some(seg.ident.to_string()),
+        _ => None,
+    }
 }
 
 /// Which verifier a crate name maps to, if any — the only crates this rule

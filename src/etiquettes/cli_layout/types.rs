@@ -40,20 +40,30 @@ impl Display for CliLayoutId {
 }
 
 /// One CLI-layout scan row (crate-level, before IR).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct CliLayoutRecord {
     /// Cargo package name.
-    pub crate_name: String,
+    crate_name: String,
     /// Stable probe rule identifier.
-    pub rule_id: CliLayoutId,
+    #[getter(copy)]
+    rule_id: CliLayoutId,
     /// Qualified name or extra locator for this site.
-    pub context: String,
+    context: String,
     /// Source file path, usually crate-relative.
-    pub file: PathBuf,
+    file: PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// Source snippet captured at the site.
-    pub snippet: String,
+    snippet: String,
+}
+
+impl CliLayoutRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> CliLayoutRecordBuilder {
+        CliLayoutRecordBuilder::default()
+    }
 }
 
 #[derive(Debug, Clone, derive_new::new)]
@@ -78,9 +88,9 @@ impl Rule for CliLayoutRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct CliLayoutMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for CliLayoutMarker {
@@ -105,15 +115,23 @@ impl Marker for CliLayoutMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct CliLayoutFinding {
-    pub rule: CliLayoutRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub context: String,
-    pub span: FileSpan,
-    pub snippet: String,
+    rule: CliLayoutRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    context: String,
+    span: FileSpan,
+    snippet: String,
+}
+
+impl CliLayoutFinding {
+    pub fn builder() -> CliLayoutFindingBuilder {
+        CliLayoutFindingBuilder::default()
+    }
 }
 
 impl Finding for CliLayoutFinding {
@@ -137,8 +155,8 @@ impl Finding for CliLayoutFinding {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
     }
 }

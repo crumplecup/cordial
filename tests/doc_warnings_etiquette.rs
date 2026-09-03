@@ -29,22 +29,22 @@ fn canary_path() -> PathBuf {
 fn parse_canary_keeps_two_unique_rustdoc_warnings() {
     cordial::init_tracing();
     let crate_root = PathBuf::from("/workspace");
-    let records = parse_doc_compiler_output(CANARY, &crate_root);
+    let records = parse_doc_compiler_output(CANARY, &crate_root).expect("parse canary");
     assert_eq!(records.len(), 2, "{records:?}");
     assert!(
         records
             .iter()
-            .all(|record| record.rule_id == DocWarningRuleId::Warning001)
+            .all(|record| record.rule_id() == DocWarningRuleId::Warning001)
     );
     assert!(records.iter().any(|record| {
-        record.line == 3
-            && record.context == "rustdoc::broken_intra_doc_links"
-            && record.snippet.contains("Nope")
+        record.line() == 3
+            && record.context() == "rustdoc::broken_intra_doc_links"
+            && record.snippet().contains("Nope")
     }));
     assert!(records.iter().any(|record| {
-        record.line == 7
-            && record.context == "rustdoc::unescaped_backticks"
-            && record.snippet.contains("backtick")
+        record.line() == 7
+            && record.context() == "rustdoc::unescaped_backticks"
+            && record.snippet().contains("backtick")
     }));
 }
 
@@ -63,7 +63,7 @@ warning[unused_variables]: unused variable: `x`
 
 warning: 3 warnings emitted
 ";
-    let records = parse_doc_compiler_output(output, &PathBuf::from("/workspace"));
+    let records = parse_doc_compiler_output(output, &PathBuf::from("/workspace")).expect("parse");
     assert!(records.is_empty(), "{records:?}");
 }
 
@@ -84,13 +84,13 @@ warning[rustdoc::broken_intra_doc_links]: unresolved link to `Foo`
  --> crates/member/src/lib.rs:3:11
 ";
     let workspace_root = PathBuf::from("/workspace");
-    let records = parse_doc_compiler_output(output, &workspace_root);
+    let records = parse_doc_compiler_output(output, &workspace_root).expect("parse");
     assert_eq!(records.len(), 1, "{records:?}");
     assert_eq!(
-        records[0].file,
-        PathBuf::from("/workspace/crates/member/src/lib.rs"),
+        records[0].file(),
+        &PathBuf::from("/workspace/crates/member/src/lib.rs"),
         "joined once against the given root, not doubled: {:?}",
-        records[0].file
+        records[0].file()
     );
 }
 
@@ -101,11 +101,11 @@ fn parse_human_rustdoc_warning() {
 warning[rustdoc::broken_intra_doc_links]: unresolved link to `Foo`
  --> src/lib.rs:12:11
 ";
-    let records = parse_doc_compiler_output(output, &PathBuf::from("/workspace"));
+    let records = parse_doc_compiler_output(output, &PathBuf::from("/workspace")).expect("parse");
     assert_eq!(records.len(), 1);
-    assert_eq!(records[0].line, 12);
-    assert_eq!(records[0].context, "rustdoc::broken_intra_doc_links");
-    assert!(records[0].snippet.contains("Foo"));
+    assert_eq!(records[0].line(), 12);
+    assert_eq!(records[0].context(), "rustdoc::broken_intra_doc_links");
+    assert!(records[0].snippet().contains("Foo"));
 }
 
 #[test]

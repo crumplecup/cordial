@@ -36,37 +36,41 @@ impl IrEnricher for CliLayoutInventoryEnricher {
         let records = scan_crate_cli_layout(&crate_root, ir.crate_name())?;
 
         for record in records {
-            let file = if record.file.is_absolute() {
-                record.file.clone()
+            let file = if record.file().is_absolute() {
+                record.file().clone()
             } else {
-                crate_root.join(&record.file)
+                crate_root.join(record.file())
             };
-            let span = FileSpan::new(file.clone(), record.line, 1);
+            let span = FileSpan::new(file.clone(), record.line(), 1);
             let node = ir.insert_node(
                 NodeWeight::new(NodeKind::Expr)
                     .with_span(span)
-                    .with_name(format!("{} {}", record.rule_id, record.context)),
+                    .with_name(format!("{} {}", record.rule_id(), record.context())),
             )?;
             ir.set_attr(
                 node,
                 "cli_layout_rule",
-                serde_json::Value::String(record.rule_id.as_str().to_string()),
+                serde_json::Value::String(record.rule_id().as_str().to_string()),
             )?;
             ir.set_attr(
                 node,
                 "file",
                 serde_json::Value::String(file.display().to_string()),
             )?;
-            ir.set_attr(node, "line", serde_json::Value::Number(record.line.into()))?;
+            ir.set_attr(
+                node,
+                "line",
+                serde_json::Value::Number(record.line().into()),
+            )?;
             ir.set_attr(
                 node,
                 "context",
-                serde_json::Value::String(record.context.clone()),
+                serde_json::Value::String(record.context().clone()),
             )?;
             ir.set_attr(
                 node,
                 "snippet",
-                serde_json::Value::String(record.snippet.clone()),
+                serde_json::Value::String(record.snippet().clone()),
             )?;
             ir.insert_edge(ir.root()?, node, EdgeKind::Contains)?;
         }

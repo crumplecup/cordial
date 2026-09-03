@@ -52,7 +52,7 @@ impl TargetProvider for FrameworkStdTargetProvider {
             });
         }
         for member in discover_crate_targets(session.project_root(), filter)? {
-            targets.push(CoverageTarget::workspace_member(member.crate_name));
+            targets.push(CoverageTarget::workspace_member(member.crate_name()));
         }
         Ok(targets)
     }

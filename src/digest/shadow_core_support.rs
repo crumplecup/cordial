@@ -132,7 +132,7 @@ pub fn build_shadow_core_support_digest(
 ) -> CordialResult<ShadowCoreSupportDigest> {
     let members: Vec<String> = discover_crate_targets(session.project_root(), &RunAll)?
         .into_iter()
-        .map(|target| target.crate_name)
+        .map(|target| target.crate_name().clone())
         .collect();
     let impl_rollups = rollup_impl_findings(findings);
 

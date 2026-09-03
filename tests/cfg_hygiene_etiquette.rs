@@ -39,7 +39,7 @@ fn d() {}
         cordial::scan_cfg_hygiene_rust_source(source, &file, fixture.path(), fixture.path())
             .into_diagnostic()
             .wrap_err("scan")?;
-    let names: Vec<_> = occurrences.iter().map(|o| o.name.as_str()).collect();
+    let names: Vec<_> = occurrences.iter().map(|o| o.name().as_str()).collect();
 
     assert!(names.contains(&"kani"), "bare cfg(kani): {names:?}");
     assert!(

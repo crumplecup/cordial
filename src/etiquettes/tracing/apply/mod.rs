@@ -36,16 +36,25 @@ pub(super) use verifier_policy::{crate_gate_cfgs, resolve_tracing_apply_policy};
 use crate::{PathInclusionFacts, workspace_path_inclusions};
 
 /// One open checklist row targeting a function or method.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct InstrumentGap {
     /// Cargo package name.
-    pub crate_name: String,
+    crate_name: String,
     /// Fully qualified item name.
-    pub qualified_name: String,
+    qualified_name: String,
     /// Path of the patched file relative to the crate root.
-    pub rel_path: PathBuf,
+    rel_path: PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
+}
+
+impl InstrumentGap {
+    /// Start a builder for this value.
+    pub fn builder() -> InstrumentGapBuilder {
+        InstrumentGapBuilder::default()
+    }
 }
 
 /// Result of applying instrumentation patches.
@@ -89,23 +98,23 @@ pub fn run_tracing_instrument_apply(
     let targets = discover_crate_targets(project_root, &filter)?;
     let crate_roots: HashMap<String, PathBuf> = targets
         .into_iter()
-        .map(|target: CrateTarget| (target.crate_name, target.crate_root))
+        .map(|target: CrateTarget| (target.crate_name().clone(), target.crate_root().clone()))
         .collect();
 
     let mut by_file: BTreeMap<(String, PathBuf), Vec<InstrumentGap>> = BTreeMap::new();
     for gap in gaps {
-        if only_crate.is_some_and(|name| name != gap.crate_name) {
+        if only_crate.is_some_and(|name| name != gap.crate_name()) {
             continue;
         }
-        if !crate_roots.contains_key(&gap.crate_name) {
+        if !crate_roots.contains_key(gap.crate_name()) {
             tracing::warn!(
-                crate_name = %gap.crate_name,
+                crate_name = %gap.crate_name(),
                 "skipping gap for crate not in scan targets"
             );
             continue;
         }
         by_file
-            .entry((gap.crate_name.clone(), gap.rel_path.clone()))
+            .entry((gap.crate_name().clone(), gap.rel_path().clone()))
             .or_default()
             .push(gap);
     }
@@ -171,7 +180,7 @@ pub fn run_tracing_instrument_apply(
         };
         let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
         dedupe_gaps(&mut file_gaps);
-        file_gaps.sort_by_key(|right| std::cmp::Reverse(right.line));
+        file_gaps.sort_by_key(|right| std::cmp::Reverse(right.line()));
         let style = attr_style(&lines);
         let policy =
             resolve_tracing_apply_policy(&crate_name, &path, crate_root, config.tracing(), &facts);
@@ -185,7 +194,7 @@ pub fn run_tracing_instrument_apply(
 
         let mut file_changed = false;
         for gap in file_gaps {
-            let strip = never_instrument.contains(&gap.qualified_name)
+            let strip = never_instrument.contains(gap.qualified_name())
                 || policy == TracingApplyPolicy::Skip;
             if strip {
                 match strip_instrument(&mut lines, &gap) {
@@ -207,15 +216,15 @@ pub fn run_tracing_instrument_apply(
             }
             let Some(recipe) = recipe_for_gap(&records, &gap) else {
                 tracing::warn!(
-                    path = %gap.rel_path.display(),
-                    line = gap.line,
-                    qualified_name = %gap.qualified_name,
+                    path = %gap.rel_path().display(),
+                    line = gap.line(),
+                    qualified_name = %gap.qualified_name(),
                     "no classified recipe for checklist item"
                 );
                 summary.unresolved += 1;
                 continue;
             };
-            match apply_gap(&mut lines, &gap, recipe, style, &policy) {
+            match apply_gap(&mut lines, &gap, recipe, style, &policy)? {
                 GapApplyOutcome::Applied => {
                     summary.changed_functions += 1;
                     file_changed = true;
@@ -265,14 +274,14 @@ pub fn run_tracing_instrument_apply(
 #[tracing::instrument(level = "debug", skip(gaps))]
 fn dedupe_gaps(gaps: &mut Vec<InstrumentGap>) {
     gaps.sort_by(|left, right| {
-        left.qualified_name
-            .cmp(&right.qualified_name)
-            .then(left.rel_path.cmp(&right.rel_path))
-            .then(left.line.cmp(&right.line))
+        left.qualified_name()
+            .cmp(right.qualified_name())
+            .then(left.rel_path().cmp(right.rel_path()))
+            .then(left.line().cmp(&right.line()))
     });
     gaps.dedup_by(|later, earlier| {
-        later.qualified_name == earlier.qualified_name
-            && later.rel_path == earlier.rel_path
-            && later.line == earlier.line
+        later.qualified_name() == earlier.qualified_name()
+            && later.rel_path() == earlier.rel_path()
+            && later.line() == earlier.line()
     });
 }

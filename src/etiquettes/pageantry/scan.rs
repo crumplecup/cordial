@@ -20,10 +20,10 @@ pub fn scan_crate_pageantry(crate_root: &Path) -> CordialResult<Vec<PageantrySit
     }
 
     findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.snippet.cmp(&b.snippet))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.snippet().cmp(b.snippet()))
     });
 
     Ok(findings)
@@ -69,16 +69,20 @@ pub fn scan_rust_source(
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
     let module_prefix = module_path_from_src_file(tree_root, file);
-    Ok(scan_syntax(&syntax, file, crate_root, &module_prefix))
+    scan_syntax(&syntax, file, crate_root, &module_prefix)
 }
 
-#[instrument(level = "debug", skip(syntax, file, crate_root, module_prefix))]
+#[instrument(
+    level = "debug",
+    skip(syntax, file, crate_root, module_prefix),
+    err(level = "warn")
+)]
 fn scan_syntax(
     syntax: &File,
     file: &Path,
     crate_root: &Path,
     module_prefix: &[String],
-) -> Vec<PageantrySiteRecord> {
+) -> CordialResult<Vec<PageantrySiteRecord>> {
     let mut findings = Vec::new();
     walk_items(
         &syntax.items,
@@ -86,13 +90,14 @@ fn scan_syntax(
         crate_root,
         module_prefix,
         &mut findings,
-    );
-    findings
+    )?;
+    Ok(findings)
 }
 
 #[instrument(
     level = "debug",
-    skip(items, file, crate_root, module_prefix, findings)
+    skip(items, file, crate_root, module_prefix, findings),
+    err(level = "warn")
 )]
 fn walk_items(
     items: &[syn::Item],
@@ -100,7 +105,7 @@ fn walk_items(
     crate_root: &Path,
     module_prefix: &[String],
     findings: &mut Vec<PageantrySiteRecord>,
-) {
+) -> CordialResult<()> {
     let mut body_started = false;
     for item in items {
         if is_cfg_test(item_attrs(item)) {
@@ -113,7 +118,7 @@ fn walk_items(
                 {
                     let mut nested_prefix = module_prefix.to_vec();
                     nested_prefix.push(item_mod.ident.to_string());
-                    walk_items(nested, file, crate_root, &nested_prefix, findings);
+                    walk_items(nested, file, crate_root, &nested_prefix, findings)?;
                 }
             }
             ItemClass::Trait { name, line } => {
@@ -122,13 +127,15 @@ fn walk_items(
                     if let Ok(rel) = path.strip_prefix(crate_root) {
                         path = rel.to_path_buf();
                     }
-                    findings.push(PageantrySiteRecord {
-                        rule_id: PageantryRuleId::Trait001,
-                        context: site_context(module_prefix),
-                        file: path,
-                        line,
-                        snippet: format!("trait {name}"),
-                    });
+                    findings.push(
+                        PageantrySiteRecord::builder()
+                            .rule_id(PageantryRuleId::Trait001)
+                            .context(site_context(module_prefix))
+                            .file(path)
+                            .line(line)
+                            .snippet(format!("trait {name}"))
+                            .build()?,
+                    );
                 }
             }
             ItemClass::Body => {
@@ -137,6 +144,7 @@ fn walk_items(
             ItemClass::Skip => {}
         }
     }
+    Ok(())
 }
 
 #[derive(Debug)]

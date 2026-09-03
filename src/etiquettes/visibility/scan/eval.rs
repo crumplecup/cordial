@@ -39,14 +39,16 @@ pub(super) fn resolve_eval(
         return (VisibilityEval::Normal, None);
     }
     let digest = tree_digest(root);
-    if let Some(cache) = cached.filter(|cache| cache.digest == digest) {
+    if let Some(cache) = cached.filter(|cache| cache.digest() == &digest) {
         return (
-            VisibilityEval::Branching { floor: cache.floor },
+            VisibilityEval::Branching {
+                floor: cache.floor(),
+            },
             Some(cache),
         );
     }
     let floor = peel_branching_floor(root, thresholds);
-    let cache = BranchingCache { digest, floor };
+    let cache = BranchingCache::new(digest, floor);
     (VisibilityEval::Branching { floor }, Some(cache))
 }
 

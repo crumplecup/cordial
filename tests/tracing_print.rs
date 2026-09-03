@@ -10,7 +10,7 @@ use cordial::{
 fn scan_source_with(source: &str, policy: &TracingStdioPolicy) -> miette::Result<Vec<PrintRuleId>> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let file = fixture.path().join("src").join("lib.rs");
-    fs::create_dir_all(file.parent().expect("src"))
+    fs::create_dir_all(file.parent().ok_or_else(|| miette::miette!("src"))?)
         .into_diagnostic()
         .wrap_err("src dir")?;
     fs::write(&file, source)
@@ -20,7 +20,7 @@ fn scan_source_with(source: &str, policy: &TracingStdioPolicy) -> miette::Result
         scan_tracing_print_rust_source(source, &file, fixture.path(), fixture.path(), policy)
             .into_diagnostic()
             .wrap_err("scan")?;
-    Ok(records.into_iter().map(|record| record.rule_id).collect())
+    Ok(records.into_iter().map(|record| record.rule_id()).collect())
 }
 
 fn scan_source(source: &str) -> miette::Result<Vec<PrintRuleId>> {
@@ -47,7 +47,10 @@ fn snippets_with(root: &Path, policy: &TracingStdioPolicy) -> miette::Result<Vec
     let records = scan_crate_tracing_print(root, policy)
         .into_diagnostic()
         .wrap_err("scan crate")?;
-    Ok(records.into_iter().map(|record| record.snippet).collect())
+    Ok(records
+        .into_iter()
+        .map(|record| record.snippet().clone())
+        .collect())
 }
 
 fn snippets(root: &Path) -> miette::Result<Vec<String>> {

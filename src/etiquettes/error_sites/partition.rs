@@ -1,31 +1,44 @@
 //! Heuristic partition of error sites into internal vs foreign origins.
 
+use crate::error::CordialResult;
+
 use super::types::{ErrorOriginClass, ErrorSiteKind, ErrorSiteScanRow};
 
 use tracing::instrument;
 /// One error site after partitioning into local vs foreign.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct PartitionedErrorSiteRow {
     /// Cargo package name.
-    pub crate_name: String,
+    crate_name: String,
     /// Error-site kind (`?`, `map_err`, …).
-    pub kind: ErrorSiteKind,
+    #[getter(copy)]
+    kind: ErrorSiteKind,
     /// Qualified name or extra locator for this site.
-    pub context: String,
+    context: String,
     /// Source file path, usually crate-relative.
-    pub file: std::path::PathBuf,
+    file: std::path::PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// Snippet of the originating expression.
-    pub source_snippet: String,
+    source_snippet: String,
     /// Snippet of the conversion site.
-    pub site_snippet: String,
+    site_snippet: String,
     /// Whether the error originates locally or from a foreign type.
-    pub origin_class: ErrorOriginClass,
+    #[getter(copy)]
+    origin_class: ErrorOriginClass,
     /// Extra classifier detail for the origin.
-    pub origin_detail: String,
+    origin_detail: String,
     /// Why this site was partitioned this way.
-    pub rationale: String,
+    rationale: String,
+}
+
+impl PartitionedErrorSiteRow {
+    /// Start a builder for this value.
+    pub fn builder() -> PartitionedErrorSiteRowBuilder {
+        PartitionedErrorSiteRowBuilder::default()
+    }
 }
 
 /// Partition error site records.
@@ -33,7 +46,7 @@ pub struct PartitionedErrorSiteRow {
 pub fn partition_error_site_records(
     records: &[ErrorSiteScanRow],
     crate_name: &str,
-) -> Vec<PartitionedErrorSiteRow> {
+) -> CordialResult<Vec<PartitionedErrorSiteRow>> {
     records
         .iter()
         .map(|record| partition_error_site_row(record, crate_name))
@@ -45,20 +58,20 @@ pub fn partition_error_site_records(
 pub fn partition_error_site_row(
     finding: &ErrorSiteScanRow,
     crate_name: &str,
-) -> PartitionedErrorSiteRow {
+) -> CordialResult<PartitionedErrorSiteRow> {
     let (origin_class, origin_detail, rationale) = classify_origin(finding, crate_name);
-    PartitionedErrorSiteRow {
-        crate_name: finding.crate_name.clone(),
-        kind: finding.kind,
-        context: finding.context.clone(),
-        file: finding.file.clone(),
-        line: finding.line,
-        source_snippet: finding.source_snippet.clone(),
-        site_snippet: finding.site_snippet.clone(),
-        origin_class,
-        origin_detail,
-        rationale,
-    }
+    PartitionedErrorSiteRow::builder()
+        .crate_name(finding.crate_name().clone())
+        .kind(finding.kind())
+        .context(finding.context().clone())
+        .file(finding.file().clone())
+        .line(finding.line())
+        .source_snippet(finding.source_snippet().clone())
+        .site_snippet(finding.site_snippet().clone())
+        .origin_class(origin_class)
+        .origin_detail(origin_detail)
+        .rationale(rationale)
+        .build()
 }
 
 #[instrument(level = "debug", skip(finding))]
@@ -66,8 +79,8 @@ fn classify_origin(
     finding: &ErrorSiteScanRow,
     crate_name: &str,
 ) -> (ErrorOriginClass, String, String) {
-    let source = finding.source_snippet.as_str();
-    let site = finding.site_snippet.as_str();
+    let source = finding.source_snippet().as_str();
+    let site = finding.site_snippet().as_str();
 
     if mentions_crate_error(source, site) {
         return (
@@ -93,7 +106,7 @@ fn classify_origin(
         );
     }
 
-    match finding.kind {
+    match finding.kind() {
         ErrorSiteKind::ReturnErr => {
             if source.contains("CordialError") {
                 (

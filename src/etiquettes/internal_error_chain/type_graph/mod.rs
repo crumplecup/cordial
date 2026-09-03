@@ -31,23 +31,21 @@ pub fn scan_crate_internal_error_type_graph(
     let mut error_impls = BTreeSet::new();
     for_each_src_rust_file(crate_root, |path, src_root| {
         let scan = scan_error_rust_file_raw(path, src_root)?;
-        raw_nodes.extend(scan.nodes);
-        error_impls.extend(scan.error_impls);
+        raw_nodes.extend(scan.nodes().iter().cloned());
+        error_impls.extend(scan.error_impls().iter().cloned());
         Ok(())
     })?;
-    raw_nodes.retain(|node| type_path_is_error_related(&node.type_path, &error_impls));
+    raw_nodes.retain(|node| type_path_is_error_related(node.type_path(), &error_impls));
 
-    let mut nodes = finalize_type_graph(raw_nodes, crate_name);
-    for node in &mut nodes {
-        if let Ok(rel) = node.file.strip_prefix(crate_root) {
-            node.file = rel.to_path_buf();
-        }
-    }
+    let nodes = finalize_type_graph(raw_nodes, crate_name)?
+        .into_iter()
+        .map(|node| relativize_type_node(node, crate_root))
+        .collect::<CordialResult<Vec<_>>>()?;
 
-    Ok(InternalErrorTypeGraphReport {
-        crate_name: crate_name.to_string(),
+    Ok(InternalErrorTypeGraphReport::new(
+        crate_name.to_string(),
         nodes,
-    })
+    ))
 }
 
 /// Scan one error-module source file (used by tests).
@@ -60,22 +58,24 @@ pub fn scan_error_rust_source(
 ) -> CordialResult<Vec<InternalErrorTypeNode>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    Ok(finalize_type_graph(
-        scan_error_rust_syntax_raw(&syntax, file, error_root).nodes,
+    finalize_type_graph(
+        scan_error_rust_syntax_raw(&syntax, file, error_root)?
+            .nodes()
+            .clone(),
         crate_name,
-    ))
+    )
 }
 
-#[instrument(level = "debug", skip(raw_nodes))]
+#[instrument(level = "debug", skip(raw_nodes), err(level = "warn"))]
 pub(crate) fn finalize_type_graph(
     raw_nodes: Vec<RawTypeNode>,
     crate_name: &str,
-) -> Vec<InternalErrorTypeNode> {
+) -> CordialResult<Vec<InternalErrorTypeNode>> {
     let mut edges: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for raw in &raw_nodes {
-        if let Some(target) = &raw.source_target {
+        if let Some(target) = raw.source_target() {
             edges
-                .entry(raw.type_path.clone())
+                .entry(raw.type_path().clone())
                 .or_default()
                 .insert(target.clone());
         }
@@ -84,35 +84,65 @@ pub(crate) fn finalize_type_graph(
     let mut nodes = Vec::with_capacity(raw_nodes.len());
     for raw in raw_nodes {
         let node_class = classify_node(&raw);
-        let (reaches_foreign, chain_depth) = graph_metrics(&raw.type_path, &edges);
-        nodes.push(InternalErrorTypeNode {
-            crate_name: crate_name.to_string(),
-            type_path: raw.type_path,
-            node_class,
-            probe_id: raw.probe_id,
-            source_target: raw.source_target,
-            reaches_foreign,
-            chain_depth,
-            file: raw.file,
-            line: raw.line,
-            snippet: raw.snippet,
-        });
+        let (reaches_foreign, chain_depth) = graph_metrics(raw.type_path(), &edges);
+        nodes.push(
+            InternalErrorTypeNode::builder()
+                .crate_name(crate_name.to_string())
+                .type_path(raw.type_path().clone())
+                .node_class(node_class)
+                .probe_id(raw.probe_id())
+                .source_target(raw.source_target().clone())
+                .reaches_foreign(reaches_foreign)
+                .chain_depth(chain_depth)
+                .file(raw.file().clone())
+                .line(raw.line())
+                .snippet(raw.snippet().clone())
+                .build()?,
+        );
     }
 
-    nodes.sort_by(|a, b| a.type_path.cmp(&b.type_path).then(a.line.cmp(&b.line)));
-    nodes
+    nodes.sort_by(|a, b| {
+        a.type_path()
+            .cmp(b.type_path())
+            .then(a.line().cmp(&b.line()))
+    });
+    Ok(nodes)
+}
+
+#[instrument(level = "debug", skip(node))]
+fn relativize_type_node(
+    node: InternalErrorTypeNode,
+    crate_root: &Path,
+) -> CordialResult<InternalErrorTypeNode> {
+    let file = node
+        .file()
+        .strip_prefix(crate_root)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|_| node.file().clone());
+    InternalErrorTypeNode::builder()
+        .crate_name(node.crate_name().clone())
+        .type_path(node.type_path().clone())
+        .node_class(node.node_class())
+        .probe_id(node.probe_id())
+        .source_target(node.source_target().clone())
+        .reaches_foreign(node.reaches_foreign())
+        .chain_depth(node.chain_depth())
+        .file(file)
+        .line(node.line())
+        .snippet(node.snippet().clone())
+        .build()
 }
 
 #[instrument(level = "debug", skip(raw))]
 fn classify_node(raw: &RawTypeNode) -> InternalErrorNodeClass {
-    if raw.type_path == "CordialError" {
+    if raw.type_path() == "CordialError" {
         return InternalErrorNodeClass::UmbrellaWrapper;
     }
-    if raw.probe_id == InternalErrorTypeProbeId::InternalLeaf001 {
+    if raw.probe_id() == InternalErrorTypeProbeId::InternalLeaf001 {
         return InternalErrorNodeClass::InternalLeaf;
     }
-    if let Some(target) = &raw.source_target {
-        if raw.type_path.ends_with("Source") && is_foreign_type_label(target) {
+    if let Some(target) = raw.source_target() {
+        if raw.type_path().ends_with("Source") && is_foreign_type_label(target) {
             return InternalErrorNodeClass::ForeignBridge;
         }
         if is_foreign_type_label(target) {

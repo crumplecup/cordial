@@ -30,7 +30,7 @@ impl Loader for SourceLoader {
         let target = view.target;
 
         let mut files = Vec::new();
-        let src_root = target.crate_root.join("src");
+        let src_root = target.crate_root().join("src");
         if src_root.is_dir() {
             for entry in walkdir::WalkDir::new(&src_root)
                 .into_iter()
@@ -42,39 +42,31 @@ impl Loader for SourceLoader {
                     continue;
                 }
                 let source = std::fs::read_to_string(path)?;
-                files.push(SourceFile {
-                    path: path.to_path_buf(),
-                    source,
-                });
+                files.push(SourceFile::new(path.to_path_buf(), source));
             }
         }
 
-        Ok(Box::new(SourceLoadView {
-            crate_name: target.crate_name.clone(),
+        Ok(Box::new(SourceLoadView::new(
+            target.crate_name().clone(),
             src_root,
             files,
-        }))
+        )))
     }
 }
 
 /// Parsed source file retained for IR construction.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct SourceFile {
-    /// Filesystem path of this source file.
-    pub path: PathBuf,
-    /// File contents.
-    pub source: String,
+    path: PathBuf,
+    source: String,
 }
 
 /// Source loader output.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct SourceLoadView {
-    /// Cargo package name.
-    pub crate_name: String,
-    /// Crate `src` directory.
-    pub src_root: PathBuf,
-    /// Parsed source files under `src`.
-    pub files: Vec<SourceFile>,
+    crate_name: String,
+    src_root: PathBuf,
+    files: Vec<SourceFile>,
 }
 
 impl LoadView for SourceLoadView {

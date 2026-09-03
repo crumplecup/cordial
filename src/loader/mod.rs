@@ -19,14 +19,14 @@ pub trait LoadView: Send + Sync {
 }
 
 /// Target workspace member to analyze.
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct CrateTarget {
     /// Cargo package name.
     #[new(into)]
-    pub crate_name: String,
+    crate_name: String,
     /// Filesystem path of the crate root.
     #[new(into)]
-    pub crate_root: PathBuf,
+    crate_root: PathBuf,
 }
 
 /// Map a file under `src/` to its module path segments.

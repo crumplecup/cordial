@@ -92,36 +92,39 @@ fn crate_names(rows: &[&ForeignErrorTypeRow]) -> Vec<String> {
     names
 }
 
-#[instrument(level = "debug", skip(rows))]
-fn typed_report_from_rows(rows: &[ForeignErrorTypeRow]) -> super::types::ForeignErrorTypeReport {
+#[instrument(level = "debug", skip(rows), err(level = "warn"))]
+fn typed_report_from_rows(
+    rows: &[ForeignErrorTypeRow],
+) -> CordialResult<super::types::ForeignErrorTypeReport> {
     let crate_name = rows
         .first()
         .map(|row| row.crate_name.clone())
         .unwrap_or_default();
     let findings = rows
         .iter()
-        .map(|row| super::types::ForeignErrorTypeRecord {
-            crate_name: row.crate_name.clone(),
-            foreign_error_type: row.foreign_error_type.clone(),
-            rule_id: row.inference_rule_id.clone(),
-            confidence: if row.confidence.contains("MEDIUM") {
-                crate::etiquettes::error_sites::ForeignTypeConfidence::Medium
-            } else {
-                crate::etiquettes::error_sites::ForeignTypeConfidence::High
-            },
-            chain_break: row.chain_break == "true",
-            kind: parse_site_kind(&row.site_kind),
-            context: row.context.clone(),
-            file: std::path::PathBuf::from(&row.file),
-            line: row.line.parse().unwrap_or(0),
-            source_snippet: row.source_snippet.clone(),
-            site_snippet: row.site_snippet.clone(),
+        .map(|row| {
+            super::types::ForeignErrorTypeRecord::builder()
+                .crate_name(row.crate_name.clone())
+                .foreign_error_type(row.foreign_error_type.clone())
+                .rule_id(row.inference_rule_id.clone())
+                .confidence(if row.confidence.contains("MEDIUM") {
+                    crate::etiquettes::error_sites::ForeignTypeConfidence::Medium
+                } else {
+                    crate::etiquettes::error_sites::ForeignTypeConfidence::High
+                })
+                .chain_break(row.chain_break == "true")
+                .kind(parse_site_kind(&row.site_kind))
+                .context(row.context.clone())
+                .file(std::path::PathBuf::from(&row.file))
+                .line(row.line.parse().unwrap_or(0))
+                .source_snippet(row.source_snippet.clone())
+                .site_snippet(row.site_snippet.clone())
+                .build()
         })
-        .collect();
-    super::types::ForeignErrorTypeReport {
-        crate_name,
-        findings,
-    }
+        .collect::<CordialResult<Vec<_>>>()?;
+    Ok(super::types::ForeignErrorTypeReport::new(
+        crate_name, findings,
+    ))
 }
 
 /// One [`super::types::ForeignErrorTypeReport`] per distinct crate in `rows`,
@@ -133,7 +136,7 @@ fn typed_report_from_rows(rows: &[ForeignErrorTypeRow]) -> super::types::Foreign
 #[instrument(level = "debug", skip(rows))]
 fn typed_reports_by_crate(
     rows: &[ForeignErrorTypeRow],
-) -> Vec<super::types::ForeignErrorTypeReport> {
+) -> CordialResult<Vec<super::types::ForeignErrorTypeReport>> {
     let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
     names.sort();
     names.dedup();
@@ -289,7 +292,7 @@ impl Reporter for ForeignErrorTypesSummaryReporter {
 
         let rows = foreign_error_type_rows(findings);
         let typed: Vec<_> = typed_rows(&rows).cloned().collect();
-        let reports = typed_reports_by_crate(&typed);
+        let reports = typed_reports_by_crate(&typed)?;
         let summary = build_workspace_foreign_error_type_summary(&reports);
 
         let mut body = String::new();
@@ -298,7 +301,8 @@ impl Reporter for ForeignErrorTypesSummaryReporter {
         body.push_str(&format!(
             "Inferred foreign exposure: **{}** sites, **{}** chain breaks \
              (`.map_err` that drops or stringifies the foreign error).\n\n",
-            summary.inferred_sites, summary.chain_breaks,
+            summary.inferred_sites(),
+            summary.chain_breaks(),
         ));
         body.push_str("| Crate | Inferred sites | Chain breaks |\n");
         body.push_str("| --- | ---: | ---: |\n");
@@ -307,24 +311,30 @@ impl Reporter for ForeignErrorTypesSummaryReporter {
                 build_workspace_foreign_error_type_summary(std::slice::from_ref(report));
             body.push_str(&format!(
                 "| `{}` | {} | {} |\n",
-                report.crate_name, crate_summary.inferred_sites, crate_summary.chain_breaks
+                report.crate_name(),
+                crate_summary.inferred_sites(),
+                crate_summary.chain_breaks()
             ));
         }
         body.push_str(&format!(
             "\n| **Total** | **{}** | **{}** |\n\n",
-            summary.inferred_sites, summary.chain_breaks
+            summary.inferred_sites(),
+            summary.chain_breaks()
         ));
         body.push_str("| Foreign error type | Chain breaks | Total inferred |\n");
         body.push_str("| --- | ---: | ---: |\n");
-        for row in &summary.types {
+        for row in summary.types() {
             body.push_str(&format!(
                 "| `{}` | {} | {} |\n",
-                row.foreign_error_type, row.chain_breaks, row.total
+                row.foreign_error_type(),
+                row.chain_breaks(),
+                row.total()
             ));
         }
         body.push_str(&format!(
             "\n| **Total** | **{}** | **{}** |\n",
-            summary.chain_breaks, summary.inferred_sites
+            summary.chain_breaks(),
+            summary.inferred_sites()
         ));
 
         Ok(vec![Box::new(TextArtifact {

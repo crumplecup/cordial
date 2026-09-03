@@ -17,15 +17,7 @@ fn exception_patch_suppresses_matching_panic_finding() -> miette::Result<()> {
         .wrap_err("src dir")?;
     fs::write(
         fixture.path().join("src/lib.rs"),
-        r#"
-pub fn boom() {
-    panic!("kaboom");
-}
-
-pub fn fragile() -> u32 {
-    Some(1).expect("missing")
-}
-"#,
+        include_str!("fixtures/panics/exceptions_patch.rs"),
     )
     .into_diagnostic()
     .wrap_err("write fixture")?;
@@ -91,11 +83,7 @@ fn quality_patches_alias_suppresses_matching_finding() -> miette::Result<()> {
         .wrap_err("src dir")?;
     fs::write(
         fixture.path().join("src/lib.rs"),
-        r#"
-pub fn boom() {
-    panic!("kaboom");
-}
-"#,
+        include_str!("fixtures/panics/exceptions_alias.rs"),
     )
     .into_diagnostic()
     .wrap_err("write fixture")?;
@@ -478,7 +466,7 @@ fn add_coverage_skip_preserves_existing_extra_fields() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let store = StoreLayout::from_root(store_root.path(), "demo");
     let path = coverage_skip_file_path(&store, "chrono");
-    fs::create_dir_all(path.parent().expect("parent"))
+    fs::create_dir_all(path.parent().ok_or_else(|| miette::miette!("parent"))?)
         .into_diagnostic()
         .wrap_err("patches dir")?;
     fs::write(

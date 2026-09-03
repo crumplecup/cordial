@@ -97,23 +97,25 @@ impl Assessor for InternalErrorChainAssessor {
                         .and_then(|value| value.as_u64())
                         .map(|value| value as u32);
 
-                    findings.push(Box::new(InternalErrorChainFinding {
-                        rule: InternalErrorChainRule::from_probe(probe_id),
-                        record_kind,
-                        disposition: Disposition::Open,
-                        anchor: crate::objects::NodeAnchor(node_id),
-                        crate_name: crate_name.clone(),
-                        context: type_path.clone(),
-                        span,
-                        snippet,
-                        type_path: Some(type_path),
-                        node_class,
-                        source_target,
-                        reaches_foreign,
-                        chain_depth,
-                        foreign_error_type: None,
-                        internal_constructor: None,
-                    }) as Box<dyn Finding>);
+                    findings.push(Box::new(
+                        InternalErrorChainFinding::builder()
+                            .rule(InternalErrorChainRule::from_probe(probe_id))
+                            .record_kind(record_kind)
+                            .disposition(Disposition::Open)
+                            .anchor(crate::objects::NodeAnchor(node_id))
+                            .crate_name(crate_name.clone())
+                            .context(type_path.clone())
+                            .span(span)
+                            .snippet(snippet)
+                            .type_path(Some(type_path))
+                            .node_class(node_class)
+                            .source_target(source_target)
+                            .reaches_foreign(reaches_foreign)
+                            .chain_depth(chain_depth)
+                            .foreign_error_type(None)
+                            .internal_constructor(None)
+                            .build()?,
+                    ) as Box<dyn Finding>);
                 }
                 InternalErrorRecordKind::Compliance => {
                     let Some(rule_value) = node.attr("rule_id").and_then(|value| value.as_str())
@@ -140,23 +142,25 @@ impl Assessor for InternalErrorChainAssessor {
                         .filter(|value| !value.is_empty())
                         .map(str::to_string);
 
-                    findings.push(Box::new(InternalErrorChainFinding {
-                        rule: InternalErrorChainRule::from_compliance(compliance_id),
-                        record_kind,
-                        disposition: Disposition::Open,
-                        anchor: crate::objects::NodeAnchor(node_id),
-                        crate_name: crate_name.clone(),
-                        context,
-                        span,
-                        snippet,
-                        type_path: None,
-                        node_class: None,
-                        source_target: None,
-                        reaches_foreign: None,
-                        chain_depth: None,
-                        foreign_error_type,
-                        internal_constructor,
-                    }) as Box<dyn Finding>);
+                    findings.push(Box::new(
+                        InternalErrorChainFinding::builder()
+                            .rule(InternalErrorChainRule::from_compliance(compliance_id))
+                            .record_kind(record_kind)
+                            .disposition(Disposition::Open)
+                            .anchor(crate::objects::NodeAnchor(node_id))
+                            .crate_name(crate_name.clone())
+                            .context(context)
+                            .span(span)
+                            .snippet(snippet)
+                            .type_path(None)
+                            .node_class(None)
+                            .source_target(None)
+                            .reaches_foreign(None)
+                            .chain_depth(None)
+                            .foreign_error_type(foreign_error_type)
+                            .internal_constructor(internal_constructor)
+                            .build()?,
+                    ) as Box<dyn Finding>);
                 }
             }
         }

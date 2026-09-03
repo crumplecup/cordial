@@ -41,7 +41,7 @@ pub use types::{
 use crate::SourceLoader;
 use crate::enricher::ERROR_IR_ENRICHERS;
 use crate::etiquette::{
-    EtiquetteExplain, EtiquetteRuleExplain, StaticEtiquette, StaticQualityEtiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, StaticEtiquette, StaticQualityEtiquette,
 };
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
@@ -68,53 +68,26 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in error sites etiquette bundle.
-pub static ERROR_SITES_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
-    etiquette: StaticEtiquette {
-        id: "error_sites",
-        name: "Error sites",
-        loaders: LOADERS,
-        enrichers: ENRICHERS,
-        probes: PROBES,
-        assessors: ASSESSORS,
-        workspace_assessors: None,
-        reporters: REPORTERS,
-        is_coverage: false,
-        explain: EtiquetteExplain {
-            summary: "Where are ?, map_err, and related error sites?",
-            why: "You cannot judge chain preservation or foreign attenuation until every error site is named. This is the census layer; later layers consume the same IR.",
-            logic: "Records ?, map_err, return Err, if let Err, match on Err, and ok_or. Downstream etiquettes partition those rows by origin (internal vs foreign). Reference-only inventory: no dedicated quality-report area.",
-            opt_out: "`[error_sites] enabled = false` in cordial.toml.",
-            rules: &[
-                EtiquetteRuleExplain {
-                    id: "ERROR-SITE-QUESTION-MARK",
-                    summary: "`?` site",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-SITE-MAP-ERR",
-                    summary: "`map_err` site",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-SITE-RETURN-ERR",
-                    summary: "`return Err` site",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-SITE-IF-LET-ERR",
-                    summary: "`if let Err` site",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-SITE-MATCH-ERR",
-                    summary: "`match` on Err",
-                },
-                EtiquetteRuleExplain {
-                    id: "ERROR-SITE-OK-OR",
-                    summary: "`ok_or` site",
-                },
+pub static ERROR_SITES_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
+    StaticEtiquette::new(
+        "error_sites",
+        "Error sites",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        false,
+        EtiquetteExplain::new(
+            "Where are ?, map_err, and related error sites?",
+            "You cannot judge chain preservation or foreign attenuation until every error site is named. This is the census layer; later layers consume the same IR.",
+            "Records ?, map_err, return Err, if let Err, match on Err, and ok_or. Downstream etiquettes partition those rows by origin (internal vs foreign). Reference-only inventory: no dedicated quality-report area.",
+            "`[error_sites] enabled = false` in cordial.toml.",
+            &[
+                EtiquetteRuleExplain::new("ERROR-SITE-QUESTION-MARK", "`?` site"),
+                EtiquetteRuleExplain::new("ERROR-SITE-MAP-ERR", "`map_err` site"),
+                EtiquetteRuleExplain::new("ERROR-SITE-RETURN-ERR", "`return Err` site"),
+                EtiquetteRuleExplain::new("ERROR-SITE-IF-LET-ERR", "`if let Err` site"),
+                EtiquetteRuleExplain::new("ERROR-SITE-MATCH-ERR", "`match` on Err"),
+                EtiquetteRuleExplain::new("ERROR-SITE-OK-OR", "`ok_or` site"),
             ],
-        },
-    },
-    // Declines a dedicated row on purpose: an intermediate census (its
-    // own doc comment: "Resolution strategies are out of scope"),
-    // feeding error_chain/foreign_error_types/foreign_error_attenuation
-    // rather than being itself an action-item area.
-    quality_area: None,
-};
+        ),
+    ),
+    None,
+);

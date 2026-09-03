@@ -20,10 +20,10 @@ use super::walk::{
 use tracing::instrument;
 
 /// Raw type-graph facts plus the `Error`-implementing type idents in one file.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, derive_new::new, derive_getters::Getters)]
 pub(crate) struct RawTypeGraphScan {
-    pub nodes: Vec<RawTypeNode>,
-    pub error_impls: BTreeSet<String>,
+    nodes: Vec<RawTypeNode>,
+    error_impls: BTreeSet<String>,
 }
 
 /// Collect raw type-graph nodes from a pre-parsed source file.
@@ -32,19 +32,23 @@ pub(crate) fn scan_error_rust_syntax_raw(
     syntax: &syn::File,
     file: &Path,
     module_root: &Path,
-) -> RawTypeGraphScan {
+) -> CordialResult<RawTypeGraphScan> {
     let module_prefix = module_path_from_src_file(module_root, file);
     let mut visitor = TypeGraphScanVisitor {
         file: file.to_path_buf(),
         module_prefix,
         raw_nodes: Vec::new(),
         error_impls: BTreeSet::new(),
+        error: None,
     };
     visitor.visit_file(syntax);
-    RawTypeGraphScan {
-        nodes: visitor.raw_nodes,
-        error_impls: visitor.error_impls,
+    if let Some(error) = visitor.error {
+        return Err(error);
     }
+    Ok(RawTypeGraphScan::new(
+        visitor.raw_nodes,
+        visitor.error_impls,
+    ))
 }
 
 #[instrument(level = "debug", skip(file), err(level = "warn"))]
@@ -55,17 +59,27 @@ pub(super) fn scan_error_rust_file_raw(
     let source = std::fs::read_to_string(file)?;
     let syntax = syn::parse_file(&source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    Ok(scan_error_rust_syntax_raw(&syntax, file, module_root))
+    scan_error_rust_syntax_raw(&syntax, file, module_root)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub(crate) struct RawTypeNode {
-    pub(crate) type_path: String,
-    pub(crate) probe_id: InternalErrorTypeProbeId,
-    pub(crate) source_target: Option<String>,
-    pub(crate) file: PathBuf,
-    pub(crate) line: u32,
-    pub(crate) snippet: String,
+    type_path: String,
+    #[getter(copy)]
+    probe_id: InternalErrorTypeProbeId,
+    source_target: Option<String>,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    snippet: String,
+}
+
+impl RawTypeNode {
+    /// Start a builder for this value.
+    pub fn builder() -> RawTypeNodeBuilder {
+        RawTypeNodeBuilder::default()
+    }
 }
 
 struct TypeGraphScanVisitor {
@@ -73,24 +87,50 @@ struct TypeGraphScanVisitor {
     module_prefix: Vec<String>,
     raw_nodes: Vec<RawTypeNode>,
     error_impls: BTreeSet<String>,
+    error: Option<crate::error::CordialError>,
 }
 
 impl TypeGraphScanVisitor {
+    #[instrument(level = "debug", skip(self))]
+    fn push_node(
+        &mut self,
+        type_path: String,
+        probe_id: InternalErrorTypeProbeId,
+        source_target: Option<String>,
+        line: u32,
+        snippet: String,
+    ) {
+        if self.error.is_some() {
+            return;
+        }
+        match RawTypeNode::builder()
+            .type_path(type_path)
+            .probe_id(probe_id)
+            .source_target(source_target)
+            .file(self.file.clone())
+            .line(line)
+            .snippet(snippet)
+            .build()
+        {
+            Ok(node) => self.raw_nodes.push(node),
+            Err(error) => self.error = Some(error),
+        }
+    }
+
     #[instrument(level = "debug", skip(self, item_struct))]
     fn check_wrapper_struct(&mut self, item_struct: &ItemStruct) {
         let type_path = qualified_type_name(&self.module_prefix, &item_struct.ident.to_string());
         if item_struct.ident == "CordialError" {
-            self.raw_nodes.push(RawTypeNode {
-                type_path: type_path.clone(),
-                probe_id: InternalErrorTypeProbeId::InternalLink001,
-                source_target: Some("CordialErrorKind".to_string()),
-                file: self.file.clone(),
-                line: item_struct.span().start().line as u32,
-                snippet: format!(
+            self.push_node(
+                type_path.clone(),
+                InternalErrorTypeProbeId::InternalLink001,
+                Some("CordialErrorKind".to_string()),
+                item_struct.span().start().line as u32,
+                format!(
                     "struct {} {{ kind: CordialErrorKind, … }}",
                     item_struct.ident
                 ),
-            });
+            );
             return;
         }
 
@@ -108,14 +148,13 @@ impl TypeGraphScanVisitor {
                 continue;
             }
             let target = type_label(&field.ty);
-            self.raw_nodes.push(RawTypeNode {
-                type_path: type_path.clone(),
-                probe_id: InternalErrorTypeProbeId::InternalLink001,
-                source_target: Some(target.clone()),
-                file: self.file.clone(),
-                line: field.span().start().line as u32,
-                snippet: format!("struct {} {{ source: {} }}", item_struct.ident, target),
-            });
+            self.push_node(
+                type_path.clone(),
+                InternalErrorTypeProbeId::InternalLink001,
+                Some(target.clone()),
+                field.span().start().line as u32,
+                format!("struct {} {{ source: {} }}", item_struct.ident, target),
+            );
         }
     }
 
@@ -146,52 +185,45 @@ impl TypeGraphScanVisitor {
                         }
                     }
                     if has_string_detail && !has_source {
-                        self.raw_nodes.push(RawTypeNode {
-                            type_path: variant_path.clone(),
-                            probe_id: InternalErrorTypeProbeId::InternalLeaf001,
-                            source_target: None,
-                            file: self.file.clone(),
-                            line: variant.span().start().line as u32,
-                            snippet: format!("enum {enum_name} {{ {variant_path} {{ … }} }}"),
-                        });
+                        self.push_node(
+                            variant_path.clone(),
+                            InternalErrorTypeProbeId::InternalLeaf001,
+                            None,
+                            variant.span().start().line as u32,
+                            format!("enum {enum_name} {{ {variant_path} {{ … }} }}"),
+                        );
                     } else if let Some(target) = source_target {
-                        self.raw_nodes.push(RawTypeNode {
-                            type_path: variant_path,
-                            probe_id: InternalErrorTypeProbeId::InternalLink001,
-                            source_target: Some(target),
-                            file: self.file.clone(),
-                            line: variant.span().start().line as u32,
-                            snippet: format!(
-                                "enum {enum_name} {{ {} {{ source: … }} }}",
-                                variant.ident
-                            ),
-                        });
+                        self.push_node(
+                            variant_path,
+                            InternalErrorTypeProbeId::InternalLink001,
+                            Some(target),
+                            variant.span().start().line as u32,
+                            format!("enum {enum_name} {{ {} {{ source: … }} }}", variant.ident),
+                        );
                     }
                 }
                 Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
                     let payload = &fields.unnamed[0].ty;
                     if is_string_type(payload) {
-                        self.raw_nodes.push(RawTypeNode {
-                            type_path: variant_path.clone(),
-                            probe_id: InternalErrorTypeProbeId::InternalLeaf001,
-                            source_target: None,
-                            file: self.file.clone(),
-                            line: variant.span().start().line as u32,
-                            snippet: format!("enum {enum_name} {{ {variant_path}(String) }}"),
-                        });
+                        self.push_node(
+                            variant_path.clone(),
+                            InternalErrorTypeProbeId::InternalLeaf001,
+                            None,
+                            variant.span().start().line as u32,
+                            format!("enum {enum_name} {{ {variant_path}(String) }}"),
+                        );
                     } else {
-                        self.raw_nodes.push(RawTypeNode {
-                            type_path: variant_path,
-                            probe_id: InternalErrorTypeProbeId::InternalLink001,
-                            source_target: Some(type_label(payload)),
-                            file: self.file.clone(),
-                            line: variant.span().start().line as u32,
-                            snippet: format!(
+                        self.push_node(
+                            variant_path,
+                            InternalErrorTypeProbeId::InternalLink001,
+                            Some(type_label(payload)),
+                            variant.span().start().line as u32,
+                            format!(
                                 "enum {enum_name} {{ {}({}) }}",
                                 variant.ident,
                                 type_label(payload)
                             ),
-                        });
+                        );
                     }
                 }
                 _ => {}
@@ -217,14 +249,13 @@ impl TypeGraphScanVisitor {
         let Some(target) = extract_source_return_type(item_impl) else {
             return;
         };
-        self.raw_nodes.push(RawTypeNode {
-            type_path: self_type.clone(),
-            probe_id: InternalErrorTypeProbeId::InternalNested001,
-            source_target: Some(target),
-            file: self.file.clone(),
-            line: item_impl.span().start().line as u32,
-            snippet: format!("impl Error for {self_type} {{ fn source() -> … }}"),
-        });
+        self.push_node(
+            self_type.clone(),
+            InternalErrorTypeProbeId::InternalNested001,
+            Some(target),
+            item_impl.span().start().line as u32,
+            format!("impl Error for {self_type} {{ fn source() -> … }}"),
+        );
     }
 }
 

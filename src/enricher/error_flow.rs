@@ -118,25 +118,25 @@ fn enrich_error_site(
     is_proc_macro_crate: bool,
     origin_nodes: &mut BTreeMap<String, crate::ir::NodeId>,
 ) -> CordialResult<()> {
-    let Some(scan_row) = scan_row_from_node(ir, site_id, crate_name) else {
+    let Some(scan_row) = scan_row_from_node(ir, site_id, crate_name)? else {
         return Ok(());
     };
-    let partitioned = partition_error_site_row(&scan_row, crate_name);
+    let partitioned = partition_error_site_row(&scan_row, crate_name)?;
 
     ir.set_attr(
         site_id,
         "origin_class",
-        serde_json::Value::String(partitioned.origin_class.to_string()),
+        serde_json::Value::String(partitioned.origin_class().to_string()),
     )?;
     ir.set_attr(
         site_id,
         "origin_detail",
-        serde_json::Value::String(partitioned.origin_detail.clone()),
+        serde_json::Value::String(partitioned.origin_detail().clone()),
     )?;
     ir.set_attr(
         site_id,
         "rationale",
-        serde_json::Value::String(partitioned.rationale.clone()),
+        serde_json::Value::String(partitioned.rationale().clone()),
     )?;
 
     let origin_key = origin_key_for(&partitioned);
@@ -152,9 +152,17 @@ fn scan_row_from_node(
     ir: &dyn IrMut,
     site_id: crate::ir::NodeId,
     crate_name: &str,
-) -> Option<ErrorSiteScanRow> {
-    let node = ir.node(site_id)?;
-    let kind = ErrorSiteKind::from_attr(node.attr("error_site_kind")?.as_str()?)?;
+) -> CordialResult<Option<ErrorSiteScanRow>> {
+    let Some(node) = ir.node(site_id) else {
+        return Ok(None);
+    };
+    let Some(kind) = node
+        .attr("error_site_kind")
+        .and_then(|value| value.as_str())
+        .and_then(ErrorSiteKind::from_attr)
+    else {
+        return Ok(None);
+    };
     let context = node
         .attr("context")
         .and_then(|value| value.as_str())
@@ -180,23 +188,29 @@ fn scan_row_from_node(
         .map(PathBuf::from)
         .unwrap_or_default();
 
-    Some(ErrorSiteScanRow {
-        crate_name: crate_name.to_string(),
-        kind,
-        context,
-        file,
-        line,
-        source_snippet,
-        site_snippet,
-    })
+    Ok(Some(
+        ErrorSiteScanRow::builder()
+            .crate_name(crate_name.to_string())
+            .kind(kind)
+            .context(context)
+            .file(file)
+            .line(line)
+            .source_snippet(source_snippet)
+            .site_snippet(site_snippet)
+            .build()?,
+    ))
 }
 
 #[instrument(level = "debug", skip(partitioned))]
 fn origin_key_for(partitioned: &crate::etiquettes::error_sites::PartitionedErrorSiteRow) -> String {
-    if partitioned.origin_class == ErrorOriginClass::Internal {
-        format!("internal:{}", partitioned.origin_detail)
+    if partitioned.origin_class() == ErrorOriginClass::Internal {
+        format!("internal:{}", partitioned.origin_detail())
     } else {
-        format!("{}:{}", partitioned.origin_class, partitioned.origin_detail)
+        format!(
+            "{}:{}",
+            partitioned.origin_class(),
+            partitioned.origin_detail()
+        )
     }
 }
 
@@ -239,12 +253,12 @@ fn apply_foreign_error_attrs(
     partitioned: &crate::etiquettes::error_sites::PartitionedErrorSiteRow,
     is_proc_macro_crate: bool,
 ) -> CordialResult<()> {
-    if partitioned.origin_class == ErrorOriginClass::Internal {
+    if partitioned.origin_class() == ErrorOriginClass::Internal {
         return Ok(());
     }
 
     if let Some((foreign_error_type, rule_id, confidence)) =
-        infer_foreign_error_type(&partitioned.source_snippet)
+        infer_foreign_error_type(partitioned.source_snippet())
     {
         if is_proc_macro_crate && rule_id == "FOREIGN-ERROR-TYPE-SYN-PARSE-001" {
             return Ok(());
@@ -278,13 +292,13 @@ fn apply_foreign_error_attrs(
         ir.set_attr(
             site_id,
             "chain_break",
-            serde_json::Value::Bool(partitioned.kind.map_err_is_chain_break(chain_preserved)),
+            serde_json::Value::Bool(partitioned.kind().map_err_is_chain_break(chain_preserved)),
         )?;
         return Ok(());
     }
 
     if matches!(
-        partitioned.origin_class,
+        partitioned.origin_class(),
         ErrorOriginClass::Other | ErrorOriginClass::Edge
     ) {
         ir.set_attr(

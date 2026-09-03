@@ -72,7 +72,7 @@ pub use scan::scan_rust_source;
 pub use subscriber::{SubscriberRuleId, SubscriberSiteRecord, scan_crate_tracing_subscriber};
 
 use crate::etiquette::{
-    EtiquetteExplain, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette,
 };
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
@@ -151,110 +151,93 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in tracing instrument etiquette bundle.
-pub static TRACING_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette {
-    etiquette: StaticEtiquette {
-        id: "tracing",
-        name: "Tracing instrument",
-        loaders: LOADERS,
-        enrichers: ENRICHERS,
-        probes: PROBES,
-        assessors: ASSESSORS,
-        workspace_assessors: None,
-        reporters: REPORTERS,
-        is_coverage: false,
-        explain: EtiquetteExplain {
-            summary: "Are functions instrumented with the recipe for their role?",
-            why: "A missing-span census that skips private helpers creates blind spots. Volume is a subscriber level problem, not a reason to skip spans.",
-            logic: "Every function gets a use-class, complexity, and target InstrumentRecipe. Probes flag a missing attribute, a recipe delta, or attenuation (instrument on proof-only code, skip-policy files, or ungated on a prover-reachable function). Visibility does not exempt a function. Subscriber-init rows are a second checklist. Leftover stdio macros are a third filter ([tracing.stdio]: println/eprintln/print/eprint/dbg, skip_cargo_protocol, skip_folders). --apply does not patch subscriber or print rows.",
-            opt_out: "`[tracing] enabled = false` in cordial.toml.",
-            rules: &[
-                EtiquetteRuleExplain {
-                    id: "TRACING-MISSING-INSTRUMENT",
-                    summary: "Function lacks #[instrument]",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-LEVEL-MISMATCH",
-                    summary: "level does not match the recipe",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-SKIP-MISSING",
-                    summary: "recipe skip list is missing",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-ERR-MISSING",
-                    summary: "fallible function missing err",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-ERROR-PATH-SILENT",
-                    summary: "error path is not recorded",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-FIELDS-MISSING",
-                    summary: "recipe fields are missing",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-PROOF-INSTRUMENT",
-                    summary: "#[instrument] on proof-only code",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-UNGATED-INSTRUMENT",
-                    summary: "ungated instrument on a prover-reachable function",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-SKIP-INSTRUMENT",
-                    summary: "instrument present on a skip-policy file",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-SUBSCRIBER-MAIN",
-                    summary: "binary main has no subscriber init",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-SUBSCRIBER-TEST",
-                    summary: "tests have no subscriber init",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-SUBSCRIBER-LIB",
-                    summary: "library has no documented subscriber story",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-SUBSCRIBER-RUST-LOG",
-                    summary: "RUST_LOG / EnvFilter policy mismatch",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-SUBSCRIBER-IDEMPOTENT",
-                    summary: "init is not idempotent",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-BOUNDARY-MAIN-SILENT",
-                    summary: "fallible binary main never reports its error via tracing",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-STD-PRINTLN",
-                    summary: "leftover println!; use a tracing event",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-STD-EPRINTLN",
-                    summary: "leftover eprintln!; use a tracing event",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-STD-PRINT",
-                    summary: "leftover print!; use a tracing event",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-STD-EPRINT",
-                    summary: "leftover eprint!; use a tracing event",
-                },
-                EtiquetteRuleExplain {
-                    id: "TRACING-STD-DBG",
-                    summary: "leftover dbg!; use a tracing event",
-                },
+pub static TRACING_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
+    StaticEtiquette::new(
+        "tracing",
+        "Tracing instrument",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        false,
+        EtiquetteExplain::new(
+            "Are functions instrumented with the recipe for their role?",
+            "A missing-span census that skips private helpers creates blind spots. Volume is a subscriber level problem, not a reason to skip spans.",
+            "Every function gets a use-class, complexity, and target InstrumentRecipe. Probes flag a missing attribute, a recipe delta, or attenuation (instrument on proof-only code, skip-policy files, or ungated on a prover-reachable function). Visibility does not exempt a function. Subscriber-init rows are a second checklist. Leftover stdio macros are a third filter ([tracing.stdio]: println/eprintln/print/eprint/dbg, skip_cargo_protocol, skip_folders). --apply does not patch subscriber or print rows.",
+            "`[tracing] enabled = false` in cordial.toml.",
+            &[
+                EtiquetteRuleExplain::new(
+                    "TRACING-MISSING-INSTRUMENT",
+                    "Function lacks #[instrument]",
+                ),
+                EtiquetteRuleExplain::new(
+                    "TRACING-LEVEL-MISMATCH",
+                    "level does not match the recipe",
+                ),
+                EtiquetteRuleExplain::new("TRACING-SKIP-MISSING", "recipe skip list is missing"),
+                EtiquetteRuleExplain::new("TRACING-ERR-MISSING", "fallible function missing err"),
+                EtiquetteRuleExplain::new(
+                    "TRACING-ERROR-PATH-SILENT",
+                    "error path is not recorded",
+                ),
+                EtiquetteRuleExplain::new("TRACING-FIELDS-MISSING", "recipe fields are missing"),
+                EtiquetteRuleExplain::new(
+                    "TRACING-PROOF-INSTRUMENT",
+                    "#[instrument] on proof-only code",
+                ),
+                EtiquetteRuleExplain::new(
+                    "TRACING-UNGATED-INSTRUMENT",
+                    "ungated instrument on a prover-reachable function",
+                ),
+                EtiquetteRuleExplain::new(
+                    "TRACING-SKIP-INSTRUMENT",
+                    "instrument present on a skip-policy file",
+                ),
+                EtiquetteRuleExplain::new(
+                    "TRACING-SUBSCRIBER-MAIN",
+                    "binary main has no subscriber init",
+                ),
+                EtiquetteRuleExplain::new(
+                    "TRACING-SUBSCRIBER-TEST",
+                    "tests have no subscriber init",
+                ),
+                EtiquetteRuleExplain::new(
+                    "TRACING-SUBSCRIBER-LIB",
+                    "library has no documented subscriber story",
+                ),
+                EtiquetteRuleExplain::new(
+                    "TRACING-SUBSCRIBER-RUST-LOG",
+                    "RUST_LOG / EnvFilter policy mismatch",
+                ),
+                EtiquetteRuleExplain::new(
+                    "TRACING-SUBSCRIBER-IDEMPOTENT",
+                    "init is not idempotent",
+                ),
+                EtiquetteRuleExplain::new(
+                    "TRACING-BOUNDARY-MAIN-SILENT",
+                    "fallible binary main never reports its error via tracing",
+                ),
+                EtiquetteRuleExplain::new(
+                    "TRACING-STD-PRINTLN",
+                    "leftover println!; use a tracing event",
+                ),
+                EtiquetteRuleExplain::new(
+                    "TRACING-STD-EPRINTLN",
+                    "leftover eprintln!; use a tracing event",
+                ),
+                EtiquetteRuleExplain::new(
+                    "TRACING-STD-PRINT",
+                    "leftover print!; use a tracing event",
+                ),
+                EtiquetteRuleExplain::new(
+                    "TRACING-STD-EPRINT",
+                    "leftover eprint!; use a tracing event",
+                ),
+                EtiquetteRuleExplain::new("TRACING-STD-DBG", "leftover dbg!; use a tracing event"),
             ],
-        },
-    },
-    quality_area: Some(QualityAreaSpec {
-        title: "Tracing instrumentation",
-        checklist: "tracing-instrument.checklist.md",
-        summary: "tracing-summary.md",
-        compute: quality_area::quality_area_compute,
-    }),
-};
+        ),
+    ),
+    Some(QualityAreaSpec::new(
+        "Tracing instrumentation",
+        "tracing-instrument.checklist.md",
+        "tracing-summary.md",
+        quality_area::quality_area_compute,
+    )),
+);

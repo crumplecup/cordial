@@ -156,9 +156,9 @@ impl Rule for ErrorSiteRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct ErrorSiteMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for ErrorSiteMarker {
@@ -183,20 +183,31 @@ impl Marker for ErrorSiteMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ErrorSiteFinding {
-    pub rule: ErrorSiteRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub kind: ErrorSiteKind,
-    pub context: String,
-    pub span: FileSpan,
-    pub source_snippet: String,
-    pub site_snippet: String,
-    pub origin_class: ErrorOriginClass,
-    pub origin_detail: String,
-    pub rationale: String,
+    rule: ErrorSiteRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    #[getter(copy)]
+    kind: ErrorSiteKind,
+    context: String,
+    span: FileSpan,
+    source_snippet: String,
+    site_snippet: String,
+    #[getter(copy)]
+    origin_class: ErrorOriginClass,
+    origin_detail: String,
+    rationale: String,
+}
+
+impl ErrorSiteFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> ErrorSiteFindingBuilder {
+        ErrorSiteFindingBuilder::default()
+    }
 }
 
 impl Finding for ErrorSiteFinding {
@@ -220,8 +231,8 @@ impl Finding for ErrorSiteFinding {
         sink.field("crate", &self.crate_name);
         sink.field("site_kind", &self.kind.to_string());
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("source_snippet", &self.source_snippet);
         sink.field("site_snippet", &self.site_snippet);
         sink.field("origin_class", &self.origin_class.to_string());
@@ -232,33 +243,53 @@ impl Finding for ErrorSiteFinding {
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ErrorSiteRecord {
-    pub kind: ErrorSiteKind,
-    pub context: String,
-    pub file: PathBuf,
-    pub line: u32,
-    pub source_snippet: String,
-    pub site_snippet: String,
+    #[getter(copy)]
+    kind: ErrorSiteKind,
+    context: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    source_snippet: String,
+    site_snippet: String,
+}
+
+impl ErrorSiteRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> ErrorSiteRecordBuilder {
+        ErrorSiteRecordBuilder::default()
+    }
 }
 
 /// Intermediate scan input for partition logic.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ErrorSiteScanRow {
     /// Cargo package name.
-    pub crate_name: String,
+    crate_name: String,
     /// Error-site kind (`?`, `map_err`, …).
-    pub kind: ErrorSiteKind,
+    #[getter(copy)]
+    kind: ErrorSiteKind,
     /// Qualified name or extra locator for this site.
-    pub context: String,
+    context: String,
     /// Source file path, usually crate-relative.
-    pub file: PathBuf,
+    file: PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// Snippet of the originating expression.
-    pub source_snippet: String,
+    source_snippet: String,
     /// Snippet of the conversion site.
-    pub site_snippet: String,
+    site_snippet: String,
+}
+
+impl ErrorSiteScanRow {
+    /// Start a builder for this value.
+    pub fn builder() -> ErrorSiteScanRowBuilder {
+        ErrorSiteScanRowBuilder::default()
+    }
 }
 
 /// Count findings by site kind for summaries.

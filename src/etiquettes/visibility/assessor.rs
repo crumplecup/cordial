@@ -69,17 +69,19 @@ impl Assessor for VisibilityAssessor {
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| session.project_root().to_path_buf());
 
-            findings.push(Box::new(VisibilityFinding {
-                rule: VisibilityRule::new(rule_id),
-                disposition: Disposition::Open,
-                anchor: crate::objects::NodeAnchor(node_id),
-                crate_name: ir.crate_name().to_string(),
-                module_path,
-                span: FileSpan::new(file, line, 1),
-                name_count,
-                parent_vis,
-                declared_vis,
-            }) as Box<dyn Finding>);
+            findings.push(Box::new(
+                VisibilityFinding::builder()
+                    .rule(VisibilityRule::new(rule_id))
+                    .disposition(Disposition::Open)
+                    .anchor(crate::objects::NodeAnchor(node_id))
+                    .crate_name(ir.crate_name().to_string())
+                    .module_path(module_path)
+                    .span(FileSpan::new(file, line, 1))
+                    .name_count(name_count)
+                    .parent_vis(parent_vis)
+                    .declared_vis(declared_vis)
+                    .build()?,
+            ) as Box<dyn Finding>);
         }
         Ok(findings)
     }

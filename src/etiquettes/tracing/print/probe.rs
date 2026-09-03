@@ -62,9 +62,9 @@ impl Probe for PrintSiteProbe {
                 continue;
             }
 
-            markers.push(Box::new(PrintMarker {
-                anchor: crate::objects::NodeAnchor(node.id),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(PrintMarker::new(crate::objects::NodeAnchor(node.id))) as Box<dyn Marker>,
+            );
         }
         Ok(markers)
     }

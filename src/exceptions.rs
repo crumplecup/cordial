@@ -221,23 +221,16 @@ pub fn coverage_skip_file_path(store: &StoreLayout, patch_set: &str) -> PathBuf 
 }
 
 /// One coverage skip-list row in `{store}/patches/{patch_set}.json`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+)]
 pub struct CoverageSkipEntry {
     /// Qualified path or type name to skip.
-    pub path: String,
+    #[new(into)]
+    path: String,
     /// Human-readable explanation shown in reports.
-    pub reason: String,
-}
-
-impl CoverageSkipEntry {
-    /// Construct a new value.
-    #[instrument(level = "debug", skip(path, reason), ret)]
-    pub fn new(path: impl Into<String>, reason: impl Into<String>) -> Self {
-        Self {
-            path: path.into(),
-            reason: reason.into(),
-        }
-    }
+    #[new(into)]
+    reason: String,
 }
 
 /// Result of appending one exception row to a store file.

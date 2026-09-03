@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::CordialResult;
 use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
@@ -104,9 +105,9 @@ impl Rule for AntipatternRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct AntipatternMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for AntipatternMarker {
@@ -131,15 +132,24 @@ impl Marker for AntipatternMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct AntipatternFinding {
-    pub rule: AntipatternRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub context: String,
-    pub span: FileSpan,
-    pub snippet: String,
+    rule: AntipatternRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    context: String,
+    span: FileSpan,
+    snippet: String,
+}
+
+impl AntipatternFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> AntipatternFindingBuilder {
+        AntipatternFindingBuilder::default()
+    }
 }
 
 impl Finding for AntipatternFinding {
@@ -163,26 +173,36 @@ impl Finding for AntipatternFinding {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
         sink.snippet(&self.snippet);
     }
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct AntipatternSiteRecord {
     /// Stable probe rule identifier.
-    pub rule_id: AntipatternRuleId,
+    #[getter(copy)]
+    rule_id: AntipatternRuleId,
     /// Qualified name or extra locator for this site.
-    pub context: String,
+    context: String,
     /// Source file path, usually crate-relative.
-    pub file: PathBuf,
+    file: PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// Source snippet captured at the site.
-    pub snippet: String,
+    snippet: String,
+}
+
+impl AntipatternSiteRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> AntipatternSiteRecordBuilder {
+        AntipatternSiteRecordBuilder::default()
+    }
 }
 
 /// Count findings by rule for summaries.
@@ -211,50 +231,83 @@ impl AntipatternRuleCounts {
 }
 
 /// Per-crate rollup row.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct AntipatternCrateSummary {
-    pub crate_name: String,
-    pub total: usize,
-    pub box_dyn_error: usize,
-    pub string_error: usize,
-    pub unused_underscore_arg: usize,
-    pub struct_static_ref: usize,
-    pub unnamed_contract_bound: usize,
-    pub version_in_member: usize,
+    crate_name: String,
+    #[getter(copy)]
+    total: usize,
+    #[getter(copy)]
+    box_dyn_error: usize,
+    #[getter(copy)]
+    string_error: usize,
+    #[getter(copy)]
+    unused_underscore_arg: usize,
+    #[getter(copy)]
+    struct_static_ref: usize,
+    #[getter(copy)]
+    unnamed_contract_bound: usize,
+    #[getter(copy)]
+    version_in_member: usize,
+}
+
+impl AntipatternCrateSummary {
+    /// Start a builder for this value.
+    pub fn builder() -> AntipatternCrateSummaryBuilder {
+        AntipatternCrateSummaryBuilder::default()
+    }
 }
 
 /// Workspace rollup across crates.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct WorkspaceAntipatternsSummary {
-    pub total: usize,
-    pub box_dyn_error: usize,
-    pub string_error: usize,
-    pub unused_underscore_arg: usize,
-    pub struct_static_ref: usize,
-    pub unnamed_contract_bound: usize,
-    pub version_in_member: usize,
-    pub crates: Vec<AntipatternCrateSummary>,
+    #[getter(copy)]
+    total: usize,
+    #[getter(copy)]
+    box_dyn_error: usize,
+    #[getter(copy)]
+    string_error: usize,
+    #[getter(copy)]
+    unused_underscore_arg: usize,
+    #[getter(copy)]
+    struct_static_ref: usize,
+    #[getter(copy)]
+    unnamed_contract_bound: usize,
+    #[getter(copy)]
+    version_in_member: usize,
+    crates: Vec<AntipatternCrateSummary>,
+}
+
+impl WorkspaceAntipatternsSummary {
+    /// Start a builder for this value.
+    pub fn builder() -> WorkspaceAntipatternsSummaryBuilder {
+        WorkspaceAntipatternsSummaryBuilder::default()
+    }
 }
 
 /// Per-crate rollup row for version-in-member scans.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub struct VersionInMemberCrateSummary {
-    pub crate_name: String,
-    pub total: usize,
+    crate_name: String,
+    #[getter(copy)]
+    total: usize,
 }
 
 /// Workspace rollup for version-in-member scans.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub struct WorkspaceVersionInMemberSummary {
-    pub total: usize,
-    pub crates_with_findings: usize,
-    pub crates: Vec<VersionInMemberCrateSummary>,
+    #[getter(copy)]
+    total: usize,
+    #[getter(copy)]
+    crates_with_findings: usize,
+    crates: Vec<VersionInMemberCrateSummary>,
 }
 
 #[instrument(level = "debug", skip(findings))]
 pub fn build_workspace_antipatterns_summary(
     findings: &[&dyn Finding],
-) -> WorkspaceAntipatternsSummary {
+) -> CordialResult<WorkspaceAntipatternsSummary> {
     let mut by_crate: std::collections::BTreeMap<String, AntipatternRuleCounts> =
         std::collections::BTreeMap::new();
 
@@ -297,16 +350,18 @@ pub fn build_workspace_antipatterns_summary(
         totals.struct_static_ref += counts.struct_static_ref;
         totals.unnamed_contract_bound += counts.unnamed_contract_bound;
         totals.version_in_member += counts.version_in_member;
-        crates.push(AntipatternCrateSummary {
-            crate_name,
-            total,
-            box_dyn_error: counts.box_dyn_error,
-            string_error: counts.string_error,
-            unused_underscore_arg: counts.unused_underscore_arg,
-            struct_static_ref: counts.struct_static_ref,
-            unnamed_contract_bound: counts.unnamed_contract_bound,
-            version_in_member: counts.version_in_member,
-        });
+        crates.push(
+            AntipatternCrateSummary::builder()
+                .crate_name(crate_name)
+                .total(total)
+                .box_dyn_error(counts.box_dyn_error)
+                .string_error(counts.string_error)
+                .unused_underscore_arg(counts.unused_underscore_arg)
+                .struct_static_ref(counts.struct_static_ref)
+                .unnamed_contract_bound(counts.unnamed_contract_bound)
+                .version_in_member(counts.version_in_member)
+                .build()?,
+        );
     }
 
     let total = totals.box_dyn_error
@@ -316,16 +371,16 @@ pub fn build_workspace_antipatterns_summary(
         + totals.unnamed_contract_bound
         + totals.version_in_member;
 
-    WorkspaceAntipatternsSummary {
-        total,
-        box_dyn_error: totals.box_dyn_error,
-        string_error: totals.string_error,
-        unused_underscore_arg: totals.unused_underscore_arg,
-        struct_static_ref: totals.struct_static_ref,
-        unnamed_contract_bound: totals.unnamed_contract_bound,
-        version_in_member: totals.version_in_member,
-        crates,
-    }
+    WorkspaceAntipatternsSummary::builder()
+        .total(total)
+        .box_dyn_error(totals.box_dyn_error)
+        .string_error(totals.string_error)
+        .unused_underscore_arg(totals.unused_underscore_arg)
+        .struct_static_ref(totals.struct_static_ref)
+        .unnamed_contract_bound(totals.unnamed_contract_bound)
+        .version_in_member(totals.version_in_member)
+        .crates(crates)
+        .build()
 }
 
 #[instrument(level = "debug", skip(findings))]
@@ -354,13 +409,9 @@ pub fn build_workspace_version_in_member_summary(
 
     let crates: Vec<_> = by_crate
         .into_iter()
-        .map(|(crate_name, total)| VersionInMemberCrateSummary { crate_name, total })
+        .map(|(crate_name, total)| VersionInMemberCrateSummary::new(crate_name, total))
         .collect();
-    let total = crates.iter().map(|row| row.total).sum();
+    let total = crates.iter().map(|row| row.total()).sum();
 
-    WorkspaceVersionInMemberSummary {
-        total,
-        crates_with_findings: crates.len(),
-        crates,
-    }
+    WorkspaceVersionInMemberSummary::new(total, crates.len(), crates)
 }

@@ -11,6 +11,7 @@ use syn::spanned::Spanned;
 use syn::{ExprMethodCall, ExprTry, Fields, ItemEnum, ItemImpl, ItemStruct, ReturnType};
 
 use super::visitor::SiteCtx;
+use crate::error::CordialResult;
 use crate::etiquettes::error_chain::{ErrorChainProbeId, ErrorChainRecord};
 
 use self::preds::{
@@ -27,6 +28,7 @@ use tracing::instrument;
 pub(super) struct ChainLayer {
     fn_return_type: Option<String>,
     chain: Vec<ErrorChainRecord>,
+    error: Option<crate::error::CordialError>,
 }
 
 impl ChainLayer {
@@ -58,14 +60,21 @@ impl ChainLayer {
         foreign_error_type: Option<String>,
         ctx: &SiteCtx,
     ) {
-        self.chain.push(ErrorChainRecord {
-            rule_id,
-            context: ctx.context.clone(),
-            file: ctx.rel_file.clone(),
-            line,
-            snippet,
-            foreign_error_type,
-        });
+        if self.error.is_some() {
+            return;
+        }
+        match ErrorChainRecord::builder()
+            .rule_id(rule_id)
+            .context(ctx.context().clone())
+            .file(ctx.rel_file().clone())
+            .line(line)
+            .snippet(snippet)
+            .foreign_error_type(foreign_error_type)
+            .build()
+        {
+            Ok(record) => self.chain.push(record),
+            Err(error) => self.error = Some(error),
+        }
     }
 
     #[instrument(level = "debug", skip(self, item_struct, ctx))]
@@ -188,7 +197,10 @@ impl ChainLayer {
     }
 
     #[instrument(level = "debug", skip(self))]
-    pub(super) fn into_records(self) -> Vec<ErrorChainRecord> {
-        self.chain
+    pub(super) fn into_records(self) -> CordialResult<Vec<ErrorChainRecord>> {
+        if let Some(error) = self.error {
+            return Err(error);
+        }
+        Ok(self.chain)
     }
 }

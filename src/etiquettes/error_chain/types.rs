@@ -81,9 +81,9 @@ impl Rule for ErrorChainRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct ErrorChainMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for ErrorChainMarker {
@@ -108,16 +108,25 @@ impl Marker for ErrorChainMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ErrorChainFinding {
-    pub rule: ErrorChainRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub context: String,
-    pub span: FileSpan,
-    pub snippet: String,
-    pub foreign_error_type: Option<String>,
+    rule: ErrorChainRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    context: String,
+    span: FileSpan,
+    snippet: String,
+    foreign_error_type: Option<String>,
+}
+
+impl ErrorChainFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> ErrorChainFindingBuilder {
+        ErrorChainFindingBuilder::default()
+    }
 }
 
 impl Finding for ErrorChainFinding {
@@ -145,28 +154,38 @@ impl Finding for ErrorChainFinding {
             &self.foreign_error_type.clone().unwrap_or_default(),
         );
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("snippet", &self.snippet);
         sink.snippet(&self.snippet);
     }
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ErrorChainRecord {
     /// Stable probe rule identifier.
-    pub rule_id: ErrorChainProbeId,
+    #[getter(copy)]
+    rule_id: ErrorChainProbeId,
     /// Qualified name or extra locator for this site.
-    pub context: String,
+    context: String,
     /// Source file path, usually crate-relative.
-    pub file: PathBuf,
+    file: PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// Source snippet captured at the site.
-    pub snippet: String,
+    snippet: String,
     /// Foreign error type named at this site.
-    pub foreign_error_type: Option<String>,
+    foreign_error_type: Option<String>,
+}
+
+impl ErrorChainRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> ErrorChainRecordBuilder {
+        ErrorChainRecordBuilder::default()
+    }
 }
 
 /// Count findings by probe rule.
@@ -205,7 +224,7 @@ impl ErrorChainProbeCounts {
 pub fn probe_counts(records: &[ErrorChainRecord]) -> ErrorChainProbeCounts {
     let mut counts = ErrorChainProbeCounts::default();
     for record in records {
-        match record.rule_id {
+        match record.rule_id() {
             ErrorChainProbeId::WrapperSourceField001 => counts.wrapper_source += 1,
             ErrorChainProbeId::KindWrapperPayload001 => counts.kind_wrapper_payload += 1,
             ErrorChainProbeId::FromBridge001 => counts.from_bridge += 1,

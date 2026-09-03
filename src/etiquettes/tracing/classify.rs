@@ -5,6 +5,7 @@ use syn::visit::Visit;
 use syn::{Block, ExprIf, ExprMatch, FnArg, ReturnType, Signature, Stmt, Type, TypePath};
 
 use crate::config::ModularityThresholds;
+use crate::error::CordialResult;
 
 use super::display_types::DisplayTypeFacts;
 use super::recordable::{
@@ -14,14 +15,18 @@ use super::types::{FnContext, FunctionComplexity, FunctionKind, FunctionRole};
 
 use tracing::instrument;
 /// Classify `ident` (unqualified) from its signature, kind, and optional body.
-#[instrument(level = "debug", skip(sig, kind, body, display_types))]
+#[instrument(
+    level = "debug",
+    skip(sig, kind, body, display_types),
+    err(level = "warn")
+)]
 pub fn classify(
     ident: &str,
     sig: &Signature,
     kind: FunctionKind,
     body: Option<&Block>,
     display_types: &DisplayTypeFacts,
-) -> FnContext {
+) -> CordialResult<FnContext> {
     let peek = body.map(peek_body).unwrap_or_default();
     let body_lines = body.map(block_lines).unwrap_or(1);
     let returns_result = returns_result_ty(sig);
@@ -38,17 +43,17 @@ pub fn classify(
     );
     let complexity = classify_complexity(body_lines, returns_result, &peek);
     let err_is_displayable = returns_result && err_type_is_displayable(sig, display_types);
-    FnContext {
-        role,
-        complexity,
-        param_names: param_names(sig),
-        unrecordable_params: unrecordable_params(sig),
-        returns_result,
-        return_unrecordable: return_type_unrecordable(sig),
-        return_borrowed: return_type_borrowed(sig),
-        err_is_displayable,
-        has_error_path_event: peek.has_error_path_event,
-    }
+    FnContext::builder()
+        .role(role)
+        .complexity(complexity)
+        .param_names(param_names(sig))
+        .unrecordable_params(unrecordable_params(sig))
+        .returns_result(returns_result)
+        .return_unrecordable(return_type_unrecordable(sig))
+        .return_borrowed(return_type_borrowed(sig))
+        .err_is_displayable(err_is_displayable)
+        .has_error_path_event(peek.has_error_path_event)
+        .build()
 }
 
 #[instrument(level = "debug", skip(sig, display_types))]

@@ -11,67 +11,83 @@ use crate::objects::{
 
 use tracing::instrument;
 /// Partitioned findings for one crate.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub struct ErrorSitePartitionReport {
     /// Cargo package name.
-    pub crate_name: String,
+    crate_name: String,
     /// Findings produced by assessors in this session.
-    pub findings: Vec<PartitionedErrorSiteRow>,
+    findings: Vec<PartitionedErrorSiteRow>,
 }
 
 /// One site with an inferred std / third-party error type.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ForeignErrorTypeRecord {
     /// Cargo package name.
-    pub crate_name: String,
+    crate_name: String,
     /// Foreign error type named at this site.
-    pub foreign_error_type: String,
+    foreign_error_type: String,
     /// Stable probe rule identifier.
-    pub rule_id: String,
+    rule_id: String,
     /// How confidently this site was classified as a foreign type.
-    pub confidence: ForeignTypeConfidence,
+    #[getter(copy)]
+    confidence: ForeignTypeConfidence,
     /// Whether this site drops the `source()` chain.
-    pub chain_break: bool,
+    #[getter(copy)]
+    chain_break: bool,
     /// Error-site kind (`?`, `map_err`, …).
-    pub kind: ErrorSiteKind,
+    #[getter(copy)]
+    kind: ErrorSiteKind,
     /// Qualified name or extra locator for this site.
-    pub context: String,
+    context: String,
     /// Source file path, usually crate-relative.
-    pub file: PathBuf,
+    file: PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// Snippet of the originating expression.
-    pub source_snippet: String,
+    source_snippet: String,
     /// Snippet of the conversion site.
-    pub site_snippet: String,
+    site_snippet: String,
+}
+
+impl ForeignErrorTypeRecord {
+    /// Start a builder for this value.
+    pub fn builder() -> ForeignErrorTypeRecordBuilder {
+        ForeignErrorTypeRecordBuilder::default()
+    }
 }
 
 /// Inferred foreign error types for one crate.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub struct ForeignErrorTypeReport {
     /// Cargo package name.
-    pub crate_name: String,
+    crate_name: String,
     /// Findings produced by assessors in this session.
-    pub findings: Vec<ForeignErrorTypeRecord>,
+    findings: Vec<ForeignErrorTypeRecord>,
 }
 
 /// Per foreign error type rollup row.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub struct ForeignErrorTypeSummaryRow {
-    pub foreign_error_type: String,
-    pub chain_breaks: usize,
-    pub total: usize,
+    foreign_error_type: String,
+    #[getter(copy)]
+    chain_breaks: usize,
+    #[getter(copy)]
+    total: usize,
 }
 
 /// Workspace rollup for inferred foreign error types.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub struct WorkspaceForeignErrorTypeSummary {
     /// How many sites were inferred rather than annotated.
-    pub inferred_sites: usize,
+    #[getter(copy)]
+    inferred_sites: usize,
     /// Places the `source()` chain is dropped.
-    pub chain_breaks: usize,
+    #[getter(copy)]
+    chain_breaks: usize,
     /// Type names collected for this row.
-    pub types: Vec<ForeignErrorTypeSummaryRow>,
+    types: Vec<ForeignErrorTypeSummaryRow>,
 }
 
 /// Build workspace foreign error type summary.
@@ -84,16 +100,16 @@ pub fn build_workspace_foreign_error_type_summary(
     let mut chain_breaks = 0usize;
 
     for report in reports {
-        for finding in &report.findings {
+        for finding in report.findings() {
             inferred_sites += 1;
-            if finding.chain_break {
+            if finding.chain_break() {
                 chain_breaks += 1;
             }
             let entry = by_type
-                .entry(finding.foreign_error_type.clone())
+                .entry(finding.foreign_error_type().clone())
                 .or_default();
             entry.1 += 1;
-            if finding.chain_break {
+            if finding.chain_break() {
                 entry.0 += 1;
             }
         }
@@ -101,26 +117,18 @@ pub fn build_workspace_foreign_error_type_summary(
 
     let mut types: Vec<ForeignErrorTypeSummaryRow> = by_type
         .into_iter()
-        .map(
-            |(foreign_error_type, (chain_break_count, total))| ForeignErrorTypeSummaryRow {
-                foreign_error_type,
-                chain_breaks: chain_break_count,
-                total,
-            },
-        )
+        .map(|(foreign_error_type, (chain_break_count, total))| {
+            ForeignErrorTypeSummaryRow::new(foreign_error_type, chain_break_count, total)
+        })
         .collect();
     types.sort_by(|a, b| {
-        b.chain_breaks
-            .cmp(&a.chain_breaks)
-            .then(b.total.cmp(&a.total))
-            .then(a.foreign_error_type.cmp(&b.foreign_error_type))
+        b.chain_breaks()
+            .cmp(&a.chain_breaks())
+            .then(b.total().cmp(&a.total()))
+            .then(a.foreign_error_type().cmp(b.foreign_error_type()))
     });
 
-    WorkspaceForeignErrorTypeSummary {
-        inferred_sites,
-        chain_breaks,
-        types,
-    }
+    WorkspaceForeignErrorTypeSummary::new(inferred_sites, chain_breaks, types)
 }
 
 /// Re-exported from `error_sites`, which sets this attribute unconditionally
@@ -168,9 +176,9 @@ impl Rule for ForeignErrorCandidateRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct ForeignErrorTypeMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for ForeignErrorTypeMarker {
@@ -195,25 +203,39 @@ impl Marker for ForeignErrorTypeMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ForeignErrorTypeFinding {
-    pub rule: ForeignErrorTypeRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub record_kind: ForeignErrorRecordKind,
-    pub crate_name: String,
-    pub foreign_error_type: String,
-    pub inference_rule_id: String,
-    pub confidence: ForeignTypeConfidence,
-    pub chain_break: bool,
-    pub kind: ErrorSiteKind,
-    pub context: String,
-    pub span: FileSpan,
-    pub source_snippet: String,
-    pub site_snippet: String,
-    pub origin_class: ErrorOriginClass,
-    pub origin_detail: String,
-    pub rationale: String,
+    rule: ForeignErrorTypeRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    #[getter(copy)]
+    record_kind: ForeignErrorRecordKind,
+    crate_name: String,
+    foreign_error_type: String,
+    inference_rule_id: String,
+    #[getter(copy)]
+    confidence: ForeignTypeConfidence,
+    #[getter(copy)]
+    chain_break: bool,
+    #[getter(copy)]
+    kind: ErrorSiteKind,
+    context: String,
+    span: FileSpan,
+    source_snippet: String,
+    site_snippet: String,
+    #[getter(copy)]
+    origin_class: ErrorOriginClass,
+    origin_detail: String,
+    rationale: String,
+}
+
+impl ForeignErrorTypeFinding {
+    /// Start a builder for this value.
+    pub fn builder() -> ForeignErrorTypeFindingBuilder {
+        ForeignErrorTypeFindingBuilder::default()
+    }
 }
 
 impl Finding for ForeignErrorTypeFinding {
@@ -247,8 +269,8 @@ impl Finding for ForeignErrorTypeFinding {
         sink.field("chain_break", &self.chain_break.to_string());
         sink.field("site_kind", &self.kind.to_string());
         sink.field("context", &self.context);
-        sink.field("file", &self.span.file.display().to_string());
-        sink.field("line", &self.span.line.to_string());
+        sink.field("file", &self.span.file().display().to_string());
+        sink.field("line", &self.span.line().to_string());
         sink.field("source_snippet", &self.source_snippet);
         sink.field("site_snippet", &self.site_snippet);
         sink.field("origin_class", &self.origin_class.to_string());

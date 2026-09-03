@@ -12,15 +12,7 @@ fn multiple_etiquettes_share_loader_and_emit_both_reports() -> miette::Result<()
         .wrap_err("src dir")?;
     fs::write(
         fixture.path().join("src/lib.rs"),
-        r#"
-pub fn noisy() {
-    panic!("boom");
-}
-
-pub fn quiet() {
-    let _ = 1;
-}
-"#,
+        include_str!("fixtures/panics/multi_etiquette.rs"),
     )
     .into_diagnostic()
     .wrap_err("write fixture")?;

@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use crate::error::CordialResult;
+use crate::objects::SourceSpan;
 use crate::verus_ir::{VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPublish};
 
 use super::types::{ProofPatternKind, ProofPatternRecord};
@@ -18,7 +19,7 @@ use tracing::instrument;
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_proof_patterns(crate_root: &Path) -> CordialResult<Vec<ProofPatternRecord>> {
     let ir = crate::verus_ir::scan_crate_verus_ir(crate_root)?;
-    Ok(proof_pattern_records(&ir, crate_root))
+    proof_pattern_records(&ir, crate_root)
 }
 
 /// Convert every real proof-pattern signal `ir` carries into this
@@ -26,34 +27,43 @@ pub fn scan_crate_proof_patterns(crate_root: &Path) -> CordialResult<Vec<ProofPa
 /// function, since a function can carry more than one (e.g. `assume`
 /// and `admit` in the same body).
 #[instrument(level = "debug", skip(ir))]
-fn proof_pattern_records(ir: &VerusCrateIr, crate_root: &Path) -> Vec<ProofPatternRecord> {
+fn proof_pattern_records(
+    ir: &VerusCrateIr,
+    crate_root: &Path,
+) -> CordialResult<Vec<ProofPatternRecord>> {
     ir.functions
         .iter()
-        .flat_map(|function| function_records(function, crate_root))
-        .collect()
+        .map(|function| function_records(function, crate_root))
+        .collect::<CordialResult<Vec<_>>>()
+        .map(|groups| groups.into_iter().flatten().collect())
 }
 
 #[instrument(level = "debug", skip(function))]
-fn function_records(function: &VerusFnFacts, crate_root: &Path) -> Vec<ProofPatternRecord> {
+fn function_records(
+    function: &VerusFnFacts,
+    crate_root: &Path,
+) -> crate::error::CordialResult<Vec<ProofPatternRecord>> {
     let context = format!("{}::{}", function.module_path, function.name);
     let file = function
         .span
-        .file
+        .file()
         .strip_prefix(crate_root)
-        .unwrap_or(&function.span.file)
+        .unwrap_or(function.span.file())
         .to_path_buf();
 
     active_kinds(function)
         .into_iter()
-        .map(|(kind, snippet)| ProofPatternRecord {
-            kind,
-            context: context.clone(),
-            file: file.clone(),
-            line: function.span.line,
-            snippet: snippet.to_string(),
-            cfg_test: function.cfg_test,
-            tracked_params: function.tracked_params.clone(),
-            recommends: function.recommends.clone(),
+        .map(|(kind, snippet)| {
+            ProofPatternRecord::builder()
+                .kind(kind)
+                .context(context.clone())
+                .file(file.clone())
+                .line(function.span.line())
+                .snippet(snippet.to_string())
+                .cfg_test(function.cfg_test)
+                .tracked_params(function.tracked_params.clone())
+                .recommends(function.recommends.clone())
+                .build()
         })
         .collect()
 }

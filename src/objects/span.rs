@@ -33,11 +33,11 @@ impl SourceSpan for () {
 pub struct FileSpan {
     /// Source file path, usually crate-relative.
     #[new(into)]
-    pub file: std::path::PathBuf,
+    file: std::path::PathBuf,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    line: u32,
     /// Source column (1-based), when known.
-    pub column: u32,
+    column: u32,
 }
 
 impl SourceSpan for FileSpan {

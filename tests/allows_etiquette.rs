@@ -106,19 +106,19 @@ fn scan_allows_rust_source_finds_four_sites() -> miette::Result<()> {
     assert_eq!(
         findings
             .iter()
-            .filter(|record| record.rule_id == AllowRuleId::Attr001)
+            .filter(|record| record.rule_id() == AllowRuleId::Attr001)
             .count(),
         4
     );
     assert!(
         findings
             .iter()
-            .any(|record| record.context.contains("many_args"))
+            .any(|record| record.context().contains("many_args"))
     );
     assert!(
         !findings
             .iter()
-            .any(|record| record.context.contains("clean_fn"))
+            .any(|record| record.context().contains("clean_fn"))
     );
     Ok(())
 }
@@ -155,12 +155,12 @@ mod inner {
     assert!(
         findings
             .iter()
-            .all(|record| record.snippet.contains("unused_imports"))
+            .all(|record| record.snippet().contains("unused_imports"))
     );
     assert!(
         findings
             .iter()
-            .any(|record| record.context.ends_with("inner")),
+            .any(|record| record.context().ends_with("inner")),
         "{findings:?}"
     );
     Ok(())
@@ -197,8 +197,8 @@ fn verus_vstd_allow_without_reason_is_flagged() -> miette::Result<()> {
     cordial::init_tracing();
     let findings = scan_inline("verus_bare.rs", VERUS_PRELUDE_WITHOUT_REASON)?;
     assert_eq!(findings.len(), 1, "{findings:?}");
-    assert_eq!(findings[0].rule_id, AllowRuleId::VerusReason001);
-    assert!(findings[0].snippet.contains("unused_imports"));
+    assert_eq!(findings[0].rule_id(), AllowRuleId::VerusReason001);
+    assert!(findings[0].snippet().contains("unused_imports"));
     Ok(())
 }
 
@@ -213,7 +213,7 @@ use vstd::float::FloatBitsProperties;
 "#,
     )?;
     assert_eq!(findings.len(), 1, "{findings:?}");
-    assert_eq!(findings[0].rule_id, AllowRuleId::VerusReason001);
+    assert_eq!(findings[0].rule_id(), AllowRuleId::VerusReason001);
     Ok(())
 }
 

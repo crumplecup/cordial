@@ -29,10 +29,10 @@ pub fn scan_crate_error_chain(crate_root: &Path) -> CordialResult<Vec<ErrorChain
     }
 
     findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.rule_id.to_string().cmp(&b.rule_id.to_string()))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.rule_id().to_string().cmp(&b.rule_id().to_string()))
     });
 
     Ok(findings)
@@ -48,18 +48,18 @@ pub fn scan_rust_source(
 ) -> CordialResult<Vec<ErrorChainRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    Ok(scan_rust_syntax(&syntax, file, src_root, crate_root))
+    scan_rust_syntax(&syntax, file, src_root, crate_root)
 }
 
 /// Scan a pre-parsed file for error-chain probes (via unified error IR visitor).
-#[instrument(level = "debug", skip(syntax, file))]
+#[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
 pub(crate) fn scan_rust_syntax(
     syntax: &syn::File,
     file: &Path,
     src_root: &Path,
     crate_root: &Path,
-) -> Vec<ErrorChainRecord> {
-    crate::etiquettes::scan_rust_file_syntax(
+) -> CordialResult<Vec<ErrorChainRecord>> {
+    Ok(crate::etiquettes::scan_rust_file_syntax(
         syntax,
         file,
         src_root,
@@ -67,8 +67,9 @@ pub(crate) fn scan_rust_syntax(
         crate_root,
         "",
         crate::etiquettes::ErrorIrScanLayers::CHAIN_ONLY,
-    )
-    .chain
+    )?
+    .chain()
+    .clone())
 }
 
 #[instrument(level = "debug", skip(file), err(level = "warn"))]

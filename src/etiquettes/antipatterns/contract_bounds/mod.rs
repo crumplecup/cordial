@@ -74,8 +74,8 @@ mod kani;
 mod registry;
 mod verus;
 
-pub use index::ContractRecordDump;
 use index::verifier_for_crate;
+pub use index::{ContractRecordDump, ContractRecordDumpBuilder};
 pub use registry::fetch_contract_records;
 
 /// A `gallery` directory holds verifier experiments, not production
@@ -132,19 +132,29 @@ pub fn scan_crate_contract_bounds(
     }
 
     findings.sort_by(|a, b| {
-        a.file
-            .cmp(&b.file)
-            .then(a.line.cmp(&b.line))
-            .then(a.snippet.cmp(&b.snippet))
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.snippet().cmp(b.snippet()))
     });
 
-    for finding in &mut findings {
-        if let Ok(rel) = finding.file.strip_prefix(crate_root) {
-            finding.file = rel.to_path_buf();
-        }
-    }
-
-    Ok(findings)
+    findings
+        .into_iter()
+        .map(|finding| {
+            let file = finding
+                .file()
+                .strip_prefix(crate_root)
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|_| finding.file().clone());
+            AntipatternSiteRecord::builder()
+                .rule_id(finding.rule_id())
+                .context(finding.context().clone())
+                .file(file)
+                .line(finding.line())
+                .snippet(finding.snippet().clone())
+                .build()
+        })
+        .collect()
 }
 
 #[instrument(level = "debug")]
@@ -160,14 +170,14 @@ pub(super) fn make_finding(
     file: &Path,
     line: u32,
     normalized: &str,
-) -> AntipatternSiteRecord {
-    AntipatternSiteRecord {
-        rule_id: AntipatternRuleId::UnnamedContractBound001,
-        context,
-        file: file.to_path_buf(),
-        line,
-        snippet: truncate_snippet(normalized, 96),
-    }
+) -> CordialResult<AntipatternSiteRecord> {
+    AntipatternSiteRecord::builder()
+        .rule_id(AntipatternRuleId::UnnamedContractBound001)
+        .context(context)
+        .file(file.to_path_buf())
+        .line(line)
+        .snippet(truncate_snippet(normalized, 96))
+        .build()
 }
 
 /// Scan one Creusot source string (used by tests, mirroring

@@ -12,12 +12,12 @@ use super::InstrumentGap;
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
 pub fn parse_tracing_instrument_checklist(path: &Path) -> CordialResult<Vec<InstrumentGap>> {
     let body = std::fs::read_to_string(path)?;
-    Ok(parse_tracing_instrument_checklist_text(&body))
+    parse_tracing_instrument_checklist_text(&body)
 }
 
 /// Parse checklist markdown already loaded into memory.
-#[instrument(level = "debug")]
-pub fn parse_tracing_instrument_checklist_text(body: &str) -> Vec<InstrumentGap> {
+#[instrument(level = "debug", err(level = "warn"))]
+pub fn parse_tracing_instrument_checklist_text(body: &str) -> CordialResult<Vec<InstrumentGap>> {
     let mut gaps = Vec::new();
     let mut current_crate = String::new();
 
@@ -30,16 +30,18 @@ pub fn parse_tracing_instrument_checklist_text(body: &str) -> Vec<InstrumentGap>
             continue;
         }
         if let Some((qualified_name, rel_path, line_number)) = parse_gap_line(line) {
-            gaps.push(InstrumentGap {
-                crate_name: current_crate.clone(),
-                qualified_name,
-                rel_path: PathBuf::from(rel_path),
-                line: line_number,
-            });
+            gaps.push(
+                InstrumentGap::builder()
+                    .crate_name(current_crate.clone())
+                    .qualified_name(qualified_name)
+                    .rel_path(PathBuf::from(rel_path))
+                    .line(line_number)
+                    .build()?,
+            );
         }
     }
 
-    gaps
+    Ok(gaps)
 }
 
 #[instrument(level = "debug")]
