@@ -69,7 +69,7 @@ pub static VISIBILITY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette
         EtiquetteExplain::new(
             "Do pub mod paths earn their existence?",
             "pub mod is a promise of a public path. A thin module or a pub child of a private parent splits crate-internal navigation without buying a real API.",
-            "A small crate stays flat; a visible module needs enough leaf names; a child's visibility must not exceed its parent. Pub fields stay in derives. Thresholds: [visibility] in cordial.toml. prefer_root (default true) keeps a fat root when flattening would overflow the crate-name cap.",
+            "A small crate stays flat; a visible module needs enough leaf names; a child's visibility must not exceed its parent. Pub fields stay in derives. Thresholds: [visibility] in cordial.toml. prefer_root (default true) keeps a fat root when flattening would overflow the crate-name cap. mod_thin_skip = { <crate> = [\"<module::path>\"] } exempts a deliberately narrow module from VIS-MOD-THIN-001 specifically, leaving every other visibility rule in force for it.",
             "`[visibility] enabled = false` in cordial.toml.",
             &[
                 EtiquetteRuleExplain::new("VIS-CRATE-FLAT-001", "Small crate should stay flat"),

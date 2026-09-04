@@ -208,6 +208,60 @@ min_module_names = 10
     Ok(())
 }
 
+/// A `[visibility] mod_thin_skip` entry exempts only the named module
+/// (and its subtree) from `VIS-MOD-THIN-001` -- a sibling module with
+/// the identical shape (one name, below the default floor of 10) is
+/// still flagged, proving this is a scoped, per-module config exclusion
+/// and not an accidental global floor change.
+#[test]
+fn mod_thin_skip_config_exempts_only_the_named_module() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    write_crate(
+        fixture.path(),
+        "pub mod gallery;\npub mod other;\npub fn root_item() {}\n",
+        &[
+            ("gallery.rs", "pub fn one_case() {}\n"),
+            ("other.rs", "pub fn one_thing() {}\n"),
+        ],
+    )?;
+    let slug = cordial::project_slug_from_path(fixture.path());
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        format!("\n[visibility]\nmod_thin_skip = {{ \"{slug}\" = [\"gallery\"] }}\n"),
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&VISIBILITY_ETIQUETTE)
+        .build();
+    session.run(&RunAll).into_diagnostic().wrap_err("run")?;
+
+    let checklist = fs::read_to_string(store.path().join("findings/visibility.checklist.md"))
+        .into_diagnostic()
+        .wrap_err("checklist")?;
+    assert!(
+        !checklist.contains("`crate::gallery` — `VIS-MOD-THIN-001`"),
+        "mod_thin_skip must exempt crate::gallery from VIS-MOD-THIN-001 \
+         specifically: {checklist}"
+    );
+    assert!(
+        checklist.contains("`crate::gallery` — `VIS-CRATE-FLAT-001`"),
+        "the skip is scoped to VIS-MOD-THIN-001 only -- gallery's other \
+         visibility findings still apply: {checklist}"
+    );
+    assert!(
+        checklist.contains("`crate::other` — `VIS-MOD-THIN-001`"),
+        "the identically-shaped, unconfigured sibling must still be \
+         flagged -- the skip is scoped per module, not a global floor \
+         change: {checklist}"
+    );
+    Ok(())
+}
+
 fn pub_fns(prefix: &str, n: usize) -> String {
     (0..n)
         .map(|i| format!("pub fn {prefix}_{i}() {{}}\n"))
@@ -299,13 +353,13 @@ fn branching_cache_reuses_floor_until_sources_change() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_thin_overflow_crate(fixture.path(), 40)?;
     let thresholds = VisibilityThresholds::default().with_prefer_root(false);
-    let (first, cache) = scan_crate_visibility_with_cache(fixture.path(), thresholds, None)
+    let (first, cache) = scan_crate_visibility_with_cache(fixture.path(), thresholds.clone(), None)
         .into_diagnostic()
         .wrap_err("scan")?;
     let cache = cache.ok_or_else(|| miette::miette!("branching writes a cache"))?;
     assert_eq!(cache.floor(), 7);
     let (second, reused) =
-        scan_crate_visibility_with_cache(fixture.path(), thresholds, Some(cache.clone()))
+        scan_crate_visibility_with_cache(fixture.path(), thresholds.clone(), Some(cache.clone()))
             .into_diagnostic()
             .wrap_err("cached scan")?;
     let reused = reused.ok_or_else(|| miette::miette!("cache hit"))?;

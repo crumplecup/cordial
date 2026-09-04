@@ -82,7 +82,7 @@ pub fn scan_crate_visibility_with_cache(
         true,
         true,
     )?;
-    let (eval, new_cache) = resolve_eval(&root, thresholds, cached);
+    let (eval, new_cache) = resolve_eval(&root, thresholds.clone(), cached);
     Ok((collect_findings(&root, thresholds, eval)?, new_cache))
 }
 

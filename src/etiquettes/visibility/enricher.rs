@@ -6,6 +6,8 @@ use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 
 use super::scan::{BranchingCache, scan_crate_visibility_with_cache};
+use super::types::VisibilityRuleId;
+use crate::config::VisibilityThresholds;
 
 use tracing::instrument;
 /// Materializes visibility-path nodes in the IR graph.
@@ -33,7 +35,9 @@ impl IrEnricher for VisibilityInventoryEnricher {
         };
 
         let crate_root = member_crate_root(source, session);
-        let thresholds = *crate::config::load_session_config(session).visibility();
+        let thresholds = crate::config::load_session_config(session)
+            .visibility()
+            .clone();
         let cache_path = session
             .store_root()
             .join("cache")
@@ -44,12 +48,17 @@ impl IrEnricher for VisibilityInventoryEnricher {
             BranchingCache::load(&cache_path)
         };
         let (records, new_cache) =
-            scan_crate_visibility_with_cache(&crate_root, thresholds, cached)?;
+            scan_crate_visibility_with_cache(&crate_root, thresholds.clone(), cached)?;
         if let Some(cache) = new_cache {
             cache.write(&cache_path)?;
         }
 
         for record in records {
+            if record.rule_id() == VisibilityRuleId::ModThin001
+                && mod_thin_skip_matches(&thresholds, ir.crate_name(), record.module_path())
+            {
+                continue;
+            }
             let file = if record.file().is_absolute() {
                 record.file().clone()
             } else {
@@ -101,4 +110,23 @@ impl IrEnricher for VisibilityInventoryEnricher {
 
         Ok(())
     }
+}
+
+/// Whether `module_path` (a record's own `crate::...` path) falls under
+/// one of `crate_name`'s configured [`VisibilityThresholds::mod_thin_skip`]
+/// prefixes -- an exact match, or nested under it (`path` matches both
+/// `crate::gallery` and `crate::gallery::ensures_contract_bound`).
+#[instrument(level = "trace", skip(thresholds), ret)]
+fn mod_thin_skip_matches(
+    thresholds: &VisibilityThresholds,
+    crate_name: &str,
+    module_path: &str,
+) -> bool {
+    let Some(prefixes) = thresholds.mod_thin_skip().get(crate_name) else {
+        return false;
+    };
+    prefixes.iter().any(|prefix| {
+        let full = format!("crate::{prefix}");
+        module_path == full || module_path.starts_with(&format!("{full}::"))
+    })
 }

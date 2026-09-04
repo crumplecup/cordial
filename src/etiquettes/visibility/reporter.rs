@@ -129,7 +129,12 @@ impl Reporter for VisibilityChecklistReporter {
         body.push_str(
             "A visible module must earn its path: a small crate stays flat (`mod` + root \
              `pub use`); a `pub`/`pub(crate)` module needs enough leaf names; a child's \
-             vis must not exceed its parent (`pub mod` under a private parent is a hole).\n\n",
+             vis must not exceed its parent (`pub mod` under a private parent is a hole). \
+             A deliberately narrow, single-concept module that will never carry enough \
+             names on purpose (e.g. a gallery investigation case, one Verus finding per \
+             file) can be exempted from `VIS-MOD-THIN-001` specifically via \
+             `[visibility] mod_thin_skip = { <crate> = [\"<module::path>\"] }` in \
+             cordial.toml -- every other visibility rule still applies to it.\n\n",
         );
         if !open.is_empty() {
             for crate_name in crate_names(&open) {
