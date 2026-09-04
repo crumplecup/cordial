@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use cordial::{
     CoverageSkipEntry, ExceptionEntry, PANICS_ETIQUETTE, RunAll, Session, SessionBuilder,
-    StoreLayout, add_coverage_skip, add_exception, backup_exception_files, coverage_skip_file_path,
-    exception_file_path, load_exception_files, resolve_exceptions_root,
+    StoreLayout, VISIBILITY_ETIQUETTE, add_coverage_skip, add_exception, backup_exception_files,
+    coverage_skip_file_path, exception_file_path, load_exception_files, resolve_exceptions_root,
 };
 
 #[test]
@@ -71,6 +71,78 @@ fn exception_patch_suppresses_matching_panic_finding() -> miette::Result<()> {
         .wrap_err("checklist")?;
     assert!(checklist.contains("**Open items:** 1"));
     assert!(checklist.contains("Documented exceptions"));
+    Ok(())
+}
+
+/// Regression test for a real bug: `VisibilityFinding::emit` only emitted
+/// `module_path`, never `context` -- the field name every other
+/// etiquette's own `Finding::emit` uses for exactly this match. Since
+/// `ExceptionEntry::matches` looks up `context` by that literal name, a
+/// `--context`-scoped exception could never match a visibility finding at
+/// all before the fix, even a `file` + `rule_id`-correct one.
+#[test]
+fn exception_patch_with_context_suppresses_matching_visibility_finding() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        "pub mod widgets;\npub fn root_item() {}\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write lib.rs")?;
+    fs::write(
+        fixture.path().join("src/widgets.rs"),
+        "pub fn widget() {}\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write widgets.rs")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let slug = cordial::project_slug_from_path(fixture.path());
+    let exceptions_dir = store.path().join("exceptions").join("visibility");
+    fs::create_dir_all(&exceptions_dir)
+        .into_diagnostic()
+        .wrap_err("exceptions dir")?;
+    fs::write(
+        exceptions_dir.join(format!("{slug}.json")),
+        r#"[
+  {
+    "file": "src/widgets.rs",
+    "rule_id": "VIS-MOD-THIN-001",
+    "context": "crate::widgets",
+    "reason": "Demo: context-scoped visibility exception"
+  }
+]"#,
+    )
+    .into_diagnostic()
+    .wrap_err("write exception patch")?;
+
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&VISIBILITY_ETIQUETTE)
+        .build();
+
+    let outcome = session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+    let dispositions: Vec<_> = outcome
+        .findings()
+        .filter(|f| f.rule().id() == "VIS-MOD-THIN-001")
+        .map(|f| f.disposition())
+        .collect();
+    assert_eq!(dispositions.len(), 1, "{dispositions:?}");
+    assert_eq!(
+        dispositions[0],
+        cordial::Disposition::Suppressed,
+        "a context-scoped exception naming crate::widgets must match its \
+         own VIS-MOD-THIN-001 finding: {dispositions:?}"
+    );
     Ok(())
 }
 

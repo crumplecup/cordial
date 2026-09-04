@@ -53,8 +53,8 @@ derive_setters = "0.1"
 [features]
 default = ["full"]
 # Quality plugins (syn scans of source).
-panics = []
-tracing = []
+panics = ["dep:quote"]
+tracing = ["derives"]
 cli = ["dep:clap", "dep:miette", "tracing"]
 allows = []
 modularity = []
@@ -66,7 +66,7 @@ foreign_error_types = ["error_sites"]
 foreign_error_attenuation = ["foreign_error_types", "error_chain"]
 antipatterns = ["dep:toml", "dep:quote"]
 cfg_scatter = []
-cfg_hygiene = ["dep:toml"]
+cfg_hygiene = ["dep:toml", "dep:quote"]
 visibility = []
 cli_layout = []
 crate_attrs = ["dep:toml"]
@@ -260,7 +260,7 @@ required-features = ["quality"]
 
 [[test]]
 name = "exceptions"
-required-features = ["panics"]
+required-features = ["panics", "visibility"]
 
 [[test]]
 name = "quality_report"

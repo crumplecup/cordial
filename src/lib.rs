@@ -231,7 +231,8 @@ pub use digest::{
     feature = "inline_tests",
     feature = "verus_warnings",
     feature = "proof_patterns",
-    feature = "pageantry"
+    feature = "pageantry",
+    feature = "cfg_hygiene"
 ))]
 pub use enricher::AttributeEnricher;
 pub use enricher::ScopeEnricher;

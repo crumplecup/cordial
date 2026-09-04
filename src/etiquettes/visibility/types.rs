@@ -149,6 +149,7 @@ impl Finding for VisibilityFinding {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id);
         sink.field("module_path", &self.module_path);
+        sink.field("context", &self.module_path);
         sink.field("file", &self.span.file().display().to_string());
         sink.field("line", &self.span.line().to_string());
         sink.field("name_count", &self.name_count.to_string());

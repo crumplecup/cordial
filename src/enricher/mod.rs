@@ -18,7 +18,10 @@ use tracing::instrument;
     feature = "doc_warnings",
     feature = "glob_imports",
     feature = "inline_tests",
-    feature = "verus_warnings"
+    feature = "verus_warnings",
+    feature = "proof_patterns",
+    feature = "pageantry",
+    feature = "cfg_hygiene"
 ))]
 mod attribute;
 #[cfg(feature = "error_sites")]
@@ -61,7 +64,10 @@ mod wrapper_coverage;
     feature = "doc_warnings",
     feature = "glob_imports",
     feature = "inline_tests",
-    feature = "verus_warnings"
+    feature = "verus_warnings",
+    feature = "proof_patterns",
+    feature = "pageantry",
+    feature = "cfg_hygiene"
 ))]
 pub use attribute::AttributeEnricher;
 #[cfg(any(
@@ -83,7 +89,10 @@ pub use attribute::AttributeEnricher;
     feature = "doc_warnings",
     feature = "glob_imports",
     feature = "inline_tests",
-    feature = "verus_warnings"
+    feature = "verus_warnings",
+    feature = "proof_patterns",
+    feature = "pageantry",
+    feature = "cfg_hygiene"
 ))]
 pub(crate) use attribute::{
     is_cfg_test, is_gated_instrument_attr, is_instrument_attr, member_crate_root, resolve_parent,
