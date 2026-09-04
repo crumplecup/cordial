@@ -327,3 +327,64 @@ fn branching_cache_reuses_floor_until_sources_change() -> miette::Result<()> {
     );
     Ok(())
 }
+
+/// `n` `pub fn`s wrapped in a real `verus! { .. }` invocation -- plain
+/// `syn` sees one opaque macro call and none of these names; only the
+/// `verus_syn`-based count `crate::verus_ir::count_verus_item_names`
+/// feeds into `ModuleNode::leaf_pub` can see them.
+#[cfg(feature = "verus_ir")]
+fn verus_fns(prefix: &str, n: usize) -> String {
+    let mut body = String::from("use verus_builtin_macros::verus;\n\nverus! {\n\n");
+    for i in 0..n {
+        body.push_str(&format!("pub fn {prefix}_{i}() {{}}\n"));
+    }
+    body.push_str("\n} // verus!\n");
+    body
+}
+
+#[cfg(feature = "verus_ir")]
+#[test]
+fn verus_macro_body_names_clear_the_thin_floor() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    write_crate(
+        fixture.path(),
+        "pub mod carrier;\n",
+        &[("carrier.rs", &verus_fns("verify", 10))],
+    )?;
+
+    let thresholds = VisibilityThresholds::default();
+    let records = scan_crate_visibility(fixture.path(), thresholds)
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    assert!(
+        thin_paths(&records).is_empty(),
+        "10 real pub fns inside verus! {{}} clear the floor of 10, even \
+         though plain syn sees zero of them: {records:?}"
+    );
+    Ok(())
+}
+
+#[cfg(feature = "verus_ir")]
+#[test]
+fn verus_macro_body_below_floor_still_flags_thin() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    write_crate(
+        fixture.path(),
+        "pub mod carrier;\n",
+        &[("carrier.rs", &verus_fns("verify", 3))],
+    )?;
+
+    let thresholds = VisibilityThresholds::default();
+    let records = scan_crate_visibility(fixture.path(), thresholds)
+        .into_diagnostic()
+        .wrap_err("scan")?;
+    assert!(
+        thin_paths(&records).contains(&"crate::carrier"),
+        "3 real pub fns inside verus! {{}} is still below the floor of \
+         10 -- the fix must count real names honestly, not swallow the \
+         finding just because it found some: {records:?}"
+    );
+    Ok(())
+}

@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
-use syn::{Attribute, Item, ItemMod};
+use syn::{Attribute, Item, ItemMacro, ItemMod};
 
 use crate::error::CordialResult;
 
@@ -98,6 +98,11 @@ fn scan_items(items: &[Item], header: ScanHeader<'_>) -> CordialResult<ModuleNod
                     child_line,
                 )?;
                 children.push(child);
+            }
+            Item::Macro(item_macro) => {
+                let (n_pub, n_crate) = verus_macro_leaf_names(item_macro);
+                leaf_pub += n_pub;
+                leaf_crate += n_crate;
             }
             _ => {
                 let vis = item_vis(item);
@@ -242,6 +247,31 @@ pub(super) fn external_name_count(node: &ModuleNode) -> usize {
         }
     }
     n
+}
+
+/// `(pub_names, pub_crate_names)` found inside `item_macro`, if it's a
+/// `verus! { .. }` invocation -- `(0, 0)` for any other macro, and
+/// (without the `verus_ir` feature) for `verus!` too, matching this
+/// scanner's existing best-effort posture: a missed name only risks
+/// under-counting a module's real leaf-name total, never a false thin-
+/// module report. `syn::visit::Visit` never descends into a macro's own
+/// token stream, and Verus's grammar extensions (`spec fn`/`open`/
+/// `closed`/`requires`/`ensures`) aren't parseable by plain `syn` even if
+/// something did -- see `crate::verus_ir::count_verus_item_names`'s own
+/// doc comment for the real `verus_syn`-based parse this delegates to.
+#[cfg(feature = "verus_ir")]
+#[instrument(level = "debug", skip(item_macro))]
+fn verus_macro_leaf_names(item_macro: &ItemMacro) -> (usize, usize) {
+    if !item_macro.mac.path.is_ident("verus") {
+        return (0, 0);
+    }
+    crate::verus_ir::count_verus_item_names(item_macro.mac.tokens.clone())
+}
+
+#[cfg(not(feature = "verus_ir"))]
+#[instrument(level = "debug", skip(_item_macro))]
+fn verus_macro_leaf_names(_item_macro: &ItemMacro) -> (usize, usize) {
+    (0, 0)
 }
 
 #[instrument(level = "debug", skip(node))]

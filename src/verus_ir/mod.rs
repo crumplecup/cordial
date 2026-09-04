@@ -39,6 +39,8 @@ pub use types::{
     VerusPanicSite, VerusPublish,
 };
 
+pub(crate) use parse::count_verus_item_names;
+
 use std::path::Path;
 
 use tracing::instrument;

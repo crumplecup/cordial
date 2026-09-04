@@ -398,7 +398,11 @@ pub(super) fn self_type_key(ty: &Type) -> String {
         }
         Type::Slice(slice) => format!("[{}]", self_type_key(&slice.elem)),
         Type::Array(array) => {
-            format!("[{}; {}]", self_type_key(&array.elem), const_arg_label(&array.len))
+            format!(
+                "[{}; {}]",
+                self_type_key(&array.elem),
+                const_arg_label(&array.len)
+            )
         }
         Type::Paren(paren) => self_type_key(&paren.elem),
         Type::Group(group) => self_type_key(&group.elem),
@@ -413,10 +417,14 @@ pub(super) fn self_type_key(ty: &Type) -> String {
 #[instrument(level = "trace", skip(expr))]
 fn const_arg_label(expr: &syn::Expr) -> String {
     match expr {
-        syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Int(int), .. }) => {
-            int.base10_digits().to_string()
-        }
-        syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Bool(b), .. }) => b.value.to_string(),
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(int),
+            ..
+        }) => int.base10_digits().to_string(),
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Bool(b),
+            ..
+        }) => b.value.to_string(),
         syn::Expr::Path(path) => syn_path_label(&path.path),
         _ => "_".to_string(),
     }
