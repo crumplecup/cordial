@@ -135,7 +135,7 @@ The built-in etiquettes are easiest to understand by standard:
 | API shape | `visibility`, `derives`, `pageantry`, `glob_imports` |
 | Structure | `modularity`, `inline_tests`, `cli_layout` |
 | Conditional code | `cfg_scatter`, `cfg_hygiene` |
-| Proof hygiene | `verus_warnings`, `proof_patterns`, contract-bound rules in `antipatterns` |
+| Proof hygiene | `verus_warnings`, `creusot_diagnostics`, `proof_patterns`, contract-bound rules in `antipatterns` |
 | Coverage | `impl-coverage`, `trenchcoat`, `shadow`, `homecoming-std`, `amenable-std` |
 
 Read [Built-in etiquettes](built-in-etiquettes.md) for the tour. Each etiquette

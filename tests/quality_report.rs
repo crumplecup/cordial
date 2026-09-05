@@ -5,7 +5,7 @@ use miette::{IntoDiagnostic, WrapErr};
 fn quality_report_lists_resolution_order() -> miette::Result<()> {
     cordial::init_tracing();
     let report = build_quality_report(&[]).into_diagnostic()?;
-    assert_eq!(report.areas.len(), 18);
+    assert_eq!(report.areas.len(), 19);
     assert_eq!(report.areas[0].title, "Error handling");
     assert_eq!(report.areas[1].title, "Tracing instrumentation");
     assert_eq!(report.areas[2].title, "Allow attributes");
@@ -22,8 +22,9 @@ fn quality_report_lists_resolution_order() -> miette::Result<()> {
     assert_eq!(report.areas[13].title, "Glob imports");
     assert_eq!(report.areas[14].title, "Inline tests");
     assert_eq!(report.areas[15].title, "Verus compiler warnings");
-    assert_eq!(report.areas[16].title, "Proof patterns");
-    assert_eq!(report.areas[17].title, "Pageantry");
+    assert_eq!(report.areas[16].title, "Creusot diagnostics");
+    assert_eq!(report.areas[17].title, "Proof patterns");
+    assert_eq!(report.areas[18].title, "Pageantry");
 
     let body = cordial::render_quality_report_markdown(&report).into_diagnostic()?;
     assert!(body.contains("## Resolution order"));
@@ -37,6 +38,7 @@ fn quality_report_lists_resolution_order() -> miette::Result<()> {
     assert!(body.contains("cli-layout.checklist.md"));
     assert!(body.contains("crate-attrs.checklist.md"));
     assert!(body.contains("doc-warnings.checklist.md"));
+    assert!(body.contains("creusot-diagnostics.checklist.md"));
 
     let summary = cordial::render_quality_workspace_summary_markdown(&report).into_diagnostic()?;
     assert!(summary.contains("# Quality workspace summary"));

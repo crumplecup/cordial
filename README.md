@@ -5,10 +5,9 @@
 **Polite standards for code development.**
 
 `cordial` is a plugin framework for local, regeneratable reports about whether a
-codebase follows the etiquettes you care about. It refines
-[`elicit_doc`](https://github.com/crumplecup/elicit_doc) with a trait-based
-architecture: loaders, enrichers, probes, assessors, and reporters hook into a
-shared graph IR so users can register custom lints without forking the tool.
+codebase follows the etiquettes you care about. Its trait-based architecture
+lets loaders, enrichers, probes, assessors, and reporters hook into a shared
+graph IR so users can register custom lints without forking the tool.
 
 Each **etiquette** is one polite standard. Quality etiquettes scan source.
 Coverage etiquettes need rustdoc JSON. Artifacts land under
@@ -51,7 +50,7 @@ the same What / Why / Flags / Ignores / Outputs / Config shape.
 | API shape | `visibility`, `derives`, `pageantry`, `glob_imports` |
 | Structure | `modularity`, `inline_tests`, `cli_layout` |
 | Conditional code | `cfg_scatter`, `cfg_hygiene` |
-| Proof hygiene | `verus_warnings`, `proof_patterns`, contract-bound rules in `antipatterns` |
+| Proof hygiene | `verus_warnings`, `creusot_diagnostics`, `proof_patterns`, contract-bound rules in `antipatterns` |
 | Coverage | `impl-coverage`, `trenchcoat`, `shadow`, `homecoming-std`, `amenable-std` |
 
 Run `cordial explain <id-or-rule-id>` for the compiled explanation of any
@@ -77,11 +76,10 @@ See [Writing etiquettes](docs/writing-etiquettes.md),
 
 ## Status
 
-Documentation is being rebuilt from the code outward. The active documentation
-plan is [Documentation overhaul](docs/planning/documentation-overhaul.md).
-Output parity with `elicit_doc` is retired; see
-[elicit_doc parity](docs/planning/elicit-doc-parity.md) for the historical
-record.
+The documentation is organized from code contracts outward: extension traits,
+module docs, built-in etiquette tours, runtime usage, and planning history. The
+completed overhaul is tracked in
+[Documentation overhaul](docs/planning/documentation-overhaul.md).
 
 ## License
 

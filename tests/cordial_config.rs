@@ -314,6 +314,35 @@ skip_crates = ["proc_helper"]
 }
 
 #[test]
+fn creusot_diagnostics_toml_overrides_default() -> miette::Result<()> {
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store home")?;
+    fs::write(
+        workspace.path().join("cordial.toml"),
+        r#"
+[creusot_diagnostics]
+skip_crates = ["slow_proof"]
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("workspace config")?;
+
+    let loaded = load_cordial_config(workspace.path(), store_home.path());
+    let creusot_diagnostics = loaded.creusot_diagnostics();
+    assert_eq!(
+        creusot_diagnostics.skip_crates(),
+        &["slow_proof".to_string()]
+    );
+    assert!(creusot_diagnostics.enabled());
+    Ok(())
+}
+
+#[test]
 fn enabled_false_turns_the_etiquette_off() -> miette::Result<()> {
     cordial::init_tracing();
     let workspace = tempfile::tempdir()
@@ -328,6 +357,9 @@ fn enabled_false_turns_the_etiquette_off() -> miette::Result<()> {
 [doc_warnings]
 enabled = false
 
+[creusot_diagnostics]
+enabled = false
+
 [panics]
 enabled = false
 
@@ -340,6 +372,7 @@ enabled = false
 
     let loaded = load_cordial_config(workspace.path(), store_home.path());
     assert!(!loaded.etiquette_enabled("doc_warnings"));
+    assert!(!loaded.etiquette_enabled("creusot_diagnostics"));
     assert!(!loaded.etiquette_enabled("panics"));
     assert!(!loaded.etiquette_enabled("impl-coverage"));
     assert!(loaded.etiquette_enabled("tracing"));

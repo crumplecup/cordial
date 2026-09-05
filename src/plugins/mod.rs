@@ -230,7 +230,7 @@ pub fn coverage_only_plugins() -> Vec<&'static dyn Plugin> {
 /// Static quality plugins wrapping each enabled etiquette.
 #[instrument(level = "debug")]
 fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
-    let items: [Option<&'static EtiquettePlugin>; 16] = [
+    let items: [Option<&'static EtiquettePlugin>; 17] = [
         #[cfg(feature = "tracing")]
         Some(tracing_plugin()),
         #[cfg(not(feature = "tracing"))]
@@ -286,6 +286,10 @@ fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
         #[cfg(feature = "verus_warnings")]
         Some(verus_warnings_plugin()),
         #[cfg(not(feature = "verus_warnings"))]
+        None,
+        #[cfg(feature = "creusot_diagnostics")]
+        Some(creusot_diagnostics_plugin()),
+        #[cfg(not(feature = "creusot_diagnostics"))]
         None,
         #[cfg(feature = "proof_patterns")]
         Some(proof_patterns_plugin()),
@@ -374,6 +378,11 @@ etiquette_plugin_fn!(
 etiquette_plugin_fn!(
     verus_warnings_plugin,
     &crate::etiquettes::verus_warnings::VERUS_WARNINGS_ETIQUETTE
+);
+#[cfg(feature = "creusot_diagnostics")]
+etiquette_plugin_fn!(
+    creusot_diagnostics_plugin,
+    &crate::etiquettes::creusot_diagnostics::CREUSOT_DIAGNOSTICS_ETIQUETTE
 );
 #[cfg(feature = "proof_patterns")]
 etiquette_plugin_fn!(

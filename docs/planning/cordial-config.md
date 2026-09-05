@@ -121,5 +121,12 @@ for the file-size and module-size checks), cfg_scatter, derives
 and `[tracing.stdio]`),
 crate_attrs (`forbid_unsafe`, `missing_docs`, `allow_unsafe`,
 `allow_missing_docs`), and doc_warnings (`document_private_items`,
-`all_features`, `skip_crates`) read through `load_session_config`.
+`all_features`, `skip_crates`), and creusot_diagnostics (`skip_crates`)
+read through `load_session_config`.
 Role→level maps stay in code.
+
+```toml
+[creusot_diagnostics]
+enabled = true
+skip_crates = ["legacy_creusot"]
+```

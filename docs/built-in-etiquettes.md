@@ -110,6 +110,7 @@ shortcuts are not invisible just because ordinary Rust tooling accepts them.
 | Etiquette | Enforces | Main rule ids |
 | --- | --- | --- |
 | `verus_warnings` | Warnings from the Verus rustc fork are captured separately from ordinary rustc output. | `VERUS-WARNING-001` |
+| `creusot_diagnostics` | `cargo creusot prove` warnings and verifier failures are captured when Creusot crates are present. | `CREUSOT-DIAGNOSTIC-001`, `CREUSOT-DIAGNOSTIC-002` |
 | `proof_patterns` | Trusted Verus forms and implicit broadcast dependencies are inventoried. | `PROOF-PATTERN-ASSUME`, `PROOF-PATTERN-ADMIT`, `PROOF-PATTERN-EXTERNAL-BODY`, `PROOF-PATTERN-UNINTERP`, `PROOF-PATTERN-AXIOM`, `PROOF-PATTERN-BROADCAST` |
 | `antipatterns` | Verifier contract bounds must be named where the supported shape requires it. | `ANTIPATTERN-UNNAMED-CONTRACT-BOUND-001` |
 

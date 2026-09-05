@@ -29,6 +29,8 @@ pub struct CordialConfig {
     #[serde(default)]
     doc_warnings: DocWarningsThresholds,
     #[serde(default)]
+    creusot_diagnostics: CreusotDiagnosticsThresholds,
+    #[serde(default)]
     tracing: TracingThresholds,
     #[serde(default)]
     derives: DerivesThresholds,
@@ -105,6 +107,7 @@ impl CordialConfig {
             "cfg_hygiene" => self.cfg_hygiene.enabled,
             "crate_attrs" => self.crate_attrs.enabled,
             "doc_warnings" => self.doc_warnings.enabled,
+            "creusot_diagnostics" => self.creusot_diagnostics.enabled,
             "tracing" => self.tracing.enabled,
             "derives" => self.derives.enabled,
             "panics" => self.panics.enabled,
@@ -697,6 +700,36 @@ impl Default for DocWarningsThresholds {
 
 impl DocWarningsThresholds {
     /// Whether this package should not run `cargo doc`.
+    #[instrument(level = "debug", skip(self))]
+    pub fn skip(&self, crate_name: &str) -> bool {
+        self.skip_crates.iter().any(|name| name == crate_name)
+    }
+}
+
+/// `cargo creusot prove` diagnostic etiquette knobs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub struct CreusotDiagnosticsThresholds {
+    /// Package names that skip the `cargo creusot prove` invocation.
+    #[serde(default)]
+    skip_crates: Vec<String>,
+    /// Run this etiquette (`true`) or skip it (`false`).
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    enabled: bool,
+}
+
+impl Default for CreusotDiagnosticsThresholds {
+    #[instrument(level = "debug", ret)]
+    fn default() -> Self {
+        Self {
+            skip_crates: Vec::new(),
+            enabled: true,
+        }
+    }
+}
+
+impl CreusotDiagnosticsThresholds {
+    /// Whether this package should not run `cargo creusot prove`.
     #[instrument(level = "debug", skip(self))]
     pub fn skip(&self, crate_name: &str) -> bool {
         self.skip_crates.iter().any(|name| name == crate_name)

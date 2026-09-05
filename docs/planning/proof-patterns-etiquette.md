@@ -9,11 +9,11 @@ This etiquette surfaces that signal the same way `panics` surfaces abort
 sites — one open finding per site, until someone reads and dispositions
 it.
 
-Complements [verus_warnings](verus-warnings-etiquette.md) (the *other*
-compiler's diagnostics) and [panics](../../src/etiquettes/panics/mod.rs)
-(abort sites, including inside `verus!` blocks). This etiquette is about
-what a `verus!` function's own signature and body say about how much of
-its claim is actually checked.
+Complements [verus_warnings](verus-warnings-etiquette.md),
+[creusot_diagnostics](creusot-diagnostics-etiquette.md), and
+[panics](../../src/etiquettes/panics/mod.rs) (abort sites, including inside
+`verus!` blocks). This etiquette is about what a `verus!` function's own
+signature and body say about how much of its claim is actually checked.
 
 ---
 

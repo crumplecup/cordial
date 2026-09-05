@@ -37,6 +37,7 @@
 //! | `glob_imports` | `glob_imports` | Are there glob `use` trees (`foo::*`, including `super::*`)? |
 //! | `inline_tests` | `inline_tests` | Are tests mixed into `src/` instead of `tests/`? |
 //! | `verus_warnings` | `verus_warnings` | Does the Verus rustc fork emit warnings this crate's rustc never sees? |
+//! | `creusot_diagnostics` | `creusot_diagnostics` | Does `cargo creusot prove` emit warnings or verification failures? |
 //! | `proof_patterns` | `proof_patterns` | Which `verus!` functions are trusted rather than proven, or apply themselves invisibly (`broadcast`)? |
 //! | `pageantry` | `pageantry` | Are traits defined in a leading block just below the import / `mod` header? |
 //!
@@ -65,6 +66,8 @@ pub(crate) mod cfg_scatter;
 pub(crate) mod cli_layout;
 #[cfg(feature = "crate_attrs")]
 pub(crate) mod crate_attrs;
+#[cfg(feature = "creusot_diagnostics")]
+pub(crate) mod creusot_diagnostics;
 #[cfg(feature = "derives")]
 pub(crate) mod derives;
 #[cfg(feature = "doc_warnings")]
@@ -122,7 +125,7 @@ pub(crate) mod trenchcoat;
 /// `docs/planning/quality-report-feeder-trait.md`).
 #[::tracing::instrument(level = "debug")]
 fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::QualityEtiquette> {
-    let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 22] = [
+    let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 23] = [
         #[cfg(feature = "panics")]
         Some(&panics::PANICS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "panics"))]
@@ -211,6 +214,13 @@ fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::QualityEtiq
         #[cfg(feature = "verus_warnings")]
         Some(&verus_warnings::VERUS_WARNINGS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "verus_warnings"))]
+        None,
+        #[cfg(feature = "creusot_diagnostics")]
+        Some(
+            &creusot_diagnostics::CREUSOT_DIAGNOSTICS_ETIQUETTE
+                as &dyn crate::etiquette::QualityEtiquette,
+        ),
+        #[cfg(not(feature = "creusot_diagnostics"))]
         None,
         #[cfg(feature = "proof_patterns")]
         Some(&proof_patterns::PROOF_PATTERNS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),

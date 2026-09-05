@@ -1,0 +1,14 @@
+warning: unused variable: `ghost`
+   --> src/lib.rs:12:9
+    |
+12  |     let ghost = 1;
+    |         ^^^^^
+
+error: postcondition might not hold
+   --> src/lib.rs:20:5
+    |
+20  |     ensures(result > 0)
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: 1 warning emitted
+error: 1 error emitted

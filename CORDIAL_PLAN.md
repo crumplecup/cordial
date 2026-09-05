@@ -79,12 +79,13 @@ framework itself.
 | `derives` | Manual builder/getter/setter/new patterns |
 | `allows` | `#[allow(...)]` inventory |
 | `verus_warnings` | Verus rustc-fork compiler warnings ([verus-warnings-etiquette.md](docs/planning/verus-warnings-etiquette.md)) |
+| `creusot_diagnostics` | `cargo creusot prove` warnings and verifier failures ([creusot-diagnostics-etiquette.md](docs/planning/creusot-diagnostics-etiquette.md)) |
 | `modularity` | File/function size, types-per-file, module-size σ, hierarchy lints |
 | `cli_layout` | Clap types and `act` dispatch in the library |
 | `crate_attrs` | Crate-root `#![forbid(unsafe_code)]` / `#![warn(missing_docs)]` ([crate-attrs-etiquette.md](docs/planning/crate-attrs-etiquette.md)) |
 | `doc_warnings` | rustdoc diagnostics from `cargo doc` ([doc-warnings-etiquette.md](docs/planning/doc-warnings-etiquette.md)) |
 | `pageantry` | File-level type arrangement; traits in a leading block ([pageantry-etiquette.md](docs/planning/pageantry-etiquette.md)) |
-| `quality` | All source-quality scanners (panics, tracing, error stack, derives, allows, modularity, antipatterns, cfg_scatter, cfg_hygiene, visibility, cli_layout, crate_attrs, doc_warnings, glob_imports, inline_tests, verus_warnings, pageantry) |
+| `quality` | All source-quality scanners (panics, tracing, error stack, derives, allows, modularity, antipatterns, cfg_scatter, cfg_hygiene, visibility, cli_layout, crate_attrs, doc_warnings, glob_imports, inline_tests, verus_warnings, creusot_diagnostics, proof_patterns, pageantry) |
 | `impl_coverage` | Trait impl coverage (requires `rustdoc`) |
 | `trenchcoat` | Trenchcoat wrapper coverage |
 | `shadow` | Shadow mirror coverage |

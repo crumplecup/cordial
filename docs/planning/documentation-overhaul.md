@@ -54,7 +54,7 @@ The built-ins should be introduced as standards, not alphabetical modules:
 | API shape | `visibility`, `derives`, `pageantry`, `glob_imports` | public paths, boilerplate, trait placement, and imports make contracts easy to see |
 | Structure | `modularity`, `inline_tests`, `cli_layout` | files stay navigable, tests live in `tests/`, CLI parsing dispatches through library code |
 | Conditional code | `cfg_scatter`, `cfg_hygiene` | gates are declared, local to the right verifier, and concentrated at module boundaries |
-| Proof hygiene | `verus_warnings`, `proof_patterns`, contract-bound checks inside `antipatterns` | verifier-only warnings and trusted proof shortcuts are visible |
+| Proof hygiene | `verus_warnings`, `creusot_diagnostics`, `proof_patterns`, contract-bound checks inside `antipatterns` | verifier-only warnings, Creusot prove failures, and trusted proof shortcuts are visible |
 | Coverage | `impl-coverage`, `trenchcoat`, `shadow`, `homecoming-std`, `amenable-std` | trait coverage and adapter completeness are inventory questions, not source lints |
 
 ## Mechanical guardrails

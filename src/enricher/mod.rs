@@ -19,6 +19,7 @@ use tracing::instrument;
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "verus_warnings",
+    feature = "creusot_diagnostics",
     feature = "proof_patterns",
     feature = "pageantry",
     feature = "cfg_hygiene"
@@ -65,6 +66,7 @@ mod wrapper_coverage;
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "verus_warnings",
+    feature = "creusot_diagnostics",
     feature = "proof_patterns",
     feature = "pageantry",
     feature = "cfg_hygiene"
@@ -90,6 +92,7 @@ pub use attribute::AttributeEnricher;
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "verus_warnings",
+    feature = "creusot_diagnostics",
     feature = "proof_patterns",
     feature = "pageantry",
     feature = "cfg_hygiene"
