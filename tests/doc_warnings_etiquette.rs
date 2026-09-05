@@ -26,10 +26,12 @@ fn canary_path() -> PathBuf {
 }
 
 #[test]
-fn parse_canary_keeps_two_unique_rustdoc_warnings() {
+fn parse_canary_keeps_two_unique_rustdoc_warnings() -> miette::Result<()> {
     cordial::init_tracing();
     let crate_root = PathBuf::from("/workspace");
-    let records = parse_doc_compiler_output(CANARY, &crate_root).expect("parse canary");
+    let records = parse_doc_compiler_output(CANARY, &crate_root)
+        .into_diagnostic()
+        .wrap_err("parse canary")?;
     assert_eq!(records.len(), 2, "{records:?}");
     assert!(
         records
@@ -46,10 +48,11 @@ fn parse_canary_keeps_two_unique_rustdoc_warnings() {
             && record.context() == "rustdoc::unescaped_backticks"
             && record.snippet().contains("backtick")
     }));
+    Ok(())
 }
 
 #[test]
-fn parse_drops_rustc_lints_summaries_and_errors_without_rustdoc_code() {
+fn parse_drops_rustc_lints_summaries_and_errors_without_rustdoc_code() -> miette::Result<()> {
     cordial::init_tracing();
     let output = "\
 error: expected `;`
@@ -63,8 +66,11 @@ warning[unused_variables]: unused variable: `x`
 
 warning: 3 warnings emitted
 ";
-    let records = parse_doc_compiler_output(output, &PathBuf::from("/workspace")).expect("parse");
+    let records = parse_doc_compiler_output(output, &PathBuf::from("/workspace"))
+        .into_diagnostic()
+        .wrap_err("parse")?;
     assert!(records.is_empty(), "{records:?}");
+    Ok(())
 }
 
 /// `cargo doc`'s own JSON diagnostics report `file_name` relative to the
@@ -77,14 +83,16 @@ warning: 3 warnings emitted
 /// `crates/member/crates/member/src/lib.rs` -- the real bug this
 /// regresses.
 #[test]
-fn resolves_a_workspace_relative_diagnostic_path_against_the_given_root() {
+fn resolves_a_workspace_relative_diagnostic_path_against_the_given_root() -> miette::Result<()> {
     cordial::init_tracing();
     let output = "\
 warning[rustdoc::broken_intra_doc_links]: unresolved link to `Foo`
  --> crates/member/src/lib.rs:3:11
 ";
     let workspace_root = PathBuf::from("/workspace");
-    let records = parse_doc_compiler_output(output, &workspace_root).expect("parse");
+    let records = parse_doc_compiler_output(output, &workspace_root)
+        .into_diagnostic()
+        .wrap_err("parse")?;
     assert_eq!(records.len(), 1, "{records:?}");
     assert_eq!(
         records[0].file(),
@@ -92,20 +100,24 @@ warning[rustdoc::broken_intra_doc_links]: unresolved link to `Foo`
         "joined once against the given root, not doubled: {:?}",
         records[0].file()
     );
+    Ok(())
 }
 
 #[test]
-fn parse_human_rustdoc_warning() {
+fn parse_human_rustdoc_warning() -> miette::Result<()> {
     cordial::init_tracing();
     let output = "\
 warning[rustdoc::broken_intra_doc_links]: unresolved link to `Foo`
  --> src/lib.rs:12:11
 ";
-    let records = parse_doc_compiler_output(output, &PathBuf::from("/workspace")).expect("parse");
+    let records = parse_doc_compiler_output(output, &PathBuf::from("/workspace"))
+        .into_diagnostic()
+        .wrap_err("parse")?;
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].line(), 12);
     assert_eq!(records[0].context(), "rustdoc::broken_intra_doc_links");
     assert!(records[0].snippet().contains("Foo"));
+    Ok(())
 }
 
 #[test]

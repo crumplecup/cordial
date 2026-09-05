@@ -73,7 +73,7 @@ fn scan_sites_fixture() -> miette::Result<Vec<ErrorSiteScanRow>> {
     scan_error_sites_rust_source(PRESERVED_FIXTURE, &file, fixture.path(), fixture.path())
         .into_diagnostic()
         .wrap_err("scan")
-        .map(|records| {
+        .and_then(|records| {
             records
                 .into_iter()
                 .map(|record| {
@@ -86,7 +86,8 @@ fn scan_sites_fixture() -> miette::Result<Vec<ErrorSiteScanRow>> {
                         .source_snippet(record.source_snippet().clone())
                         .site_snippet(record.site_snippet().clone())
                         .build()
-                        .expect("scan row")
+                        .into_diagnostic()
+                        .wrap_err("scan row")
                 })
                 .collect()
         })
@@ -101,7 +102,7 @@ fn question_mark_record(
     file: &str,
     line: u32,
     source_snippet: &str,
-) -> ForeignErrorTypeRecord {
+) -> miette::Result<ForeignErrorTypeRecord> {
     ForeignErrorTypeRecord::builder()
         .crate_name("example".to_string())
         .foreign_error_type(foreign_error_type.to_string())
@@ -115,7 +116,8 @@ fn question_mark_record(
         .source_snippet(source_snippet.to_string())
         .site_snippet(format!("{source_snippet}?"))
         .build()
-        .expect("foreign type record")
+        .into_diagnostic()
+        .wrap_err("foreign type record")
 }
 
 fn scan_chain_fixture() -> miette::Result<Vec<cordial::ErrorChainRecord>> {
@@ -157,7 +159,7 @@ fn attenuator_pairs_preserved_and_chain_break_sites() -> miette::Result<()> {
 }
 
 #[test]
-fn test_into_diagnostic_is_miette_exemplar_not_pending_infra() {
+fn test_into_diagnostic_is_miette_exemplar_not_pending_infra() -> miette::Result<()> {
     cordial::init_tracing();
     let foreign = ForeignErrorTypeReport::new(
         "example".to_string(),
@@ -168,18 +170,21 @@ fn test_into_diagnostic_is_miette_exemplar_not_pending_infra() {
             "tests/custom_plugins.rs",
             25,
             "std::fs::create_dir_all(…).into_diagnostic(…).wrap_err(…)",
-        )],
+        )?],
     );
-    let report = build_foreign_error_attenuation_report(&foreign, &[]).expect("attenuation report");
+    let report = build_foreign_error_attenuation_report(&foreign, &[])
+        .into_diagnostic()
+        .wrap_err("attenuation report")?;
     assert_eq!(report.findings().len(), 1);
     assert_eq!(
         report.findings()[0].handling_class(),
         ForeignErrorHandlingClass::ChainPreserved
     );
+    Ok(())
 }
 
 #[test]
-fn display_fmt_question_mark_is_exemplar_not_pending_infra() {
+fn display_fmt_question_mark_is_exemplar_not_pending_infra() -> miette::Result<()> {
     cordial::init_tracing();
     let foreign = ForeignErrorTypeReport::new(
         "example".to_string(),
@@ -190,18 +195,21 @@ fn display_fmt_question_mark_is_exemplar_not_pending_infra() {
             "tests/provenance_test.rs",
             71,
             "write!(…)",
-        )],
+        )?],
     );
-    let report = build_foreign_error_attenuation_report(&foreign, &[]).expect("attenuation report");
+    let report = build_foreign_error_attenuation_report(&foreign, &[])
+        .into_diagnostic()
+        .wrap_err("attenuation report")?;
     assert_eq!(report.findings().len(), 1);
     assert_eq!(
         report.findings()[0].handling_class(),
         ForeignErrorHandlingClass::ChainPreserved
     );
+    Ok(())
 }
 
 #[test]
-fn library_into_diagnostic_without_bridge_is_still_pending_infra() {
+fn library_into_diagnostic_without_bridge_is_still_pending_infra() -> miette::Result<()> {
     cordial::init_tracing();
     let foreign = ForeignErrorTypeReport::new(
         "example".to_string(),
@@ -212,13 +220,16 @@ fn library_into_diagnostic_without_bridge_is_still_pending_infra() {
             "src/lib.rs",
             10,
             "std::fs::read_to_string(…).into_diagnostic()",
-        )],
+        )?],
     );
-    let report = build_foreign_error_attenuation_report(&foreign, &[]).expect("attenuation report");
+    let report = build_foreign_error_attenuation_report(&foreign, &[])
+        .into_diagnostic()
+        .wrap_err("attenuation report")?;
     assert_eq!(
         report.findings()[0].handling_class(),
         ForeignErrorHandlingClass::PendingInfrastructure
     );
+    Ok(())
 }
 
 #[test]

@@ -26,17 +26,22 @@ fn contract_record_dump(
     verifier: impl Into<String>,
     kind: impl Into<String>,
     fragment: impl Into<String>,
-) -> ContractRecordDump {
+) -> miette::Result<ContractRecordDump> {
     ContractRecordDump::builder()
         .evidence(evidence.into())
         .verifier(verifier.into())
         .kind(kind.into())
         .fragment(fragment.into())
         .build()
-        .expect("contract record dump")
+        .into_diagnostic()
+        .wrap_err("contract record dump")
 }
 
-fn logic_fn_record(verifier: &str, kind: &str, fn_name: &str) -> ContractRecordDump {
+fn logic_fn_record(
+    verifier: &str,
+    kind: &str,
+    fn_name: &str,
+) -> miette::Result<ContractRecordDump> {
     contract_record_dump(
         format!("fixture::{fn_name}"),
         verifier,
@@ -45,7 +50,7 @@ fn logic_fn_record(verifier: &str, kind: &str, fn_name: &str) -> ContractRecordD
     )
 }
 
-fn kani_type_record(kind: &str, evidence: &str) -> ContractRecordDump {
+fn kani_type_record(kind: &str, evidence: &str) -> miette::Result<ContractRecordDump> {
     contract_record_dump(evidence, "kani", kind, "value >= 0")
 }
 
@@ -79,7 +84,7 @@ struct ShapeCase {
     /// source itself); read this alongside `id` when auditing coverage.
     kind: &'static str,
     source: &'static str,
-    registry: fn() -> Vec<ContractRecordDump>,
+    registry: fn() -> miette::Result<Vec<ContractRecordDump>>,
     /// `false` = the scanner must stay silent (a real, correctly-named
     /// call). `true` = the scanner is expected to flag this shape --
     /// either because it's genuinely a raw/unnamed bound, or because it's
@@ -87,60 +92,60 @@ struct ShapeCase {
     expect_flagged: bool,
 }
 
-fn empty_registry() -> Vec<ContractRecordDump> {
-    Vec::new()
+fn empty_registry() -> miette::Result<Vec<ContractRecordDump>> {
+    Ok(Vec::new())
 }
 
-fn abbreviated_ensures_registry() -> Vec<ContractRecordDump> {
-    vec![contract_record_dump(
+fn abbreviated_ensures_registry() -> miette::Result<Vec<ContractRecordDump>> {
+    Ok(vec![contract_record_dump(
         "amenable_std::rust_std::RustStdStandard<i32>",
         "kani",
         "ensures",
         "value >= 0",
-    )]
+    )?])
 }
 
-fn nested_generic_cell_registry() -> Vec<ContractRecordDump> {
-    vec![contract_record_dump(
+fn nested_generic_cell_registry() -> miette::Result<Vec<ContractRecordDump>> {
+    Ok(vec![contract_record_dump(
         "amenable_std::rust_std::RustStdStandard<Cell<i32>>",
         "kani",
         "ensures",
         "actual == expected",
-    )]
+    )?])
 }
 
-fn nonnegative_ensures_registry() -> Vec<ContractRecordDump> {
-    vec![kani_type_record("ensures", "fixture::NonNegative")]
+fn nonnegative_ensures_registry() -> miette::Result<Vec<ContractRecordDump>> {
+    Ok(vec![kani_type_record("ensures", "fixture::NonNegative")?])
 }
 
-fn write_stores_new_value_registry() -> Vec<ContractRecordDump> {
-    vec![logic_fn_record(
+fn write_stores_new_value_registry() -> miette::Result<Vec<ContractRecordDump>> {
+    Ok(vec![logic_fn_record(
         "verus",
         "ensures",
         "write_stores_new_value",
-    )]
+    )?])
 }
 
-fn value_to_owned_identity_registry() -> Vec<ContractRecordDump> {
-    vec![contract_record_dump(
+fn value_to_owned_identity_registry() -> miette::Result<Vec<ContractRecordDump>> {
+    Ok(vec![contract_record_dump(
         "fixture::value_to_owned_is_identity",
         "verus",
         "ensures",
         "pub open spec fn value_to_owned_is_identity(value: i32) -> bool { to_owned_spec(value) == value }",
-    )]
+    )?])
 }
 
-fn into_i32_identity_registry() -> Vec<ContractRecordDump> {
-    vec![contract_record_dump(
+fn into_i32_identity_registry() -> miette::Result<Vec<ContractRecordDump>> {
+    Ok(vec![contract_record_dump(
         "fixture::into_i32_spec_matches_input",
         "verus",
         "ensures",
         "pub open spec fn into_i32_spec_matches_input(v: i32) -> bool { into_i32_spec(v) == v }",
-    )]
+    )?])
 }
 
-fn i32_and_bool_type_ids_differ_registry() -> Vec<ContractRecordDump> {
-    vec![contract_record_dump(
+fn i32_and_bool_type_ids_differ_registry() -> miette::Result<Vec<ContractRecordDump>> {
+    Ok(vec![contract_record_dump(
         "fixture::i32_and_bool_type_ids_differ",
         "verus",
         "ensures",
@@ -156,35 +161,35 @@ fn i32_and_bool_type_ids_differ_registry() -> Vec<ContractRecordDump> {
         // a compact `::<` fragment string would parse back with the
         // same spacing as the clause and pass even without that fix.
         "open spec fn i32_and_bool_type_ids_differ() -> bool { type_id_spec :: < i32 > () != type_id_spec :: < bool > () }",
-    )]
+    )?])
 }
 
-fn bytes_lifetime_registry() -> Vec<ContractRecordDump> {
-    vec![kani_type_record(
+fn bytes_lifetime_registry() -> miette::Result<Vec<ContractRecordDump>> {
+    Ok(vec![kani_type_record(
         "ensures",
         "amenable_std::rust_std::RustStdStandard<std::str::Bytes<'static>>",
-    )]
+    )?])
 }
 
-fn into_iter_const_generic_registry() -> Vec<ContractRecordDump> {
-    vec![kani_type_record(
+fn into_iter_const_generic_registry() -> miette::Result<Vec<ContractRecordDump>> {
+    Ok(vec![kani_type_record(
         "ensures",
         "amenable_std::rust_std::RustStdStandard<std::array::IntoIter<i32, 3>>",
-    )]
+    )?])
 }
 
-fn pair_like_comma_generic_registry() -> Vec<ContractRecordDump> {
-    vec![kani_type_record(
+fn pair_like_comma_generic_registry() -> miette::Result<Vec<ContractRecordDump>> {
+    Ok(vec![kani_type_record(
         "ensures",
         "amenable_std::rust_std::RustStdStandard<PairLike<i32, i32>>",
-    )]
+    )?])
 }
 
-fn extract_if_trailing_comma_registry() -> Vec<ContractRecordDump> {
-    vec![kani_type_record(
+fn extract_if_trailing_comma_registry() -> miette::Result<Vec<ContractRecordDump>> {
+    Ok(vec![kani_type_record(
         "ensures",
         "amenable_std::rust_std::RustStdStandard<std::collections::linked_list::ExtractIf<'static, i32, fn(&mut i32) -> bool>>",
-    )]
+    )?])
 }
 
 const SHAPE_CASES: &[ShapeCase] = &[
@@ -676,7 +681,7 @@ fn shape_matrix_matches_expected_flags() -> miette::Result<()> {
     let src_root = fixtures_root();
     for case in SHAPE_CASES {
         let path = src_root.join(format!("shape_{}.rs", case.id));
-        let registry = (case.registry)();
+        let registry = (case.registry)()?;
         let scan = match case.verifier {
             Verifier::Kani => scan_kani_contract_bounds_source,
             Verifier::Creusot => scan_creusot_contract_bounds_source,
@@ -708,7 +713,7 @@ fn creusot_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::
     cordial::init_tracing();
     let name = "contract_bounds_creusot.rs";
     let src_root = fixtures_root();
-    let registry = vec![logic_fn_record("creusot", "ensures", "char_roundtrips")];
+    let registry = vec![logic_fn_record("creusot", "ensures", "char_roundtrips")?];
     let findings = scan_creusot_contract_bounds_source(
         &fixture(name)?,
         &src_root.join(name),
@@ -776,7 +781,7 @@ fn verus_named_call_matching_a_registered_fn_name_is_not_flagged() -> miette::Re
     cordial::init_tracing();
     let name = "contract_bounds_verus.rs";
     let src_root = fixtures_root();
-    let registry = vec![logic_fn_record("verus", "ensures", "char_roundtrips")];
+    let registry = vec![logic_fn_record("verus", "ensures", "char_roundtrips")?];
     let findings = scan_verus_contract_bounds_source(
         &fixture(name)?,
         &src_root.join(name),
@@ -829,7 +834,7 @@ pub fn verify_something(value: i32) -> (result: i32)
         "verus",
         "ensures",
         "cow_into_owned_preserves_variant_value",
-    )];
+    )?];
     let findings = scan_verus_contract_bounds_source(
         source,
         &path,
@@ -855,8 +860,8 @@ fn kani_named_call_matching_a_registered_type_is_not_flagged() -> miette::Result
     let name = "contract_bounds_kani.rs";
     let src_root = fixtures_root();
     let registry = vec![
-        kani_type_record("requires", "fixture::NonNegative"),
-        kani_type_record("ensures", "fixture::NonNegative"),
+        kani_type_record("requires", "fixture::NonNegative")?,
+        kani_type_record("ensures", "fixture::NonNegative")?,
     ];
     let findings = scan_kani_contract_bounds_source(
         &fixture(name)?,

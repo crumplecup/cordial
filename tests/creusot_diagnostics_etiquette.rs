@@ -19,10 +19,12 @@ fn canary_path() -> PathBuf {
 }
 
 #[test]
-fn parse_canary_keeps_warning_and_failure() {
+fn parse_canary_keeps_warning_and_failure() -> miette::Result<()> {
     cordial::init_tracing();
     let crate_root = PathBuf::from("/workspace");
-    let records = parse_creusot_compiler_output(CANARY, &crate_root, false).expect("parse canary");
+    let records = parse_creusot_compiler_output(CANARY, &crate_root, false)
+        .into_diagnostic()
+        .wrap_err("parse canary")?;
     assert_eq!(records.len(), 2, "{records:?}");
     assert!(records.iter().any(|record| {
         record.rule_id() == CreusotDiagnosticRuleId::Warning001
@@ -34,10 +36,11 @@ fn parse_canary_keeps_warning_and_failure() {
             && record.line() == 20
             && record.snippet().contains("postcondition")
     }));
+    Ok(())
 }
 
 #[test]
-fn parse_failed_without_span_emits_crate_level_failure() {
+fn parse_failed_without_span_emits_crate_level_failure() -> miette::Result<()> {
     cordial::init_tracing();
     let crate_root = PathBuf::from("/workspace");
     let records = parse_creusot_compiler_output(
@@ -45,23 +48,27 @@ fn parse_failed_without_span_emits_crate_level_failure() {
         &crate_root,
         false,
     )
-    .expect("parse");
+    .into_diagnostic()
+    .wrap_err("parse")?;
     assert_eq!(records.len(), 1, "{records:?}");
     assert_eq!(records[0].rule_id(), CreusotDiagnosticRuleId::Failure001);
     assert_eq!(records[0].line(), 1);
     assert_eq!(records[0].file(), &PathBuf::from("/workspace/Cargo.toml"));
+    Ok(())
 }
 
 #[test]
-fn parse_success_drops_summary_lines() {
+fn parse_success_drops_summary_lines() -> miette::Result<()> {
     cordial::init_tracing();
     let records = parse_creusot_compiler_output(
         "warning: 3 warnings emitted\nerror: 1 error emitted\n",
         &PathBuf::from("/workspace"),
         true,
     )
-    .expect("parse");
+    .into_diagnostic()
+    .wrap_err("parse")?;
     assert!(records.is_empty(), "{records:?}");
+    Ok(())
 }
 
 #[test]
@@ -87,7 +94,8 @@ fn parse_workspace_relative_span_resolves_from_workspace_root() -> miette::Resul
         &crate_root,
         true,
     )
-    .expect("parse");
+    .into_diagnostic()
+    .wrap_err("parse")?;
 
     assert_eq!(records.len(), 1);
     assert_eq!(

@@ -64,7 +64,7 @@ fn scan_fixture() -> miette::Result<Vec<ErrorSiteScanRow>> {
     )
     .into_diagnostic()
     .wrap_err("scan")
-    .map(|records| {
+    .and_then(|records| {
         records
             .into_iter()
             .map(|record| {
@@ -77,7 +77,8 @@ fn scan_fixture() -> miette::Result<Vec<ErrorSiteScanRow>> {
                     .source_snippet(record.source_snippet().clone())
                     .site_snippet(record.site_snippet().clone())
                     .build()
-                    .expect("scan row")
+                    .into_diagnostic()
+                    .wrap_err("scan row")
             })
             .collect()
     })

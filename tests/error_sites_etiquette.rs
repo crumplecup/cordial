@@ -13,7 +13,7 @@ fn scan_row(
     line: u32,
     source_snippet: &str,
     site_snippet: &str,
-) -> ErrorSiteScanRow {
+) -> miette::Result<ErrorSiteScanRow> {
     ErrorSiteScanRow::builder()
         .crate_name("fixture".to_string())
         .kind(kind)
@@ -23,7 +23,8 @@ fn scan_row(
         .source_snippet(source_snippet.to_string())
         .site_snippet(site_snippet.to_string())
         .build()
-        .expect("scan row")
+        .into_diagnostic()
+        .wrap_err("scan row")
 }
 
 const ERROR_SITES: &str = r#"
@@ -190,7 +191,7 @@ fn error_sites_etiquette_session_produces_csv() -> miette::Result<()> {
 }
 
 #[test]
-fn map_err_on_std_is_other() {
+fn map_err_on_std_is_other() -> miette::Result<()> {
     cordial::init_tracing();
 
     let row = scan_row(
@@ -200,10 +201,13 @@ fn map_err_on_std_is_other() {
         1,
         "std::fs::read_to_string(…)",
         "std::fs::read_to_string(…).map_err(…)",
-    );
-    let partitioned = partition_error_site_row(&row, "fixture").expect("partition");
+    )?;
+    let partitioned = partition_error_site_row(&row, "fixture")
+        .into_diagnostic()
+        .wrap_err("partition")?;
     assert_eq!(partitioned.origin_class(), ErrorOriginClass::Other);
     assert_eq!(partitioned.origin_detail(), "std");
+    Ok(())
 }
 
 #[test]
@@ -217,7 +221,7 @@ fn question_mark_after_map_err_is_internal() -> miette::Result<()> {
         1,
         "std::fs::read_to_string(…).map_err(…)",
         "std::fs::read_to_string(…).map_err(…)?",
-    );
+    )?;
     let partitioned = partition_error_site_row(&row, "fixture").into_diagnostic()?;
     assert_eq!(partitioned.origin_class(), ErrorOriginClass::Internal);
     assert_eq!(partitioned.origin_detail(), "CordialResult");
@@ -255,7 +259,8 @@ fn partition_fixture_has_foreign_pool() -> miette::Result<()> {
             .source_snippet(record.source_snippet().clone())
             .site_snippet(record.site_snippet().clone())
             .build()
-            .expect("scan row");
+            .into_diagnostic()
+            .wrap_err("scan row")?;
         let partitioned = partition_error_site_row(&row, "fixture").into_diagnostic()?;
         match partitioned.origin_class() {
             ErrorOriginClass::Internal => internal += 1,

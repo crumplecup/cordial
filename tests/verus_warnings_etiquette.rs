@@ -17,10 +17,12 @@ fn canary_path() -> PathBuf {
 }
 
 #[test]
-fn parse_amenable_canary_keeps_two_unique_warnings() {
+fn parse_amenable_canary_keeps_two_unique_warnings() -> miette::Result<()> {
     cordial::init_tracing();
     let crate_root = PathBuf::from("/workspace");
-    let records = parse_verus_compiler_output(CANARY, &crate_root).expect("parse canary");
+    let records = parse_verus_compiler_output(CANARY, &crate_root)
+        .into_diagnostic()
+        .wrap_err("parse canary")?;
     assert_eq!(records.len(), 2);
     assert!(
         records
@@ -35,10 +37,11 @@ fn parse_amenable_canary_keeps_two_unique_warnings() {
             .iter()
             .any(|record| record.line() == 446 && record.snippet().contains("autoderive Clone"))
     );
+    Ok(())
 }
 
 #[test]
-fn parse_drops_summary_lines_and_errors() {
+fn parse_drops_summary_lines_and_errors() -> miette::Result<()> {
     cordial::init_tracing();
     let output = "\
 error: expected `;`
@@ -46,8 +49,11 @@ error: expected `;`
 
 warning: 3 warnings emitted
 ";
-    let records = parse_verus_compiler_output(output, &PathBuf::from("/workspace")).expect("parse");
+    let records = parse_verus_compiler_output(output, &PathBuf::from("/workspace"))
+        .into_diagnostic()
+        .wrap_err("parse")?;
     assert!(records.is_empty());
+    Ok(())
 }
 
 #[test]
@@ -167,7 +173,8 @@ fn pattern_projection_warning_is_suppressed_only_when_fully_documented() -> miet
     fs::create_dir_all(undocumented_root.join("src")).into_diagnostic()?;
     fs::write(undocumented_root.join("src/lib.rs"), undocumented_source).into_diagnostic()?;
     let undocumented_parsed = parse_verus_compiler_output(fake_compiler_output, &undocumented_root)
-        .expect("parse undocumented");
+        .into_diagnostic()
+        .wrap_err("parse undocumented")?;
     let undocumented_ir = scan_crate_verus_ir(&undocumented_root)
         .into_diagnostic()
         .wrap_err("scan undocumented ir")?;
