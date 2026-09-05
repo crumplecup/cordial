@@ -234,7 +234,7 @@ impl<I> StrategicPortfolio<I> {
 /// a small set of portfolios, each keyed by an indicator enum, while ordinary
 /// plugins continue to use [`StaticPlugin`] or [`EtiquettePlugin`].
 #[derive(Clone)]
-pub struct StrategicPlugin<I: 'static> {
+pub struct StrategicPlugin<I: Copy + 'static> {
     /// Stable identifier.
     id: Cow<'static, str>,
     /// Human-readable name.
@@ -244,10 +244,10 @@ pub struct StrategicPlugin<I: 'static> {
     /// Active strategy indicator.
     indicator: I,
     /// Available portfolios.
-    portfolios: &'static [StrategicPortfolio<I>],
+    portfolios: Cow<'static, [StrategicPortfolio<I>]>,
 }
 
-impl<I: 'static> StrategicPlugin<I> {
+impl<I: Copy + 'static> StrategicPlugin<I> {
     /// Build a strategic plugin definition from compile-time metadata.
     pub const fn new(
         id: &'static str,
@@ -261,7 +261,7 @@ impl<I: 'static> StrategicPlugin<I> {
             name: Cow::Borrowed(name),
             category,
             indicator,
-            portfolios,
+            portfolios: Cow::Borrowed(portfolios),
         }
     }
 
@@ -271,20 +271,20 @@ impl<I: 'static> StrategicPlugin<I> {
         name: impl Into<String>,
         category: PluginCategory,
         indicator: I,
-        portfolios: &'static [StrategicPortfolio<I>],
+        portfolios: Vec<StrategicPortfolio<I>>,
     ) -> Self {
         Self {
             id: Cow::Owned(id.into()),
             name: Cow::Owned(name.into()),
             category,
             indicator,
-            portfolios,
+            portfolios: Cow::Owned(portfolios),
         }
     }
 
     /// Available portfolios for this plugin.
     pub fn portfolios(&self) -> &[StrategicPortfolio<I>] {
-        self.portfolios
+        self.portfolios.as_ref()
     }
 }
 
@@ -320,6 +320,7 @@ where
     #[instrument(level = "trace", skip(self))]
     fn etiquettes(&self) -> &[&'static dyn Etiquette] {
         self.portfolios
+            .as_ref()
             .iter()
             .find(|portfolio| self.accepts(portfolio))
             .map(StrategicPortfolio::etiquettes)

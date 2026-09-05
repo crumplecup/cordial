@@ -405,7 +405,7 @@ fn static_struct_field_strategy_can_recommend_cow() -> miette::Result<()> {
 }
 
 #[test]
-fn static_struct_field_strategy_can_recommend_const_placement() -> miette::Result<()> {
+fn static_struct_field_strategy_falls_back_to_cow_for_runtime_types() -> miette::Result<()> {
     cordial::init_tracing();
     let findings =
         scan_fixture_with_static_ref_strategy("static_struct_fields.rs", StaticRefStrategy::Const)?;
@@ -416,7 +416,11 @@ fn static_struct_field_strategy_can_recommend_const_placement() -> miette::Resul
                 && f.context().ends_with("BorrowsStatic::name")
         })
         .ok_or_else(|| miette::miette!("BorrowsStatic::name finding"))?;
-    assert!(name.snippet().contains("const/static placement"));
+    assert!(
+        name.snippet()
+            .contains("const/static only for const-only types")
+    );
+    assert!(name.snippet().contains("Cow<'static, str>"));
     Ok(())
 }
 

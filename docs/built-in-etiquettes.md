@@ -39,7 +39,8 @@ architecture. `panics` catches places that bypass the typed path entirely.
 `antipatterns` also canaries strategy selection for `&'static str` fields:
 `[antipatterns.static_refs] strategy = "string" | "cow" | "const"` changes the
 recommended remediation while the rule keeps making runtime static borrows
-visible.
+visible. The `const` strategy is contextual: const/static-only types are quiet;
+runtime or unclear construction falls back to `Cow<'static, str>`.
 
 ## Observability
 

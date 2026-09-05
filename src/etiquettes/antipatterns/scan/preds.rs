@@ -224,7 +224,9 @@ fn static_str_field_snippet(ty: &Type, strategy: StaticRefStrategy) -> String {
             format!("{found}; replace &'static str fields with Cow<'static, str>")
         }
         StaticRefStrategy::Const => {
-            format!("{found}; move string data into const/static placement instead")
+            format!(
+                "{found}; const/static only for const-only types; otherwise use Cow<'static, str>"
+            )
         }
     };
     truncate_snippet(&message, 128)
@@ -241,7 +243,7 @@ fn owned_static_ref_snippet(ty: &Type, strategy: StaticRefStrategy) -> String {
             format!("{found}; use Cow or a domain wrapper only when borrowing is intentional")
         }
         StaticRefStrategy::Const => {
-            format!("{found}; move data into const/static placement or own it")
+            format!("{found}; const/static only for const-only types; otherwise own the data")
         }
     };
     truncate_snippet(&message, 128)

@@ -102,7 +102,7 @@ pub static ANTIPATTERNS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquet
             "Untyped error carriers and related source smells?",
             "These are quality problems adjacent to error handling that are not site/chain/foreign layers: they erase types, hide unused work, or fight workspace versioning.",
             "Flags Box<dyn Error>, Result<_, String>, unused _arg (except on impls of foreign traits), struct &'static fields where an owned type or configured static-ref strategy would do, unnamed contract bounds (Kani/Creusot/Verus), and workspace members that pin a version. Some Box<dyn Error> / unused-arg rows feed the Error handling quality-report area.",
-            "`[antipatterns] enabled = false` in cordial.toml. `[antipatterns.static_refs] strategy = \"string\" | \"cow\" | \"const\"` changes the static-ref remediation guidance.",
+            "`[antipatterns] enabled = false` in cordial.toml. `[antipatterns.static_refs] strategy = \"string\" | \"cow\" | \"const\"` changes the static-ref remediation guidance; `const` falls back to `Cow<'static, str>` for runtime string fields.",
             &[
                 EtiquetteRuleExplain::new(
                     "ANTIPATTERN-BOX-DYN-ERROR-001",

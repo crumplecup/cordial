@@ -73,6 +73,8 @@ min_fluent_setters = 2
 
 [antipatterns.static_refs]
 # default: "string"; accepted: "string", "cow", "const"
+# "const" is contextual: const/static-only types stay quiet; runtime or
+# unclear construction falls back to Cow<'static, str>.
 strategy = "string"
 
 [tracing]
