@@ -11,16 +11,23 @@ use crate::targets::discover_crate_targets;
 use tracing::instrument;
 
 /// What impls count as covered for a coverage profile.
+///
+/// A requirement may name one composite trait, a list of prerequisite traits, or
+/// both. Coverage assessors use this policy to decide whether a type is already
+/// covered, ready, or blocked.
 pub trait TraitRequirement: Send + Sync {
-    /// Composite trait.
+    /// Composite trait whose direct impl completes coverage, if any.
     fn composite_trait(&self) -> Option<&str>;
-    /// Supertraits.
+    /// Prerequisite traits that may explain why the composite impl is missing.
     fn supertraits(&self) -> &[&str];
 }
 
 /// Discovers [`CoverageTarget`] rows for a profile.
 pub trait TargetProvider: Send + Sync {
-    /// Coverage targets.
+    /// Coverage targets for this session and filter.
+    ///
+    /// Return stable rows; the plugin registry deduplicates equivalent coverage
+    /// targets before building IR.
     fn coverage_targets(
         &self,
         session: &dyn SessionView,
@@ -29,10 +36,14 @@ pub trait TargetProvider: Send + Sync {
 }
 
 /// Semantic supertrait: trait-impl coverage over a target library.
+///
+/// Implement this with [`Plugin`] when a product asks "which targets implement
+/// the required traits?" Coverage plugins route to coverage commands and skip
+/// the source-quality rollup.
 pub trait Coverage: Plugin {
-    /// Target provider.
+    /// Target provider for this coverage profile.
     fn target_provider(&self) -> &dyn TargetProvider;
-    /// Trait requirement.
+    /// Trait requirement for this coverage profile.
     fn trait_requirement(&self) -> &dyn TraitRequirement;
 
     /// Targets.

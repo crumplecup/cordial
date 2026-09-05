@@ -1,22 +1,26 @@
 //! Crate-root `#![forbid(unsafe_code)]` and `#![warn(missing_docs)]`.
 //!
-//! **What.** Flags library crates whose root file is missing those inner
-//! attributes ([`CrateAttrsRuleId`]). `deny(unsafe_code)` is not enough;
-//! `warn`/`deny`/`forbid(missing_docs)` all satisfy the docs lint.
+//! **What.** Checks that library roots state the unsafe-code and docs policy
+//! explicitly.
 //!
-//! **Why.** Sibling `CLAUDE.md` files require both attributes on `lib.rs`
-//! so the whole library is locked down. `[lib] path` is honored; bin-only
-//! packages are skipped. `[crate_attrs] allow_unsafe` lists members that
-//! may use `unsafe` (an FFI crate) without turning the rule off everywhere.
+//! **Why.** The root attributes make the whole library policy visible and
+//! compiler-enforced instead of relying on convention in review.
 //!
-//! **How to use.** Run `cordial quality` (feature `crate_attrs`). Knobs
-//! live under `[crate_attrs]` in `cordial.toml`. Artifacts:
-//! `{store}/findings/crate-attrs.checklist.md` and `crate-attrs-summary.md`.
-//! `cordial quality --apply` writes the missing inner attributes onto each
-//! library root (`--dry-run` logs without writing). Register
-//! [`CRATE_ATTRS_ETIQUETTE`].
+//! **Flags.** Library root files missing `#![forbid(unsafe_code)]` or a
+//! missing-docs lint. `deny(unsafe_code)` is not enough; `warn`, `deny`, or
+//! `forbid(missing_docs)` satisfy the docs rule.
 //!
-//! Policy: `docs/planning/crate-attrs-etiquette.md`.
+//! **Ignores.** Bin-only packages are skipped. `[lib] path` is honored.
+//! Configured `allow_unsafe` members may use unsafe without disabling the
+//! docs rule or the whole etiquette.
+//!
+//! **Outputs.** `{store}/findings/crate-attrs.checklist.md`,
+//! `crate-attrs-summary.md`, and CSV.
+//!
+//! **Config.** `[crate_attrs]` owns `allow_unsafe` and `enabled`.
+//! `cordial quality --apply` writes missing inner attributes; `--dry-run`
+//! logs without writing. Register [`CRATE_ATTRS_ETIQUETTE`]. Policy:
+//! `docs/planning/crate-attrs-etiquette.md`.
 
 mod apply;
 mod assessor;

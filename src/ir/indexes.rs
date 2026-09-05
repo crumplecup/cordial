@@ -49,7 +49,10 @@ pub struct IrIndexes {
 }
 
 impl IrIndexes {
-    /// Index node.
+    /// Add one node to the secondary indexes.
+    ///
+    /// Callers that perform structural rewrites should rebuild indexes instead
+    /// of relying only on incremental updates.
     #[instrument(level = "debug", skip(self, node, weight))]
     pub fn index_node(&mut self, node: NodeId, weight: &NodeWeight) {
         let kind_key = format!("{:?}", weight.kind);

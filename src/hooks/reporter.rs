@@ -4,10 +4,16 @@ use crate::objects::{Artifact, Finding};
 use crate::session::SessionView;
 
 /// Renders findings into artifacts.
+///
+/// Reporters format already-judged findings. They should not invent new
+/// findings or silently change dispositions.
 pub trait Reporter: Send + Sync {
-    /// Stable identifier for this hook.
+    /// Stable identifier used to deduplicate reporter runs.
     fn id(&self) -> &str;
     /// Render findings into artifacts.
+    ///
+    /// Artifact filenames should be stable because users inspect them through
+    /// `cordial view`, scripts, and diffs.
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>>;
 }
 

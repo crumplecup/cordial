@@ -6,31 +6,45 @@ use tracing::instrument;
 
 use super::query::Query;
 
-/// Read-only view over a crate IR graph.
+/// Read-only view over one crate's IR graph.
+///
+/// Probes, assessors, and reporters use this trait instead of depending on the
+/// concrete petgraph storage. All node ids are local to this crate graph and
+/// remain valid only for the IR snapshot passed to the hook.
 pub trait IrView {
-    /// Package name this IR belongs to.
+    /// Cargo package name this crate IR belongs to.
     fn crate_name(&self) -> &str;
-    /// Root node of this graph.
+    /// Root node of this crate graph.
     fn root(&self) -> CordialResult<NodeId>;
-    /// Borrow the node with this id, if it exists.
+    /// Borrow the node with this id, if it exists in this crate graph.
     fn node(&self, id: NodeId) -> Option<NodeRef<'_>>;
-    /// Nodes whose weights match `query`.
+    /// Return nodes whose kinds and attributes match `query`.
+    ///
+    /// The default concrete implementation uses [`Query::node_kinds`] as a
+    /// cheap prefilter, then calls [`Query::matches_node`] for the final
+    /// predicate.
     fn nodes_matching(&self, query: &dyn Query) -> Vec<NodeRef<'_>>;
-    /// Parent node ids along edges of `kind`.
+    /// Parent node ids along incoming edges of `kind`.
     fn parents(&self, id: NodeId, kind: EdgeKind) -> Vec<NodeId>;
-    /// Child node ids along edges of `kind`.
+    /// Child node ids along outgoing edges of `kind`.
     fn children(&self, id: NodeId, kind: EdgeKind) -> Vec<NodeId>;
-    /// Node id for a `foo::bar` path, if indexed.
+    /// Node id for a `foo::bar` path, if the path index knows it.
     fn node_by_path(&self, path: &str) -> Option<NodeId>;
 }
 
-/// Mutable view for enrichers.
+/// Mutable crate IR view for enrichers.
+///
+/// Enrichers should add facts and then rebuild affected indexes before later
+/// probes rely on lookup by qualified path.
 pub trait IrMut: IrView {
-    /// Insert a node and return its id.
+    /// Insert a node and return its crate-local id.
     fn insert_node(&mut self, weight: NodeWeight) -> CordialResult<NodeId>;
-    /// Insert a directed edge of `kind`.
+    /// Insert a directed edge of `kind` between existing nodes.
     fn insert_edge(&mut self, from: NodeId, to: NodeId, kind: EdgeKind) -> CordialResult<()>;
-    /// Set a JSON attribute on a node.
+    /// Append a JSON attribute value to a node.
+    ///
+    /// Attribute lookup returns the latest value for a key, so enrichers may
+    /// refine loader facts without mutating historical entries in place.
     fn set_attr(&mut self, node: NodeId, key: &str, value: serde_json::Value) -> CordialResult<()>;
     /// Rebuild the path → node index after structural edits.
     fn rebuild_path_index(&mut self) -> CordialResult<()>;
@@ -42,28 +56,32 @@ pub trait IrMut: IrView {
     }
 }
 
-/// Trait alias for node-level read API used by probes.
+/// Node-level read API used by queries and probes.
 pub trait NodeView {
-    /// Stable identifier for this hook.
+    /// Crate-local node id.
     fn id(&self) -> NodeId;
-    /// Borrowed error kind.
+    /// Node kind.
     fn kind(&self) -> &NodeKind;
-    /// Latest attribute value stored under `key`.
+    /// Latest attribute value stored under `key`, if present.
     fn attr(&self, key: &str) -> Option<&serde_json::Value>;
 }
 
-/// Borrowed node handle for probes.
+/// Borrowed node handle returned by [`IrView`] queries.
 pub struct NodeRef<'a> {
+    /// Crate-local node id.
     pub id: NodeId,
+    /// Borrowed node payload.
     pub weight: &'a NodeWeight,
 }
 
 impl<'a> NodeRef<'a> {
+    /// Node kind.
     #[instrument(level = "trace", skip(self))]
     pub fn kind(&self) -> &NodeKind {
         &self.weight.kind
     }
 
+    /// Latest attribute value stored under `key`, if present.
     #[instrument(level = "trace", skip(self))]
     pub fn attr(&self, key: &str) -> Option<&serde_json::Value> {
         self.weight.attr(key)

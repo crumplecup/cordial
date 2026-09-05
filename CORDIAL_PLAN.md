@@ -25,10 +25,12 @@ The motivating use case is twofold:
 
 ## Status
 
-Phases 0–6 implemented on `main`. Built-in etiquettes cover panics, tracing,
-and elicitation coverage (impl / trenchcoat / shadow). The `cordial` binary
-drives session runs against local and workspace projects. `cordial explain`
-prints why a compiled-in etiquette exists and how to opt out
+Phases 0–6 implemented on `main`. Built-in etiquettes now cover source quality,
+error-handling architecture, conditional-code hygiene, proof hygiene, and
+rustdoc-backed coverage; see
+[docs/built-in-etiquettes.md](docs/built-in-etiquettes.md). The `cordial`
+binary drives session runs against local and workspace projects.
+`cordial explain` prints why a compiled-in etiquette exists and how to opt out
 ([etiquette-explain.md](docs/planning/etiquette-explain.md)).
 
 Output parity with `elicit_doc` is retired -- see

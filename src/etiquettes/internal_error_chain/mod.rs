@@ -1,24 +1,27 @@
 //! Internal error types as a graph, plus compliance.
 //!
-//! **What.** Builds the crate’s error-type graph and enforces a rigid error
-//! architecture. The catalog is every type that implements `Error` (or
-//! `#[derive(Error)]`) under `src/`: a parent error boxes an umbrella `*Kind`
-//! enum; every Kind variant holds a native source; native sources that wrap a
-//! foreign error keep it in `source` with owned `file`/`line` copied from
-//! `Location::caller()` and `#[track_caller]`;
-//! nested native sources may box another Kind and the same rules recurse.
-//! Native sources may live next to their call site.
+//! **What.** Builds the crate's error-type graph and enforces the
+//! parent / `Kind` / native-source architecture.
 //!
-//! **Why.** Foreign-error etiquettes ask what leaks *in*. This one asks
-//! whether *our* error types are a place those leaks can land. Without a
-//! typed internal graph, attenuation advice has nowhere to point.
+//! **Why.** Foreign-error etiquettes ask what leaks in. This etiquette asks
+//! whether the crate-owned error types are a place those leaks can land.
+//! Without a typed internal graph, attenuation advice has nowhere to point.
 //!
-//! **How to use.** Run `cordial quality` (feature `internal_error_chain`).
-//! Artifacts: `{store}/findings/internal-error-chain.checklist.md`,
-//! `internal-error-chain-summary.md`, type-graph and compliance CSVs.
-//! Register [`INTERNAL_ERROR_CHAIN_ETIQUETTE`].
+//! **Flags.** Parent errors that do not box an umbrella `*Kind`, kind enums
+//! with wrong payload shapes, orphan native sources, stringified or discarded
+//! typed errors, native sources missing `#[track_caller]`, and internal leaf /
+//! link / nested graph shapes. Native sources that wrap a foreign error keep
+//! it in `source` with owned `file` / `line` copied from `Location::caller()`.
 //!
-//! Policy: `docs/planning/error-handling-as-plugin.md`.
+//! **Ignores.** Native sources may live next to their call site. Nested native
+//! sources may box another `Kind` when the same architecture recurses.
+//!
+//! **Outputs.** `{store}/findings/internal-error-chain.checklist.md`,
+//! `internal-error-chain-summary.md`, type-graph CSVs, and compliance CSVs.
+//!
+//! **Config.** `[internal_error_chain] enabled = false` opts out in
+//! `cordial.toml`. Register [`INTERNAL_ERROR_CHAIN_ETIQUETTE`]. Policy:
+//! `docs/planning/error-handling-as-plugin.md`.
 
 mod architecture;
 mod assessor;

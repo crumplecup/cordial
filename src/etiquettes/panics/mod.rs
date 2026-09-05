@@ -1,23 +1,28 @@
 //! Panic and hard-fail sites in source.
 //!
-//! **What.** Inventories `panic!`, `unwrap`, `expect`, `unreachable!`, and
-//! `compile_error!`. Each site is a [`PanicKind`] with a stable rule id
-//! (`PANIC-SOURCE-*`). String literals that parse as Rust and contain those
-//! APIs are treated as embedded fixture programs; keep samples under
-//! `tests/fixtures/` or `tests/parity/`.
+//! **What.** Inventories abort paths that bypass the typed error flow.
 //!
 //! **Why.** Abort sites are the first error-handling layer. Library code
-//! should return the crate’s internal error type (preserving `source()`);
-//! binaries and tests should surface through miette. Test `.unwrap` /
-//! `.expect` (including `#[cfg(test)]` modules under `src/`) stay on the
-//! checklist rather than becoming CSV-only inventory.
+//! should return the crate's internal error type while preserving
+//! `source()`; binaries and tests should surface through miette.
 //!
-//! **How to use.** Run `cordial quality` (feature `panics`, on by default).
-//! Artifacts: `{store}/findings/panics.checklist.md`, `panics-summary.md`,
-//! and CSV. Silence a site with `cordial exceptions show panics`. From a
-//! library, register [`PANICS_ETIQUETTE`] on a [`crate::Session`].
+//! **Flags.** `panic!`, `unwrap`, `expect`, `unreachable!`, and
+//! `compile_error!`. Each site is a [`PanicKind`] with a stable
+//! `PANIC-SOURCE-*` rule id. String literals that parse as Rust and contain
+//! those APIs are treated as embedded fixture programs.
 //!
-//! Policy: `docs/planning/error-handling-as-plugin.md`.
+//! **Ignores.** Embedded samples under `tests/fixtures/` and `tests/parity/`
+//! are fixture material. Test `.unwrap` / `.expect`, including `#[cfg(test)]`
+//! modules under `src/`, remain checklist findings rather than CSV-only
+//! inventory.
+//!
+//! **Outputs.** `{store}/findings/panics.checklist.md`,
+//! `panics-summary.md`, and CSV.
+//!
+//! **Config.** `[panics] enabled = false` opts out in `cordial.toml`.
+//! Exceptions are managed with `cordial exceptions show panics`. Register
+//! [`PANICS_ETIQUETTE`] on a [`crate::Session`]. Policy:
+//! `docs/planning/error-handling-as-plugin.md`.
 
 mod assessor;
 mod enricher;

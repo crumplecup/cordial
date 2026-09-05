@@ -1,18 +1,25 @@
 //! Trait-impl coverage against elicitation requirements.
 //!
-//! **What.** From rustdoc JSON, finds types that should implement
-//! `ElicitComplete` (and prerequisite traits) and classifies gaps
-//! ([`ImplGapKind`]): missing our traits, ready for `ElicitComplete`,
-//! feature-gated external, or externally blocked.
+//! **What.** Measures whether target types implement the required elicitation
+//! trait stack.
 //!
 //! **Why.** Elicitation coverage is a completeness inventory, not a source
 //! lint. Types that wrap foreign values or sit on a tracked target need the
-//! trait stack before they are “done.”
+//! trait stack before they are done.
 //!
-//! **How to use.** `cordial build rustdoc`, then `cordial coverage` (feature
-//! `impl_coverage` / `elicitation`). Artifacts:
-//! `{store}/findings/impl-coverage.checklist.md` plus coverage/gaps CSVs.
-//! Register [`IMPL_COVERAGE_ETIQUETTE`].
+//! **Flags.** Types that should implement `ElicitComplete` and prerequisite
+//! traits, classified by [`ImplGapKind`]: missing local traits, ready for
+//! `ElicitComplete`, feature-gated external, or externally blocked.
+//!
+//! **Ignores.** This etiquette does not judge source style. Foreign wrapping
+//! belongs to `trenchcoat`; upstream mirror completeness belongs to `shadow`.
+//!
+//! **Outputs.** `{store}/findings/impl-coverage.checklist.md` plus coverage
+//! and gap CSVs.
+//!
+//! **Config.** Run `cordial build rustdoc`, then `cordial coverage`. Requires
+//! the `impl_coverage` / `elicitation` feature set. Register
+//! [`IMPL_COVERAGE_ETIQUETTE`].
 
 mod assessor;
 mod gap_classify;

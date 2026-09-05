@@ -1,30 +1,29 @@
 //! Soundness and proof-visibility patterns inside `verus! { .. }` blocks.
 //!
-//! **What.** Inventories six real, local signals `verus_ir` already
-//! extracts from a genuine `verus_syn` parse: `assume(..)`, `admit()`,
-//! `#[verifier::external_body]`, `uninterp spec fn`, `axiom fn` (each a
-//! function trusted rather than proven -- `VerusFnFacts::
-//! is_trusted_not_proven()`), and `broadcast proof fn` (a lemma applied
-//! automatically to every proof in scope, invisibly, at every call
-//! site). Each site is a [`ProofPatternKind`] with a stable rule id
-//! (`PROOF-PATTERN-*`).
+//! **What.** Inventories trusted proof shortcuts and implicit proof
+//! dependencies extracted from a genuine `verus_syn` parse.
 //!
-//! **Why.** A `verus!` function's signature says what it proves; these
-//! six signals say how much of that is actually checked versus trusted,
-//! and (for `broadcast`) how much of a proof's real dependency surface
-//! is invisible from its own body. None of this shows up in an ordinary
-//! `cargo check`/`clippy` pass, or even in `verus`'s own compiler
-//! warnings (see [verus_warnings](../verus_warnings/index.html)) --
-//! Verus accepts every one of these forms without complaint, by design.
+//! **Why.** A `verus!` function signature says what it proves; these signals
+//! say how much is actually checked versus trusted. Broadcast lemmas also hide
+//! dependency surface from the proof body. Ordinary cargo, Clippy, and Verus
+//! warnings do not report these forms.
 //!
-//! **How to use.** Run `cordial quality` (feature `proof_patterns`,
-//! requires `verus_ir`, part of `quality`). Artifacts:
-//! `{store}/findings/proof-patterns.checklist.md`,
-//! `proof-patterns-summary.md`, and CSV. Silence a site with `cordial
-//! exceptions show proof_patterns`. From a library, register
-//! [`PROOF_PATTERNS_ETIQUETTE`] on a [`crate::Session`].
+//! **Flags.** `assume(..)`, `admit()`, `#[verifier::external_body]`,
+//! `uninterp spec fn`, `axiom fn`, and `broadcast proof fn`. Each site is a
+//! [`ProofPatternKind`] with a stable `PROOF-PATTERN-*` rule id.
 //!
-//! Policy: `docs/planning/proof-patterns-etiquette.md`.
+//! **Ignores.** This etiquette does not prove obligations or judge whether a
+//! trusted escape hatch is justified. It makes the proof surface visible for
+//! review.
+//!
+//! **Outputs.** `{store}/findings/proof-patterns.checklist.md`,
+//! `proof-patterns-summary.md`, and CSV.
+//!
+//! **Config.** `[proof_patterns] enabled = false` opts out in
+//! `cordial.toml`. Requires `verus_ir`. Exceptions are managed with
+//! `cordial exceptions show proof_patterns`. Register
+//! [`PROOF_PATTERNS_ETIQUETTE`]. Policy:
+//! `docs/planning/proof-patterns-etiquette.md`.
 
 mod assessor;
 mod enricher;

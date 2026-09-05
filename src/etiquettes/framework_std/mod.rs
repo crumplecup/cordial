@@ -1,20 +1,25 @@
 //! Std-family coverage for homecoming `Code` and the amenable registry.
 //!
-//! **What.** Two workspace-scoped etiquettes, not source scanners:
+//! **What.** Provides workspace-scoped coverage etiquettes for standard
+//! library ecosystem surfaces, not source scanners.
 //!
-//! - `homecoming-std` — how much of `std` / `core` / `alloc` implements
-//!   homecoming `Code` ([`HOMECOMING_STD_ETIQUETTE`]).
-//! - `amenable-std` — how much of that surface is in the amenable registry
-//!   (`AMENABLE_STD_ETIQUETTE`, feature `amenable_std`).
+//! **Why.** Framework coverage has a different denominator from project
+//! elicitation: the question is which std-family types are first-class in the
+//! ecosystem, not whether a workspace crate wrapped its foreign types.
 //!
-//! **Why.** Framework coverage is a different denominator from project
-//! elicitation: the question is “which std types are first-class in this
-//! ecosystem,” not “did this workspace crate wrap its foreign types.”
+//! **Flags.** `homecoming-std` inventories how much of `std` / `core` /
+//! `alloc` implements homecoming `Code`. `amenable-std` inventories how much
+//! of that surface is in the amenable registry.
 //!
-//! **How to use.** `cordial build sysroot` (needs `homecoming_std`), then
-//! `cordial coverage`. Artifact: `{store}/findings/std.checklist.md`. These
-//! bundles have no source loaders; they consume sysroot rustdoc already in
-//! the store.
+//! **Ignores.** Source-quality findings, local wrapper gaps, and project
+//! trait coverage belong to other etiquettes.
+//!
+//! **Outputs.** `{store}/findings/std.checklist.md` and std coverage
+//! inventory artifacts.
+//!
+//! **Config.** Run `cordial build sysroot`, then `cordial coverage`.
+//! `amenable-std` requires the `amenable_std` feature. These bundles consume
+//! sysroot rustdoc already in the store.
 
 #[cfg(feature = "amenable_std")]
 mod amenable;

@@ -1,28 +1,28 @@
-//! Undeclared `cfg` names, and verifier cfg names leaking into the wrong
-//! backend crate.
+//! Undeclared `cfg` names and verifier cfg names in the wrong backend crate.
 //!
-//! **What.** Flags two things ([`CfgHygieneRuleId`]): a `cfg(X)`/
-//! `cfg_attr(X, ...)` (including nested in `all()`/`any()`/`not()`) whose
-//! `X` isn't declared anywhere reachable by that crate (`UNEXPECTED-CFG-001`);
-//! and a crate registered in `cordial.toml`'s `[cfg_hygiene] crate_verifier`
-//! table using a *different* verifier's cfg name than its own configured
-//! identity (`CFG-VERIFIER-MISMATCH-001`).
+//! **What.** Checks cfg names against the declarations reachable by a crate
+//! and against any configured verifier identity.
 //!
-//! **Why.** A workspace-wide `--check-cfg` union (declaring every verifier's
-//! cfg name "expected" in every crate) makes a copy-pasted `#[cfg(creusot)]`
-//! landing in a Kani-only crate invisible to `rustc` itself — nothing short
-//! of a project-aware scan can catch it. `UNEXPECTED-CFG-001` is the
-//! general form of the same gap: any name rustc doesn't already know about
-//! (its own ~32 built-ins, Cargo's `test`/`feature`/`docsrs`) and this
-//! project never declared either.
+//! **Why.** A workspace-wide `--check-cfg` union can make a copied
+//! `#[cfg(creusot)]` in a Kani-only crate invisible to rustc. Project-aware
+//! cfg hygiene catches that backend mismatch and the general case of names
+//! neither rustc nor the project declared.
 //!
-//! **How to use.** Run `cordial quality` (feature `cfg_hygiene`).
-//! `crate_verifier` (empty by default — the rule is inert until a project
-//! configures it) and `extra_known_names` live under `[cfg_hygiene]` in
-//! `cordial.toml`. Artifacts: `{store}/findings/cfg-hygiene.checklist.md`
-//! and `cfg-hygiene-summary.md`. Register [`CFG_HYGIENE_ETIQUETTE`].
+//! **Flags.** `cfg(X)` / `cfg_attr(X, ...)`, including nested
+//! `all()` / `any()` / `not()`, whose name is undeclared
+//! (`UNEXPECTED-CFG-001`), and crates using a different verifier cfg than the
+//! one configured in `[cfg_hygiene] crate_verifier`
+//! (`CFG-VERIFIER-MISMATCH-001`).
 //!
-//! Policy: `docs/planning/cfg-hygiene-etiquette.md`.
+//! **Ignores.** Rustc built-ins and Cargo-known names are treated as known.
+//! Verifier mismatch is inert until the project fills `crate_verifier`.
+//!
+//! **Outputs.** `{store}/findings/cfg-hygiene.checklist.md`,
+//! `cfg-hygiene-summary.md`, and CSV.
+//!
+//! **Config.** `[cfg_hygiene]` owns `crate_verifier`, `extra_known_names`,
+//! and `enabled`. Register [`CFG_HYGIENE_ETIQUETTE`]. Policy:
+//! `docs/planning/cfg-hygiene-etiquette.md`.
 
 mod assessor;
 mod declared;

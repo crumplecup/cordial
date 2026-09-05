@@ -1,20 +1,24 @@
-//! Foreign error types that appear on this crate’s `Result` surface.
+//! Foreign error types that appear on this crate's `Result` surface.
 //!
-//! **What.** From partitioned error sites, lists foreign `E` types (and
-//! confidence) that leak into this crate instead of being wrapped in an
-//! internal error. Checklist focuses on chain breaks; a second checklist
-//! covers other / edge partition candidates.
+//! **What.** Lists foreign `E` types found from partitioned error sites.
 //!
-//! **Why.** A public `Result<_, io::Error>` (or `syn::Error`, …) couples
-//! callers to an upstream type we do not control. Naming those types is the
-//! input to attenuation: wrap, map, or accept as infrastructure.
+//! **Why.** A public `Result<_, io::Error>` or `Result<_, syn::Error>`
+//! couples callers to an upstream type the crate does not control. Naming the
+//! type is the input to attenuation: wrap, map, or accept as infrastructure.
 //!
-//! **How to use.** Run `cordial quality` (feature `foreign_error_types`).
-//! Artifacts: `{store}/findings/foreign-error-types.checklist.md`,
-//! `foreign-errors.checklist.md`, `foreign-error-types-summary.md`. Register
-//! [`FOREIGN_ERROR_TYPES_ETIQUETTE`].
+//! **Flags.** Foreign error candidates, confidence, and other / edge
+//! partitions that may need human review. Checklist rows focus on foreign
+//! chain breaks and explicit candidates.
 //!
-//! Policy: `docs/planning/error-handling-as-plugin.md`.
+//! **Ignores.** The site-level resolution belongs to
+//! `foreign_error_attenuation`; this etiquette names the foreign type surface.
+//!
+//! **Outputs.** `{store}/findings/foreign-error-types.checklist.md`,
+//! `foreign-errors.checklist.md`, `foreign-error-types-summary.md`, and CSV.
+//!
+//! **Config.** `[foreign_error_types] enabled = false` opts out in
+//! `cordial.toml`. Register [`FOREIGN_ERROR_TYPES_ETIQUETTE`]. Policy:
+//! `docs/planning/error-handling-as-plugin.md`.
 
 mod assessor;
 mod foreign_types;

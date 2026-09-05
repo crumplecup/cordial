@@ -1,3 +1,15 @@
+//! Graph-backed intermediate representation shared by loaders, enrichers, and probes.
+//!
+//! The IR is organized as a [`WorkspaceIr`] containing one [`CrateIr`] per
+//! analyzed crate. Each crate graph stores [`NodeWeight`] values connected by
+//! [`EdgeWeight`] values, plus indexes for stable lookup by path and attribute.
+//!
+//! Extension authors normally consume the trait views: [`IrView`] for read-only
+//! probes and assessors, [`IrMut`] through [`CrateViewMut`] for enrichers, and
+//! [`Query`] for reusable graph searches. Concrete graph types remain public so
+//! built-in loaders and tests can construct snapshots, but hook code should
+//! prefer the view traits.
+
 #[cfg(feature = "rustdoc")]
 mod attrs;
 #[cfg(feature = "rustdoc")]

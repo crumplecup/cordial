@@ -4,11 +4,17 @@ use crate::loader::{LoadView, SourceLoader};
 use crate::session::SessionView;
 
 /// Extends the IR with derived structure and attributes.
+///
+/// Enrichers translate loader output into reusable graph facts. They should not
+/// decide whether a fact is good or bad; that belongs in assessors.
 pub trait IrEnricher: Send + Sync {
-    /// Stable identifier for this hook.
+    /// Stable identifier used to deduplicate enricher runs.
     fn id(&self) -> &str;
 
     /// Lower values run first among enrichers in one session.
+    ///
+    /// Use this only for real fact dependencies, such as an index that another
+    /// enricher reads.
     fn priority(&self) -> u8 {
         50
     }
@@ -19,6 +25,8 @@ pub trait IrEnricher: Send + Sync {
     }
 
     /// Mutate the IR with derived structure and attributes.
+    ///
+    /// Repeated runs over the same inputs should produce the same graph facts.
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()>;
 }
 

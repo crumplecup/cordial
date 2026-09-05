@@ -1,21 +1,24 @@
 //! Inventory of `#[allow]` / `#![allow]` attributes.
 //!
-//! **What.** Records every `#[allow(...)]` and inner `#![allow(...)]`
-//! (`ALLOW-ATTR-001`). Verus is the one judged case: an allow on a
-//! `vstd` / `verus_builtin` import must carry rustc's `reason = "..."`
-//! (`ALLOW-VERUS-REASON-001`). A reasoned Verus allow is not an action
-//! item — the prelude is unused under plain rustc because `verus! {}`
-//! erases spec content.
+//! **What.** Records suppressions that hide compiler or Clippy signal.
 //!
-//! **Why.** Allows hide compiler and Clippy signal. A regeneratable catalog
-//! makes each suppression reviewable, exceptionable, and comparable across
-//! crates instead of disappearing into the source. Verus globs are the
-//! accepted exception; they still have to say why.
+//! **Why.** A regeneratable catalog makes each suppression reviewable,
+//! exceptionable, and comparable across crates instead of disappearing into
+//! source. Verus globs are accepted, but still need a reason.
 //!
-//! **How to use.** Run `cordial quality` (feature `allows`, part of
-//! `quality`). Artifacts: `{store}/findings/allows.checklist.md`,
-//! `allows-summary.md`, and CSV. Exceptions: `cordial exceptions show allows`.
-//! Register [`ALLOWS_ETIQUETTE`] on a [`crate::Session`].
+//! **Flags.** Every `#[allow(...)]` and inner `#![allow(...)]` as
+//! `ALLOW-ATTR-001`. A `vstd` / `verus_builtin` import allow without rustc's
+//! `reason = "..."` is `ALLOW-VERUS-REASON-001`.
+//!
+//! **Ignores.** A reasoned Verus allow is not an action item because
+//! `verus! {}` erases spec content under plain rustc.
+//!
+//! **Outputs.** `{store}/findings/allows.checklist.md`,
+//! `allows-summary.md`, and CSV.
+//!
+//! **Config.** `[allows] enabled = false` opts out in `cordial.toml`.
+//! Exceptions are managed with `cordial exceptions show allows`. Register
+//! [`ALLOWS_ETIQUETTE`] on a [`crate::Session`].
 
 mod assessor;
 mod enricher;

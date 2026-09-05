@@ -1,23 +1,26 @@
 //! Warnings from the Verus rustc fork.
 //!
-//! **What.** Invokes `verus` on crates that are Verus compilation units
-//! (`*_verus` or a `vstd` / `verus_builtin` dependency) and records each
-//! `warning:` diagnostic (`VERUS-WARNING-001`). Rustc summary lines
-//! (`N warnings emitted`) are dropped; the same span is kept once.
+//! **What.** Runs Verus on Verus compilation units and captures diagnostics
+//! ordinary Rust tooling cannot see.
 //!
-//! **Why.** Verus is a different compiler. It fires diagnostics rustc and
-//! clippy never see, and it has no deny-warnings flag. Catch them in post
-//! so a clean `cargo clippy -D warnings` cannot hide a Verus warning.
+//! **Why.** Verus is a different compiler. It emits diagnostics rustc and
+//! Clippy never see, and it has no deny-warnings flag. A clean
+//! `cargo clippy -D warnings` can still hide a Verus warning.
 //!
-//! **How to use.** Run `cordial quality` (feature `verus_warnings`, part of
-//! `quality`). The crate is skipped when it is not a Verus target or when
-//! `verus` is not on `PATH` (`CORDIAL_VERUS` / `VERUS` / `VERUS_PATH`
-//! override the binary). Artifacts: `{store}/findings/verus-warnings.checklist.md`,
-//! `verus-warnings-summary.md`, and CSV. Exceptions:
-//! `cordial exceptions show verus_warnings`.
-//! Register [`VERUS_WARNINGS_ETIQUETTE`] on a [`crate::Session`].
+//! **Flags.** Each `warning:` diagnostic as `VERUS-WARNING-001`; rustc
+//! summary lines are dropped and duplicate spans are kept once.
 //!
-//! Policy: `docs/planning/verus-warnings-etiquette.md`.
+//! **Ignores.** Crates that are not Verus targets are skipped. The scan also
+//! skips when no Verus binary is available.
+//!
+//! **Outputs.** `{store}/findings/verus-warnings.checklist.md`,
+//! `verus-warnings-summary.md`, and CSV.
+//!
+//! **Config.** `[verus_warnings] enabled = false` opts out in `cordial.toml`.
+//! `CORDIAL_VERUS` / `VERUS` / `VERUS_PATH` override the Verus binary.
+//! Exceptions are managed with `cordial exceptions show verus_warnings`.
+//! Register [`VERUS_WARNINGS_ETIQUETTE`]. Policy:
+//! `docs/planning/verus-warnings-etiquette.md`.
 
 mod assessor;
 mod enricher;

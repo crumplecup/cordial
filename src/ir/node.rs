@@ -124,7 +124,10 @@ impl NodeWeight {
         self
     }
 
-    /// Set a JSON attribute on a node.
+    /// Append a JSON attribute to this node.
+    ///
+    /// Attribute lookup returns the latest value for a key, so repeated keys
+    /// are allowed when later enrichers refine earlier loader facts.
     #[instrument(level = "trace", skip(self, value))]
     pub fn set_attr(&mut self, key: &str, value: serde_json::Value) {
         self.attrs.push((key.to_string(), value));

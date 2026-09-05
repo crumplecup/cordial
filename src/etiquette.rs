@@ -13,10 +13,14 @@ use crate::objects::{Disposition, Finding, MapFindingSink};
 
 use tracing::instrument;
 /// Named bundle of cordial hook implementations.
+///
+/// An etiquette is the smallest named standard a user can run or explain. It
+/// does not own scheduling; the session deduplicates hooks by id, invokes them
+/// in pipeline order, and writes any reporter artifacts into the project store.
 pub trait Etiquette: Send + Sync {
-    /// Stable identifier for this hook.
+    /// Stable identifier for command filters, reports, and deduplication.
     fn id(&self) -> &str;
-    /// Human-readable name.
+    /// Human-readable display name for reports and `cordial explain`.
     fn name(&self) -> &str;
 
     /// Why this check exists, what it flags, and how to opt out.
@@ -26,21 +30,39 @@ pub trait Etiquette: Send + Sync {
     fn explain(&self) -> EtiquetteExplain;
 
     /// Loaders that populate IR for this etiquette.
+    ///
+    /// Return an empty slice only when the etiquette reads facts added by other
+    /// registered hooks or uses workspace-only assessment.
     fn loaders(&self) -> &[&dyn Loader];
     /// Enrichers that run after loaders.
+    ///
+    /// Enrichers should add facts to the IR, not findings.
     fn enrichers(&self) -> &[&dyn IrEnricher];
     /// Probes that attach markers to the IR.
+    ///
+    /// Probes should emit observations. Judgment belongs in assessors.
     fn probes(&self) -> &[&dyn Probe];
     /// Assessors that turn markers into findings.
+    ///
+    /// Return an empty slice for inventory/report-only etiquettes.
     fn assessors(&self) -> &[&dyn Assessor];
     /// Optional workspace-scoped assessors; empty by default.
+    ///
+    /// Use these for cross-crate rules that cannot be judged against one crate
+    /// graph at a time.
     fn workspace_assessors(&self) -> &[&dyn WorkspaceAssessor] {
         &[]
     }
     /// Reporters that render findings into artifacts.
+    ///
+    /// Artifact names should be stable because users view, diff, and script
+    /// against files in the store.
     fn reporters(&self) -> &[&dyn Reporter];
 
-    /// True for trait-impl / framework coverage hook bundles (not source-quality scans).
+    /// True for trait-impl / framework coverage hook bundles.
+    ///
+    /// Coverage etiquettes are routed with coverage plugins and do not
+    /// contribute to the source-quality rollup.
     fn is_coverage(&self) -> bool {
         false
     }
@@ -58,6 +80,8 @@ pub trait Etiquette: Send + Sync {
 /// invisible. See `docs/planning/quality-report-feeder-trait.md`.
 pub trait QualityReportArea {
     /// This etiquette's row in the workspace quality-report rollup, if any.
+    ///
+    /// `None` must mean "intentionally absent", not "forgotten".
     fn quality_area(&self) -> Option<QualityAreaSpec>;
 }
 
@@ -108,6 +132,9 @@ pub struct EtiquetteExplain {
 
 impl EtiquetteExplain {
     /// Bind the explain page for a static etiquette table.
+    ///
+    /// This text is user-facing through `cordial explain`, so keep it specific
+    /// enough to explain the standard without requiring source-code context.
     pub const fn new(
         summary: &'static str,
         why: &'static str,
@@ -166,6 +193,9 @@ pub struct EtiquetteHooks {
 
 impl EtiquetteHooks {
     /// Bind the hook slices for an etiquette table.
+    ///
+    /// Empty slices are meaningful: they say this etiquette does not participate
+    /// in that pipeline phase.
     pub const fn new(
         loaders: &'static [&'static dyn Loader],
         enrichers: &'static [&'static dyn IrEnricher],
@@ -199,8 +229,11 @@ pub struct StaticEtiquette {
 }
 
 impl StaticEtiquette {
-    /// Bind a static hook table. Not a builder: `const` statics cannot
-    /// call `derive_builder::build`.
+    /// Bind a static hook table.
+    ///
+    /// Not a builder: `const` statics cannot call `derive_builder::build`.
+    /// Keep `id`, rule ids, marker labels, and artifact names stable after
+    /// users have generated reports or exceptions.
     pub const fn new(
         id: &'static str,
         name: &'static str,
@@ -282,6 +315,9 @@ pub struct QualityAreaSpec {
 
 impl QualityAreaSpec {
     /// Bind a quality-report row for a static etiquette table.
+    ///
+    /// `compute` receives all findings and should count only the rows owned by
+    /// this area.
     pub const fn new(
         title: &'static str,
         checklist: &'static str,
@@ -328,6 +364,10 @@ pub struct StaticQualityEtiquette {
 
 impl StaticQualityEtiquette {
     /// Wrap a hook table with its optional quality-report row.
+    ///
+    /// Use `Some` for ordinary quality etiquettes. Use `None` only for explicit
+    /// reference inventories or findings intentionally rolled into another
+    /// hand-composed area.
     pub const fn new(etiquette: StaticEtiquette, quality_area: Option<QualityAreaSpec>) -> Self {
         Self {
             etiquette,

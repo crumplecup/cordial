@@ -1,39 +1,32 @@
 //! Classified `tracing::instrument` coverage.
 //!
-//! **What.** Every function gets a use-class (`FunctionRole`), a complexity,
-//! and a target `InstrumentRecipe`. Probes flag a missing attribute, a recipe
-//! delta (`level`, `err`, `ret`, `fields`, `skip`), or **attenuation**:
-//! `#[instrument]` already present on proof-only code, skip-policy files, or
-//! ungated on a prover-reachable function. Apply writes, gates, or removes
-//! to match. Visibility does not exempt a function.
+//! **What.** Classifies every function and checks whether its tracing shape
+//! matches the recipe for that role.
 //!
-//! **Why.** A missing-span census treats constructors, getters, scanners, and
-//! entry points the same. Skipping private helpers creates blind spots in the
-//! internals. The etiquette’s job is to instrument each function properly for
-//! its class. Volume is a subscriber `level` problem, not a reason to skip
-//! spans. `Fallible` means the function returns `Result` or a `*Result` alias;
-//! `?` on `Option` is not fallible.
+//! **Why.** Skipping private helpers creates observability blind spots.
+//! Volume is a subscriber `level` problem, not a reason to omit spans.
+//! `Fallible` means the function returns `Result` or a `*Result` alias; `?`
+//! on `Option` is not fallible.
 //!
-//! **How to use.**
-//! 1. `cordial quality` writes `{store}/findings/tracing-instrument.checklist.md`
-//!    and `tracing-summary.md`. Subscriber-init rows go to
-//!    `tracing-subscriber.checklist.md`. The binary error-boundary rule
-//!    (a fallible `fn main` must report its error via tracing before the
-//!    process boundary, not bubble it into a crash) goes to
-//!    `tracing-boundary.checklist.md`. Leftover stdio (`println!`/`print!`/
-//!    `dbg!`, including `main`, `src/cli`, and `tests/`) go to
-//!    `tracing-print.checklist.md`. Filter those with `[tracing.stdio]`
-//!    (`--apply` does not patch those).
-//! 2. `cordial quality --apply` (or `--dry-run`) patches open instrument
-//!    checklist rows. Re-run quality after apply.
+//! **Flags.** Missing `#[instrument]`, recipe deltas (`level`, `err`, `ret`,
+//! `fields`, `skip`), and attenuation cases: instrumentation on proof-only
+//! code, skip-policy files, or ungated prover-reachable functions. The same
+//! etiquette also owns subscriber-init findings, binary error-boundary
+//! findings, and leftover stdio macro findings.
 //!
-//! Knobs live under `[tracing]` in `cordial.toml` (`extra_skip`,
-//! `apply_gate_crates`, `apply_skip_crates`, `[tracing.subscriber]`,
-//! `[tracing.boundary]`, `[tracing.stdio]`).
-//! Role→level maps stay in code. Feature `tracing` is on by default. Register
-//! [`TRACING_ETIQUETTE`] on a [`crate::Session`].
+//! **Ignores.** Visibility does not exempt a function. `--apply` only patches
+//! open instrument checklist rows; it does not patch subscriber, boundary, or
+//! stdio rows.
 //!
-//! Policy: `docs/planning/tracing-etiquette.md`.
+//! **Outputs.** `{store}/findings/tracing-instrument.checklist.md`,
+//! `tracing-summary.md`, `tracing-subscriber.checklist.md`,
+//! `tracing-boundary.checklist.md`, `tracing-print.checklist.md`, and CSVs.
+//!
+//! **Config.** `[tracing]` owns `extra_skip`, `apply_gate_crates`,
+//! `apply_skip_crates`, `[tracing.subscriber]`, `[tracing.boundary]`, and
+//! `[tracing.stdio]`. `[tracing] enabled = false` opts out. Register
+//! [`TRACING_ETIQUETTE`] on a [`crate::Session`]. Policy:
+//! `docs/planning/tracing-etiquette.md`.
 
 mod apply;
 mod assessor;

@@ -1,18 +1,26 @@
 //! Unified error IR source scan shared by error-handling etiquettes.
 //!
-//! **What.** One `syn` walk of a file produces the layers later etiquettes
-//! read: sites always; chain preservation when `error_chain` is on;
-//! internal compliance when `internal_error_chain` is on.
+//! **What.** One `syn` walk of a file produces the layers consumed by the
+//! error-handling family.
 //!
-//! **Why.** Sites, chain, internal graph, foreign types, and attenuation
-//! must agree on the same rows. A shared scan avoids each etiquette
-//! re-walking source with a slightly different visitor.
+//! **Why.** Sites, chain preservation, internal graph shape, foreign types,
+//! and attenuation must agree on the same rows. A shared scan avoids each
+//! etiquette re-walking source with a slightly different visitor.
 //!
-//! **How to use.** Not a CLI etiquette. Enable `error_sites` (and optional
-//! downstream features). `visitor` is unconditional. `chain_layer` and
-//! `compliance_layer` are gated wholesale by a single `#[cfg]` on their
-//! `mod` declaration, rather than scattering `#[cfg(feature = ...)]` across
-//! their internals (`docs/planning/cfg-scatter-etiquette.md`).
+//! **Flags.** This module does not emit user-facing findings. It builds site
+//! rows unconditionally for `error_sites`, chain-preservation rows when
+//! `error_chain` is on, and internal-compliance rows when
+//! `internal_error_chain` is on.
+//!
+//! **Ignores.** Judgment, exception handling, and artifact rendering stay in
+//! the downstream etiquettes.
+//!
+//! **Outputs.** In-memory error IR layers attached to the shared graph.
+//!
+//! **Config.** Not a CLI etiquette. Enable `error_sites` and optional
+//! downstream error features. `chain_layer` and `compliance_layer` are gated
+//! wholesale at the module boundary instead of scattering feature cfgs across
+//! their internals.
 
 mod visitor;
 

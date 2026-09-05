@@ -1,19 +1,24 @@
 //! Whether error conversions keep `source()`.
 //!
-//! **What.** Among inventoried error sites, flags converters (especially
-//! `map_err`) that drop the original error instead of wrapping it. Sites that
-//! already preserve the chain are the contrast set, not the checklist.
+//! **What.** Judges inventoried error sites for source-chain preservation.
 //!
-//! **Why.** A typed crate error is useless in the field if the foreign cause
-//! was stringified away. Chain preservation is the difference between
-//! “something failed” and a diagnosable `source()` walk.
+//! **Why.** A typed crate error is not diagnosable if the foreign cause was
+//! stringified away. Chain preservation is the difference between “something
+//! failed” and a useful `source()` walk.
 //!
-//! **How to use.** Run `cordial quality` (feature `error_chain`). Artifacts:
-//! `{store}/findings/error-chain-preserved.checklist.md` and
-//! `error-chain-preserved-summary.md`. Contrast with `foreign_error_types`
-//! (breaks on foreign `E`). Register [`ERROR_CHAIN_ETIQUETTE`].
+//! **Flags.** Wrappers without a source field, kind-wrapper payload shape
+//! problems, and `From` / `map_err` bridges that drop the cause. Preserved `?`
+//! and preserved `map_err` rows are retained as contrast rules.
 //!
-//! Policy: `docs/planning/error-handling-as-plugin.md`.
+//! **Ignores.** Foreign-type leakage itself belongs to `foreign_error_types`;
+//! this etiquette only asks whether a conversion kept the chain.
+//!
+//! **Outputs.** `{store}/findings/error-chain-preserved.checklist.md`,
+//! `error-chain-preserved-summary.md`, and CSV.
+//!
+//! **Config.** `[error_chain] enabled = false` opts out in `cordial.toml`.
+//! Register [`ERROR_CHAIN_ETIQUETTE`]. Policy:
+//! `docs/planning/error-handling-as-plugin.md`.
 
 mod assessor;
 mod probe;

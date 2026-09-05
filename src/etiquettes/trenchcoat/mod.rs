@@ -1,16 +1,23 @@
 //! Foreign types that reach elicitation traits unwrapped.
 //!
-//! **What.** From rustdoc JSON, finds types that implement (or should
-//! implement) our traits while still exposing an unwrapped foreign type —
-//! the “trenchcoat” is the wrapper that should sit in between.
+//! **What.** Finds foreign types exposed directly where a local wrapper should
+//! sit in between.
 //!
 //! **Why.** Binding a foreign type directly to an elicitation trait couples
-//! our surface to upstream layout and orphan-rule limits. Wrappers are the
-//! seam that `impl-coverage` and `shadow` then measure.
+//! the local surface to upstream layout and orphan-rule limits. Wrappers are
+//! the seam that `impl_coverage` and `shadow` then measure.
 //!
-//! **How to use.** `cordial build rustdoc`, then `cordial coverage` (feature
-//! `trenchcoat` / `elicitation`). Artifact: `{store}/findings/trenchcoats.csv`.
-//! Register [`TRENCHCOAT_ETIQUETTE`].
+//! **Flags.** Types that implement, or should implement, local elicitation
+//! traits while still exposing an unwrapped foreign type.
+//!
+//! **Ignores.** Missing trait implementations belong to `impl_coverage`.
+//! Missing upstream mirrors belong to `shadow`.
+//!
+//! **Outputs.** `{store}/findings/trenchcoats.csv`.
+//!
+//! **Config.** Run `cordial build rustdoc`, then `cordial coverage`. Requires
+//! the `trenchcoat` / `elicitation` feature set. Register
+//! [`TRENCHCOAT_ETIQUETTE`].
 
 mod assessor;
 mod probe;

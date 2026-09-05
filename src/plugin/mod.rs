@@ -42,17 +42,24 @@ pub use workspace_hub::{WorkspaceHub, detect_workspace_hub, discover_workspace_h
 
 use crate::etiquette::Etiquette;
 
-/// Runnable unit registered with the session.
+/// Runnable product registered with the session.
+///
+/// A plugin contributes one or more etiquettes under one product id. The session
+/// flattens plugin etiquettes, removes duplicate etiquette ids, and then runs
+/// the resulting hook bundles.
 pub trait Plugin: Send + Sync {
-    /// Stable identifier for this hook.
+    /// Stable identifier for command filters and registration deduplication.
     fn id(&self) -> &str;
-    /// Human-readable name.
+    /// Human-readable display name for reports and diagnostics.
     fn name(&self) -> &str;
 
-    /// Hook bundles this plugin contributes (deduped across plugins in one run).
+    /// Hook bundles this plugin contributes.
+    ///
+    /// Return a stable slice. The session deduplicates etiquettes by
+    /// [`Etiquette::id`] after all selected plugins have been flattened.
     fn etiquettes(&self) -> &[&'static dyn Etiquette];
 
-    /// Etiquette / lint category this rule belongs to.
+    /// Product category used by quality and coverage command routing.
     fn category(&self) -> PluginCategory {
         PluginCategory::Quality
     }

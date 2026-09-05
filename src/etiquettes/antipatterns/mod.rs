@@ -1,22 +1,27 @@
 //! Untyped error carriers and related source smells.
 //!
-//! **What.** Flags `Box<dyn Error>`, `Result<_, String>`, unused `_arg`
-//! parameters (except on impls of traits not defined in this crate), struct
-//! fields that are `&'static` references where an owned type would do
-//! (`Location` → copy `file`/`line`; `&'static dyn` of a crate-local trait is
-//! a view/registry exception; `&'static str` on types constructed only as
-//! `const`/`static` is a placement guarantee), unnamed contract bounds (Kani / Creusot /
-//! Verus), and workspace members that pin a version in
-//! `[workspace.members]`-adjacent tables ([`AntipatternRuleId`]).
+//! **What.** Catches quality problems adjacent to error handling that do not
+//! belong to the site, chain, foreign-type, or attenuation layers.
 //!
-//! **Why.** These are quality problems adjacent to error handling that are
-//! not site/chain/foreign layers: they erase types, hide unused work, or
-//! fight workspace versioning. The error-handling plugin consumes typed
-//! `E`; this etiquette catches the untyped leftovers.
+//! **Why.** These patterns erase types, hide unused work, or fight workspace
+//! versioning. The error-handling plugin consumes typed `E`; this etiquette
+//! catches the untyped leftovers and adjacent smells.
 //!
-//! **How to use.** Run `cordial quality` (feature `antipatterns`). Artifacts:
-//! `{store}/findings/antipatterns.checklist.md`, `antipatterns-summary.md`,
-//! plus `version-in-member.*`. Register [`ANTIPATTERNS_ETIQUETTE`].
+//! **Flags.** `Box<dyn Error>`, `Result<_, String>`, unused `_arg`
+//! parameters, struct fields that are `&'static` references where owned data
+//! would do, unnamed verifier contract bounds, and workspace members that pin
+//! a version in workspace-adjacent tables.
+//!
+//! **Ignores.** Unused `_arg` is allowed on impls of traits not defined in
+//! this crate. `&'static dyn` of a crate-local trait may be a view/registry
+//! exception, and `&'static str` on const/static-only types may be a placement
+//! guarantee.
+//!
+//! **Outputs.** `{store}/findings/antipatterns.checklist.md`,
+//! `antipatterns-summary.md`, antipattern CSVs, and `version-in-member.*`.
+//!
+//! **Config.** `[antipatterns] enabled = false` opts out in `cordial.toml`.
+//! Register [`ANTIPATTERNS_ETIQUETTE`].
 
 mod assessor;
 mod contract_bounds;

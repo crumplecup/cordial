@@ -1,19 +1,26 @@
 //! Inventory of `Result` control-flow sites.
 //!
-//! **What.** Records `?`, `map_err`, `return Err`, `if let Err`, `match` on
-//! `Err`, and `ok_or` ([`ErrorSiteKind`]). Downstream etiquettes partition
-//! those rows by origin (internal vs foreign).
+//! **What.** Names each place an error is created, propagated, or inspected
+//! so later error-handling etiquettes can make judgments over the same rows.
 //!
-//! **Why.** You cannot judge chain preservation or foreign attenuation until
+//! **Why.** Chain preservation and foreign attenuation cannot be judged until
 //! every error site is named. This is the census layer of the error-handling
-//! plugin; later layers consume the same IR.
+//! plugin.
 //!
-//! **How to use.** Run `cordial quality` (feature `error_sites`). Artifacts:
-//! `{store}/findings/error-sites.checklist.md`, `error-sites-summary.md`,
-//! partition CSV/summary. Register [`ERROR_SITES_ETIQUETTE`] on a
-//! [`crate::Session`]. Shares the `error_ir` scan.
+//! **Flags.** `?`, `map_err`, `return Err`, `if let Err`, `match` on `Err`,
+//! and `ok_or` sites, represented as [`ErrorSiteKind`]. Downstream etiquettes
+//! partition these rows by internal vs foreign origin.
 //!
-//! Policy: `docs/planning/error-handling-as-plugin.md`.
+//! **Ignores.** This layer does not decide whether a site is good or bad. It
+//! produces shared observations for `error_chain`, `foreign_error_types`, and
+//! `foreign_error_attenuation`.
+//!
+//! **Outputs.** `{store}/findings/error-sites.checklist.md`,
+//! `error-sites-summary.md`, partition CSVs, and partition summaries.
+//!
+//! **Config.** `[error_sites] enabled = false` opts out in `cordial.toml`.
+//! Register [`ERROR_SITES_ETIQUETTE`] on a [`crate::Session`]. Shared scan:
+//! `error_ir`. Policy: `docs/planning/error-handling-as-plugin.md`.
 
 mod assessor;
 mod foreign_infer;

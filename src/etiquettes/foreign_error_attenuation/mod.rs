@@ -1,23 +1,27 @@
 //! How foreign error sites should be handled.
 //!
-//! **What.** Classifies each typed foreign site
-//! ([`ForeignErrorHandlingClass`]): chain already preserved, chain break,
-//! pending infrastructure, or neutral. Suggests a resolution (keep the
-//! exemplar, replace a stringifying `map_err`, add infrastructure then `?`,
-//! or review by hand).
+//! **What.** Classifies each typed foreign site into an actionable handling
+//! class.
 //!
-//! **Why.** Listing foreign types is not enough; the actionable question is
-//! *what to do at this site*. Attenuation turns the census into a queue:
-//! wrap into the internal type, wait for a `From` impl, or leave a documented
+//! **Why.** Listing foreign types is not enough; the operational question is
+//! what to do at this site. Attenuation turns the census into a queue: wrap
+//! into the internal type, wait for a `From` impl, or leave a documented
 //! exception.
 //!
-//! **How to use.** Run `cordial quality` (feature
-//! `foreign_error_attenuation`). Artifacts:
-//! `{store}/findings/foreign-error-attenuation.checklist.md` and
-//! `foreign-error-attenuation-summary.md`. Register
-//! [`FOREIGN_ERROR_ATTENUATION_ETIQUETTE`].
+//! **Flags.** [`ForeignErrorHandlingClass`] rows: chain already preserved,
+//! chain break, pending infrastructure, or neutral. Resolutions say to keep
+//! the exemplar, replace a stringifying `map_err`, add infrastructure then use
+//! `?`, or review by hand.
 //!
-//! Policy: `docs/planning/error-handling-as-plugin.md`.
+//! **Ignores.** Pure type-surface inventory belongs to `foreign_error_types`.
+//! Internal architecture compliance belongs to `internal_error_chain`.
+//!
+//! **Outputs.** `{store}/findings/foreign-error-attenuation.checklist.md`,
+//! `foreign-error-attenuation-summary.md`, and CSV.
+//!
+//! **Config.** `[foreign_error_attenuation] enabled = false` opts out in
+//! `cordial.toml`. Register [`FOREIGN_ERROR_ATTENUATION_ETIQUETTE`]. Policy:
+//! `docs/planning/error-handling-as-plugin.md`.
 
 mod assess;
 mod assessor;

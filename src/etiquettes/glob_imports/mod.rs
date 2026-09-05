@@ -1,23 +1,24 @@
 //! Glob `use` trees (`foo::*`).
 //!
-//! **What.** Flags every `*` in a `use` item (`GLOB-IMPORT-001`), including
-//! `pub use`, `use super::*;`, and nested `use foo::{bar, *}`. Exempts
-//! `use <path>::prelude::*;` -- a crate's own `prelude` module is
-//! conventionally designed to be glob-imported (`std::prelude`,
-//! `vstd::prelude`, `itertools::prelude`, `rayon::prelude`, `diesel::
-//! prelude`, ...), the same way `std`'s own prelude is auto-imported into
-//! every ordinary Rust crate with no explicit-list alternative.
+//! **What.** Finds imports that hide the concrete names a file depends on.
 //!
-//! **Why.** Glob imports hide which names a file depends on and break
-//! completion in most IDEs. Explicit lists stay reviewable when code moves,
-//! and they keep tracing recipes and exception patches pointed at real idents.
+//! **Why.** Glob imports break reviewability and completion when code moves.
+//! Explicit lists keep dependencies, tracing recipes, and exception patches
+//! pointed at real identifiers.
 //!
-//! **How to use.** Run `cordial quality` (feature `glob_imports`, part of
-//! `quality`). Artifacts: `{store}/findings/glob-imports.checklist.md`,
-//! `glob-imports-summary.md`, and CSV. Exceptions: `cordial exceptions show glob_imports`.
-//! Register [`GLOB_IMPORTS_ETIQUETTE`] on a [`crate::Session`].
+//! **Flags.** Every `*` in a `use` item as `GLOB-IMPORT-001`, including
+//! `pub use`, `use super::*`, and nested `use foo::{bar, *}`.
 //!
-//! Policy: `docs/planning/glob-imports-etiquette.md`.
+//! **Ignores.** `use <path>::prelude::*` is allowed because prelude modules
+//! are conventionally designed for glob import.
+//!
+//! **Outputs.** `{store}/findings/glob-imports.checklist.md`,
+//! `glob-imports-summary.md`, and CSV.
+//!
+//! **Config.** `[glob_imports] enabled = false` opts out in `cordial.toml`.
+//! Exceptions are managed with `cordial exceptions show glob_imports`.
+//! Register [`GLOB_IMPORTS_ETIQUETTE`]. Policy:
+//! `docs/planning/glob-imports-etiquette.md`.
 
 mod assessor;
 mod enricher;

@@ -1,23 +1,27 @@
 //! rustdoc diagnostics from `cargo doc`.
 //!
-//! **What.** Invokes `cargo doc --no-deps` and records each `rustdoc::*`
-//! diagnostic (`DOC-WARNING-001`). rustc lints that happen to fire while
-//! rustdoc compiles (`missing_docs`, `unused`, …) are dropped — check and
-//! clippy already see those. The same span is kept once.
+//! **What.** Runs documentation compilation and records rustdoc-only
+//! diagnostics.
 //!
-//! **Why.** `cargo check` never runs rustdoc. Broken intra-doc links and
-//! the rest of the `rustdoc::*` group only show up under `cargo doc`, which
-//! is easy to skip locally until CI sets `RUSTDOCFLAGS=-D warnings`.
+//! **Why.** `cargo check` never runs rustdoc. Broken intra-doc links and the
+//! rest of the `rustdoc::*` group only show up under `cargo doc`, which is
+//! easy to skip locally until CI sets `RUSTDOCFLAGS=-D warnings`.
 //!
-//! **How to use.** Run `cordial quality` (feature `doc_warnings`, part of
-//! `quality`). Skipped when `cargo` is not on `PATH` (`CORDIAL_CARGO` /
-//! `CARGO` override the binary) or when the package is in
-//! `[doc_warnings] skip_crates`. Artifacts:
-//! `{store}/findings/doc-warnings.checklist.md`, `doc-warnings-summary.md`,
-//! and CSV. Exceptions: `cordial exceptions show doc_warnings`.
-//! Register [`DOC_WARNINGS_ETIQUETTE`] on a [`crate::Session`].
+//! **Flags.** Each `rustdoc::*` diagnostic as `DOC-WARNING-001`; duplicate
+//! spans are kept once.
 //!
-//! Policy: `docs/planning/doc-warnings-etiquette.md`.
+//! **Ignores.** Rustc lints that fire while rustdoc compiles, such as
+//! `missing_docs` or `unused`, are dropped because check and Clippy already
+//! see them. Crates in `[doc_warnings] skip_crates` are skipped.
+//!
+//! **Outputs.** `{store}/findings/doc-warnings.checklist.md`,
+//! `doc-warnings-summary.md`, and CSV.
+//!
+//! **Config.** `[doc_warnings]` owns `skip_crates` and `enabled`.
+//! `CORDIAL_CARGO` / `CARGO` override the cargo binary. Exceptions are
+//! managed with `cordial exceptions show doc_warnings`. Register
+//! [`DOC_WARNINGS_ETIQUETTE`]. Policy:
+//! `docs/planning/doc-warnings-etiquette.md`.
 
 mod assessor;
 mod enricher;

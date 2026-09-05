@@ -1,3 +1,14 @@
+//! Built-in reporters and summary builders.
+//!
+//! Reporters convert post-assessment findings into local artifacts such as CSV,
+//! Markdown checklists, rollups, quality summaries, and coverage summaries. The
+//! session always adds the rollup reporter; feature-gated quality and coverage
+//! summaries are added when the active plugin or etiquette set needs them.
+//!
+//! Custom etiquette authors usually implement [`Reporter`](crate::Reporter)
+//! directly. The items re-exported here are the first-party report shapes used
+//! by the CLI and built-in standards.
+
 #[cfg(any(
     feature = "homecoming_std",
     feature = "amenable_std",

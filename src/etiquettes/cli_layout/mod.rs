@@ -1,19 +1,26 @@
 //! Clap types and dispatch live in the library; `main` is thin.
 //!
-//! **What.** For lib+bin crates that use clap, `Parser` / `Subcommand` types
-//! must live in the library, each implement `fn act(self, …) -> Result`, and
-//! hand off to every nested clap type. Free functions do not take clap types.
-//! `main` only parses, calls `act`, and converts with miette. Error types
-//! must not live only on the binary side.
+//! **What.** Enforces the one-crate CLI layout for lib+bin crates that use
+//! clap.
 //!
-//! **Why.** A single `Cli::act` still hides a god-match and `execute_*(&Cli)`
-//! helpers. Dispatch belongs on the clap types themselves.
+//! **Why.** A single `Cli::act` can still hide a god-match and
+//! `execute_*(&Cli)` helpers. Dispatch belongs on the clap types themselves,
+//! with the binary as a thin process boundary.
 //!
-//! **How to use.** Run `cordial quality` (feature `cli_layout`). Artifacts:
-//! `{store}/findings/cli-layout.checklist.md`, `cli-layout-summary.md`,
-//! `cli-layout.csv`. Register [`CLI_LAYOUT_ETIQUETTE`].
+//! **Flags.** Clap `Parser` / `Subcommand` types that live only on the
+//! binary side, clap types that do not implement `fn act(self, ...) ->
+//! Result`, nested clap types that are not handed off through `act`, free
+//! functions that take clap types, binary-only error types, and `main`
+//! functions that do more than parse + act + miette.
 //!
-//! Policy: `docs/planning/one-crate-cli-layout.md`.
+//! **Ignores.** Crates without the lib+bin clap shape are not the target.
+//!
+//! **Outputs.** `{store}/findings/cli-layout.checklist.md`,
+//! `cli-layout-summary.md`, and `cli-layout.csv`.
+//!
+//! **Config.** `[cli_layout] enabled = false` opts out in `cordial.toml`.
+//! Register [`CLI_LAYOUT_ETIQUETTE`]. Policy:
+//! `docs/planning/one-crate-cli-layout.md`.
 
 mod assessor;
 mod enricher;

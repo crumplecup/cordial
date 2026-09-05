@@ -1,10 +1,24 @@
-//! Binary error-boundary policy: a fallible `fn main` must convert its
-//! error to a tracing warn/error emission before the process boundary
-//! instead of letting it bubble up and crash the process. Library code
-//! keeps propagating errors via `?` (the existing error-chain policy);
-//! this etiquette applies only to the binary's own entry point, and only
-//! `stdio`-locked-down projects have a single designated UI channel
-//! (`tracing::warn!`/`error!`) to check for.
+//! Binary error-boundary policy for tracing.
+//!
+//! **What.** Checks whether fallible binary entry points report their error
+//! through tracing before the process boundary.
+//!
+//! **Why.** Library code should keep propagating errors with `?`, but a
+//! binary that lets the final error bubble out has crossed the last useful
+//! observability boundary.
+//!
+//! **Flags.** A fallible `fn main` that never emits a `tracing::warn!` or
+//! `tracing::error!` event for the returned error.
+//!
+//! **Ignores.** Library functions and ordinary propagation sites belong to
+//! the error-chain policy. This sub-etiquette applies only to the binary's own
+//! entry point.
+//!
+//! **Outputs.** `tracing-boundary.checklist.md`, summary, and CSV artifacts
+//! through the parent `tracing` etiquette.
+//!
+//! **Config.** `[tracing.boundary]` controls this policy. It is part of
+//! [`crate::etiquettes::tracing::TRACING_ETIQUETTE`].
 
 mod assessor;
 mod detect;

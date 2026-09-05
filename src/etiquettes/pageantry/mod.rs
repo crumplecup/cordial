@@ -1,23 +1,24 @@
-//! Arrangement of types in a file (pageantry).
+//! Arrangement of traits in a file.
 //!
-//! **What.** First rule: a trait definition after the leading trait
-//! block (`PAGEANTRY-TRAIT-001`). Several traits in a row just below
-//! `use` / `extern crate` / `mod` are fine. A trait after a type (or
-//! any other body item) is not.
+//! **What.** Keeps trait contracts in the leading declaration block.
 //!
-//! **Why.** Contracts belong at the top of the file. A trait that
-//! appears once types have already started is ceremony in the middle of
-//! the show — harder to find, and it usually means the file grew in
-//! the order the author thought of things rather than the order a
-//! reader needs.
+//! **Why.** Contracts belong at the top of the file. A trait that appears
+//! after types or functions have started is harder to find and usually means
+//! the file grew in authoring order rather than reader order.
 //!
-//! **How to use.** Run `cordial quality` (feature `pageantry`, part of
-//! `quality`). Artifacts: `{store}/findings/pageantry.checklist.md`,
-//! `pageantry-summary.md`, and CSV. Opt out:
-//! `[pageantry] enabled = false` in `cordial.toml`. Register
-//! [`PAGEANTRY_ETIQUETTE`] on a [`crate::Session`].
+//! **Flags.** A trait definition after the leading trait block as
+//! `PAGEANTRY-TRAIT-001`.
 //!
-//! Policy: `docs/planning/pageantry-etiquette.md`.
+//! **Ignores.** `use`, `extern crate`, and `mod` declarations are treated as
+//! the file header. Several traits in a row just below that header are valid.
+//! `#[cfg(test)]` items are skipped.
+//!
+//! **Outputs.** `{store}/findings/pageantry.checklist.md`,
+//! `pageantry-summary.md`, and CSV.
+//!
+//! **Config.** `[pageantry] enabled = false` opts out in `cordial.toml`.
+//! Register [`PAGEANTRY_ETIQUETTE`] on a [`crate::Session`]. Policy:
+//! `docs/planning/pageantry-etiquette.md`.
 
 mod assessor;
 mod enricher;

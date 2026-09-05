@@ -1,19 +1,23 @@
 //! Tests mixed into library source.
 //!
-//! **What.** Flags `#[cfg(test)]` modules and leftover `#[test]` functions
-//! under `src/` (`INLINE-TEST-MOD`, `INLINE-TEST-CFG`, `INLINE-TEST-FN`).
-//! Crate `tests/` is the destination, not a finding.
+//! **What.** Finds test-only code under `src/`.
 //!
 //! **Why.** Inline tests hide cases from readers of the library and mix
 //! test-only helpers into production modules. Integration tests in `tests/`
-//! stay visible and match cordial’s own layout rule.
+//! stay visible and match cordial's own layout rule.
 //!
-//! **How to use.** Run `cordial quality` (feature `inline_tests`, part of
-//! `quality`). Artifacts: `{store}/findings/inline-tests.checklist.md`,
-//! `inline-tests-summary.md`, and CSV. Exceptions: `cordial exceptions show inline_tests`.
-//! Register [`INLINE_TESTS_ETIQUETTE`] on a [`crate::Session`].
+//! **Flags.** `#[cfg(test)]` modules, `#[cfg(test)]` items, and leftover
+//! `#[test]` functions under `src/`.
 //!
-//! Policy: `docs/planning/inline-tests-etiquette.md`.
+//! **Ignores.** Crate `tests/` is the destination, not a finding.
+//!
+//! **Outputs.** `{store}/findings/inline-tests.checklist.md`,
+//! `inline-tests-summary.md`, and CSV.
+//!
+//! **Config.** `[inline_tests] enabled = false` opts out in `cordial.toml`.
+//! Exceptions are managed with `cordial exceptions show inline_tests`.
+//! Register [`INLINE_TESTS_ETIQUETTE`]. Policy:
+//! `docs/planning/inline-tests-etiquette.md`.
 
 mod assessor;
 mod enricher;

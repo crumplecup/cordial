@@ -3,10 +3,17 @@ use crate::loader::{CrateTarget, LoadView};
 use crate::session::SessionView;
 
 /// Reads raw material for analysis.
+///
+/// Loaders should gather source, rustdoc, cargo metadata, or similar inputs and
+/// return an opaque [`LoadView`]. They should not add graph facts or emit
+/// findings.
 pub trait Loader: Send + Sync {
-    /// Stable identifier for this hook.
+    /// Stable identifier used to deduplicate loader runs.
     fn id(&self) -> &str;
     /// Read raw material for this crate and return a load view.
+    ///
+    /// The session passes the returned view to enrichers whose
+    /// `required_loader()` matches this loader id.
     fn load(&self, view: LoadContext<'_>) -> CordialResult<Box<dyn LoadView>>;
 }
 

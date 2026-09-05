@@ -1,33 +1,28 @@
 //! Manual patterns that a derive crate would write.
 //!
-//! **What.** Flags hand-rolled builders, constructors that should be
-//! builders, getters, setters (`into` / `strip_option`), `as_ref` / `as_str`,
-//! trivial `new`, and public fields ([`DeriveRuleId`]). Policy knobs live in
-//! [`crate::config::DerivesThresholds`] / `[derives]` in `cordial.toml`.
+//! **What.** Finds hand-written boilerplate that can move back to the type
+//! definition.
 //!
 //! **Why.** Repeated accessors and builders are noise. Derives keep the type
 //! definition as the source of truth and shrink the surface tracing and
-//! visibility have to classify. Error types are exempt from `derive_new`
-//! because their constructors use `#[track_caller]`. Clap `Parser` /
-//! `Args` / `Subcommand` types skip public-field linting (CLI schema).
-//! `const fn` constructors, getters, setters, and `as_ref`/`as_str`
-//! forwarders are exempt from their respective rules: none of
-//! `derive_new::new`, `derive_getters::Getters`, `derive_setters::Setters`,
-//! or `derive_more::AsRef` generate `const fn` output (confirmed against
-//! each crate's own docs, not assumed), so recommending one of them would
-//! recommend a lossy change -- silently dropping const-evaluability with
-//! no compiler warning, since nothing forces a call site to already need
-//! it. `DERIVE-USE-BUILDER-001` gets the same exemption for the same
-//! reason: `derive_builder::Builder`'s generated `build()` isn't const
-//! either. This etiquette asks
-//! *could this be a derive?* (or *should this constructor be a builder?*);
-//! tracing asks *is this function instrumented for its role?* `Some(arg)`
-//! and `arg.into()` are `derive_setters` options, not exemptions. `as_str`
-//! / `as_ref` steer to `derive_more::AsRef`.
+//! visibility have to classify.
 //!
-//! **How to use.** Run `cordial quality` (feature `derives`). Artifacts:
-//! `{store}/findings/derives.checklist.md`, `derives-summary.md`, and CSV.
-//! Exceptions: `cordial exceptions show derives`. Register
+//! **Flags.** Hand-rolled builders, constructors that should be builders,
+//! getters, setters, `as_ref` / `as_str`, trivial `new`, and public fields.
+//! `Some(arg)` and `arg.into()` are `derive_setters` options, not exemptions.
+//!
+//! **Ignores.** Error constructors are exempt from `derive_new` when they use
+//! `#[track_caller]`. Clap schema types skip public-field linting.
+//! `const fn` constructors, getters, setters, and `as_ref` / `as_str`
+//! forwarders are exempt because the recommended derives would drop
+//! const-evaluability.
+//!
+//! **Outputs.** `{store}/findings/derives.checklist.md`,
+//! `derives-summary.md`, and CSV.
+//!
+//! **Config.** `[derives]` owns the thresholds in
+//! [`crate::config::DerivesThresholds`]. `[derives] enabled = false` opts out.
+//! Exceptions are managed with `cordial exceptions show derives`. Register
 //! [`DERIVES_ETIQUETTE`] on a [`crate::Session`].
 
 mod assessor;

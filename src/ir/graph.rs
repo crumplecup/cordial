@@ -25,7 +25,11 @@ pub struct CrateIrSnapshot {
     pub indexes: IrIndexes,
 }
 
-/// One crate's append-only IR graph.
+/// One crate's append-oriented IR graph.
+///
+/// Loaders create the initial graph, enrichers add nodes/edges/attributes, and
+/// probes read it through [`IrView`](crate::IrView). Node ids are stable within
+/// one graph snapshot but are not a persistent cross-run identifier.
 #[derive(Debug, Clone, derive_getters::Getters)]
 pub struct CrateIr {
     /// Cargo package name.
@@ -39,7 +43,7 @@ pub struct CrateIr {
 }
 
 impl CrateIr {
-    /// Construct a new value.
+    /// Construct an empty crate graph with a crate root node.
     #[instrument(level = "debug", skip(crate_name), ret)]
     pub fn new(crate_name: impl Into<String>) -> Self {
         let crate_name = crate_name.into();
@@ -55,7 +59,7 @@ impl CrateIr {
         }
     }
 
-    /// Node weight.
+    /// Borrow the stored payload for a node id.
     #[instrument(level = "trace", skip(self, id))]
     pub fn node_weight(&self, id: NodeId) -> Option<&NodeWeight> {
         self.graph.node_weight(id.to_index())
@@ -110,7 +114,7 @@ impl CrateIr {
         self.indexes.rebuild_by_path(&self.graph);
     }
 
-    /// Neighbors.
+    /// Return neighboring nodes connected by `kind` in `direction`.
     #[instrument(level = "debug", skip(self, node, kind, direction))]
     pub fn neighbors(
         &self,
@@ -132,7 +136,7 @@ impl CrateIr {
             .collect()
     }
 
-    /// Snapshot.
+    /// Serialize the graph and indexes for cache storage.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
     pub fn snapshot(&self) -> CordialResult<CrateIrSnapshot> {
         Ok(CrateIrSnapshot {
@@ -188,7 +192,7 @@ impl CrateIr {
         })
     }
 
-    /// Write cache.
+    /// Write a pretty-printed JSON IR cache file.
     #[instrument(level = "info", skip(self, path), err(level = "warn"))]
     pub fn write_cache(&self, path: &Path) -> CordialResult<()> {
         if let Some(parent) = path.parent() {
@@ -200,7 +204,7 @@ impl CrateIr {
         Ok(())
     }
 
-    /// Read cache.
+    /// Read a JSON IR cache file.
     #[instrument(level = "info", skip(path), err(level = "warn"))]
     pub fn read_cache(path: &Path) -> CordialResult<Self> {
         let json = fs::read_to_string(path)?;
@@ -208,7 +212,7 @@ impl CrateIr {
         Self::from_snapshot(snapshot)
     }
 
-    /// Store path for this digest file.
+    /// Store path for this crate's IR cache file.
     #[instrument(level = "debug")]
     pub fn cache_path(cache_dir: &Path, crate_name: &str) -> PathBuf {
         cache_dir.join(format!("{crate_name}.ir.json"))

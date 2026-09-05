@@ -4,10 +4,13 @@ use crate::objects::Finding;
 use crate::session::{RunFilter, SessionView};
 
 /// Consumes workspace-scoped IR and emits cross-crate findings.
+///
+/// Workspace assessors handle rules that need multiple crate graphs or
+/// workspace-level metadata before they can be judged.
 pub trait WorkspaceAssessor: Send + Sync {
-    /// Stable identifier for this hook.
+    /// Stable identifier used to deduplicate workspace assessor runs.
     fn id(&self) -> &str;
-    /// Judge markers (or workspace IR) and emit findings.
+    /// Judge workspace IR and emit findings.
     fn assess(&self, view: WorkspaceAssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>>;
 }
 

@@ -1,16 +1,22 @@
 //! Shadow crates that should mirror upstream items.
 //!
-//! **What.** Pairs an upstream crate with its shadow (interface) crate and
-//! reports types/methods that exist upstream but are not mirrored, including
-//! a workspace-level pass across crate boundaries.
+//! **What.** Compares upstream crates with their shadow/interface crates.
 //!
 //! **Why.** Shadow crates are the elicitation adapter for crates we do not
 //! own. Missing mirrors mean the tracked target is incomplete even when
 //! rustdoc for the upstream crate is present.
 //!
-//! **How to use.** `cordial build rustdoc`, then `cordial coverage` (feature
-//! `shadow` / `elicitation`). Artifacts: `{store}/findings/shadow-*.checklist.md`
-//! and pair/gap CSVs. Register [`SHADOW_ETIQUETTE`].
+//! **Flags.** Upstream types and methods that are not mirrored by the shadow
+//! crate, including cross-crate workspace gaps.
+//!
+//! **Ignores.** Project trait-impl gaps belong to `impl_coverage`. Foreign
+//! wrapper shape belongs to `trenchcoat`.
+//!
+//! **Outputs.** `{store}/findings/shadow-*.checklist.md`, pair CSVs, gap
+//! CSVs, and method checklist artifacts.
+//!
+//! **Config.** Run `cordial build rustdoc`, then `cordial coverage`. Requires
+//! the `shadow` / `elicitation` feature set. Register [`SHADOW_ETIQUETTE`].
 
 mod assessor;
 mod probe;

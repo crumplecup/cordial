@@ -12,13 +12,13 @@ use tracing::instrument;
 
 /// Profile policy: which layers run and how findings are classified.
 pub trait ErrorHandlingPolicy: Send + Sync {
-    /// Layers.
+    /// Enabled layers for this product.
     fn layers(&self) -> ErrorHandlingLayers;
 }
 
-/// Discovers crate scopes for an error-handling run (default: workspace members).
+/// Discovers crate scopes for an error-handling run.
 pub trait ErrorScopeProvider: Send + Sync {
-    /// Error scopes.
+    /// Error scopes for this session and filter.
     fn error_scopes(
         &self,
         session: &dyn SessionView,
@@ -27,10 +27,13 @@ pub trait ErrorScopeProvider: Send + Sync {
 }
 
 /// Semantic supertrait: error flow analysis over workspace source IR.
+///
+/// Implement this with [`Plugin`] when a product configures the built-in
+/// error-handling family instead of contributing unrelated style checks.
 pub trait ErrorHandling: Plugin {
-    /// Scope provider.
+    /// Scope provider for this error-handling profile.
     fn scope_provider(&self) -> &dyn ErrorScopeProvider;
-    /// Policy.
+    /// Policy for which error layers participate.
     fn policy(&self) -> &dyn ErrorHandlingPolicy;
 
     /// Scopes.

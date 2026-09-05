@@ -6,8 +6,10 @@
 //! etiquettes need rustdoc JSON. The `cordial` CLI writes artifacts under
 //! `~/.cordial/{project}/`.
 //!
-//! What each etiquette checks, why, and how to run it: the README, then
-//! module docs under `src/etiquettes/`. Architecture:
+//! Start with the README for commands and reader paths. The built-in standards
+//! tour explains what each etiquette enforces, the etiquette-author guide covers
+//! extension traits, and module docs under `src/etiquettes/` document local
+//! lint behavior. Architecture:
 //! [CORDIAL_PLAN.md](https://github.com/crumplecup/cordial/blob/main/CORDIAL_PLAN.md).
 //!
 //! # Features
