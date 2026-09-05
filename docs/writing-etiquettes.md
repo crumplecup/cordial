@@ -82,13 +82,20 @@ to `true`. Coverage reports do not feed `quality-report.md`.
 
 ## Choose the plugin shape
 
-There are three supported product shapes:
+There are four supported product shapes:
 
 | Shape | Use when | Copy from |
 | --- | --- | --- |
 | `StaticPlugin` | a quality product contributes one or more ordinary etiquettes | `examples/custom_plugins/quality.rs` |
+| `StrategicPlugin` | a product exposes alternate etiquette portfolios selected by a strategy enum | `tests/custom_plugins.rs` |
 | `Coverage` | a product asks trait-implementation coverage questions over targets | `examples/custom_plugins/coverage.rs` |
 | `ErrorHandling` | a product configures the error-flow analysis family | `examples/custom_plugins/error_handling.rs` |
+
+Use `Strategy<T>` and `StrategicPlugin` when a plugin family has legitimate
+policy variants. The strategy indicator is usually a small enum parsed from
+`cordial.toml`; each selected portfolio returns the etiquette slice that should
+run for that variant. Keep ordinary plugins on `StaticPlugin` until they
+actually need this selection seam.
 
 Register plugins, not individual hooks:
 

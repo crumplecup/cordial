@@ -44,6 +44,24 @@ pub use workspace_hub::{WorkspaceHub, detect_workspace_hub, discover_workspace_h
 
 use crate::etiquette::Etiquette;
 
+static EMPTY_ETIQUETTES: &[&'static dyn Etiquette] = &[];
+
+/// Policy object that chooses behavior for a target using an indicator.
+///
+/// Most callers use a small enum as [`Strategy::Indicator`], with one variant
+/// per supported option. Strategic plugin variants use that indicator to select
+/// the etiquette portfolio that should participate in a run.
+pub trait Strategy<Target: ?Sized>: Send + Sync {
+    /// User-facing selection key, usually represented by an enum.
+    type Indicator: Copy + Eq + Send + Sync + 'static;
+
+    /// Active selection for this strategy.
+    fn indicator(&self) -> Self::Indicator;
+
+    /// Whether `target` participates under the active indicator.
+    fn accepts(&self, target: &Target) -> bool;
+}
+
 /// Runnable product registered with the session.
 ///
 /// A plugin contributes one or more etiquettes under one product id. The session
@@ -170,6 +188,142 @@ impl Plugin for StaticPlugin {
     #[instrument(level = "trace", skip(self))]
     fn etiquettes(&self) -> &[&'static dyn Etiquette] {
         self.etiquettes
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn category(&self) -> PluginCategory {
+        self.category
+    }
+}
+
+/// One strategy-selected portfolio for a [`StrategicPlugin`].
+#[derive(Clone, Copy)]
+pub struct StrategicPortfolio<I> {
+    /// Indicator value selecting this portfolio.
+    indicator: I,
+    /// Etiquettes contributed when this portfolio is selected.
+    etiquettes: &'static [&'static dyn Etiquette],
+}
+
+impl<I> StrategicPortfolio<I> {
+    /// Build a strategy-selected etiquette portfolio.
+    pub const fn new(indicator: I, etiquettes: &'static [&'static dyn Etiquette]) -> Self {
+        Self {
+            indicator,
+            etiquettes,
+        }
+    }
+
+    /// Indicator value selecting this portfolio.
+    pub fn indicator(&self) -> I
+    where
+        I: Copy,
+    {
+        self.indicator
+    }
+
+    /// Etiquettes contributed when this portfolio is selected.
+    pub fn etiquettes(&self) -> &[&'static dyn Etiquette] {
+        self.etiquettes
+    }
+}
+
+/// Named plugin family whose etiquette portfolio is selected by a strategy.
+///
+/// This avoids making every etiquette configurable at once. A plugin can expose
+/// a small set of portfolios, each keyed by an indicator enum, while ordinary
+/// plugins continue to use [`StaticPlugin`] or [`EtiquettePlugin`].
+#[derive(Clone)]
+pub struct StrategicPlugin<I: 'static> {
+    /// Stable identifier.
+    id: Cow<'static, str>,
+    /// Human-readable name.
+    name: Cow<'static, str>,
+    /// Plugin category this product belongs to.
+    category: PluginCategory,
+    /// Active strategy indicator.
+    indicator: I,
+    /// Available portfolios.
+    portfolios: &'static [StrategicPortfolio<I>],
+}
+
+impl<I: 'static> StrategicPlugin<I> {
+    /// Build a strategic plugin definition from compile-time metadata.
+    pub const fn new(
+        id: &'static str,
+        name: &'static str,
+        category: PluginCategory,
+        indicator: I,
+        portfolios: &'static [StrategicPortfolio<I>],
+    ) -> Self {
+        Self {
+            id: Cow::Borrowed(id),
+            name: Cow::Borrowed(name),
+            category,
+            indicator,
+            portfolios,
+        }
+    }
+
+    /// Build a strategic plugin definition from runtime-owned metadata.
+    pub fn owned(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        category: PluginCategory,
+        indicator: I,
+        portfolios: &'static [StrategicPortfolio<I>],
+    ) -> Self {
+        Self {
+            id: Cow::Owned(id.into()),
+            name: Cow::Owned(name.into()),
+            category,
+            indicator,
+            portfolios,
+        }
+    }
+
+    /// Available portfolios for this plugin.
+    pub fn portfolios(&self) -> &[StrategicPortfolio<I>] {
+        self.portfolios
+    }
+}
+
+impl<I> Strategy<StrategicPortfolio<I>> for StrategicPlugin<I>
+where
+    I: Copy + Eq + Send + Sync + 'static,
+{
+    type Indicator = I;
+
+    fn indicator(&self) -> Self::Indicator {
+        self.indicator
+    }
+
+    fn accepts(&self, target: &StrategicPortfolio<I>) -> bool {
+        target.indicator == self.indicator
+    }
+}
+
+impl<I> Plugin for StrategicPlugin<I>
+where
+    I: Copy + Eq + Send + Sync + 'static,
+{
+    #[instrument(level = "trace", skip(self))]
+    fn id(&self) -> &str {
+        self.id.as_ref()
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn etiquettes(&self) -> &[&'static dyn Etiquette] {
+        self.portfolios
+            .iter()
+            .find(|portfolio| self.accepts(portfolio))
+            .map(StrategicPortfolio::etiquettes)
+            .unwrap_or(EMPTY_ETIQUETTES)
     }
 
     #[instrument(level = "trace", skip(self))]

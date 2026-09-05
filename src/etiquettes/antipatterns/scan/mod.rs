@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use syn::visit::Visit;
 
+use crate::config::StaticRefStrategy;
 use crate::error::CordialResult;
 use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
 
@@ -23,6 +24,15 @@ pub(crate) use preds::truncate_snippet;
 /// Scan every quality tree under `crate_root`, sharing one crate-local trait name set.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_trees(crate_root: &Path) -> CordialResult<Vec<AntipatternSiteRecord>> {
+    scan_crate_trees_with_static_ref_strategy(crate_root, StaticRefStrategy::default())
+}
+
+/// Scan every quality tree under `crate_root` using a static-reference strategy.
+#[instrument(level = "debug", err(level = "warn"))]
+pub fn scan_crate_trees_with_static_ref_strategy(
+    crate_root: &Path,
+    static_ref_strategy: StaticRefStrategy,
+) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let mut parsed = Vec::new();
     let mut local_trait_names = HashSet::new();
     let mut const_constructed = HashSet::new();
@@ -52,6 +62,7 @@ pub fn scan_crate_trees(crate_root: &Path) -> CordialResult<Vec<AntipatternSiteR
             crate_root,
             &local_trait_names,
             &const_placed_types,
+            static_ref_strategy,
         )?);
     }
     Ok(findings)
@@ -64,6 +75,24 @@ pub fn scan_rust_source(
     file: &Path,
     src_root: &Path,
     crate_root: &Path,
+) -> CordialResult<Vec<AntipatternSiteRecord>> {
+    scan_rust_source_with_static_ref_strategy(
+        source,
+        file,
+        src_root,
+        crate_root,
+        StaticRefStrategy::default(),
+    )
+}
+
+/// Scan one Rust source file and return records using a static-reference strategy.
+#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
+pub fn scan_rust_source_with_static_ref_strategy(
+    source: &str,
+    file: &Path,
+    src_root: &Path,
+    crate_root: &Path,
+    static_ref_strategy: StaticRefStrategy,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
@@ -80,6 +109,7 @@ pub fn scan_rust_source(
         crate_root,
         &local_trait_names,
         &const_placed_types,
+        static_ref_strategy,
     )
 }
 
@@ -94,6 +124,7 @@ fn scan_parsed(
     crate_root: &Path,
     local_trait_names: &HashSet<String>,
     const_placed_types: &HashSet<String>,
+    static_ref_strategy: StaticRefStrategy,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut visitor = AntipatternScanVisitor::new(
@@ -102,6 +133,7 @@ fn scan_parsed(
         module_prefix,
         local_trait_names,
         const_placed_types,
+        static_ref_strategy,
     );
     visitor.visit_file(&syntax);
     visitor.into_findings()

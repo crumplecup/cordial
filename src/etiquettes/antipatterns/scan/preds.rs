@@ -8,6 +8,8 @@ use syn::{
     TypeParamBound, TypePath, TypeTraitObject,
 };
 
+use crate::config::StaticRefStrategy;
+
 use tracing::instrument;
 pub(super) struct UnusedArgBinding {
     pub(super) line: u32,
@@ -148,12 +150,101 @@ pub(super) fn type_is_location_capture(ty: &Type) -> bool {
 }
 
 #[instrument(level = "debug", skip(ty))]
-pub(super) fn static_ref_field_snippet(ty: &Type) -> String {
+pub(super) fn static_ref_field_snippet(ty: &Type, strategy: StaticRefStrategy) -> String {
     if type_is_location_capture(ty) {
         "copy `file` and `line` from Location; do not store &'static Location".to_string()
+    } else if type_contains_static_str_ref(ty) {
+        static_str_field_snippet(ty, strategy)
     } else {
-        static_ref_snippet(ty)
+        owned_static_ref_snippet(ty, strategy)
     }
+}
+
+#[instrument(level = "debug", skip(ty), ret)]
+fn type_contains_static_str_ref(ty: &Type) -> bool {
+    match ty {
+        Type::Reference(reference) => {
+            let is_static = reference
+                .lifetime
+                .as_ref()
+                .is_some_and(|lifetime| lifetime.ident == "static");
+            (is_static && type_is_str(&reference.elem))
+                || type_contains_static_str_ref(&reference.elem)
+        }
+        Type::Path(type_path) => {
+            type_path
+                .path
+                .segments
+                .iter()
+                .any(|segment| match &segment.arguments {
+                    PathArguments::AngleBracketed(args) => args.args.iter().any(|arg| {
+                        matches!(
+                            arg,
+                            syn::GenericArgument::Type(inner) if type_contains_static_str_ref(inner)
+                        )
+                    }),
+                    PathArguments::Parenthesized(args) => {
+                        args.inputs.iter().any(type_contains_static_str_ref)
+                    }
+                    PathArguments::None => false,
+                })
+        }
+        Type::Array(array) => type_contains_static_str_ref(&array.elem),
+        Type::Slice(slice) => type_contains_static_str_ref(&slice.elem),
+        Type::Tuple(tuple) => tuple.elems.iter().any(type_contains_static_str_ref),
+        Type::Paren(paren) => type_contains_static_str_ref(&paren.elem),
+        Type::Group(group) => type_contains_static_str_ref(&group.elem),
+        Type::Ptr(pointer) => type_contains_static_str_ref(&pointer.elem),
+        _ => false,
+    }
+}
+
+#[instrument(level = "debug", skip(ty), ret)]
+fn type_is_str(ty: &Type) -> bool {
+    match ty {
+        Type::Paren(paren) => type_is_str(&paren.elem),
+        Type::Group(group) => type_is_str(&group.elem),
+        Type::Path(type_path) => type_path
+            .path
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "str"),
+        _ => false,
+    }
+}
+
+#[instrument(level = "debug", skip(ty))]
+fn static_str_field_snippet(ty: &Type, strategy: StaticRefStrategy) -> String {
+    let found = static_ref_snippet(ty);
+    let message = match strategy {
+        StaticRefStrategy::String => {
+            format!("{found}; replace &'static str fields with owned String data")
+        }
+        StaticRefStrategy::Cow => {
+            format!("{found}; replace &'static str fields with Cow<'static, str>")
+        }
+        StaticRefStrategy::Const => {
+            format!("{found}; move string data into const/static placement instead")
+        }
+    };
+    truncate_snippet(&message, 128)
+}
+
+#[instrument(level = "debug", skip(ty))]
+fn owned_static_ref_snippet(ty: &Type, strategy: StaticRefStrategy) -> String {
+    let found = static_ref_snippet(ty);
+    let message = match strategy {
+        StaticRefStrategy::String => {
+            format!("{found}; replace static reference fields with owned data")
+        }
+        StaticRefStrategy::Cow => {
+            format!("{found}; use Cow or a domain wrapper only when borrowing is intentional")
+        }
+        StaticRefStrategy::Const => {
+            format!("{found}; move data into const/static placement or own it")
+        }
+    };
+    truncate_snippet(&message, 128)
 }
 
 #[instrument(level = "debug", skip(ty))]

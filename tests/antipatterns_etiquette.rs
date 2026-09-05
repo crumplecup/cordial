@@ -2,8 +2,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use cordial::{
-    ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, RunAll, Session, SessionBuilder,
-    scan_antipatterns_rust_source, scan_crate_antipatterns,
+    ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, RunAll, Session, SessionBuilder, StaticRefStrategy,
+    scan_antipatterns_rust_source, scan_antipatterns_rust_source_with_static_ref_strategy,
+    scan_crate_antipatterns,
 };
 
 use miette::{IntoDiagnostic, WrapErr};
@@ -24,6 +25,25 @@ fn scan_fixture(name: &str) -> miette::Result<Vec<cordial::AntipatternSiteRecord
     ));
     let file = src_root.join(name);
     scan_antipatterns_rust_source(&fixture(name)?, &file, src_root, src_root).into_diagnostic()
+}
+
+fn scan_fixture_with_static_ref_strategy(
+    name: &str,
+    strategy: StaticRefStrategy,
+) -> miette::Result<Vec<cordial::AntipatternSiteRecord>> {
+    let src_root = Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/quality/antipatterns"
+    ));
+    let file = src_root.join(name);
+    scan_antipatterns_rust_source_with_static_ref_strategy(
+        &fixture(name)?,
+        &file,
+        src_root,
+        src_root,
+        strategy,
+    )
+    .into_diagnostic()
 }
 
 #[test]
@@ -347,6 +367,56 @@ fn static_struct_fields_are_detected() -> miette::Result<()> {
             .iter()
             .any(|f| f.context().contains("OwnsData") || f.context().contains("Named::detail"))
     );
+    Ok(())
+}
+
+#[test]
+fn static_struct_field_strategy_defaults_to_string_guidance() -> miette::Result<()> {
+    cordial::init_tracing();
+    let findings = scan_fixture_with_static_ref_strategy(
+        "static_struct_fields.rs",
+        StaticRefStrategy::String,
+    )?;
+    let name = findings
+        .iter()
+        .find(|f| {
+            f.rule_id() == AntipatternRuleId::StructStaticRef001
+                && f.context().ends_with("BorrowsStatic::name")
+        })
+        .ok_or_else(|| miette::miette!("BorrowsStatic::name finding"))?;
+    assert!(name.snippet().contains("owned String data"));
+    Ok(())
+}
+
+#[test]
+fn static_struct_field_strategy_can_recommend_cow() -> miette::Result<()> {
+    cordial::init_tracing();
+    let findings =
+        scan_fixture_with_static_ref_strategy("static_struct_fields.rs", StaticRefStrategy::Cow)?;
+    let name = findings
+        .iter()
+        .find(|f| {
+            f.rule_id() == AntipatternRuleId::StructStaticRef001
+                && f.context().ends_with("BorrowsStatic::name")
+        })
+        .ok_or_else(|| miette::miette!("BorrowsStatic::name finding"))?;
+    assert!(name.snippet().contains("Cow<'static, str>"));
+    Ok(())
+}
+
+#[test]
+fn static_struct_field_strategy_can_recommend_const_placement() -> miette::Result<()> {
+    cordial::init_tracing();
+    let findings =
+        scan_fixture_with_static_ref_strategy("static_struct_fields.rs", StaticRefStrategy::Const)?;
+    let name = findings
+        .iter()
+        .find(|f| {
+            f.rule_id() == AntipatternRuleId::StructStaticRef001
+                && f.context().ends_with("BorrowsStatic::name")
+        })
+        .ok_or_else(|| miette::miette!("BorrowsStatic::name finding"))?;
+    assert!(name.snippet().contains("const/static placement"));
     Ok(())
 }
 

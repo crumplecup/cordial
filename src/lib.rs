@@ -78,9 +78,12 @@ pub use etiquettes::allows::{
 #[cfg(feature = "antipatterns")]
 pub use etiquettes::antipatterns::{
     ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, AntipatternSiteRecord, ContractRecordDump,
-    ContractRecordDumpBuilder, scan_crate_antipatterns, scan_crate_contract_bounds,
+    ContractRecordDumpBuilder, scan_crate_antipatterns,
+    scan_crate_antipatterns_with_static_ref_strategy, scan_crate_contract_bounds,
     scan_creusot_contract_bounds_source, scan_kani_contract_bounds_source,
-    scan_rust_source as scan_antipatterns_rust_source, scan_verus_contract_bounds_source,
+    scan_rust_source as scan_antipatterns_rust_source,
+    scan_rust_source_with_static_ref_strategy as scan_antipatterns_rust_source_with_static_ref_strategy,
+    scan_verus_contract_bounds_source,
 };
 #[cfg(feature = "cfg_hygiene")]
 pub use etiquettes::cfg_hygiene::{
@@ -288,8 +291,8 @@ pub use plugin::{
     ErrorSurface, StandardErrorHandlingPolicy, WorkspaceMembersErrorScopeProvider,
 };
 pub use plugin::{
-    EtiquettePlugin, Plugin, PluginCategory, StaticPlugin, etiquettes_from_plugins,
-    plugins_in_category, selected_plugins,
+    EtiquettePlugin, Plugin, PluginCategory, StaticPlugin, StrategicPlugin, StrategicPortfolio,
+    Strategy, etiquettes_from_plugins, plugins_in_category, selected_plugins,
 };
 #[cfg(feature = "amenable_std")]
 pub use plugins::{AMENABLE_STD_COVERAGE, AmenableStdCoverage};
@@ -313,11 +316,11 @@ pub use cargo_rustdoc::{
     resolve_shadow_dep_build_config,
 };
 pub use config::{
-    CfgHygieneThresholds, CfgScatterThresholds, CordialConfig, CrateAttrsThresholds,
-    CreusotDiagnosticsThresholds, DerivesThresholds, DocWarningsThresholds, EtiquetteGate,
-    ModularityThresholds, TracingBoundaryPolicy, TracingStdioPolicy, TracingSubscriberPolicy,
-    TracingThresholds, VisibilityThresholds, load_cordial_config, load_derives_thresholds,
-    load_session_config, load_visibility_thresholds,
+    AntipatternsConfig, CfgHygieneThresholds, CfgScatterThresholds, CordialConfig,
+    CrateAttrsThresholds, CreusotDiagnosticsThresholds, DerivesThresholds, DocWarningsThresholds,
+    EtiquetteGate, ModularityThresholds, StaticRefPolicy, StaticRefStrategy, TracingBoundaryPolicy,
+    TracingStdioPolicy, TracingSubscriberPolicy, TracingThresholds, VisibilityThresholds,
+    load_cordial_config, load_derives_thresholds, load_session_config, load_visibility_thresholds,
 };
 pub use exceptions::{
     AddExceptionOutcome, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,

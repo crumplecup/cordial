@@ -36,6 +36,10 @@ Read these together. `error_sites` says where failures move, `error_chain`
 says whether the cause survived that movement, `foreign_error_*` explains the
 foreign/local boundary, and `internal_error_chain` checks the crate-owned error
 architecture. `panics` catches places that bypass the typed path entirely.
+`antipatterns` also canaries strategy selection for `&'static str` fields:
+`[antipatterns.static_refs] strategy = "string" | "cow" | "const"` changes the
+recommended remediation while the rule keeps making runtime static borrows
+visible.
 
 ## Observability
 

@@ -6,12 +6,49 @@ mod error_handling;
 mod quality;
 
 use cordial::{
-    NamedRunFilter, Plugin, PluginCategory, Session, SessionBuilder, plugins_in_category,
+    Etiquette, NamedRunFilter, Plugin, PluginCategory, Session, SessionBuilder, StrategicPlugin,
+    StrategicPortfolio, plugins_in_category,
 };
 use coverage::ACME_API_COVERAGE;
 use error_handling::ACME_ERROR_HANDLING;
 use miette::{IntoDiagnostic, WrapErr};
 use quality::ACME_STYLE;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AcmeStrategy {
+    Todos,
+    Empty,
+}
+
+static TODO_ETIQUETTES: &[&dyn Etiquette] = &[&quality::TODO_ETIQUETTE];
+static EMPTY_ETIQUETTES: &[&dyn Etiquette] = &[];
+static ACME_PORTFOLIOS: &[StrategicPortfolio<AcmeStrategy>] = &[
+    StrategicPortfolio::new(AcmeStrategy::Todos, TODO_ETIQUETTES),
+    StrategicPortfolio::new(AcmeStrategy::Empty, EMPTY_ETIQUETTES),
+];
+
+#[test]
+fn strategic_plugin_selects_portfolio_by_indicator() {
+    cordial::init_tracing();
+    let todos = StrategicPlugin::new(
+        "acme-strategic",
+        "Acme strategic",
+        PluginCategory::Quality,
+        AcmeStrategy::Todos,
+        ACME_PORTFOLIOS,
+    );
+    let empty = StrategicPlugin::new(
+        "acme-strategic",
+        "Acme strategic",
+        PluginCategory::Quality,
+        AcmeStrategy::Empty,
+        ACME_PORTFOLIOS,
+    );
+
+    assert_eq!(todos.etiquettes().len(), 1);
+    assert_eq!(todos.etiquettes()[0].id(), "acme-todo");
+    assert!(empty.etiquettes().is_empty());
+}
 
 #[test]
 fn three_plugin_kinds_register_and_quality_finds_todo() -> miette::Result<()> {

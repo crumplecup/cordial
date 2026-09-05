@@ -5,7 +5,7 @@ use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 
-use super::scan_crate::scan_crate_antipatterns;
+use super::scan_crate::scan_crate_antipatterns_with_static_ref_strategy;
 
 use tracing::instrument;
 /// Materializes antipattern-site expression nodes in the IR graph.
@@ -33,11 +33,13 @@ impl IrEnricher for AntipatternInventoryEnricher {
         };
 
         let crate_root = member_crate_root(source, session);
-        let records = scan_crate_antipatterns(
+        let config = crate::load_session_config(session);
+        let records = scan_crate_antipatterns_with_static_ref_strategy(
             &crate_root,
             ir.crate_name(),
             session.project_root(),
             session.store_root(),
+            config.antipatterns().static_refs().strategy(),
         )?;
 
         for record in records {

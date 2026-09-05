@@ -2,7 +2,8 @@ use miette::{IntoDiagnostic, WrapErr};
 use std::fs;
 
 use cordial::{
-    CordialConfig, VisibilityThresholds, load_cordial_config, load_visibility_thresholds,
+    CordialConfig, StaticRefStrategy, VisibilityThresholds, load_cordial_config,
+    load_visibility_thresholds,
 };
 
 #[test]
@@ -339,6 +340,84 @@ skip_crates = ["slow_proof"]
         &["slow_proof".to_string()]
     );
     assert!(creusot_diagnostics.enabled());
+    Ok(())
+}
+
+#[test]
+fn antipatterns_static_ref_strategy_defaults_to_string() -> miette::Result<()> {
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store home")?;
+
+    let loaded = load_cordial_config(workspace.path(), store_home.path());
+    assert_eq!(
+        loaded.antipatterns().static_refs().strategy(),
+        StaticRefStrategy::String
+    );
+    assert!(loaded.etiquette_enabled("antipatterns"));
+    Ok(())
+}
+
+#[test]
+fn antipatterns_static_ref_strategy_reads_cordial_toml() -> miette::Result<()> {
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store home")?;
+    fs::write(
+        workspace.path().join("cordial.toml"),
+        r#"
+[antipatterns.static_refs]
+strategy = "cow"
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("workspace config")?;
+
+    let loaded = load_cordial_config(workspace.path(), store_home.path());
+    assert_eq!(
+        loaded.antipatterns().static_refs().strategy(),
+        StaticRefStrategy::Cow
+    );
+    assert!(loaded.etiquette_enabled("antipatterns"));
+    Ok(())
+}
+
+#[test]
+fn antipatterns_enabled_false_still_works_with_strategy_policy() -> miette::Result<()> {
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store home")?;
+    fs::write(
+        workspace.path().join("cordial.toml"),
+        r#"
+[antipatterns]
+enabled = false
+
+[antipatterns.static_refs]
+strategy = "const"
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("workspace config")?;
+
+    let loaded = load_cordial_config(workspace.path(), store_home.path());
+    assert!(!loaded.etiquette_enabled("antipatterns"));
+    assert_eq!(
+        loaded.antipatterns().static_refs().strategy(),
+        StaticRefStrategy::Const
+    );
     Ok(())
 }
 

@@ -68,6 +68,13 @@ min_occurrences = 5
 max_constructor_args = 3
 min_fluent_setters = 2
 
+[antipatterns]
+# enabled = true
+
+[antipatterns.static_refs]
+# default: "string"; accepted: "string", "cow", "const"
+strategy = "string"
+
 [tracing]
 # enabled = true
 # extra_skip = ["inventory"]
@@ -121,8 +128,8 @@ for the file-size and module-size checks), cfg_scatter, derives
 and `[tracing.stdio]`),
 crate_attrs (`forbid_unsafe`, `missing_docs`, `allow_unsafe`,
 `allow_missing_docs`), and doc_warnings (`document_private_items`,
-`all_features`, `skip_crates`), and creusot_diagnostics (`skip_crates`)
-read through `load_session_config`.
+`all_features`, `skip_crates`), creusot_diagnostics (`skip_crates`), and
+antipatterns (`static_refs.strategy`) read through `load_session_config`.
 Role→level maps stay in code.
 
 ```toml

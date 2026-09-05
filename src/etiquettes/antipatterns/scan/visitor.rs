@@ -10,6 +10,7 @@ use syn::{
     ItemType, Signature, TraitItem, Type,
 };
 
+use crate::config::StaticRefStrategy;
 use crate::enricher::is_cfg_test;
 
 use super::preds::{
@@ -33,6 +34,7 @@ pub(super) struct AntipatternScanVisitor<'a> {
     in_foreign_trait_impl: bool,
     local_trait_names: &'a HashSet<String>,
     const_placed_types: &'a HashSet<String>,
+    static_ref_strategy: StaticRefStrategy,
     cfg_sibling_real_params: HashMap<String, HashSet<String>>,
     findings: Vec<AntipatternSiteRecord>,
     error: Option<crate::error::CordialError>,
@@ -46,6 +48,7 @@ impl<'a> AntipatternScanVisitor<'a> {
         module_prefix: Vec<String>,
         local_trait_names: &'a HashSet<String>,
         const_placed_types: &'a HashSet<String>,
+        static_ref_strategy: StaticRefStrategy,
     ) -> Self {
         Self {
             file,
@@ -57,6 +60,7 @@ impl<'a> AntipatternScanVisitor<'a> {
             in_foreign_trait_impl: false,
             local_trait_names,
             const_placed_types,
+            static_ref_strategy,
             cfg_sibling_real_params: HashMap::new(),
             findings: Vec::new(),
             error: None,
@@ -160,7 +164,7 @@ impl AntipatternScanVisitor<'_> {
             AntipatternRuleId::StructStaticRef001,
             self.adt_field_context(owner, field_name),
             ty.span().start().line as u32,
-            static_ref_field_snippet(ty),
+            static_ref_field_snippet(ty, self.static_ref_strategy),
         );
     }
 

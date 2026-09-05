@@ -21,7 +21,9 @@
 //! `antipatterns-summary.md`, antipattern CSVs, and `version-in-member.*`.
 //!
 //! **Config.** `[antipatterns] enabled = false` opts out in `cordial.toml`.
-//! Register [`ANTIPATTERNS_ETIQUETTE`].
+//! `[antipatterns.static_refs] strategy = "string" | "cow" | "const"`
+//! chooses the remediation guidance for `&'static str` fields. Register
+//! [`ANTIPATTERNS_ETIQUETTE`].
 
 mod assessor;
 mod contract_bounds;
@@ -45,8 +47,8 @@ pub use probe::AntipatternSiteProbe;
 pub use reporter::{
     AntipatternChecklistReporter, AntipatternCsvReporter, AntipatternSummaryReporter,
 };
-pub use scan::scan_rust_source;
-pub use scan_crate::scan_crate_antipatterns;
+pub use scan::{scan_rust_source, scan_rust_source_with_static_ref_strategy};
+pub use scan_crate::{scan_crate_antipatterns, scan_crate_antipatterns_with_static_ref_strategy};
 pub use types::{AntipatternRuleId, AntipatternSiteRecord};
 pub use version_reporter::{
     VersionInMemberChecklistReporter, VersionInMemberCsvReporter, VersionInMemberSummaryReporter,
@@ -99,8 +101,8 @@ pub static ANTIPATTERNS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquet
         EtiquetteExplain::new(
             "Untyped error carriers and related source smells?",
             "These are quality problems adjacent to error handling that are not site/chain/foreign layers: they erase types, hide unused work, or fight workspace versioning.",
-            "Flags Box<dyn Error>, Result<_, String>, unused _arg (except on impls of foreign traits), struct &'static fields where an owned type would do, unnamed contract bounds (Kani/Creusot/Verus), and workspace members that pin a version. Some Box<dyn Error> / unused-arg rows feed the Error handling quality-report area.",
-            "`[antipatterns] enabled = false` in cordial.toml.",
+            "Flags Box<dyn Error>, Result<_, String>, unused _arg (except on impls of foreign traits), struct &'static fields where an owned type or configured static-ref strategy would do, unnamed contract bounds (Kani/Creusot/Verus), and workspace members that pin a version. Some Box<dyn Error> / unused-arg rows feed the Error handling quality-report area.",
+            "`[antipatterns] enabled = false` in cordial.toml. `[antipatterns.static_refs] strategy = \"string\" | \"cow\" | \"const\"` changes the static-ref remediation guidance.",
             &[
                 EtiquetteRuleExplain::new(
                     "ANTIPATTERN-BOX-DYN-ERROR-001",
