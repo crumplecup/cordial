@@ -1009,6 +1009,61 @@ fn open_rule_ids(outcome: &dyn cordial::RunOutcome) -> Vec<String> {
 }
 
 #[test]
+fn tracing_checklist_recipe_shows_the_gated_wrap_for_a_gate_crate() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[tracing]\napply_gate_crates = { fixture_crate = \"kani\" }\n",
+    )
+    .into_diagnostic()
+    .wrap_err("config")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        "\npub fn scan_tree() {}\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write fixture")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .with_store_home(store.path())
+        .register(&TRACING_ETIQUETTE)
+        .build();
+    session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("session run")?;
+
+    let checklist = fs::read_to_string(
+        store
+            .path()
+            .join("findings")
+            .join("tracing-instrument.checklist.md"),
+    )
+    .into_diagnostic()
+    .wrap_err("checklist")?;
+    assert!(
+        checklist.contains("`#[cfg_attr(not(kani), tracing::instrument(level = \"debug\"))]`"),
+        "the recipe cell must show the exact gated attribute `--apply` writes for a \
+         gate-policy crate, not the bare `#[instrument(..)]` a human would then paste \
+         into a file a `cargo kani` build compiles: {checklist}"
+    );
+    assert!(
+        !checklist.contains("`#[instrument(level = \"debug\")]`"),
+        "no bare-attr recipe should survive for a gate crate: {checklist}"
+    );
+    Ok(())
+}
+
+#[test]
 fn tracing_proof_only_method_with_instrument_is_flagged() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;

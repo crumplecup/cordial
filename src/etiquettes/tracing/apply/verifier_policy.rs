@@ -119,3 +119,19 @@ pub fn gate_predicate(cfgs: &[String]) -> String {
         many => format!("any({})", many.join(", ")),
     }
 }
+
+/// Wrap a rendered `#[instrument(..)]` (or path-qualified equivalent) as
+/// `#[cfg_attr(not(#predicate), ..)]` -- the real toolchain still never
+/// sees `#[instrument]` under the gated cfg (e.g. `cargo kani`'s
+/// `--cfg kani`), because `cfg_attr`'s condition is evaluated before its
+/// inner attribute is ever expanded. Shared between `--apply`'s write
+/// path and the checklist reporter's recipe column so the two can never
+/// drift.
+pub fn gate_attr(attr: &str, predicate: &str) -> String {
+    let inner = attr
+        .strip_prefix('#')
+        .and_then(|rest| rest.strip_prefix('['))
+        .and_then(|rest| rest.strip_suffix(']'))
+        .unwrap_or(attr);
+    format!("#[cfg_attr(not({predicate}), {inner})]")
+}

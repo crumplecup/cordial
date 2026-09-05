@@ -180,6 +180,11 @@ pub struct TracingFinding {
     #[getter(copy)]
     complexity: FunctionComplexity,
     recipe: InstrumentRecipe,
+    /// `not(..)` predicate `--apply` would gate this recipe with, empty
+    /// unless the file's policy is `gated`. Keeps the rendered checklist
+    /// recipe byte-identical to what apply writes.
+    #[builder(default)]
+    gate_predicate: String,
     visibility: VisibilityLabel,
     span: FileSpan,
 }
@@ -242,7 +247,16 @@ impl TracingFinding {
             TracingRuleKind::ProofInstrument | TracingRuleKind::SkipInstrument => {
                 "remove #[instrument]".to_string()
             }
-            _ => self.recipe.as_attribute(),
+            _ if self.gate_predicate.is_empty() => self.recipe.as_attribute(),
+            // Gate-policy file: show the exact `#[cfg_attr(not(<gate>),
+            // ..)]` wrap `--apply` writes, not the bare attr -- a bare
+            // `#[instrument]` here is expanded by a verifier build that
+            // sets the gate cfg, which is the hazard the gate exists to
+            // prevent. Always the fully-qualified inner, same as apply.
+            _ => super::super::apply::gate_attr(
+                &self.recipe.as_path_attribute(),
+                &self.gate_predicate,
+            ),
         }
     }
 }

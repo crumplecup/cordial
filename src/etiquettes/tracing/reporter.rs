@@ -148,12 +148,15 @@ impl Reporter for TracingChecklistReporter {
         body.push_str("# Tracing instrument checklist\n\n");
         body.push_str(&format!("**Open gaps:** {}\n\n", open.len()));
         body.push_str(
-            "Apply writes the listed recipe (`level`, `skip`, `err`, `ret`, `fields`) \
-             for missing/delta rows. `TRACING-PROOF-INSTRUMENT` and \
-             `TRACING-SKIP-INSTRUMENT` mean **remove** `#[instrument]` (including a \
-             `not(<gate>)` wrap on proof-only code — that span never fires). \
-             `TRACING-UNGATED-INSTRUMENT` means wrap with `cfg_attr(not(<gate>), …)`. \
-             Do not skip getters — filter at the subscriber. \
+            "Apply writes the recipe shown on each row verbatim (`level`, `skip`, `err`, \
+             `ret`, `fields`) for missing/delta rows — including the \
+             `#[cfg_attr(not(<gate>), …)]` wrap already rendered into the recipe for a \
+             gate-policy crate (`[tracing] apply_gate_crates`), where a bare \
+             `#[instrument]` would be expanded by a verifier build that sets the gate cfg. \
+             `TRACING-PROOF-INSTRUMENT` and `TRACING-SKIP-INSTRUMENT` mean **remove** \
+             `#[instrument]` (including a `not(<gate>)` wrap on proof-only code — that span \
+             never fires). `TRACING-UNGATED-INSTRUMENT` means wrap with \
+             `cfg_attr(not(<gate>), …)`. Do not skip getters — filter at the subscriber. \
              `TRACING-ERROR-PATH-SILENT` only fires when the recipe wants `err` and the body \
              has neither `err` nor `warn!`/`error!`.\n\n",
         );

@@ -94,6 +94,10 @@ struct ParsedFn {
     has_error_path_event: bool,
     proof_only: bool,
     apply_policy: String,
+    /// `not(..)` predicate `--apply` would gate this recipe with (empty
+    /// unless the file's policy is `gated`). Rendered into the checklist
+    /// recipe so it matches what apply writes.
+    gate_predicate: String,
 }
 
 impl ParsedFn {
@@ -163,6 +167,7 @@ impl ParsedFn {
                 .and_then(|value| value.as_bool())
                 .unwrap_or(false),
             apply_policy: attr("tracing_apply_policy").to_string(),
+            gate_predicate: attr("tracing_gate_predicate").to_string(),
         }))
     }
 
@@ -190,6 +195,7 @@ impl ParsedFn {
                 .role(self.role)
                 .complexity(self.complexity)
                 .recipe(self.recipe)
+                .gate_predicate(self.gate_predicate)
                 .visibility(self.visibility)
                 .span(self.span)
                 .build()?,

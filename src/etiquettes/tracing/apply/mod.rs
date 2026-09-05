@@ -31,7 +31,9 @@ use instrument::{
 pub use parse::{parse_tracing_instrument_checklist, parse_tracing_instrument_checklist_text};
 pub use verifier_policy::TracingApplyPolicy;
 
-pub(super) use verifier_policy::{crate_gate_cfgs, resolve_tracing_apply_policy};
+pub(super) use verifier_policy::{
+    crate_gate_cfgs, gate_attr, gate_predicate, resolve_tracing_apply_policy,
+};
 
 use crate::{PathInclusionFacts, workspace_path_inclusions};
 

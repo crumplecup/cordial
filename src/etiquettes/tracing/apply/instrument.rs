@@ -6,7 +6,7 @@ use crate::error::{CordialError, CordialResult};
 
 use super::super::types::{FunctionRecord, InstrumentRecipe};
 use super::InstrumentGap;
-use super::verifier_policy::{TracingApplyPolicy, gate_predicate};
+use super::verifier_policy::{TracingApplyPolicy, gate_attr, gate_predicate};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum GapApplyOutcome {
@@ -123,21 +123,6 @@ pub(super) fn strip_instrument(lines: &mut Vec<String>, gap: &InstrumentGap) -> 
     };
     lines.drain(start..=end);
     GapApplyOutcome::Applied
-}
-
-/// Wrap a rendered `#[instrument(..)]` (or path-qualified equivalent) as
-/// `#[cfg_attr(not(#predicate), ..)]` -- the real toolchain still never
-/// sees `#[instrument]` under the gated cfg (e.g. `cargo kani`'s
-/// `--cfg kani`), because `cfg_attr`'s condition is evaluated before its
-/// inner attribute is ever expanded.
-#[instrument(level = "trace")]
-fn gate_attr(attr: &str, predicate: &str) -> String {
-    let inner = attr
-        .strip_prefix('#')
-        .and_then(|rest| rest.strip_prefix('['))
-        .and_then(|rest| rest.strip_suffix(']'))
-        .unwrap_or(attr);
-    format!("#[cfg_attr(not({predicate}), {inner})]")
 }
 
 #[instrument(level = "debug", skip(recipe, style))]

@@ -51,24 +51,35 @@ impl IrEnricher for FunctionInventoryEnricher {
             never_instrument,
         )?;
         let facts = crate::workspace_path_inclusions(session.project_root());
-        let mut policy_by_file: std::collections::HashMap<std::path::PathBuf, &'static str> =
-            std::collections::HashMap::new();
+        // Value: (policy tag, `not(..)` predicate). The predicate is
+        // empty unless the policy is `gated`; it lets the assessor render
+        // a checklist recipe byte-identical to what `--apply` writes for
+        // this file (`#[cfg_attr(not(kani), tracing::instrument(..))]`).
+        let mut policy_by_file: std::collections::HashMap<
+            std::path::PathBuf,
+            (&'static str, String),
+        > = std::collections::HashMap::new();
 
         for record in records {
             let file_path = crate_root.join(record.file());
-            let policy = *policy_by_file.entry(file_path.clone()).or_insert_with(|| {
-                match super::apply::resolve_tracing_apply_policy(
-                    source.crate_name(),
-                    &file_path,
-                    &crate_root,
-                    config.tracing(),
-                    &facts,
-                ) {
-                    super::apply::TracingApplyPolicy::Skip => "skip",
-                    super::apply::TracingApplyPolicy::Gated(_) => "gated",
-                    super::apply::TracingApplyPolicy::Bare => "bare",
-                }
-            });
+            let (policy, gate_predicate) = policy_by_file
+                .entry(file_path.clone())
+                .or_insert_with(|| {
+                    match super::apply::resolve_tracing_apply_policy(
+                        source.crate_name(),
+                        &file_path,
+                        &crate_root,
+                        config.tracing(),
+                        &facts,
+                    ) {
+                        super::apply::TracingApplyPolicy::Skip => ("skip", String::new()),
+                        super::apply::TracingApplyPolicy::Gated(cfgs) => {
+                            ("gated", super::apply::gate_predicate(&cfgs))
+                        }
+                        super::apply::TracingApplyPolicy::Bare => ("bare", String::new()),
+                    }
+                })
+                .clone();
             if policy == "skip" && !record.instrumented() {
                 continue;
             }
@@ -190,6 +201,11 @@ impl IrEnricher for FunctionInventoryEnricher {
                 node,
                 "tracing_apply_policy",
                 serde_json::Value::String(policy.to_string()),
+            )?;
+            ir.set_attr(
+                node,
+                "tracing_gate_predicate",
+                serde_json::Value::String(gate_predicate.clone()),
             )?;
         }
         Ok(())
