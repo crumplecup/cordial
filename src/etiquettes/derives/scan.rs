@@ -122,17 +122,12 @@ struct StructInfo {
     fields: HashMap<String, FieldMeta>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_getters::Getters)]
 struct FieldMeta {
+    #[getter(copy)]
     is_public: bool,
+    #[getter(copy)]
     is_option: bool,
-}
-
-impl FieldMeta {
-    #[instrument(level = "trace", skip(self), ret)]
-    fn is_option(&self) -> bool {
-        self.is_option
-    }
 }
 
 struct DeriveScanVisitor<'a> {

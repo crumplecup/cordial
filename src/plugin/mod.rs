@@ -3,6 +3,8 @@
 //! An [`Etiquette`] is a hook bundle; a [`Plugin`] is a runnable product that
 //! contributes one or more etiquettes. See [coverage-as-plugin.md](https://github.com/crumplecup/cordial/blob/main/docs/planning/coverage-as-plugin.md).
 
+use std::borrow::Cow;
+
 use tracing::instrument;
 #[cfg(feature = "rustdoc")]
 mod coverage;
@@ -78,7 +80,14 @@ pub enum PluginCategory {
 
 /// Wraps a single etiquette as a quality plugin (id matches the etiquette id).
 #[derive(Clone, Copy)]
-pub struct EtiquettePlugin(pub &'static dyn Etiquette);
+pub struct EtiquettePlugin(&'static dyn Etiquette);
+
+impl EtiquettePlugin {
+    /// Build a quality plugin wrapper for one etiquette.
+    pub const fn new(etiquette: &'static dyn Etiquette) -> Self {
+        Self(etiquette)
+    }
+}
 
 impl Plugin for EtiquettePlugin {
     fn id(&self) -> &str {
@@ -103,27 +112,59 @@ impl Plugin for EtiquettePlugin {
 /// Use this for quality families that have no extra semantics. Coverage and
 /// error-handling products implement [`Plugin`] plus their supertrait by hand
 /// instead — see `examples/custom_plugins`.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct StaticPlugin {
     /// Stable identifier.
-    pub id: &'static str,
+    id: Cow<'static, str>,
     /// Human-readable name.
-    pub name: &'static str,
+    name: Cow<'static, str>,
     /// Plugin category this product belongs to.
-    pub category: PluginCategory,
+    category: PluginCategory,
     /// Etiquettes this product contributes.
-    pub etiquettes: &'static [&'static dyn Etiquette],
+    etiquettes: &'static [&'static dyn Etiquette],
+}
+
+impl StaticPlugin {
+    /// Build a static plugin definition from compile-time metadata.
+    pub const fn new(
+        id: &'static str,
+        name: &'static str,
+        category: PluginCategory,
+        etiquettes: &'static [&'static dyn Etiquette],
+    ) -> Self {
+        Self {
+            id: Cow::Borrowed(id),
+            name: Cow::Borrowed(name),
+            category,
+            etiquettes,
+        }
+    }
+
+    /// Build a plugin definition from runtime-owned metadata.
+    pub fn owned(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        category: PluginCategory,
+        etiquettes: &'static [&'static dyn Etiquette],
+    ) -> Self {
+        Self {
+            id: Cow::Owned(id.into()),
+            name: Cow::Owned(name.into()),
+            category,
+            etiquettes,
+        }
+    }
 }
 
 impl Plugin for StaticPlugin {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
-        self.id
+        self.id.as_ref()
     }
 
     #[instrument(level = "trace", skip(self))]
     fn name(&self) -> &str {
-        self.name
+        self.name.as_ref()
     }
 
     #[instrument(level = "trace", skip(self))]

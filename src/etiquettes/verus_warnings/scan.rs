@@ -119,13 +119,13 @@ fn manifest_names_verus_dep(manifest: &str) -> bool {
 fn verus_crate_entry(crate_root: &Path) -> Option<VerusEntry> {
     if crate_root.join("src/lib.rs").is_file() {
         return Some(VerusEntry {
-            crate_type: "lib",
+            crate_type: VerusCrateType::Lib,
             input: PathBuf::from("src/lib.rs"),
         });
     }
     if crate_root.join("src/main.rs").is_file() {
         return Some(VerusEntry {
-            crate_type: "bin",
+            crate_type: VerusCrateType::Bin,
             input: PathBuf::from("src/main.rs"),
         });
     }
@@ -133,8 +133,24 @@ fn verus_crate_entry(crate_root: &Path) -> Option<VerusEntry> {
 }
 
 struct VerusEntry {
-    crate_type: &'static str,
+    crate_type: VerusCrateType,
     input: PathBuf,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum VerusCrateType {
+    Lib,
+    Bin,
+}
+
+impl VerusCrateType {
+    #[instrument(level = "trace", skip(self), ret)]
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Lib => "lib",
+            Self::Bin => "bin",
+        }
+    }
 }
 
 #[instrument(level = "debug")]
@@ -168,7 +184,7 @@ fn which_verus() -> Option<PathBuf> {
 fn run_verus(verus: &Path, crate_root: &Path, entry: &VerusEntry) -> CordialResult<String> {
     let output = Command::new(verus)
         .current_dir(crate_root)
-        .arg(format!("--crate-type={}", entry.crate_type))
+        .arg(format!("--crate-type={}", entry.crate_type.as_str()))
         .arg(&entry.input)
         .output()?;
     let mut text = String::new();

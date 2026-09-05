@@ -306,7 +306,7 @@ fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
 macro_rules! etiquette_plugin_fn {
     ($fn_name:ident, $etiquette:expr) => {
         fn $fn_name() -> &'static EtiquettePlugin {
-            static PLUGIN: EtiquettePlugin = EtiquettePlugin($etiquette);
+            static PLUGIN: EtiquettePlugin = EtiquettePlugin::new($etiquette);
             &PLUGIN
         }
     };

@@ -51,12 +51,12 @@ pub static TODO_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
 static ACME_STYLE_ETIQUETTES: &[&dyn Etiquette] = &[&TODO_ETIQUETTE];
 
 /// Acme style family — Plugin only, no Coverage / ErrorHandling supertrait.
-pub static ACME_STYLE: StaticPlugin = StaticPlugin {
-    id: "acme-style",
-    name: "Acme style",
-    category: PluginCategory::Quality,
-    etiquettes: ACME_STYLE_ETIQUETTES,
-};
+pub static ACME_STYLE: StaticPlugin = StaticPlugin::new(
+    "acme-style",
+    "Acme style",
+    PluginCategory::Quality,
+    ACME_STYLE_ETIQUETTES,
+);
 
 const TODO_ATTR: &str = "acme_todo";
 const TODO_LABEL: &str = "acme-todo-site";
