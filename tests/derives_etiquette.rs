@@ -532,6 +532,66 @@ impl Widget {
 }
 
 #[test]
+fn boxed_inner_reference_getter_has_no_derive_getters_equivalent() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+struct Widget {
+    kind: Box<WidgetKind>,
+}
+
+enum WidgetKind {
+    Basic,
+}
+
+impl Widget {
+    pub fn kind(&self) -> &WidgetKind {
+        &self.kind
+    }
+}
+"#;
+    let findings = scan_findings(source, DerivesThresholds::default())?;
+    assert!(
+        findings
+            .iter()
+            .all(|record| record.rule_id() != DeriveRuleId::Getter001),
+        "`&self.boxed_field` returning `&Inner` relies on deref coercion; \
+         derive_getters would return `&Box<Inner>` instead: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn boxed_field_reference_getter_still_flags_when_returning_box() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+struct Widget {
+    kind: Box<WidgetKind>,
+}
+
+enum WidgetKind {
+    Basic,
+}
+
+impl Widget {
+    pub fn kind(&self) -> &Box<WidgetKind> {
+        &self.kind
+    }
+}
+"#;
+    let findings = scan_findings(source, DerivesThresholds::default())?;
+    assert_eq!(
+        findings
+            .iter()
+            .filter(|record| record.rule_id() == DeriveRuleId::Getter001)
+            .count(),
+        1,
+        "`&self.boxed_field` returning `&Box<Inner>` is exactly the shape \
+         derive_getters can generate: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn trivial_setter_is_flagged() -> miette::Result<()> {
     cordial::init_tracing();
     let source = r#"

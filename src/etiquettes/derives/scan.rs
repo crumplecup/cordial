@@ -128,6 +128,7 @@ struct FieldMeta {
     is_public: bool,
     #[getter(copy)]
     is_option: bool,
+    boxed_inner_type: Option<String>,
 }
 
 struct DeriveScanVisitor<'a> {
@@ -470,6 +471,14 @@ impl DeriveScanVisitor<'_> {
         if field_name != method_name {
             return;
         }
+        if matches!(read, FieldRead::Direct)
+            && field
+                .boxed_inner_type()
+                .as_ref()
+                .is_some_and(|inner| method_returns_reference_to(&method.sig, inner))
+        {
+            return;
+        }
         let recommendation = match read {
             FieldRead::Direct => "Use #[derive(derive_getters::Getters)] and delete manual getter",
             // Bare `self.field` (no `.clone()`) only compiles when the
@@ -735,6 +744,7 @@ fn collect_struct_fields(item_struct: &ItemStruct) -> (HashMap<String, FieldMeta
                     FieldMeta {
                         is_public: exposed,
                         is_option: type_is_option(&field.ty),
+                        boxed_inner_type: boxed_inner_type(&field.ty),
                     },
                 );
                 if exposed {
@@ -764,6 +774,41 @@ fn type_is_option(ty: &syn::Type) -> bool {
         .segments
         .last()
         .is_some_and(|segment| segment.ident == "Option")
+}
+
+#[instrument(level = "debug", skip(sig, type_name), ret)]
+fn method_returns_reference_to(sig: &syn::Signature, type_name: &str) -> bool {
+    let syn::ReturnType::Type(_, ty) = &sig.output else {
+        return false;
+    };
+    let syn::Type::Reference(reference) = ty.as_ref() else {
+        return false;
+    };
+    type_label(&reference.elem) == type_name
+}
+
+#[instrument(level = "debug", skip(ty), ret)]
+fn boxed_inner_type(ty: &syn::Type) -> Option<String> {
+    match ty {
+        syn::Type::Paren(paren) => boxed_inner_type(&paren.elem),
+        syn::Type::Group(group) => boxed_inner_type(&group.elem),
+        syn::Type::Path(type_path) => {
+            let segment = type_path.path.segments.last()?;
+            if segment.ident != "Box" {
+                return None;
+            }
+            let syn::PathArguments::AngleBracketed(args) = &segment.arguments else {
+                return None;
+            };
+            args.args.iter().find_map(|arg| {
+                let syn::GenericArgument::Type(inner) = arg else {
+                    return None;
+                };
+                Some(type_label(inner))
+            })
+        }
+        _ => None,
+    }
 }
 
 #[instrument(level = "debug")]
