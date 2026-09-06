@@ -63,6 +63,12 @@ min_occurrences = 5
 # all_features = false
 # skip_crates = []
 
+[dependency_freshness]
+# enabled = true
+# patch = true
+# minor = true
+# major = true
+
 [derives]
 # enabled = true
 max_constructor_args = 3
@@ -130,8 +136,9 @@ for the file-size and module-size checks), cfg_scatter, derives
 and `[tracing.stdio]`),
 crate_attrs (`forbid_unsafe`, `missing_docs`, `allow_unsafe`,
 `allow_missing_docs`), and doc_warnings (`document_private_items`,
-`all_features`, `skip_crates`), creusot_diagnostics (`skip_crates`), and
-antipatterns (`static_refs.strategy`) read through `load_session_config`.
+`all_features`, `skip_crates`), creusot_diagnostics (`skip_crates`),
+dependency_freshness (`enabled`, `patch`, `minor`, `major`), and antipatterns
+(`static_refs.strategy`) read through `load_session_config`.
 Role→level maps stay in code.
 
 ```toml

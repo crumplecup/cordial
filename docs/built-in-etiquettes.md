@@ -107,6 +107,26 @@ module boundaries.
 often exist to hold a feature-gated type. It is looking for copied control flow
 over free-standing items.
 
+## Dependency policy
+
+The dependency-policy standard is: manifest intent and lockfile resolution are
+visible before the project decides which patch, minor, or major drift should
+be denied.
+
+| Etiquette | Enforces | Main rule ids |
+| --- | --- | --- |
+| `dependency_freshness` | Surveys direct `Cargo.toml` dependencies, joins matching `Cargo.lock` versions, and opens findings when Cargo reports patch, minor, or major drift. | `DEPENDENCY-FRESHNESS-PATCH`, `DEPENDENCY-FRESHNESS-MINOR`, `DEPENDENCY-FRESHNESS-MAJOR` |
+
+The current slice always writes `dependency-freshness-survey.csv`.
+`cargo update --dry-run --verbose` supplies freshness observations without
+mutating `Cargo.lock`; optional cache data under
+`{store}/cache/dependency-freshness.toml` can override that collector for
+deterministic or offline runs. `patch_available`, `minor_available`, and
+`major_available` become separate lints with independent strategies.
+Use `[dependency_freshness] patch = false`, `minor = false`, or
+`major = false` to keep a drift class visible in the survey without opening
+findings for it.
+
 ## Proof hygiene
 
 The proof-hygiene standard is: verifier-only compiler signal and trusted proof
