@@ -293,17 +293,36 @@ impl ErrorSiteScanRow {
 }
 
 /// Count findings by site kind for summaries.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, derive_getters::Getters)]
 pub struct ErrorSiteKindCounts {
-    pub question_mark: usize,
-    pub map_err: usize,
-    pub return_err: usize,
-    pub if_let_err: usize,
-    pub match_err: usize,
-    pub ok_or: usize,
+    #[getter(copy)]
+    question_mark: usize,
+    #[getter(copy)]
+    map_err: usize,
+    #[getter(copy)]
+    return_err: usize,
+    #[getter(copy)]
+    if_let_err: usize,
+    #[getter(copy)]
+    match_err: usize,
+    #[getter(copy)]
+    ok_or: usize,
 }
 
 impl ErrorSiteKindCounts {
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn record_site_kind_id(&mut self, site_kind: &str) {
+        match site_kind {
+            id if id == ErrorSiteKind::QuestionMark.to_string() => self.question_mark += 1,
+            id if id == ErrorSiteKind::MapErr.to_string() => self.map_err += 1,
+            id if id == ErrorSiteKind::ReturnErr.to_string() => self.return_err += 1,
+            id if id == ErrorSiteKind::IfLetErr.to_string() => self.if_let_err += 1,
+            id if id == ErrorSiteKind::MatchErr.to_string() => self.match_err += 1,
+            id if id == ErrorSiteKind::OkOr.to_string() => self.ok_or += 1,
+            _ => {}
+        }
+    }
+
     #[instrument(level = "trace", skip(self))]
     pub fn total(&self) -> usize {
         self.question_mark
@@ -316,9 +335,29 @@ impl ErrorSiteKindCounts {
 }
 
 /// Count partitioned rows by origin class.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, derive_getters::Getters)]
 pub struct ErrorOriginClassCounts {
-    pub internal: usize,
-    pub other: usize,
-    pub edge: usize,
+    #[getter(copy)]
+    internal: usize,
+    #[getter(copy)]
+    other: usize,
+    #[getter(copy)]
+    edge: usize,
+}
+
+impl ErrorOriginClassCounts {
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn record_origin_class_id(&mut self, origin_class: &str) {
+        match origin_class {
+            id if id == ErrorOriginClass::Internal.to_string() => self.internal += 1,
+            id if id == ErrorOriginClass::Other.to_string() => self.other += 1,
+            id if id == ErrorOriginClass::Edge.to_string() => self.edge += 1,
+            _ => {}
+        }
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    pub fn foreign_pool(&self) -> usize {
+        self.other + self.edge
+    }
 }

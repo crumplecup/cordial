@@ -5,7 +5,7 @@ use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
 
-use super::types::{ErrorOriginClass, ErrorOriginClassCounts, ErrorSiteKind, ErrorSiteKindCounts};
+use super::types::{ErrorOriginClassCounts, ErrorSiteKindCounts};
 
 use tracing::instrument;
 #[derive(Debug, Default, Clone)]
@@ -69,15 +69,7 @@ fn open_rows(rows: &[ErrorSiteRow]) -> impl Iterator<Item = &ErrorSiteRow> {
 fn kind_counts(rows: &[ErrorSiteRow]) -> ErrorSiteKindCounts {
     let mut counts = ErrorSiteKindCounts::default();
     for row in rows {
-        match row.site_kind.as_str() {
-            s if s == ErrorSiteKind::QuestionMark.to_string() => counts.question_mark += 1,
-            s if s == ErrorSiteKind::MapErr.to_string() => counts.map_err += 1,
-            s if s == ErrorSiteKind::ReturnErr.to_string() => counts.return_err += 1,
-            s if s == ErrorSiteKind::IfLetErr.to_string() => counts.if_let_err += 1,
-            s if s == ErrorSiteKind::MatchErr.to_string() => counts.match_err += 1,
-            s if s == ErrorSiteKind::OkOr.to_string() => counts.ok_or += 1,
-            _ => {}
-        }
+        counts.record_site_kind_id(&row.site_kind);
     }
     counts
 }
@@ -99,12 +91,7 @@ fn crate_names(rows: &[&ErrorSiteRow]) -> Vec<String> {
 fn origin_counts(rows: &[ErrorSiteRow]) -> ErrorOriginClassCounts {
     let mut counts = ErrorOriginClassCounts::default();
     for row in rows {
-        match row.origin_class.as_str() {
-            s if s == ErrorOriginClass::Internal.to_string() => counts.internal += 1,
-            s if s == ErrorOriginClass::Other.to_string() => counts.other += 1,
-            s if s == ErrorOriginClass::Edge.to_string() => counts.edge += 1,
-            _ => {}
-        }
+        counts.record_origin_class_id(&row.origin_class);
     }
     counts
 }
@@ -238,12 +225,12 @@ impl Reporter for ErrorSitesSummaryReporter {
         body.push_str(&format!(
             "Workspace totals: **{total}** sites — `?` **{}**, map_err **{}**, return Err **{}**, \
              if let Err **{}**, match Err **{}**, ok_or **{}**.\n\n",
-            counts.question_mark,
-            counts.map_err,
-            counts.return_err,
-            counts.if_let_err,
-            counts.match_err,
-            counts.ok_or,
+            counts.question_mark(),
+            counts.map_err(),
+            counts.return_err(),
+            counts.if_let_err(),
+            counts.match_err(),
+            counts.ok_or(),
         ));
         body.push_str(
             "| Crate | Total | `?` | map_err | return Err | if let Err | match Err | ok_or |\n",
@@ -260,22 +247,22 @@ impl Reporter for ErrorSitesSummaryReporter {
             body.push_str(&format!(
                 "| `{crate_name}` | {} | {} | {} | {} | {} | {} | {} |\n",
                 crate_counts.total(),
-                crate_counts.question_mark,
-                crate_counts.map_err,
-                crate_counts.return_err,
-                crate_counts.if_let_err,
-                crate_counts.match_err,
-                crate_counts.ok_or,
+                crate_counts.question_mark(),
+                crate_counts.map_err(),
+                crate_counts.return_err(),
+                crate_counts.if_let_err(),
+                crate_counts.match_err(),
+                crate_counts.ok_or(),
             ));
         }
         body.push_str(&format!(
             "\n| **Total** | **{total}** | **{}** | **{}** | **{}** | **{}** | **{}** | **{}** |\n",
-            counts.question_mark,
-            counts.map_err,
-            counts.return_err,
-            counts.if_let_err,
-            counts.match_err,
-            counts.ok_or,
+            counts.question_mark(),
+            counts.map_err(),
+            counts.return_err(),
+            counts.if_let_err(),
+            counts.match_err(),
+            counts.ok_or(),
         ));
 
         Ok(vec![Box::new(TextArtifact {
@@ -349,7 +336,7 @@ impl Reporter for ErrorSitesPartitionSummaryReporter {
         let rows = error_site_rows(findings);
         let counts = origin_counts(&rows);
         let total = rows.len();
-        let foreign_pool = counts.other + counts.edge;
+        let foreign_pool = counts.foreign_pool();
 
         let mut body = String::new();
         body.push_str("# Error sites partition summary\n\n");
@@ -357,7 +344,9 @@ impl Reporter for ErrorSitesPartitionSummaryReporter {
         body.push_str(&format!(
             "Workspace totals: **{total}** sites — internal **{}**, other **{}**, edge **{}**, \
              foreign pool **{foreign_pool}** (other + edge).\n\n",
-            counts.internal, counts.other, counts.edge,
+            counts.internal(),
+            counts.other(),
+            counts.edge(),
         ));
         body.push_str("| Crate | Total | Internal | Other | Edge | Foreign pool |\n");
         body.push_str("| --- | ---: | ---: | ---: | ---: | ---: |\n");
@@ -369,18 +358,20 @@ impl Reporter for ErrorSitesPartitionSummaryReporter {
                 .cloned()
                 .collect();
             let crate_counts = origin_counts(&crate_rows);
-            let crate_foreign_pool = crate_counts.other + crate_counts.edge;
+            let crate_foreign_pool = crate_counts.foreign_pool();
             body.push_str(&format!(
                 "| `{crate_name}` | {} | {} | {} | {} | {crate_foreign_pool} |\n",
                 crate_rows.len(),
-                crate_counts.internal,
-                crate_counts.other,
-                crate_counts.edge,
+                crate_counts.internal(),
+                crate_counts.other(),
+                crate_counts.edge(),
             ));
         }
         body.push_str(&format!(
             "\n| **Total** | **{total}** | **{}** | **{}** | **{}** | **{foreign_pool}** |\n",
-            counts.internal, counts.other, counts.edge,
+            counts.internal(),
+            counts.other(),
+            counts.edge(),
         ));
 
         Ok(vec![Box::new(TextArtifact {
