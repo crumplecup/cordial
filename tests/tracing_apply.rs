@@ -174,8 +174,8 @@ fn apply_inserts_instrument_from_checklist() -> miette::Result<()> {
     .into_diagnostic()
     .wrap_err("apply tracing")?;
 
-    assert_eq!(summary.changed_functions, 2);
-    assert_eq!(summary.changed_files, 1);
+    assert_eq!(summary.changed_functions(), 2);
+    assert_eq!(summary.changed_files(), 1);
 
     let updated = fs::read_to_string(&fixture.src)
         .into_diagnostic()
@@ -212,7 +212,7 @@ impl Store {
     )
     .into_diagnostic()
     .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 1);
+    assert_eq!(summary.changed_functions(), 1);
 
     let updated = fs::read_to_string(&fixture.src)
         .into_diagnostic()
@@ -244,7 +244,7 @@ pub fn load_session_config() -> Result<(), String> {
     )
     .into_diagnostic()
     .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 1);
+    assert_eq!(summary.changed_functions(), 1);
 
     let updated = fs::read_to_string(&fixture.src)
         .into_diagnostic()
@@ -377,8 +377,8 @@ impl Store {
     )
     .into_diagnostic()
     .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 1);
-    assert_eq!(summary.skipped_existing, 0);
+    assert_eq!(summary.changed_functions(), 1);
+    assert_eq!(summary.skipped_existing(), 0);
 
     let updated = fs::read_to_string(&fixture.src)
         .into_diagnostic()
@@ -418,8 +418,8 @@ pub fn load_session_config() -> Result<(), String> {
     )
     .into_diagnostic()
     .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 0);
-    assert_eq!(summary.skipped_existing, 1);
+    assert_eq!(summary.changed_functions(), 0);
+    assert_eq!(summary.skipped_existing(), 1);
     Ok(())
 }
 
@@ -445,7 +445,7 @@ pub fn load_session_config() -> Result<(), String> {
     )
     .into_diagnostic()
     .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 1);
+    assert_eq!(summary.changed_functions(), 1);
 
     let updated = fs::read_to_string(&fixture.src)
         .into_diagnostic()
@@ -760,8 +760,8 @@ fn apply_gates_instrument_for_configured_crate() -> miette::Result<()> {
     let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
         .into_diagnostic()
         .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 1);
-    assert_eq!(summary.skipped_policy, 0);
+    assert_eq!(summary.changed_functions(), 1);
+    assert_eq!(summary.skipped_policy(), 0);
 
     let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
         .into_diagnostic()
@@ -794,9 +794,9 @@ fn apply_skips_configured_crate_leaving_checklist_open() -> miette::Result<()> {
     let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
         .into_diagnostic()
         .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 0);
-    assert_eq!(summary.changed_files, 0);
-    assert_eq!(summary.skipped_policy, 1);
+    assert_eq!(summary.changed_functions(), 0);
+    assert_eq!(summary.changed_files(), 0);
+    assert_eq!(summary.skipped_policy(), 1);
 
     let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
         .into_diagnostic()
@@ -829,7 +829,7 @@ fn apply_gates_dependency_crate_via_transitive_dependent() -> miette::Result<()>
     let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
         .into_diagnostic()
         .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 1);
+    assert_eq!(summary.changed_functions(), 1);
 
     let updated = fs::read_to_string(fixture.workspace.join("fixture_core/src/lib.rs"))
         .into_diagnostic()
@@ -862,8 +862,8 @@ fn apply_skips_file_spliced_into_skip_configured_crate() -> miette::Result<()> {
     let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
         .into_diagnostic()
         .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 0);
-    assert_eq!(summary.skipped_policy, 1);
+    assert_eq!(summary.changed_functions(), 0);
+    assert_eq!(summary.skipped_policy(), 1);
 
     let updated = fs::read_to_string(fixture.workspace.join("fixture_owner/src/lib.rs"))
         .into_diagnostic()
@@ -896,7 +896,8 @@ mod proofs {
         .into_diagnostic()
         .wrap_err("apply tracing")?;
     assert_eq!(
-        summary.changed_functions, 0,
+        summary.changed_functions(),
+        0,
         "proof_harness only exists at all under `#[cfg(kani)]`, and Gated \
          policy already suppresses `#[instrument]` whenever `kani` *is* \
          active -- so #[instrument] can never fire in any real build; the \
@@ -904,7 +905,7 @@ mod proofs {
          (the scanner never records it in the first place), not merely \
          applied with a qualified path"
     );
-    assert_eq!(summary.unresolved, 1);
+    assert_eq!(summary.unresolved(), 1);
 
     let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
         .into_diagnostic()
@@ -949,13 +950,14 @@ mod proofs {
         .into_diagnostic()
         .wrap_err("apply tracing")?;
     assert_eq!(
-        summary.changed_functions, 0,
+        summary.changed_functions(),
+        0,
         "Checker::ensures's only known caller is proofs::harness, itself \
          nested in #[cfg(kani)] -- apply must not write a span (gated or \
          otherwise); with no #[instrument] to strip, the file stays put"
     );
-    assert_eq!(summary.skipped_policy, 1);
-    assert_eq!(summary.unresolved, 0);
+    assert_eq!(summary.skipped_policy(), 1);
+    assert_eq!(summary.unresolved(), 0);
 
     let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
         .into_diagnostic()
@@ -1000,7 +1002,8 @@ fake_harness_macro::harness! {
         .into_diagnostic()
         .wrap_err("apply tracing")?;
     assert_eq!(
-        summary.changed_functions, 0,
+        summary.changed_functions(),
+        0,
         "syn never expands macros -- `fake_harness_macro::harness! {{ .. }}` \
          parses as an opaque Item::Macro, so without extracting its \
          trailing brace-block of real items, the call graph would never \
@@ -1010,8 +1013,8 @@ fake_harness_macro::harness! {
          harness in amenable_kani the same way. Apply must not write a \
          span; with none to strip, the file stays put"
     );
-    assert_eq!(summary.skipped_policy, 1);
-    assert_eq!(summary.unresolved, 0);
+    assert_eq!(summary.skipped_policy(), 1);
+    assert_eq!(summary.unresolved(), 0);
 
     let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
         .into_diagnostic()
@@ -1056,8 +1059,8 @@ mod proofs {
     let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
         .into_diagnostic()
         .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 1, "{summary:?}");
-    assert_eq!(summary.unresolved, 0, "{summary:?}");
+    assert_eq!(summary.changed_functions(), 1, "{summary:?}");
+    assert_eq!(summary.unresolved(), 0, "{summary:?}");
 
     let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
         .into_diagnostic()
@@ -1107,7 +1110,7 @@ mod proofs {
     let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
         .into_diagnostic()
         .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 1, "{summary:?}");
+    assert_eq!(summary.changed_functions(), 1, "{summary:?}");
 
     let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
         .into_diagnostic()
@@ -1137,8 +1140,8 @@ fn apply_strips_instrument_from_skip_crate() -> miette::Result<()> {
     let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
         .into_diagnostic()
         .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 1, "{summary:?}");
-    assert_eq!(summary.skipped_policy, 0, "{summary:?}");
+    assert_eq!(summary.changed_functions(), 1, "{summary:?}");
+    assert_eq!(summary.skipped_policy(), 0, "{summary:?}");
 
     let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
         .into_diagnostic()
@@ -1169,7 +1172,7 @@ fn apply_gates_bare_instrument_on_ordinary_fn() -> miette::Result<()> {
     let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
         .into_diagnostic()
         .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 1, "{summary:?}");
+    assert_eq!(summary.changed_functions(), 1, "{summary:?}");
 
     let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
         .into_diagnostic()
@@ -1220,7 +1223,7 @@ impl Store {
     let summary = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
         .into_diagnostic()
         .wrap_err("apply tracing")?;
-    assert_eq!(summary.changed_functions, 1, "{summary:?}");
+    assert_eq!(summary.changed_functions(), 1, "{summary:?}");
 
     let updated = fs::read_to_string(fixture.workspace.join("fixture_crate/src/lib.rs"))
         .into_diagnostic()

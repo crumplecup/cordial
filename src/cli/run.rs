@@ -153,11 +153,11 @@ pub(super) fn execute_tracing_apply(
         .unwrap_or_else(|| store.findings_dir().join("tracing-instrument.checklist.md"));
     let summary = run_tracing_instrument_apply(project_root, &checklist_path, crate_name, dry_run)?;
     tracing::info!(
-        changed_functions = summary.changed_functions,
-        changed_files = summary.changed_files,
-        already_instrumented = summary.skipped_existing,
-        skipped_by_policy = summary.skipped_policy,
-        unresolved = summary.unresolved,
+        changed_functions = summary.changed_functions(),
+        changed_files = summary.changed_files(),
+        already_instrumented = summary.skipped_existing(),
+        skipped_by_policy = summary.skipped_policy(),
+        unresolved = summary.unresolved(),
         "tracing apply"
     );
     Ok(())

@@ -60,20 +60,25 @@ impl InstrumentGap {
 }
 
 /// Result of applying instrumentation patches.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
 pub struct InstrumentApplySummary {
     /// How many functions received `#[instrument]`.
-    pub changed_functions: usize,
+    #[getter(copy)]
+    changed_functions: usize,
     /// How many source files were rewritten.
-    pub changed_files: usize,
+    #[getter(copy)]
+    changed_files: usize,
     /// Items that already satisfied the recipe.
-    pub skipped_existing: usize,
+    #[getter(copy)]
+    skipped_existing: usize,
     /// Left untouched because the real verifier toolchain for every
     /// crate that compiles the file can't tolerate `#[instrument]`,
     /// gated or not (apply skip policy).
-    pub skipped_policy: usize,
+    #[getter(copy)]
+    skipped_policy: usize,
     /// Checklist rows that could not be matched in source.
-    pub unresolved: usize,
+    #[getter(copy)]
+    unresolved: usize,
 }
 
 /// Patch source files listed in the tracing instrument checklist.
@@ -262,11 +267,11 @@ pub fn run_tracing_instrument_apply(
     }
 
     tracing::info!(
-        changed_functions = summary.changed_functions,
-        changed_files = summary.changed_files,
-        skipped_existing = summary.skipped_existing,
-        skipped_policy = summary.skipped_policy,
-        unresolved = summary.unresolved,
+        changed_functions = summary.changed_functions(),
+        changed_files = summary.changed_files(),
+        skipped_existing = summary.skipped_existing(),
+        skipped_policy = summary.skipped_policy(),
+        unresolved = summary.unresolved(),
         dry_run,
         "tracing instrument apply complete"
     );
