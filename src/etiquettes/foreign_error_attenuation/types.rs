@@ -101,12 +101,16 @@ pub struct ForeignErrorAttenuationReport {
 }
 
 /// Count rows by handling class.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, derive_getters::Getters)]
 pub struct ForeignErrorHandlingCounts {
-    pub chain_preserved: usize,
-    pub chain_break: usize,
-    pub pending_infrastructure: usize,
-    pub neutral: usize,
+    #[getter(copy)]
+    chain_preserved: usize,
+    #[getter(copy)]
+    chain_break: usize,
+    #[getter(copy)]
+    pending_infrastructure: usize,
+    #[getter(copy)]
+    neutral: usize,
 }
 
 impl ForeignErrorAttenuationReport {
