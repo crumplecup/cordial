@@ -62,7 +62,7 @@ pub fn scan_crate_tracing_boundary(
 
     let safe_names: Vec<&str> = sites
         .iter()
-        .filter(|site| site.facts.is_fallible && site.facts.reports_errors())
+        .filter(|site| site.facts.is_fallible() && site.facts.reports_errors())
         .map(|site| site.name.as_str())
         .collect();
 
@@ -72,7 +72,7 @@ pub fn scan_crate_tracing_boundary(
             && !skip_program_lints
             && has_bin
             && site.is_main
-            && site.facts.is_fallible
+            && site.facts.is_fallible()
             && !site.facts.reports_errors()
             && !site.facts.calls_safe_helper(&safe_names)
         {

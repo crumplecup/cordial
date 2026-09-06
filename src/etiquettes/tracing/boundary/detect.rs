@@ -10,24 +10,28 @@ use crate::etiquettes::tracing::present::parse_instrument_meta;
 
 /// Facts collected from one function's signature and body about whether it
 /// reports its own error to the UI-facing tracing channel before returning.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, derive_getters::Getters)]
 pub(super) struct BoundaryBodyFacts {
     /// Return type is `Result<_, _>` (or a `*Result` alias).
-    pub is_fallible: bool,
+    #[getter(copy)]
+    is_fallible: bool,
     /// `#[instrument(err(...))]` (or bare `err`) is present, including
     /// wrapped in `#[cfg_attr(pred, instrument(...))]`.
-    pub has_err_instrument: bool,
+    #[getter(copy)]
+    has_err_instrument: bool,
     /// Body directly calls `tracing::warn!`/`tracing::error!` (bare
     /// `warn!`/`error!` also counts — this project's `use tracing::warn`
     /// convention is orthogonal to this check).
-    pub has_error_emission: bool,
+    #[getter(copy)]
+    has_error_emission: bool,
     /// Last path segment or method name of every call, for helper-name
     /// delegation matching (mirrors [`super::super::subscriber::detect::InitBodyFacts`]).
-    pub called_names: Vec<String>,
+    called_names: Vec<String>,
     /// Body calls a path matching a configured cross-crate helper that
     /// already reports its own errors — trusted the same way subscriber
     /// trusts `known_helper_paths` for cross-crate init delegation.
-    pub calls_known_helper: bool,
+    #[getter(copy)]
+    calls_known_helper: bool,
     known_helper_paths: Vec<String>,
 }
 
