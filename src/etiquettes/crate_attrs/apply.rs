@@ -21,17 +21,21 @@ use super::types::CrateAttrsRuleId;
 use tracing::instrument;
 
 /// Result of applying crate-root lint attributes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
 pub struct CrateAttrsApplySummary {
     /// Library root files written (or that would be written under dry-run).
-    pub changed_files: usize,
+    #[getter(copy)]
+    changed_files: usize,
     /// Individual `#![…]` lines inserted.
-    pub inserted_attrs: usize,
+    #[getter(copy)]
+    inserted_attrs: usize,
     /// Library crates that already satisfied the armed rules (or were skipped
     /// by config).
-    pub skipped_existing: usize,
+    #[getter(copy)]
+    skipped_existing: usize,
     /// Library roots the scanner named that were missing or unparseable.
-    pub unresolved: usize,
+    #[getter(copy)]
+    unresolved: usize,
 }
 
 /// Patch library roots that are missing `forbid(unsafe_code)` / `warn(missing_docs)`.
@@ -116,10 +120,10 @@ pub fn run_crate_attrs_apply(
     }
 
     tracing::info!(
-        changed_files = summary.changed_files,
-        inserted_attrs = summary.inserted_attrs,
-        skipped_existing = summary.skipped_existing,
-        unresolved = summary.unresolved,
+        changed_files = summary.changed_files(),
+        inserted_attrs = summary.inserted_attrs(),
+        skipped_existing = summary.skipped_existing(),
+        unresolved = summary.unresolved(),
         dry_run,
         "crate-attrs apply complete"
     );

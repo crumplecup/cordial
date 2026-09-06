@@ -108,10 +108,10 @@ pub(super) fn execute_quality_apply(
         let home = store_home.clone().unwrap_or_else(default_store_home);
         let summary = crate::run_crate_attrs_apply(project_root, &home, crate_name, dry_run)?;
         tracing::info!(
-            inserted_attrs = summary.inserted_attrs,
-            changed_files = summary.changed_files,
-            already_compliant = summary.skipped_existing,
-            unresolved = summary.unresolved,
+            inserted_attrs = summary.inserted_attrs(),
+            changed_files = summary.changed_files(),
+            already_compliant = summary.skipped_existing(),
+            unresolved = summary.unresolved(),
             "crate-attrs apply"
         );
     }

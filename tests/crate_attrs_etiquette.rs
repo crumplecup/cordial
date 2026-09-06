@@ -516,8 +516,8 @@ fn dogfood_cordial_library_root() -> miette::Result<()> {
     let summary = run_crate_attrs_apply(root, store.path(), None, true).into_diagnostic()?;
     let after = fs::read_to_string(root.join("src/lib.rs")).into_diagnostic()?;
     assert_eq!(before, after, "dry-run must not rewrite cordial src/lib.rs");
-    assert_eq!(summary.inserted_attrs, 0);
-    assert_eq!(summary.changed_files, 0);
+    assert_eq!(summary.inserted_attrs(), 0);
+    assert_eq!(summary.changed_files(), 0);
     Ok(())
 }
 
@@ -532,8 +532,8 @@ fn apply_inserts_both_after_crate_docs() -> miette::Result<()> {
     )?;
     let summary =
         run_crate_attrs_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
-    assert_eq!(summary.inserted_attrs, 2);
-    assert_eq!(summary.changed_files, 1);
+    assert_eq!(summary.inserted_attrs(), 2);
+    assert_eq!(summary.changed_files(), 1);
     let lib = fs::read_to_string(fixture.path().join("src/lib.rs")).into_diagnostic()?;
     assert!(
         lib.contains("//! Crate docs."),
@@ -571,14 +571,14 @@ fn apply_is_idempotent_and_fills_only_the_gap() -> miette::Result<()> {
     )?;
     let first =
         run_crate_attrs_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
-    assert_eq!(first.inserted_attrs, 1);
+    assert_eq!(first.inserted_attrs(), 1);
     let lib = fs::read_to_string(fixture.path().join("src/lib.rs")).into_diagnostic()?;
     assert_eq!(lib.matches("#![forbid(unsafe_code)]").count(), 1);
     assert!(lib.contains("#![warn(missing_docs)]"));
     let second =
         run_crate_attrs_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
-    assert_eq!(second.changed_files, 0);
-    assert_eq!(second.skipped_existing, 1);
+    assert_eq!(second.changed_files(), 0);
+    assert_eq!(second.skipped_existing(), 1);
     Ok(())
 }
 
@@ -590,7 +590,7 @@ fn apply_dry_run_does_not_write() -> miette::Result<()> {
     let before = fs::read_to_string(fixture.path().join("src/lib.rs")).into_diagnostic()?;
     let summary =
         run_crate_attrs_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
-    assert_eq!(summary.changed_files, 1);
+    assert_eq!(summary.changed_files(), 1);
     let after = fs::read_to_string(fixture.path().join("src/lib.rs")).into_diagnostic()?;
     assert_eq!(before, after);
     Ok(())
@@ -624,7 +624,7 @@ fn apply_honors_allow_unsafe_and_lib_path() -> miette::Result<()> {
 
     let summary =
         run_crate_attrs_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
-    assert_eq!(summary.inserted_attrs, 1);
+    assert_eq!(summary.inserted_attrs(), 1);
     let decoy = fs::read_to_string(fixture.path().join("src/lib.rs")).into_diagnostic()?;
     let core = fs::read_to_string(fixture.path().join("src/core.rs")).into_diagnostic()?;
     assert_eq!(decoy, "pub fn decoy() {}\n");
