@@ -13,7 +13,11 @@ use tracing::instrument;
 pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<String> {
     let mut out = String::new();
     writeln!(out, "# Code quality report")?;
-    writeln!(out, "\n**Total open items:** {}\n", report.total_open_items)?;
+    writeln!(
+        out,
+        "\n**Total open items:** {}\n",
+        report.total_open_items()
+    )?;
     writeln!(
         out,
         "Resolve issues in the order below. Each area has a checklist (action items) \
@@ -34,29 +38,32 @@ pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<S
         "| Priority | Area | Open items | Checklist | Summary |"
     )?;
     writeln!(out, "| ---: | --- | ---: | --- | --- |")?;
-    for area in &report.areas {
+    for area in report.areas() {
         writeln!(
             out,
             "| {} | {} | {} | [`{}`]({}) | [`{}`]({}) |",
-            area.priority,
-            area.title,
-            area.open_items,
-            area.checklist,
-            area.checklist,
-            area.summary,
-            area.summary,
+            area.priority(),
+            area.title(),
+            area.open_items(),
+            area.checklist(),
+            area.checklist(),
+            area.summary(),
+            area.summary(),
         )?;
     }
     writeln!(out)?;
 
-    for area in &report.areas {
-        writeln!(out, "## {}. {}\n", area.priority, area.title)?;
-        writeln!(out, "**Open items:** {}\n", area.open_items)?;
-        writeln!(out, "_{}_\n", area.detail)?;
+    for area in report.areas() {
+        writeln!(out, "## {}. {}\n", area.priority(), area.title())?;
+        writeln!(out, "**Open items:** {}\n", area.open_items())?;
+        writeln!(out, "_{}_\n", area.detail())?;
         writeln!(
             out,
             "- Checklist: [`{}`]({})\n- Summary: [`{}`]({})\n",
-            area.checklist, area.checklist, area.summary, area.summary,
+            area.checklist(),
+            area.checklist(),
+            area.summary(),
+            area.summary(),
         )?;
     }
 
@@ -68,7 +75,11 @@ pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<S
 pub fn render_quality_workspace_summary_markdown(report: &QualityReport) -> CordialResult<String> {
     let mut out = String::new();
     writeln!(out, "# Quality workspace summary")?;
-    writeln!(out, "\n**Total open items:** {}\n", report.total_open_items)?;
+    writeln!(
+        out,
+        "\n**Total open items:** {}\n",
+        report.total_open_items()
+    )?;
     writeln!(
         out,
         "Bird's-eye view after running quality heuristics on the workspace. \
@@ -82,18 +93,18 @@ pub fn render_quality_workspace_summary_markdown(report: &QualityReport) -> Cord
         "| Priority | Heuristic | Open items | Checklist | Rollup | Notes |"
     )?;
     writeln!(out, "| --- | --- | ---: | --- | --- | --- |")?;
-    for area in &report.areas {
+    for area in report.areas() {
         writeln!(
             out,
             "| {} | {} | {} | [`{}`]({}) | [`{}`]({}) | {} |",
-            area.priority,
-            area.title,
-            area.open_items,
-            area.checklist,
-            area.checklist,
-            area.summary,
-            area.summary,
-            area.detail,
+            area.priority(),
+            area.title(),
+            area.open_items(),
+            area.checklist(),
+            area.checklist(),
+            area.summary(),
+            area.summary(),
+            area.detail(),
         )?;
     }
     writeln!(out)?;

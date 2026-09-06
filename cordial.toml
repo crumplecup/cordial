@@ -31,4 +31,4 @@ min_distinct_kinds = 2
 min_occurrences = 5
 
 [antipatterns.static_refs]
-strategy = "const"
+strategy = "cow"

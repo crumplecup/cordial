@@ -15,29 +15,32 @@ use metrics::{error_handling_metrics, panic_metrics};
 pub use render::{render_quality_report_markdown, render_quality_workspace_summary_markdown};
 
 /// One resolution-priority area in the code quality report.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub struct QualityAreaSummary {
     /// Sort key; lower numbers appear first in the report.
-    pub priority: u8,
+    #[getter(copy)]
+    priority: u8,
     /// Section title in `quality-report.md`.
-    pub title: String,
+    title: String,
     /// Open findings in this area.
-    pub open_items: usize,
+    #[getter(copy)]
+    open_items: usize,
     /// Checklist artifact filename.
-    pub checklist: String,
+    checklist: String,
     /// Summary artifact filename.
-    pub summary: String,
+    summary: String,
     /// One-line breakdown shown in the rollup table.
-    pub detail: String,
+    detail: String,
 }
 
 /// Workspace code quality report in resolution order.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub struct QualityReport {
     /// Per-etiquette sections of the quality report.
-    pub areas: Vec<QualityAreaSummary>,
+    areas: Vec<QualityAreaSummary>,
     /// Open findings across every area.
-    pub total_open_items: usize,
+    #[getter(copy)]
+    total_open_items: usize,
 }
 
 /// Build the unified report from session findings (open items only).
@@ -106,12 +109,9 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
         priority += 1;
     }
 
-    let total_open_items = areas.iter().map(|area| area.open_items).sum();
+    let total_open_items = areas.iter().map(QualityAreaSummary::open_items).sum();
 
-    Ok(QualityReport {
-        areas,
-        total_open_items,
-    })
+    Ok(QualityReport::new(areas, total_open_items))
 }
 
 #[instrument(level = "trace", skip(detail))]
@@ -123,14 +123,14 @@ fn quality_area(
     summary: &str,
     detail: String,
 ) -> QualityAreaSummary {
-    QualityAreaSummary {
+    QualityAreaSummary::new(
         priority,
-        title: title.to_string(),
+        title.to_string(),
         open_items,
-        checklist: checklist.to_string(),
-        summary: summary.to_string(),
+        checklist.to_string(),
+        summary.to_string(),
         detail,
-    }
+    )
 }
 
 /// Writes `quality-report.md` and `summary.md` after a quality session.

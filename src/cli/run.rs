@@ -242,7 +242,7 @@ fn print_run_summary(outcome: &dyn RunOutcome) -> CordialResult<RunSummary> {
 #[cfg(feature = "quality")]
 #[instrument(level = "debug", skip(findings), err(level = "warn"))]
 fn open_action_items(findings: &[&dyn Finding]) -> CordialResult<usize> {
-    Ok(build_quality_report(findings)?.total_open_items)
+    Ok(build_quality_report(findings)?.total_open_items())
 }
 
 #[cfg(not(feature = "quality"))]
