@@ -56,14 +56,14 @@ impl Probe for MissingShadowMirrorProbe {
         let mut markers = Vec::new();
 
         for entry in entries {
-            let Some(target) = ir.node_by_path(&entry.target) else {
+            let Some(target) = ir.node_by_path(entry.target()) else {
                 continue;
             };
             let mirrors = ir.children(target, EdgeKind::Mirrors);
             if mirrors.iter().any(|shadow| {
                 ir.node(*shadow).is_some_and(|node| {
                     node.attr("qualified_path").and_then(|v| v.as_str())
-                        == Some(entry.shadow.as_str())
+                        == Some(entry.shadow().as_str())
                 })
             }) {
                 continue;

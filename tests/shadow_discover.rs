@@ -24,7 +24,7 @@ fn discovers_widget_shadow_pair_without_map_file() -> miette::Result<()> {
 
     let entries = discover_same_crate_shadow_pairs(&ir);
     assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0].target, "demo::Widget");
-    assert_eq!(entries[0].shadow, "demo::WidgetShadow");
+    assert_eq!(entries[0].target(), "demo::Widget");
+    assert_eq!(entries[0].shadow(), "demo::WidgetShadow");
     Ok(())
 }

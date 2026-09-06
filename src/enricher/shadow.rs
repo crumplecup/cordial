@@ -10,12 +10,12 @@ use crate::session::SessionView;
 
 use tracing::instrument;
 /// One upstream → shadow item mapping.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, derive_new::new, derive_getters::Getters)]
 pub struct ShadowMapEntry {
     /// Crate being loaded or analyzed.
-    pub target: String,
+    target: String,
     /// Shadow crate that should mirror the upstream.
-    pub shadow: String,
+    shadow: String,
 }
 
 /// Adds [`EdgeKind::Mirrors`] edges from the shadow roster or `{name}Shadow` pairs in the IR.
@@ -45,17 +45,17 @@ impl IrEnricher for ShadowLinkEnricher {
 
         let entries = resolve_shadow_entries(session, ir)?;
         for entry in entries {
-            let Some(target) = ir.node_by_path(&entry.target) else {
+            let Some(target) = ir.node_by_path(entry.target()) else {
                 continue;
             };
-            let Some(shadow) = ir.node_by_path(&entry.shadow) else {
+            let Some(shadow) = ir.node_by_path(entry.shadow()) else {
                 continue;
             };
             ir.insert_edge(target, shadow, EdgeKind::Mirrors)?;
             ir.set_attr(
                 target,
                 "shadow_path",
-                serde_json::Value::String(entry.shadow),
+                serde_json::Value::String(entry.shadow().clone()),
             )?;
         }
         Ok(())
@@ -101,10 +101,7 @@ pub fn discover_same_crate_shadow_pairs(ir: &dyn IrView) -> Vec<ShadowMapEntry> 
             continue;
         }
         if seen.insert((target_path.to_string(), shadow_path.clone())) {
-            entries.push(ShadowMapEntry {
-                target: target_path.to_string(),
-                shadow: shadow_path,
-            });
+            entries.push(ShadowMapEntry::new(target_path.to_string(), shadow_path));
         }
     }
     entries
