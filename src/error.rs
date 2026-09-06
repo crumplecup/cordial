@@ -10,7 +10,7 @@ use std::path::{PathBuf, StripPrefixError};
 use io::{FmtSource, IoSource, PrefixSource};
 use local::{
     BuilderSource, CargoMetadataSource, InvariantSource, NoCachedIrSource, NoExceptionsSource,
-    NotFoundSource, UnknownEtiquetteSource, UnreachableSource,
+    NotFoundSource, OpenFindingsSource, UnknownEtiquetteSource, UnreachableSource,
 };
 pub use parse::TokenStreamParseError;
 use parse::{ConfigSource, JsonParseSource, JsonSource, SynParseSource};
@@ -56,6 +56,8 @@ pub enum CordialErrorKind {
     NoExceptions(NoExceptionsSource),
     /// Cached IR was required but missing.
     NoCachedIr(NoCachedIrSource),
+    /// Open action items were denied by the CLI.
+    OpenFindings(OpenFindingsSource),
     /// A path was not a prefix of another.
     Prefix(PrefixSource),
 }
@@ -156,6 +158,15 @@ impl CordialError {
     pub fn no_cached_ir(path: PathBuf) -> Self {
         Self::from_kind(CordialErrorKind::NoCachedIr(NoCachedIrSource::new(path)))
     }
+
+    /// Open action items were denied by a CLI gate.
+    #[track_caller]
+    #[instrument(level = "debug")]
+    pub fn open_findings(count: usize) -> Self {
+        Self::from_kind(CordialErrorKind::OpenFindings(OpenFindingsSource::new(
+            count,
+        )))
+    }
 }
 
 impl Display for CordialError {
@@ -183,7 +194,8 @@ impl std::error::Error for CordialError {
             | CordialErrorKind::UnknownEtiquette(_)
             | CordialErrorKind::NotFound(_)
             | CordialErrorKind::NoExceptions(_)
-            | CordialErrorKind::NoCachedIr(_) => None,
+            | CordialErrorKind::NoCachedIr(_)
+            | CordialErrorKind::OpenFindings(_) => None,
         }
     }
 }
@@ -207,6 +219,7 @@ impl Display for CordialErrorKind {
             Self::NotFound(source) => source.fmt(formatter),
             Self::NoExceptions(source) => source.fmt(formatter),
             Self::NoCachedIr(source) => source.fmt(formatter),
+            Self::OpenFindings(source) => source.fmt(formatter),
             Self::Prefix(source) => source.fmt(formatter),
         }
     }

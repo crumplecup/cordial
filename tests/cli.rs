@@ -68,6 +68,44 @@ fn cli_quality_writes_reports_and_rollup() -> miette::Result<()> {
 }
 
 #[test]
+fn cli_quality_deny_open_fails_after_writing_reports() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    write_minimal_crate(
+        fixture.path(),
+        include_str!("fixtures/panics/cli_quality.rs"),
+    )?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let output = cordial_command()
+        .args([
+            "--project",
+            utf8_path(fixture.path())?,
+            "--store-home",
+            utf8_path(store.path())?,
+            "quality",
+            "--deny-open",
+        ])
+        .output()
+        .into_diagnostic()
+        .wrap_err("run cordial quality --deny-open")?;
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("open action items denied"),
+        "stderr: {stderr}"
+    );
+    let slug = cordial::project_slug_from_path(fixture.path());
+    let project_store = store.path().join(&slug);
+    assert!(project_store.join("findings/quality-report.md").is_file());
+    assert!(project_store.join("findings/rollup-summary.md").is_file());
+    Ok(())
+}
+
+#[test]
 fn cli_view_prints_artifact() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;

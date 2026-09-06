@@ -168,6 +168,7 @@ pub(super) fn execute_run_plugins(
     crate_name: Option<&str>,
     store_home: Option<PathBuf>,
     plugins: Vec<&'static dyn Plugin>,
+    deny_open: bool,
 ) -> CordialResult<()> {
     let mut builder = SessionBuilder::new(project_root)
         .with_store_root(store.root.clone())
@@ -179,7 +180,10 @@ pub(super) fn execute_run_plugins(
     let session = builder.build();
     let filter = run_filter(crate_name);
     let outcome = session.run(filter.as_ref())?;
-    print_run_summary(outcome.as_ref());
+    let summary = print_run_summary(outcome.as_ref());
+    if deny_open && summary.open > 0 {
+        return Err(CordialError::open_findings(summary.open));
+    }
     Ok(())
 }
 
@@ -209,12 +213,14 @@ impl RunFilterChoice {
 }
 
 #[instrument(level = "debug", skip(outcome))]
-fn print_run_summary(outcome: &dyn RunOutcome) {
+fn print_run_summary(outcome: &dyn RunOutcome) -> RunSummary {
     let mut open = 0usize;
+    let mut exemplar = 0usize;
     let mut suppressed = 0usize;
     for finding in outcome.findings() {
         match finding.disposition() {
-            Disposition::Open | Disposition::Exemplar => open += 1,
+            Disposition::Open => open += 1,
+            Disposition::Exemplar => exemplar += 1,
             Disposition::Suppressed => suppressed += 1,
         }
     }
@@ -222,10 +228,15 @@ fn print_run_summary(outcome: &dyn RunOutcome) {
         .artifacts()
         .map(|artifact| artifact.name())
         .collect();
-    tracing::info!(open, suppressed, "findings");
+    tracing::info!(open, exemplar, suppressed, "findings");
     if !artifacts.is_empty() {
         tracing::info!(?artifacts, "artifacts");
     }
+    RunSummary { open }
+}
+
+struct RunSummary {
+    open: usize,
 }
 
 #[instrument(level = "debug", skip(store, path), err(level = "warn"))]

@@ -19,12 +19,15 @@ committed to git.
 ```sh
 cargo install --path .
 cordial quality -p <project>
+cordial quality -p <project> --deny-open
 cordial explain
 ```
 
 `cordial quality` runs source-quality etiquettes. `cordial coverage` runs
 rustdoc-backed inventory etiquettes after `cordial build rustdoc`. Artifacts
 land under `~/.cordial/{project}/findings/`.
+Use `--deny-open` in CI to keep report artifacts while failing on unresolved
+open action items.
 
 ## Reader paths
 

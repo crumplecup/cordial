@@ -29,7 +29,11 @@ use tracing::instrument;
 #[derive(Subcommand)]
 pub enum Commands {
     /// Run all built-in etiquettes (quality + coverage).
-    Run,
+    Run {
+        /// Exit with failure when unresolved open findings remain.
+        #[arg(long)]
+        deny_open: bool,
+    },
     /// Run source-quality etiquettes, or apply mechanical patches.
     Quality {
         /// Write tracing `#[instrument]` recipes and crate-root lint attributes.
@@ -43,6 +47,9 @@ pub enum Commands {
         /// apply scans library roots and does not use this path.
         #[arg(long)]
         checklist: Option<PathBuf>,
+        /// Exit with failure when unresolved open findings remain.
+        #[arg(long, conflicts_with = "apply")]
+        deny_open: bool,
     },
     /// Run rustdoc coverage etiquettes (impl coverage, trenchcoat, shadow).
     #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
@@ -182,17 +189,19 @@ impl Commands {
     #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
     pub(super) fn act(self, ctx: ActCtx) -> CordialResult<()> {
         match self {
-            Self::Run => execute_run_plugins(
+            Self::Run { deny_open } => execute_run_plugins(
                 &ctx.project_root,
                 &ctx.store,
                 ctx.crate_name.as_deref(),
                 ctx.store_home.clone(),
                 all_plugins(),
+                deny_open,
             ),
             Self::Quality {
                 apply,
                 dry_run,
                 checklist,
+                deny_open,
             } => {
                 if apply {
                     execute_quality_apply(
@@ -210,6 +219,7 @@ impl Commands {
                         ctx.crate_name.as_deref(),
                         ctx.store_home.clone(),
                         quality_plugins(),
+                        deny_open,
                     )
                 }
             }
@@ -224,6 +234,7 @@ impl Commands {
                         ctx.crate_name.as_deref(),
                         ctx.store_home.clone(),
                         coverage_plugins_for_hub(hub),
+                        false,
                     )
                 }
                 #[cfg(all(feature = "elicitation", not(feature = "homecoming_std")))]
@@ -234,6 +245,7 @@ impl Commands {
                         ctx.crate_name.as_deref(),
                         ctx.store_home.clone(),
                         coverage_plugins(),
+                        false,
                     )
                 }
             }

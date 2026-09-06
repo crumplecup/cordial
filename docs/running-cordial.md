@@ -20,6 +20,7 @@ feature-gated on the `cordial` crate, including `panics`, `tracing`, `quality`,
 
 ```text
 cordial quality -p <project>          # source-quality etiquettes
+cordial quality --deny-open           # fail after reports if open action items remain
 cordial quality --apply               # tracing recipes + crate-root lint attributes
 cordial quality --apply --dry-run     # log apply without writing
 cordial explain                       # id + one-line why for every compiled etiquette
@@ -29,6 +30,7 @@ cordial build rustdoc                 # rustdoc JSON for coverage
 cordial build sysroot                 # std-family rustdoc for framework coverage
 cordial coverage                      # impl / trenchcoat / shadow / std-family coverage
 cordial run                           # quality + coverage
+cordial run --deny-open               # CI gate for unresolved open findings
 cordial view findings/quality-report.md
 ```
 
@@ -123,6 +125,10 @@ Quality `--apply` rewrites source only for supported apply paths:
 - crate-root lint attributes from `crate_attrs`.
 
 Error-handling etiquettes share one source scan through `error_ir`.
+
+Use `--deny-open` in CI when a report should still be written but unresolved
+`Disposition::Open` findings should fail the job. Exemplars and suppressed
+findings remain report evidence; they do not trip the deny gate.
 
 ## Coverage
 

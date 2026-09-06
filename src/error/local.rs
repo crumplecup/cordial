@@ -300,3 +300,28 @@ impl Display for NoCachedIrSource {
 }
 
 impl std::error::Error for NoCachedIrSource {}
+
+#[derive(Debug, derive_getters::Getters)]
+pub struct OpenFindingsSource {
+    #[getter(copy)]
+    count: usize,
+}
+
+impl OpenFindingsSource {
+    #[instrument(level = "debug", ret)]
+    pub fn new(count: usize) -> Self {
+        Self { count }
+    }
+}
+
+impl Display for OpenFindingsSource {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        write!(
+            formatter,
+            "open action items denied: {} open findings remain",
+            self.count
+        )
+    }
+}
+
+impl std::error::Error for OpenFindingsSource {}
