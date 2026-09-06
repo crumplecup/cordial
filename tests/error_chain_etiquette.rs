@@ -229,8 +229,8 @@ fn probe_counts_aggregate_fixture_rules() -> miette::Result<()> {
     cordial::init_tracing();
     let records = scan_fixture()?;
     let counts = probe_counts(&records);
-    assert_eq!(counts.wrapper_source, 1);
-    assert_eq!(counts.from_bridge, 1);
+    assert_eq!(counts.wrapper_source(), 1);
+    assert_eq!(counts.from_bridge(), 1);
     assert!(counts.preserved_propagation() >= 5);
     assert!(counts.infrastructure() >= 2);
     Ok(())

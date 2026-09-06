@@ -189,16 +189,54 @@ impl ErrorChainRecord {
 }
 
 /// Count findings by probe rule.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, derive_getters::Getters)]
 pub struct ErrorChainProbeCounts {
-    pub wrapper_source: usize,
-    pub kind_wrapper_payload: usize,
-    pub from_bridge: usize,
-    pub preserved_question_mark: usize,
-    pub preserved_map_err: usize,
+    #[getter(copy)]
+    wrapper_source: usize,
+    #[getter(copy)]
+    kind_wrapper_payload: usize,
+    #[getter(copy)]
+    from_bridge: usize,
+    #[getter(copy)]
+    preserved_question_mark: usize,
+    #[getter(copy)]
+    preserved_map_err: usize,
 }
 
 impl ErrorChainProbeCounts {
+    #[instrument(level = "trace", skip(self))]
+    fn record_probe(&mut self, probe_id: ErrorChainProbeId) {
+        match probe_id {
+            ErrorChainProbeId::WrapperSourceField001 => self.wrapper_source += 1,
+            ErrorChainProbeId::KindWrapperPayload001 => self.kind_wrapper_payload += 1,
+            ErrorChainProbeId::FromBridge001 => self.from_bridge += 1,
+            ErrorChainProbeId::PreservedQuestionMark001 => self.preserved_question_mark += 1,
+            ErrorChainProbeId::PreservedMapErr001 => self.preserved_map_err += 1,
+        }
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn record_rule_id(&mut self, rule_id: &str) {
+        match rule_id {
+            id if id == ErrorChainProbeId::WrapperSourceField001.as_str() => {
+                self.record_probe(ErrorChainProbeId::WrapperSourceField001);
+            }
+            id if id == ErrorChainProbeId::KindWrapperPayload001.as_str() => {
+                self.record_probe(ErrorChainProbeId::KindWrapperPayload001);
+            }
+            id if id == ErrorChainProbeId::FromBridge001.as_str() => {
+                self.record_probe(ErrorChainProbeId::FromBridge001);
+            }
+            id if id == ErrorChainProbeId::PreservedQuestionMark001.as_str() => {
+                self.record_probe(ErrorChainProbeId::PreservedQuestionMark001);
+            }
+            id if id == ErrorChainProbeId::PreservedMapErr001.as_str() => {
+                self.record_probe(ErrorChainProbeId::PreservedMapErr001);
+            }
+            _ => {}
+        }
+    }
+
     #[instrument(level = "trace", skip(self))]
     pub fn total(&self) -> usize {
         self.wrapper_source
@@ -224,13 +262,7 @@ impl ErrorChainProbeCounts {
 pub fn probe_counts(records: &[ErrorChainRecord]) -> ErrorChainProbeCounts {
     let mut counts = ErrorChainProbeCounts::default();
     for record in records {
-        match record.rule_id() {
-            ErrorChainProbeId::WrapperSourceField001 => counts.wrapper_source += 1,
-            ErrorChainProbeId::KindWrapperPayload001 => counts.kind_wrapper_payload += 1,
-            ErrorChainProbeId::FromBridge001 => counts.from_bridge += 1,
-            ErrorChainProbeId::PreservedQuestionMark001 => counts.preserved_question_mark += 1,
-            ErrorChainProbeId::PreservedMapErr001 => counts.preserved_map_err += 1,
-        }
+        counts.record_probe(record.rule_id());
     }
     counts
 }

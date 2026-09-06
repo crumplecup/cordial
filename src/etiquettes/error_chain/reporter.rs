@@ -5,7 +5,7 @@ use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
 
-use super::types::{ErrorChainProbeCounts, ErrorChainProbeId};
+use super::types::ErrorChainProbeCounts;
 
 use tracing::instrument;
 #[derive(Debug, Default, Clone)]
@@ -76,22 +76,7 @@ fn crate_names(rows: &[&ErrorChainRow]) -> Vec<String> {
 fn probe_counts_from_rows(rows: &[ErrorChainRow]) -> ErrorChainProbeCounts {
     let mut counts = ErrorChainProbeCounts::default();
     for row in rows {
-        match row.rule_id.as_str() {
-            s if s == ErrorChainProbeId::WrapperSourceField001.as_str() => {
-                counts.wrapper_source += 1;
-            }
-            s if s == ErrorChainProbeId::KindWrapperPayload001.as_str() => {
-                counts.kind_wrapper_payload += 1;
-            }
-            s if s == ErrorChainProbeId::FromBridge001.as_str() => counts.from_bridge += 1,
-            s if s == ErrorChainProbeId::PreservedQuestionMark001.as_str() => {
-                counts.preserved_question_mark += 1;
-            }
-            s if s == ErrorChainProbeId::PreservedMapErr001.as_str() => {
-                counts.preserved_map_err += 1;
-            }
-            _ => {}
-        }
+        counts.record_rule_id(&row.rule_id);
     }
     counts
 }
