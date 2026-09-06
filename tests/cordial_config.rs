@@ -482,6 +482,11 @@ fn dependency_freshness_policy_reads_drift_class_gates() -> miette::Result<()> {
 patch = false
 minor = true
 major = false
+manifest_exact_pin = false
+manifest_upper_bound = true
+manifest_wildcard = false
+manifest_tilde = true
+manifest_workspace_bypass = false
 "#,
     )
     .into_diagnostic()
@@ -495,6 +500,11 @@ major = false
     assert!(!loaded.dependency_freshness().patch());
     assert!(loaded.dependency_freshness().minor());
     assert!(!loaded.dependency_freshness().major());
+    assert!(!loaded.dependency_freshness().manifest_exact_pin());
+    assert!(loaded.dependency_freshness().manifest_upper_bound());
+    assert!(!loaded.dependency_freshness().manifest_wildcard());
+    assert!(loaded.dependency_freshness().manifest_tilde());
+    assert!(!loaded.dependency_freshness().manifest_workspace_bypass());
     assert!(
         !loaded
             .dependency_freshness()
@@ -509,6 +519,31 @@ major = false
         !loaded
             .dependency_freshness()
             .rule_enabled("DEPENDENCY-FRESHNESS-MAJOR")
+    );
+    assert!(
+        !loaded
+            .dependency_freshness()
+            .rule_enabled("DEPENDENCY-FRESHNESS-MANIFEST-EXACT-PIN")
+    );
+    assert!(
+        loaded
+            .dependency_freshness()
+            .rule_enabled("DEPENDENCY-FRESHNESS-MANIFEST-UPPER-BOUND")
+    );
+    assert!(
+        !loaded
+            .dependency_freshness()
+            .rule_enabled("DEPENDENCY-FRESHNESS-MANIFEST-WILDCARD")
+    );
+    assert!(
+        loaded
+            .dependency_freshness()
+            .rule_enabled("DEPENDENCY-FRESHNESS-MANIFEST-TILDE")
+    );
+    assert!(
+        !loaded
+            .dependency_freshness()
+            .rule_enabled("DEPENDENCY-FRESHNESS-MANIFEST-WORKSPACE-BYPASS")
     );
     Ok(())
 }

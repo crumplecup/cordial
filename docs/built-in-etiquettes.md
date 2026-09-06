@@ -109,23 +109,27 @@ over free-standing items.
 
 ## Dependency policy
 
-The dependency-policy standard is: manifest intent and lockfile resolution are
-visible before the project decides which patch, minor, or major drift should
-be denied.
+The dependency-policy standard is: manifest intent, lockfile resolution, and
+registry freshness are visible before the project decides which dependency
+maintenance policy should be denied.
 
 | Etiquette | Enforces | Main rule ids |
 | --- | --- | --- |
-| `dependency_freshness` | Surveys direct `Cargo.toml` dependencies, joins matching `Cargo.lock` versions, and opens findings when Cargo reports patch, minor, or major drift. | `DEPENDENCY-FRESHNESS-PATCH`, `DEPENDENCY-FRESHNESS-MINOR`, `DEPENDENCY-FRESHNESS-MAJOR` |
+| `dependency_freshness` | Surveys direct `Cargo.toml` dependencies, joins matching `Cargo.lock` versions, and opens findings for enabled manifest-policy indicators or Cargo-reported patch, minor, or major drift. | `DEPENDENCY-FRESHNESS-PATCH`, `DEPENDENCY-FRESHNESS-MINOR`, `DEPENDENCY-FRESHNESS-MAJOR`, `DEPENDENCY-FRESHNESS-MANIFEST-EXACT-PIN`, `DEPENDENCY-FRESHNESS-MANIFEST-UPPER-BOUND`, `DEPENDENCY-FRESHNESS-MANIFEST-WILDCARD`, `DEPENDENCY-FRESHNESS-MANIFEST-TILDE`, `DEPENDENCY-FRESHNESS-MANIFEST-WORKSPACE-BYPASS` |
 
 The current slice always writes `dependency-freshness-survey.csv`.
 `cargo update --dry-run --verbose` supplies freshness observations without
 mutating `Cargo.lock`; optional cache data under
 `{store}/cache/dependency-freshness.toml` can override that collector for
 deterministic or offline runs. `patch_available`, `minor_available`, and
-`major_available` become separate lints with independent strategies.
-Use `[dependency_freshness] patch = false`, `minor = false`, or
-`major = false` to keep a drift class visible in the survey without opening
-findings for it.
+`major_available`, `manifest_exact_pin`, `manifest_upper_bound`,
+`manifest_wildcard`, `manifest_tilde`, and `manifest_workspace_bypass` become
+separate lints with independent strategies. Use
+`[dependency_freshness] patch = false`, `minor = false`, `major = false`,
+`manifest_exact_pin = false`, `manifest_upper_bound = false`,
+`manifest_wildcard = false`, `manifest_tilde = false`, or
+`manifest_workspace_bypass = false` to keep a policy shape visible in the
+survey without opening findings for it.
 
 ## Proof hygiene
 

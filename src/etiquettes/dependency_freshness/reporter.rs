@@ -254,8 +254,9 @@ impl Reporter for DependencyFreshnessChecklistReporter {
         body.push_str("# Dependency freshness checklist\n\n");
         body.push_str(&format!("**Open items:** {}\n\n", open.len()));
         body.push_str(
-            "Review available dependency updates. Patch, minor, and major drift \
-             remain separate rule ids so CI can deny them independently.\n\n",
+            "Review dependency freshness and manifest policy findings. Drift and \
+             manifest policy rules remain separate rule ids so CI can deny them \
+             independently.\n\n",
         );
 
         for crate_name in crate_names(&open) {
@@ -268,8 +269,8 @@ impl Reporter for DependencyFreshnessChecklistReporter {
 
             for row in crate_open {
                 body.push_str(&format!(
-                    "- [ ] `{}` — `{}` → `{}` — `{}`\n",
-                    row.rule_id, row.locked_versions, row.available_versions, row.package
+                    "- [ ] `{}` — `{}` — `{}`\n",
+                    row.rule_id, row.package, row.snippet
                 ));
             }
             body.push('\n');

@@ -68,6 +68,11 @@ min_occurrences = 5
 # patch = true
 # minor = true
 # major = true
+# manifest_exact_pin = true
+# manifest_upper_bound = true
+# manifest_wildcard = true
+# manifest_tilde = true
+# manifest_workspace_bypass = true
 
 [derives]
 # enabled = true
@@ -137,7 +142,9 @@ and `[tracing.stdio]`),
 crate_attrs (`forbid_unsafe`, `missing_docs`, `allow_unsafe`,
 `allow_missing_docs`), and doc_warnings (`document_private_items`,
 `all_features`, `skip_crates`), creusot_diagnostics (`skip_crates`),
-dependency_freshness (`enabled`, `patch`, `minor`, `major`), and antipatterns
+dependency_freshness (`enabled`, `patch`, `minor`, `major`,
+`manifest_exact_pin`, `manifest_upper_bound`, `manifest_wildcard`,
+`manifest_tilde`, `manifest_workspace_bypass`), and antipatterns
 (`static_refs.strategy`) read through `load_session_config`.
 Role→level maps stay in code.
 

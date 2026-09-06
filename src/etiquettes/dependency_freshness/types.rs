@@ -102,6 +102,8 @@ pub enum DependencyFreshnessIndicator {
     ManifestWildcard,
     /// Manifest uses a tilde requirement.
     ManifestTilde,
+    /// Member manifest declares local policy where `[workspace.dependencies]` exists.
+    ManifestWorkspaceBypass,
     /// Member manifest inherits dependency policy from the workspace.
     ManifestWorkspaceInherited,
     /// Lockfile contains at least one resolved version for this package.
@@ -172,6 +174,16 @@ pub enum DependencyFreshnessRuleId {
     Minor,
     /// A newer major version is available.
     Major,
+    /// A manifest requirement uses an exact `=` pin.
+    ManifestExactPin,
+    /// A manifest requirement uses an upper bound.
+    ManifestUpperBound,
+    /// A manifest requirement uses a wildcard.
+    ManifestWildcard,
+    /// A manifest requirement uses a tilde constraint.
+    ManifestTilde,
+    /// A member dependency bypasses a matching workspace dependency policy.
+    ManifestWorkspaceBypass,
 }
 
 impl DependencyFreshnessRuleId {
@@ -181,6 +193,11 @@ impl DependencyFreshnessRuleId {
             Self::Patch => "DEPENDENCY-FRESHNESS-PATCH",
             Self::Minor => "DEPENDENCY-FRESHNESS-MINOR",
             Self::Major => "DEPENDENCY-FRESHNESS-MAJOR",
+            Self::ManifestExactPin => "DEPENDENCY-FRESHNESS-MANIFEST-EXACT-PIN",
+            Self::ManifestUpperBound => "DEPENDENCY-FRESHNESS-MANIFEST-UPPER-BOUND",
+            Self::ManifestWildcard => "DEPENDENCY-FRESHNESS-MANIFEST-WILDCARD",
+            Self::ManifestTilde => "DEPENDENCY-FRESHNESS-MANIFEST-TILDE",
+            Self::ManifestWorkspaceBypass => "DEPENDENCY-FRESHNESS-MANIFEST-WORKSPACE-BYPASS",
         }
     }
 
@@ -190,6 +207,11 @@ impl DependencyFreshnessRuleId {
             "DEPENDENCY-FRESHNESS-PATCH" => Some(Self::Patch),
             "DEPENDENCY-FRESHNESS-MINOR" => Some(Self::Minor),
             "DEPENDENCY-FRESHNESS-MAJOR" => Some(Self::Major),
+            "DEPENDENCY-FRESHNESS-MANIFEST-EXACT-PIN" => Some(Self::ManifestExactPin),
+            "DEPENDENCY-FRESHNESS-MANIFEST-UPPER-BOUND" => Some(Self::ManifestUpperBound),
+            "DEPENDENCY-FRESHNESS-MANIFEST-WILDCARD" => Some(Self::ManifestWildcard),
+            "DEPENDENCY-FRESHNESS-MANIFEST-TILDE" => Some(Self::ManifestTilde),
+            "DEPENDENCY-FRESHNESS-MANIFEST-WORKSPACE-BYPASS" => Some(Self::ManifestWorkspaceBypass),
             _ => None,
         }
     }
@@ -216,7 +238,32 @@ impl Rule for DependencyFreshnessRule {
     }
 
     fn description(&self) -> &str {
-        "A newer dependency version is available according to Cargo's registry freshness view"
+        match self.rule_id {
+            DependencyFreshnessRuleId::Patch => {
+                "A newer patch dependency version is available according to Cargo's registry freshness view"
+            }
+            DependencyFreshnessRuleId::Minor => {
+                "A newer minor dependency version is available according to Cargo's registry freshness view"
+            }
+            DependencyFreshnessRuleId::Major => {
+                "A newer major dependency version is available according to Cargo's registry freshness view"
+            }
+            DependencyFreshnessRuleId::ManifestExactPin => {
+                "A dependency manifest uses an exact version pin"
+            }
+            DependencyFreshnessRuleId::ManifestUpperBound => {
+                "A dependency manifest uses an upper-bound version requirement"
+            }
+            DependencyFreshnessRuleId::ManifestWildcard => {
+                "A dependency manifest uses a wildcard version requirement"
+            }
+            DependencyFreshnessRuleId::ManifestTilde => {
+                "A dependency manifest uses a tilde version requirement"
+            }
+            DependencyFreshnessRuleId::ManifestWorkspaceBypass => {
+                "A member dependency bypasses a matching workspace dependency policy"
+            }
+        }
     }
 }
 
@@ -372,12 +419,32 @@ impl DependencyFreshnessIndicator {
             Self::ManifestUpperBound => "manifest_upper_bound",
             Self::ManifestWildcard => "manifest_wildcard",
             Self::ManifestTilde => "manifest_tilde",
+            Self::ManifestWorkspaceBypass => "manifest_workspace_bypass",
             Self::ManifestWorkspaceInherited => "manifest_workspace_inherited",
             Self::LockfileResolved => "lockfile_resolved",
             Self::LockfileMissing => "lockfile_missing",
             Self::PatchAvailable => "patch_available",
             Self::MinorAvailable => "minor_available",
             Self::MajorAvailable => "major_available",
+        }
+    }
+
+    /// Finding rule promoted from manifest-policy indicators.
+    pub const fn manifest_rule_id(self) -> Option<DependencyFreshnessRuleId> {
+        match self {
+            Self::ManifestExactPin => Some(DependencyFreshnessRuleId::ManifestExactPin),
+            Self::ManifestUpperBound => Some(DependencyFreshnessRuleId::ManifestUpperBound),
+            Self::ManifestWildcard => Some(DependencyFreshnessRuleId::ManifestWildcard),
+            Self::ManifestTilde => Some(DependencyFreshnessRuleId::ManifestTilde),
+            Self::ManifestWorkspaceBypass => {
+                Some(DependencyFreshnessRuleId::ManifestWorkspaceBypass)
+            }
+            Self::ManifestWorkspaceInherited
+            | Self::LockfileResolved
+            | Self::LockfileMissing
+            | Self::PatchAvailable
+            | Self::MinorAvailable
+            | Self::MajorAvailable => None,
         }
     }
 }
@@ -419,6 +486,7 @@ impl DependencySurveyRecord {
     /// Construct a dependency survey record.
     pub(crate) fn from_input(input: DependencySurveyRecordInput) -> Self {
         let mut indicators = indicators_for(&input.version_spec, &input.locked_versions);
+        indicators.extend(input.indicators);
         indicators.sort();
         indicators.dedup();
         Self {
@@ -484,9 +552,21 @@ impl DependencySurveyRecord {
 
     /// Finding rule ids formatted for a flat artifact row.
     pub fn freshness_rule_ids_display(&self) -> String {
-        self.freshness_observations
+        let mut rule_ids = self
+            .freshness_observations
             .iter()
-            .map(|observation| observation.rule_id().as_str())
+            .map(|observation| observation.rule_id())
+            .chain(
+                self.indicators
+                    .iter()
+                    .filter_map(|indicator| indicator.manifest_rule_id()),
+            )
+            .collect::<Vec<_>>();
+        rule_ids.sort();
+        rule_ids.dedup();
+        rule_ids
+            .iter()
+            .map(|rule_id| rule_id.as_str())
             .collect::<Vec<_>>()
             .join("|")
     }
@@ -513,6 +593,8 @@ pub(crate) struct DependencySurveyRecordInput {
     pub(crate) source_kind: DependencySourceKind,
     /// Versions currently resolved in `Cargo.lock`.
     pub(crate) locked_versions: Vec<String>,
+    /// Additional manifest-structure indicators collected by the scanner.
+    pub(crate) indicators: Vec<DependencyFreshnessIndicator>,
 }
 
 fn indicators_for(

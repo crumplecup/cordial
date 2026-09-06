@@ -61,10 +61,6 @@ impl Assessor for DependencyFreshnessAssessor {
                 .and_then(serde_json::Value::as_str)
                 .map(|path| resolve_source_path(view.session, path))
                 .unwrap_or_else(|| view.session.project_root().join("Cargo.toml"));
-            let snippet = format!(
-                "{dependency_name} locked {locked_versions}; available {available_versions}"
-            );
-
             for rule_id in rule_ids
                 .split('|')
                 .filter_map(DependencyFreshnessRuleId::from_attr)
@@ -72,6 +68,13 @@ impl Assessor for DependencyFreshnessAssessor {
                 if !policy.rule_enabled(rule_id.as_str()) {
                     continue;
                 }
+                let snippet = snippet_for_rule(
+                    rule_id,
+                    &dependency_name,
+                    &version_spec,
+                    &locked_versions,
+                    &available_versions,
+                );
                 findings.push(Box::new(
                     DependencyFreshnessFinding::builder()
                         .rule(DependencyFreshnessRule::new(rule_id))
@@ -86,7 +89,7 @@ impl Assessor for DependencyFreshnessAssessor {
                         .locked_versions(locked_versions.clone())
                         .available_versions(available_versions.clone())
                         .update_kinds(update_kinds.clone())
-                        .snippet(snippet.clone())
+                        .snippet(snippet)
                         .build()?,
                 ) as Box<dyn Finding>);
             }
@@ -100,4 +103,37 @@ fn node_attr(node: &crate::ir::NodeRef<'_>, key: &str) -> String {
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default()
         .to_string()
+}
+
+fn snippet_for_rule(
+    rule_id: DependencyFreshnessRuleId,
+    dependency_name: &str,
+    version_spec: &str,
+    locked_versions: &str,
+    available_versions: &str,
+) -> String {
+    match rule_id {
+        DependencyFreshnessRuleId::Patch
+        | DependencyFreshnessRuleId::Minor
+        | DependencyFreshnessRuleId::Major => {
+            format!("{dependency_name} locked {locked_versions}; available {available_versions}")
+        }
+        DependencyFreshnessRuleId::ManifestExactPin => {
+            format!("{dependency_name} uses exact manifest requirement {version_spec}")
+        }
+        DependencyFreshnessRuleId::ManifestUpperBound => {
+            format!("{dependency_name} uses upper-bounded manifest requirement {version_spec}")
+        }
+        DependencyFreshnessRuleId::ManifestWildcard => {
+            format!("{dependency_name} uses wildcard manifest requirement {version_spec}")
+        }
+        DependencyFreshnessRuleId::ManifestTilde => {
+            format!("{dependency_name} uses tilde manifest requirement {version_spec}")
+        }
+        DependencyFreshnessRuleId::ManifestWorkspaceBypass => {
+            format!(
+                "{dependency_name} declares local dependency policy instead of workspace = true"
+            )
+        }
+    }
 }

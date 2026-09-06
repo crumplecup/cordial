@@ -95,7 +95,7 @@ version = "2.3.4"
         .run(&NamedRunFilter::all_etiquettes().with_crate("app"))
         .into_diagnostic()
         .wrap_err("session run")?;
-    assert_eq!(outcome.findings().count(), 0);
+    assert_eq!(outcome.findings().count(), 4);
 
     let csv = dependency_freshness_survey_csv(store.path())?;
     assert!(csv.contains("app,serde,serde"));
@@ -110,6 +110,102 @@ version = "2.3.4"
     assert!(csv.contains("wildcard"));
     assert!(csv.contains("app,nix,nix"));
     assert!(csv.contains("upper_bound"));
+
+    let findings = fs::read_to_string(
+        store
+            .path()
+            .join("findings")
+            .join("dependency-freshness.csv"),
+    )
+    .into_diagnostic()
+    .wrap_err("dependency freshness csv")?;
+    assert!(findings.contains("DEPENDENCY-FRESHNESS-MANIFEST-EXACT-PIN"));
+    assert!(findings.contains("DEPENDENCY-FRESHNESS-MANIFEST-UPPER-BOUND"));
+    assert!(findings.contains("DEPENDENCY-FRESHNESS-MANIFEST-WILDCARD"));
+    assert!(findings.contains("DEPENDENCY-FRESHNESS-MANIFEST-TILDE"));
+    assert!(findings.contains("uses exact manifest requirement"));
+    assert!(findings.contains("uses upper-bounded manifest requirement"));
+    assert!(findings.contains("uses wildcard manifest requirement"));
+    assert!(findings.contains("uses tilde manifest requirement"));
+    Ok(())
+}
+
+#[test]
+fn dependency_freshness_lints_workspace_policy_bypass() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    write_workspace_manifest(
+        fixture.path(),
+        r#"
+[workspace]
+members = ["crates/app", "crates/serde"]
+resolver = "2"
+
+[workspace.dependencies]
+serde = { path = "crates/serde", version = "1" }
+"#,
+    )?;
+    write_package_manifest(fixture.path(), "crates/serde", "serde", "1.0.0")?;
+    write_member_manifest(
+        fixture.path(),
+        "crates/app",
+        r#"
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { version = "1", path = "../serde" }
+"#,
+    )?;
+    write_lockfile(
+        fixture.path(),
+        r#"
+version = 4
+
+[[package]]
+name = "app"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "serde"
+version = "1.0.0"
+"#,
+    )?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    write_dependency_freshness_cache(store.path(), "")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&DEPENDENCY_FRESHNESS_ETIQUETTE)
+        .build();
+
+    let outcome = session
+        .run(&NamedRunFilter::all_etiquettes().with_crate("app"))
+        .into_diagnostic()
+        .wrap_err("session run")?;
+    assert_eq!(outcome.findings().count(), 1);
+
+    let survey = dependency_freshness_survey_csv(store.path())?;
+    assert!(survey.contains("app,serde,serde"));
+    assert!(survey.contains("manifest_workspace_bypass"));
+
+    let findings = fs::read_to_string(
+        store
+            .path()
+            .join("findings")
+            .join("dependency-freshness.csv"),
+    )
+    .into_diagnostic()
+    .wrap_err("dependency freshness csv")?;
+    assert!(findings.contains("DEPENDENCY-FRESHNESS-MANIFEST-WORKSPACE-BYPASS"));
+    assert!(findings.contains("declares local dependency policy instead of workspace = true"));
     Ok(())
 }
 

@@ -4,14 +4,16 @@
 //! them to resolved package versions from `Cargo.lock`.
 //!
 //! **Why.** Outdated dependency policy needs manifest intent (`workspace =
-//! true`, exact pins, wildcards, upper bounds, source kind), lockfile
-//! resolution, and Cargo's registry freshness view. This slice surveys those
-//! facts before patch/minor/major indicators become lints.
+//! true`, workspace-level policy, exact pins, wildcards, upper bounds, source
+//! kind), lockfile resolution, and Cargo's registry freshness view. This slice
+//! keeps the survey available while promoting selected manifest and registry
+//! indicators into independent lints.
 //!
 //! **Flags.** `cargo update --dry-run --verbose` observations produce
 //! `DEPENDENCY-FRESHNESS-PATCH`, `DEPENDENCY-FRESHNESS-MINOR`, and
-//! `DEPENDENCY-FRESHNESS-MAJOR`. A cache file under the session store can
-//! override Cargo for deterministic runs.
+//! `DEPENDENCY-FRESHNESS-MAJOR`. Manifest policy indicators produce exact-pin,
+//! upper-bound, wildcard, tilde, and workspace-bypass rule ids. A cache file
+//! under the session store can override Cargo for deterministic runs.
 //!
 //! **Outputs.** `{store}/findings/dependency-freshness-survey.csv`,
 //! `dependency-freshness.checklist.md`, `dependency-freshness-summary.md`, and
@@ -81,7 +83,7 @@ pub static DEPENDENCY_FRESHNESS_ETIQUETTE: StaticQualityEtiquette = StaticQualit
         EtiquetteExplain::new(
             "Which dependency declarations and lockfile resolutions can freshness lints use?",
             "Dependency freshness needs manifest intent and lockfile state before registry comparisons can be judged.",
-            "Surveys direct Cargo.toml dependencies, classifies manifest indicators, joins matching Cargo.lock package versions, asks Cargo for available registry updates, and emits patch/minor/major findings.",
+            "Surveys direct Cargo.toml dependencies, classifies manifest indicators, joins matching Cargo.lock package versions, asks Cargo for available registry updates, and emits manifest-policy plus patch/minor/major findings.",
             "`[dependency_freshness] enabled = false` in cordial.toml.",
             &[
                 EtiquetteRuleExplain::new(
@@ -95,6 +97,26 @@ pub static DEPENDENCY_FRESHNESS_ETIQUETTE: StaticQualityEtiquette = StaticQualit
                 EtiquetteRuleExplain::new(
                     "DEPENDENCY-FRESHNESS-MAJOR",
                     "A newer major release is available",
+                ),
+                EtiquetteRuleExplain::new(
+                    "DEPENDENCY-FRESHNESS-MANIFEST-EXACT-PIN",
+                    "A dependency manifest uses an exact version pin",
+                ),
+                EtiquetteRuleExplain::new(
+                    "DEPENDENCY-FRESHNESS-MANIFEST-UPPER-BOUND",
+                    "A dependency manifest uses an upper-bound version requirement",
+                ),
+                EtiquetteRuleExplain::new(
+                    "DEPENDENCY-FRESHNESS-MANIFEST-WILDCARD",
+                    "A dependency manifest uses a wildcard version requirement",
+                ),
+                EtiquetteRuleExplain::new(
+                    "DEPENDENCY-FRESHNESS-MANIFEST-TILDE",
+                    "A dependency manifest uses a tilde version requirement",
+                ),
+                EtiquetteRuleExplain::new(
+                    "DEPENDENCY-FRESHNESS-MANIFEST-WORKSPACE-BYPASS",
+                    "A member dependency bypasses a matching workspace dependency policy",
                 ),
             ],
         ),

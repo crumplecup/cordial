@@ -8,8 +8,8 @@ use serde::Deserialize;
 use crate::error::{CordialError, CordialResult};
 
 use super::types::{
-    DependencyFreshnessObservation, DependencySection, DependencySourceKind,
-    DependencySurveyRecord, DependencySurveyRecordInput, ManifestVersionSpec,
+    DependencyFreshnessIndicator, DependencyFreshnessObservation, DependencySection,
+    DependencySourceKind, DependencySurveyRecord, DependencySurveyRecordInput, ManifestVersionSpec,
 };
 
 type LockfileIndex = BTreeMap<String, Vec<String>>;
@@ -26,6 +26,7 @@ struct DependencyEntry {
     version_spec: ManifestVersionSpec,
     source_kind: DependencySourceKind,
     line: u32,
+    indicators: Vec<DependencyFreshnessIndicator>,
 }
 
 /// Survey one crate and join Cargo registry freshness facts.
@@ -54,6 +55,7 @@ pub(crate) fn survey_crate_dependency_freshness(
             version_spec: entry.version_spec,
             source_kind: entry.source_kind,
             locked_versions,
+            indicators: entry.indicators,
         });
         records.push(record);
     }
@@ -257,6 +259,7 @@ fn parse_dependency_entry(
             version_spec: ManifestVersionSpec::Requirement(requirement.clone()),
             source_kind: DependencySourceKind::Registry,
             line,
+            indicators: workspace_bypass_indicators(workspace_dependencies, dependency_name, false),
         },
         toml::Value::Table(table) => {
             let workspace_inherited = table
@@ -292,6 +295,11 @@ fn parse_dependency_entry(
                 version_spec,
                 source_kind: source_kind(table, workspace_inherited),
                 line,
+                indicators: workspace_bypass_indicators(
+                    workspace_dependencies,
+                    dependency_name,
+                    workspace_inherited,
+                ),
             }
         }
         _ => DependencyEntry {
@@ -301,7 +309,20 @@ fn parse_dependency_entry(
             version_spec: ManifestVersionSpec::Unspecified,
             source_kind: DependencySourceKind::Unspecified,
             line,
+            indicators: workspace_bypass_indicators(workspace_dependencies, dependency_name, false),
         },
+    }
+}
+
+fn workspace_bypass_indicators(
+    workspace_dependencies: &BTreeMap<String, DependencyEntry>,
+    dependency_name: &str,
+    workspace_inherited: bool,
+) -> Vec<DependencyFreshnessIndicator> {
+    if workspace_inherited || !workspace_dependencies.contains_key(dependency_name) {
+        Vec::new()
+    } else {
+        vec![DependencyFreshnessIndicator::ManifestWorkspaceBypass]
     }
 }
 

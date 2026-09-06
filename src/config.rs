@@ -814,6 +814,26 @@ pub struct DependencyFreshnessThresholds {
     #[serde(default = "default_true")]
     #[getter(copy)]
     major: bool,
+    /// Emit exact manifest version pin findings.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    manifest_exact_pin: bool,
+    /// Emit manifest upper-bound findings.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    manifest_upper_bound: bool,
+    /// Emit manifest wildcard requirement findings.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    manifest_wildcard: bool,
+    /// Emit manifest tilde requirement findings.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    manifest_tilde: bool,
+    /// Emit findings for member manifests bypassing workspace dependency policy.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    manifest_workspace_bypass: bool,
     /// Run this etiquette (`true`) or skip it (`false`).
     #[serde(default = "default_true")]
     #[getter(copy)]
@@ -827,6 +847,11 @@ impl Default for DependencyFreshnessThresholds {
             patch: true,
             minor: true,
             major: true,
+            manifest_exact_pin: true,
+            manifest_upper_bound: true,
+            manifest_wildcard: true,
+            manifest_tilde: true,
+            manifest_workspace_bypass: true,
             enabled: true,
         }
     }
@@ -840,6 +865,11 @@ impl DependencyFreshnessThresholds {
             "DEPENDENCY-FRESHNESS-PATCH" => self.patch,
             "DEPENDENCY-FRESHNESS-MINOR" => self.minor,
             "DEPENDENCY-FRESHNESS-MAJOR" => self.major,
+            "DEPENDENCY-FRESHNESS-MANIFEST-EXACT-PIN" => self.manifest_exact_pin,
+            "DEPENDENCY-FRESHNESS-MANIFEST-UPPER-BOUND" => self.manifest_upper_bound,
+            "DEPENDENCY-FRESHNESS-MANIFEST-WILDCARD" => self.manifest_wildcard,
+            "DEPENDENCY-FRESHNESS-MANIFEST-TILDE" => self.manifest_tilde,
+            "DEPENDENCY-FRESHNESS-MANIFEST-WORKSPACE-BYPASS" => self.manifest_workspace_bypass,
             _ => false,
         }
     }

@@ -39,7 +39,7 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 | [cfg_scatter etiquette](docs/planning/cfg-scatter-etiquette.md) | **Reference** | Static lint for `#[cfg(feature = "...")]` scattered across item kinds instead of module gates |
 | [Crate attributes](docs/planning/crate-attrs-etiquette.md) | **Reference** | `#![forbid(unsafe_code)]` and `#![warn(missing_docs)]` on each library root |
 | [Creusot diagnostics](docs/planning/creusot-diagnostics-etiquette.md) | **Reference** | Post-process `cargo creusot prove`; warnings and verifier failures become checklist items |
-| [Dependency freshness](docs/planning/dependency-freshness-etiquette.md) | **Active** | Survey `Cargo.toml` intent and `Cargo.lock` resolutions before patch/minor/major freshness lints |
+| [Dependency freshness](docs/planning/dependency-freshness-etiquette.md) | **Active** | Survey `Cargo.toml` intent and `Cargo.lock` resolutions before manifest-policy, workspace-policy, and patch/minor/major freshness lints |
 | [Derive patterns etiquette](docs/planning/derives-etiquette.md) | **Reference** | `derive_*` vs hand-rolled accessors; constructor arity to builder |
 | [Doc warnings](docs/planning/doc-warnings-etiquette.md) | **Reference** | Post-process `cargo doc`; rustc/clippy never see `rustdoc::*` diagnostics |
 | [Glob imports](docs/planning/glob-imports-etiquette.md) | **Reference** | Flag `use ...::*`; replace with explicit names |
