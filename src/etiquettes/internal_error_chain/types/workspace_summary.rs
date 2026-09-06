@@ -56,9 +56,9 @@ pub fn build_workspace_internal_error_chain_summary(
     for report in reports {
         let counts = report.type_graph().class_counts();
         type_nodes += report.type_graph().nodes().len();
-        internal_leaves += counts.internal_leaf;
-        internal_links += counts.internal_link + counts.umbrella_wrapper;
-        foreign_bridges += counts.foreign_bridge;
+        internal_leaves += counts.internal_leaf();
+        internal_links += counts.internal_links_total();
+        foreign_bridges += counts.foreign_bridge();
         compliance_findings += report.compliance().findings().len();
         stringify_violations += report.compliance().stringify_count();
         discard_violations += report.compliance().discard_count();
@@ -66,9 +66,9 @@ pub fn build_workspace_internal_error_chain_summary(
             InternalErrorChainCrateSummary::builder()
                 .crate_name(report.crate_name().clone())
                 .type_nodes(report.type_graph().nodes().len())
-                .internal_leaves(counts.internal_leaf)
-                .internal_links(counts.internal_link + counts.umbrella_wrapper)
-                .foreign_bridges(counts.foreign_bridge)
+                .internal_leaves(counts.internal_leaf())
+                .internal_links(counts.internal_links_total())
+                .foreign_bridges(counts.foreign_bridge())
                 .compliance_findings(report.compliance().findings().len())
                 .stringify_violations(report.compliance().stringify_count())
                 .discard_violations(report.compliance().discard_count())
