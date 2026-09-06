@@ -206,14 +206,20 @@ impl AntipatternSiteRecord {
 }
 
 /// Count findings by rule for summaries.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, derive_getters::Getters)]
 pub struct AntipatternRuleCounts {
-    pub box_dyn_error: usize,
-    pub string_error: usize,
-    pub unused_underscore_arg: usize,
-    pub struct_static_ref: usize,
-    pub unnamed_contract_bound: usize,
-    pub version_in_member: usize,
+    #[getter(copy)]
+    box_dyn_error: usize,
+    #[getter(copy)]
+    string_error: usize,
+    #[getter(copy)]
+    unused_underscore_arg: usize,
+    #[getter(copy)]
+    struct_static_ref: usize,
+    #[getter(copy)]
+    unnamed_contract_bound: usize,
+    #[getter(copy)]
+    version_in_member: usize,
 }
 
 impl AntipatternRuleCounts {
