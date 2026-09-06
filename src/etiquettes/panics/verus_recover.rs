@@ -32,9 +32,16 @@ use tracing::instrument;
 /// One function-shaped chunk recovered from inside a `verus! { .. }`
 /// token stream: its real name, and its own body's raw, still-unparsed
 /// tokens (real spans preserved, tied back to the original source file).
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub(super) struct VerusFunctionChunk {
-    pub(super) name: String,
-    pub(super) body: TokenStream,
+    name: String,
+    body: TokenStream,
+}
+
+impl VerusFunctionChunk {
+    pub(super) fn into_parts(self) -> (String, TokenStream) {
+        (self.name, self.body)
+    }
 }
 
 /// Recover every function-shaped chunk inside `tokens`, at any nesting

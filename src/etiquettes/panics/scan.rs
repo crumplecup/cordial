@@ -451,17 +451,18 @@ impl PanicScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, chunks))]
     fn scan_verus_chunks(&mut self, chunks: Vec<VerusFunctionChunk>) {
         for chunk in chunks {
+            let (name, body) = chunk.into_parts();
             let braced = proc_macro2::TokenStream::from(proc_macro2::TokenTree::Group(
-                proc_macro2::Group::new(proc_macro2::Delimiter::Brace, chunk.body.clone()),
+                proc_macro2::Group::new(proc_macro2::Delimiter::Brace, body.clone()),
             ));
             match syn::parse2::<syn::Block>(braced) {
                 Ok(block) => {
-                    self.fn_stack.push(chunk.name);
+                    self.fn_stack.push(name);
                     syn::visit::visit_block(self, &block);
                     self.fn_stack.pop();
                 }
                 Err(_) => {
-                    self.scan_verus_chunks(collect_verus_functions(chunk.body));
+                    self.scan_verus_chunks(collect_verus_functions(body));
                 }
             }
         }
