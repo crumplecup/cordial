@@ -28,7 +28,7 @@ default:
 
 # Install the release binary to ~/.cargo/bin (`cordial` on PATH).
 install:
-    {{cargo}} install --path {{justfile_directory()}} --bin cordial --force --locked --features {{features}}
+    {{cargo}} install --path {{justfile_directory()}} --bin cordial --force --locked --profile release --features {{features}}
 
 # Routine test run. Deliberately `--features full`, not `--all-features`:
 # `--all-features` unconditionally enables `slow_tests` too (inherent to
