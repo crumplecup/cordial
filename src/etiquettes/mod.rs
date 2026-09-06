@@ -38,6 +38,7 @@
 //! | `inline_tests` | `inline_tests` | Are tests mixed into `src/` instead of `tests/`? |
 //! | `verus_warnings` | `verus_warnings` | Does the Verus rustc fork emit warnings this crate's rustc never sees? |
 //! | `creusot_diagnostics` | `creusot_diagnostics` | Does `cargo creusot prove` emit warnings or verification failures? |
+//! | `dependency_freshness` | `dependency_freshness` | Which manifest and lockfile facts can dependency freshness lints use? |
 //! | `proof_patterns` | `proof_patterns` | Which `verus!` functions are trusted rather than proven, or apply themselves invisibly (`broadcast`)? |
 //! | `pageantry` | `pageantry` | Are traits defined in a leading block just below the import / `mod` header? |
 //!
@@ -68,6 +69,8 @@ pub(crate) mod cli_layout;
 pub(crate) mod crate_attrs;
 #[cfg(feature = "creusot_diagnostics")]
 pub(crate) mod creusot_diagnostics;
+#[cfg(feature = "dependency_freshness")]
+pub(crate) mod dependency_freshness;
 #[cfg(feature = "derives")]
 pub(crate) mod derives;
 #[cfg(feature = "doc_warnings")]
@@ -125,7 +128,7 @@ pub(crate) mod trenchcoat;
 /// `docs/planning/quality-report-feeder-trait.md`).
 #[::tracing::instrument(level = "debug")]
 fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::QualityEtiquette> {
-    let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 23] = [
+    let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 24] = [
         #[cfg(feature = "panics")]
         Some(&panics::PANICS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "panics"))]
@@ -221,6 +224,13 @@ fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::QualityEtiq
                 as &dyn crate::etiquette::QualityEtiquette,
         ),
         #[cfg(not(feature = "creusot_diagnostics"))]
+        None,
+        #[cfg(feature = "dependency_freshness")]
+        Some(
+            &dependency_freshness::DEPENDENCY_FRESHNESS_ETIQUETTE
+                as &dyn crate::etiquette::QualityEtiquette,
+        ),
+        #[cfg(not(feature = "dependency_freshness"))]
         None,
         #[cfg(feature = "proof_patterns")]
         Some(&proof_patterns::PROOF_PATTERNS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),

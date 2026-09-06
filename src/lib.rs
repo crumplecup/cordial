@@ -16,7 +16,7 @@
 //!
 //! Built-in plugins are feature-gated:
 //!
-//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `crate_attrs`, `doc_warnings`, `glob_imports`, `inline_tests`, `verus_warnings`, `creusot_diagnostics`, `proof_patterns`, `pageantry` — source-quality scanners
+//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `crate_attrs`, `doc_warnings`, `glob_imports`, `inline_tests`, `verus_warnings`, `creusot_diagnostics`, `dependency_freshness`, `proof_patterns`, `pageantry` — source-quality scanners
 //!   (the `quality` umbrella)
 //! - `cli` — clap binary (`cordial`)
 //! - `impl_coverage`, `trenchcoat`, `shadow` — rustdoc coverage scanners
@@ -109,6 +109,8 @@ pub use etiquettes::creusot_diagnostics::{
     CREUSOT_DIAGNOSTICS_ETIQUETTE, CreusotDiagnosticRecord, CreusotDiagnosticRuleId,
     crate_is_creusot_target, parse_creusot_compiler_output, scan_crate_creusot_diagnostics,
 };
+#[cfg(feature = "dependency_freshness")]
+pub use etiquettes::dependency_freshness::DEPENDENCY_FRESHNESS_ETIQUETTE;
 #[cfg(feature = "derives")]
 pub use etiquettes::derives::{
     DERIVES_ETIQUETTE, DeriveRuleId, DeriveSiteRecord, PathInclusionFacts,
@@ -317,10 +319,11 @@ pub use cargo_rustdoc::{
 };
 pub use config::{
     AntipatternsConfig, CfgHygieneThresholds, CfgScatterThresholds, CordialConfig,
-    CrateAttrsThresholds, CreusotDiagnosticsThresholds, DerivesThresholds, DocWarningsThresholds,
-    EtiquetteGate, ModularityThresholds, StaticRefPolicy, StaticRefStrategy, TracingBoundaryPolicy,
-    TracingStdioPolicy, TracingSubscriberPolicy, TracingThresholds, VisibilityThresholds,
-    load_cordial_config, load_derives_thresholds, load_session_config, load_visibility_thresholds,
+    CrateAttrsThresholds, CreusotDiagnosticsThresholds, DependencyFreshnessThresholds,
+    DerivesThresholds, DocWarningsThresholds, EtiquetteGate, ModularityThresholds, StaticRefPolicy,
+    StaticRefStrategy, TracingBoundaryPolicy, TracingStdioPolicy, TracingSubscriberPolicy,
+    TracingThresholds, VisibilityThresholds, load_cordial_config, load_derives_thresholds,
+    load_session_config, load_visibility_thresholds,
 };
 pub use exceptions::{
     AddExceptionOutcome, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,

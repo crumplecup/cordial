@@ -230,7 +230,7 @@ pub fn coverage_only_plugins() -> Vec<&'static dyn Plugin> {
 /// Static quality plugins wrapping each enabled etiquette.
 #[instrument(level = "debug")]
 fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
-    let items: [Option<&'static EtiquettePlugin>; 17] = [
+    let items: [Option<&'static EtiquettePlugin>; 18] = [
         #[cfg(feature = "tracing")]
         Some(tracing_plugin()),
         #[cfg(not(feature = "tracing"))]
@@ -290,6 +290,10 @@ fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
         #[cfg(feature = "creusot_diagnostics")]
         Some(creusot_diagnostics_plugin()),
         #[cfg(not(feature = "creusot_diagnostics"))]
+        None,
+        #[cfg(feature = "dependency_freshness")]
+        Some(dependency_freshness_plugin()),
+        #[cfg(not(feature = "dependency_freshness"))]
         None,
         #[cfg(feature = "proof_patterns")]
         Some(proof_patterns_plugin()),
@@ -383,6 +387,11 @@ etiquette_plugin_fn!(
 etiquette_plugin_fn!(
     creusot_diagnostics_plugin,
     &crate::etiquettes::creusot_diagnostics::CREUSOT_DIAGNOSTICS_ETIQUETTE
+);
+#[cfg(feature = "dependency_freshness")]
+etiquette_plugin_fn!(
+    dependency_freshness_plugin,
+    &crate::etiquettes::dependency_freshness::DEPENDENCY_FRESHNESS_ETIQUETTE
 );
 #[cfg(feature = "proof_patterns")]
 etiquette_plugin_fn!(

@@ -20,6 +20,7 @@ use tracing::instrument;
     feature = "inline_tests",
     feature = "verus_warnings",
     feature = "creusot_diagnostics",
+    feature = "dependency_freshness",
     feature = "proof_patterns",
     feature = "pageantry",
     feature = "cfg_hygiene"
@@ -67,6 +68,7 @@ mod wrapper_coverage;
     feature = "inline_tests",
     feature = "verus_warnings",
     feature = "creusot_diagnostics",
+    feature = "dependency_freshness",
     feature = "proof_patterns",
     feature = "pageantry",
     feature = "cfg_hygiene"
@@ -93,6 +95,7 @@ pub use attribute::AttributeEnricher;
     feature = "inline_tests",
     feature = "verus_warnings",
     feature = "creusot_diagnostics",
+    feature = "dependency_freshness",
     feature = "proof_patterns",
     feature = "pageantry",
     feature = "cfg_hygiene"

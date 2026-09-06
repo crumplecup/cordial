@@ -31,6 +31,8 @@ pub struct CordialConfig {
     #[serde(default)]
     creusot_diagnostics: CreusotDiagnosticsThresholds,
     #[serde(default)]
+    dependency_freshness: DependencyFreshnessThresholds,
+    #[serde(default)]
     tracing: TracingThresholds,
     #[serde(default)]
     derives: DerivesThresholds,
@@ -108,6 +110,7 @@ impl CordialConfig {
             "crate_attrs" => self.crate_attrs.enabled,
             "doc_warnings" => self.doc_warnings.enabled,
             "creusot_diagnostics" => self.creusot_diagnostics.enabled,
+            "dependency_freshness" => self.dependency_freshness.enabled,
             "tracing" => self.tracing.enabled,
             "derives" => self.derives.enabled,
             "panics" => self.panics.enabled,
@@ -793,6 +796,52 @@ impl CreusotDiagnosticsThresholds {
     #[instrument(level = "debug", skip(self))]
     pub fn skip(&self, crate_name: &str) -> bool {
         self.skip_crates.iter().any(|name| name == crate_name)
+    }
+}
+
+/// Dependency freshness etiquette knobs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub struct DependencyFreshnessThresholds {
+    /// Emit patch-drift findings.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    patch: bool,
+    /// Emit minor-drift findings.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    minor: bool,
+    /// Emit major-drift findings.
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    major: bool,
+    /// Run this etiquette (`true`) or skip it (`false`).
+    #[serde(default = "default_true")]
+    #[getter(copy)]
+    enabled: bool,
+}
+
+impl Default for DependencyFreshnessThresholds {
+    #[instrument(level = "debug", ret)]
+    fn default() -> Self {
+        Self {
+            patch: true,
+            minor: true,
+            major: true,
+            enabled: true,
+        }
+    }
+}
+
+impl DependencyFreshnessThresholds {
+    /// Whether a dependency freshness rule should emit a finding.
+    #[instrument(level = "debug", skip(self))]
+    pub fn rule_enabled(&self, rule_id: &str) -> bool {
+        match rule_id {
+            "DEPENDENCY-FRESHNESS-PATCH" => self.patch,
+            "DEPENDENCY-FRESHNESS-MINOR" => self.minor,
+            "DEPENDENCY-FRESHNESS-MAJOR" => self.major,
+            _ => false,
+        }
     }
 }
 

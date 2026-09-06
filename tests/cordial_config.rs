@@ -2,8 +2,8 @@ use miette::{IntoDiagnostic, WrapErr};
 use std::fs;
 
 use cordial::{
-    CordialConfig, StaticRefStrategy, VisibilityThresholds, load_cordial_config,
-    load_visibility_thresholds,
+    CordialConfig, DependencyFreshnessThresholds, StaticRefStrategy, VisibilityThresholds,
+    load_cordial_config, load_visibility_thresholds,
 };
 
 #[test]
@@ -439,6 +439,9 @@ enabled = false
 [creusot_diagnostics]
 enabled = false
 
+[dependency_freshness]
+enabled = false
+
 [panics]
 enabled = false
 
@@ -452,12 +455,60 @@ enabled = false
     let loaded = load_cordial_config(workspace.path(), store_home.path());
     assert!(!loaded.etiquette_enabled("doc_warnings"));
     assert!(!loaded.etiquette_enabled("creusot_diagnostics"));
+    assert!(!loaded.etiquette_enabled("dependency_freshness"));
     assert!(!loaded.etiquette_enabled("panics"));
     assert!(!loaded.etiquette_enabled("impl-coverage"));
     assert!(loaded.etiquette_enabled("tracing"));
     assert!(
         loaded.etiquette_enabled("custom_plugin"),
         "unknown ids stay on"
+    );
+    Ok(())
+}
+
+#[test]
+fn dependency_freshness_policy_reads_drift_class_gates() -> miette::Result<()> {
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store home")?;
+    fs::write(
+        workspace.path().join("cordial.toml"),
+        r#"
+[dependency_freshness]
+patch = false
+minor = true
+major = false
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("workspace config")?;
+
+    let loaded = load_cordial_config(workspace.path(), store_home.path());
+    assert_ne!(
+        loaded.dependency_freshness(),
+        &DependencyFreshnessThresholds::default()
+    );
+    assert!(!loaded.dependency_freshness().patch());
+    assert!(loaded.dependency_freshness().minor());
+    assert!(!loaded.dependency_freshness().major());
+    assert!(
+        !loaded
+            .dependency_freshness()
+            .rule_enabled("DEPENDENCY-FRESHNESS-PATCH")
+    );
+    assert!(
+        loaded
+            .dependency_freshness()
+            .rule_enabled("DEPENDENCY-FRESHNESS-MINOR")
+    );
+    assert!(
+        !loaded
+            .dependency_freshness()
+            .rule_enabled("DEPENDENCY-FRESHNESS-MAJOR")
     );
     Ok(())
 }

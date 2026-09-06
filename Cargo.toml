@@ -31,6 +31,7 @@ derive_more = { version = "2", features = ["display", "error", "from"] }
 petgraph = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+semver = { version = "1", optional = true }
 sha2 = "0.10"
 syn = { version = "2", features = ["full", "visit", "extra-traits"] }
 verus_syn = { version = "0.0.0-2026-08-02-0125", features = ["visit", "extra-traits"], optional = true }
@@ -75,6 +76,7 @@ glob_imports = []
 inline_tests = []
 verus_warnings = []
 creusot_diagnostics = []
+dependency_freshness = ["dep:semver", "dep:toml"]
 # Real verus_syn-based parsing of verus! { .. } blocks into first-class
 # Verus AST facts (mode, publish, requires/ensures/decreases, assume/
 # admit/external_body usage) -- foundational infrastructure other
@@ -86,7 +88,7 @@ verus_ir = ["dep:verus_syn", "dep:quote"]
 # built for.
 proof_patterns = ["verus_ir"]
 pageantry = []
-quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "crate_attrs", "doc_warnings", "glob_imports", "inline_tests", "verus_warnings", "creusot_diagnostics", "proof_patterns", "pageantry"]
+quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "crate_attrs", "doc_warnings", "glob_imports", "inline_tests", "verus_warnings", "creusot_diagnostics", "dependency_freshness", "proof_patterns", "pageantry"]
 # Shared rustdoc JSON support for coverage plugins.
 rustdoc = ["dep:rustdoc-types", "dep:nom"]
 # Elicitation coverage plugins (each requires rustdoc).
@@ -216,6 +218,10 @@ name = "creusot_diagnostics_etiquette"
 required-features = ["creusot_diagnostics"]
 
 [[test]]
+name = "dependency_freshness_etiquette"
+required-features = ["dependency_freshness"]
+
+[[test]]
 name = "proof_patterns_etiquette"
 required-features = ["proof_patterns"]
 
@@ -342,5 +348,5 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(creusot)',
   'cfg(prusti)',
   'cfg(verus)',
-  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "crate_attrs", "doc_warnings", "glob_imports", "inline_tests", "verus_warnings", "creusot_diagnostics", "verus_ir", "proof_patterns", "pageantry", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
+  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "crate_attrs", "doc_warnings", "glob_imports", "inline_tests", "verus_warnings", "creusot_diagnostics", "dependency_freshness", "verus_ir", "proof_patterns", "pageantry", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
 ] }
