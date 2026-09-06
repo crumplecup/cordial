@@ -10,21 +10,22 @@ use crate::objects::{Disposition, Finding, MapFindingSink, Rule};
 use crate::store::StoreLayout;
 
 /// One documented exception row in `{store}/exceptions/{etiquette}/{crate}.json`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct ExceptionEntry {
     /// Path relative to the crate root.
-    pub file: String,
+    file: String,
     /// When set, only findings on this line match.
+    #[getter(copy)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub line: Option<u32>,
+    line: Option<u32>,
     /// When set, only findings with this rule id match.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rule_id: Option<String>,
+    rule_id: Option<String>,
     /// When set, only findings with this context/qualified name match.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context: Option<String>,
+    context: Option<String>,
     /// Human-readable explanation shown in reports.
-    pub reason: String,
+    reason: String,
 }
 
 /// Loaded exception patch set for one etiquette and crate.
