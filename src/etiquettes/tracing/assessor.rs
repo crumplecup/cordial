@@ -58,11 +58,11 @@ impl Assessor for TracingAssessor {
                     let kinds = recipe_deltas(
                         &parsed.recipe,
                         &present,
-                        &DeltaContext {
-                            role: parsed.role,
-                            param_names: &parsed.param_names,
-                            has_error_path_event: parsed.has_error_path_event,
-                        },
+                        &DeltaContext::new(
+                            parsed.role,
+                            &parsed.param_names,
+                            parsed.has_error_path_event,
+                        ),
                     );
                     for kind in kinds {
                         findings.push(parsed.clone().into_finding(kind)?);

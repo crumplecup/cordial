@@ -5,11 +5,14 @@ use super::types::{FunctionRole, InstrumentRecipe, TracingRuleKind};
 
 use tracing::instrument;
 /// Inputs the delta rules read besides the recipe itself.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub struct DeltaContext<'a> {
-    pub role: FunctionRole,
-    pub param_names: &'a [String],
-    pub has_error_path_event: bool,
+    #[getter(copy)]
+    role: FunctionRole,
+    #[getter(copy)]
+    param_names: &'a [String],
+    #[getter(copy)]
+    has_error_path_event: bool,
 }
 
 /// Recipe-vs-present findings for an already-instrumented function.
@@ -23,7 +26,7 @@ pub fn recipe_deltas(
     if present.level() > recipe.level() {
         kinds.push(TracingRuleKind::LevelMismatch);
     }
-    if skip_missing(recipe, present, ctx.param_names) {
+    if skip_missing(recipe, present, ctx.param_names()) {
         kinds.push(TracingRuleKind::SkipMissing);
     }
     if recipe.err().is_some() && !present.err() {
@@ -32,7 +35,7 @@ pub fn recipe_deltas(
     if error_path_silent(recipe, present, ctx) {
         kinds.push(TracingRuleKind::ErrorPathSilent);
     }
-    if matches!(ctx.role, FunctionRole::Entry | FunctionRole::Constructor)
+    if matches!(ctx.role(), FunctionRole::Entry | FunctionRole::Constructor)
         && fields_missing(recipe, present)
     {
         kinds.push(TracingRuleKind::FieldsMissing);
@@ -69,7 +72,7 @@ fn error_path_silent(
     present: &PresentInstrument,
     ctx: &DeltaContext<'_>,
 ) -> bool {
-    if present.err() || ctx.has_error_path_event {
+    if present.err() || ctx.has_error_path_event() {
         return false;
     }
     recipe.err().is_some()
