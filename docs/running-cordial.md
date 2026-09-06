@@ -127,8 +127,9 @@ Quality `--apply` rewrites source only for supported apply paths:
 Error-handling etiquettes share one source scan through `error_ir`.
 
 Use `--deny-open` in CI when a report should still be written but unresolved
-`Disposition::Open` findings should fail the job. Exemplars and suppressed
-findings remain report evidence; they do not trip the deny gate.
+action items from `quality-report.md` should fail the job. Inventory-only
+`Disposition::Open` findings, exemplars, and suppressed findings remain report
+evidence; they do not trip the deny gate.
 
 ## Coverage
 

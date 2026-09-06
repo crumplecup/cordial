@@ -318,7 +318,7 @@ impl Display for OpenFindingsSource {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(
             formatter,
-            "open action items denied: {} open findings remain",
+            "open action items denied: {} open action items remain",
             self.count
         )
     }

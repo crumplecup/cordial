@@ -6,12 +6,14 @@ use std::path::{Path, PathBuf};
 
 #[cfg(feature = "elicitation")]
 use crate::build_all_active_shadow_deps;
+#[cfg(feature = "quality")]
+use crate::build_quality_report;
 #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
 use crate::build_workspace_members;
 use crate::{
     AddExceptionOutcome, CordialError, CordialResult, CoverageSkipEntry, CrateIr, Disposition,
-    ExceptionEntry, NamedRunFilter, Plugin, RunAll, RunFilter, RunOutcome, Session, SessionBuilder,
-    StoreLayout, SurrealGraphExport, add_coverage_skip, add_exception, all_plugins,
+    ExceptionEntry, Finding, NamedRunFilter, Plugin, RunAll, RunFilter, RunOutcome, Session,
+    SessionBuilder, StoreLayout, SurrealGraphExport, add_coverage_skip, add_exception, all_plugins,
     backup_exception_files, default_store_home, etiquettes_from_plugins, load_exception_files,
     load_exceptions, lookup_etiquette, render_explain_list, render_explain_page,
     resolve_exceptions_root, run_tracing_instrument_apply,
@@ -180,9 +182,9 @@ pub(super) fn execute_run_plugins(
     let session = builder.build();
     let filter = run_filter(crate_name);
     let outcome = session.run(filter.as_ref())?;
-    let summary = print_run_summary(outcome.as_ref());
-    if deny_open && summary.open > 0 {
-        return Err(CordialError::open_findings(summary.open));
+    let summary = print_run_summary(outcome.as_ref())?;
+    if deny_open && summary.open_action_items > 0 {
+        return Err(CordialError::open_findings(summary.open_action_items));
     }
     Ok(())
 }
@@ -212,31 +214,48 @@ impl RunFilterChoice {
     }
 }
 
-#[instrument(level = "debug", skip(outcome))]
-fn print_run_summary(outcome: &dyn RunOutcome) -> RunSummary {
+#[instrument(level = "debug", skip(outcome), err(level = "warn"))]
+fn print_run_summary(outcome: &dyn RunOutcome) -> CordialResult<RunSummary> {
+    let findings = outcome.findings().collect::<Vec<_>>();
     let mut open = 0usize;
     let mut exemplar = 0usize;
     let mut suppressed = 0usize;
-    for finding in outcome.findings() {
+    for finding in &findings {
         match finding.disposition() {
             Disposition::Open => open += 1,
             Disposition::Exemplar => exemplar += 1,
             Disposition::Suppressed => suppressed += 1,
         }
     }
+    let open_action_items = open_action_items(&findings)?;
     let artifacts: Vec<_> = outcome
         .artifacts()
         .map(|artifact| artifact.name())
         .collect();
-    tracing::info!(open, exemplar, suppressed, "findings");
+    tracing::info!(open, exemplar, suppressed, open_action_items, "findings");
     if !artifacts.is_empty() {
         tracing::info!(?artifacts, "artifacts");
     }
-    RunSummary { open }
+    Ok(RunSummary { open_action_items })
+}
+
+#[cfg(feature = "quality")]
+#[instrument(level = "debug", skip(findings), err(level = "warn"))]
+fn open_action_items(findings: &[&dyn Finding]) -> CordialResult<usize> {
+    Ok(build_quality_report(findings)?.total_open_items)
+}
+
+#[cfg(not(feature = "quality"))]
+#[instrument(level = "debug", skip(findings))]
+fn open_action_items(findings: &[&dyn Finding]) -> CordialResult<usize> {
+    Ok(findings
+        .iter()
+        .filter(|finding| finding.disposition() == Disposition::Open)
+        .count())
 }
 
 struct RunSummary {
-    open: usize,
+    open_action_items: usize,
 }
 
 #[instrument(level = "debug", skip(store, path), err(level = "warn"))]

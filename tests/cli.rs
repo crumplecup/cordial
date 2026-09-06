@@ -106,6 +106,126 @@ fn cli_quality_deny_open_fails_after_writing_reports() -> miette::Result<()> {
 }
 
 #[test]
+fn cli_quality_deny_open_allows_inventory_only_findings() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    write_minimal_crate(
+        fixture.path(),
+        r#"
+pub fn read_text(path: &std::path::Path) -> std::io::Result<String> {
+    let text = std::fs::read_to_string(path)?;
+    Ok(text)
+}
+"#,
+    )?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        r#"
+[panics]
+enabled = false
+
+[tracing]
+enabled = false
+
+[allows]
+enabled = false
+
+[modularity]
+enabled = false
+
+[derives]
+enabled = false
+
+[error_chain]
+enabled = false
+
+[internal_error_chain]
+enabled = false
+
+[foreign_error_types]
+enabled = false
+
+[foreign_error_attenuation]
+enabled = false
+
+[antipatterns]
+enabled = false
+
+[cfg_scatter]
+enabled = false
+
+[cfg_hygiene]
+enabled = false
+
+[visibility]
+enabled = false
+
+[cli_layout]
+enabled = false
+
+[crate_attrs]
+enabled = false
+
+[doc_warnings]
+enabled = false
+
+[glob_imports]
+enabled = false
+
+[inline_tests]
+enabled = false
+
+[verus_warnings]
+enabled = false
+
+[creusot_diagnostics]
+enabled = false
+
+[dependency_freshness]
+enabled = false
+
+[proof_patterns]
+enabled = false
+
+[pageantry]
+enabled = false
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("cordial.toml")?;
+
+    let store = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let output = cordial_command()
+        .args([
+            "--project",
+            utf8_path(fixture.path())?,
+            "--store-home",
+            utf8_path(store.path())?,
+            "quality",
+            "--deny-open",
+        ])
+        .output()
+        .into_diagnostic()
+        .wrap_err("run cordial quality --deny-open")?;
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let slug = cordial::project_slug_from_path(fixture.path());
+    let project_store = store.path().join(&slug);
+    assert!(project_store.join("findings/error-sites.csv").is_file());
+    let quality_report = fs::read_to_string(project_store.join("findings/quality-report.md"))
+        .into_diagnostic()
+        .wrap_err("quality report")?;
+    assert!(quality_report.contains("**Total open items:** 0"));
+    Ok(())
+}
+
+#[test]
 fn cli_view_prints_artifact() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;

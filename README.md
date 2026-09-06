@@ -27,7 +27,8 @@ cordial explain
 rustdoc-backed inventory etiquettes after `cordial build rustdoc`. Artifacts
 land under `~/.cordial/{project}/findings/`.
 Use `--deny-open` in CI to keep report artifacts while failing on unresolved
-open action items.
+open action items from `quality-report.md`; inventory-only findings stay
+report evidence and do not fail the gate.
 
 ## Reader paths
 
