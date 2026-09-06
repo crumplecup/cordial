@@ -11,9 +11,11 @@ use syn::{
 use crate::config::StaticRefStrategy;
 
 use tracing::instrument;
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub(super) struct UnusedArgBinding {
-    pub(super) line: u32,
-    pub(super) snippet: String,
+    #[getter(copy)]
+    line: u32,
+    snippet: String,
 }
 
 /// True when a field type contains a `&'static` that is not a crate-local `dyn Trait`.
@@ -323,15 +325,15 @@ pub(super) fn unused_argument_bindings(pat: &Pat) -> Vec<UnusedArgBinding> {
 #[instrument(level = "debug", skip(pat, bindings))]
 fn collect_unused_argument_bindings(pat: &Pat, bindings: &mut Vec<UnusedArgBinding>) {
     match pat {
-        Pat::Wild(wild) => bindings.push(UnusedArgBinding {
-            line: wild.span().start().line as u32,
-            snippet: "_".to_string(),
-        }),
+        Pat::Wild(wild) => bindings.push(UnusedArgBinding::new(
+            wild.span().start().line as u32,
+            "_".to_string(),
+        )),
         Pat::Ident(ident) if is_unused_argument_ident(&ident.ident) => {
-            bindings.push(UnusedArgBinding {
-                line: ident.span().start().line as u32,
-                snippet: ident.ident.to_string(),
-            });
+            bindings.push(UnusedArgBinding::new(
+                ident.span().start().line as u32,
+                ident.ident.to_string(),
+            ));
         }
         Pat::Reference(reference) => collect_unused_argument_bindings(&reference.pat, bindings),
         Pat::Type(pat_type) => collect_unused_argument_bindings(&pat_type.pat, bindings),

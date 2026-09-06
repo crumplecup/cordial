@@ -223,7 +223,7 @@ impl AntipatternScanVisitor<'_> {
                 continue;
             };
             for binding in unused_argument_bindings(&pat_type.pat) {
-                if let Some(unprefixed) = binding.snippet.strip_prefix('_')
+                if let Some(unprefixed) = binding.snippet().strip_prefix('_')
                     && real_names_elsewhere
                         .as_ref()
                         .is_some_and(|names| names.contains(unprefixed))
@@ -233,8 +233,8 @@ impl AntipatternScanVisitor<'_> {
                 self.push_record(
                     AntipatternRuleId::UnusedUnderscoreArg001,
                     self.site_context(),
-                    binding.line,
-                    binding.snippet,
+                    binding.line(),
+                    binding.snippet().clone(),
                 );
             }
         }
