@@ -68,9 +68,10 @@ impl Probe for MissingShadowMirrorProbe {
             }) {
                 continue;
             }
-            markers.push(Box::new(MissingMirrorMarker {
-                anchor: crate::objects::NodeAnchor(target),
-            }) as Box<dyn Marker>);
+            markers.push(
+                Box::new(MissingMirrorMarker::new(crate::objects::NodeAnchor(target)))
+                    as Box<dyn Marker>,
+            );
         }
 
         let _ = SHADOW_TARGET_QUERY;
