@@ -4,24 +4,31 @@ use syn::{Block, ExprCall, ExprLit, ExprMethodCall, ExprPath, ImplItemFn, ItemFn
 use tracing::instrument;
 
 /// Facts collected from one function body about subscriber install.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, derive_getters::Getters)]
 pub(super) struct InitBodyFacts {
     /// Body itself contains real install code: a direct `init`/`try_init`/
     /// `set_global_default` call. Does **not** include a call matching
     /// `known_helper_paths` -- see [`Self::calls_known_helper`] and
     /// [`Self::installs_or_delegates`] for that.
-    pub calls_install: bool,
+    #[getter(copy)]
+    calls_install: bool,
     /// Body calls `try_init` or `set_global_default` (already-set is an error, not a panic).
-    pub calls_try_init: bool,
+    #[getter(copy)]
+    calls_try_init: bool,
     /// Body calls bare `init` (panics if a subscriber is already set).
-    pub calls_init: bool,
+    #[getter(copy)]
+    calls_init: bool,
     /// Body names `Once` or `OnceLock`.
-    pub has_once: bool,
-    pub has_try_from_default_env: bool,
-    pub has_rust_log_literal: bool,
-    pub has_fallback: bool,
+    #[getter(copy)]
+    has_once: bool,
+    #[getter(copy)]
+    has_try_from_default_env: bool,
+    #[getter(copy)]
+    has_rust_log_literal: bool,
+    #[getter(copy)]
+    has_fallback: bool,
     /// Last path segment or method name of every call, for helper-name matching.
-    pub called_names: Vec<String>,
+    called_names: Vec<String>,
     /// Body calls a path matching `known_helper_paths` (a cross-crate
     /// shared helper this crate can't see the definition of -- see
     /// [`Self::from_block`]). Kept separate from [`Self::calls_install`]:
@@ -29,7 +36,8 @@ pub(super) struct InitBodyFacts {
     /// exactly what `helper_in_lib` wants, not the antipattern it flags,
     /// so the `Lib`/`RustLog`/`Idempotent` rules must never treat one as
     /// "install code inlined here" -- only `Main`/`Test` should accept it.
-    pub calls_known_helper: bool,
+    #[getter(copy)]
+    calls_known_helper: bool,
     /// Cross-crate helper paths (from `cordial.toml`'s
     /// `[tracing.subscriber] known_helper_paths`) that count as a real
     /// install even though this crate's own scan never sees their body --

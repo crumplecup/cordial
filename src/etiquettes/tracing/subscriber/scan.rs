@@ -58,7 +58,7 @@ pub fn scan_crate_tracing_subscriber(
 
     let helper_names: Vec<&str> = sites
         .iter()
-        .filter(|site| site.facts.calls_install)
+        .filter(|site| site.facts.calls_install())
         .map(|site| site.name.as_str())
         .collect();
 
@@ -91,7 +91,7 @@ pub fn scan_crate_tracing_subscriber(
         }
         if policy.helper_in_lib()
             && has_lib
-            && site.facts.calls_install
+            && site.facts.calls_install()
             && matches!(site.kind, FileKind::Bin | FileKind::Test)
         {
             findings.push(record(
@@ -100,14 +100,14 @@ pub fn scan_crate_tracing_subscriber(
                 "subscriber init lives outside the library — move it to one documented helper",
             )?);
         }
-        if policy.rust_log_fallback() && site.facts.calls_install && !site.facts.rust_log_ok() {
+        if policy.rust_log_fallback() && site.facts.calls_install() && !site.facts.rust_log_ok() {
             findings.push(record(
                 SubscriberRuleId::RustLog,
                 site,
                 "init helper must read RUST_LOG with a fallback (try_from_default_env + unwrap_or)",
             )?);
         }
-        if policy.idempotent() && site.facts.calls_install && !site.facts.idempotent_ok() {
+        if policy.idempotent() && site.facts.calls_install() && !site.facts.idempotent_ok() {
             findings.push(record(
                 SubscriberRuleId::Idempotent,
                 site,
