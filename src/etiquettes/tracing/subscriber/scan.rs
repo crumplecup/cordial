@@ -56,11 +56,8 @@ pub fn scan_crate_tracing_subscriber(
     let has_bin = crate_root.join("src").join("main.rs").is_file()
         || crate_root.join("src").join("bin").is_dir();
 
-    let helper_names: Vec<&str> = sites
-        .iter()
-        .filter(|site| site.facts.calls_install())
-        .map(|site| site.name.as_str())
-        .collect();
+    let helper_names = trusted_helper_names(&sites);
+    let helper_refs: Vec<&str> = helper_names.iter().map(String::as_str).collect();
 
     let mut findings = Vec::new();
     for site in &sites {
@@ -69,7 +66,7 @@ pub fn scan_crate_tracing_subscriber(
             && has_bin
             && site.is_main
             && !site.facts.installs_or_delegates()
-            && !site.facts.calls_helper(&helper_names)
+            && !site.facts.calls_helper(&helper_refs)
         {
             findings.push(record(
                 SubscriberRuleId::Main,
@@ -81,7 +78,7 @@ pub fn scan_crate_tracing_subscriber(
             && !skip_program_lints
             && site.is_test
             && !site.facts.installs_or_delegates()
-            && !site.facts.calls_helper(&helper_names)
+            && !site.facts.calls_helper(&helper_refs)
         {
             findings.push(record(
                 SubscriberRuleId::Test,
@@ -124,6 +121,31 @@ pub fn scan_crate_tracing_subscriber(
             .then(a.snippet().cmp(b.snippet()))
     });
     Ok(findings)
+}
+
+#[instrument(level = "debug", skip(sites))]
+fn trusted_helper_names(sites: &[FnSite]) -> Vec<String> {
+    let mut helper_names: Vec<String> = sites
+        .iter()
+        .filter(|site| site.facts.calls_install())
+        .map(|site| site.name.clone())
+        .collect();
+
+    loop {
+        let helper_refs: Vec<&str> = helper_names.iter().map(String::as_str).collect();
+        let discovered: Vec<String> = sites
+            .iter()
+            .filter(|site| !helper_names.contains(&site.name))
+            .filter(|site| site.facts.calls_helper(&helper_refs))
+            .map(|site| site.name.clone())
+            .collect();
+        if discovered.is_empty() {
+            break;
+        }
+        helper_names.extend(discovered);
+    }
+
+    helper_names
 }
 
 #[instrument(level = "debug", skip(site), err(level = "warn"))]

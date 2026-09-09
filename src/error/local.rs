@@ -344,12 +344,21 @@ impl std::error::Error for MissingRustdocJsonSource {}
 pub struct OpenFindingsSource {
     #[getter(copy)]
     count: usize,
+    file: String,
+    #[getter(copy)]
+    line: u32,
 }
 
 impl OpenFindingsSource {
+    #[track_caller]
     #[instrument(level = "debug", ret)]
     pub fn new(count: usize) -> Self {
-        Self { count }
+        let loc = Location::caller();
+        Self {
+            count,
+            file: loc.file().to_string(),
+            line: loc.line(),
+        }
     }
 }
 

@@ -1,17 +1,20 @@
 //! Clap types and dispatch. `main` parses and calls [`Cli::act`].
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use clap::Parser;
 use tracing::instrument;
 
-use crate::{CordialResult, StoreLayout, default_store_home, project_slug_from_path};
+use crate::{CordialResult, ProgressSink, StoreLayout, default_store_home, project_slug_from_path};
 
 mod commands;
+mod progress;
 mod run;
 
 use commands::ActCtx;
 pub use commands::Commands;
+use progress::IndicatifProgress;
 
 /// Top-level clap parser for the `cordial` binary.
 #[derive(Parser)]
@@ -53,11 +56,13 @@ impl Cli {
             .unwrap_or_else(default_store_home)
             .join(&slug);
         let store = StoreLayout::from_root(store_root, slug);
+        let progress: Arc<dyn ProgressSink> = Arc::new(IndicatifProgress::new());
         self.command.act(ActCtx::new(
             project_root,
             store,
             self.crate_name,
             self.store_home,
+            progress,
         ))
     }
 }

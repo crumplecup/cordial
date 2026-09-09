@@ -37,6 +37,16 @@ cordial view findings/quality-report.md
 `-p` / `CORDIAL_PROJECT` selects the project root. `--crate-name` restricts a
 run to one crate. `--store-home` / `CORDIAL_HOME` overrides `~/.cordial`.
 
+## Progress and logs
+
+Interactive CLI runs write progress to stderr with short status messages,
+spinners, and counted bars for longer workspace operations. Progress is hidden
+automatically when stderr is not a terminal, and you can force it off with
+`CORDIAL_NO_PROGRESS=1`.
+
+Diagnostics still use tracing. CLI commands default to warning-level logs; set
+`RUST_LOG=info` or `RUST_LOG=debug` when you want operational detail.
+
 ## Store
 
 Reports write to `{store_home}/{project}/findings/`:

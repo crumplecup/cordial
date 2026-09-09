@@ -37,7 +37,7 @@ use super::resolve::{
     dedupe_assessors, dedupe_enrichers, dedupe_loaders, dedupe_probes, dedupe_reporters,
     dedupe_workspace_assessors, resolved_etiquettes, select_load_view,
 };
-use super::{RunFilter, RunOutcome, RuntimeSession};
+use super::{RunFilter, RunOutcome, RuntimeSession, SessionView};
 
 #[cfg(any(
     feature = "homecoming_std",
@@ -115,6 +115,9 @@ pub(super) fn run_session(
     );
     store.ensure_dirs()?;
 
+    let setup = session
+        .progress()
+        .spinner("Preparing cordial run".to_string());
     let etiquettes = resolved_etiquettes(&session.plugins, &session.etiquettes, filter);
     let config = crate::load_session_config(session);
     let etiquettes: Vec<&'static dyn Etiquette> = etiquettes
@@ -122,6 +125,7 @@ pub(super) fn run_session(
         .filter(|etiquette| config.etiquette_enabled(etiquette.id()))
         .collect();
     if etiquettes.is_empty() {
+        setup.finish("No enabled etiquettes".to_string());
         return Ok(empty_outcome());
     }
 
@@ -132,6 +136,7 @@ pub(super) fn run_session(
         filter,
     )?;
     if targets.is_empty() {
+        setup.finish("No matching crates".to_string());
         return Ok(empty_outcome());
     }
 
@@ -141,6 +146,11 @@ pub(super) fn run_session(
     let assessors = dedupe_assessors(&etiquettes);
     let workspace_assessors = dedupe_workspace_assessors(&etiquettes);
     let reporters = dedupe_reporters(&etiquettes);
+    setup.finish(format!(
+        "Running {} etiquette(s) on {} crate(s)",
+        etiquettes.len(),
+        targets.len()
+    ));
 
     let loaded = load_and_probe(
         session, filter, &store, &targets, &loaders, &enrichers, &probes,
@@ -163,6 +173,9 @@ pub(super) fn run_session(
 
     #[cfg(feature = "shadow")]
     {
+        let preload = session
+            .progress()
+            .spinner("Preparing shadow workspace inputs".to_string());
         crate::shadow::preload_shadow_pair_crates(
             &mut workspace,
             session,
@@ -170,14 +183,27 @@ pub(super) fn run_session(
             &loaders,
             &enrichers,
         )?;
+        preload.finish("Prepared shadow workspace inputs".to_string());
     }
 
-    for assessor in &workspace_assessors {
-        all_findings.extend(assessor.assess(WorkspaceAssessView {
-            workspace: &workspace,
-            session,
-            filter,
-        })?);
+    if !workspace_assessors.is_empty() {
+        let task = session.progress().bar(
+            "Assessing workspace rules".to_string(),
+            workspace_assessors.len() as u64,
+        );
+        for assessor in &workspace_assessors {
+            task.set_message(format!("Assessing workspace rule {}", assessor.id()));
+            all_findings.extend(assessor.assess(WorkspaceAssessView {
+                workspace: &workspace,
+                session,
+                filter,
+            })?);
+            task.inc(1);
+        }
+        task.finish(format!(
+            "Assessed {} workspace rule(s)",
+            workspace_assessors.len()
+        ));
     }
 
     let all_artifacts = render_and_write(
@@ -244,7 +270,17 @@ fn load_and_probe(
     #[cfg(not(feature = "impl_coverage"))]
     let _ = filter;
 
-    for target in targets {
+    let progress = session.progress().bar(
+        "Loading, enriching, and probing crates".to_string(),
+        targets.len() as u64,
+    );
+    for (index, target) in targets.iter().enumerate() {
+        progress.set_message(format!(
+            "Analyzing {} ({}/{})",
+            target.crate_name(),
+            index + 1,
+            targets.len()
+        ));
         let mut crate_ir = CrateIr::new(target.crate_name());
 
         for loader in loaders {
@@ -307,7 +343,9 @@ fn load_and_probe(
                 .or_default()
                 .append(&mut found);
         }
+        progress.inc(1);
     }
+    progress.finish(format!("Analyzed {} crate(s)", targets.len()));
 
     Ok(LoadedWorkspace {
         workspace,
@@ -331,7 +369,16 @@ fn assess_targets(
 ) -> CordialResult<Vec<Box<dyn Finding>>> {
     let mut all_findings: Vec<Box<dyn Finding>> = Vec::new();
 
-    for target in targets {
+    let progress = session
+        .progress()
+        .bar("Assessing crate findings".to_string(), targets.len() as u64);
+    for (index, target) in targets.iter().enumerate() {
+        progress.set_message(format!(
+            "Assessing {} ({}/{})",
+            target.crate_name(),
+            index + 1,
+            targets.len()
+        ));
         let markers = markers_by_crate
             .get(target.crate_name())
             .map(Vec::as_slice)
@@ -364,8 +411,10 @@ fn assess_targets(
             crate::exceptions::load_exception_sets(store, etiquette_ids, target.crate_name())?;
         crate_findings = crate::exceptions::apply_exception_sets(crate_findings, &exception_sets);
         all_findings.extend(crate_findings);
+        progress.inc(1);
     }
 
+    progress.finish(format!("Assessed {} crate(s)", targets.len()));
     Ok(all_findings)
 }
 
@@ -408,6 +457,7 @@ fn render_and_write(
         .map(|finding| finding.as_ref() as &dyn Finding)
         .collect();
 
+    let progress = session.progress().spinner("Writing reports".to_string());
     let mut all_artifacts: Vec<Box<dyn Artifact>> = Vec::new();
     for reporter in reporters {
         let mut artifacts = reporter.render(RenderView {
@@ -485,5 +535,6 @@ fn render_and_write(
         artifact.write_to(&mut file)?;
     }
 
+    progress.finish(format!("Wrote {} report artifact(s)", all_artifacts.len()));
     Ok(all_artifacts)
 }

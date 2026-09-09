@@ -7,6 +7,7 @@ use tracing::instrument;
 use crate::cargo_rustdoc::{DepBuildConfig, collect_member_dep_build_config};
 use crate::error::CordialResult;
 use crate::plugin::{discover_active_shadow_pairs, tracked_target_for_shadow};
+use crate::progress::{ProgressSink, noop_progress};
 use crate::session::{RunAll, RunFilter};
 use crate::store::StoreLayout;
 
@@ -53,6 +54,25 @@ pub fn build_shadow_dep_rustdoc(
     upstream_crate: &str,
     force: bool,
 ) -> CordialResult<BuildArtifact> {
+    build_shadow_dep_rustdoc_with_progress(
+        project_root,
+        store,
+        shadow_crate,
+        upstream_crate,
+        force,
+        noop_progress(),
+    )
+}
+
+#[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
+pub(crate) fn build_shadow_dep_rustdoc_with_progress(
+    project_root: &Path,
+    store: &StoreLayout,
+    shadow_crate: &str,
+    upstream_crate: &str,
+    force: bool,
+    progress: &dyn ProgressSink,
+) -> CordialResult<BuildArtifact> {
     store.ensure_dirs()?;
     std::fs::create_dir_all(store.builds_dir())?;
     std::fs::create_dir_all(store.rustdoc_cache_dir())?;
@@ -74,6 +94,7 @@ pub fn build_shadow_dep_rustdoc(
     }
 
     let dep_config = resolve_shadow_dep_build_config(project_root, shadow_crate, upstream_crate);
+    let task = progress.spinner(format!("Building rustdoc for shadow dep {upstream_crate}"));
     let feature_refs: Vec<&str> = dep_config
         .activated_features()
         .iter()
@@ -97,6 +118,9 @@ pub fn build_shadow_dep_rustdoc(
         super::artifact::DocFingerprint::new(rustdoc_sha256, crate_version),
     );
     write_build_artifact(&artifact_path, &artifact)?;
+    task.finish(format!(
+        "Shadow-dep rustdoc cache ready for {upstream_crate}"
+    ));
     Ok(artifact)
 }
 
@@ -118,10 +142,39 @@ pub fn build_active_shadow_deps(
     filter: &dyn RunFilter,
     force: bool,
 ) -> CordialResult<Vec<BuildArtifact>> {
+    build_active_shadow_deps_with_progress(project_root, store, filter, force, noop_progress())
+}
+
+#[instrument(level = "debug", skip(store, filter, progress), err(level = "warn"))]
+pub(crate) fn build_active_shadow_deps_with_progress(
+    project_root: &Path,
+    store: &StoreLayout,
+    filter: &dyn RunFilter,
+    force: bool,
+    progress: &dyn ProgressSink,
+) -> CordialResult<Vec<BuildArtifact>> {
     let pairs = discover_active_shadow_pairs(project_root, filter)?;
+    let task = progress.bar(
+        "Building shadow-dep rustdoc cache".to_string(),
+        pairs.len() as u64,
+    );
     let mut artifacts = Vec::new();
-    for pair in pairs {
-        match build_shadow_dep_rustdoc(project_root, store, pair.shadow(), pair.upstream(), force) {
+    for (index, pair) in pairs.iter().enumerate() {
+        task.set_message(format!(
+            "Building {} via {} ({}/{})",
+            pair.upstream(),
+            pair.shadow(),
+            index + 1,
+            pairs.len()
+        ));
+        match build_shadow_dep_rustdoc_with_progress(
+            project_root,
+            store,
+            pair.shadow(),
+            pair.upstream(),
+            force,
+            progress,
+        ) {
             Ok(artifact) => artifacts.push(artifact),
             Err(error) => tracing::warn!(
                 upstream = %pair.upstream(),
@@ -130,7 +183,12 @@ pub fn build_active_shadow_deps(
                 "skipping shadow-dep rustdoc build"
             ),
         }
+        task.inc(1);
     }
+    task.finish(format!(
+        "Shadow-dep rustdoc cache ready for {} pair(s)",
+        artifacts.len()
+    ));
     Ok(artifacts)
 }
 
@@ -142,4 +200,14 @@ pub fn build_all_active_shadow_deps(
     force: bool,
 ) -> CordialResult<Vec<BuildArtifact>> {
     build_active_shadow_deps(project_root, store, &RunAll, force)
+}
+
+#[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
+pub(crate) fn build_all_active_shadow_deps_with_progress(
+    project_root: &Path,
+    store: &StoreLayout,
+    force: bool,
+    progress: &dyn ProgressSink,
+) -> CordialResult<Vec<BuildArtifact>> {
+    build_active_shadow_deps_with_progress(project_root, store, &RunAll, force, progress)
 }

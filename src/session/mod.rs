@@ -11,11 +11,13 @@
 //! which plugins or etiquettes are registered on the session.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::error::CordialResult;
 use crate::etiquette::Etiquette;
 use crate::objects::{Artifact, Finding};
 use crate::plugin::Plugin;
+use crate::progress::{ProgressSink, noop_progress, noop_progress_arc};
 
 use tracing::instrument;
 mod resolve;
@@ -43,6 +45,14 @@ pub trait SessionView: Send + Sync {
     /// the CLI, environment, or builder. Global `cordial.toml` config is read
     /// from this directory.
     fn store_home(&self) -> &Path;
+    /// User-facing progress reporter for the current run.
+    ///
+    /// Hooks may use this sparingly for long-running, user-visible work. The
+    /// default is a no-op reporter, so non-CLI callers are not forced to render
+    /// terminal UI.
+    fn progress(&self) -> &dyn ProgressSink {
+        noop_progress()
+    }
 }
 
 /// Per-run selection over registered plugins, resolved etiquettes, and crates.
@@ -124,6 +134,7 @@ pub struct SessionBuilder {
     store_root: PathBuf,
     plugins: Vec<&'static dyn Plugin>,
     etiquettes: Vec<&'static dyn Etiquette>,
+    progress: Arc<dyn ProgressSink>,
 }
 
 impl std::fmt::Debug for SessionBuilder {
@@ -135,6 +146,7 @@ impl std::fmt::Debug for SessionBuilder {
             .field("store_root", &self.store_root)
             .field("plugins", &self.plugins.len())
             .field("etiquettes", &self.etiquettes.len())
+            .field("progress", &"<progress-sink>")
             .finish()
     }
 }
@@ -156,6 +168,7 @@ impl SessionBuilder {
             store_root: store.root,
             plugins: Vec::new(),
             etiquettes: Vec::new(),
+            progress: noop_progress_arc(),
         }
     }
 
@@ -176,6 +189,13 @@ impl SessionBuilder {
         let store_root = store_root.into();
         self.store_home = store_root.clone();
         self.store_root = store_root;
+        self
+    }
+
+    /// Return a copy with a frontend progress reporter installed.
+    #[instrument(level = "trace", skip(self, progress))]
+    pub fn with_progress_sink(mut self, progress: Arc<dyn ProgressSink>) -> Self {
+        self.progress = progress;
         self
     }
 
@@ -202,6 +222,7 @@ impl SessionBuilder {
             store_root: self.store_root,
             plugins: self.plugins,
             etiquettes: self.etiquettes,
+            progress: self.progress,
         }
     }
 }
@@ -216,6 +237,7 @@ pub struct RuntimeSession {
     pub(super) store_root: PathBuf,
     pub(super) plugins: Vec<&'static dyn Plugin>,
     pub(super) etiquettes: Vec<&'static dyn Etiquette>,
+    pub(super) progress: Arc<dyn ProgressSink>,
 }
 
 impl SessionView for RuntimeSession {
@@ -232,6 +254,11 @@ impl SessionView for RuntimeSession {
     #[instrument(level = "trace", skip(self))]
     fn store_home(&self) -> &Path {
         &self.store_home
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn progress(&self) -> &dyn ProgressSink {
+        self.progress.as_ref()
     }
 }
 

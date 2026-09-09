@@ -179,11 +179,12 @@ pub(crate) fn resolve_or_rebuild_rustdoc_json(
         session.store_root(),
         project_slug_from_path(session.project_root()),
     );
-    crate::cargo_rustdoc::build_workspace_members(
+    crate::cargo_rustdoc::build_workspace_members_with_progress(
         session.project_root(),
         &store,
         Some(target.crate_name()),
         true,
+        session.progress(),
     )?;
 
     resolve_rustdoc_json(

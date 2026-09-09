@@ -3,34 +3,38 @@
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-#[cfg(feature = "elicitation")]
-use crate::build_all_active_shadow_deps;
+#[cfg(feature = "homecoming_std")]
+use crate::SysrootCache;
 #[cfg(feature = "quality")]
 use crate::build_quality_report;
-#[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
-use crate::build_workspace_members;
 use crate::{
     AddExceptionOutcome, CordialError, CordialResult, CoverageSkipEntry, CrateIr, Disposition,
-    ExceptionEntry, Finding, NamedRunFilter, Plugin, RunAll, RunFilter, RunOutcome, Session,
-    SessionBuilder, StoreLayout, SurrealGraphExport, add_coverage_skip, add_exception, all_plugins,
-    backup_exception_files, default_store_home, etiquettes_from_plugins, load_exception_files,
-    load_exceptions, lookup_etiquette, render_explain_list, render_explain_page,
-    resolve_exceptions_root, run_tracing_instrument_apply,
+    ExceptionEntry, Finding, NamedRunFilter, Plugin, ProgressSink, RunAll, RunFilter, RunOutcome,
+    Session, SessionBuilder, StoreLayout, SurrealGraphExport, add_coverage_skip, add_exception,
+    all_plugins, backup_exception_files, default_store_home, etiquettes_from_plugins,
+    load_exception_files, load_exceptions, lookup_etiquette, render_explain_list,
+    render_explain_page, resolve_exceptions_root, run_tracing_instrument_apply,
 };
-#[cfg(feature = "homecoming_std")]
-use crate::{SysrootCache, build_sysroot_libraries};
 use tracing::instrument;
 
-#[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
 #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
 pub(super) fn execute_build_rustdoc(
     project_root: &Path,
     store: &StoreLayout,
     crate_name: Option<&str>,
+    progress: Arc<dyn ProgressSink>,
     force: bool,
 ) -> CordialResult<()> {
-    let artifacts = build_workspace_members(project_root, store, crate_name, force)?;
+    let artifacts = crate::cargo_rustdoc::build_workspace_members_with_progress(
+        project_root,
+        store,
+        crate_name,
+        force,
+        progress.as_ref(),
+    )?;
     for artifact in artifacts {
         tracing::info!(
             crate_name = artifact.crate_name(),
@@ -39,7 +43,14 @@ pub(super) fn execute_build_rustdoc(
         );
     }
     #[cfg(feature = "elicitation")]
-    if let Ok(shadow_dep_artifacts) = build_all_active_shadow_deps(project_root, store, force) {
+    if let Ok(shadow_dep_artifacts) =
+        crate::cargo_rustdoc::build_all_active_shadow_deps_with_progress(
+            project_root,
+            store,
+            force,
+            progress.as_ref(),
+        )
+    {
         for artifact in shadow_dep_artifacts {
             tracing::info!(
                 crate_name = artifact.crate_name(),
@@ -52,16 +63,22 @@ pub(super) fn execute_build_rustdoc(
     Ok(())
 }
 
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(progress), err(level = "warn"))]
 #[cfg(feature = "homecoming_std")]
 pub(super) fn execute_build_sysroot(
     store_home: Option<PathBuf>,
     crate_name: Option<&str>,
+    progress: Arc<dyn ProgressSink>,
     force: bool,
 ) -> CordialResult<()> {
     let home = store_home.unwrap_or_else(default_store_home);
     let sysroot = SysrootCache::from_home(home);
-    let artifacts = build_sysroot_libraries(&sysroot, crate_name, force)?;
+    let artifacts = crate::cargo_rustdoc::build_sysroot_libraries_with_progress(
+        &sysroot,
+        crate_name,
+        force,
+        progress.as_ref(),
+    )?;
     for artifact in artifacts {
         tracing::info!(
             crate_name = artifact.crate_name(),
@@ -91,13 +108,14 @@ pub(super) fn execute_explain(id: Option<&str>) -> CordialResult<()> {
     }
 }
 
-#[instrument(level = "debug", skip(store), err(level = "warn"))]
+#[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
 pub(super) fn execute_quality_apply(
     project_root: &Path,
     store: &StoreLayout,
     crate_name: Option<&str>,
     store_home: Option<PathBuf>,
     checklist: Option<&Path>,
+    progress: Arc<dyn ProgressSink>,
     dry_run: bool,
 ) -> CordialResult<()> {
     #[cfg(not(feature = "crate_attrs"))]
@@ -106,7 +124,12 @@ pub(super) fn execute_quality_apply(
     #[cfg(feature = "crate_attrs")]
     {
         let home = store_home.clone().unwrap_or_else(default_store_home);
+        let task = progress.spinner("Applying crate-level attributes".to_string());
         let summary = crate::run_crate_attrs_apply(project_root, &home, crate_name, dry_run)?;
+        task.finish(format!(
+            "Crate attributes applied to {} file(s)",
+            summary.changed_files()
+        ));
         tracing::info!(
             inserted_attrs = summary.inserted_attrs(),
             changed_files = summary.changed_files(),
@@ -122,6 +145,7 @@ pub(super) fn execute_quality_apply(
             .map(Path::to_path_buf)
             .unwrap_or_else(|| store.findings_dir().join("tracing-instrument.checklist.md"));
         if checklist_path.is_file() {
+            let task = progress.spinner("Applying tracing instrumentation".to_string());
             execute_tracing_apply(
                 project_root,
                 store,
@@ -129,6 +153,7 @@ pub(super) fn execute_quality_apply(
                 Some(&checklist_path),
                 dry_run,
             )?;
+            task.finish("Tracing instrumentation apply complete".to_string());
         } else {
             tracing::warn!(
                 path = %checklist_path.display(),
@@ -163,18 +188,20 @@ pub(super) fn execute_tracing_apply(
     Ok(())
 }
 
-#[instrument(level = "debug", skip(store, plugins), err(level = "warn"))]
+#[instrument(level = "debug", skip(store, progress, plugins), err(level = "warn"))]
 pub(super) fn execute_run_plugins(
     project_root: &Path,
     store: &StoreLayout,
     crate_name: Option<&str>,
     store_home: Option<PathBuf>,
+    progress: Arc<dyn ProgressSink>,
     plugins: Vec<&'static dyn Plugin>,
     deny_open: bool,
 ) -> CordialResult<()> {
     let mut builder = SessionBuilder::new(project_root)
         .with_store_root(store.root.clone())
-        .with_store_home(store_home.unwrap_or_else(default_store_home));
+        .with_store_home(store_home.unwrap_or_else(default_store_home))
+        .with_progress_sink(progress.clone());
     for plugin in plugins {
         builder = builder.register_plugin(plugin);
     }
@@ -183,6 +210,10 @@ pub(super) fn execute_run_plugins(
     let filter = run_filter(crate_name);
     let outcome = session.run(filter.as_ref())?;
     let summary = print_run_summary(outcome.as_ref())?;
+    progress.notice(format!(
+        "Reports available under {}",
+        store.findings_dir().display()
+    ));
     if deny_open && summary.open_action_items > 0 {
         return Err(CordialError::open_findings(summary.open_action_items));
     }

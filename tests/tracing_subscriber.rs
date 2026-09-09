@@ -216,6 +216,32 @@ fn good_helper_called_from_main_and_test_is_clean() -> miette::Result<()> {
 }
 
 #[test]
+fn helper_that_delegates_to_installer_is_clean() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = write_lib_bin_test(
+        r#"
+pub fn init_tracing() {
+    init_tracing_with_default("info");
+}
+
+fn init_tracing_with_default(default_filter: &str) {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default_filter));
+    let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
+}
+"#,
+        "fn main() { init_tracing(); }\n",
+        Some("#[test] fn it_works() { init_tracing(); }\n"),
+    )?;
+    let rules = scan(fixture.path(), "fixture", false)?;
+    assert!(
+        rules.is_empty(),
+        "delegating helper should be trusted transitively: {rules:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn init_without_once_fails_idempotent() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = write_lib_bin_test(

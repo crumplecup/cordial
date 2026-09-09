@@ -1,6 +1,7 @@
 //! Clap subcommands. Each type implements `act` and hands off nested clap types.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use clap::Subcommand;
 
@@ -19,7 +20,7 @@ use crate::RunAll;
 use crate::coverage_plugins;
 use crate::{
     CordialError, CordialResult, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,
-    StoreLayout, all_plugins, quality_plugins,
+    ProgressSink, StoreLayout, all_plugins, quality_plugins,
 };
 #[cfg(feature = "homecoming_std")]
 use crate::{coverage_plugins_for_hub, discover_workspace_hub};
@@ -183,6 +184,7 @@ pub(super) struct ActCtx {
     store: StoreLayout,
     crate_name: Option<String>,
     store_home: Option<PathBuf>,
+    progress: Arc<dyn ProgressSink>,
 }
 
 impl Commands {
@@ -194,6 +196,7 @@ impl Commands {
                 &ctx.store,
                 ctx.crate_name.as_deref(),
                 ctx.store_home.clone(),
+                ctx.progress.clone(),
                 all_plugins(),
                 deny_open,
             ),
@@ -210,6 +213,7 @@ impl Commands {
                         ctx.crate_name.as_deref(),
                         ctx.store_home.clone(),
                         checklist.as_deref(),
+                        ctx.progress.clone(),
                         dry_run,
                     )
                 } else {
@@ -218,6 +222,7 @@ impl Commands {
                         &ctx.store,
                         ctx.crate_name.as_deref(),
                         ctx.store_home.clone(),
+                        ctx.progress.clone(),
                         quality_plugins(),
                         deny_open,
                     )
@@ -233,6 +238,7 @@ impl Commands {
                         &ctx.store,
                         ctx.crate_name.as_deref(),
                         ctx.store_home.clone(),
+                        ctx.progress.clone(),
                         coverage_plugins_for_hub(hub),
                         false,
                     )
@@ -244,6 +250,7 @@ impl Commands {
                         &ctx.store,
                         ctx.crate_name.as_deref(),
                         ctx.store_home.clone(),
+                        ctx.progress.clone(),
                         coverage_plugins(),
                         false,
                     )
@@ -347,12 +354,16 @@ impl BuildCommands {
                 &ctx.project_root,
                 &ctx.store,
                 ctx.crate_name.as_deref(),
+                ctx.progress.clone(),
                 force,
             ),
             #[cfg(feature = "homecoming_std")]
-            Self::Sysroot { force } => {
-                execute_build_sysroot(ctx.store_home.clone(), ctx.crate_name.as_deref(), force)
-            }
+            Self::Sysroot { force } => execute_build_sysroot(
+                ctx.store_home.clone(),
+                ctx.crate_name.as_deref(),
+                ctx.progress.clone(),
+                force,
+            ),
         }
     }
 }

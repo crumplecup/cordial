@@ -26,10 +26,18 @@ pub use shadow_dep::{
     build_active_shadow_deps, build_all_active_shadow_deps, build_shadow_dep_rustdoc,
     resolve_shadow_dep_build_config,
 };
+#[cfg(feature = "shadow")]
+pub(crate) use shadow_dep::{
+    build_all_active_shadow_deps_with_progress, build_shadow_dep_rustdoc_with_progress,
+};
 #[cfg(feature = "homecoming_std")]
-pub use sysroot::{build_sysroot_libraries, is_std_family_crate, resolve_sysroot_library_manifest};
+pub use sysroot::{
+    build_sysroot_libraries, build_sysroot_libraries_with_progress, is_std_family_crate,
+    resolve_sysroot_library_manifest,
+};
 
 use crate::error::CordialResult;
+use crate::progress::{ProgressSink, noop_progress};
 use crate::session::RunAll;
 use crate::store::StoreLayout;
 use crate::targets::discover_crate_targets;
@@ -42,6 +50,17 @@ pub fn build_workspace_members(
     only_crate: Option<&str>,
     force: bool,
 ) -> CordialResult<Vec<BuildArtifact>> {
+    build_workspace_members_with_progress(project_root, store, only_crate, force, noop_progress())
+}
+
+#[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
+pub(crate) fn build_workspace_members_with_progress(
+    project_root: &Path,
+    store: &StoreLayout,
+    only_crate: Option<&str>,
+    force: bool,
+    progress: &dyn ProgressSink,
+) -> CordialResult<Vec<BuildArtifact>> {
     store.ensure_dirs()?;
     std::fs::create_dir_all(store.builds_dir())?;
     std::fs::create_dir_all(store.rustdoc_cache_dir())?;
@@ -52,8 +71,18 @@ pub fn build_workspace_members(
         targets.retain(|target| target.crate_name() == name);
     }
 
+    let task = progress.bar(
+        "Building workspace rustdoc cache".to_string(),
+        targets.len() as u64,
+    );
     let mut artifacts = Vec::new();
-    for target in targets {
+    for (index, target) in targets.iter().enumerate() {
+        task.set_message(format!(
+            "Checking rustdoc cache for {} ({}/{})",
+            target.crate_name(),
+            index + 1,
+            targets.len()
+        ));
         let artifact_path = store.build_artifact_path(target.crate_name());
         let cached_json = store.rustdoc_cache_path(target.crate_name());
         if !force
@@ -63,9 +92,16 @@ pub fn build_workspace_members(
             && let Ok(existing) = read_build_artifact(&artifact_path)
         {
             artifacts.push(existing);
+            task.inc(1);
             continue;
         }
 
+        task.set_message(format!(
+            "Building rustdoc for {} ({}/{})",
+            target.crate_name(),
+            index + 1,
+            targets.len()
+        ));
         let json_path = run_cargo_rustdoc(project_root, target.crate_name(), &[])?;
 
         copy_rustdoc_json(&json_path, &cached_json)?;
@@ -86,8 +122,13 @@ pub fn build_workspace_members(
         );
         write_build_artifact(&artifact_path, &artifact)?;
         artifacts.push(artifact);
+        task.inc(1);
     }
 
+    task.finish(format!(
+        "Workspace rustdoc cache ready for {} crate(s)",
+        artifacts.len()
+    ));
     Ok(artifacts)
 }
 

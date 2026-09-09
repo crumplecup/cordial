@@ -11,6 +11,7 @@ use super::{
 };
 use crate::error::{CordialError, CordialResult};
 use crate::framework_std::FRAMEWORK_STD_SOURCES;
+use crate::progress::{ProgressSink, noop_progress};
 use crate::store::SysrootCache;
 
 /// Whether `crate_name` is a std-family library documented from the sysroot.
@@ -55,6 +56,17 @@ pub fn build_sysroot_libraries(
     only_crate: Option<&str>,
     force: bool,
 ) -> CordialResult<Vec<BuildArtifact>> {
+    build_sysroot_libraries_with_progress(sysroot, only_crate, force, noop_progress())
+}
+
+/// Build rustdoc JSON for std-family sysroot libraries with progress reporting.
+#[instrument(level = "debug", skip(sysroot, progress), err(level = "warn"))]
+pub fn build_sysroot_libraries_with_progress(
+    sysroot: &SysrootCache,
+    only_crate: Option<&str>,
+    force: bool,
+    progress: &dyn ProgressSink,
+) -> CordialResult<Vec<BuildArtifact>> {
     sysroot.ensure_dirs()?;
 
     let mut sources: Vec<&str> = FRAMEWORK_STD_SOURCES.to_vec();
@@ -67,8 +79,17 @@ pub fn build_sysroot_libraries(
         sources.retain(|source| *source == name);
     }
 
+    let task = progress.bar(
+        "Building sysroot rustdoc cache".to_string(),
+        sources.len() as u64,
+    );
     let mut artifacts = Vec::new();
-    for crate_name in sources {
+    for (index, crate_name) in sources.iter().copied().enumerate() {
+        task.set_message(format!(
+            "Checking sysroot rustdoc for {crate_name} ({}/{})",
+            index + 1,
+            sources.len()
+        ));
         let artifact_path = sysroot.build_artifact_path(crate_name);
         if !force
             && artifact_path.is_file()
@@ -77,10 +98,16 @@ pub fn build_sysroot_libraries(
             let cached_json = sysroot.rustdoc_cache_path(crate_name);
             if cached_json.is_file() {
                 artifacts.push(existing);
+                task.inc(1);
                 continue;
             }
         }
 
+        task.set_message(format!(
+            "Building sysroot rustdoc for {crate_name} ({}/{})",
+            index + 1,
+            sources.len()
+        ));
         let json_path = run_sysroot_rustdoc(sysroot, crate_name)?;
         let cached_json = sysroot.rustdoc_cache_path(crate_name);
         copy_rustdoc_json(&json_path, &cached_json)?;
@@ -95,8 +122,13 @@ pub fn build_sysroot_libraries(
         );
         write_build_artifact(&artifact_path, &artifact)?;
         artifacts.push(artifact);
+        task.inc(1);
     }
 
+    task.finish(format!(
+        "Sysroot rustdoc cache ready for {} crate(s)",
+        artifacts.len()
+    ));
     Ok(artifacts)
 }
 

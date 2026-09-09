@@ -44,8 +44,6 @@ pub use workspace_hub::{WorkspaceHub, detect_workspace_hub, discover_workspace_h
 
 use crate::etiquette::Etiquette;
 
-static EMPTY_ETIQUETTES: &[&'static dyn Etiquette] = &[];
-
 /// Policy object that chooses behavior for a target using an indicator.
 ///
 /// Most callers use a small enum as [`Strategy::Indicator`], with one variant
@@ -84,6 +82,8 @@ pub trait Plugin: Send + Sync {
         PluginCategory::Quality
     }
 }
+
+static EMPTY_ETIQUETTES: &[&'static dyn Etiquette] = &[];
 
 /// Whether a plugin participates in coverage analysis or source-quality scans.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

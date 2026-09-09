@@ -117,12 +117,13 @@ pub fn load_rustdoc_view(
                 session.store_root(),
                 crate::project_slug_from_path(session.project_root()),
             );
-            crate::cargo_rustdoc::build_shadow_dep_rustdoc(
+            crate::cargo_rustdoc::build_shadow_dep_rustdoc_with_progress(
                 session.project_root(),
                 &store,
                 shadow,
                 target.crate_name(),
                 true,
+                session.progress(),
             )?;
 
             if let Some(path) =

@@ -53,6 +53,7 @@ mod loader;
 mod objects;
 mod plugin;
 mod plugins;
+mod progress;
 #[cfg(feature = "impl_coverage")]
 mod proof_harness;
 mod reporter;
@@ -309,7 +310,7 @@ pub use plugins::{
     all_etiquettes_from_plugins, all_plugins, coverage_only_plugins, coverage_plugins,
     quality_only_plugins, quality_plugins,
 };
-pub use tracing_init::init_tracing;
+pub use tracing_init::{init_cli_tracing, init_tracing};
 // `homecoming_std` re-exports live in one block (see docs/planning/cfg-scatter-etiquette.md)
 // even though they source from several internal modules.
 #[cfg(all(feature = "rustdoc", feature = "shadow"))]
@@ -355,6 +356,7 @@ pub use objects::{
     Artifact, Disposition, FileSpan, Finding, FindingSink, IrAnchor, MapFindingSink, Marker,
     NodeAnchor, Rule, SourceSpan, TextArtifact,
 };
+pub use progress::{ProgressSink, ProgressTask, noop_progress};
 pub use reporter::RollupReporter;
 #[cfg(any(
     feature = "homecoming_std",
