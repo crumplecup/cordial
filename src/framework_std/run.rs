@@ -19,10 +19,12 @@ pub const HOMECOMING_TRAIT: &str = "Code";
 pub const HOMECOMING_PATCH_SET: &str = "homecoming";
 
 /// Options for framework std coverage assessment.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, derive_getters::Getters, derive_setters::Setters)]
+#[setters(prefix = "with_")]
 pub struct FrameworkStdOptions {
     /// Whether nightly-only items are in scope.
-    pub include_nightly: bool,
+    #[getter(copy)]
+    include_nightly: bool,
 }
 
 /// Assess homecoming std `Code` coverage using cached rustdoc inventories.
@@ -52,6 +54,6 @@ pub fn assess_homecoming_std_coverage(
         HOMECOMING_IMPL_CRATE,
         &impl_paths,
         &skip_map,
-        options.include_nightly,
+        options.include_nightly(),
     ))
 }

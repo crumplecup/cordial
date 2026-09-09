@@ -10,17 +10,13 @@ use super::scan::catalog::{ActRec, LayoutCatalog, TypeRec, VariantShape};
 use tracing::instrument;
 #[instrument(level = "debug", skip(catalog))]
 pub(super) fn finalize_acts(catalog: &mut LayoutCatalog) {
-    let pending = std::mem::take(&mut catalog.pending_acts);
+    let pending = std::mem::take(catalog.pending_acts_mut());
     for act in pending {
-        let called_on = resolve_act_targets(catalog, &act.ident, &act.block);
-        catalog.acts.insert(
-            act.ident,
-            ActRec {
-                file: act.file,
-                line: act.line,
-                called_on,
-            },
-        );
+        let (ident, file, line, block) = act.into_parts();
+        let called_on = resolve_act_targets(catalog, &ident, &block);
+        catalog
+            .acts_mut()
+            .insert(ident, ActRec::new(file, line, called_on));
     }
 }
 
@@ -32,15 +28,15 @@ pub(super) fn nested_clap_types(
     let mut out = BTreeSet::new();
     let mut consider = |idents: &[String]| {
         for ident in idents {
-            if clap_idents.contains(ident) && ident != &item.ident {
+            if clap_idents.contains(ident) && ident != item.ident() {
                 out.insert(ident.clone());
             }
         }
     };
-    for idents in item.fields.values() {
+    for idents in item.fields().values() {
         consider(idents);
     }
-    for variant in item.variants.values() {
+    for variant in item.variants().values() {
         match variant {
             VariantShape::Named(fields) => {
                 for idents in fields.values() {
@@ -89,7 +85,7 @@ impl ActCallHunt<'_> {
         }
         idents
             .iter()
-            .find(|ident| self.catalog.types.contains_key(*ident))
+            .find(|ident| self.catalog.types().contains_key(*ident))
             .cloned()
     }
 
@@ -113,9 +109,9 @@ impl ActCallHunt<'_> {
                     Member::Unnamed(index) => index.index.to_string(),
                 };
                 self.catalog
-                    .types
+                    .types()
                     .get(&type_name)
-                    .and_then(|rec| rec.fields.get(&member))
+                    .and_then(|rec| rec.fields().get(&member))
                     .cloned()
                     .unwrap_or_default()
             }
@@ -149,21 +145,21 @@ impl ActCallHunt<'_> {
         let first = path.segments.first()?.ident.to_string();
         let owner = if first == "Self" {
             Some(self.self_ident.to_string())
-        } else if self.catalog.types.contains_key(&first) {
+        } else if self.catalog.types().contains_key(&first) {
             Some(first)
         } else {
             scrutinee.map(str::to_string)
         };
         let rec = owner
             .as_deref()
-            .and_then(|name| self.catalog.types.get(name))?;
-        if path.segments.len() == 1 && (last == "Self" || last == rec.ident) {
+            .and_then(|name| self.catalog.types().get(name))?;
+        if path.segments.len() == 1 && (last == "Self" || last == *rec.ident()) {
             return Some((rec, None));
         }
-        if rec.variants.contains_key(&last) {
+        if rec.variants().contains_key(&last) {
             return Some((rec, Some(last)));
         }
-        if last == rec.ident {
+        if last == *rec.ident() {
             return Some((rec, None));
         }
         None
@@ -175,14 +171,14 @@ impl ActCallHunt<'_> {
         variant: Option<&str>,
     ) -> Option<&'a BTreeMap<String, Vec<String>>> {
         if let Some(variant) = variant {
-            match rec.variants.get(variant)? {
+            match rec.variants().get(variant)? {
                 VariantShape::Named(fields) => Some(fields),
                 _ => None,
             }
-        } else if rec.fields.is_empty() {
+        } else if rec.fields().is_empty() {
             None
         } else {
-            Some(&rec.fields)
+            Some(rec.fields())
         }
     }
 
@@ -192,7 +188,7 @@ impl ActCallHunt<'_> {
         variant: Option<&str>,
     ) -> Option<&'a Vec<Vec<String>>> {
         let variant = variant?;
-        match rec.variants.get(variant)? {
+        match rec.variants().get(variant)? {
             VariantShape::Unnamed(fields) => Some(fields),
             _ => None,
         }
@@ -313,7 +309,7 @@ impl ActCallHunt<'_> {
             other => {
                 let inner = field_tys
                     .iter()
-                    .find(|ident| self.catalog.types.contains_key(*ident))
+                    .find(|ident| self.catalog.types().contains_key(*ident))
                     .map(String::as_str);
                 self.collect_pat_bindings(other, inner, out);
             }

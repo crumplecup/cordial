@@ -8,9 +8,9 @@ fn export_includes_root_node() -> miette::Result<()> {
     let export = SurrealGraphExport::from_crate_ir(&ir)
         .into_diagnostic()
         .wrap_err("snapshot")?;
-    assert_eq!(export.crate_name, "demo");
-    assert!(!export.nodes.is_empty());
-    assert!(export.nodes[0].id.starts_with("demo:node:"));
+    assert_eq!(export.crate_name(), "demo");
+    assert!(!export.nodes().is_empty());
+    assert!(export.nodes()[0].id().starts_with("demo:node:"));
     Ok(())
 }
 

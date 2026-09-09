@@ -19,12 +19,15 @@ pub const AMENABLE_IMPL_CRATE: &str = "amenable_std";
 pub const AMENABLE_PATCH_SET: &str = "amenable";
 
 /// Options for amenable std registry coverage assessment.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, derive_getters::Getters, derive_setters::Setters)]
+#[setters(prefix = "with_")]
 pub struct AmenableStdOptions {
     /// Whether nightly-only items are in scope.
-    pub include_nightly: bool,
+    #[getter(copy)]
+    include_nightly: bool,
     /// Re-run `amenable dump-registry` even when a cached dump exists.
-    pub refresh_registry: bool,
+    #[getter(copy)]
+    refresh_registry: bool,
 }
 
 #[instrument(level = "debug", skip(store))]
@@ -39,7 +42,7 @@ fn ensure_registry_dump(
     options: &AmenableStdOptions,
 ) -> CordialResult<RegistryDump> {
     let path = registry_dump_path(store);
-    if !options.refresh_registry && path.is_file() {
+    if !options.refresh_registry() && path.is_file() {
         return load_registry_dump(&path);
     }
     run_amenable_dump_registry(project_root, &path)?;
@@ -81,6 +84,6 @@ pub fn assess_amenable_std_coverage(
         &registry,
         &skip_map,
         &proof_chain_subjects,
-        options.include_nightly,
+        options.include_nightly(),
     ))
 }

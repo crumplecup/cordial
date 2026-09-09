@@ -110,9 +110,10 @@ impl TracingRuleKind {
     }
 }
 
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new)]
 pub struct TracingRule {
-    pub(super) kind: TracingRuleKind,
+    #[getter(copy)]
+    kind: TracingRuleKind,
 }
 
 impl Rule for TracingRule {
@@ -243,7 +244,7 @@ impl Finding for TracingFinding {
 impl TracingFinding {
     #[instrument(level = "trace", skip(self))]
     fn recipe_field(&self) -> String {
-        match self.rule.kind {
+        match self.rule.kind() {
             TracingRuleKind::ProofInstrument | TracingRuleKind::SkipInstrument => {
                 "remove #[instrument]".to_string()
             }

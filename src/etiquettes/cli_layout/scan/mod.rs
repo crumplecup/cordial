@@ -2,7 +2,7 @@
 //!
 //! Bin-only crates (no `lib.rs`) are out of scope. Library-only crates are too.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
@@ -57,13 +57,7 @@ pub fn scan_crate_cli_layout(
     }
     let bin_only: BTreeSet<PathBuf> = bin_files.difference(&lib_files).cloned().collect();
 
-    let mut catalog = LayoutCatalog {
-        crate_name: crate_name.to_string(),
-        types: BTreeMap::new(),
-        acts: BTreeMap::new(),
-        pending_acts: Vec::new(),
-        free_fns: Vec::new(),
-    };
+    let mut catalog = LayoutCatalog::new(crate_name.to_string());
     for path in lib_files.iter().chain(bin_only.iter()) {
         load_file(&mut catalog, path, lib_files.contains(path))?;
     }
@@ -71,51 +65,51 @@ pub fn scan_crate_cli_layout(
 
     let mut findings = Vec::new();
     let clap_idents: BTreeSet<String> = catalog
-        .types
+        .types()
         .values()
-        .filter(|item| item.parser || item.subcommand)
-        .map(|item| item.ident.clone())
+        .filter(|item| item.parser() || item.subcommand())
+        .map(|item| item.ident().clone())
         .collect();
     let has_clap = !clap_idents.is_empty();
 
-    for item in catalog.types.values() {
-        if item.in_library {
-            if item.parser || item.subcommand {
+    for item in catalog.types().values() {
+        if item.in_library() {
+            if item.parser() || item.subcommand() {
                 lint_act(crate_name, item, &catalog, &clap_idents, &mut findings)?;
             }
             continue;
         }
-        if item.parser || item.subcommand || item.error {
+        if item.parser() || item.subcommand() || item.error() {
             findings.push(finding(
                 crate_name,
                 CliLayoutId::Island001,
-                item.type_path.clone(),
-                item.file.clone(),
-                item.line,
+                item.type_path().clone(),
+                item.file().clone(),
+                item.line(),
                 format!(
                     "{} — CLI and error types belong in the library, not a binary island",
-                    item.snippet
+                    item.snippet()
                 ),
             )?);
         }
     }
 
     if has_clap {
-        for func in &catalog.free_fns {
-            if !func.in_library {
+        for func in catalog.free_fns() {
+            if !func.in_library() {
                 continue;
             }
-            for ident in &func.input_idents {
+            for ident in func.input_idents() {
                 if clap_idents.contains(ident) {
                     findings.push(finding(
                         crate_name,
                         CliLayoutId::Act001,
-                        format!("{}::{ident}", catalog.crate_name),
-                        func.file.clone(),
-                        func.line,
+                        format!("{}::{ident}", catalog.crate_name()),
+                        func.file().clone(),
+                        func.line(),
                         format!(
                             "fn {} — dispatch `{ident}` with `{ident}::act`, not a free function",
-                            func.name
+                            func.name()
                         ),
                     )?);
                     break;
@@ -142,16 +136,16 @@ fn lint_act(
     clap_idents: &BTreeSet<String>,
     findings: &mut Vec<CliLayoutRecord>,
 ) -> CordialResult<()> {
-    let Some(act) = catalog.acts.get(&item.ident) else {
+    let Some(act) = catalog.acts().get(item.ident()) else {
         findings.push(finding(
             crate_name,
             CliLayoutId::Act001,
-            item.type_path.clone(),
-            item.file.clone(),
-            item.line,
+            item.type_path().clone(),
+            item.file().clone(),
+            item.line(),
             format!(
                 "{} — write `fn act(self, …) -> Result<_, _>` on this clap type",
-                item.snippet
+                item.snippet()
             ),
         )?);
         return Ok(());
@@ -159,7 +153,7 @@ fn lint_act(
     let nested = nested_clap_types(item, clap_idents);
     let missing: Vec<String> = nested
         .into_iter()
-        .filter(|name| !act.called_on.contains(name))
+        .filter(|name| !act.called_on().contains(name))
         .collect();
     if missing.is_empty() {
         return Ok(());
@@ -168,12 +162,12 @@ fn lint_act(
     findings.push(finding(
         crate_name,
         CliLayoutId::Act001,
-        item.type_path.clone(),
-        act.file.clone(),
-        act.line,
+        item.type_path().clone(),
+        act.file().clone(),
+        act.line(),
         format!(
             "{}::act must call `act` on nested clap type(s) `{names}`",
-            item.ident
+            item.ident()
         ),
     )?);
     Ok(())

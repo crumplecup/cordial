@@ -17,18 +17,24 @@ use super::idents::{
 };
 use tracing::instrument;
 
+#[derive(derive_getters::Getters, derive_new::new)]
 pub(crate) struct TypeRec {
-    pub(crate) ident: String,
-    pub(crate) type_path: String,
-    pub(crate) file: PathBuf,
-    pub(crate) line: u32,
-    pub(crate) snippet: String,
-    pub(crate) parser: bool,
-    pub(crate) subcommand: bool,
-    pub(crate) error: bool,
-    pub(crate) in_library: bool,
-    pub(crate) fields: BTreeMap<String, Vec<String>>,
-    pub(crate) variants: BTreeMap<String, VariantShape>,
+    ident: String,
+    type_path: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    snippet: String,
+    #[getter(copy)]
+    parser: bool,
+    #[getter(copy)]
+    subcommand: bool,
+    #[getter(copy)]
+    error: bool,
+    #[getter(copy)]
+    in_library: bool,
+    fields: BTreeMap<String, Vec<String>>,
+    variants: BTreeMap<String, VariantShape>,
 }
 
 pub(crate) enum VariantShape {
@@ -37,33 +43,67 @@ pub(crate) enum VariantShape {
     Unit,
 }
 
+#[derive(derive_getters::Getters, derive_new::new)]
 pub(crate) struct ActRec {
-    pub(crate) file: PathBuf,
-    pub(crate) line: u32,
-    pub(crate) called_on: BTreeSet<String>,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    called_on: BTreeSet<String>,
 }
 
+#[derive(derive_getters::Getters, derive_new::new)]
 pub(crate) struct PendingAct {
-    pub(crate) ident: String,
-    pub(crate) file: PathBuf,
-    pub(crate) line: u32,
-    pub(crate) block: syn::Block,
+    ident: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    block: syn::Block,
 }
 
+impl PendingAct {
+    pub(crate) fn into_parts(self) -> (String, PathBuf, u32, syn::Block) {
+        (self.ident, self.file, self.line, self.block)
+    }
+}
+
+#[derive(derive_getters::Getters, derive_new::new)]
 pub(crate) struct FreeFnRec {
-    pub(crate) name: String,
-    pub(crate) file: PathBuf,
-    pub(crate) line: u32,
-    pub(crate) in_library: bool,
-    pub(crate) input_idents: Vec<String>,
+    name: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    #[getter(copy)]
+    in_library: bool,
+    input_idents: Vec<String>,
 }
 
+#[derive(derive_getters::Getters)]
 pub(crate) struct LayoutCatalog {
-    pub(crate) crate_name: String,
-    pub(crate) types: BTreeMap<String, TypeRec>,
-    pub(crate) acts: BTreeMap<String, ActRec>,
-    pub(crate) pending_acts: Vec<PendingAct>,
-    pub(crate) free_fns: Vec<FreeFnRec>,
+    crate_name: String,
+    types: BTreeMap<String, TypeRec>,
+    acts: BTreeMap<String, ActRec>,
+    pending_acts: Vec<PendingAct>,
+    free_fns: Vec<FreeFnRec>,
+}
+
+impl LayoutCatalog {
+    pub(crate) fn new(crate_name: String) -> Self {
+        Self {
+            crate_name,
+            types: BTreeMap::new(),
+            acts: BTreeMap::new(),
+            pending_acts: Vec::new(),
+            free_fns: Vec::new(),
+        }
+    }
+
+    pub(crate) fn acts_mut(&mut self) -> &mut BTreeMap<String, ActRec> {
+        &mut self.acts
+    }
+
+    pub(crate) fn pending_acts_mut(&mut self) -> &mut Vec<PendingAct> {
+        &mut self.pending_acts
+    }
 }
 
 #[instrument(level = "info", skip(catalog, file), err(level = "warn"))]
@@ -115,18 +155,20 @@ impl LayoutVisitor<'_> {
             .catalog
             .types
             .entry(seed.ident.clone())
-            .or_insert(TypeRec {
-                ident: seed.ident.clone(),
-                type_path: format!("{}::{}", self.catalog.crate_name, seed.ident),
-                file: self.file.clone(),
-                line: seed.line,
-                snippet: seed.snippet.clone(),
-                parser: false,
-                subcommand: false,
-                error: false,
-                in_library: self.in_library,
-                fields: BTreeMap::new(),
-                variants: BTreeMap::new(),
+            .or_insert_with(|| {
+                TypeRec::new(
+                    seed.ident.clone(),
+                    format!("{}::{}", self.catalog.crate_name, seed.ident),
+                    self.file.clone(),
+                    seed.line,
+                    seed.snippet.clone(),
+                    false,
+                    false,
+                    false,
+                    self.in_library,
+                    BTreeMap::new(),
+                    BTreeMap::new(),
+                )
             });
         entry.parser |= seed.parser;
         entry.subcommand |= seed.subcommand;
@@ -195,13 +237,13 @@ impl<'ast> Visit<'ast> for LayoutVisitor<'_> {
         if is_cfg_test(&node.attrs) {
             return;
         }
-        self.catalog.free_fns.push(FreeFnRec {
-            name: node.sig.ident.to_string(),
-            file: self.file.clone(),
-            line: node.span().start().line as u32,
-            in_library: self.in_library,
-            input_idents: input_type_idents(&node.sig),
-        });
+        self.catalog.free_fns.push(FreeFnRec::new(
+            node.sig.ident.to_string(),
+            self.file.clone(),
+            node.span().start().line as u32,
+            self.in_library,
+            input_type_idents(&node.sig),
+        ));
         syn::visit::visit_item_fn(self, node);
     }
 
@@ -230,12 +272,12 @@ impl<'ast> Visit<'ast> for LayoutVisitor<'_> {
             if !has_self_receiver(&method.sig) || !sig_returns_result(&method.sig) {
                 continue;
             }
-            self.catalog.pending_acts.push(PendingAct {
-                ident: self_ident.clone(),
-                file: self.file.clone(),
-                line: method.span().start().line as u32,
-                block: method.block.clone(),
-            });
+            self.catalog.pending_acts.push(PendingAct::new(
+                self_ident.clone(),
+                self.file.clone(),
+                method.span().start().line as u32,
+                method.block.clone(),
+            ));
         }
     }
 }
