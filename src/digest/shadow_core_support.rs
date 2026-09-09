@@ -16,48 +16,58 @@ use crate::session::{RunAll, RunFilter, SessionView};
 use crate::targets::discover_crate_targets;
 
 /// Roster comparison for workspace members vs the elicitation tracked-target roster.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_getters::Getters)]
 pub struct TrackedTargetRosterDigest {
     /// Workspace members that participate in elicitation.
-    pub workspace_elicit_members: Vec<String>,
+    workspace_elicit_members: Vec<String>,
     /// Interface crates in the elicitation roster.
-    pub interface_crates: Vec<String>,
+    interface_crates: Vec<String>,
     /// Tracked-target roster gaps.
-    pub gaps: TrackedTargetRosterGapRecord,
+    gaps: TrackedTargetRosterGapRecord,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_getters::Getters)]
 pub struct TrackedTargetRosterGapRecord {
-    pub members_without_tracked_target: Vec<String>,
+    members_without_tracked_target: Vec<String>,
 }
 
 /// Per-target rollup of shadow-core elicitation support.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, derive_getters::Getters)]
 pub struct ShadowCoreSupportSummary {
     /// Upstream crate being compared or covered.
-    pub target_crate: String,
+    target_crate: String,
     /// Shadow crate that should mirror the target.
-    pub shadow_crate: String,
+    shadow_crate: String,
     /// Whether this target has an elicitation impl crate.
-    pub elicitation_impl: bool,
+    #[getter(copy)]
+    elicitation_impl: bool,
     /// How many types the target inventory contains.
-    pub target_types: usize,
+    #[getter(copy)]
+    target_types: usize,
     /// Whether rustdoc inventory was available for the target.
-    pub target_inventory_available: bool,
+    #[getter(copy)]
+    target_inventory_available: bool,
     /// Whether an impl-coverage report was available.
-    pub impl_report_available: bool,
+    #[getter(copy)]
+    impl_report_available: bool,
     /// How many of our traits the shadow already impls.
-    pub our_traits_done: usize,
+    #[getter(copy)]
+    our_traits_done: usize,
     /// Our traits the type still needs to impl.
-    pub missing_our_traits: usize,
+    #[getter(copy)]
+    missing_our_traits: usize,
     /// How many types impl ElicitComplete directly.
-    pub direct_elicit_complete: usize,
+    #[getter(copy)]
+    direct_elicit_complete: usize,
     /// How many types are covered via a wrapper.
-    pub wrapper_covered_types: usize,
+    #[getter(copy)]
+    wrapper_covered_types: usize,
     /// Covered fraction as a percentage.
-    pub coverage_pct: f64,
+    #[getter(copy)]
+    coverage_pct: f64,
     /// Rollup status for this row.
-    pub status: ShadowCoreSupportStatus,
+    #[getter(copy)]
+    status: ShadowCoreSupportStatus,
 }
 
 /// Whether a crate is tracked, pending, or shadow-only.
@@ -94,25 +104,38 @@ impl std::fmt::Display for ShadowCoreSupportStatus {
 }
 
 /// Workspace digest of shadow-core elicitation support.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, derive_getters::Getters)]
 pub struct ShadowCoreSupportDigest {
     /// Tracked-target roster digest.
-    pub roster: TrackedTargetRosterDigest,
+    roster: TrackedTargetRosterDigest,
     /// Per-target shadow-core summaries.
-    pub summaries: Vec<ShadowCoreSupportSummary>,
+    summaries: Vec<ShadowCoreSupportSummary>,
 }
 
 /// Per-impl-crate counts inside a shadow-core digest.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, derive_builder::Builder, derive_getters::Getters)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ImplCrateRollup {
     /// Type names collected for this row.
-    pub types: usize,
+    #[getter(copy)]
+    types: usize,
     /// How many of our traits the shadow already impls.
-    pub our_traits_done: usize,
+    #[getter(copy)]
+    our_traits_done: usize,
     /// How many types impl ElicitComplete directly.
-    pub direct_elicit_complete: usize,
+    #[getter(copy)]
+    direct_elicit_complete: usize,
     /// How many types are covered via a wrapper.
-    pub wrapper_covered_types: usize,
+    #[getter(copy)]
+    wrapper_covered_types: usize,
+}
+
+impl ImplCrateRollup {
+    /// Start a builder for this value.
+    #[instrument(level = "trace")]
+    pub fn builder() -> ImplCrateRollupBuilder {
+        ImplCrateRollupBuilder::default()
+    }
 }
 
 /// Build the combined core + shadow support digest for the current workspace run.
@@ -138,16 +161,16 @@ pub fn build_shadow_core_support_digest(
 
     let mut summaries = Vec::new();
     for pair in discover_active_shadow_pairs(session.project_root(), filter)? {
-        let elicitation_impl = tracked_target_for_upstream(&pair.upstream)
-            .map(|entry| entry.elicitation_impl)
+        let elicitation_impl = tracked_target_for_upstream(pair.upstream())
+            .map(|entry| entry.elicitation_impl())
             .unwrap_or(false);
         summaries.push(build_shadow_core_support_summary(
-            &pair.upstream,
-            &pair.shadow,
+            pair.upstream(),
+            pair.shadow(),
             elicitation_impl,
-            workspace.rustdoc_inventory_type_count(&pair.upstream),
-            workspace.crate_ir(&pair.upstream).is_some(),
-            impl_rollups.get(pair.upstream.as_str()),
+            workspace.rustdoc_inventory_type_count(pair.upstream()),
+            workspace.crate_ir(pair.upstream()).is_some(),
+            impl_rollups.get(pair.upstream().as_str()),
         )?);
     }
 
@@ -234,7 +257,7 @@ pub fn build_tracked_target_roster_digest(
             .cloned()
             .collect(),
         gaps: TrackedTargetRosterGapRecord {
-            members_without_tracked_target: gaps.members_without_tracked_target,
+            members_without_tracked_target: gaps.members_without_tracked_target().clone(),
         },
     }
 }

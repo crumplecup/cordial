@@ -2,6 +2,7 @@
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::panic::Location;
+use std::path::PathBuf;
 
 use tracing::instrument;
 
@@ -269,7 +270,7 @@ impl std::error::Error for NoExceptionsSource {}
 #[derive(Debug, derive_getters::Getters)]
 pub struct NoCachedIrSource {
     #[getter(skip)]
-    path: std::path::PathBuf,
+    path: PathBuf,
     file: String,
     #[getter(copy)]
     line: u32,
@@ -278,7 +279,7 @@ pub struct NoCachedIrSource {
 impl NoCachedIrSource {
     #[track_caller]
     #[instrument(level = "debug", skip(path), ret)]
-    pub fn new(path: std::path::PathBuf) -> Self {
+    pub fn new(path: PathBuf) -> Self {
         let loc = Location::caller();
         Self {
             path,
@@ -300,6 +301,44 @@ impl Display for NoCachedIrSource {
 }
 
 impl std::error::Error for NoCachedIrSource {}
+
+#[derive(Debug, derive_getters::Getters)]
+pub struct MissingRustdocJsonSource {
+    #[getter(skip)]
+    crate_name: String,
+    #[getter(skip)]
+    crate_root: PathBuf,
+    file: String,
+    #[getter(copy)]
+    line: u32,
+}
+
+impl MissingRustdocJsonSource {
+    #[track_caller]
+    #[instrument(level = "debug", skip(crate_name, crate_root), ret)]
+    pub fn new(crate_name: impl Into<String>, crate_root: PathBuf) -> Self {
+        let loc = Location::caller();
+        Self {
+            crate_name: crate_name.into(),
+            crate_root,
+            file: loc.file().to_string(),
+            line: loc.line(),
+        }
+    }
+}
+
+impl Display for MissingRustdocJsonSource {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        write!(
+            formatter,
+            "rustdoc JSON not found for crate `{}` under {}; automatic rustdoc cache rebuild did not produce it",
+            self.crate_name,
+            self.crate_root.display()
+        )
+    }
+}
+
+impl std::error::Error for MissingRustdocJsonSource {}
 
 #[derive(Debug, derive_getters::Getters)]
 pub struct OpenFindingsSource {

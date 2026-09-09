@@ -9,8 +9,9 @@ use std::path::{PathBuf, StripPrefixError};
 
 use io::{FmtSource, IoSource, PrefixSource};
 use local::{
-    BuilderSource, CargoMetadataSource, InvariantSource, NoCachedIrSource, NoExceptionsSource,
-    NotFoundSource, OpenFindingsSource, UnknownEtiquetteSource, UnreachableSource,
+    BuilderSource, CargoMetadataSource, InvariantSource, MissingRustdocJsonSource,
+    NoCachedIrSource, NoExceptionsSource, NotFoundSource, OpenFindingsSource,
+    UnknownEtiquetteSource, UnreachableSource,
 };
 pub use parse::TokenStreamParseError;
 use parse::{ConfigSource, JsonParseSource, JsonSource, SynParseSource};
@@ -56,6 +57,8 @@ pub enum CordialErrorKind {
     NoExceptions(NoExceptionsSource),
     /// Cached IR was required but missing.
     NoCachedIr(NoCachedIrSource),
+    /// Rustdoc JSON was required but missing.
+    MissingRustdocJson(MissingRustdocJsonSource),
     /// Open action items were denied by the CLI.
     OpenFindings(OpenFindingsSource),
     /// A path was not a prefix of another.
@@ -159,6 +162,15 @@ impl CordialError {
         Self::from_kind(CordialErrorKind::NoCachedIr(NoCachedIrSource::new(path)))
     }
 
+    /// Rustdoc JSON is required for this crate but has not been built.
+    #[track_caller]
+    #[instrument(level = "debug", skip(crate_root, crate_name))]
+    pub fn missing_rustdoc_json(crate_name: impl Into<String>, crate_root: PathBuf) -> Self {
+        Self::from_kind(CordialErrorKind::MissingRustdocJson(
+            MissingRustdocJsonSource::new(crate_name, crate_root),
+        ))
+    }
+
     /// Open action items were denied by a CLI gate.
     #[track_caller]
     #[instrument(level = "debug")]
@@ -195,6 +207,7 @@ impl std::error::Error for CordialError {
             | CordialErrorKind::NotFound(_)
             | CordialErrorKind::NoExceptions(_)
             | CordialErrorKind::NoCachedIr(_)
+            | CordialErrorKind::MissingRustdocJson(_)
             | CordialErrorKind::OpenFindings(_) => None,
         }
     }
@@ -219,6 +232,7 @@ impl Display for CordialErrorKind {
             Self::NotFound(source) => source.fmt(formatter),
             Self::NoExceptions(source) => source.fmt(formatter),
             Self::NoCachedIr(source) => source.fmt(formatter),
+            Self::MissingRustdocJson(source) => source.fmt(formatter),
             Self::OpenFindings(source) => source.fmt(formatter),
             Self::Prefix(source) => source.fmt(formatter),
         }

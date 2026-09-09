@@ -10,9 +10,9 @@ lets loaders, enrichers, probes, assessors, and reporters hook into a shared
 graph IR so users can register custom lints without forking the tool.
 
 Each **etiquette** is one polite standard. Quality etiquettes scan source.
-Coverage etiquettes need rustdoc JSON. Artifacts land under
-`~/.cordial/{project}/` (or `--store-home` / `CORDIAL_HOME`) and are never
-committed to git.
+Coverage etiquettes read rustdoc JSON and refresh the workspace cache when it
+is missing or stale. Artifacts land under `~/.cordial/{project}/` (or
+`--store-home` / `CORDIAL_HOME`) and are never committed to git.
 
 ## Start here
 
@@ -24,8 +24,8 @@ cordial explain
 ```
 
 `cordial quality` runs source-quality etiquettes. `cordial coverage` runs
-rustdoc-backed inventory etiquettes after `cordial build rustdoc`. Artifacts
-land under `~/.cordial/{project}/findings/`.
+rustdoc-backed inventory etiquettes and rebuilds workspace rustdoc cache inputs
+as needed. Artifacts land under `~/.cordial/{project}/findings/`.
 Use `--deny-open` in CI to keep report artifacts while failing on unresolved
 open action items from `quality-report.md`; inventory-only findings stay
 report evidence and do not fail the gate.

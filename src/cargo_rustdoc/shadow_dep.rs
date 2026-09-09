@@ -13,7 +13,8 @@ use crate::store::StoreLayout;
 use super::artifact::BuildArtifact;
 use super::cargo::run_cargo_rustdoc;
 use super::{
-    copy_rustdoc_json, hash_file, read_build_artifact, read_crate_version, write_build_artifact,
+    copy_rustdoc_json, hash_file, read_build_artifact, read_crate_version, rustdoc_cache_is_fresh,
+    write_build_artifact,
 };
 
 /// Resolve how to build upstream rustdoc for one shadow mirror pair.
@@ -29,11 +30,11 @@ pub fn resolve_shadow_dep_build_config(
     }
 
     tracked_target_for_shadow(shadow_crate)
-        .filter(|target| target.upstream == upstream_crate)
+        .filter(|target| target.upstream() == upstream_crate)
         .map(|target| {
             DepBuildConfig::new(
                 target
-                    .impl_dep_features
+                    .impl_dep_features()
                     .iter()
                     .map(|feature| (*feature).to_string())
                     .collect(),
@@ -62,6 +63,11 @@ pub fn build_shadow_dep_rustdoc(
     if !force
         && artifact_path.is_file()
         && cached_json.is_file()
+        && rustdoc_cache_is_fresh(
+            project_root,
+            &reference_member_root(project_root, shadow_crate),
+            &cached_json,
+        )
         && let Ok(existing) = read_build_artifact(&artifact_path)
     {
         return Ok(existing);
@@ -94,6 +100,16 @@ pub fn build_shadow_dep_rustdoc(
     Ok(artifact)
 }
 
+#[instrument(level = "debug")]
+fn reference_member_root(project_root: &Path, member_crate: &str) -> PathBuf {
+    let crate_root = project_root.join("crates").join(member_crate);
+    if crate_root.join("Cargo.toml").is_file() {
+        crate_root
+    } else {
+        project_root.to_path_buf()
+    }
+}
+
 /// Build shadow-dep rustdoc for every active tracked pair in the workspace.
 #[instrument(level = "debug", skip(store, filter), err(level = "warn"))]
 pub fn build_active_shadow_deps(
@@ -105,11 +121,11 @@ pub fn build_active_shadow_deps(
     let pairs = discover_active_shadow_pairs(project_root, filter)?;
     let mut artifacts = Vec::new();
     for pair in pairs {
-        match build_shadow_dep_rustdoc(project_root, store, &pair.shadow, &pair.upstream, force) {
+        match build_shadow_dep_rustdoc(project_root, store, pair.shadow(), pair.upstream(), force) {
             Ok(artifact) => artifacts.push(artifact),
             Err(error) => tracing::warn!(
-                upstream = %pair.upstream,
-                shadow = %pair.shadow,
+                upstream = %pair.upstream(),
+                shadow = %pair.shadow(),
                 %error,
                 "skipping shadow-dep rustdoc build"
             ),

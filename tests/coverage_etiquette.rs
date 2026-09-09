@@ -116,7 +116,7 @@ fn elicitation_tracked_targets_roster_is_non_empty() {
     assert!(
         cordial::ELICITATION_TRACKED_TARGETS
             .iter()
-            .any(|target| target.upstream == "url")
+            .any(|target| target.upstream() == "url")
     );
 }
 

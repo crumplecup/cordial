@@ -15,9 +15,9 @@
 //!
 //! **Outputs.** `{store}/findings/trenchcoats.csv`.
 //!
-//! **Config.** Run `cordial build rustdoc`, then `cordial coverage`. Requires
-//! the `trenchcoat` / `elicitation` feature set. Register
-//! [`TRENCHCOAT_ETIQUETTE`].
+//! **Config.** Run `cordial coverage`; workspace rustdoc JSON is rebuilt when
+//! missing or stale. Requires the `trenchcoat` / `elicitation` feature set.
+//! Register [`TRENCHCOAT_ETIQUETTE`].
 
 mod assessor;
 mod probe;
@@ -52,7 +52,7 @@ pub static TRENCHCOAT_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
     EtiquetteExplain::new(
         "Are foreign types wrapped before they reach our traits?",
         "Binding a foreign type directly to an elicitation trait couples our surface to upstream layout and orphan-rule limits. Wrappers are the seam that impl-coverage and shadow then measure.",
-        "From rustdoc JSON, finds types that implement (or should implement) our traits while still exposing an unwrapped foreign type. Needs cordial build rustdoc.",
+        "From rustdoc JSON, finds types that implement (or should implement) our traits while still exposing an unwrapped foreign type. Rebuilds workspace rustdoc JSON when the cache is missing or stale.",
         "`[trenchcoat] enabled = false` in cordial.toml.",
         &[EtiquetteRuleExplain::new(
             "TRENCHCOAT-MISSING-WRAP",

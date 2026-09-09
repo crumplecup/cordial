@@ -2,7 +2,8 @@
 //!
 //! An etiquette is one polite standard: a named bundle of loaders, enrichers,
 //! probes, assessors, and reporters. Quality etiquettes walk source into the
-//! graph IR. Coverage etiquettes need rustdoc JSON (`cordial build rustdoc`).
+//! graph IR. Coverage etiquettes read rustdoc JSON and refresh workspace cache
+//! inputs when they are missing or stale.
 //!
 //! Run `cordial quality` or `cordial coverage`, or register a bundle on a
 //! [`crate::Session`]. Thresholds load from `cordial.toml` (workspace, then

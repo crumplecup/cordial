@@ -14,19 +14,19 @@ use super::elicitation_tracked_targets::{
 };
 
 /// One upstream ↔ shadow mirror pair active in the current workspace.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
 pub struct ShadowPair {
     /// Upstream crate this shadow pair tracks.
-    pub upstream: String,
+    upstream: String,
     /// Shadow crate that should mirror the upstream.
-    pub shadow: String,
+    shadow: String,
 }
 
 /// Workspace `elicit_*` mirror members with no entry in the tracked roster.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
 pub struct TrackedTargetRosterGap {
     /// Workspace members with no tracked elicitation target.
-    pub members_without_tracked_target: Vec<String>,
+    members_without_tracked_target: Vec<String>,
 }
 
 /// Target provider for the elicitation coverage profile.
@@ -56,14 +56,18 @@ impl TargetProvider for ElicitationTargetProvider {
         }
 
         for tracked in active_tracked_targets(&all_members) {
-            if tracked.elicitation_impl {
-                let target = CoverageTarget::upstream_dep(tracked.upstream);
-                if seen.insert(format!("upstream:{}", tracked.upstream)) {
+            if tracked.elicitation_impl() {
+                let target = CoverageTarget::upstream_dep(tracked.upstream());
+                if seen.insert(format!("upstream:{}", tracked.upstream())) {
                     targets.push(target);
                 }
             }
-            let target = CoverageTarget::shadow_pair(tracked.upstream, tracked.shadow);
-            if seen.insert(format!("shadow:{}:{}", tracked.upstream, tracked.shadow)) {
+            let target = CoverageTarget::shadow_pair(tracked.upstream(), tracked.shadow());
+            if seen.insert(format!(
+                "shadow:{}:{}",
+                tracked.upstream(),
+                tracked.shadow()
+            )) {
                 targets.push(target);
             }
         }
@@ -79,7 +83,7 @@ pub fn active_tracked_targets(
 ) -> Vec<&'static ElicitationTrackedTarget> {
     ELICITATION_TRACKED_TARGETS
         .iter()
-        .filter(|target| workspace_members.contains(target.shadow))
+        .filter(|target| workspace_members.contains(target.shadow()))
         .collect()
 }
 
@@ -96,8 +100,8 @@ pub fn discover_active_shadow_pairs(
     let pairs: Vec<ShadowPair> = active_tracked_targets(&members)
         .into_iter()
         .map(|target| ShadowPair {
-            upstream: target.upstream.to_string(),
-            shadow: target.shadow.to_string(),
+            upstream: target.upstream().to_string(),
+            shadow: target.shadow().to_string(),
         })
         .collect();
     Ok(filter_shadow_pairs(pairs, filter))
@@ -125,7 +129,7 @@ fn filter_shadow_pairs(pairs: Vec<ShadowPair>, filter: &dyn RunFilter) -> Vec<Sh
 pub fn tracked_target_for_upstream(upstream: &str) -> Option<&'static ElicitationTrackedTarget> {
     ELICITATION_TRACKED_TARGETS
         .iter()
-        .find(|target| target.upstream == upstream)
+        .find(|target| target.upstream() == upstream)
 }
 
 /// Look up a tracked target by shadow member crate name.
@@ -133,7 +137,7 @@ pub fn tracked_target_for_upstream(upstream: &str) -> Option<&'static Elicitatio
 pub fn tracked_target_for_shadow(shadow: &str) -> Option<&'static ElicitationTrackedTarget> {
     ELICITATION_TRACKED_TARGETS
         .iter()
-        .find(|target| target.shadow == shadow)
+        .find(|target| target.shadow() == shadow)
 }
 
 /// Returns `true` when `crate_name` is an interface crate rather than an upstream mirror.
@@ -147,7 +151,7 @@ pub fn is_interface_shadow_crate(crate_name: &str) -> bool {
 pub fn compare_tracked_target_roster(workspace_members: &[String]) -> TrackedTargetRosterGap {
     let configured_shadows: HashSet<&str> = ELICITATION_TRACKED_TARGETS
         .iter()
-        .map(|target| target.shadow)
+        .map(|target| target.shadow())
         .collect();
 
     let members_without_tracked_target: Vec<String> = workspace_members

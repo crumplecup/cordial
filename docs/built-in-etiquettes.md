@@ -160,8 +160,9 @@ surface-area accounting, not a source-quality violation by itself.
 | `homecoming-std` | Rust `std` / `core` / `alloc` coverage for homecoming `Code` is inventoried. | `FRAMEWORK-STD-ROW` |
 | `amenable-std` | Rust `std` coverage in the amenable registry is inventoried. | `AMENABLE-STD-ROW` |
 
-Run `cordial build rustdoc` before coverage. Quality etiquettes can run from
-source alone; coverage needs the rustdoc inventory.
+Quality etiquettes can run from source alone. Coverage needs rustdoc inventory
+inputs, and workspace-member rustdoc JSON is rebuilt automatically when the
+cache is missing or stale.
 
 ## Keeping this current
 

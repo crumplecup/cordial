@@ -11,18 +11,23 @@ pub const ELICITATION_INTERFACE_SHADOW_CRATES: &[&str] = &[
     "elicit_server",
 ];
 /// One upstream crate tracked for both core impl coverage and shadow mirror coverage.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_getters::Getters)]
 pub struct ElicitationTrackedTarget {
     /// Upstream dependency name (single source of truth for the target crate version).
-    pub upstream: &'static str,
+    #[getter(copy)]
+    upstream: &'static str,
     /// Workspace member that mirrors the upstream public API.
-    pub shadow: &'static str,
+    #[getter(copy)]
+    shadow: &'static str,
     /// When true, run impl-dep builds via elicitation's dependency edge for core metrics.
-    pub elicitation_impl: bool,
+    #[getter(copy)]
+    elicitation_impl: bool,
     /// Planned or active `elicitation` Cargo feature for the optional dep.
-    pub elicitation_feature: &'static str,
+    #[getter(copy)]
+    elicitation_feature: &'static str,
     /// Extra features when documenting the dep from `elicitation` for impl coverage.
-    pub impl_dep_features: &'static [&'static str],
+    #[getter(copy)]
+    impl_dep_features: &'static [&'static str],
 }
 
 /// Canonical target list: one upstream crate, core metrics + shadow metrics.

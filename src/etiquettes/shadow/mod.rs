@@ -15,8 +15,9 @@
 //! **Outputs.** `{store}/findings/shadow-*.checklist.md`, pair CSVs, gap
 //! CSVs, and method checklist artifacts.
 //!
-//! **Config.** Run `cordial build rustdoc`, then `cordial coverage`. Requires
-//! the `shadow` / `elicitation` feature set. Register [`SHADOW_ETIQUETTE`].
+//! **Config.** Run `cordial coverage`; workspace rustdoc JSON is rebuilt when
+//! missing or stale. Requires the `shadow` / `elicitation` feature set.
+//! Register [`SHADOW_ETIQUETTE`].
 
 mod assessor;
 mod probe;
@@ -74,7 +75,7 @@ pub static SHADOW_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
     EtiquetteExplain::new(
         "Do shadow crates mirror upstream items?",
         "Shadow crates are the elicitation adapter for crates we do not own. Missing mirrors mean the tracked target is incomplete even when rustdoc for the upstream crate is present.",
-        "Pairs an upstream crate with its shadow crate and reports types/methods that exist upstream but are not mirrored, including a workspace-level pass. Needs cordial build rustdoc.",
+        "Pairs an upstream crate with its shadow crate and reports types/methods that exist upstream but are not mirrored, including a workspace-level pass. Rebuilds workspace rustdoc JSON when the cache is missing or stale.",
         "`[shadow] enabled = false` in cordial.toml.",
         &[EtiquetteRuleExplain::new(
             "SHADOW-MISSING-MIRROR",

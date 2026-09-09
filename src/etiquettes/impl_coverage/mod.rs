@@ -17,9 +17,9 @@
 //! **Outputs.** `{store}/findings/impl-coverage.checklist.md` plus coverage
 //! and gap CSVs.
 //!
-//! **Config.** Run `cordial build rustdoc`, then `cordial coverage`. Requires
-//! the `impl_coverage` / `elicitation` feature set. Register
-//! [`IMPL_COVERAGE_ETIQUETTE`].
+//! **Config.** Run `cordial coverage`; workspace rustdoc JSON is rebuilt when
+//! missing or stale. Requires the `impl_coverage` / `elicitation` feature set.
+//! Register [`IMPL_COVERAGE_ETIQUETTE`].
 
 mod assessor;
 mod gap_classify;
@@ -71,7 +71,7 @@ pub static IMPL_COVERAGE_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
     EtiquetteExplain::new(
         "Do types implement the required elicitation traits?",
         "Elicitation coverage is a completeness inventory, not a source lint. Types that wrap foreign values or sit on a tracked target need the trait stack before they are done.",
-        "From rustdoc JSON, finds types that should implement ElicitComplete (and prerequisites) and classifies gaps: missing our traits, ready for ElicitComplete, feature-gated external, or externally blocked. Needs cordial build rustdoc.",
+        "From rustdoc JSON, finds types that should implement ElicitComplete (and prerequisites) and classifies gaps: missing our traits, ready for ElicitComplete, feature-gated external, or externally blocked. Rebuilds workspace rustdoc JSON when the cache is missing or stale.",
         "`[impl-coverage] enabled = false` in cordial.toml.",
         &[EtiquetteRuleExplain::new(
             "IMPL-COVERAGE-GAP",

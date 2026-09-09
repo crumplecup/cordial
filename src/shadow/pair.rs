@@ -27,16 +27,16 @@ pub fn preload_shadow_pair_crates(
     enrichers: &[&dyn IrEnricher],
 ) -> CordialResult<()> {
     for pair in discover_active_shadow_pairs(session.project_root(), filter)? {
-        load_crate_ir_if_missing(workspace, session, &pair.shadow, None, loaders, enrichers)?;
+        load_crate_ir_if_missing(workspace, session, pair.shadow(), None, loaders, enrichers)?;
         load_crate_ir_if_missing(
             workspace,
             session,
-            &pair.upstream,
-            Some(pair.shadow.as_str()),
+            pair.upstream(),
+            Some(pair.shadow().as_str()),
             loaders,
             enrichers,
         )?;
-        materialize_cross_crate_shadow_mirrors(workspace, &pair.upstream, &pair.shadow)?;
+        materialize_cross_crate_shadow_mirrors(workspace, pair.upstream(), pair.shadow())?;
     }
     Ok(())
 }
@@ -52,8 +52,8 @@ pub fn load_workspace_shadow_reports(
     let mut reports = Vec::new();
     for pair in pairs {
         let report =
-            build_shadow_pair_report_from_workspace(workspace, &pair.upstream, &pair.shadow)?;
-        reports.push((pair.upstream, pair.shadow, report));
+            build_shadow_pair_report_from_workspace(workspace, pair.upstream(), pair.shadow())?;
+        reports.push((pair.upstream().clone(), pair.shadow().clone(), report));
     }
     Ok(reports)
 }

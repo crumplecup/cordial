@@ -7,6 +7,8 @@ use tracing::instrument;
 
 use crate::error::CordialResult;
 use crate::loader::{CrateTarget, SourceLoadView};
+#[cfg(feature = "rustdoc")]
+use crate::{RustdocLoadView, RustdocLoader};
 
 /// Fingerprints recorded alongside a cached IR graph.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,13 +54,12 @@ impl IrCacheDigest {
         let rustdoc_json = {
             #[cfg(feature = "rustdoc")]
             {
-                crate::rustdoc_loader::resolve_rustdoc_json(
-                    target.crate_root(),
-                    target.crate_name(),
-                    None,
-                )
-                .ok()
-                .and_then(|path| digest_file(&path).ok())
+                let rustdoc_key = format!("{}:{}", target.crate_name(), RustdocLoader::ID);
+                load_views
+                    .get(&rustdoc_key)
+                    .and_then(|view| view.as_any().downcast_ref::<RustdocLoadView>())
+                    .and_then(RustdocLoadView::json_path)
+                    .and_then(|path| digest_file(path).ok())
             }
             #[cfg(not(feature = "rustdoc"))]
             {

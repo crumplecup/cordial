@@ -1,11 +1,12 @@
 #![cfg(feature = "rustdoc")]
 
+use std::fs;
 use std::path::PathBuf;
 
 use cordial::{
-    ATTR_IR_ORIGIN, BasicQuery, EtiquetteExplain, EtiquetteHooks, IrView, ORIGIN_RUSTDOC,
-    ORIGIN_SOURCE, RunAll, RustdocLoader, Session, SessionBuilder, SourceLoader, StaticEtiquette,
-    syn_doc_peer,
+    ATTR_IR_ORIGIN, BasicQuery, CordialError, CrateTarget, EtiquetteExplain, EtiquetteHooks,
+    IrCacheDigest, IrView, ORIGIN_RUSTDOC, ORIGIN_SOURCE, RunAll, RustdocLoader, Session,
+    SessionBuilder, SourceLoader, StaticEtiquette, nightly_available, syn_doc_peer,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -89,4 +90,80 @@ fn link_key_normalizes_crate_root_items() {
         inventory_link_key("build_demo::Widget", "build_demo"),
         "build_demo::Widget"
     );
+}
+
+#[test]
+fn missing_rustdoc_json_error_reports_failed_auto_rebuild() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+
+    let err = CordialError::missing_rustdoc_json("missing_crate", fixture.path().to_path_buf());
+    let message = err.to_string();
+
+    assert!(message.contains("rustdoc JSON not found for crate `missing_crate`"));
+    assert!(message.contains("automatic rustdoc cache rebuild did not produce it"));
+    assert!(!message.contains("invariant violated"));
+    Ok(())
+}
+
+#[test]
+fn rustdoc_loader_rebuilds_missing_workspace_cache() -> miette::Result<()> {
+    cordial::init_tracing();
+    if !nightly_available() {
+        tracing::warn!("skipping auto-rebuild test: nightly toolchain required for rustdoc JSON");
+        return Ok(());
+    }
+
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("fixture")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        r#"[package]
+name = "auto_rustdoc_cache"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+"#,
+    )
+    .into_diagnostic()
+    .wrap_err("manifest")?;
+    fs::write(fixture.path().join("src/lib.rs"), "pub struct Widget;\n")
+        .into_diagnostic()
+        .wrap_err("lib")?;
+
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&DUAL_INVENTORY_ETIQUETTE)
+        .build();
+
+    session
+        .run(&RunAll)
+        .into_diagnostic()
+        .wrap_err("auto rebuild run")?;
+
+    assert!(
+        store
+            .path()
+            .join("cache/rustdoc/auto_rustdoc_cache.json")
+            .is_file()
+    );
+    assert!(fixture.path().join("doc/auto_rustdoc_cache.json").is_file());
+    Ok(())
+}
+
+#[test]
+fn ir_digest_tolerates_missing_optional_rustdoc_json() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let target = CrateTarget::new("missing_crate", fixture.path());
+
+    let _digest = IrCacheDigest::compute(&target, &[], &Default::default())
+        .into_diagnostic()
+        .wrap_err("digest")?;
+    Ok(())
 }

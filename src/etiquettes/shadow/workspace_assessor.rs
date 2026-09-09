@@ -36,15 +36,15 @@ impl WorkspaceAssessor for CrossCrateShadowWorkspaceAssessor {
 
         for pair in pairs {
             let report =
-                build_shadow_pair_report_from_workspace(workspace, &pair.upstream, &pair.shadow)?;
+                build_shadow_pair_report_from_workspace(workspace, pair.upstream(), pair.shadow())?;
             let anchor = workspace
-                .crate_ir(&pair.upstream)
+                .crate_ir(pair.upstream())
                 .map(|ir| NodeAnchor(ir.root))
                 .unwrap_or(NodeAnchor(crate::ir::NodeId(0)));
             findings.extend(findings_from_shadow_pair_report(
                 &report,
-                &pair.upstream,
-                &pair.shadow,
+                pair.upstream(),
+                pair.shadow(),
                 anchor,
             )?);
         }

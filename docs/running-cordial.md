@@ -133,11 +133,18 @@ evidence; they do not trip the deny gate.
 
 ## Coverage
 
-Coverage etiquettes need rustdoc JSON:
+Coverage etiquettes read rustdoc JSON. Workspace-member rustdoc cache inputs
+are rebuilt automatically when missing or stale:
+
+```sh
+cordial coverage
+```
+
+Use the explicit build command when you want to prewarm or force-refresh that
+cache:
 
 ```sh
 cordial build rustdoc
-cordial coverage
 ```
 
 Std-family coverage also needs sysroot rustdoc:

@@ -17,14 +17,14 @@ fn tracked_targets_have_unique_upstream_and_shadow_names() {
     let mut shadow = HashSet::new();
     for target in ELICITATION_TRACKED_TARGETS {
         assert!(
-            upstream.insert(target.upstream),
+            upstream.insert(target.upstream()),
             "duplicate upstream {}",
-            target.upstream
+            target.upstream()
         );
         assert!(
-            shadow.insert(target.shadow),
+            shadow.insert(target.shadow()),
             "duplicate shadow {}",
-            target.shadow
+            target.shadow()
         );
     }
 }
@@ -37,8 +37,8 @@ fn active_tracked_targets_require_shadow_member() {
         .map(str::to_string)
         .collect();
     let active = active_tracked_targets(&members);
-    assert!(active.iter().any(|target| target.upstream == "url"));
-    assert!(!active.iter().any(|target| target.upstream == "serde"));
+    assert!(active.iter().any(|target| target.upstream() == "url"));
+    assert!(!active.iter().any(|target| target.upstream() == "serde"));
 }
 
 #[test]

@@ -10,6 +10,7 @@ mod shadow_dep;
 mod sysroot;
 
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use sha2::{Digest, Sha256};
 use tracing::instrument;
@@ -54,20 +55,19 @@ pub fn build_workspace_members(
     let mut artifacts = Vec::new();
     for target in targets {
         let artifact_path = store.build_artifact_path(target.crate_name());
+        let cached_json = store.rustdoc_cache_path(target.crate_name());
         if !force
             && artifact_path.is_file()
+            && cached_json.is_file()
+            && rustdoc_cache_is_fresh(project_root, target.crate_root(), &cached_json)
             && let Ok(existing) = read_build_artifact(&artifact_path)
         {
-            let cached_json = store.rustdoc_cache_path(target.crate_name());
-            if cached_json.is_file() {
-                artifacts.push(existing);
-                continue;
-            }
+            artifacts.push(existing);
+            continue;
         }
 
         let json_path = run_cargo_rustdoc(project_root, target.crate_name(), &[])?;
 
-        let cached_json = store.rustdoc_cache_path(target.crate_name());
         copy_rustdoc_json(&json_path, &cached_json)?;
 
         let crate_doc_dir = target.crate_root().join("doc");
@@ -89,6 +89,53 @@ pub fn build_workspace_members(
     }
 
     Ok(artifacts)
+}
+
+/// Whether cached rustdoc JSON is newer than the Rust inputs that feed it.
+#[instrument(level = "debug", skip(project_root, crate_root, cached_json))]
+pub(crate) fn rustdoc_cache_is_fresh(
+    project_root: &Path,
+    crate_root: &Path,
+    cached_json: &Path,
+) -> bool {
+    let Some(cache_modified) = modified_at(cached_json) else {
+        return false;
+    };
+
+    !rustdoc_inputs(project_root, crate_root)
+        .into_iter()
+        .any(|path| modified_at(&path).is_some_and(|modified| modified > cache_modified))
+}
+
+#[instrument(level = "trace", skip(project_root, crate_root))]
+fn rustdoc_inputs(project_root: &Path, crate_root: &Path) -> Vec<PathBuf> {
+    let mut inputs = vec![
+        project_root.join("Cargo.toml"),
+        project_root.join("Cargo.lock"),
+        crate_root.join("Cargo.toml"),
+        crate_root.join("build.rs"),
+    ];
+
+    let src_root = crate_root.join("src");
+    if src_root.is_dir() {
+        inputs.extend(
+            walkdir::WalkDir::new(src_root)
+                .into_iter()
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_type().is_file())
+                .map(|entry| entry.into_path())
+                .filter(|path| path.extension().is_some_and(|extension| extension == "rs")),
+        );
+    }
+
+    inputs
+}
+
+#[instrument(level = "trace", skip(path))]
+fn modified_at(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path)
+        .ok()
+        .and_then(|metadata| metadata.modified().ok())
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
@@ -128,4 +175,44 @@ pub(crate) fn write_build_artifact(path: &Path, artifact: &BuildArtifact) -> Cor
     }
     std::fs::write(path, serde_json::to_string_pretty(artifact)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use miette::{IntoDiagnostic, WrapErr};
+
+    use super::*;
+
+    #[test]
+    fn rustdoc_cache_freshness_tracks_member_sources() -> miette::Result<()> {
+        let temp = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+        let project = temp.path();
+        let src = project.join("src");
+        std::fs::create_dir_all(&src)
+            .into_diagnostic()
+            .wrap_err("src dir")?;
+        let source = src.join("lib.rs");
+        let cache = project.join("cache.json");
+
+        std::fs::write(project.join("Cargo.toml"), "[package]\nname = \"demo\"\n")
+            .into_diagnostic()
+            .wrap_err("manifest")?;
+        std::fs::write(&source, "pub struct Before;\n")
+            .into_diagnostic()
+            .wrap_err("source")?;
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        std::fs::write(&cache, "{}\n")
+            .into_diagnostic()
+            .wrap_err("cache")?;
+
+        assert!(rustdoc_cache_is_fresh(project, project, &cache));
+
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        std::fs::write(&source, "pub struct After;\n")
+            .into_diagnostic()
+            .wrap_err("updated source")?;
+
+        assert!(!rustdoc_cache_is_fresh(project, project, &cache));
+        Ok(())
+    }
 }

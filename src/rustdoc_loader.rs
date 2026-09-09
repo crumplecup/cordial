@@ -6,7 +6,10 @@ use crate::ir::{
     ATTR_IS_PUBLIC, ATTR_ITEM_NAME, ATTR_QUALIFIED_PATH, ATTR_RUSTDOC_KIND, CrateIr, EdgeKind,
     NodeKind, NodeWeight,
 };
+use crate::loader::CrateTarget;
 use crate::rustdoc::{RustdocInventory, ir_item_kind};
+use crate::session::SessionView;
+use crate::store::{StoreLayout, project_slug_from_path};
 
 use tracing::instrument;
 /// Loads parsed rustdoc JSON into a [`RustdocLoadView`].
@@ -35,13 +38,11 @@ impl Loader for RustdocLoader {
         let session = view.session;
         let target = view.target;
 
-        let json_path = resolve_rustdoc_json(
-            target.crate_root(),
-            target.crate_name(),
-            Some(session.store_root()),
-        )?;
+        let json_path = resolve_or_rebuild_rustdoc_json(session, target)?;
         let inventory = crate::rustdoc::parse_rustdoc_json(&json_path, target.crate_name())?;
-        Ok(Box::new(RustdocLoadView::from_inventory(inventory)))
+        Ok(Box::new(RustdocLoadView::from_inventory_path(
+            inventory, json_path,
+        )))
     }
 }
 
@@ -49,12 +50,29 @@ impl Loader for RustdocLoader {
 #[derive(Debug, Clone)]
 pub struct RustdocLoadView {
     pub(crate) inventory: RustdocInventory,
+    json_path: Option<PathBuf>,
 }
 
 impl RustdocLoadView {
     #[instrument(level = "debug", skip(inventory), ret)]
     pub(crate) fn from_inventory(inventory: RustdocInventory) -> Self {
-        Self { inventory }
+        Self {
+            inventory,
+            json_path: None,
+        }
+    }
+
+    #[instrument(level = "debug", skip(inventory, json_path), ret)]
+    pub(crate) fn from_inventory_path(inventory: RustdocInventory, json_path: PathBuf) -> Self {
+        Self {
+            inventory,
+            json_path: Some(json_path),
+        }
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn json_path(&self) -> Option<&Path> {
+        self.json_path.as_deref()
     }
 }
 
@@ -131,6 +149,57 @@ pub fn resolve_rustdoc_json(
     crate_name: &str,
     store_root: Option<&Path>,
 ) -> CordialResult<PathBuf> {
+    find_rustdoc_json(crate_root, crate_name, store_root)
+        .ok_or_else(|| CordialError::missing_rustdoc_json(crate_name, crate_root.to_path_buf()))
+}
+
+/// Resolve rustdoc JSON, rebuilding the workspace-member cache when absent or stale.
+#[instrument(level = "info", skip(session, target), fields(crate_name = target.crate_name()), err(level = "warn"))]
+pub(crate) fn resolve_or_rebuild_rustdoc_json(
+    session: &dyn SessionView,
+    target: &CrateTarget,
+) -> CordialResult<PathBuf> {
+    if let Some(path) = find_rustdoc_json(
+        target.crate_root(),
+        target.crate_name(),
+        Some(session.store_root()),
+    ) && crate::cargo_rustdoc::rustdoc_cache_is_fresh(
+        session.project_root(),
+        target.crate_root(),
+        &path,
+    ) {
+        return Ok(path);
+    }
+
+    tracing::info!(
+        crate_name = %target.crate_name(),
+        "rebuilding missing or stale rustdoc cache"
+    );
+    let store = StoreLayout::from_root(
+        session.store_root(),
+        project_slug_from_path(session.project_root()),
+    );
+    crate::cargo_rustdoc::build_workspace_members(
+        session.project_root(),
+        &store,
+        Some(target.crate_name()),
+        true,
+    )?;
+
+    resolve_rustdoc_json(
+        target.crate_root(),
+        target.crate_name(),
+        Some(session.store_root()),
+    )
+}
+
+/// Find rustdoc JSON when it is available.
+#[instrument(level = "debug")]
+pub(crate) fn find_rustdoc_json(
+    crate_root: &Path,
+    crate_name: &str,
+    store_root: Option<&Path>,
+) -> Option<PathBuf> {
     let normalized = crate_name.replace('-', "_");
     let candidates = [
         crate_root.join("doc").join(format!("{normalized}.json")),
@@ -144,12 +213,6 @@ pub fn resolve_rustdoc_json(
         .into_iter()
         .find(|path| path.is_file())
         .or_else(|| store_rustdoc_candidate(store_root, crate_name))
-        .ok_or_else(|| {
-            CordialError::invariant(format!(
-                "rustdoc JSON not found for crate `{crate_name}` under {}",
-                crate_root.display()
-            ))
-        })
 }
 
 #[instrument(level = "debug")]

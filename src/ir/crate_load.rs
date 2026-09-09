@@ -91,21 +91,56 @@ pub fn load_rustdoc_view(
     target: &CrateTarget,
     shadow_for_upstream: Option<&str>,
 ) -> CordialResult<Box<dyn LoadView>> {
-    if let Some(shadow) = shadow_for_upstream
-        && let Some(path) =
+    if let Some(shadow) = shadow_for_upstream {
+        if let Some(path) =
             shadow_dep_rustdoc_path(session.store_root(), shadow, target.crate_name())
-    {
-        let inventory = parse_rustdoc_json(&path, target.crate_name())?;
-        return Ok(Box::new(RustdocLoadView::from_inventory(inventory)));
+            && crate::cargo_rustdoc::rustdoc_cache_is_fresh(
+                session.project_root(),
+                &resolve_crate_root(session.project_root(), shadow),
+                &path,
+            )
+        {
+            let inventory = parse_rustdoc_json(&path, target.crate_name())?;
+            return Ok(Box::new(RustdocLoadView::from_inventory_path(
+                inventory, path,
+            )));
+        }
+
+        #[cfg(feature = "shadow")]
+        {
+            tracing::info!(
+                shadow_crate = %shadow,
+                upstream_crate = %target.crate_name(),
+                "rebuilding missing or stale shadow-dep rustdoc cache"
+            );
+            let store = crate::StoreLayout::from_root(
+                session.store_root(),
+                crate::project_slug_from_path(session.project_root()),
+            );
+            crate::cargo_rustdoc::build_shadow_dep_rustdoc(
+                session.project_root(),
+                &store,
+                shadow,
+                target.crate_name(),
+                true,
+            )?;
+
+            if let Some(path) =
+                shadow_dep_rustdoc_path(session.store_root(), shadow, target.crate_name())
+            {
+                let inventory = parse_rustdoc_json(&path, target.crate_name())?;
+                return Ok(Box::new(RustdocLoadView::from_inventory_path(
+                    inventory, path,
+                )));
+            }
+        }
     }
 
-    let json_path = crate::rustdoc_loader::resolve_rustdoc_json(
-        target.crate_root(),
-        target.crate_name(),
-        Some(session.store_root()),
-    )?;
+    let json_path = crate::rustdoc_loader::resolve_or_rebuild_rustdoc_json(session, target)?;
     let inventory = parse_rustdoc_json(&json_path, target.crate_name())?;
-    Ok(Box::new(RustdocLoadView::from_inventory(inventory)))
+    Ok(Box::new(RustdocLoadView::from_inventory_path(
+        inventory, json_path,
+    )))
 }
 
 #[instrument(level = "debug")]
