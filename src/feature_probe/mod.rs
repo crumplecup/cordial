@@ -12,14 +12,14 @@ use crate::rustdoc::{TraitPrereqs, collect_trait_prereqs_for_inventory, parse_ru
 use crate::session::RunFilter;
 
 /// Per-type feature probe result used for actionable impl-gap reporting.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct TypeFeatureProbe {
     /// Crate whose features were probed.
-    pub feature_crate: String,
+    feature_crate: String,
     /// Feature names that would unlock the missing item.
-    pub candidate_unlock_features: Vec<String>,
+    candidate_unlock_features: Vec<String>,
     /// Prerequisite flags observed under the probed features.
-    pub probed_prereqs: Option<TraitPrereqs>,
+    probed_prereqs: Option<TraitPrereqs>,
 }
 
 /// Hub crate name for feature-probe dependency resolution.
@@ -127,11 +127,11 @@ pub fn build_type_feature_probes(
             .and_then(|map| map.get(type_path).cloned());
         probes.insert(
             type_path.clone(),
-            TypeFeatureProbe {
-                feature_crate: report_crate_name.to_string(),
-                candidate_unlock_features: candidate_unlock_features.to_vec(),
+            TypeFeatureProbe::new(
+                report_crate_name.to_string(),
+                candidate_unlock_features.to_vec(),
                 probed_prereqs,
-            },
+            ),
         );
     }
 

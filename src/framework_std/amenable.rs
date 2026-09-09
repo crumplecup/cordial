@@ -183,7 +183,7 @@ pub fn classify_amenable_std_row(type_path: &str, args: ClassifyRowArgs<'_>) -> 
     let exception = skip_map.get(type_path);
 
     if let Some(exception) = exception
-        && exception.verifiers.is_none()
+        && exception.verifiers().is_none()
     {
         return AmenableStdEntry {
             type_path: type_path.to_string(),
@@ -196,7 +196,7 @@ pub fn classify_amenable_std_row(type_path: &str, args: ClassifyRowArgs<'_>) -> 
             verus_witness: false,
             proof_test: false,
             status: AmenableStdStatus::Skipped,
-            skip_reason: Some(exception.reason.clone()),
+            skip_reason: Some(exception.reason().clone()),
             kani_excepted: true,
             creusot_excepted: true,
             verus_excepted: true,
@@ -245,7 +245,7 @@ pub fn classify_amenable_std_row(type_path: &str, args: ClassifyRowArgs<'_>) -> 
         verus_witness,
         proof_test,
         status,
-        skip_reason: exception.map(|e| e.reason.clone()),
+        skip_reason: exception.map(|e| e.reason().clone()),
         kani_excepted: !kani_applicable,
         creusot_excepted: !creusot_applicable,
         verus_excepted: !verus_applicable,

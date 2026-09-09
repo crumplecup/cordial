@@ -21,14 +21,7 @@ pub struct AcmeErrorPolicy;
 impl ErrorHandlingPolicy for AcmeErrorPolicy {
     #[instrument(level = "trace", skip(self))]
     fn layers(&self) -> ErrorHandlingLayers {
-        ErrorHandlingLayers {
-            panics: false,
-            sites: true,
-            chain: true,
-            internal: false,
-            foreign_types: false,
-            attenuation: false,
-        }
+        ErrorHandlingLayers::new(false, true, true, false, false, false)
     }
 }
 

@@ -17,11 +17,11 @@ pub fn feature_probe_from_node(node: &dyn NodeView) -> Option<TypeFeatureProbe> 
     let probed_prereqs = node
         .attr(FeatureProbeEnricher::ATTR_PROBED_PREREQS)
         .and_then(|value| serde_json::from_value(value.clone()).ok());
-    Some(TypeFeatureProbe {
+    Some(TypeFeatureProbe::new(
         feature_crate,
         candidate_unlock_features,
         probed_prereqs,
-    })
+    ))
 }
 
 #[instrument(level = "debug", skip(node))]

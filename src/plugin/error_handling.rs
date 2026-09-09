@@ -52,10 +52,10 @@ pub trait ErrorHandling: Plugin {
 }
 
 /// One crate in scope for error-flow analysis.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
 pub struct ErrorScope {
     /// Cargo package name.
-    pub crate_name: String,
+    crate_name: String,
 }
 
 impl ErrorScope {
@@ -69,20 +69,26 @@ impl ErrorScope {
 }
 
 /// Which error-analysis layers a profile enables.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct ErrorHandlingLayers {
     /// Abort sites (`panic!`, `unwrap`, `expect`, `unreachable!`).
-    pub panics: bool,
+    #[getter(copy)]
+    panics: bool,
     /// Error-site scanning (`?`, `map_err`, …).
-    pub sites: bool,
+    #[getter(copy)]
+    sites: bool,
     /// Error-chain / `source()` preservation scanning.
-    pub chain: bool,
+    #[getter(copy)]
+    chain: bool,
     /// Library code should return a crate error type, not panic.
-    pub internal: bool,
+    #[getter(copy)]
+    internal: bool,
     /// Keep foreign error types in the `source()` chain.
-    pub foreign_types: bool,
+    #[getter(copy)]
+    foreign_types: bool,
     /// Do not stringify or discard typed errors.
-    pub attenuation: bool,
+    #[getter(copy)]
+    attenuation: bool,
 }
 
 impl ErrorHandlingLayers {
@@ -99,12 +105,12 @@ impl ErrorHandlingLayers {
     /// Any enabled.
     #[instrument(level = "debug", skip(self))]
     pub fn any_enabled(self) -> bool {
-        self.panics
-            || self.sites
-            || self.chain
-            || self.internal
-            || self.foreign_types
-            || self.attenuation
+        self.panics()
+            || self.sites()
+            || self.chain()
+            || self.internal()
+            || self.foreign_types()
+            || self.attenuation()
     }
 }
 

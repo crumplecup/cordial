@@ -112,10 +112,7 @@ fn build_amenable_std_report_classifies_complete_partial_missing_and_skipped() -
     let mut skip = VerifierSkipMap::new();
     skip.insert(
         "core::fmt::Debug".to_string(),
-        VerifierSkipEntry {
-            reason: "trait".to_string(),
-            verifiers: None,
-        },
+        VerifierSkipEntry::new("trait".to_string(), None),
     );
     let proof_chain: HashSet<String> = HashSet::from(["RustStdStandard<String>".to_string()]);
 
@@ -244,10 +241,10 @@ fn a_scoped_exception_only_excepts_its_named_verifier_and_keeps_real_witnesses_v
     let mut skip = VerifierSkipMap::new();
     skip.insert(
         "std::os::windows::ffi::EncodeWide".to_string(),
-        VerifierSkipEntry {
-            reason: "creusot has no Windows target".to_string(),
-            verifiers: Some(["creusot".to_string()].into_iter().collect()),
-        },
+        VerifierSkipEntry::new(
+            "creusot has no Windows target".to_string(),
+            Some(["creusot".to_string()].into_iter().collect()),
+        ),
     );
 
     let report = build_amenable_std_report(
@@ -295,10 +292,10 @@ fn a_scoped_exception_does_not_hide_a_real_gap_on_a_different_verifier() -> miet
     let mut skip = VerifierSkipMap::new();
     skip.insert(
         "std::os::windows::prelude::OwnedSocket".to_string(),
-        VerifierSkipEntry {
-            reason: "creusot has no Windows target".to_string(),
-            verifiers: Some(["creusot".to_string()].into_iter().collect()),
-        },
+        VerifierSkipEntry::new(
+            "creusot has no Windows target".to_string(),
+            Some(["creusot".to_string()].into_iter().collect()),
+        ),
     );
 
     let report = build_amenable_std_report(

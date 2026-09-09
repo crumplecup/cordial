@@ -155,7 +155,7 @@ pub fn render_amenable_std_checklist_md(
             let reason = entry
                 .skip_reason
                 .as_deref()
-                .or_else(|| skip_map.get(&entry.type_path).map(|e| e.reason.as_str()))
+                .or_else(|| skip_map.get(&entry.type_path).map(|e| e.reason().as_str()))
                 .unwrap_or("documented in patch set");
             if entry.status == AmenableStdStatus::Skipped {
                 writeln!(out, "- `{}` — {}", entry.type_path, reason)?;

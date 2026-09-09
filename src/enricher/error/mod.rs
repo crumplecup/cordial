@@ -49,14 +49,14 @@ pub static ERROR_IR_ENRICHERS: &[&'static dyn IrEnricher] = &[
 #[instrument(level = "debug", skip(layers))]
 pub fn error_ir_enricher_ids(layers: ErrorHandlingLayers) -> Vec<&'static str> {
     let mut ids = vec![ScopeEnricher::ID];
-    if layers.sites || layers.chain || layers.internal {
+    if layers.sites() || layers.chain() || layers.internal() {
         #[cfg(feature = "error_sites")]
         {
             ids.push(ErrorIrScanEnricher::ID);
             ids.push(ErrorFlowEnricher::ID);
         }
     }
-    if layers.attenuation {
+    if layers.attenuation() {
         #[cfg(feature = "foreign_error_attenuation")]
         ids.push(attenuation::ForeignErrorAttenuationInventoryEnricher::ID);
     }

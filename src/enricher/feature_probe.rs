@@ -82,14 +82,14 @@ impl IrEnricher for FeatureProbeEnricher {
             ir.set_attr(
                 node_id,
                 Self::ATTR_CRATE,
-                serde_json::Value::String(probe.feature_crate.clone()),
+                serde_json::Value::String(probe.feature_crate().clone()),
             )?;
             ir.set_attr(
                 node_id,
                 Self::ATTR_CANDIDATE_FEATURES,
-                serde_json::to_value(&probe.candidate_unlock_features)?,
+                serde_json::to_value(probe.candidate_unlock_features())?,
             )?;
-            if let Some(prereqs) = &probe.probed_prereqs {
+            if let Some(prereqs) = probe.probed_prereqs() {
                 ir.set_attr(
                     node_id,
                     Self::ATTR_PROBED_PREREQS,

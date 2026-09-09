@@ -50,10 +50,10 @@ pub fn assess_impl_gap(
     }
 
     let candidate_unlock_features = feature_probe
-        .map(|probe| probe.candidate_unlock_features.clone())
+        .map(|probe| probe.candidate_unlock_features().clone())
         .unwrap_or_default();
     let feature_owner_crate = feature_probe
-        .map(|probe| probe.feature_crate.clone())
+        .map(|probe| probe.feature_crate().clone())
         .unwrap_or_else(|| source_crate.to_string());
 
     let missing_external = missing_external_traits(prereqs);
@@ -67,7 +67,7 @@ pub fn assess_impl_gap(
         && !can_be_direct
         && !candidate_unlock_features.is_empty()
         && feature_probe
-            .and_then(|probe| probe.probed_prereqs.as_ref())
+            .and_then(|probe| probe.probed_prereqs().as_ref())
             .is_some_and(TraitPrereqs::can_be_direct);
     let blocked_by_orphan_rule =
         !lifetime_blocks_elicitation && !can_be_direct && !feature_gated_external;
