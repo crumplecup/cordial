@@ -10,9 +10,18 @@ use crate::session::{RunFilter, SessionView};
 
 use tracing::instrument;
 /// Rollup body plus optional coverage-plugin artifacts.
+#[derive(derive_getters::Getters, derive_new::new)]
 pub struct ElicitationCoverageRollup {
-    pub body: String,
-    pub extra_artifacts: Vec<Box<dyn Artifact>>,
+    body: String,
+    extra_artifacts: Vec<Box<dyn Artifact>>,
+}
+
+impl ElicitationCoverageRollup {
+    /// Consume the rollup into its markdown body and extra artifacts.
+    #[instrument(level = "trace", skip(self))]
+    pub fn into_parts(self) -> (String, Vec<Box<dyn Artifact>>) {
+        (self.body, self.extra_artifacts)
+    }
 }
 
 /// Build the elicitation plugin body and shadow-core-support artifact for the workspace rollup.
@@ -41,10 +50,7 @@ pub fn build_elicitation_coverage_rollup(
         media_type: "application/json".to_string(),
         body: serde_json::to_string_pretty(&digest)?,
     }) as Box<dyn Artifact>];
-    Ok(ElicitationCoverageRollup {
-        body: out,
-        extra_artifacts,
-    })
+    Ok(ElicitationCoverageRollup::new(out, extra_artifacts))
 }
 
 #[instrument(level = "info", skip(workspace, findings), err(level = "warn"))]

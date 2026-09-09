@@ -517,7 +517,7 @@ fn render_and_write(
             media_type: "text/markdown".to_string(),
             body,
         }));
-        all_artifacts.extend(summary.extra_artifacts);
+        all_artifacts.extend(summary.into_extra_artifacts());
     }
     #[cfg(not(any(
         feature = "homecoming_std",

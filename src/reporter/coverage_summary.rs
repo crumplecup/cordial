@@ -8,30 +8,39 @@ use crate::session::{RunFilter, SessionView};
 
 use tracing::instrument;
 /// One registered coverage plugin section in the workspace rollup.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct CoveragePluginSummary {
     /// Coverage plugin identifier.
-    pub plugin_id: String,
+    plugin_id: String,
     /// Human-readable coverage plugin name.
-    pub plugin_name: String,
+    plugin_name: String,
     /// Artifact payload.
-    pub body: String,
+    body: String,
 }
 
 /// Workspace rollup across registered coverage plugins.
+#[derive(derive_getters::Getters, derive_new::new)]
 pub struct CoverageSummary {
     /// Per-plugin coverage summaries.
-    pub plugins: Vec<CoveragePluginSummary>,
+    plugins: Vec<CoveragePluginSummary>,
     /// Additional artifacts emitted beside the summary.
-    pub extra_artifacts: Vec<Box<dyn Artifact>>,
+    extra_artifacts: Vec<Box<dyn Artifact>>,
+}
+
+impl CoverageSummary {
+    /// Additional artifacts emitted beside the summary.
+    #[instrument(level = "trace", skip(self))]
+    pub fn into_extra_artifacts(self) -> Vec<Box<dyn Artifact>> {
+        self.extra_artifacts
+    }
 }
 
 impl std::fmt::Debug for CoverageSummary {
     #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CoverageSummary")
-            .field("plugins", &self.plugins)
-            .field("extra_artifacts_len", &self.extra_artifacts.len())
+            .field("plugins", self.plugins())
+            .field("extra_artifacts_len", &self.extra_artifacts().len())
             .finish()
     }
 }
@@ -64,17 +73,17 @@ pub fn build_coverage_summary(
         for etiquette_id in resolved_etiquette_ids {
             match *etiquette_id {
                 #[cfg(feature = "homecoming_std")]
-                "homecoming-std" => plugins.push(CoveragePluginSummary {
-                    plugin_id: "homecoming-std".to_string(),
-                    plugin_name: "Homecoming std coverage".to_string(),
-                    body: homecoming_section::homecoming_std_section(findings)?,
-                }),
+                "homecoming-std" => plugins.push(CoveragePluginSummary::new(
+                    "homecoming-std".to_string(),
+                    "Homecoming std coverage".to_string(),
+                    homecoming_section::homecoming_std_section(findings)?,
+                )),
                 #[cfg(feature = "amenable_std")]
-                "amenable-std" => plugins.push(CoveragePluginSummary {
-                    plugin_id: "amenable-std".to_string(),
-                    plugin_name: "Amenable std coverage".to_string(),
-                    body: amenable_section::amenable_std_section(findings)?,
-                }),
+                "amenable-std" => plugins.push(CoveragePluginSummary::new(
+                    "amenable-std".to_string(),
+                    "Amenable std coverage".to_string(),
+                    amenable_section::amenable_std_section(findings)?,
+                )),
                 #[cfg(feature = "elicitation")]
                 "impl-coverage" | "trenchcoat" | "shadow" if !saw_elicitation => {
                     saw_elicitation = true;
@@ -88,10 +97,7 @@ pub fn build_coverage_summary(
             }
         }
     }
-    Ok(CoverageSummary {
-        plugins,
-        extra_artifacts,
-    })
+    Ok(CoverageSummary::new(plugins, extra_artifacts))
 }
 
 struct CoverageSection {
@@ -114,20 +120,20 @@ fn section_for_plugin(
     match plugin.id() {
         #[cfg(feature = "homecoming_std")]
         "homecoming-std-coverage" => Ok(CoverageSection {
-            summary: CoveragePluginSummary {
-                plugin_id: plugin.id().to_string(),
-                plugin_name: plugin.name().to_string(),
-                body: homecoming_section::homecoming_std_section(findings)?,
-            },
+            summary: CoveragePluginSummary::new(
+                plugin.id().to_string(),
+                plugin.name().to_string(),
+                homecoming_section::homecoming_std_section(findings)?,
+            ),
             extra_artifacts: Vec::new(),
         }),
         #[cfg(feature = "amenable_std")]
         "amenable-std-coverage" => Ok(CoverageSection {
-            summary: CoveragePluginSummary {
-                plugin_id: plugin.id().to_string(),
-                plugin_name: plugin.name().to_string(),
-                body: amenable_section::amenable_std_section(findings)?,
-            },
+            summary: CoveragePluginSummary::new(
+                plugin.id().to_string(),
+                plugin.name().to_string(),
+                amenable_section::amenable_std_section(findings)?,
+            ),
             extra_artifacts: Vec::new(),
         }),
         #[cfg(feature = "elicitation")]
@@ -135,11 +141,11 @@ fn section_for_plugin(
             elicitation_section_impl::elicitation_section(session, filter, findings, workspace)
         }
         other => Ok(CoverageSection {
-            summary: CoveragePluginSummary {
-                plugin_id: plugin.id().to_string(),
-                plugin_name: plugin.name().to_string(),
-                body: format!("Coverage plugin `{other}` has no summary section yet.\n"),
-            },
+            summary: CoveragePluginSummary::new(
+                plugin.id().to_string(),
+                plugin.name().to_string(),
+                format!("Coverage plugin `{other}` has no summary section yet.\n"),
+            ),
             extra_artifacts: Vec::new(),
         }),
     }
@@ -151,23 +157,23 @@ pub fn render_coverage_summary_markdown(summary: &CoverageSummary) -> CordialRes
     let mut out = String::new();
     writeln!(out, "# Coverage summary")?;
     writeln!(out)?;
-    if summary.plugins.is_empty() {
+    if summary.plugins().is_empty() {
         writeln!(out, "_No coverage plugins ran._")?;
         return Ok(out);
     }
     writeln!(
         out,
         "Rollup for **{}** registered coverage plugin(s).\n",
-        summary.plugins.len()
+        summary.plugins().len()
     )?;
 
-    for (index, plugin) in summary.plugins.iter().enumerate() {
+    for (index, plugin) in summary.plugins().iter().enumerate() {
         if index > 0 {
             writeln!(out, "\n---\n")?;
         }
-        writeln!(out, "## {}\n", plugin.plugin_name)?;
-        out.push_str(&plugin.body);
-        if !plugin.body.ends_with('\n') {
+        writeln!(out, "## {}\n", plugin.plugin_name())?;
+        out.push_str(plugin.body());
+        if !plugin.body().ends_with('\n') {
             out.push('\n');
         }
     }
@@ -263,13 +269,14 @@ mod elicitation_section_impl {
         let rollup = crate::reporter::elicitation_summary::build_elicitation_coverage_rollup(
             session, filter, findings, workspace,
         )?;
+        let (body, extra_artifacts) = rollup.into_parts();
         Ok(CoverageSection {
-            summary: CoveragePluginSummary {
-                plugin_id: "elicitation-coverage".to_string(),
-                plugin_name: "Elicitation coverage".to_string(),
-                body: rollup.body,
-            },
-            extra_artifacts: rollup.extra_artifacts,
+            summary: CoveragePluginSummary::new(
+                "elicitation-coverage".to_string(),
+                "Elicitation coverage".to_string(),
+                body,
+            ),
+            extra_artifacts,
         })
     }
 }
