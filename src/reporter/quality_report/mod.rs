@@ -50,11 +50,11 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
     let box_dyn_error = count_open_rule(findings, "ANTIPATTERN-BOX-DYN-ERROR-001");
     let string_error = count_open_rule(findings, "ANTIPATTERN-STRING-ERROR-001");
     let panics = panic_metrics(findings);
-    let error_open = error.migration_backlog
-        + error.compliance_unique
+    let error_open = error.migration_backlog()
+        + error.compliance_unique()
         + box_dyn_error
         + string_error
-        + panics.checklist_total;
+        + panics.checklist_total();
 
     let mut error_detail = format!(
         "migration backlog **{}** (chain breaks **{}** + pending infra **{}**), \
@@ -62,18 +62,18 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
          `Box<dyn Error>` **{box_dyn_error}**, `Result<_, String>` **{string_error}**, \
          abort-site action items **{}** (panic **{}**, unwrap **{}**, expect **{}**; \
          library → wrap associated errors, binary/tests → miette)",
-        error.migration_backlog,
-        error.chain_breaks,
-        error.pending_infrastructure,
-        error.compliance,
-        error.compliance_unique,
-        panics.checklist_total,
-        panics.panic,
-        panics.unwrap,
-        panics.expect,
+        error.migration_backlog(),
+        error.chain_breaks(),
+        error.pending_infrastructure(),
+        error.compliance(),
+        error.compliance_unique(),
+        panics.checklist_total(),
+        panics.panic(),
+        panics.unwrap(),
+        panics.expect(),
     );
-    if error.neutral > 0 {
-        write!(error_detail, ", manual review **{}**", error.neutral)?;
+    if error.neutral() > 0 {
+        write!(error_detail, ", manual review **{}**", error.neutral())?;
     }
 
     let mut areas = vec![quality_area(

@@ -57,10 +57,11 @@ impl IrEnricher for RustdocStructureEnricher {
 
         let mut trait_impls_by_type: HashMap<String, BTreeSet<String>> = HashMap::new();
         for record in collect_trait_impls(inventory) {
+            let (type_path, trait_short) = record.into_type_and_trait_short();
             trait_impls_by_type
-                .entry(record.type_path)
+                .entry(type_path)
                 .or_default()
-                .insert(record.trait_short);
+                .insert(trait_short);
         }
 
         let extracted: HashMap<String, _> =
@@ -173,13 +174,14 @@ impl IrEnricher for RustdocStructureEnricher {
         }
 
         for pair in trenchcoat_pairs {
-            let Some(wrapper) = ir.node_by_path(&pair.wrapper_path) else {
+            let wrapper_path = pair.wrapper_path().clone();
+            let Some(wrapper) = ir.node_by_path(&wrapper_path) else {
                 continue;
             };
             ir.set_attr(
                 wrapper,
                 ATTR_WRAPS_FOREIGN,
-                serde_json::Value::String(pair.foreign_path.clone()),
+                serde_json::Value::String(pair.foreign_path().clone()),
             )?;
         }
 

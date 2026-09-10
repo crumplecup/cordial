@@ -51,7 +51,7 @@ pub fn load_workspace_wrapper_coverage(
     let inventory = parse_rustdoc_json(&json_path, hub_name)?;
     let pairs: Vec<(String, String)> = collect_trenchcoat_pairs(&inventory)
         .into_iter()
-        .map(|pair| (pair.foreign_path, pair.wrapper_path))
+        .map(crate::rustdoc::TrenchcoatPair::into_foreign_wrapper_pair)
         .collect();
     let complete = collect_elicit_complete_from_inventory(&inventory);
     let wrapper_prereqs: HashMap<_, _> = collect_trait_prereqs_for_inventory(&inventory);

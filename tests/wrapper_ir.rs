@@ -44,7 +44,7 @@ fn hub_ir_wrapper_map_matches_inventory_oracle() -> miette::Result<()> {
 
     let pairs: Vec<(String, String)> = collect_trenchcoat_pairs(&inventory)
         .into_iter()
-        .map(|pair| (pair.foreign_path, pair.wrapper_path))
+        .map(|pair| pair.into_foreign_wrapper_pair())
         .collect();
     let complete = collect_elicit_complete_from_inventory(&inventory);
     let wrapper_prereqs = collect_trait_prereqs_for_inventory(&inventory);

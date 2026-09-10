@@ -7,12 +7,20 @@ use super::inventory::RustdocInventory;
 
 use tracing::instrument;
 /// Wrapper type paired with the foreign type it wraps via `From<T>`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct TrenchcoatPair {
     /// Path of the wrapper type.
-    pub wrapper_path: String,
+    wrapper_path: String,
     /// Path of the wrapped foreign type.
-    pub foreign_path: String,
+    foreign_path: String,
+}
+
+impl TrenchcoatPair {
+    /// Consume the record into `(foreign_path, wrapper_path)`.
+    #[instrument(level = "trace", skip(self))]
+    pub fn into_foreign_wrapper_pair(self) -> (String, String) {
+        (self.foreign_path, self.wrapper_path)
+    }
 }
 
 /// Collect `(wrapper, foreign)` pairs from `From` impls on elicitation-style wrappers.
@@ -42,10 +50,7 @@ pub fn collect_trenchcoat_pairs(inventory: &RustdocInventory) -> Vec<TrenchcoatP
         };
         let key = (wrapper_path.clone(), foreign_path.clone());
         if seen.insert(key) {
-            pairs.push(TrenchcoatPair {
-                wrapper_path,
-                foreign_path,
-            });
+            pairs.push(TrenchcoatPair::new(wrapper_path, foreign_path));
         }
     }
 

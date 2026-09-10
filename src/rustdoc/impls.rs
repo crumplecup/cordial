@@ -4,14 +4,22 @@ use super::inventory::{RustdocInventory, canonical_to_public_map};
 
 use tracing::instrument;
 /// One `impl Trait for Type` edge from rustdoc.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct TraitImplRecord {
     /// Qualified type path.
-    pub type_path: String,
+    type_path: String,
     /// Qualified path of the trait.
-    pub trait_path: String,
+    trait_path: String,
     /// Unqualified trait name.
-    pub trait_short: String,
+    trait_short: String,
+}
+
+impl TraitImplRecord {
+    /// Consume the record into the type path and short trait label.
+    #[instrument(level = "trace", skip(self))]
+    pub fn into_type_and_trait_short(self) -> (String, String) {
+        (self.type_path, self.trait_short)
+    }
 }
 
 /// Collect trait impl edges for types in `inventory`.
@@ -48,11 +56,11 @@ pub fn collect_trait_impls(inventory: &RustdocInventory) -> Vec<TraitImplRecord>
         }
         let type_path = canonical_map.get(&canonical).cloned().unwrap_or(canonical);
         let trait_short = trait_.path.rsplit("::").next().unwrap_or("").to_string();
-        records.push(TraitImplRecord {
+        records.push(TraitImplRecord::new(
             type_path,
-            trait_path: trait_.path.clone(),
+            trait_.path.clone(),
             trait_short,
-        });
+        ));
     }
 
     records.sort_by(|a, b| {

@@ -11,14 +11,20 @@ use crate::etiquette::{finding_field, open_findings};
 use crate::objects::Finding;
 
 use tracing::instrument;
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, derive_getters::Getters)]
 pub(super) struct ErrorHandlingMetrics {
-    pub(super) chain_breaks: usize,
-    pub(super) pending_infrastructure: usize,
-    pub(super) neutral: usize,
-    pub(super) compliance: usize,
-    pub(super) compliance_unique: usize,
-    pub(super) migration_backlog: usize,
+    #[getter(copy)]
+    chain_breaks: usize,
+    #[getter(copy)]
+    pending_infrastructure: usize,
+    #[getter(copy)]
+    neutral: usize,
+    #[getter(copy)]
+    compliance: usize,
+    #[getter(copy)]
+    compliance_unique: usize,
+    #[getter(copy)]
+    migration_backlog: usize,
 }
 
 #[instrument(level = "debug", skip(findings))]
@@ -66,14 +72,20 @@ fn finding_site(finding: &dyn Finding) -> (String, String) {
     )
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, derive_getters::Getters)]
 pub(super) struct PanicMetrics {
-    pub(super) checklist_total: usize,
-    pub(super) panic: usize,
-    pub(super) unreachable: usize,
-    pub(super) expect: usize,
-    pub(super) unwrap: usize,
-    pub(super) compile_error: usize,
+    #[getter(copy)]
+    checklist_total: usize,
+    #[getter(copy)]
+    panic: usize,
+    #[getter(copy)]
+    unreachable: usize,
+    #[getter(copy)]
+    expect: usize,
+    #[getter(copy)]
+    unwrap: usize,
+    #[getter(copy)]
+    compile_error: usize,
 }
 
 #[instrument(level = "debug", skip(findings))]
