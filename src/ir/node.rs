@@ -106,15 +106,26 @@ impl NodeKind {
 }
 
 /// Weight stored at each graph node.
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters, derive_new::new)]
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    derive_getters::Getters,
+    derive_new::new,
+    derive_setters::Setters,
+)]
+#[setters(generate = false, prefix = "with_")]
 pub struct NodeWeight {
     /// Kind of this node.
     kind: NodeKind,
     /// Optional item name.
     #[new(default)]
+    #[setters(generate, strip_option, into)]
     name: Option<String>,
     /// Optional source span.
     #[new(default)]
+    #[setters(generate, strip_option)]
     span: Option<crate::objects::FileSpan>,
     /// JSON attributes attached to this node.
     #[new(default)]
@@ -122,20 +133,6 @@ pub struct NodeWeight {
 }
 
 impl NodeWeight {
-    /// Return a copy with `name` set.
-    #[instrument(level = "trace", skip(self, name))]
-    pub fn with_name(mut self, name: impl Into<String>) -> Self {
-        self.name = Some(name.into());
-        self
-    }
-
-    /// Return a copy with `span` set.
-    #[instrument(level = "trace", skip(self, span))]
-    pub fn with_span(mut self, span: crate::objects::FileSpan) -> Self {
-        self.span = Some(span);
-        self
-    }
-
     /// Append a JSON attribute to this node.
     ///
     /// Attribute lookup returns the latest value for a key, so repeated keys

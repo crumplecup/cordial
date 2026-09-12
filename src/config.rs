@@ -199,8 +199,17 @@ impl Default for StaticRefStrategy {
 
 /// Visibility etiquette knobs.
 #[derive(
-    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_new::new,
+    derive_getters::Getters,
+    derive_setters::Setters,
 )]
+#[setters(generate = false, prefix = "with_")]
 pub struct VisibilityThresholds {
     /// If the crate has fewer than this many externally reachable `pub` names,
     /// no `pub mod` is allowed on a public path.
@@ -215,6 +224,7 @@ pub struct VisibilityThresholds {
     #[serde(default = "default_prefer_root")]
     #[new(value = "true")]
     #[getter(copy)]
+    #[setters(generate)]
     prefer_root: bool,
     /// Run this etiquette (`true`) or skip it (`false`).
     #[serde(default = "default_true")]
@@ -252,15 +262,6 @@ fn default_min_module_names() -> usize {
 #[instrument(level = "debug")]
 fn default_prefer_root() -> bool {
     true
-}
-
-impl VisibilityThresholds {
-    /// Return a copy with `prefer_root` set.
-    #[instrument(level = "trace", skip(self))]
-    pub fn with_prefer_root(mut self, prefer_root: bool) -> Self {
-        self.prefer_root = prefer_root;
-        self
-    }
 }
 
 impl Default for VisibilityThresholds {

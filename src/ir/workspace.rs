@@ -5,7 +5,8 @@ use crate::ir::{CrateIr, EdgeKind, EdgeWeight, IrMut, IrView, NodeId};
 
 use tracing::instrument;
 /// Workspace-level IR: one graph per crate plus cross-crate edges.
-#[derive(Debug, Default, derive_getters::Getters)]
+#[derive(Debug, Default, derive_getters::Getters, derive_setters::Setters)]
+#[setters(generate = false, borrow_self)]
 pub struct WorkspaceIr {
     /// Crate names in this rollup.
     crates: HashMap<String, CrateIr>,
@@ -14,17 +15,11 @@ pub struct WorkspaceIr {
     /// Foreign-type → elicitation wrapper coverage built from hub crate IR.
     #[cfg(feature = "impl_coverage")]
     #[getter(skip)]
+    #[setters(generate, rename = "set_wrapper_coverage_map", strip_option)]
     wrapper_coverage_map: Option<crate::rustdoc::WrapperCoverageMap>,
 }
 
 impl WorkspaceIr {
-    /// Store workspace-level wrapper coverage from the elicitation hub.
-    #[instrument(level = "trace", skip(self, map))]
-    #[cfg(feature = "impl_coverage")]
-    pub fn set_wrapper_coverage_map(&mut self, map: crate::rustdoc::WrapperCoverageMap) {
-        self.wrapper_coverage_map = Some(map);
-    }
-
     /// Workspace-level wrapper coverage from the elicitation hub, if recorded.
     #[instrument(level = "trace", skip(self))]
     #[cfg(feature = "impl_coverage")]
