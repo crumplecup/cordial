@@ -31,7 +31,7 @@ fn proof_pattern_records(
     ir: &VerusCrateIr,
     crate_root: &Path,
 ) -> CordialResult<Vec<ProofPatternRecord>> {
-    ir.functions
+    ir.functions()
         .iter()
         .map(|function| function_records(function, crate_root))
         .collect::<CordialResult<Vec<_>>>()
@@ -43,12 +43,12 @@ fn function_records(
     function: &VerusFnFacts,
     crate_root: &Path,
 ) -> crate::error::CordialResult<Vec<ProofPatternRecord>> {
-    let context = format!("{}::{}", function.module_path, function.name);
+    let context = format!("{}::{}", function.module_path(), function.name());
     let file = function
-        .span
+        .span()
         .file()
         .strip_prefix(crate_root)
-        .unwrap_or(function.span.file())
+        .unwrap_or(function.span().file())
         .to_path_buf();
 
     active_kinds(function)
@@ -58,11 +58,11 @@ fn function_records(
                 .kind(kind)
                 .context(context.clone())
                 .file(file.clone())
-                .line(function.span.line())
+                .line(function.span().line())
                 .snippet(snippet.to_string())
-                .cfg_test(function.cfg_test)
-                .tracked_params(function.tracked_params.clone())
-                .recommends(function.recommends.clone())
+                .cfg_test(function.cfg_test())
+                .tracked_params(function.tracked_params().clone())
+                .recommends(function.recommends().clone())
                 .build()
         })
         .collect()
@@ -73,22 +73,22 @@ fn function_records(
 #[instrument(level = "trace", skip(function), ret)]
 fn active_kinds(function: &VerusFnFacts) -> Vec<(ProofPatternKind, &'static str)> {
     let mut kinds = Vec::new();
-    if function.uses_assume {
+    if function.uses_assume() {
         kinds.push((ProofPatternKind::Assume, "assume(..)"));
     }
-    if function.uses_admit {
+    if function.uses_admit() {
         kinds.push((ProofPatternKind::Admit, "admit()"));
     }
-    if function.is_external_body {
+    if function.is_external_body() {
         kinds.push((ProofPatternKind::ExternalBody, "#[verifier::external_body]"));
     }
-    if matches!(function.publish, VerusPublish::Uninterp) {
+    if matches!(function.publish(), VerusPublish::Uninterp) {
         kinds.push((ProofPatternKind::Uninterp, "uninterp spec fn"));
     }
-    if matches!(function.mode, VerusFnMode::ProofAxiom) {
+    if matches!(function.mode(), VerusFnMode::ProofAxiom) {
         kinds.push((ProofPatternKind::Axiom, "axiom fn"));
     }
-    if function.is_broadcast {
+    if function.is_broadcast() {
         kinds.push((ProofPatternKind::Broadcast, "broadcast proof fn"));
     }
     kinds

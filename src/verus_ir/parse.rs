@@ -50,10 +50,16 @@ impl Parse for Items {
 /// `cfg_test` tracking, since a real consumer needs the same test-vs-
 /// library routing this codebase's panics policy already uses.
 pub(super) struct VerusBlock {
-    pub(super) file: PathBuf,
-    pub(super) module_path: String,
-    pub(super) cfg_test: bool,
-    pub(super) items: Vec<verus_syn::Item>,
+    file: PathBuf,
+    module_path: String,
+    cfg_test: bool,
+    items: Vec<verus_syn::Item>,
+}
+
+impl VerusBlock {
+    pub(super) fn into_parts(self) -> (PathBuf, String, bool, Vec<verus_syn::Item>) {
+        (self.file, self.module_path, self.cfg_test, self.items)
+    }
 }
 
 /// Find every `verus! { .. }` block under `crate_root`'s `src`/`tests`

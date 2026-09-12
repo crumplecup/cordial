@@ -8,17 +8,17 @@ use cordial::{
 };
 
 fn function_named<'a>(ir: &'a VerusCrateIr, name: &str) -> miette::Result<&'a VerusFnFacts> {
-    ir.functions
+    ir.functions()
         .iter()
-        .find(|f| f.name == name)
-        .ok_or_else(|| miette::miette!("{name} not found in {:?}", ir.functions))
+        .find(|f| f.name() == name)
+        .ok_or_else(|| miette::miette!("{name} not found in {:?}", ir.functions()))
 }
 
 fn enum_named<'a>(ir: &'a VerusCrateIr, name: &str) -> miette::Result<&'a VerusEnumFacts> {
-    ir.enums
+    ir.enums()
         .iter()
-        .find(|e| e.name == name)
-        .ok_or_else(|| miette::miette!("{name} not found in {:?}", ir.enums))
+        .find(|e| e.name() == name)
+        .ok_or_else(|| miette::miette!("{name} not found in {:?}", ir.enums()))
 }
 
 /// A fully-documented enum with one data-carrying and one unit variant --
@@ -52,7 +52,7 @@ fn parses_a_function_whose_body_uses_the_view_operator() -> miette::Result<()> {
         "rust_std::cstr_carrier",
     );
 
-    let names: Vec<&str> = ir.functions.iter().map(|f| f.name.as_str()).collect();
+    let names: Vec<&str> = ir.functions().iter().map(|f| f.name().as_str()).collect();
     assert!(
         names.contains(&"verify_cstr_excludes_the_terminating_nul_from_to_bytes"),
         "{names:?}"
@@ -63,28 +63,33 @@ fn parses_a_function_whose_body_uses_the_view_operator() -> miette::Result<()> {
     );
 
     let spec_fn = function_named(&ir, "non_nul_byte_value_is_nonzero")?;
-    assert_eq!(spec_fn.mode, VerusFnMode::Spec);
-    assert_eq!(spec_fn.publish, VerusPublish::Open);
+    assert_eq!(spec_fn.mode(), VerusFnMode::Spec);
+    assert_eq!(spec_fn.publish(), VerusPublish::Open);
 
     let exec_fn = function_named(
         &ir,
         "verify_cstr_excludes_the_terminating_nul_from_to_bytes",
     )?;
     assert_eq!(
-        exec_fn.requires,
+        exec_fn.requires().as_slice(),
         vec!["non_nul_byte_value_is_nonzero (byte)"]
     );
-    assert!(!exec_fn.uses_assume);
-    assert!(!exec_fn.uses_admit);
-    assert!(!exec_fn.is_external_body);
+    assert!(!exec_fn.uses_assume());
+    assert!(!exec_fn.uses_admit());
+    assert!(!exec_fn.is_external_body());
 
     // The real completion of panics::verus_recover's own motivating gap:
     // this exact function's real .unwrap() call (invisible to that
     // best-effort recovery because a *later* line in the same body uses
     // the `@` view operator, failing the whole block's syn::Block parse)
     // is found here via a real, complete parse.
-    assert_eq!(exec_fn.panic_sites.len(), 1, "{:?}", exec_fn.panic_sites);
-    assert_eq!(exec_fn.panic_sites[0].kind, VerusPanicKind::Unwrap);
+    assert_eq!(
+        exec_fn.panic_sites().len(),
+        1,
+        "{:?}",
+        exec_fn.panic_sites()
+    );
+    assert_eq!(exec_fn.panic_sites()[0].kind(), VerusPanicKind::Unwrap);
     Ok(())
 }
 
@@ -100,26 +105,26 @@ fn detects_real_soundness_escape_hatches() -> miette::Result<()> {
     );
 
     let axiom = function_named(&ir, "axiom_addition_commutes")?;
-    assert_eq!(axiom.mode, VerusFnMode::ProofAxiom);
+    assert_eq!(axiom.mode(), VerusFnMode::ProofAxiom);
     assert!(axiom.is_trusted_not_proven());
 
     let assumes = function_named(&ir, "trusts_a_local_claim")?;
-    assert!(assumes.uses_assume);
+    assert!(assumes.uses_assume());
     assert!(assumes.is_trusted_not_proven());
 
     let external = function_named(&ir, "opts_out_of_verification")?;
-    assert!(external.is_external_body);
+    assert!(external.is_external_body());
     assert!(external.is_trusted_not_proven());
 
     let admits = function_named(&ir, "calls_admit_directly")?;
-    assert!(admits.uses_admit);
+    assert!(admits.uses_admit());
     assert!(admits.is_trusted_not_proven());
 
     assert_eq!(
         ir.trusted_not_proven().count(),
         4,
         "expected every one of the 4 real escape hatches to be flagged: {:?}",
-        ir.functions
+        ir.functions()
     );
     Ok(())
 }
@@ -136,12 +141,12 @@ fn extracts_signature_level_facts_and_every_panic_site_kind() -> miette::Result<
     );
 
     let lemma = function_named(&ir, "lemma_applies_everywhere")?;
-    assert!(lemma.is_broadcast);
-    assert_eq!(lemma.tracked_params, vec!["cred"]);
-    assert_eq!(lemma.recommends, vec!["cred . is_valid ()"]);
+    assert!(lemma.is_broadcast());
+    assert_eq!(lemma.tracked_params().as_slice(), ["cred"]);
+    assert_eq!(lemma.recommends().as_slice(), ["cred . is_valid ()"]);
 
     let matcher = function_named(&ir, "matches_on_result")?;
-    let kinds: Vec<VerusPanicKind> = matcher.panic_sites.iter().map(|s| s.kind).collect();
+    let kinds: Vec<VerusPanicKind> = matcher.panic_sites().iter().map(|s| s.kind()).collect();
     assert_eq!(
         kinds,
         vec![
@@ -151,7 +156,7 @@ fn extracts_signature_level_facts_and_every_panic_site_kind() -> miette::Result<
             VerusPanicKind::Unwrap,
         ],
         "{:?}",
-        matcher.panic_sites
+        matcher.panic_sites()
     );
     Ok(())
 }
@@ -169,16 +174,16 @@ fn tracks_cfg_test_module_nesting_and_detects_compile_error() -> miette::Result<
     );
 
     let library_fn = function_named(&ir, "in_library_code")?;
-    assert!(!library_fn.cfg_test);
+    assert!(!library_fn.cfg_test());
     assert_eq!(
-        library_fn.panic_sites[0].kind,
+        library_fn.panic_sites()[0].kind(),
         VerusPanicKind::CompileError,
         "{:?}",
-        library_fn.panic_sites
+        library_fn.panic_sites()
     );
 
     let test_fn = function_named(&ir, "in_test_code")?;
-    assert!(test_fn.cfg_test);
+    assert!(test_fn.cfg_test());
     Ok(())
 }
 
@@ -195,19 +200,24 @@ fn marks_only_the_unreachable_arm_with_a_real_ghost_sibling() -> miette::Result<
     );
 
     let paired = function_named(&ir, "matches_int_error_kind_carriers_own_shape")?;
-    assert_eq!(paired.panic_sites.len(), 1, "{:?}", paired.panic_sites);
+    assert_eq!(paired.panic_sites().len(), 1, "{:?}", paired.panic_sites());
     assert!(
-        paired.panic_sites[0].proven_unreachable_by_ghost_sibling,
+        paired.panic_sites()[0].proven_unreachable_by_ghost_sibling(),
         "{:?}",
-        paired.panic_sites
+        paired.panic_sites()
     );
 
     let unpaired = function_named(&ir, "ordinary_unreachable_with_no_ghost_sibling")?;
-    assert_eq!(unpaired.panic_sites.len(), 1, "{:?}", unpaired.panic_sites);
-    assert!(
-        !unpaired.panic_sites[0].proven_unreachable_by_ghost_sibling,
+    assert_eq!(
+        unpaired.panic_sites().len(),
+        1,
         "{:?}",
-        unpaired.panic_sites
+        unpaired.panic_sites()
+    );
+    assert!(
+        !unpaired.panic_sites()[0].proven_unreachable_by_ghost_sibling(),
+        "{:?}",
+        unpaired.panic_sites()
     );
     Ok(())
 }
@@ -225,18 +235,18 @@ fn records_local_call_target_names() -> miette::Result<()> {
 
     let caller = function_named(&ir, "caller")?;
     assert!(
-        caller.calls.contains(&"helper".to_string()),
+        caller.calls().contains(&"helper".to_string()),
         "{:?}",
-        caller.calls
+        caller.calls()
     );
     assert!(
-        caller.calls.contains(&"from_str".to_string()),
+        caller.calls().contains(&"from_str".to_string()),
         "{:?}",
-        caller.calls
+        caller.calls()
     );
 
     let helper = function_named(&ir, "helper")?;
-    assert!(helper.calls.is_empty(), "{:?}", helper.calls);
+    assert!(helper.calls().is_empty(), "{:?}", helper.calls());
     Ok(())
 }
 
@@ -253,7 +263,7 @@ fn fully_documented_data_carrying_enum_is_a_pattern_projection_enum() -> miette:
     let transfer_error = enum_named(&ir, "TransferError")?;
     assert!(transfer_error.synthesizes_pattern_projection_accessors());
     assert!(transfer_error.fully_documented());
-    assert!(ir.is_documented_pattern_projection_enum(file, transfer_error.span.line()));
+    assert!(ir.is_documented_pattern_projection_enum(file, transfer_error.span().line()));
     Ok(())
 }
 
@@ -273,7 +283,7 @@ fn undocumented_data_carrying_variant_is_not_exempt() -> miette::Result<()> {
         !transfer_error.fully_documented(),
         "NegativeAmount has no doc comment"
     );
-    assert!(!ir.is_documented_pattern_projection_enum(file, transfer_error.span.line()));
+    assert!(!ir.is_documented_pattern_projection_enum(file, transfer_error.span().line()));
     Ok(())
 }
 
@@ -288,7 +298,7 @@ fn unit_only_enum_never_synthesizes_accessors() -> miette::Result<()> {
         !selector.synthesizes_pattern_projection_accessors(),
         "no variant carries data"
     );
-    assert!(!ir.is_documented_pattern_projection_enum(file, selector.span.line()));
+    assert!(!ir.is_documented_pattern_projection_enum(file, selector.span().line()));
     Ok(())
 }
 
@@ -303,12 +313,10 @@ fn wrong_line_or_file_is_never_a_match() -> miette::Result<()> {
     );
     let transfer_error = enum_named(&ir, "TransferError")?;
 
-    assert!(!ir.is_documented_pattern_projection_enum(file, transfer_error.span.line() + 1));
-    assert!(
-        !ir.is_documented_pattern_projection_enum(
-            Path::new("other.rs"),
-            transfer_error.span.line()
-        )
-    );
+    assert!(!ir.is_documented_pattern_projection_enum(file, transfer_error.span().line() + 1));
+    assert!(!ir.is_documented_pattern_projection_enum(
+        Path::new("other.rs"),
+        transfer_error.span().line()
+    ));
     Ok(())
 }

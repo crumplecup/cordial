@@ -44,17 +44,17 @@ impl VerusReachability {
 #[instrument(level = "debug", skip(ir))]
 pub(super) fn build_verus_reachability(ir: &VerusCrateIr) -> VerusReachability {
     let called: HashSet<&str> = ir
-        .functions
+        .functions()
         .iter()
-        .flat_map(|function| function.calls.iter().map(String::as_str))
+        .flat_map(|function| function.calls().iter().map(String::as_str))
         .collect();
 
     let leaves = ir
-        .functions
+        .functions()
         .iter()
-        .filter(|function| !function.ensures.is_empty())
-        .filter(|function| !called.contains(function.name.as_str()))
-        .map(|function| function.name.clone())
+        .filter(|function| !function.ensures().is_empty())
+        .filter(|function| !called.contains(function.name().as_str()))
+        .map(|function| function.name().clone())
         .collect();
 
     VerusReachability { leaves }

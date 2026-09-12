@@ -168,30 +168,30 @@ fn verus_ir_findings(
     let reachability = verus_reach::build_verus_reachability(ir);
     let mut findings = Vec::new();
     for function in ir
-        .functions
+        .functions()
         .iter()
-        .filter(|function| !reachability.is_verification_leaf(&function.name))
+        .filter(|function| !reachability.is_verification_leaf(function.name()))
     {
-        let context = format!("{}::{}", function.module_path, function.name);
+        let context = format!("{}::{}", function.module_path(), function.name());
         let file = function
-            .span
+            .span()
             .file()
             .strip_prefix(crate_root)
-            .unwrap_or(function.span.file())
+            .unwrap_or(function.span().file())
             .to_path_buf();
-        let cfg_test = function.cfg_test;
+        let cfg_test = function.cfg_test();
         for site in function
-            .panic_sites
+            .panic_sites()
             .iter()
-            .filter(|site| !site.proven_unreachable_by_ghost_sibling)
+            .filter(|site| !site.proven_unreachable_by_ghost_sibling())
         {
             findings.push(
                 PanicSiteRecord::builder()
-                    .kind(verus_panic_kind(site.kind))
+                    .kind(verus_panic_kind(site.kind()))
                     .context(context.clone())
                     .file(file.clone())
-                    .line(site.line)
-                    .snippet(site.snippet.clone())
+                    .line(site.line())
+                    .snippet(site.snippet().clone())
                     .cfg_test(cfg_test)
                     .build()?,
             );

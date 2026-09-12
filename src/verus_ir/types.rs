@@ -77,14 +77,16 @@ pub enum VerusPanicKind {
 }
 
 /// One abort site found inside a function's body.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct VerusPanicSite {
     /// Abort kind (`panic!`, `unwrap`, …).
-    pub kind: VerusPanicKind,
+    #[getter(copy)]
+    kind: VerusPanicKind,
     /// Source line number (1-based), when known.
-    pub line: u32,
+    #[getter(copy)]
+    line: u32,
     /// Source snippet captured at the site.
-    pub snippet: String,
+    snippet: String,
     /// True when this site sits in a `match` arm gated
     /// `#[cfg(not(verus_keep_ghost))]` whose sibling arm -- same
     /// pattern, gated `#[cfg(verus_keep_ghost)]` -- calls `unreached()`
@@ -96,7 +98,8 @@ pub struct VerusPanicSite {
     /// raw structural fact -- whether a consumer treats it as exempt
     /// from a panic-inventory policy is that consumer's own call, not
     /// this parse's.
-    pub proven_unreachable_by_ghost_sibling: bool,
+    #[getter(copy)]
+    proven_unreachable_by_ghost_sibling: bool,
 }
 
 /// Real facts extracted from one `fn`/`spec fn`/`proof fn` found inside a
@@ -108,67 +111,74 @@ pub struct VerusPanicSite {
 /// back to text; `uses_assume`/`uses_admit`/`is_external_body` are real
 /// soundness-relevant signals -- code paths where a claim is trusted
 /// rather than checked.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct VerusFnFacts {
     /// The function's own name.
-    pub name: String,
+    name: String,
     /// Crate-relative module path (`rust_std::try_from_int_error_carrier`).
-    pub module_path: String,
+    module_path: String,
     /// Where this function is declared.
-    pub span: FileSpan,
+    span: FileSpan,
     /// Whether the enclosing `verus! { .. }` invocation sits inside a
     /// `#[cfg(test)]` module -- matching `panics::scan`'s own tracking,
     /// so a real consumer can apply the same test-vs-library routing
     /// policy.
-    pub cfg_test: bool,
+    #[getter(copy)]
+    cfg_test: bool,
     /// The function's own declared mode (`spec`/`proof`/`exec`/...).
-    pub mode: VerusFnMode,
+    #[getter(copy)]
+    mode: VerusFnMode,
     /// The function's own declared publish visibility (spec fns only;
     /// `VerusPublish::Default` for proof/exec fns).
-    pub publish: VerusPublish,
+    #[getter(copy)]
+    publish: VerusPublish,
     /// Every `requires` clause, rendered back to text, in declared order.
-    pub requires: Vec<String>,
+    requires: Vec<String>,
     /// Every `ensures` clause, rendered back to text, in declared order.
-    pub ensures: Vec<String>,
+    ensures: Vec<String>,
     /// The `decreases` clause, if any, rendered back to text -- present
     /// only on recursive spec/proof fns that need a termination measure.
-    pub decreases: Option<String>,
+    decreases: Option<String>,
     /// Whether the body calls `assume(..)` anywhere -- a real, local
     /// soundness escape hatch: the enclosed condition is trusted, not
     /// proven, from that point on.
-    pub uses_assume: bool,
+    #[getter(copy)]
+    uses_assume: bool,
     /// Whether the body calls `admit()` anywhere -- discharges the
     /// entire remaining proof obligation unconditionally, the strongest
     /// local soundness escape hatch Verus has.
-    pub uses_admit: bool,
+    #[getter(copy)]
+    uses_admit: bool,
     /// Whether the function carries `#[verifier::external_body]` --
     /// Verus never checks this body against its own signature at all;
     /// the `ensures` clause is trusted based on the (unverified) exec
     /// code alone.
-    pub is_external_body: bool,
+    #[getter(copy)]
+    is_external_body: bool,
     /// Every `panic!`/`unreachable!`/`.expect(..)`/`.unwrap()` site found
     /// in the body -- the direct completion of this module's own
     /// motivating gap (`panics::verus_recover`'s best-effort recovery
     /// found 7 of the 13 real sites known to exist in `amenable_verus`;
     /// a real parse finds all of them).
-    pub panic_sites: Vec<VerusPanicSite>,
+    panic_sites: Vec<VerusPanicSite>,
     /// Every `requires`/`ensures`-mode `tracked` parameter's own name --
     /// a parameter Verus threads through as ghost-but-linear state
     /// rather than an ordinary value, real signal for what this
     /// function's own proof obligation actually depends on carrying.
-    pub tracked_params: Vec<String>,
+    tracked_params: Vec<String>,
     /// Every `recommends` clause, rendered back to text -- a
     /// well-formedness condition Verus checks (and reports separately
     /// from `requires` failures) but doesn't require the caller to
     /// discharge; distinguishing "recommended" from "required" callers
     /// is itself a real proof-design choice worth being able to see.
-    pub recommends: Vec<String>,
+    recommends: Vec<String>,
     /// Whether the function is declared `broadcast` -- a lemma Verus
     /// applies automatically to every proof in scope (via `use`) rather
     /// than one a caller must invoke by name; real signal for how much
     /// of a codebase's total proof burden one function actually
     /// contributes to, invisibly.
-    pub is_broadcast: bool,
+    #[getter(copy)]
+    is_broadcast: bool,
     /// The bare name of every function/method this body calls -- a raw,
     /// local fact (what this one function's own body contains), not a
     /// crate-wide reachability judgment; a consumer wanting "is this
@@ -176,7 +186,7 @@ pub struct VerusFnFacts {
     /// every function's own `calls` list, the same two-layer split
     /// `panics::kani_reach` already uses for the analogous Kani
     /// question.
-    pub calls: Vec<String>,
+    calls: Vec<String>,
 }
 
 impl VerusFnFacts {
@@ -195,15 +205,17 @@ impl VerusFnFacts {
 }
 
 /// One variant of an `enum` found inside a `verus! { .. }` block.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct VerusEnumVariantFacts {
     /// The variant's own name.
-    pub name: String,
+    name: String,
     /// Whether the variant carries data (a tuple or named-field variant)
     /// as opposed to being a bare unit variant.
-    pub carries_data: bool,
+    #[getter(copy)]
+    carries_data: bool,
     /// Whether the variant carries a doc comment (`///` or `#[doc = ..]`).
-    pub has_doc: bool,
+    #[getter(copy)]
+    has_doc: bool,
 }
 
 /// Real facts extracted from one `enum` found inside a `verus! { .. }`
@@ -217,21 +229,23 @@ pub struct VerusEnumVariantFacts {
 /// line* with nothing real to attach a doc comment to. Confirmed against
 /// a real `verus` invocation, not assumed: neither a doc comment on the
 /// variant nor on the individual data field cleared the warning.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct VerusEnumFacts {
     /// The enum's own name.
-    pub name: String,
+    name: String,
     /// Crate-relative module path.
-    pub module_path: String,
+    module_path: String,
     /// Where this enum is declared.
-    pub span: FileSpan,
+    span: FileSpan,
     /// Whether the enclosing `verus! { .. }` invocation sits inside a
     /// `#[cfg(test)]` module.
-    pub cfg_test: bool,
+    #[getter(copy)]
+    cfg_test: bool,
     /// Whether the enum itself carries a doc comment.
-    pub has_doc: bool,
+    #[getter(copy)]
+    has_doc: bool,
     /// Every variant, in declared order.
-    pub variants: Vec<VerusEnumVariantFacts>,
+    variants: Vec<VerusEnumVariantFacts>,
 }
 
 impl VerusEnumFacts {
@@ -241,7 +255,9 @@ impl VerusEnumFacts {
     /// matters.
     #[instrument(level = "trace", skip(self), ret)]
     pub fn synthesizes_pattern_projection_accessors(&self) -> bool {
-        self.variants.iter().any(|variant| variant.carries_data)
+        self.variants
+            .iter()
+            .any(VerusEnumVariantFacts::carries_data)
     }
 
     /// Whether every human-writable doc site on this enum (the enum
@@ -257,18 +273,18 @@ impl VerusEnumFacts {
             && self
                 .variants
                 .iter()
-                .all(|variant| !variant.carries_data || variant.has_doc)
+                .all(|variant| !variant.carries_data() || variant.has_doc())
     }
 }
 
 /// Every `VerusFnFacts`/[`VerusEnumFacts`] recovered from one crate's
 /// real `verus! { .. }` blocks.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct VerusCrateIr {
     /// Verus functions inventoried in this crate.
-    pub functions: Vec<VerusFnFacts>,
+    functions: Vec<VerusFnFacts>,
     /// Verus enums inventoried in this crate.
-    pub enums: Vec<VerusEnumFacts>,
+    enums: Vec<VerusEnumFacts>,
 }
 
 impl VerusCrateIr {

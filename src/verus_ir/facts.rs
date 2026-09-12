@@ -19,20 +19,21 @@ pub(super) fn build_crate_ir(blocks: Vec<VerusBlock>) -> VerusCrateIr {
     let mut functions = Vec::new();
     let mut enums = Vec::new();
     for block in blocks {
+        let (file, module_path, cfg_test, items) = block.into_parts();
         let mut visitor = FactsVisitor {
-            file: block.file,
-            module_path: block.module_path,
-            cfg_test: block.cfg_test,
+            file,
+            module_path,
+            cfg_test,
             functions: Vec::new(),
             enums: Vec::new(),
         };
-        for item in &block.items {
+        for item in &items {
             visitor.visit_item(item);
         }
         functions.extend(visitor.functions);
         enums.extend(visitor.enums);
     }
-    VerusCrateIr { functions, enums }
+    VerusCrateIr::new(functions, enums)
 }
 
 struct FactsVisitor {
@@ -76,25 +77,25 @@ impl FactsVisitor {
 
         let body = scan_body(block);
 
-        self.functions.push(VerusFnFacts {
-            name: sig.ident.to_string(),
-            module_path: self.module_path.clone(),
-            span: FileSpan::new(self.file.clone(), line, 0),
-            cfg_test: self.cfg_test,
-            mode: fn_mode(&sig.mode),
-            publish: publish_kind(&sig.publish),
+        self.functions.push(VerusFnFacts::new(
+            sig.ident.to_string(),
+            self.module_path.clone(),
+            FileSpan::new(self.file.clone(), line, 0),
+            self.cfg_test,
+            fn_mode(&sig.mode),
+            publish_kind(&sig.publish),
             requires,
             ensures,
             decreases,
-            uses_assume: body.uses_assume,
-            uses_admit: body.uses_admit,
-            is_external_body: has_external_body(attrs),
-            panic_sites: body.panic_sites,
-            tracked_params: tracked_param_names(sig),
+            body.uses_assume,
+            body.uses_admit,
+            has_external_body(attrs),
+            body.panic_sites,
+            tracked_param_names(sig),
             recommends,
-            is_broadcast: sig.broadcast.is_some(),
-            calls: body.calls,
-        });
+            sig.broadcast.is_some(),
+            body.calls,
+        ));
     }
 }
 
@@ -117,14 +118,14 @@ impl<'ast> Visit<'ast> for FactsVisitor {
     fn visit_item_enum(&mut self, node: &'ast verus_syn::ItemEnum) {
         use verus_syn::spanned::Spanned;
         let line = node.enum_token.span().start().line as u32;
-        self.enums.push(VerusEnumFacts {
-            name: node.ident.to_string(),
-            module_path: self.module_path.clone(),
-            span: FileSpan::new(self.file.clone(), line, 0),
-            cfg_test: self.cfg_test,
-            has_doc: has_doc_comment(&node.attrs),
-            variants: node.variants.iter().map(variant_facts).collect(),
-        });
+        self.enums.push(VerusEnumFacts::new(
+            node.ident.to_string(),
+            self.module_path.clone(),
+            FileSpan::new(self.file.clone(), line, 0),
+            self.cfg_test,
+            has_doc_comment(&node.attrs),
+            node.variants.iter().map(variant_facts).collect(),
+        ));
         verus_syn::visit::visit_item_enum(self, node);
     }
 }
@@ -133,11 +134,11 @@ impl<'ast> Visit<'ast> for FactsVisitor {
 /// comment for why `carries_data`/`has_doc` are the two that matter.
 #[instrument(level = "trace", skip(variant))]
 fn variant_facts(variant: &verus_syn::Variant) -> VerusEnumVariantFacts {
-    VerusEnumVariantFacts {
-        name: variant.ident.to_string(),
-        carries_data: !matches!(variant.fields, verus_syn::Fields::Unit),
-        has_doc: has_doc_comment(&variant.attrs),
-    }
+    VerusEnumVariantFacts::new(
+        variant.ident.to_string(),
+        !matches!(variant.fields, verus_syn::Fields::Unit),
+        has_doc_comment(&variant.attrs),
+    )
 }
 
 /// Whether `attrs` carries a doc comment (`///`/`//!`, or a literal
@@ -291,12 +292,12 @@ impl BodyVisitor {
             _ => None,
         };
         if let Some(kind) = kind {
-            self.panic_sites.push(VerusPanicSite {
+            self.panic_sites.push(VerusPanicSite::new(
                 kind,
-                line: mac.span().start().line as u32,
-                snippet: format!("{}!(..)", segment.ident),
-                proven_unreachable_by_ghost_sibling: self.in_proven_unreachable_arm,
-            });
+                mac.span().start().line as u32,
+                format!("{}!(..)", segment.ident),
+                self.in_proven_unreachable_arm,
+            ));
         }
     }
 }
@@ -344,12 +345,12 @@ impl<'ast> Visit<'ast> for BodyVisitor {
             _ => None,
         };
         if let Some(kind) = kind {
-            self.panic_sites.push(VerusPanicSite {
+            self.panic_sites.push(VerusPanicSite::new(
                 kind,
-                line: node.method.span().start().line as u32,
-                snippet: format!(".{}(..)", node.method),
-                proven_unreachable_by_ghost_sibling: self.in_proven_unreachable_arm,
-            });
+                node.method.span().start().line as u32,
+                format!(".{}(..)", node.method),
+                self.in_proven_unreachable_arm,
+            ));
         }
         verus_syn::visit::visit_expr_method_call(self, node);
     }
