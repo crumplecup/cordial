@@ -67,18 +67,20 @@ pub trait NodeView {
 }
 
 /// Borrowed node handle returned by [`IrView`] queries.
+#[derive(Debug, Clone, Copy, derive_getters::Getters, derive_new::new)]
 pub struct NodeRef<'a> {
     /// Crate-local node id.
-    pub id: NodeId,
+    #[getter(copy)]
+    id: NodeId,
     /// Borrowed node payload.
-    pub weight: &'a NodeWeight,
+    weight: &'a NodeWeight,
 }
 
 impl<'a> NodeRef<'a> {
     /// Node kind.
     #[instrument(level = "trace", skip(self))]
     pub fn kind(&self) -> &NodeKind {
-        &self.weight.kind
+        self.weight.kind()
     }
 
     /// Latest attribute value stored under `key`, if present.
@@ -96,7 +98,7 @@ impl NodeView for NodeRef<'_> {
 
     #[instrument(level = "trace", skip(self))]
     fn kind(&self) -> &NodeKind {
-        &self.weight.kind
+        self.weight.kind()
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -108,17 +110,17 @@ impl NodeView for NodeRef<'_> {
 impl IrView for CrateIr {
     #[instrument(level = "trace", skip(self))]
     fn crate_name(&self) -> &str {
-        &self.crate_name
+        self.crate_name()
     }
 
     #[instrument(level = "trace", skip(self))]
     fn root(&self) -> CordialResult<NodeId> {
-        Ok(self.root)
+        Ok(self.root())
     }
 
     #[instrument(level = "trace", skip(self, id))]
     fn node(&self, id: NodeId) -> Option<NodeRef<'_>> {
-        self.node_weight(id).map(|weight| NodeRef { id, weight })
+        self.node_weight(id).map(|weight| NodeRef::new(id, weight))
     }
 
     #[instrument(level = "trace", skip(self, query))]
@@ -129,8 +131,8 @@ impl IrView for CrateIr {
             .filter_map(|index| {
                 let id = NodeId::from_index(index);
                 let weight = self.graph().node_weight(index)?;
-                if kinds.is_empty() || kinds.iter().any(|kind| kind == &weight.kind) {
-                    Some(NodeRef { id, weight })
+                if kinds.is_empty() || kinds.iter().any(|kind| kind == weight.kind()) {
+                    Some(NodeRef::new(id, weight))
                 } else {
                     None
                 }
@@ -157,7 +159,7 @@ impl IrView for CrateIr {
 
     #[instrument(level = "trace", skip(self, path))]
     fn node_by_path(&self, path: &str) -> Option<NodeId> {
-        self.indexes().by_path.get(path).copied()
+        self.indexes().by_path().get(path).copied()
     }
 }
 

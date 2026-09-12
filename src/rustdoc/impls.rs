@@ -27,7 +27,7 @@ impl TraitImplRecord {
 pub fn collect_trait_impls(inventory: &RustdocInventory) -> Vec<TraitImplRecord> {
     let tracked: std::collections::HashSet<String> = inventory
         .type_items()
-        .map(|item| item.path.clone())
+        .map(|item| item.path().clone())
         .collect();
     let canonical_map = canonical_to_public_map(inventory);
     let extended: std::collections::HashSet<String> = tracked
@@ -37,7 +37,7 @@ pub fn collect_trait_impls(inventory: &RustdocInventory) -> Vec<TraitImplRecord>
         .collect();
 
     let mut records = Vec::new();
-    for item in inventory.krate.index.values() {
+    for item in inventory.krate().index.values() {
         let ItemEnum::Impl(impl_item) = &item.inner else {
             continue;
         };
@@ -47,7 +47,7 @@ pub fn collect_trait_impls(inventory: &RustdocInventory) -> Vec<TraitImplRecord>
         let Type::ResolvedPath(type_path) = &impl_item.for_ else {
             continue;
         };
-        let Some(summary) = inventory.krate.paths.get(&type_path.id) else {
+        let Some(summary) = inventory.krate().paths.get(&type_path.id) else {
             continue;
         };
         let canonical = summary.path.join("::");

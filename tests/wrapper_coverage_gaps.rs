@@ -6,6 +6,14 @@ use cordial::rustdoc::{
 use cordial::testing::assess_impl_gap;
 use cordial::{ElicitCompleteSet, TraitPrereqs};
 
+fn prereqs_from_trait_shorts(traits: &[&str]) -> TraitPrereqs {
+    let mut prereqs = TraitPrereqs::default();
+    for trait_short in traits {
+        prereqs.apply_trait_short(trait_short);
+    }
+    prereqs
+}
+
 #[test]
 fn wrapper_elicit_complete_suppresses_foreign_gap() {
     cordial::init_tracing();
@@ -14,13 +22,12 @@ fn wrapper_elicit_complete_suppresses_foreign_gap() {
     let mut wrapper_prereqs = std::collections::HashMap::new();
     wrapper_prereqs.insert(
         wrapper.to_string(),
-        TraitPrereqs {
-            elicit_complete: true,
-            ..TraitPrereqs::default()
-        },
+        prereqs_from_trait_shorts(&["ElicitComplete"]),
     );
-    let mut complete = ElicitCompleteSet::default();
-    complete.concrete.insert(wrapper.to_string());
+    let complete = ElicitCompleteSet::new(
+        std::collections::HashSet::from([wrapper.to_string()]),
+        std::collections::HashSet::new(),
+    );
     let map = build_wrapper_coverage_map(
         &[(foreign.to_string(), wrapper.to_string())],
         &complete,
@@ -28,12 +35,7 @@ fn wrapper_elicit_complete_suppresses_foreign_gap() {
     );
     let wrappers = lookup_wrapper_coverage(&map, foreign).map(Vec::as_slice);
 
-    let prereqs = TraitPrereqs {
-        serialize: false,
-        deserialize: false,
-        json_schema: false,
-        ..TraitPrereqs::default()
-    };
+    let prereqs = TraitPrereqs::default();
     let assessment = assess_impl_gap("demo", &prereqs, None, false, wrappers);
     assert!(
         assessment.gap_kind().is_none(),
@@ -51,14 +53,13 @@ fn partial_wrapper_prereqs_credit_indirect_our_traits() {
     let mut wrapper_prereqs = std::collections::HashMap::new();
     wrapper_prereqs.insert(
         wrapper.to_string(),
-        TraitPrereqs {
-            elicitation_trait: true,
-            elicit_introspect: true,
-            elicit_spec: true,
-            elicit_prompt_tree: true,
-            to_code_literal: true,
-            ..TraitPrereqs::default()
-        },
+        prereqs_from_trait_shorts(&[
+            "Elicitation",
+            "ElicitIntrospect",
+            "ElicitSpec",
+            "ElicitPromptTree",
+            "ToCodeLiteral",
+        ]),
     );
     let map = build_wrapper_coverage_map(
         &[(foreign.to_string(), wrapper.to_string())],
@@ -67,12 +68,7 @@ fn partial_wrapper_prereqs_credit_indirect_our_traits() {
     );
     let wrappers = lookup_wrapper_coverage(&map, foreign).map(Vec::as_slice);
 
-    let prereqs = TraitPrereqs {
-        serialize: false,
-        deserialize: false,
-        json_schema: false,
-        ..TraitPrereqs::default()
-    };
+    let prereqs = TraitPrereqs::default();
     let assessment = assess_impl_gap("demo", &prereqs, None, false, wrappers);
     assert!(
         assessment.gap_kind().is_none(),
@@ -89,11 +85,11 @@ fn lookup_wrapper_coverage_falls_back_to_bare_name() {
     let mut map = WrapperCoverageMap::new();
     map.insert(
         "chrono::naive::date::NaiveDate".to_string(),
-        vec![WrapperCoverage {
-            wrapper_path: "elicitation::NaiveDateCoat".to_string(),
-            wrapper_elicit_complete: false,
-            wrapper_prereqs: TraitPrereqs::default(),
-        }],
+        vec![WrapperCoverage::new(
+            "elicitation::NaiveDateCoat".to_string(),
+            false,
+            TraitPrereqs::default(),
+        )],
     );
     assert!(lookup_wrapper_coverage(&map, "chrono::NaiveDate").is_some());
 }

@@ -28,9 +28,8 @@ impl Assessor for PanicAssessor {
 
     #[instrument(level = "trace", skip(self, view))]
     fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
-        let markers = view.markers;
-        let ir = view.ir;
-        let session = view.session;
+        let markers = view.markers();
+        let (ir, _, session) = view.into_parts();
 
         let mut findings = Vec::new();
         for marker in markers {
@@ -74,7 +73,7 @@ impl Assessor for PanicAssessor {
                 PanicFinding::builder()
                     .rule(PanicRule::new(kind))
                     .disposition(Disposition::Open)
-                    .anchor(crate::objects::NodeAnchor(node_id))
+                    .anchor(crate::objects::NodeAnchor::new(node_id))
                     .crate_name(ir.crate_name().to_string())
                     .context(context)
                     .span(span)

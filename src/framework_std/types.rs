@@ -30,54 +30,67 @@ impl std::fmt::Display for FrameworkTraitStatus {
 }
 
 /// One std inventory row assessed for framework trait coverage.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub struct StdInventoryItem {
     /// Qualified rustdoc path of this item.
-    pub path: String,
+    path: String,
     /// rustdoc item kind.
-    pub kind: InventoryItemKind,
+    #[getter(copy)]
+    kind: InventoryItemKind,
     /// Whether the type is generic.
-    pub is_generic: bool,
+    #[getter(copy)]
+    is_generic: bool,
     /// Whether rustdoc marked this item unstable.
-    pub is_unstable: bool,
+    #[getter(copy)]
+    is_unstable: bool,
     /// For type aliases, the aliased type path (used by amenable registry matching).
-    pub alias_target: Option<String>,
+    alias_target: Option<String>,
 }
 
 /// One row in a framework trait coverage report.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+)]
 pub struct FrameworkTraitEntry {
     /// Qualified type path.
-    pub type_path: String,
+    type_path: String,
     /// rustdoc item kind of the type.
-    pub type_kind: String,
+    type_kind: String,
     /// Whether the type is generic.
-    pub is_generic: bool,
+    #[getter(copy)]
+    is_generic: bool,
     /// Whether the tracked trait impl is complete, missing, or skipped.
-    pub trait_status: FrameworkTraitStatus,
+    #[getter(copy)]
+    trait_status: FrameworkTraitStatus,
     /// Why this row was skipped, when it was.
-    pub skip_reason: Option<String>,
+    skip_reason: Option<String>,
 }
 
 /// Coverage report for merged std-family inventory vs impl-crate trait impls.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+)]
 pub struct FrameworkTraitReport {
     /// Crate that defined the foreign type.
-    pub source_crate: String,
+    source_crate: String,
     /// Tracked trait this row is about.
-    pub trait_name: String,
+    trait_name: String,
     /// Crate that provides the impl under review.
-    pub impl_crate: String,
+    impl_crate: String,
     /// Whether nightly-only items are in scope.
-    pub include_nightly: bool,
+    #[getter(copy)]
+    include_nightly: bool,
     /// Per-item coverage rows.
-    pub entries: Vec<FrameworkTraitEntry>,
+    entries: Vec<FrameworkTraitEntry>,
     /// How many rows are complete.
-    pub complete_count: usize,
+    #[getter(copy)]
+    complete_count: usize,
     /// How many items are still missing.
-    pub missing_count: usize,
+    #[getter(copy)]
+    missing_count: usize,
     /// How many rows were skipped.
-    pub skipped_count: usize,
+    #[getter(copy)]
+    skipped_count: usize,
 }
 
 impl FrameworkTraitReport {
@@ -109,20 +122,22 @@ impl FrameworkTraitReport {
 }
 
 /// One actionable gap row for framework trait coverage.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+)]
 pub struct FrameworkGapEntry {
     /// Crate that defined the foreign type.
-    pub source_crate: String,
+    source_crate: String,
     /// Qualified type path.
-    pub type_path: String,
+    type_path: String,
     /// rustdoc item kind of the type.
-    pub type_kind: String,
+    type_kind: String,
     /// Tracked trait this row is about.
-    pub trait_name: String,
+    trait_name: String,
     /// Crate that provides the impl under review.
-    pub impl_crate: String,
+    impl_crate: String,
     /// Recommended next action for this gap.
-    pub action: String,
+    action: String,
 }
 
 /// Map of skipped paths to reasons.
@@ -162,7 +177,7 @@ pub fn build_framework_trait_report(
     let mut skipped_count = 0usize;
 
     for item in framework_std_type_items(items, include_nightly) {
-        let type_path = item.path.clone();
+        let type_path = item.path().clone();
         let (trait_status, skip_reason) =
             classify_framework_std_row(&type_path, impl_paths, skip_map);
         match trait_status {
@@ -170,44 +185,48 @@ pub fn build_framework_trait_report(
             FrameworkTraitStatus::Missing => missing_count += 1,
             FrameworkTraitStatus::Skipped => skipped_count += 1,
         };
-        entries.push(FrameworkTraitEntry {
+        entries.push(FrameworkTraitEntry::new(
             type_path,
-            type_kind: item.kind.as_str().to_string(),
-            is_generic: item.is_generic,
+            item.kind().as_str().to_string(),
+            item.is_generic(),
             trait_status,
             skip_reason,
-        });
+        ));
     }
 
-    FrameworkTraitReport {
-        source_crate: source_crate.to_string(),
-        trait_name: trait_name.to_string(),
-        impl_crate: impl_crate.to_string(),
+    FrameworkTraitReport::new(
+        source_crate.to_string(),
+        trait_name.to_string(),
+        impl_crate.to_string(),
         include_nightly,
         entries,
         complete_count,
         missing_count,
         skipped_count,
-    }
+    )
 }
 
 /// Build consolidated gap rows from a framework trait report.
 #[instrument(level = "debug", skip(report))]
 pub fn build_framework_gaps(report: &FrameworkTraitReport) -> Vec<FrameworkGapEntry> {
     report
-        .entries
+        .entries()
         .iter()
-        .filter(|entry| entry.trait_status == FrameworkTraitStatus::Missing)
-        .map(|entry| FrameworkGapEntry {
-            source_crate: report.source_crate.clone(),
-            type_path: entry.type_path.clone(),
-            type_kind: entry.type_kind.clone(),
-            trait_name: report.trait_name.clone(),
-            impl_crate: report.impl_crate.clone(),
-            action: format!(
-                "Add `impl {} for {}` in {}",
-                report.trait_name, entry.type_path, report.impl_crate
-            ),
+        .filter(|entry| entry.trait_status() == FrameworkTraitStatus::Missing)
+        .map(|entry| {
+            FrameworkGapEntry::new(
+                report.source_crate().clone(),
+                entry.type_path().clone(),
+                entry.type_kind().clone(),
+                report.trait_name().clone(),
+                report.impl_crate().clone(),
+                format!(
+                    "Add `impl {} for {}` in {}",
+                    report.trait_name(),
+                    entry.type_path(),
+                    report.impl_crate()
+                ),
+            )
         })
         .collect()
 }
@@ -219,18 +238,21 @@ pub fn framework_std_type_items(
     include_nightly: bool,
 ) -> impl Iterator<Item = &StdInventoryItem> {
     items.iter().filter(move |item| {
-        if !include_nightly && item.is_unstable {
+        if !include_nightly && item.is_unstable() {
             return false;
         }
-        item.kind.is_type() || is_rustdoc_primitive(item)
+        item.kind().is_type() || is_rustdoc_primitive(item)
     })
 }
 
 #[instrument(level = "trace", skip(item), ret)]
 fn is_rustdoc_primitive(item: &StdInventoryItem) -> bool {
-    item.kind == InventoryItemKind::Other
-        && item.path.split("::").count() == 2
-        && matches!(item.path.split("::").next(), Some("std" | "core" | "alloc"))
+    item.kind() == InventoryItemKind::Other
+        && item.path().split("::").count() == 2
+        && matches!(
+            item.path().split("::").next(),
+            Some("std" | "core" | "alloc")
+        )
 }
 
 /// Merge concrete type items from multiple std-family inventories, deduped by path.
@@ -240,11 +262,11 @@ pub fn merge_std_inventory_items(inventories: &[Vec<StdInventoryItem>]) -> Vec<S
     let mut seen = HashSet::new();
     for inventory in inventories {
         for item in inventory {
-            if seen.insert(item.path.clone()) {
+            if seen.insert(item.path().clone()) {
                 items.push(item.clone());
             }
         }
     }
-    items.sort_by(|left, right| left.path.cmp(&right.path));
+    items.sort_by(|left, right| left.path().cmp(right.path()));
     items
 }

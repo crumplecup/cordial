@@ -33,7 +33,7 @@ impl InternalErrorChainRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -80,7 +80,7 @@ fn compliance_rows(rows: &[InternalErrorChainRow]) -> impl Iterator<Item = &Inte
         .filter(|row| row.record_kind == InternalErrorRecordKind::Compliance.as_str())
 }
 
-/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// Distinct crate names present in `rows`, sorted -- `view.ir().crate_name()`
 /// is pinned to whichever crate the run's target discovery lists first, not
 /// the crate a given row actually belongs to, so a workspace-spanning
 /// artifact must derive its own crate breakdown from `row.crate_name`
@@ -149,7 +149,7 @@ impl Reporter for InternalErrorTypeGraphCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = internal_error_chain_rows(findings);
         let mut body = String::from(
@@ -170,11 +170,11 @@ impl Reporter for InternalErrorTypeGraphCsvReporter {
                 csv_field(&row.snippet),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "internal-error-type-graph.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "internal-error-type-graph.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -192,7 +192,7 @@ impl Reporter for InternalErrorComplianceCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = internal_error_chain_rows(findings);
         let mut body = String::from(
@@ -211,11 +211,11 @@ impl Reporter for InternalErrorComplianceCsvReporter {
                 csv_field(&row.snippet),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "internal-error-compliance.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "internal-error-compliance.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -233,7 +233,7 @@ impl Reporter for InternalErrorChainChecklistReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = internal_error_chain_rows(findings);
         let type_nodes: Vec<_> = type_graph_rows(&rows).collect();
@@ -335,11 +335,11 @@ impl Reporter for InternalErrorChainChecklistReporter {
             }
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "internal-error-chain.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "internal-error-chain.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -359,7 +359,7 @@ impl Reporter for InternalErrorChainSummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = internal_error_chain_rows(findings);
         let counts = class_counts(&rows);
@@ -450,10 +450,10 @@ impl Reporter for InternalErrorChainSummaryReporter {
              **{source_shape_violations}** | **{track_caller_violations}** | **{architecture_violations}** |\n"
         ));
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "internal-error-chain-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "internal-error-chain-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

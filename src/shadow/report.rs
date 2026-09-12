@@ -36,7 +36,7 @@ pub fn build_shadow_report(
     let shadow_index = index_shadow_items(shadow);
     let mut rows = match_target_rows(target, &shadow_index, shadow_complete, shadow_prereqs);
     append_extra_shadow_rows(shadow, &mut rows);
-    rows.sort_by(|left, right| left.item_path.cmp(&right.item_path));
+    rows.sort_by(|left, right| left.item_path().cmp(right.item_path()));
 
     let (covered_count, missing_count, extra_count, drifted_count, coverage_pct) =
         tally_coverage(&rows, target);
@@ -48,20 +48,20 @@ pub fn build_shadow_report(
     let missing_type_methods = collect_missing_type_methods(&rows, maps);
     let trait_coverage = collect_trait_coverage(&rows, maps);
 
-    ShadowReport {
-        target_crate: target.crate_name.clone(),
-        shadow_crate: shadow.crate_name.clone(),
+    ShadowReport::new(
+        target.crate_name().clone(),
+        shadow.crate_name().clone(),
         rows,
         covered_count,
         missing_count,
-        extra_count,
         drifted_count,
+        extra_count,
         coverage_pct,
         verification_gap_count,
         method_coverage,
         missing_type_methods,
         trait_coverage,
-    }
+    )
 }
 
 struct ShadowItemIndex<'a> {
@@ -73,13 +73,13 @@ struct ShadowItemIndex<'a> {
 fn index_shadow_items(shadow: &RustdocInventory) -> ShadowItemIndex<'_> {
     let mut by_name: HashMap<&str, Vec<&RustdocItem>> = HashMap::new();
     let mut normalized: HashMap<String, Vec<&RustdocItem>> = HashMap::new();
-    for item in &shadow.items {
+    for item in shadow.items() {
         if !counts_toward_shadow_coverage(item) {
             continue;
         }
-        by_name.entry(item.name.as_str()).or_default().push(item);
+        by_name.entry(item.name().as_str()).or_default().push(item);
         normalized
-            .entry(normalize_name(&item.name))
+            .entry(normalize_name(item.name()))
             .or_default()
             .push(item);
     }
@@ -97,17 +97,17 @@ fn match_target_rows(
     shadow_prereqs: &HashMap<String, TraitPrereqs>,
 ) -> Vec<ShadowRow> {
     let mut rows = Vec::new();
-    for target_item in &target.items {
+    for target_item in target.items() {
         if !counts_toward_shadow_coverage(target_item) {
             continue;
         }
         let exact = shadow
             .by_name
-            .get(target_item.name.as_str())
+            .get(target_item.name().as_str())
             .and_then(|candidates| {
                 candidates
                     .iter()
-                    .find(|candidate| candidate.kind == target_item.kind)
+                    .find(|candidate| candidate.kind() == target_item.kind())
                     .or_else(|| candidates.first())
                     .copied()
             });
@@ -128,7 +128,7 @@ fn match_target_rows(
                 target_item,
                 shadow_item,
                 ShadowStatus::Drifted,
-                shadow_item.path.clone(),
+                shadow_item.path().clone(),
                 format!("{confidence:.2}"),
                 shadow_complete,
                 shadow_prereqs,
@@ -142,43 +142,43 @@ fn match_target_rows(
 
 #[instrument(level = "debug", skip(target_item))]
 fn missing_row(target_item: &crate::rustdoc::RustdocItem) -> ShadowRow {
-    ShadowRow {
-        item_path: target_item.path.clone(),
-        item_kind: target_item.kind,
-        status: ShadowStatus::Missing,
-        shadow_item: String::new(),
-        drift_confidence: String::new(),
-        shadow_elicit_impl: String::new(),
-        shadow_can_be_direct: String::new(),
-        shadow_missing_external_traits: String::new(),
-        shadow_missing_our_traits: String::new(),
-        notes: String::new(),
-    }
+    ShadowRow::new(
+        target_item.path().clone(),
+        target_item.kind(),
+        ShadowStatus::Missing,
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+    )
 }
 
 #[instrument(level = "debug", skip(shadow, rows))]
 fn append_extra_shadow_rows(shadow: &RustdocInventory, rows: &mut Vec<ShadowRow>) {
     let matched: HashSet<String> = rows
         .iter()
-        .filter(|row| matches!(row.status, ShadowStatus::Covered | ShadowStatus::Drifted))
-        .map(|row| row.shadow_item.clone())
+        .filter(|row| matches!(row.status(), ShadowStatus::Covered | ShadowStatus::Drifted))
+        .map(|row| row.shadow_item().clone())
         .collect();
-    for shadow_item in &shadow.items {
-        if !counts_toward_shadow_coverage(shadow_item) || matched.contains(&shadow_item.path) {
+    for shadow_item in shadow.items() {
+        if !counts_toward_shadow_coverage(shadow_item) || matched.contains(shadow_item.path()) {
             continue;
         }
-        rows.push(ShadowRow {
-            item_path: shadow_item.path.clone(),
-            item_kind: shadow_item.kind,
-            status: ShadowStatus::Extra,
-            shadow_item: String::new(),
-            drift_confidence: String::new(),
-            shadow_elicit_impl: String::new(),
-            shadow_can_be_direct: String::new(),
-            shadow_missing_external_traits: String::new(),
-            shadow_missing_our_traits: String::new(),
-            notes: "in shadow, not in target".to_string(),
-        });
+        rows.push(ShadowRow::new(
+            shadow_item.path().clone(),
+            shadow_item.kind(),
+            ShadowStatus::Extra,
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+            "in shadow, not in target".to_string(),
+        ));
     }
 }
 
@@ -189,22 +189,22 @@ fn tally_coverage(
 ) -> (usize, usize, usize, usize, f64) {
     let covered_count = rows
         .iter()
-        .filter(|row| row.status == ShadowStatus::Covered)
+        .filter(|row| row.status() == ShadowStatus::Covered)
         .count();
     let missing_count = rows
         .iter()
-        .filter(|row| row.status == ShadowStatus::Missing)
+        .filter(|row| row.status() == ShadowStatus::Missing)
         .count();
     let extra_count = rows
         .iter()
-        .filter(|row| row.status == ShadowStatus::Extra)
+        .filter(|row| row.status() == ShadowStatus::Extra)
         .count();
     let drifted_count = rows
         .iter()
-        .filter(|row| row.status == ShadowStatus::Drifted)
+        .filter(|row| row.status() == ShadowStatus::Drifted)
         .count();
     let total_target = target
-        .items
+        .items()
         .iter()
         .filter(|item| counts_toward_shadow_coverage(item))
         .count();
@@ -227,15 +227,15 @@ fn collect_method_coverage(
     rows: &[ShadowRow],
     maps: &ShadowBuildMaps<'_>,
 ) -> Vec<TypeMethodCoverage> {
-    if maps.target_methods.is_empty() && maps.shadow_methods.is_empty() {
+    if maps.target_methods().is_empty() && maps.shadow_methods().is_empty() {
         return Vec::new();
     }
     rows.iter()
         .filter(|row| {
-            matches!(row.status, ShadowStatus::Covered | ShadowStatus::Drifted)
-                && row.item_kind.is_type()
+            matches!(row.status(), ShadowStatus::Covered | ShadowStatus::Drifted)
+                && row.item_kind().is_type()
         })
-        .map(|row| diff_type_methods(&row.item_path, &row.shadow_item, maps))
+        .map(|row| diff_type_methods(row.item_path(), row.shadow_item(), maps))
         .collect()
 }
 
@@ -244,25 +244,25 @@ fn collect_missing_type_methods(
     rows: &[ShadowRow],
     maps: &ShadowBuildMaps<'_>,
 ) -> Vec<TypeMethodCoverage> {
-    if maps.target_methods.is_empty() {
+    if maps.target_methods().is_empty() {
         return Vec::new();
     }
     rows.iter()
-        .filter(|row| row.status == ShadowStatus::Missing && row.item_kind.is_type())
+        .filter(|row| row.status() == ShadowStatus::Missing && row.item_kind().is_type())
         .filter_map(|row| {
-            let upstream = methods_for_path(&row.item_path, maps.target_methods);
+            let upstream = methods_for_path(row.item_path(), maps.target_methods());
             if upstream.is_empty() {
                 return None;
             }
             let mut missing: Vec<String> = upstream.into_iter().collect();
             missing.sort();
-            Some(TypeMethodCoverage {
-                upstream_type: row.item_path.clone(),
-                shadow_type: String::new(),
-                covered: Vec::new(),
+            Some(TypeMethodCoverage::new(
+                row.item_path().clone(),
+                String::new(),
+                Vec::new(),
                 missing,
-                extra: Vec::new(),
-            })
+                Vec::new(),
+            ))
         })
         .collect()
 }
@@ -274,21 +274,21 @@ fn collect_trait_coverage(
 ) -> Vec<TraitImplCoverage> {
     let shadow_bare_names: HashSet<String> = rows
         .iter()
-        .filter(|row| matches!(row.status, ShadowStatus::Covered | ShadowStatus::Drifted))
-        .filter_map(|row| row.item_path.rsplit("::").next().map(str::to_owned))
+        .filter(|row| matches!(row.status(), ShadowStatus::Covered | ShadowStatus::Drifted))
+        .filter_map(|row| row.item_path().rsplit("::").next().map(str::to_owned))
         .collect();
     rows.iter()
         .filter(|row| {
-            row.status == ShadowStatus::Missing && row.item_kind == InventoryItemKind::Trait
+            row.status() == ShadowStatus::Missing && row.item_kind() == InventoryItemKind::Trait
         })
         .filter_map(|row| {
             let empty = BTreeSet::new();
             let target_impls = maps
-                .target_trait_impls
-                .get(&row.item_path)
+                .target_trait_impls()
+                .get(row.item_path())
                 .unwrap_or(&empty);
             let shadow_impls =
-                trait_impls_for_path(&row.item_path, maps.shadow_trait_impls).unwrap_or(&empty);
+                trait_impls_for_path(row.item_path(), maps.shadow_trait_impls()).unwrap_or(&empty);
             let mut missing_on_shadow: Vec<String> = target_impls
                 .iter()
                 .filter(|name| shadow_bare_names.contains(*name))
@@ -305,11 +305,11 @@ fn collect_trait_coverage(
             if missing_on_shadow.is_empty() && covered_on_shadow.is_empty() {
                 return None;
             }
-            Some(TraitImplCoverage {
-                trait_path: row.item_path.clone(),
+            Some(TraitImplCoverage::new(
+                row.item_path().clone(),
                 missing_on_shadow,
                 covered_on_shadow,
-            })
+            ))
         })
         .collect()
 }
@@ -320,21 +320,21 @@ fn diff_type_methods(
     shadow_type: &str,
     maps: &ShadowBuildMaps<'_>,
 ) -> TypeMethodCoverage {
-    let upstream = methods_for_path(upstream_type, maps.target_methods);
-    let shadow = methods_for_path(shadow_type, maps.shadow_methods);
+    let upstream = methods_for_path(upstream_type, maps.target_methods());
+    let shadow = methods_for_path(shadow_type, maps.shadow_methods());
     let mut covered: Vec<String> = upstream.intersection(&shadow).cloned().collect();
     let mut missing: Vec<String> = upstream.difference(&shadow).cloned().collect();
     let mut extra: Vec<String> = shadow.difference(&upstream).cloned().collect();
     covered.sort();
     missing.sort();
     extra.sort();
-    TypeMethodCoverage {
-        upstream_type: upstream_type.to_string(),
-        shadow_type: shadow_type.to_string(),
+    TypeMethodCoverage::new(
+        upstream_type.to_string(),
+        shadow_type.to_string(),
         covered,
         missing,
         extra,
-    }
+    )
 }
 
 /// Convenience wrapper that derives shadow complete/prereqs from the shadow inventory.
@@ -376,22 +376,22 @@ fn row_for_match(
     } else {
         String::new()
     };
-    ShadowRow {
-        item_path: target_item.path.clone(),
-        item_kind: target_item.kind,
+    ShadowRow::new(
+        target_item.path().clone(),
+        target_item.kind(),
         status,
-        shadow_item: if shadow_item_path.is_empty() {
-            shadow_item.path.clone()
+        if shadow_item_path.is_empty() {
+            shadow_item.path().clone()
         } else {
             shadow_item_path
         },
         drift_confidence,
-        shadow_elicit_impl: shadow_impl_status(shadow_item, shadow_complete)
+        shadow_impl_status(shadow_item, shadow_complete)
             .as_str()
             .to_string(),
-        shadow_can_be_direct: shadow_can_be_direct(shadow_item, shadow_prereqs),
-        shadow_missing_external_traits: shadow_missing_external_traits(shadow_item, shadow_prereqs),
-        shadow_missing_our_traits: shadow_missing_our_traits(shadow_item, shadow_prereqs),
+        shadow_can_be_direct(shadow_item, shadow_prereqs),
+        shadow_missing_external_traits(shadow_item, shadow_prereqs),
+        shadow_missing_our_traits(shadow_item, shadow_prereqs),
         notes,
-    }
+    )
 }

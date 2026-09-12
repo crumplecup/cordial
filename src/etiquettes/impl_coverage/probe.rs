@@ -51,7 +51,7 @@ impl Probe for MissingPrereqProbe {
 
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
-        let ir = view.ir;
+        let ir = view.ir();
 
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&TYPE_NODES_QUERY) {
@@ -62,10 +62,9 @@ impl Probe for MissingPrereqProbe {
             {
                 continue;
             }
-            markers.push(
-                Box::new(ImplGapMarker::new(crate::objects::NodeAnchor(node.id)))
-                    as Box<dyn Marker>,
-            );
+            markers.push(Box::new(ImplGapMarker::new(crate::objects::NodeAnchor::new(
+                node.id(),
+            ))) as Box<dyn Marker>);
         }
         Ok(markers)
     }

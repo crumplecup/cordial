@@ -11,18 +11,19 @@ use crate::error::{CordialError, CordialResult};
 use crate::ir::{EdgeKind, EdgeWeight, IrIndexes, NodeId, NodeKind, NodeWeight};
 
 /// Serializable snapshot of a crate graph for cache read/write.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub struct CrateIrSnapshot {
     /// Cargo package name.
-    pub crate_name: String,
+    crate_name: String,
     /// Filesystem or graph root.
-    pub root: NodeId,
+    #[getter(copy)]
+    root: NodeId,
     /// Graph nodes in this export.
-    pub nodes: Vec<NodeWeight>,
+    nodes: Vec<NodeWeight>,
     /// Directed edges in this graph or export.
-    pub edges: Vec<(u32, u32, EdgeWeight)>,
+    edges: Vec<(u32, u32, EdgeWeight)>,
     /// Path and kind indexes for this snapshot.
-    pub indexes: IrIndexes,
+    indexes: IrIndexes,
 }
 
 /// One crate's append-oriented IR graph.
@@ -33,11 +34,10 @@ pub struct CrateIrSnapshot {
 #[derive(Debug, Clone, derive_getters::Getters)]
 pub struct CrateIr {
     /// Cargo package name.
-    #[getter(skip)]
-    pub crate_name: String,
+    crate_name: String,
     /// Filesystem or graph root.
-    #[getter(skip)]
-    pub root: NodeId,
+    #[getter(copy)]
+    root: NodeId,
     graph: StableDiGraph<NodeWeight, EdgeWeight>,
     indexes: IrIndexes,
 }

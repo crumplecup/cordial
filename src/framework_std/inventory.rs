@@ -17,12 +17,14 @@ pub const FRAMEWORK_STD_SOURCES: &[&str] = &["std", "core", "alloc"];
 pub fn std_items_from_extracted(items: &[ExtractedItem]) -> Vec<StdInventoryItem> {
     items
         .iter()
-        .map(|item| StdInventoryItem {
-            path: item.path_str(),
-            kind: item.kind,
-            is_generic: item.is_generic,
-            is_unstable: item.is_unstable,
-            alias_target: item.alias_target.clone(),
+        .map(|item| {
+            StdInventoryItem::new(
+                item.path_str(),
+                item.kind(),
+                item.is_generic(),
+                item.is_unstable(),
+                item.alias_target().clone(),
+            )
         })
         .collect()
 }

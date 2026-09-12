@@ -2,15 +2,9 @@
 
 use std::collections::HashSet;
 
-use crate::ir::{BasicQuery, EdgeKind, IrView, NodeKind, NodeView};
+use crate::ir::{BasicQuery, EdgeKind, IrView, NodeKind};
 
 use tracing::instrument;
-static ALL_ITEMS: BasicQuery = BasicQuery {
-    node_kinds: Vec::new(),
-    edge_kinds: Vec::new(),
-    attr_key: None,
-    attr_value: None,
-};
 
 /// Type paths in `ir` that have `impl {trait_short} for T`.
 #[instrument(level = "debug", skip(ir))]
@@ -18,8 +12,9 @@ pub fn collect_trait_impl_type_paths_from_ir(
     ir: &dyn IrView,
     trait_short: &str,
 ) -> HashSet<String> {
+    let all_items = BasicQuery::all_nodes();
     let mut paths = HashSet::new();
-    for node in ir.nodes_matching(&ALL_ITEMS) {
+    for node in ir.nodes_matching(&all_items) {
         if !matches!(node.kind(), NodeKind::Item(_)) {
             continue;
         }

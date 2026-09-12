@@ -42,14 +42,13 @@ impl IrEnricher for RustdocStructureEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let ir = view.ir;
-        let load = view.load;
+        let (ir, load, _) = view.into_parts();
 
         let Some(rustdoc) = load.as_any().downcast_ref::<RustdocLoadView>() else {
             return Ok(());
         };
 
-        let inventory = &rustdoc.inventory;
+        let inventory = rustdoc.inventory();
         let methods = collect_type_methods_from_inventory(inventory);
         let prereqs = collect_trait_prereqs_for_inventory(inventory);
         let elicit_complete = collect_elicit_complete_from_inventory(inventory);
@@ -65,26 +64,20 @@ impl IrEnricher for RustdocStructureEnricher {
         }
 
         let extracted: HashMap<String, _> =
-            extract_public_items(&inventory.krate, &inventory.crate_name, false)
+            extract_public_items(inventory.krate(), inventory.crate_name(), false)
                 .into_iter()
                 .map(|item| (item.path_str(), item))
                 .collect();
 
         let items_by_path: HashMap<&str, _> = inventory
-            .items
+            .items()
             .iter()
-            .map(|item| (item.path.as_str(), item))
+            .map(|item| (item.path().as_str(), item))
             .collect();
 
-        static ALL_NODES: BasicQuery = BasicQuery {
-            node_kinds: Vec::new(),
-            edge_kinds: Vec::new(),
-            attr_key: None,
-            attr_value: None,
-        };
-
+        let all_nodes = BasicQuery::all_nodes();
         let nodes: Vec<(crate::ir::NodeId, String)> = ir
-            .nodes_matching(&ALL_NODES)
+            .nodes_matching(&all_nodes)
             .into_iter()
             .filter_map(|node| {
                 if !matches!(node.kind(), NodeKind::Item(_)) {
@@ -94,7 +87,7 @@ impl IrEnricher for RustdocStructureEnricher {
                     .attr(ATTR_QUALIFIED_PATH)
                     .and_then(|value| value.as_str())
                     .map(str::to_string)?;
-                Some((node.id, path))
+                Some((node.id(), path))
             })
             .collect();
 
@@ -103,12 +96,12 @@ impl IrEnricher for RustdocStructureEnricher {
                 ir.set_attr(
                     node_id,
                     ATTR_ITEM_NAME,
-                    serde_json::Value::String(item.name.clone()),
+                    serde_json::Value::String(item.name().clone()),
                 )?;
                 ir.set_attr(
                     node_id,
                     ATTR_IS_PUBLIC,
-                    serde_json::Value::Bool(item.is_public),
+                    serde_json::Value::Bool(item.is_public()),
                 )?;
             }
 
@@ -116,14 +109,14 @@ impl IrEnricher for RustdocStructureEnricher {
                 ir.set_attr(
                     node_id,
                     ATTR_IS_GENERIC,
-                    serde_json::Value::Bool(meta.is_generic),
+                    serde_json::Value::Bool(meta.is_generic()),
                 )?;
                 ir.set_attr(
                     node_id,
                     ATTR_IS_UNSTABLE,
-                    serde_json::Value::Bool(meta.is_unstable),
+                    serde_json::Value::Bool(meta.is_unstable()),
                 )?;
-                if let Some(target) = &meta.alias_target {
+                if let Some(target) = meta.alias_target() {
                     ir.set_attr(
                         node_id,
                         ATTR_ALIAS_TARGET,
@@ -134,7 +127,7 @@ impl IrEnricher for RustdocStructureEnricher {
 
             let is_type = items_by_path
                 .get(path.as_str())
-                .is_some_and(|item| item.kind.is_type());
+                .is_some_and(|item| item.kind().is_type());
 
             if is_type {
                 let public_methods: Vec<String> =
@@ -168,7 +161,7 @@ impl IrEnricher for RustdocStructureEnricher {
                 ir.set_attr(
                     node_id,
                     ATTR_ELICIT_COMPLETE_FACTORY,
-                    serde_json::Value::Bool(elicit_complete.factory.contains(&path)),
+                    serde_json::Value::Bool(elicit_complete.contains_factory_path(&path)),
                 )?;
             }
         }

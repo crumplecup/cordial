@@ -50,14 +50,15 @@ impl Probe for VisibilitySiteProbe {
 
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
-        let ir = view.ir;
+        let ir = view.ir();
 
         Ok(ir
             .nodes_matching(&VISIBILITY_SITES_QUERY)
             .into_iter()
             .map(|node| {
-                Box::new(VisibilityMarker::new(crate::objects::NodeAnchor(node.id)))
-                    as Box<dyn Marker>
+                Box::new(VisibilityMarker::new(crate::objects::NodeAnchor::new(
+                    node.id(),
+                ))) as Box<dyn Marker>
             })
             .collect())
     }

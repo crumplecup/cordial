@@ -24,12 +24,12 @@ impl Loader for DependencyFreshnessLoader {
 
     #[instrument(level = "trace", skip(self, view))]
     fn load(&self, view: LoadContext<'_>) -> CordialResult<Box<dyn LoadView>> {
-        let target = view.target;
+        let target = view.target();
         let records = survey_crate_dependency_freshness(
-            view.session.project_root(),
+            view.session().project_root(),
             target.crate_root(),
             target.crate_name(),
-            Some(view.session.store_root()),
+            Some(view.session().store_root()),
         )?;
         Ok(Box::new(DependencyFreshnessLoadView::new(
             target.crate_name().clone(),

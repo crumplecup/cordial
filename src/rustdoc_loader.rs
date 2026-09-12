@@ -35,8 +35,8 @@ impl Loader for RustdocLoader {
 
     #[instrument(level = "trace", skip(self, view))]
     fn load(&self, view: LoadContext<'_>) -> CordialResult<Box<dyn crate::loader::LoadView>> {
-        let session = view.session;
-        let target = view.target;
+        let session = view.session();
+        let target = view.target();
 
         let json_path = resolve_or_rebuild_rustdoc_json(session, target)?;
         let inventory = crate::rustdoc::parse_rustdoc_json(&json_path, target.crate_name())?;
@@ -47,9 +47,10 @@ impl Loader for RustdocLoader {
 }
 
 /// Rustdoc loader output retained for the loader skeleton and structure enricher.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub struct RustdocLoadView {
-    pub(crate) inventory: RustdocInventory,
+    inventory: RustdocInventory,
+    #[getter(skip)]
     json_path: Option<PathBuf>,
 }
 
@@ -84,7 +85,7 @@ impl crate::loader::LoadView for RustdocLoadView {
 
     #[instrument(level = "trace", skip(self))]
     fn crate_name(&self) -> &str {
-        &self.inventory.crate_name
+        self.inventory.crate_name()
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -97,39 +98,39 @@ impl RustdocLoadView {
     /// Fill the crate IR from loaded views.
     #[instrument(level = "debug", skip(self, ir), err(level = "warn"))]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
-        let root = ir.root;
+        let root = ir.root();
         ir.set_attr(
             root,
             RustdocLoader::ATTR_CRATE_VERSION,
-            serde_json::Value::String(self.inventory.crate_version.clone()),
+            serde_json::Value::String(self.inventory.crate_version().clone()),
         )?;
-        for item in &self.inventory.items {
-            if !item.kind.is_type() && item.kind != crate::rustdoc::InventoryItemKind::Trait {
+        for item in self.inventory.items() {
+            if !item.kind().is_type() && item.kind() != crate::rustdoc::InventoryItemKind::Trait {
                 continue;
             }
             let node = ir.insert_node(
-                NodeWeight::new(NodeKind::Item(ir_item_kind(item.kind)))
-                    .with_name(item.name.clone()),
+                NodeWeight::new(NodeKind::Item(ir_item_kind(item.kind())))
+                    .with_name(item.name().clone()),
             );
             ir.set_attr(
                 node,
                 ATTR_QUALIFIED_PATH,
-                serde_json::Value::String(item.path.clone()),
+                serde_json::Value::String(item.path().clone()),
             )?;
             ir.set_attr(
                 node,
                 ATTR_RUSTDOC_KIND,
-                serde_json::Value::String(format!("{:?}", item.kind)),
+                serde_json::Value::String(format!("{:?}", item.kind())),
             )?;
             ir.set_attr(
                 node,
                 ATTR_ITEM_NAME,
-                serde_json::Value::String(item.name.clone()),
+                serde_json::Value::String(item.name().clone()),
             )?;
             ir.set_attr(
                 node,
                 ATTR_IS_PUBLIC,
-                serde_json::Value::Bool(item.is_public),
+                serde_json::Value::Bool(item.is_public()),
             )?;
             ir.set_attr(
                 node,

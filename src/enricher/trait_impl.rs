@@ -32,17 +32,11 @@ impl IrEnricher for TraitImplEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let ir = view.ir;
+        let ir = view.ir();
 
-        static ALL_NODES: BasicQuery = BasicQuery {
-            node_kinds: Vec::new(),
-            edge_kinds: Vec::new(),
-            attr_key: None,
-            attr_value: None,
-        };
-
+        let all_nodes = BasicQuery::all_nodes();
         let types: Vec<(crate::ir::NodeId, Vec<String>)> = ir
-            .nodes_matching(&ALL_NODES)
+            .nodes_matching(&all_nodes)
             .into_iter()
             .filter_map(|node| {
                 if !matches!(node.kind(), NodeKind::Item(_)) {
@@ -62,7 +56,7 @@ impl IrEnricher for TraitImplEnricher {
                 if trait_shorts.is_empty() {
                     return None;
                 }
-                Some((node.id, trait_shorts))
+                Some((node.id(), trait_shorts))
             })
             .collect();
 
@@ -87,7 +81,7 @@ fn ensure_trait_node(ir: &mut dyn IrMut, trait_short: &str) -> CordialResult<cra
                 .is_some_and(|short| short == trait_short)
         })
     {
-        return Ok(existing.id);
+        return Ok(existing.id());
     }
     let node = ir.insert_node(
         NodeWeight::new(NodeKind::Item(crate::ir::ItemKind::Trait))

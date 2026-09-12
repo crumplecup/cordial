@@ -29,7 +29,7 @@ pub fn collect_trenchcoat_pairs(inventory: &RustdocInventory) -> Vec<TrenchcoatP
     let mut pairs = Vec::new();
     let mut seen = HashSet::new();
 
-    for item in inventory.krate.index.values() {
+    for item in inventory.krate().index.values() {
         let ItemEnum::Impl(impl_item) = &item.inner else {
             continue;
         };
@@ -39,7 +39,7 @@ pub fn collect_trenchcoat_pairs(inventory: &RustdocInventory) -> Vec<TrenchcoatP
         if trait_.path.rsplit("::").next() != Some("From") {
             continue;
         }
-        let Some(wrapper_path) = impl_target_path(&inventory.krate, &impl_item.for_) else {
+        let Some(wrapper_path) = impl_target_path(inventory.krate(), &impl_item.for_) else {
             continue;
         };
         if !is_wrapper_path(&wrapper_path) {

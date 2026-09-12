@@ -80,17 +80,28 @@ pub enum CoverageTargetKind {
 }
 
 /// One built-inventory scope in a coverage run.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, derive_getters::Getters, PartialEq, Eq)]
 pub struct CoverageTarget {
     /// Kind of coverage inventory this target represents.
-    pub kind: CoverageTargetKind,
+    #[getter(copy)]
+    kind: CoverageTargetKind,
     /// Cargo package name.
-    pub crate_name: String,
+    crate_name: String,
     /// Shadow crate that should mirror the target.
-    pub shadow_crate: Option<String>,
+    shadow_crate: Option<String>,
 }
 
 impl CoverageTarget {
+    /// Coverage target for a framework std inventory source.
+    #[instrument(level = "debug", skip(crate_name))]
+    pub fn std_inventory(crate_name: impl Into<String>) -> Self {
+        Self {
+            kind: CoverageTargetKind::StdInventory,
+            crate_name: crate_name.into(),
+            shadow_crate: None,
+        }
+    }
+
     /// Coverage target for a workspace member crate.
     #[instrument(level = "debug", skip(crate_name))]
     pub fn workspace_member(crate_name: impl Into<String>) -> Self {
@@ -163,12 +174,12 @@ impl TraitRequirement for ElicitCompleteRequirement {
 }
 
 /// Inputs for gap classification.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new)]
 pub struct GapContext {
     /// Qualified type path.
-    pub type_path: String,
+    type_path: String,
     /// ElicitComplete prerequisite trait flags.
-    pub prereqs: TraitPrereqs,
+    prereqs: TraitPrereqs,
 }
 
 impl GapContext {
@@ -203,7 +214,7 @@ impl TargetProvider for WorkspaceMembersTargetProvider {
 #[instrument(level = "debug", skip(prereqs))]
 #[cfg(feature = "impl_coverage")]
 pub fn classify_elicit_complete_gap(prereqs: &TraitPrereqs) -> Option<ImplGapKind> {
-    if prereqs.elicit_complete {
+    if prereqs.elicit_complete() {
         return None;
     }
     if prereqs.can_be_direct() && prereqs.our_traits_complete() {

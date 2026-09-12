@@ -46,32 +46,32 @@ impl SurrealGraphExport {
     #[instrument(level = "debug", skip(snapshot), ret)]
     pub fn from_snapshot(snapshot: &CrateIrSnapshot) -> Self {
         let nodes = snapshot
-            .nodes
+            .nodes()
             .iter()
             .enumerate()
             .map(|(index, node)| {
                 SurrealNode::new(
-                    node_id(snapshot.crate_name.as_str(), index),
-                    format_node_kind(&node.kind),
-                    node.name.clone(),
-                    attrs_to_json(&node.attrs),
+                    node_id(snapshot.crate_name().as_str(), index),
+                    format_node_kind(node.kind()),
+                    node.name().clone(),
+                    attrs_to_json(node.attrs()),
                 )
             })
             .collect();
 
         let edges = snapshot
-            .edges
+            .edges()
             .iter()
             .map(|(from, to, weight)| {
                 SurrealEdge::new(
-                    node_id(snapshot.crate_name.as_str(), *from as usize),
-                    node_id(snapshot.crate_name.as_str(), *to as usize),
+                    node_id(snapshot.crate_name().as_str(), *from as usize),
+                    node_id(snapshot.crate_name().as_str(), *to as usize),
                     format_edge_kind(weight.kind()),
                 )
             })
             .collect();
 
-        Self::new(snapshot.crate_name.clone(), nodes, edges)
+        Self::new(snapshot.crate_name().clone(), nodes, edges)
     }
 
     /// Build an export from a crate IR graph.

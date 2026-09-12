@@ -157,14 +157,14 @@ impl IrEnricher for ScopeEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let ir = view.ir;
+        let ir = view.ir();
 
         let all_nodes = BasicQuery::all_nodes();
         let items: Vec<_> = ir
             .nodes_matching(&all_nodes)
             .into_iter()
             .filter(|node| matches!(node.kind(), NodeKind::Item(_)))
-            .map(|node| node.id)
+            .map(|node| node.id())
             .collect();
 
         for item in items {

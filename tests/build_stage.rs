@@ -83,8 +83,8 @@ fn collect_trait_prereqs_reads_supertrait_impls() -> miette::Result<()> {
     let widget = prereqs
         .get("demo::Widget")
         .ok_or_else(|| miette::miette!("widget prereqs"))?;
-    assert!(widget.serialize);
-    assert!(!widget.deserialize);
-    assert!(!widget.elicit_complete);
+    assert!(widget.serialize());
+    assert!(!widget.deserialize());
+    assert!(!widget.elicit_complete());
     Ok(())
 }

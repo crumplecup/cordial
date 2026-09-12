@@ -22,7 +22,7 @@ fn pair_rows(findings: &[&dyn Finding]) -> Vec<MapFindingSink> {
 
 #[instrument(level = "debug", skip(sink))]
 fn field<'a>(sink: &'a MapFindingSink, name: &str) -> &'a str {
-    sink.fields
+    sink.fields()
         .iter()
         .find(|(key, _)| key == name)
         .map(|(_, value)| value.as_str())
@@ -42,7 +42,7 @@ impl Reporter for ShadowPairCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = pair_rows(findings);
         let mut by_target: BTreeMap<String, Vec<&MapFindingSink>> = BTreeMap::new();
@@ -81,11 +81,11 @@ impl Reporter for ShadowPairCsvReporter {
                     csv_escape(field(row, "notes")),
                 ));
             }
-            artifacts.push(Box::new(TextArtifact {
-                name: format!("shadow-{target_crate}.csv"),
-                media_type: "text/csv".to_string(),
+            artifacts.push(Box::new(TextArtifact::new(
+                format!("shadow-{target_crate}.csv"),
+                "text/csv".to_string(),
                 body,
-            }) as Box<dyn Artifact>);
+            )) as Box<dyn Artifact>);
         }
         Ok(artifacts)
     }
@@ -104,7 +104,7 @@ impl Reporter for ShadowGapsCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from(
             "target_crate,shadow_crate,item_path,item_kind,gap_kind,matched_shadow_item,drift_confidence,shadow_elicit_impl,shadow_can_be_direct,shadow_missing_external_traits,shadow_missing_our_traits,action,notes\n",
@@ -147,11 +147,11 @@ impl Reporter for ShadowGapsCsvReporter {
                 csv_escape(field(row, "notes")),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "gaps-shadow.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "gaps-shadow.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -168,7 +168,7 @@ impl Reporter for ShadowCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from("crate,target_path,shadow_path,disposition\n");
         for finding in findings
@@ -178,7 +178,7 @@ impl Reporter for ShadowCsvReporter {
             let mut sink = MapFindingSink::default();
             finding.emit(&mut sink);
             let field = |name: &str| {
-                sink.fields
+                sink.fields()
                     .iter()
                     .find(|(key, _)| key == name)
                     .map(|(_, value)| value.as_str())
@@ -192,11 +192,11 @@ impl Reporter for ShadowCsvReporter {
                 csv_escape(&finding.disposition().to_string())
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "shadow.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "shadow.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -215,7 +215,7 @@ impl Reporter for ShadowMethodChecklistReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut artifacts = Vec::new();
         for finding in findings
@@ -225,7 +225,7 @@ impl Reporter for ShadowMethodChecklistReporter {
             let mut sink = MapFindingSink::default();
             finding.emit(&mut sink);
             let field = |name: &str| {
-                sink.fields
+                sink.fields()
                     .iter()
                     .find(|(key, _)| key == name)
                     .map(|(_, value)| value.as_str())
@@ -235,11 +235,11 @@ impl Reporter for ShadowMethodChecklistReporter {
             if target_crate.is_empty() {
                 continue;
             }
-            artifacts.push(Box::new(TextArtifact {
-                name: format!("shadow-{target_crate}.checklist.md"),
-                media_type: "text/markdown".to_string(),
-                body: field("body").to_string(),
-            }) as Box<dyn Artifact>);
+            artifacts.push(Box::new(TextArtifact::new(
+                format!("shadow-{target_crate}.checklist.md"),
+                "text/markdown".to_string(),
+                field("body").to_string(),
+            )) as Box<dyn Artifact>);
         }
         Ok(artifacts)
     }

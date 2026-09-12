@@ -26,7 +26,7 @@ impl PrintRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -58,7 +58,7 @@ fn open_rows(rows: &[PrintRow]) -> impl Iterator<Item = &PrintRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
-/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// Distinct crate names present in `rows`, sorted -- `view.ir().crate_name()`
 /// is pinned to whichever crate the run's target discovery lists first, not
 /// the crate a given row actually belongs to, so a workspace-spanning
 /// artifact must derive its own crate breakdown from `row.crate_name`
@@ -87,7 +87,7 @@ impl Reporter for PrintCsvReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from("crate,rule_id,context,file,line,snippet\n");
         for row in print_rows(findings) {
@@ -101,11 +101,11 @@ impl Reporter for PrintCsvReporter {
                 csv_field(&row.snippet),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "tracing-print.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "tracing-print.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -125,7 +125,7 @@ impl Reporter for PrintChecklistReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = print_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -165,11 +165,11 @@ impl Reporter for PrintChecklistReporter {
             }
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "tracing-print.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "tracing-print.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -189,7 +189,7 @@ impl Reporter for PrintSummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = print_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -212,10 +212,10 @@ impl Reporter for PrintSummaryReporter {
         }
         body.push_str(&format!("\n| **Total** | **{total}** |\n"));
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "tracing-print-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "tracing-print-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

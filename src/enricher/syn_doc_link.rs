@@ -32,7 +32,7 @@ impl IrEnricher for SynDocLinkEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let ir = view.ir;
+        let ir = view.ir();
 
         let crate_name = ir.crate_name();
         let mut by_path: BTreeMap<String, (Option<crate::ir::NodeId>, Option<crate::ir::NodeId>)> =
@@ -49,8 +49,8 @@ impl IrEnricher for SynDocLinkEnricher {
             let key = inventory_link_key(path, crate_name);
             let entry = by_path.entry(key).or_default();
             match node.attr(ATTR_IR_ORIGIN).and_then(|value| value.as_str()) {
-                Some(ORIGIN_SOURCE) => entry.0 = Some(node.id),
-                Some(ORIGIN_RUSTDOC) => entry.1 = Some(node.id),
+                Some(ORIGIN_SOURCE) => entry.0 = Some(node.id()),
+                Some(ORIGIN_RUSTDOC) => entry.1 = Some(node.id()),
                 _ => {}
             }
         }
@@ -76,12 +76,12 @@ fn link_peers(
     ir.set_attr(
         source,
         ATTR_SYN_DOC_PEER,
-        serde_json::Value::Number(rustdoc.0.into()),
+        serde_json::Value::Number(rustdoc.value().into()),
     )?;
     ir.set_attr(
         rustdoc,
         ATTR_SYN_DOC_PEER,
-        serde_json::Value::Number(source.0.into()),
+        serde_json::Value::Number(source.value().into()),
     )?;
     ir.insert_edge(source, rustdoc, EdgeKind::Plugin)?;
     ir.insert_edge(rustdoc, source, EdgeKind::Plugin)?;
@@ -94,7 +94,7 @@ pub fn syn_doc_peer(node: &dyn NodeView) -> Option<crate::ir::NodeId> {
     let id = node
         .attr(ATTR_SYN_DOC_PEER)
         .and_then(|value| value.as_u64())
-        .map(|value| crate::ir::NodeId(value as u32))?;
+        .map(|value| crate::ir::NodeId::new(value as u32))?;
     Some(id)
 }
 

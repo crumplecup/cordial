@@ -21,12 +21,15 @@ pub trait Reporter: Send + Sync {
 ///
 /// Take the fields the reporter needs; unused neighbors are not unused
 /// arguments.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, derive_getters::Getters, derive_new::new)]
 pub struct RenderView<'a> {
     /// Findings produced by assessors in this session.
-    pub findings: &'a [&'a dyn Finding],
+    #[getter(copy)]
+    findings: &'a [&'a dyn Finding],
     /// Crate IR graph for this hook invocation.
-    pub ir: &'a dyn IrView,
+    #[getter(copy)]
+    ir: &'a dyn IrView,
     /// Session this hook is running in.
-    pub session: &'a dyn SessionView,
+    #[getter(copy)]
+    session: &'a dyn SessionView,
 }

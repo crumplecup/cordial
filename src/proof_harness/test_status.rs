@@ -50,7 +50,7 @@ pub fn test_status_for_type_path(
 ) -> (TestStatus, TestStatus) {
     let bare_name = type_path.rsplit("::").next().unwrap_or(type_path);
 
-    if harness.non_empty_types.contains(bare_name) {
+    if harness.non_empty_types().contains(bare_name) {
         return (
             TestStatus::Covered,
             composition_test_status(bare_name, harness),
@@ -59,7 +59,7 @@ pub fn test_status_for_type_path(
 
     if has_factory_impl
         && let Some(instantiation) = harness
-            .non_empty_types
+            .non_empty_types()
             .iter()
             .find(|t| t.starts_with(bare_name) && t.contains('<'))
             .cloned()
@@ -71,7 +71,7 @@ pub fn test_status_for_type_path(
     }
 
     let qualified_match = harness
-        .non_empty_types
+        .non_empty_types()
         .iter()
         .any(|t| t == type_path || t.ends_with(&format!("::{bare_name}")));
     if qualified_match {
@@ -90,7 +90,7 @@ pub fn test_status_for_type_path(
 #[instrument(level = "debug", skip(harness))]
 fn composition_test_status(name: &str, harness: &ProofHarness) -> TestStatus {
     let found = harness
-        .composition_pairs
+        .composition_pairs()
         .iter()
         .any(|(outer, _inner)| outer.starts_with(name) || outer == name);
     if found {

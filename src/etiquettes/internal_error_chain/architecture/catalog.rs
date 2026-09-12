@@ -27,19 +27,25 @@ pub(super) enum CatalogPhase {
     Impls,
 }
 
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub(super) struct StructInfo {
-    pub(super) ident: String,
-    pub(super) type_path: String,
-    pub(super) file: PathBuf,
-    pub(super) line: u32,
-    pub(super) snippet: String,
-    pub(super) kind_box_of: Option<String>,
-    pub(super) kind_unboxed_of: Option<String>,
-    pub(super) foreign_source: Option<String>,
-    pub(super) has_source_field: bool,
-    pub(super) has_file: bool,
-    pub(super) has_line: bool,
-    pub(super) has_location: bool,
+    ident: String,
+    type_path: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    snippet: String,
+    kind_box_of: Option<String>,
+    kind_unboxed_of: Option<String>,
+    foreign_source: Option<String>,
+    #[getter(copy)]
+    has_source_field: bool,
+    #[getter(copy)]
+    has_file: bool,
+    #[getter(copy)]
+    has_line: bool,
+    #[getter(copy)]
+    has_location: bool,
 }
 
 impl StructInfo {
@@ -49,39 +55,50 @@ impl StructInfo {
     }
 }
 
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub(super) struct VariantInfo {
-    pub(super) name: String,
-    pub(super) line: u32,
-    pub(super) snippet: String,
-    pub(super) payloads: Vec<String>,
+    name: String,
+    #[getter(copy)]
+    line: u32,
+    snippet: String,
+    payloads: Vec<String>,
 }
 
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub(super) struct EnumInfo {
-    pub(super) ident: String,
-    pub(super) type_path: String,
-    pub(super) file: PathBuf,
-    pub(super) line: u32,
-    pub(super) snippet: String,
-    pub(super) variants: Vec<VariantInfo>,
+    ident: String,
+    type_path: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    snippet: String,
+    variants: Vec<VariantInfo>,
 }
 
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub(super) struct ConstructorRec {
-    pub(super) self_ident: String,
-    pub(super) name: String,
-    pub(super) line: u32,
-    pub(super) has_track_caller: bool,
-    pub(super) captures_location: bool,
-    pub(super) from_trait: bool,
-    pub(super) input_labels: Vec<String>,
-    pub(super) takes_location_arg: bool,
+    self_ident: String,
+    name: String,
+    #[getter(copy)]
+    line: u32,
+    #[getter(copy)]
+    has_track_caller: bool,
+    #[getter(copy)]
+    captures_location: bool,
+    #[getter(copy)]
+    from_trait: bool,
+    input_labels: Vec<String>,
+    #[getter(copy)]
+    takes_location_arg: bool,
 }
 
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub(super) struct Catalog {
-    pub(super) crate_name: String,
-    pub(super) structs: BTreeMap<String, StructInfo>,
-    pub(super) enums: BTreeMap<String, EnumInfo>,
-    pub(super) constructors: Vec<ConstructorRec>,
-    pub(super) error_impls: BTreeSet<String>,
+    crate_name: String,
+    structs: BTreeMap<String, StructInfo>,
+    enums: BTreeMap<String, EnumInfo>,
+    constructors: Vec<ConstructorRec>,
+    error_impls: BTreeSet<String>,
 }
 
 impl Catalog {

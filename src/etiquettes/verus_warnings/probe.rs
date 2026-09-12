@@ -51,7 +51,7 @@ impl Probe for VerusWarningSiteProbe {
 
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
-        let ir = view.ir;
+        let ir = view.ir();
 
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&VERUS_WARNING_SITES_QUERY) {
@@ -64,8 +64,9 @@ impl Probe for VerusWarningSiteProbe {
             }
 
             markers.push(
-                Box::new(VerusWarningMarker::new(crate::objects::NodeAnchor(node.id)))
-                    as Box<dyn Marker>,
+                Box::new(VerusWarningMarker::new(crate::objects::NodeAnchor::new(
+                    node.id(),
+                ))) as Box<dyn Marker>,
             );
         }
         Ok(markers)

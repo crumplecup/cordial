@@ -462,7 +462,7 @@ fn format_crate_list(crates: &[String]) -> String {
 fn finding_row(finding: &dyn Finding) -> BTreeMap<String, String> {
     let mut sink = MapFindingSink::default();
     finding.emit(&mut sink);
-    sink.fields.into_iter().collect()
+    sink.into_fields().into_iter().collect()
 }
 
 #[instrument(level = "debug")]

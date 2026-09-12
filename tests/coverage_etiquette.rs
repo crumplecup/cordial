@@ -69,7 +69,7 @@ fn trenchcoat_etiquette_finds_unwrapped_foreign_type() -> miette::Result<()> {
         findings.iter().any(|finding| {
             let mut sink = cordial::MapFindingSink::default();
             finding.emit(&mut sink);
-            sink.fields
+            sink.fields()
                 .iter()
                 .any(|(_, value)| value.contains("BareForeign"))
         }),

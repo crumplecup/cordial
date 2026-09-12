@@ -26,14 +26,21 @@ pub trait Artifact: Send + Sync {
 }
 
 /// Collects finding fields into a flat map for default reporters.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, derive_getters::Getters)]
 pub struct MapFindingSink {
     /// Collected named finding fields.
-    pub fields: Vec<(String, String)>,
+    fields: Vec<(String, String)>,
     /// Collected source snippets.
-    pub snippets: Vec<String>,
+    snippets: Vec<String>,
     /// Collected related-anchor displays.
-    pub related: Vec<String>,
+    related: Vec<String>,
+}
+
+impl MapFindingSink {
+    /// Consume the sink into its collected named fields.
+    pub fn into_fields(self) -> Vec<(String, String)> {
+        self.fields
+    }
 }
 
 impl FindingSink for MapFindingSink {
@@ -54,14 +61,14 @@ impl FindingSink for MapFindingSink {
 }
 
 /// UTF-8 artifact backed by an in-memory buffer.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct TextArtifact {
     /// Filename written under the store (for example `crate-attrs.csv`).
-    pub name: String,
+    name: String,
     /// IANA media type of the artifact body.
-    pub media_type: String,
+    media_type: String,
     /// Artifact payload.
-    pub body: String,
+    body: String,
 }
 
 impl Artifact for TextArtifact {

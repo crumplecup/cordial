@@ -8,20 +8,23 @@ use cordial::testing::{
 };
 
 fn sample_item(path: &str) -> StdInventoryItem {
-    StdInventoryItem {
-        path: path.to_string(),
-        kind: InventoryItemKind::Struct,
-        is_generic: false,
-        is_unstable: false,
-        alias_target: None,
-    }
+    StdInventoryItem::new(
+        path.to_string(),
+        InventoryItemKind::Struct,
+        false,
+        false,
+        None,
+    )
 }
 
 fn sample_unstable_item(path: &str) -> StdInventoryItem {
-    StdInventoryItem {
-        is_unstable: true,
-        ..sample_item(path)
-    }
+    StdInventoryItem::new(
+        path.to_string(),
+        InventoryItemKind::Struct,
+        false,
+        true,
+        None,
+    )
 }
 
 #[test]
@@ -60,9 +63,9 @@ fn build_framework_trait_report_classifies_complete_missing_and_skipped() {
         &skip,
         false,
     );
-    assert_eq!(report.complete_count, 2);
-    assert_eq!(report.missing_count, 0);
-    assert_eq!(report.skipped_count, 1);
+    assert_eq!(report.complete_count(), 2);
+    assert_eq!(report.missing_count(), 0);
+    assert_eq!(report.skipped_count(), 1);
     assert!(build_framework_gaps(&report).is_empty());
 
     let missing_source = vec![sample_item("std::vec::Vec")];
@@ -76,7 +79,7 @@ fn build_framework_trait_report_classifies_complete_missing_and_skipped() {
         false,
     );
     assert_eq!(
-        missing_report.entries[0].trait_status,
+        missing_report.entries()[0].trait_status(),
         FrameworkTraitStatus::Missing
     );
     assert_eq!(build_framework_gaps(&missing_report).len(), 1);
@@ -99,8 +102,11 @@ fn stable_only_scope_excludes_nightly_std_types() {
         &SkipMap::new(),
         false,
     );
-    assert_eq!(stable_report.entries.len(), 1);
-    assert_eq!(stable_report.entries[0].type_path, "std::string::String");
+    assert_eq!(stable_report.entries().len(), 1);
+    assert_eq!(
+        stable_report.entries()[0].type_path(),
+        "std::string::String"
+    );
 
     let nightly_report = build_framework_trait_report(
         "std",
@@ -111,7 +117,7 @@ fn stable_only_scope_excludes_nightly_std_types() {
         &SkipMap::new(),
         true,
     );
-    assert_eq!(nightly_report.entries.len(), 2);
+    assert_eq!(nightly_report.entries().len(), 2);
 }
 
 #[test]

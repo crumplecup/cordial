@@ -29,7 +29,7 @@ impl Probe for PanicSiteProbe {
 
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
-        let ir = view.ir;
+        let ir = view.ir();
 
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&PANIC_SITES_QUERY) {
@@ -41,7 +41,8 @@ impl Probe for PanicSiteProbe {
             }
 
             markers.push(
-                Box::new(PanicMarker::new(crate::objects::NodeAnchor(node.id))) as Box<dyn Marker>,
+                Box::new(PanicMarker::new(crate::objects::NodeAnchor::new(node.id())))
+                    as Box<dyn Marker>,
             );
         }
         Ok(markers)

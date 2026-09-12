@@ -12,12 +12,22 @@ use super::inventory::RustdocInventory;
 
 use tracing::instrument;
 /// Types with `impl ElicitComplete for T` in a hub crate rustdoc snapshot.
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_getters::Getters,
+    derive_new::new,
+)]
 pub struct ElicitCompleteSet {
     /// Concrete types that impl ElicitComplete.
-    pub concrete: HashSet<String>,
+    concrete: HashSet<String>,
     /// Factory types whose product impls ElicitComplete.
-    pub factory: HashSet<String>,
+    factory: HashSet<String>,
 }
 
 impl ElicitCompleteSet {
@@ -25,6 +35,12 @@ impl ElicitCompleteSet {
     #[instrument(level = "trace", skip(self, path))]
     pub fn contains_path(&self, path: &str) -> bool {
         self.concrete.contains(path) || self.factory.contains(path)
+    }
+
+    /// Contains a factory impl path.
+    #[instrument(level = "trace", skip(self, path))]
+    pub fn contains_factory_path(&self, path: &str) -> bool {
+        self.factory.contains(path)
     }
 }
 
@@ -41,11 +57,11 @@ pub fn collect_elicit_complete_paths(
 /// Collect types that impl `ElicitComplete` (concrete vs factory) from an inventory.
 #[instrument(level = "debug", skip(inventory))]
 pub fn collect_elicit_complete_from_inventory(inventory: &RustdocInventory) -> ElicitCompleteSet {
-    let local_crate_name = inventory.crate_name.replace('-', "_");
+    let local_crate_name = inventory.crate_name().replace('-', "_");
     let mut concrete = HashSet::new();
     let mut factory = HashSet::new();
 
-    for item in inventory.krate.index.values() {
+    for item in inventory.krate().index.values() {
         let ItemEnum::Impl(impl_item) = &item.inner else {
             continue;
         };
@@ -65,7 +81,7 @@ pub fn collect_elicit_complete_from_inventory(inventory: &RustdocInventory) -> E
 
         let path = match &impl_item.for_ {
             Type::ResolvedPath(path) => inventory
-                .krate
+                .krate()
                 .paths
                 .get(&path.id)
                 .map(|summary| summary.path.join("::"))
@@ -84,5 +100,5 @@ pub fn collect_elicit_complete_from_inventory(inventory: &RustdocInventory) -> E
         }
     }
 
-    ElicitCompleteSet { concrete, factory }
+    ElicitCompleteSet::new(concrete, factory)
 }

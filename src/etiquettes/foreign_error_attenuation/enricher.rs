@@ -48,9 +48,7 @@ impl IrEnricher for ForeignErrorAttenuationInventoryEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let ir = view.ir;
-        let load = view.load;
-        let session = view.session;
+        let (ir, load, session) = view.into_parts();
 
         let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
             return Ok(());
@@ -381,7 +379,7 @@ fn index_typed_error_sites(
             continue;
         };
         let file = relative_file(file_attr, crate_root);
-        map.insert(SiteKey { file, line }, node.id);
+        map.insert(SiteKey { file, line }, node.id());
     }
     map
 }

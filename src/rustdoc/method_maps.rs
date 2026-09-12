@@ -69,7 +69,7 @@ pub fn collect_type_methods_from_krate(krate: &Crate) -> HashMap<String, BTreeSe
 pub fn collect_type_methods_from_inventory(
     inventory: &RustdocInventory,
 ) -> HashMap<String, BTreeSet<String>> {
-    collect_type_methods_from_krate(&inventory.krate)
+    collect_type_methods_from_krate(inventory.krate())
 }
 
 /// Collect method maps by reading rustdoc JSON from disk.
@@ -93,7 +93,7 @@ pub fn collect_trait_impl_map_from_krate(krate: &Crate) -> HashMap<String, BTree
     let aliases = collect_public_same_crate_reexport_aliases(krate, &own_crate, false);
     let alias_path: HashMap<&rustdoc_types::Id, Vec<String>> = aliases
         .iter()
-        .map(|(id, item)| (id, item.path.clone()))
+        .map(|(id, item)| (id, item.path().clone()))
         .collect();
 
     let mut map: HashMap<String, BTreeSet<String>> = HashMap::new();
@@ -141,7 +141,7 @@ pub fn collect_trait_impl_map_from_krate(krate: &Crate) -> HashMap<String, BTree
 pub fn collect_trait_impl_map_from_inventory(
     inventory: &RustdocInventory,
 ) -> HashMap<String, BTreeSet<String>> {
-    collect_trait_impl_map_from_krate(&inventory.krate)
+    collect_trait_impl_map_from_krate(inventory.krate())
 }
 
 /// Collect trait impl map.

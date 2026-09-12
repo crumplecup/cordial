@@ -9,7 +9,7 @@ fn sysroot_cache_defaults_under_cordial_home() {
     cordial::init_tracing();
     let home = default_store_home();
     let cache = SysrootCache::from_home(&home);
-    assert_eq!(cache.root, home.join("sysroot"));
+    assert_eq!(cache.root(), &home.join("sysroot"));
     assert_eq!(
         cache.rustdoc_cache_path("std"),
         home.join("sysroot/cache/rustdoc/std.json")
@@ -20,7 +20,7 @@ fn sysroot_cache_defaults_under_cordial_home() {
 fn sysroot_cache_default_matches_from_home() {
     cordial::init_tracing();
     let expected = SysrootCache::from_home(default_store_home());
-    assert_eq!(SysrootCache::default().root, expected.root);
+    assert_eq!(SysrootCache::default().root(), expected.root());
 }
 
 // Expensive and environment-dependent: when a real local rustdoc-JSON
@@ -54,13 +54,13 @@ fn merged_std_inventory_excludes_unstable_simd_from_stable_scope() -> miette::Re
     let in_scope: Vec<_> = framework_std_type_items(&merged, false).collect();
     let simd: Vec<_> = in_scope
         .iter()
-        .filter(|item| item.path.contains("core_simd"))
+        .filter(|item| item.path().contains("core_simd"))
         .collect();
     assert!(
         simd.is_empty(),
         "stable scope should exclude core_simd: {:?}",
         simd.iter()
-            .map(|item| &item.path)
+            .map(|item| item.path())
             .take(5)
             .collect::<Vec<_>>()
     );

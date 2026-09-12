@@ -50,7 +50,7 @@ impl Probe for ErrorSiteProbe {
 
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
-        let ir = view.ir;
+        let ir = view.ir();
 
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&ERROR_SITES_QUERY) {
@@ -62,8 +62,9 @@ impl Probe for ErrorSiteProbe {
             }
 
             markers.push(
-                Box::new(ErrorSiteMarker::new(crate::objects::NodeAnchor(node.id)))
-                    as Box<dyn Marker>,
+                Box::new(ErrorSiteMarker::new(crate::objects::NodeAnchor::new(
+                    node.id(),
+                ))) as Box<dyn Marker>,
             );
         }
         Ok(markers)

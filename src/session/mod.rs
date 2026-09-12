@@ -165,7 +165,7 @@ impl SessionBuilder {
         Self {
             project_root,
             store_home,
-            store_root: store.root,
+            store_root: store.root().clone(),
             plugins: Vec::new(),
             etiquettes: Vec::new(),
             progress: noop_progress_arc(),

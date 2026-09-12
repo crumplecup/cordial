@@ -20,10 +20,12 @@ pub trait Loader: Send + Sync {
 /// Shared inputs for [`Loader::load`].
 ///
 /// Take the fields the loader needs; unused neighbors are not unused arguments.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, derive_getters::Getters, derive_new::new)]
 pub struct LoadContext<'a> {
     /// Session this hook is running in.
-    pub session: &'a dyn SessionView,
+    #[getter(copy)]
+    session: &'a dyn SessionView,
     /// Crate being loaded or analyzed.
-    pub target: &'a CrateTarget,
+    #[getter(copy)]
+    target: &'a CrateTarget,
 }

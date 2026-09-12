@@ -53,11 +53,11 @@ impl Probe for UnwrappedForeignProbe {
 
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
-        let ir = view.ir;
+        let ir = view.ir();
 
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&FOREIGN_TYPE_QUERY) {
-            let incoming_wraps = ir.parents(node.id, EdgeKind::Wraps);
+            let incoming_wraps = ir.parents(node.id(), EdgeKind::Wraps);
             if !incoming_wraps.is_empty() {
                 continue;
             }
@@ -69,8 +69,9 @@ impl Probe for UnwrappedForeignProbe {
                 continue;
             }
             markers.push(
-                Box::new(UnwrappedMarker::new(crate::objects::NodeAnchor(node.id)))
-                    as Box<dyn Marker>,
+                Box::new(UnwrappedMarker::new(crate::objects::NodeAnchor::new(
+                    node.id(),
+                ))) as Box<dyn Marker>,
             );
         }
         Ok(markers)

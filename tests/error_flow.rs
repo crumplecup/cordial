@@ -105,7 +105,7 @@ fn error_flow_enricher_partitions_sites_and_links_origins() -> miette::Result<()
 
     let has_error_flow = sites
         .iter()
-        .any(|site| !ir.children(site.id, EdgeKind::ErrorFlow).is_empty());
+        .any(|site| !ir.children(site.id(), EdgeKind::ErrorFlow).is_empty());
     assert!(
         has_error_flow,
         "expected ErrorFlow edges to origin stub nodes"

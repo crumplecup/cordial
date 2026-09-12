@@ -5,18 +5,33 @@ use cordial::testing::TypeFeatureProbe;
 use cordial::testing::{ImplGapKind, assess_impl_gap};
 use miette::{IntoDiagnostic, WrapErr};
 
-fn prereqs_with_missing_external() -> TraitPrereqs {
-    TraitPrereqs {
-        serialize: false,
-        deserialize: false,
-        json_schema: false,
-        elicitation_trait: true,
-        elicit_introspect: false,
-        elicit_spec: true,
-        elicit_prompt_tree: false,
-        to_code_literal: true,
-        ..TraitPrereqs::default()
+fn prereqs_from_trait_shorts(traits: &[&str]) -> TraitPrereqs {
+    let mut prereqs = TraitPrereqs::default();
+    for trait_short in traits {
+        prereqs.apply_trait_short(trait_short);
     }
+    prereqs
+}
+
+fn prereqs_with_missing_external() -> TraitPrereqs {
+    prereqs_from_trait_shorts(&["Elicitation", "ElicitSpec", "ToCodeLiteral"])
+}
+
+fn with_external_traits(mut prereqs: TraitPrereqs) -> TraitPrereqs {
+    prereqs.apply_trait_short("Serialize");
+    prereqs.apply_trait_short("Deserialize");
+    prereqs.apply_trait_short("JsonSchema");
+    prereqs
+}
+
+fn with_our_traits() -> TraitPrereqs {
+    prereqs_from_trait_shorts(&[
+        "Elicitation",
+        "ElicitIntrospect",
+        "ElicitSpec",
+        "ElicitPromptTree",
+        "ToCodeLiteral",
+    ])
 }
 
 #[test]
@@ -26,12 +41,7 @@ fn flags_feature_gated_external_when_probe_unlocks_direct_impl() {
     let probe = TypeFeatureProbe::new(
         "reqwest".to_string(),
         vec!["json".to_string()],
-        Some(TraitPrereqs {
-            serialize: true,
-            deserialize: true,
-            json_schema: true,
-            ..prereqs.clone()
-        }),
+        Some(with_external_traits(prereqs.clone())),
     );
 
     let assessment = assess_impl_gap("reqwest", &prereqs, Some(&probe), false, None);
@@ -45,26 +55,11 @@ fn flags_feature_gated_external_when_probe_unlocks_direct_impl() {
 #[test]
 fn classifies_pure_feature_gated_external_when_our_traits_complete() {
     cordial::init_tracing();
-    let prereqs = TraitPrereqs {
-        serialize: false,
-        deserialize: false,
-        json_schema: false,
-        elicitation_trait: true,
-        elicit_introspect: true,
-        elicit_spec: true,
-        elicit_prompt_tree: true,
-        to_code_literal: true,
-        ..TraitPrereqs::default()
-    };
+    let prereqs = with_our_traits();
     let probe = TypeFeatureProbe::new(
         "reqwest".to_string(),
         vec!["json".to_string()],
-        Some(TraitPrereqs {
-            serialize: true,
-            deserialize: true,
-            json_schema: true,
-            ..prereqs.clone()
-        }),
+        Some(with_external_traits(prereqs.clone())),
     );
 
     let assessment = assess_impl_gap("reqwest", &prereqs, Some(&probe), false, None);
@@ -79,17 +74,7 @@ fn classifies_pure_feature_gated_external_when_our_traits_complete() {
 #[test]
 fn marks_externally_blocked_when_no_probe_unlock() {
     cordial::init_tracing();
-    let prereqs = TraitPrereqs {
-        serialize: false,
-        deserialize: false,
-        json_schema: false,
-        elicitation_trait: true,
-        elicit_introspect: true,
-        elicit_spec: true,
-        elicit_prompt_tree: true,
-        to_code_literal: true,
-        ..TraitPrereqs::default()
-    };
+    let prereqs = with_our_traits();
 
     let assessment = assess_impl_gap("reqwest", &prereqs, None, false, None);
     assert!(assessment.gap_kind().is_none());

@@ -85,14 +85,8 @@ pub fn mirror_target(ir: &dyn IrView, node: NodeId) -> Option<NodeId> {
 /// All rustdoc-origin item nodes with a `qualified_path` attr.
 #[instrument(level = "debug", skip(ir))]
 pub fn rustdoc_item_nodes(ir: &dyn IrView) -> Vec<NodeRef<'_>> {
-    static ALL_NODES: BasicQuery = BasicQuery {
-        node_kinds: Vec::new(),
-        edge_kinds: Vec::new(),
-        attr_key: None,
-        attr_value: None,
-    };
-
-    ir.nodes_matching(&ALL_NODES)
+    let all_nodes = BasicQuery::all_nodes();
+    ir.nodes_matching(&all_nodes)
         .into_iter()
         .filter(|node| {
             node.attr(ATTR_QUALIFIED_PATH)

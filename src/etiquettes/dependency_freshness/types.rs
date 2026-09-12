@@ -573,28 +573,36 @@ impl DependencySurveyRecord {
 }
 
 /// Input object for constructing a dependency survey record.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_builder::Builder)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub(crate) struct DependencySurveyRecordInput {
     /// Crate whose manifest contains the declaration.
-    pub(crate) crate_name: String,
+    crate_name: String,
     /// Dependency key in the manifest.
-    pub(crate) dependency_name: String,
+    dependency_name: String,
     /// Actual package name, accounting for `package = "..."` renames.
-    pub(crate) package_name: String,
+    package_name: String,
     /// Manifest path that declared the dependency.
-    pub(crate) manifest_path: PathBuf,
+    manifest_path: PathBuf,
     /// Manifest line for the declaration when recoverable.
-    pub(crate) line: u32,
+    line: u32,
     /// Cargo dependency section.
-    pub(crate) section: DependencySection,
+    section: DependencySection,
     /// Manifest version policy.
-    pub(crate) version_spec: ManifestVersionSpec,
+    version_spec: ManifestVersionSpec,
     /// Source class visible in the manifest.
-    pub(crate) source_kind: DependencySourceKind,
+    source_kind: DependencySourceKind,
     /// Versions currently resolved in `Cargo.lock`.
-    pub(crate) locked_versions: Vec<String>,
+    locked_versions: Vec<String>,
     /// Additional manifest-structure indicators collected by the scanner.
-    pub(crate) indicators: Vec<DependencyFreshnessIndicator>,
+    indicators: Vec<DependencyFreshnessIndicator>,
+}
+
+impl DependencySurveyRecordInput {
+    /// Start building a dependency survey record input.
+    pub(crate) fn builder() -> DependencySurveyRecordInputBuilder {
+        DependencySurveyRecordInputBuilder::default()
+    }
 }
 
 fn indicators_for(

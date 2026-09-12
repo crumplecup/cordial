@@ -23,7 +23,7 @@ impl CrateAttrsRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -80,7 +80,7 @@ impl Reporter for CrateAttrsCsvReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let all_rows = crate_attrs_rows(findings);
         let mut rows: Vec<_> = open_rows(&all_rows).collect();
@@ -97,11 +97,11 @@ impl Reporter for CrateAttrsCsvReporter {
                 csv_field(&row.snippet),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "crate-attrs.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "crate-attrs.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -122,7 +122,7 @@ impl Reporter for CrateAttrsChecklistReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = crate_attrs_rows(findings);
         let mut open: Vec<_> = open_rows(&rows).collect();
@@ -160,11 +160,11 @@ impl Reporter for CrateAttrsChecklistReporter {
             }
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "crate-attrs.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "crate-attrs.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -192,7 +192,7 @@ impl Reporter for CrateAttrsSummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = crate_attrs_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -233,10 +233,10 @@ impl Reporter for CrateAttrsSummaryReporter {
             ));
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "crate-attrs-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "crate-attrs-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

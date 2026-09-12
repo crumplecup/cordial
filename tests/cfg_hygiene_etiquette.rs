@@ -104,17 +104,19 @@ fn cfg_hygiene_etiquette_flags_undeclared_but_not_builtin() -> miette::Result<()
     let mut sink = MapFindingSink::default();
     unexpected[0].emit(&mut sink);
     assert!(
-        sink.fields
+        sink.fields()
             .iter()
             .any(|(k, v)| k == "cfg_name" && v == "totally_undeclared_name"),
         "flagged finding should name totally_undeclared_name: {:?}",
-        sink.fields
+        sink.fields()
     );
     assert!(
         findings.iter().all(|finding| {
             let mut s = MapFindingSink::default();
             finding.emit(&mut s);
-            !s.fields.iter().any(|(k, v)| k == "cfg_name" && v == "test")
+            !s.fields()
+                .iter()
+                .any(|(k, v)| k == "cfg_name" && v == "test")
         }),
         "cfg(test) is Cargo-injected and must never be flagged"
     );
@@ -241,11 +243,11 @@ fn wrong_verifier() {}
     let mut sink = MapFindingSink::default();
     mismatches[0].emit(&mut sink);
     assert!(
-        sink.fields
+        sink.fields()
             .iter()
             .any(|(k, v)| k == "cfg_name" && v == "creusot"),
         "the mismatch finding should name creusot: {:?}",
-        sink.fields
+        sink.fields()
     );
     Ok(())
 }

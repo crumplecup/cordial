@@ -32,7 +32,7 @@ fn coverage_rows(findings: &[&dyn Finding]) -> Vec<CoverageRow> {
             let mut sink = MapFindingSink::default();
             finding.emit(&mut sink);
             let field = |name: &str| {
-                sink.fields
+                sink.fields()
                     .iter()
                     .find(|(key, _)| key == name)
                     .map(|(_, value)| value.clone())
@@ -59,7 +59,7 @@ fn coverage_rows(findings: &[&dyn Finding]) -> Vec<CoverageRow> {
         .collect()
 }
 
-/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// Distinct crate names present in `rows`, sorted -- `view.ir().crate_name()`
 /// is pinned to whichever crate the run's target discovery lists first, not
 /// the crate a given row actually belongs to, so a workspace-spanning
 /// artifact must derive its own crate breakdown from `row.crate_name`
@@ -85,7 +85,7 @@ impl Reporter for ImplCoverageCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from(
             "crate,type_path,gap_kind,missing_our_traits,missing_external_traits,elicit_complete_gap,proof_test,composition_test,disposition\n",
@@ -104,11 +104,11 @@ impl Reporter for ImplCoverageCsvReporter {
                 csv_field(&row.disposition),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "impl-coverage.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "impl-coverage.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -125,7 +125,7 @@ impl Reporter for ImplGapsCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from(
             "crate,type_path,gap_kind,missing_our_traits,missing_external_traits,elicit_complete_gap,feature_gated_external,feature_owner_crate,candidate_unlock_features,coverage_provider,wrapper_paths,covered_indirectly\n",
@@ -150,11 +150,11 @@ impl Reporter for ImplGapsCsvReporter {
                 csv_field(&row.covered_indirectly),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "gaps-impl.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "gaps-impl.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -173,7 +173,7 @@ impl Reporter for ImplChecklistReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let owned_rows: Vec<_> = coverage_rows(findings)
             .into_iter()
@@ -200,10 +200,10 @@ impl Reporter for ImplChecklistReporter {
                 ));
             }
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "impl-coverage.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "impl-coverage.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

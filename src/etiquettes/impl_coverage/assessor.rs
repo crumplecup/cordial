@@ -34,8 +34,8 @@ impl Assessor for ImplGapAssessor {
 
     #[instrument(level = "trace", skip(self, view))]
     fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
-        let markers = view.markers;
-        let ir = view.ir;
+        let markers = view.markers();
+        let ir = view.ir();
 
         let mut findings = Vec::new();
         let mut seen = HashSet::new();
@@ -131,7 +131,7 @@ fn coverage_finding(node_id: crate::ir::NodeId, args: CoverageFindingArgs<'_>) -
     Box::new(ImplGapFinding::new(
         CoverageRule,
         args.disposition,
-        crate::objects::NodeAnchor(node_id),
+        crate::objects::NodeAnchor::new(node_id),
         args.crate_name.to_string(),
         args.type_path.to_string(),
         args.gap_kind,

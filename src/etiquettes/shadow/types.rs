@@ -45,14 +45,17 @@ impl Marker for MissingMirrorMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new)]
 pub struct MissingMirrorFinding {
-    pub rule: ShadowRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub target_path: String,
-    pub shadow_path: String,
+    #[getter(copy)]
+    rule: ShadowRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    #[getter(copy)]
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    target_path: String,
+    shadow_path: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -92,14 +95,17 @@ impl Rule for ShadowPairChecklistRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new)]
 pub struct ShadowMethodChecklistFinding {
-    pub rule: ShadowPairChecklistRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub target_crate: String,
-    pub shadow_crate: String,
-    pub body: String,
+    #[getter(copy)]
+    rule: ShadowPairChecklistRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    #[getter(copy)]
+    anchor: crate::objects::NodeAnchor,
+    target_crate: String,
+    shadow_crate: String,
+    body: String,
 }
 
 impl Finding for ShadowMethodChecklistFinding {
@@ -122,15 +128,19 @@ impl Finding for ShadowMethodChecklistFinding {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new)]
 pub struct CrossCrateShadowFinding {
-    pub rule: ShadowPairRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub target_crate: String,
-    pub shadow_crate: String,
-    pub row: crate::shadow::ShadowRow,
-    pub coverage_pct: f64,
+    #[getter(copy)]
+    rule: ShadowPairRule,
+    #[getter(copy)]
+    disposition: Disposition,
+    #[getter(copy)]
+    anchor: crate::objects::NodeAnchor,
+    target_crate: String,
+    shadow_crate: String,
+    row: crate::shadow::ShadowRow,
+    #[getter(copy)]
+    coverage_pct: f64,
 }
 
 impl Finding for CrossCrateShadowFinding {
@@ -150,37 +160,37 @@ impl Finding for CrossCrateShadowFinding {
         let render = crate::shadow::render_shadow_row(&self.row);
         sink.field("target_crate", &self.target_crate);
         sink.field("shadow_crate", &self.shadow_crate);
-        sink.field("item_path", &self.row.item_path);
-        sink.field("item_kind", &self.row.item_kind.as_str());
-        sink.field("status", &self.row.status.as_str());
-        sink.field("coverage_kind", &render.coverage_kind);
-        sink.field("primary_gap_kind", &render.primary_gap_kind);
-        sink.field("shadow_item", &self.row.shadow_item);
-        sink.field("drift_confidence", &self.row.drift_confidence);
-        sink.field("shadow_elicit_impl", &self.row.shadow_elicit_impl);
-        let verification_gap = if render.verification_gap {
+        sink.field("item_path", self.row.item_path());
+        sink.field("item_kind", &self.row.item_kind().as_str());
+        sink.field("status", &self.row.status().as_str());
+        sink.field("coverage_kind", render.coverage_kind());
+        sink.field("primary_gap_kind", render.primary_gap_kind());
+        sink.field("shadow_item", self.row.shadow_item());
+        sink.field("drift_confidence", self.row.drift_confidence());
+        sink.field("shadow_elicit_impl", self.row.shadow_elicit_impl());
+        let verification_gap = if render.verification_gap() {
             "true"
         } else {
             "false"
         };
-        let verification_ready = if render.verification_ready {
+        let verification_ready = if render.verification_ready() {
             "true"
         } else {
             "false"
         };
         sink.field("verification_gap", &verification_gap);
         sink.field("verification_ready", &verification_ready);
-        sink.field("shadow_can_be_direct", &self.row.shadow_can_be_direct);
+        sink.field("shadow_can_be_direct", self.row.shadow_can_be_direct());
         sink.field(
             "shadow_missing_external_traits",
-            &self.row.shadow_missing_external_traits,
+            self.row.shadow_missing_external_traits(),
         );
         sink.field(
             "shadow_missing_our_traits",
-            &self.row.shadow_missing_our_traits,
+            self.row.shadow_missing_our_traits(),
         );
-        sink.field("action", &render.action);
-        sink.field("notes", &self.row.notes);
+        sink.field("action", render.action());
+        sink.field("notes", self.row.notes());
         sink.field("coverage_pct", &format!("{:.1}", self.coverage_pct));
     }
 }

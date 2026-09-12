@@ -27,18 +27,14 @@ fn rustdoc_structure_enricher_materializes_type_attrs() -> miette::Result<()> {
 
     let session = SessionBuilder::new(temp.path()).build();
     RustdocStructureEnricher
-        .enrich(EnrichView {
-            ir: &mut ir,
-            load: &load as &dyn LoadView,
-            session: &session,
-        })
+        .enrich(EnrichView::new(&mut ir, &load as &dyn LoadView, &session))
         .into_diagnostic()
         .wrap_err("enrich")?;
 
     let prereqs =
         type_trait_prereqs(&ir, "demo::Widget").ok_or_else(|| miette::miette!("prereqs"))?;
-    assert!(prereqs.serialize);
-    assert!(!prereqs.deserialize);
+    assert!(prereqs.serialize());
+    assert!(!prereqs.deserialize());
 
     assert_eq!(type_trait_impls(&ir, "demo::Widget"), vec!["Serialize"]);
     assert_eq!(type_public_methods(&ir, "demo::Widget"), vec!["draw"]);

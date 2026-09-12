@@ -98,16 +98,16 @@ impl QueryBuilder {
 }
 
 /// Concrete query used by built-in probes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub struct BasicQuery {
     /// Node kinds this query matches.
-    pub node_kinds: Vec<NodeKind>,
+    node_kinds: Vec<NodeKind>,
     /// Edge kinds this query traverses.
-    pub edge_kinds: Vec<EdgeKind>,
+    edge_kinds: Vec<EdgeKind>,
     /// Optional attribute key this query filters on.
-    pub attr_key: Option<String>,
+    attr_key: Option<String>,
     /// Optional attribute value this query filters on.
-    pub attr_value: Option<String>,
+    attr_value: Option<String>,
 }
 
 impl Query for BasicQuery {

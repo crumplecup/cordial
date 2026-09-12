@@ -33,7 +33,7 @@ impl ForeignErrorTypeRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -79,7 +79,7 @@ fn open_rows(rows: &[ForeignErrorTypeRow]) -> impl Iterator<Item = &ForeignError
     rows.iter().filter(|row| row.disposition == "open")
 }
 
-/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// Distinct crate names present in `rows`, sorted -- `view.ir().crate_name()`
 /// is pinned to whichever crate the run's target discovery lists first, not
 /// the crate a given row actually belongs to, so a workspace-spanning
 /// artifact must derive its own crate breakdown from `row.crate_name`
@@ -181,7 +181,7 @@ impl Reporter for ForeignErrorTypesCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from(
             "crate,foreign_error_type,rule_id,confidence,chain_break,site_kind,context,file,line,source_snippet,site_snippet\n",
@@ -202,11 +202,11 @@ impl Reporter for ForeignErrorTypesCsvReporter {
                 csv_field(&row.site_snippet),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "foreign-error-types.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "foreign-error-types.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -224,7 +224,7 @@ impl Reporter for ForeignErrorTypesChecklistReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = foreign_error_type_rows(findings);
         let chain_breaks: Vec<_> = typed_rows(&rows)
@@ -266,11 +266,11 @@ impl Reporter for ForeignErrorTypesChecklistReporter {
             body.push('\n');
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "foreign-error-types.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "foreign-error-types.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -288,7 +288,7 @@ impl Reporter for ForeignErrorTypesSummaryReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = foreign_error_type_rows(findings);
         let typed: Vec<_> = typed_rows(&rows).cloned().collect();
@@ -337,11 +337,11 @@ impl Reporter for ForeignErrorTypesSummaryReporter {
             summary.inferred_sites()
         ));
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "foreign-error-types-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "foreign-error-types-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -361,7 +361,7 @@ impl Reporter for ForeignErrorsChecklistReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = foreign_error_type_rows(findings);
         let candidates: Vec<_> = open_rows(&rows)
@@ -419,10 +419,10 @@ impl Reporter for ForeignErrorsChecklistReporter {
             }
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "foreign-errors.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "foreign-errors.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

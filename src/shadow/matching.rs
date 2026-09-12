@@ -7,7 +7,7 @@ use crate::rustdoc::{InventoryItemKind, RustdocItem};
 use tracing::instrument;
 #[instrument(level = "debug", skip(item))]
 pub fn counts_toward_shadow_coverage(item: &RustdocItem) -> bool {
-    counts_toward_shadow_kind(item.kind)
+    counts_toward_shadow_kind(item.kind())
 }
 
 #[instrument(level = "debug", skip(kind))]
@@ -25,7 +25,7 @@ pub fn find_drift_match<'a>(
     target_item: &RustdocItem,
     shadow_names: &HashMap<String, Vec<&'a RustdocItem>>,
 ) -> Option<(&'a RustdocItem, f32)> {
-    let target_norm = normalize_name(&target_item.name);
+    let target_norm = normalize_name(target_item.name());
     let mut best: Option<(&RustdocItem, f32)> = None;
 
     for (shadow_norm, candidates) in shadow_names {
@@ -39,7 +39,7 @@ pub fn find_drift_match<'a>(
             continue;
         }
         for shadow_item in candidates {
-            if shadow_item.kind != target_item.kind {
+            if shadow_item.kind() != target_item.kind() {
                 continue;
             }
             if best.is_none_or(|(_, c)| confidence > c) {

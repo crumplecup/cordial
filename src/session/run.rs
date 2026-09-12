@@ -193,11 +193,8 @@ pub(super) fn run_session(
         );
         for assessor in &workspace_assessors {
             task.set_message(format!("Assessing workspace rule {}", assessor.id()));
-            all_findings.extend(assessor.assess(WorkspaceAssessView {
-                workspace: &workspace,
-                session,
-                filter,
-            })?);
+            all_findings
+                .extend(assessor.assess(WorkspaceAssessView::new(&workspace, session, filter))?);
             task.inc(1);
         }
         task.finish(format!(
@@ -284,7 +281,7 @@ fn load_and_probe(
         let mut crate_ir = CrateIr::new(target.crate_name());
 
         for loader in loaders {
-            let view = loader.load(LoadContext { session, target })?;
+            let view = loader.load(LoadContext::new(session, target))?;
             if view.loader_id() == SourceLoader::ID
                 && let Some(source) = view.as_any().downcast_ref::<SourceLoadView>()
             {
@@ -301,21 +298,14 @@ fn load_and_probe(
                 .or_insert(view);
         }
 
-        if !workspace.crates.contains_key(target.crate_name()) {
+        if !workspace.crates().contains_key(target.crate_name()) {
             workspace.insert_crate(crate_ir);
         }
 
         for enricher in enrichers {
             let load = select_load_view(*enricher, &load_views, target.crate_name())?;
-            let mut view = CrateViewMut {
-                workspace: &mut workspace,
-                crate_name: target.crate_name().clone(),
-            };
-            enricher.enrich(EnrichView {
-                ir: &mut view,
-                load,
-                session,
-            })?;
+            let mut view = CrateViewMut::new(&mut workspace, target.crate_name().clone());
+            enricher.enrich(EnrichView::new(&mut view, load, session))?;
         }
 
         let cached = workspace
@@ -329,15 +319,9 @@ fn load_and_probe(
             target.crate_name(),
         ))?;
 
-        let crate_view = CrateView {
-            workspace: &workspace,
-            crate_name: target.crate_name().clone(),
-        };
+        let crate_view = CrateView::new(&workspace, target.crate_name().clone());
         for probe in probes {
-            let mut found = probe.probe(ProbeView {
-                ir: &crate_view,
-                session,
-            })?;
+            let mut found = probe.probe(ProbeView::new(&crate_view, session))?;
             markers_by_crate
                 .entry(target.crate_name().clone())
                 .or_default()
@@ -387,10 +371,7 @@ fn assess_targets(
             .iter()
             .map(|marker| marker.as_ref() as &dyn Marker)
             .collect();
-        let crate_view = CrateView {
-            workspace,
-            crate_name: target.crate_name().clone(),
-        };
+        let crate_view = CrateView::new(workspace, target.crate_name().clone());
 
         let mut crate_findings: Vec<Box<dyn Finding>> = Vec::new();
         for assessor in assessors {
@@ -399,11 +380,7 @@ fn assess_targets(
                 .copied()
                 .filter(|marker| assessor.consumes().contains(&marker.label()))
                 .collect();
-            let mut findings = assessor.assess(AssessView {
-                markers: &relevant,
-                ir: &crate_view,
-                session,
-            })?;
+            let mut findings = assessor.assess(AssessView::new(&relevant, &crate_view, session))?;
             crate_findings.append(&mut findings);
         }
 
@@ -447,10 +424,7 @@ fn render_and_write(
         .first()
         .map(|target| target.crate_name().clone())
         .ok_or_else(|| CordialError::invariant("workspace missing crate targets"))?;
-    let crate_view = CrateView {
-        workspace,
-        crate_name: primary_name,
-    };
+    let crate_view = CrateView::new(workspace, primary_name);
 
     let finding_refs: Vec<&dyn Finding> = all_findings
         .iter()
@@ -460,20 +434,14 @@ fn render_and_write(
     let progress = session.progress().spinner("Writing reports".to_string());
     let mut all_artifacts: Vec<Box<dyn Artifact>> = Vec::new();
     for reporter in reporters {
-        let mut artifacts = reporter.render(RenderView {
-            findings: &finding_refs,
-            ir: &crate_view,
-            session,
-        })?;
+        let mut artifacts =
+            reporter.render(RenderView::new(&finding_refs, &crate_view, session))?;
         all_artifacts.append(&mut artifacts);
     }
 
     let rollup = RollupReporter;
-    let mut rollup_artifacts = rollup.render(RenderView {
-        findings: &finding_refs,
-        ir: &crate_view,
-        session,
-    })?;
+    let mut rollup_artifacts =
+        rollup.render(RenderView::new(&finding_refs, &crate_view, session))?;
     all_artifacts.append(&mut rollup_artifacts);
 
     #[cfg(feature = "quality")]
@@ -484,11 +452,8 @@ fn render_and_write(
     #[cfg(feature = "quality")]
     if includes_quality {
         let quality_report = QualityReportReporter;
-        let mut quality_artifacts = quality_report.render(RenderView {
-            findings: &finding_refs,
-            ir: &crate_view,
-            session,
-        })?;
+        let mut quality_artifacts =
+            quality_report.render(RenderView::new(&finding_refs, &crate_view, session))?;
         all_artifacts.append(&mut quality_artifacts);
     }
 
@@ -512,11 +477,11 @@ fn render_and_write(
         } else {
             "summary.md"
         };
-        all_artifacts.push(Box::new(TextArtifact {
-            name: summary_name.to_string(),
-            media_type: "text/markdown".to_string(),
+        all_artifacts.push(Box::new(TextArtifact::new(
+            summary_name.to_string(),
+            "text/markdown".to_string(),
             body,
-        }));
+        )));
         all_artifacts.extend(summary.into_extra_artifacts());
     }
     #[cfg(not(any(

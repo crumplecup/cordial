@@ -34,7 +34,7 @@ impl IrEnricher for WrapperCoverageEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let ir = view.ir;
+        let ir = view.ir();
 
         let Some(map) = ir.workspace_wrapper_coverage() else {
             return Ok(());
@@ -49,7 +49,7 @@ impl IrEnricher for WrapperCoverageEnricher {
             .filter(|node| matches!(node.kind(), NodeKind::Item(_)))
             .filter_map(|node| {
                 let path = node.attr(ATTR_QUALIFIED_PATH)?.as_str()?.to_string();
-                Some((node.id, path))
+                Some((node.id(), path))
             })
             .collect();
 

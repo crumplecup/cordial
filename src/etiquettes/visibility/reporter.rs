@@ -23,7 +23,7 @@ impl VisibilityRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -79,7 +79,7 @@ impl Reporter for VisibilityCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from(
             "crate,rule_id,module_path,file,line,name_count,parent_vis,declared_vis\n",
@@ -97,11 +97,11 @@ impl Reporter for VisibilityCsvReporter {
                 csv_field(&row.declared_vis),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "visibility.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "visibility.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -119,7 +119,7 @@ impl Reporter for VisibilityChecklistReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = visibility_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -154,11 +154,11 @@ impl Reporter for VisibilityChecklistReporter {
         } else {
             body.push_str("_No visibility-path findings._\n\n");
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "visibility.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "visibility.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -178,7 +178,7 @@ impl Reporter for VisibilitySummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = visibility_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -224,10 +224,10 @@ impl Reporter for VisibilitySummaryReporter {
                 "| `{crate_name}` | {crate_flat} | {crate_thin} | {crate_mismatch} |\n",
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "visibility-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "visibility-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

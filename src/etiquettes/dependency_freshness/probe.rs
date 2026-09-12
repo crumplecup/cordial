@@ -59,13 +59,13 @@ impl Probe for DependencyFreshnessSiteProbe {
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
         Ok(view
-            .ir
+            .ir()
             .nodes_matching(&DEPENDENCY_FRESHNESS_SITES_QUERY)
             .into_iter()
             .map(|node| {
-                Box::new(DependencyFreshnessMarker::new(crate::objects::NodeAnchor(
-                    node.id,
-                ))) as Box<dyn Marker>
+                Box::new(DependencyFreshnessMarker::new(
+                    crate::objects::NodeAnchor::new(node.id()),
+                )) as Box<dyn Marker>
             })
             .collect())
     }

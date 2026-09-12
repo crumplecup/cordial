@@ -26,8 +26,8 @@ impl Reporter for ModularitySummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
-        let session = view.session;
+        let findings = view.findings();
+        let session = view.session();
 
         let rows = modularity_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -55,14 +55,14 @@ impl Reporter for ModularitySummaryReporter {
         let mut modules: Vec<_> = open
             .iter()
             .copied()
-            .filter(|row| row.kind == "MODULARITY-MODULE-SIZE")
+            .filter(|row| row.kind() == "MODULARITY-MODULE-SIZE")
             .collect();
         sort_by_lines_desc(&mut modules);
         let sigma = thresholds.module_size_sigma();
         let min_lines = thresholds.min_module_lines();
         let sample_lines: Vec<u32> = modules
             .iter()
-            .filter_map(|row| row.lines.parse::<u32>().ok())
+            .filter_map(|row| row.lines().parse::<u32>().ok())
             .filter(|lines| *lines >= min_lines)
             .collect();
         let stats = ModuleSizeStats::from_lines(&sample_lines);
@@ -85,7 +85,7 @@ impl Reporter for ModularitySummaryReporter {
             let crate_open: Vec<_> = inventory
                 .iter()
                 .copied()
-                .filter(|row| row.crate_name == crate_name)
+                .filter(|row| row.crate_name() == &crate_name)
                 .collect();
             let crate_checklist: Vec<_> = crate_open
                 .iter()
@@ -138,11 +138,11 @@ impl Reporter for ModularitySummaryReporter {
             append_hierarchy_sections(&mut body, &modules, thresholds);
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "modularity-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "modularity-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -158,7 +158,7 @@ fn append_truncated_module_table(body: &mut String, modules: &[&ModularityRow]) 
             break;
         }
         if shown.iter().any(|existing| {
-            existing.crate_name == row.crate_name && existing.context == row.context
+            existing.crate_name() == row.crate_name() && existing.context() == row.context()
         }) {
             continue;
         }
@@ -169,14 +169,17 @@ fn append_truncated_module_table(body: &mut String, modules: &[&ModularityRow]) 
     body.push_str("| --- | --- | --- | ---: | ---: | --- |\n");
     for row in &shown {
         let outlier = if row.is_checklist() { "yes" } else { "" };
-        let zscore = if row.zscore.is_empty() {
+        let zscore = if row.zscore().is_empty() {
             "—"
         } else {
-            row.zscore.as_str()
+            row.zscore().as_str()
         };
         body.push_str(&format!(
             "| `{}` | `{}` | `{}` | {} | {zscore} | {outlier} |\n",
-            row.crate_name, row.context, row.file, row.lines
+            row.crate_name(),
+            row.context(),
+            row.file(),
+            row.lines()
         ));
     }
     let hidden = modules.len().saturating_sub(shown.len());
@@ -190,7 +193,7 @@ fn append_longest_methods(body: &mut String, open: &[&ModularityRow]) {
     let mut methods: Vec<&ModularityRow> = open
         .iter()
         .copied()
-        .filter(|row| row.kind == "MODULARITY-FUNCTION")
+        .filter(|row| row.kind() == "MODULARITY-FUNCTION")
         .collect();
     if methods.is_empty() {
         return;
@@ -209,7 +212,10 @@ fn append_longest_methods(body: &mut String, open: &[&ModularityRow]) {
         let flag = if row.is_checklist() { "yes" } else { "" };
         body.push_str(&format!(
             "| `{}` | `{}` | `{}` | {} | {flag} |\n",
-            row.crate_name, row.context, row.file, row.lines
+            row.crate_name(),
+            row.context(),
+            row.file(),
+            row.lines()
         ));
     }
     if hidden > 0 {

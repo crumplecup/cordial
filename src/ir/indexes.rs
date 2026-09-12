@@ -10,25 +10,37 @@ use tracing::instrument;
 pub type AttrKey = String;
 
 /// JSON value stored on an IR node attribute.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, derive_new::new)]
 #[serde(transparent)]
-pub struct AttrValue(pub serde_json::Value);
+pub struct AttrValue(serde_json::Value);
+
+impl AttrValue {
+    /// Borrow the stored JSON value.
+    #[instrument(level = "trace", skip(self))]
+    pub fn value(&self) -> &serde_json::Value {
+        &self.0
+    }
+}
 
 /// Fully-qualified Rust path used for indexing.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct QualifiedPath(pub Vec<String>);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, derive_getters::Getters)]
+pub struct QualifiedPath {
+    segments: Vec<String>,
+}
 
 impl QualifiedPath {
     /// Build a path from path segments.
     #[instrument(level = "debug", skip(segments), ret)]
     pub fn from_segments(segments: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        Self(segments.into_iter().map(Into::into).collect())
+        Self {
+            segments: segments.into_iter().map(Into::into).collect(),
+        }
     }
 
     /// Stable string form of this value.
     #[instrument(level = "trace", skip(self))]
     pub fn as_str(&self) -> String {
-        self.0.join("::")
+        self.segments.join("::")
     }
 }
 
@@ -40,12 +52,12 @@ impl From<&str> for QualifiedPath {
 }
 
 /// Secondary indexes over a crate graph.
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub struct IrIndexes {
     /// Node ids keyed by `foo::bar` path.
-    pub by_path: HashMap<String, NodeId>,
+    by_path: HashMap<String, NodeId>,
     /// Node ids grouped by kind tag.
-    pub by_kind: HashMap<String, Vec<NodeId>>,
+    by_kind: HashMap<String, Vec<NodeId>>,
 }
 
 impl IrIndexes {
@@ -55,7 +67,7 @@ impl IrIndexes {
     /// of relying only on incremental updates.
     #[instrument(level = "debug", skip(self, node, weight))]
     pub fn index_node(&mut self, node: NodeId, weight: &NodeWeight) {
-        let kind_key = format!("{:?}", weight.kind);
+        let kind_key = format!("{:?}", weight.kind());
         self.by_kind.entry(kind_key).or_default().push(node);
 
         if let Some(path) = weight.attr("qualified_path").and_then(|v| v.as_str()) {

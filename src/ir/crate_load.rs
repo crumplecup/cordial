@@ -34,10 +34,7 @@ pub fn load_crate_ir_if_missing(
         let view = if loader.id() == RustdocLoader::ID {
             load_rustdoc_view(session, &target, shadow_for_upstream)?
         } else {
-            loader.load(LoadContext {
-                session,
-                target: &target,
-            })?
+            loader.load(LoadContext::new(session, &target))?
         };
 
         if view.loader_id() == SourceLoader::ID
@@ -71,15 +68,8 @@ pub fn load_crate_ir_if_missing(
                     enricher.id()
                 ))
             })?;
-        let mut view = CrateViewMut {
-            workspace,
-            crate_name: crate_name.to_string(),
-        };
-        enricher.enrich(EnrichView {
-            ir: &mut view,
-            load,
-            session,
-        })?;
+        let mut view = CrateViewMut::new(workspace, crate_name.to_string());
+        enricher.enrich(EnrichView::new(&mut view, load, session))?;
     }
 
     Ok(())

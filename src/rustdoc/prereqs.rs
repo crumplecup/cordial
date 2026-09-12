@@ -23,26 +23,44 @@ pub const ELICIT_COMPLETE_SUPERTRAITS: &[&str] = &[
 pub const ELICIT_COMPLETE_TRAIT: &str = "ElicitComplete";
 
 /// Which of the eight `ElicitComplete` supertraits a type already implements.
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_getters::Getters,
+)]
 pub struct TraitPrereqs {
     /// Whether `Serialize` is a prerequisite.
-    pub serialize: bool,
+    #[getter(copy)]
+    serialize: bool,
     /// Whether `Deserialize` is a prerequisite.
-    pub deserialize: bool,
+    #[getter(copy)]
+    deserialize: bool,
     /// Whether `JsonSchema` is a prerequisite.
-    pub json_schema: bool,
+    #[getter(copy)]
+    json_schema: bool,
     /// Whether the elicitation trait is a prerequisite.
-    pub elicitation_trait: bool,
+    #[getter(copy)]
+    elicitation_trait: bool,
     /// Whether `ElicitIntrospect` is a prerequisite.
-    pub elicit_introspect: bool,
+    #[getter(copy)]
+    elicit_introspect: bool,
     /// Whether `ElicitSpec` is a prerequisite.
-    pub elicit_spec: bool,
+    #[getter(copy)]
+    elicit_spec: bool,
     /// Whether `ElicitPromptTree` is a prerequisite.
-    pub elicit_prompt_tree: bool,
+    #[getter(copy)]
+    elicit_prompt_tree: bool,
     /// Whether `ToCodeLiteral` is a prerequisite.
-    pub to_code_literal: bool,
+    #[getter(copy)]
+    to_code_literal: bool,
     /// Whether `ElicitComplete` itself is present.
-    pub elicit_complete: bool,
+    #[getter(copy)]
+    elicit_complete: bool,
 }
 
 impl TraitPrereqs {
@@ -143,7 +161,7 @@ pub fn collect_trait_prereqs_for_inventory(
 ) -> HashMap<String, TraitPrereqs> {
     let tracked: std::collections::HashSet<String> = inventory
         .type_items()
-        .map(|item| item.path.clone())
+        .map(|item| item.path().clone())
         .collect();
     let canonical_map = canonical_to_public_map(inventory);
     let extended: std::collections::HashSet<String> = tracked
@@ -153,7 +171,7 @@ pub fn collect_trait_prereqs_for_inventory(
         .collect();
 
     let mut map: HashMap<String, TraitPrereqs> = HashMap::new();
-    for item in inventory.krate.index.values() {
+    for item in inventory.krate().index.values() {
         let ItemEnum::Impl(impl_item) = &item.inner else {
             continue;
         };
@@ -169,7 +187,7 @@ pub fn collect_trait_prereqs_for_inventory(
         let Type::ResolvedPath(type_path) = &impl_item.for_ else {
             continue;
         };
-        let Some(summary) = inventory.krate.paths.get(&type_path.id) else {
+        let Some(summary) = inventory.krate().paths.get(&type_path.id) else {
             continue;
         };
         let canonical = summary.path.join("::");

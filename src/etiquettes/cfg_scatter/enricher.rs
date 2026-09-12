@@ -25,9 +25,7 @@ impl IrEnricher for CfgScatterInventoryEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let ir = view.ir;
-        let load = view.load;
-        let session = view.session;
+        let (ir, load, session) = view.into_parts();
 
         let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
             return Ok(());

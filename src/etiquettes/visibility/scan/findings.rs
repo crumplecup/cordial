@@ -21,12 +21,12 @@ pub(super) fn collect_findings(
             out.push(
                 VisibilityRecord::builder()
                     .rule_id(VisibilityRuleId::CrateFlat001)
-                    .module_path(pub_mod.path.clone())
-                    .file(pub_mod.file.clone())
-                    .line(pub_mod.line)
+                    .module_path(pub_mod.path().clone())
+                    .file(pub_mod.file().clone())
+                    .line(pub_mod.line())
                     .name_count(external)
                     .parent_vis("pub".to_string())
-                    .declared_vis(pub_mod.declared_vis.as_str().to_string())
+                    .declared_vis(pub_mod.declared_vis().as_str().to_string())
                     .build()?,
             );
         }
@@ -48,54 +48,54 @@ fn collect_module_findings(
     thin_floor: usize,
     out: &mut Vec<VisibilityRecord>,
 ) -> crate::error::CordialResult<()> {
-    if !node.is_crate_root {
-        let mismatch = node.declared_vis.is_unrestricted_pub() && !node.parent_declared_pub;
+    if !node.is_crate_root() {
+        let mismatch = node.declared_vis().is_unrestricted_pub() && !node.parent_declared_pub();
         if mismatch {
             out.push(
                 VisibilityRecord::builder()
                     .rule_id(VisibilityRuleId::ModMismatch001)
-                    .module_path(node.path.clone())
-                    .file(node.file.clone())
-                    .line(node.line)
-                    .name_count(node.leaf_crate)
-                    .parent_vis(if node.parent_declared_pub {
+                    .module_path(node.path().clone())
+                    .file(node.file().clone())
+                    .line(node.line())
+                    .name_count(node.leaf_crate())
+                    .parent_vis(if node.parent_declared_pub() {
                         "pub".to_string()
                     } else {
                         "non-pub".to_string()
                     })
-                    .declared_vis(node.declared_vis.as_str().to_string())
+                    .declared_vis(node.declared_vis().as_str().to_string())
                     .build()?,
             );
         }
-        let is_path = node.declared_vis.is_unrestricted_pub()
-            || node.declared_vis == VisKind::PubCrate
+        let is_path = node.declared_vis().is_unrestricted_pub()
+            || node.declared_vis() == VisKind::PubCrate
             || mismatch;
         if is_path {
-            let count = if node.declared_vis.is_unrestricted_pub() && node.ancestors_all_pub {
-                node.leaf_pub
+            let count = if node.declared_vis().is_unrestricted_pub() && node.ancestors_all_pub() {
+                node.leaf_pub()
             } else {
-                node.leaf_crate
+                node.leaf_crate()
             };
             if count < thin_floor {
                 out.push(
                     VisibilityRecord::builder()
                         .rule_id(VisibilityRuleId::ModThin001)
-                        .module_path(node.path.clone())
-                        .file(node.file.clone())
-                        .line(node.line)
+                        .module_path(node.path().clone())
+                        .file(node.file().clone())
+                        .line(node.line())
                         .name_count(count)
-                        .parent_vis(if node.parent_declared_pub {
+                        .parent_vis(if node.parent_declared_pub() {
                             "pub".to_string()
                         } else {
                             "non-pub".to_string()
                         })
-                        .declared_vis(node.declared_vis.as_str().to_string())
+                        .declared_vis(node.declared_vis().as_str().to_string())
                         .build()?,
                 );
             }
         }
     }
-    for child in &node.children {
+    for child in node.children() {
         collect_module_findings(child, thin_floor, out)?;
     }
     Ok(())

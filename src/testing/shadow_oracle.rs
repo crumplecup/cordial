@@ -37,12 +37,12 @@ pub fn build_shadow_pair_report_from_inventories(
     let shadow_methods = collect_type_methods_from_inventory(shadow);
     let target_trait_impls = collect_trait_impl_map_from_inventory(target);
     let shadow_trait_impls = collect_trait_impl_map_from_inventory(shadow);
-    let maps = ShadowBuildMaps {
-        target_methods: &target_methods,
-        shadow_methods: &shadow_methods,
-        target_trait_impls: &target_trait_impls,
-        shadow_trait_impls: &shadow_trait_impls,
-    };
+    let maps = ShadowBuildMaps::new(
+        &target_methods,
+        &shadow_methods,
+        &target_trait_impls,
+        &shadow_trait_impls,
+    );
     build_shadow_report_from_inventories_with_maps(target, shadow, &maps)
 }
 

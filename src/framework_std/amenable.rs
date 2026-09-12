@@ -38,46 +38,65 @@ impl std::fmt::Display for AmenableStdStatus {
 }
 
 /// One row in an amenable std registry coverage report.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new, derive_getters::Getters,
+)]
 pub struct AmenableStdEntry {
-    pub type_path: String,
-    pub type_kind: String,
-    pub is_generic: bool,
-    pub evidence_link: bool,
-    pub evidence_name: Option<String>,
-    pub kani_witness: bool,
-    pub creusot_witness: bool,
-    pub verus_witness: bool,
-    pub proof_test: bool,
-    pub status: AmenableStdStatus,
-    pub skip_reason: Option<String>,
+    type_path: String,
+    type_kind: String,
+    #[getter(copy)]
+    is_generic: bool,
+    #[getter(copy)]
+    evidence_link: bool,
+    evidence_name: Option<String>,
+    #[getter(copy)]
+    kani_witness: bool,
+    #[getter(copy)]
+    creusot_witness: bool,
+    #[getter(copy)]
+    verus_witness: bool,
+    #[getter(copy)]
+    proof_test: bool,
+    #[getter(copy)]
+    status: AmenableStdStatus,
+    skip_reason: Option<String>,
     #[serde(default)]
-    pub kani_excepted: bool,
+    #[getter(copy)]
+    kani_excepted: bool,
     #[serde(default)]
-    pub creusot_excepted: bool,
+    #[getter(copy)]
+    creusot_excepted: bool,
     #[serde(default)]
-    pub verus_excepted: bool,
+    #[getter(copy)]
+    verus_excepted: bool,
 }
 
 /// Coverage report for amenable std registry vs std type inventory.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+)]
 pub struct AmenableStdReport {
     /// Crate that defined the foreign type.
-    pub source_crate: String,
+    source_crate: String,
     /// Crate that provides the impl under review.
-    pub impl_crate: String,
+    impl_crate: String,
     /// Whether nightly-only items are in scope.
-    pub include_nightly: bool,
+    #[getter(copy)]
+    include_nightly: bool,
     /// Per-item coverage rows.
-    pub entries: Vec<AmenableStdEntry>,
+    entries: Vec<AmenableStdEntry>,
     /// How many rows are complete.
-    pub complete_count: usize,
+    #[getter(copy)]
+    complete_count: usize,
     /// How many rows are partial.
-    pub partial_count: usize,
+    #[getter(copy)]
+    partial_count: usize,
     /// How many items are still missing.
-    pub missing_count: usize,
+    #[getter(copy)]
+    missing_count: usize,
     /// How many rows were skipped.
-    pub skipped_count: usize,
+    #[getter(copy)]
+    skipped_count: usize,
 }
 
 impl AmenableStdReport {
@@ -94,14 +113,17 @@ impl AmenableStdReport {
 }
 
 /// One actionable gap row for amenable std registry coverage.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+)]
 pub struct AmenableStdGapEntry {
-    pub source_crate: String,
-    pub type_path: String,
-    pub type_kind: String,
-    pub status: AmenableStdStatus,
-    pub missing_layers: String,
-    pub action: String,
+    source_crate: String,
+    type_path: String,
+    type_kind: String,
+    #[getter(copy)]
+    status: AmenableStdStatus,
+    missing_layers: String,
+    action: String,
 }
 
 /// Build an amenable std registry coverage report.
@@ -123,16 +145,16 @@ pub fn build_amenable_std_report(
 
     for item in framework_std_type_items(items, include_nightly) {
         let entry = classify_amenable_std_row(
-            &item.path,
-            ClassifyRowArgs {
-                type_kind: item.kind.as_str(),
-                is_generic: item.is_generic,
-                alias_target: item.alias_target.as_deref(),
+            item.path(),
+            ClassifyRowArgs::new(
+                item.kind().as_str(),
+                item.is_generic(),
+                item.alias_target().as_deref(),
                 items,
                 registry,
                 skip_map,
                 proof_chain_subjects,
-            },
+            ),
         );
         match entry.status {
             AmenableStdStatus::Complete => complete_count += 1,
@@ -143,29 +165,30 @@ pub fn build_amenable_std_report(
         entries.push(entry);
     }
 
-    AmenableStdReport {
-        source_crate: source_crate.to_string(),
-        impl_crate: impl_crate.to_string(),
+    AmenableStdReport::new(
+        source_crate.to_string(),
+        impl_crate.to_string(),
         include_nightly,
         entries,
         complete_count,
         partial_count,
         missing_count,
         skipped_count,
-    }
+    )
 }
 
 /// Everything [`classify_amenable_std_row`] needs beyond the row's own
 /// `type_path`, bundled so the function takes two arguments instead of
 /// eight.
+#[derive(derive_new::new)]
 pub struct ClassifyRowArgs<'a> {
-    pub type_kind: &'a str,
-    pub is_generic: bool,
-    pub alias_target: Option<&'a str>,
-    pub items: &'a [StdInventoryItem],
-    pub registry: &'a RegistryDump,
-    pub skip_map: &'a VerifierSkipMap,
-    pub proof_chain_subjects: &'a HashSet<String>,
+    type_kind: &'a str,
+    is_generic: bool,
+    alias_target: Option<&'a str>,
+    items: &'a [StdInventoryItem],
+    registry: &'a RegistryDump,
+    skip_map: &'a VerifierSkipMap,
+    proof_chain_subjects: &'a HashSet<String>,
 }
 
 /// Classify one std inventory row for amenable registry coverage.
@@ -185,22 +208,22 @@ pub fn classify_amenable_std_row(type_path: &str, args: ClassifyRowArgs<'_>) -> 
     if let Some(exception) = exception
         && exception.verifiers().is_none()
     {
-        return AmenableStdEntry {
-            type_path: type_path.to_string(),
-            type_kind: type_kind.to_string(),
+        return AmenableStdEntry::new(
+            type_path.to_string(),
+            type_kind.to_string(),
             is_generic,
-            evidence_link: false,
-            evidence_name: None,
-            kani_witness: false,
-            creusot_witness: false,
-            verus_witness: false,
-            proof_test: false,
-            status: AmenableStdStatus::Skipped,
-            skip_reason: Some(exception.reason().clone()),
-            kani_excepted: true,
-            creusot_excepted: true,
-            verus_excepted: true,
-        };
+            false,
+            None,
+            false,
+            false,
+            false,
+            false,
+            AmenableStdStatus::Skipped,
+            Some(exception.reason().clone()),
+            true,
+            true,
+            true,
+        );
     }
 
     let mut evidence_name = evidence_for_std_type(registry, type_path);
@@ -234,9 +257,9 @@ pub fn classify_amenable_std_row(type_path: &str, args: ClassifyRowArgs<'_>) -> 
         AmenableStdStatus::Partial
     };
 
-    AmenableStdEntry {
-        type_path: type_path.to_string(),
-        type_kind: type_kind.to_string(),
+    AmenableStdEntry::new(
+        type_path.to_string(),
+        type_kind.to_string(),
         is_generic,
         evidence_link,
         evidence_name,
@@ -245,11 +268,11 @@ pub fn classify_amenable_std_row(type_path: &str, args: ClassifyRowArgs<'_>) -> 
         verus_witness,
         proof_test,
         status,
-        skip_reason: exception.map(|e| e.reason().clone()),
-        kani_excepted: !kani_applicable,
-        creusot_excepted: !creusot_applicable,
-        verus_excepted: !verus_applicable,
-    }
+        exception.map(|e| e.reason().clone()),
+        !kani_applicable,
+        !creusot_applicable,
+        !verus_applicable,
+    )
 }
 
 /// Gap metadata for one amenable std row.
@@ -267,11 +290,11 @@ pub fn resolve_alias_chain(items: &[StdInventoryItem], start: &str, max_hops: us
     let mut current = start.to_string();
     for _ in 0..max_hops {
         let Some(next_item) = items.iter().find(|candidate| {
-            candidate.path == current || candidate.path.ends_with(&format!("::{current}"))
+            candidate.path() == &current || candidate.path().ends_with(&format!("::{current}"))
         }) else {
             break;
         };
-        let Some(next_target) = &next_item.alias_target else {
+        let Some(next_target) = next_item.alias_target() else {
             break;
         };
         if *next_target == current {
@@ -296,14 +319,14 @@ pub fn build_amenable_std_gaps(report: &AmenableStdReport) -> Vec<AmenableStdGap
         })
         .map(|entry| {
             let (missing_layers, action) = amenable_gap_fields(entry, &report.impl_crate);
-            AmenableStdGapEntry {
-                source_crate: report.source_crate.clone(),
-                type_path: entry.type_path.clone(),
-                type_kind: entry.type_kind.clone(),
-                status: entry.status,
+            AmenableStdGapEntry::new(
+                report.source_crate.clone(),
+                entry.type_path.clone(),
+                entry.type_kind.clone(),
+                entry.status,
                 missing_layers,
                 action,
-            }
+            )
         })
         .collect()
 }

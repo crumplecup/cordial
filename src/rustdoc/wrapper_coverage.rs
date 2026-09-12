@@ -9,14 +9,17 @@ use super::elicit_complete::ElicitCompleteSet;
 
 use tracing::instrument;
 /// Coverage provided by one elicitation-owned wrapper for a foreign type.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters, derive_new::new,
+)]
 pub struct WrapperCoverage {
     /// Path of the wrapper type.
-    pub wrapper_path: String,
+    wrapper_path: String,
     /// Whether the wrapper impls ElicitComplete.
-    pub wrapper_elicit_complete: bool,
+    #[getter(copy)]
+    wrapper_elicit_complete: bool,
     /// ElicitComplete prerequisites the wrapper satisfies.
-    pub wrapper_prereqs: TraitPrereqs,
+    wrapper_prereqs: TraitPrereqs,
 }
 
 /// Map of type path to wrapper-coverage records.
@@ -52,19 +55,19 @@ pub fn build_wrapper_coverage_map(
     let mut map = WrapperCoverageMap::new();
 
     for (foreign, wrapper) in pairs {
-        let coverage = WrapperCoverage {
-            wrapper_path: wrapper.clone(),
-            wrapper_elicit_complete: complete_paths.contains_path(wrapper),
-            wrapper_prereqs: wrapper_prereqs
+        let coverage = WrapperCoverage::new(
+            wrapper.clone(),
+            complete_paths.contains_path(wrapper),
+            wrapper_prereqs
                 .get(wrapper.as_str())
                 .cloned()
                 .unwrap_or_default(),
-        };
+        );
         map.entry(foreign.clone()).or_default().push(coverage);
     }
 
     for providers in map.values_mut() {
-        providers.sort_by(|left, right| left.wrapper_path.cmp(&right.wrapper_path));
+        providers.sort_by(|left, right| left.wrapper_path().cmp(right.wrapper_path()));
     }
 
     map
@@ -76,7 +79,7 @@ pub fn join_wrapper_paths(wrappers: Option<&[WrapperCoverage]>) -> String {
     wrappers
         .unwrap_or(&[])
         .iter()
-        .map(|wrapper| wrapper.wrapper_path.as_str())
+        .map(|wrapper| wrapper.wrapper_path().as_str())
         .collect::<Vec<_>>()
         .join(";")
 }
@@ -85,7 +88,7 @@ pub fn join_wrapper_paths(wrappers: Option<&[WrapperCoverage]>) -> String {
 fn merge_wrapper_prereqs(wrappers: Option<&[WrapperCoverage]>) -> TraitPrereqs {
     let mut merged = TraitPrereqs::default();
     for wrapper in wrappers.unwrap_or(&[]) {
-        merged.merge(&wrapper.wrapper_prereqs);
+        merged.merge(wrapper.wrapper_prereqs());
     }
     merged
 }
@@ -101,11 +104,11 @@ pub fn effective_missing_our_traits(
         .iter()
         .copied()
         .filter(|trait_name| match *trait_name {
-            "Elicitation" => !merged.elicitation_trait,
-            "ElicitIntrospect" => !merged.elicit_introspect,
-            "ElicitSpec" => !merged.elicit_spec,
-            "ElicitPromptTree" => !merged.elicit_prompt_tree,
-            "ToCodeLiteral" => !merged.to_code_literal,
+            "Elicitation" => !merged.elicitation_trait(),
+            "ElicitIntrospect" => !merged.elicit_introspect(),
+            "ElicitSpec" => !merged.elicit_spec(),
+            "ElicitPromptTree" => !merged.elicit_prompt_tree(),
+            "ToCodeLiteral" => !merged.to_code_literal(),
             _ => true,
         })
         .collect()
@@ -116,7 +119,7 @@ pub fn effective_missing_our_traits(
 pub fn covered_indirectly(wrappers: Option<&[WrapperCoverage]>) -> bool {
     wrappers.is_some_and(|known| {
         known.iter().any(|wrapper| {
-            wrapper.wrapper_elicit_complete || wrapper.wrapper_prereqs.our_traits_complete()
+            wrapper.wrapper_elicit_complete() || wrapper.wrapper_prereqs().our_traits_complete()
         })
     })
 }
@@ -127,7 +130,7 @@ pub fn indirect_elicit_complete(wrappers: Option<&[WrapperCoverage]>) -> bool {
     wrappers
         .unwrap_or(&[])
         .iter()
-        .any(|wrapper| wrapper.wrapper_elicit_complete)
+        .any(|wrapper| wrapper.wrapper_elicit_complete())
 }
 
 /// Coverage provider label.

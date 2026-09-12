@@ -29,7 +29,7 @@ impl ErrorSiteRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -74,7 +74,7 @@ fn kind_counts(rows: &[ErrorSiteRow]) -> ErrorSiteKindCounts {
     counts
 }
 
-/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// Distinct crate names present in `rows`, sorted -- `view.ir().crate_name()`
 /// is pinned to whichever crate the run's target discovery lists first, not
 /// the crate a given row actually belongs to, so a workspace-spanning
 /// artifact must derive its own crate breakdown from `row.crate_name`
@@ -110,7 +110,7 @@ impl Reporter for ErrorSitesCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body =
             String::from("crate,site_kind,context,file,line,source_snippet,site_snippet\n");
@@ -126,11 +126,11 @@ impl Reporter for ErrorSitesCsvReporter {
                 csv_field(&row.site_snippet),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "error-sites.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "error-sites.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -148,7 +148,7 @@ impl Reporter for ErrorSitesChecklistReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = error_site_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -191,11 +191,11 @@ impl Reporter for ErrorSitesChecklistReporter {
             }
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "error-sites.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "error-sites.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -213,7 +213,7 @@ impl Reporter for ErrorSitesSummaryReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = error_site_rows(findings);
         let counts = kind_counts(&rows);
@@ -265,11 +265,11 @@ impl Reporter for ErrorSitesSummaryReporter {
             counts.ok_or(),
         ));
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "error-sites-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "error-sites-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -287,7 +287,7 @@ impl Reporter for ErrorSitesPartitionedCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from(
             "crate,site_kind,origin_class,origin_detail,rationale,context,file,line,source_snippet,site_snippet\n",
@@ -307,11 +307,11 @@ impl Reporter for ErrorSitesPartitionedCsvReporter {
                 csv_field(&row.site_snippet),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "error-sites-partitioned.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "error-sites-partitioned.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -331,7 +331,7 @@ impl Reporter for ErrorSitesPartitionSummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = error_site_rows(findings);
         let counts = origin_counts(&rows);
@@ -374,10 +374,10 @@ impl Reporter for ErrorSitesPartitionSummaryReporter {
             counts.edge(),
         ));
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "error-sites-partition-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "error-sites-partition-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

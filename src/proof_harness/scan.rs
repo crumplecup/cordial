@@ -10,14 +10,24 @@ use crate::error::CordialResult;
 use crate::plugin::{WorkspaceHub, discover_workspace_hub};
 
 /// Scanned contents of the proof harness test files.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    Serialize,
+    Deserialize,
+    derive_getters::Getters,
+    derive_new::new,
+    PartialEq,
+    Eq,
+)]
 pub struct ProofHarness {
     /// Type name strings found in `assert_proofs_non_empty::<T>()` calls.
-    pub non_empty_types: HashSet<String>,
+    non_empty_types: HashSet<String>,
     /// `(Outer, Inner)` pairs from `assert_kani_contains::<Outer, Inner>()`.
-    pub composition_pairs: Vec<(String, String)>,
+    composition_pairs: Vec<(String, String)>,
     /// Subject strings from `proof_chain("…")` and `proof_chain_for_verifiers("…", …)`.
-    pub proof_chain_subjects: HashSet<String>,
+    proof_chain_subjects: HashSet<String>,
 }
 
 impl ProofHarness {
@@ -95,11 +105,11 @@ pub fn collect_proof_harness(path: &Path) -> CordialResult<ProofHarness> {
         }
     }
 
-    Ok(ProofHarness {
+    Ok(ProofHarness::new(
         non_empty_types,
         composition_pairs,
         proof_chain_subjects,
-    })
+    ))
 }
 
 #[instrument(level = "debug")]

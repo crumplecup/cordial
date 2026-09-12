@@ -32,16 +32,10 @@ pub fn build_wrapper_coverage_from_hub_ir(
 /// `(foreign_path, wrapper_path)` pairs from materialized `wraps_foreign` attrs.
 #[instrument(level = "debug", skip(ir))]
 pub fn collect_trenchcoat_pairs_from_ir(ir: &CrateIr) -> Vec<(String, String)> {
-    static ALL_NODES: BasicQuery = BasicQuery {
-        node_kinds: Vec::new(),
-        edge_kinds: Vec::new(),
-        attr_key: None,
-        attr_value: None,
-    };
-
+    let all_nodes = BasicQuery::all_nodes();
     let mut pairs = Vec::new();
     let mut seen = HashSet::new();
-    for node in ir.nodes_matching(&ALL_NODES) {
+    for node in ir.nodes_matching(&all_nodes) {
         if !matches!(node.kind(), NodeKind::Item(_)) {
             continue;
         }
@@ -62,16 +56,10 @@ pub fn collect_trenchcoat_pairs_from_ir(ir: &CrateIr) -> Vec<(String, String)> {
 
 #[instrument(level = "debug", skip(ir))]
 fn elicit_complete_set_from_ir(ir: &CrateIr) -> ElicitCompleteSet {
-    static ALL_NODES: BasicQuery = BasicQuery {
-        node_kinds: Vec::new(),
-        edge_kinds: Vec::new(),
-        attr_key: None,
-        attr_value: None,
-    };
-
+    let all_nodes = BasicQuery::all_nodes();
     let mut concrete = HashSet::new();
     let mut factory = HashSet::new();
-    for node in ir.nodes_matching(&ALL_NODES) {
+    for node in ir.nodes_matching(&all_nodes) {
         let Some(path) = node.attr(ATTR_QUALIFIED_PATH).and_then(|v| v.as_str()) else {
             continue;
         };
@@ -92,19 +80,13 @@ fn elicit_complete_set_from_ir(ir: &CrateIr) -> ElicitCompleteSet {
             concrete.insert(path.to_string());
         }
     }
-    ElicitCompleteSet { concrete, factory }
+    ElicitCompleteSet::new(concrete, factory)
 }
 
 #[instrument(level = "debug", skip(ir))]
 fn trait_prereqs_map_from_ir(ir: &CrateIr) -> HashMap<String, TraitPrereqs> {
-    static ALL_NODES: BasicQuery = BasicQuery {
-        node_kinds: Vec::new(),
-        edge_kinds: Vec::new(),
-        attr_key: None,
-        attr_value: None,
-    };
-
-    ir.nodes_matching(&ALL_NODES)
+    let all_nodes = BasicQuery::all_nodes();
+    ir.nodes_matching(&all_nodes)
         .into_iter()
         .filter_map(|node| {
             let path = node.attr(ATTR_QUALIFIED_PATH).and_then(|v| v.as_str())?;

@@ -57,36 +57,38 @@ impl InventoryItemKind {
 }
 
 /// One public type or trait from a crate inventory.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct RustdocItem {
     /// Qualified rustdoc path of this item.
-    pub path: String,
+    path: String,
     /// Unqualified item name.
-    pub name: String,
+    name: String,
     /// rustdoc item kind.
-    pub kind: InventoryItemKind,
+    #[getter(copy)]
+    kind: InventoryItemKind,
     /// Whether rustdoc considers this item public.
-    pub is_public: bool,
+    #[getter(copy)]
+    is_public: bool,
 }
 
 /// Parsed rustdoc inventory for one crate.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new)]
 pub struct RustdocInventory {
     /// Cargo package name.
-    pub crate_name: String,
+    crate_name: String,
     /// Crate version recorded in the rustdoc JSON.
-    pub crate_version: String,
+    crate_version: String,
     /// Inventory items parsed from rustdoc JSON.
-    pub items: Vec<RustdocItem>,
+    items: Vec<RustdocItem>,
     /// Parsed rustdoc crate object.
-    pub krate: Crate,
+    krate: Crate,
 }
 
 impl RustdocInventory {
     /// Type items.
     #[instrument(level = "trace", skip(self))]
     pub fn type_items(&self) -> impl Iterator<Item = &RustdocItem> {
-        self.items.iter().filter(|item| item.kind.is_type())
+        self.items.iter().filter(|item| item.kind().is_type())
     }
 }
 
@@ -100,12 +102,12 @@ pub fn parse_rustdoc_json(json_path: &Path, crate_name: &str) -> CordialResult<R
         .clone()
         .unwrap_or_else(|| "unknown".to_string());
     let items = extract_items(&krate, crate_name);
-    Ok(RustdocInventory {
-        crate_name: crate_name.to_string(),
+    Ok(RustdocInventory::new(
+        crate_name.to_string(),
         crate_version,
         items,
         krate,
-    })
+    ))
 }
 
 #[instrument(level = "debug", skip(krate))]
@@ -132,12 +134,12 @@ fn extract_items(krate: &Crate, own_crate: &str) -> Vec<RustdocItem> {
         if !seen.insert(path.clone()) {
             continue;
         }
-        items.push(RustdocItem {
-            name: item.name.clone().unwrap_or_else(|| "item".to_string()),
+        items.push(RustdocItem::new(
             path,
+            item.name.clone().unwrap_or_else(|| "item".to_string()),
             kind,
-            is_public: true,
-        });
+            true,
+        ));
     }
 
     items.sort_by(|a, b| a.path.cmp(&b.path));
@@ -166,17 +168,17 @@ pub fn ir_item_kind(kind: InventoryItemKind) -> crate::ir::ItemKind {
 #[instrument(level = "debug", skip(inventory))]
 pub fn canonical_to_public_map(inventory: &RustdocInventory) -> HashMap<String, String> {
     let mut by_name: HashMap<&str, Vec<&RustdocItem>> = HashMap::new();
-    for item in &inventory.items {
-        by_name.entry(item.name.as_str()).or_default().push(item);
+    for item in inventory.items() {
+        by_name.entry(item.name().as_str()).or_default().push(item);
     }
 
     let mut map = HashMap::new();
-    for (id, summary) in &inventory.krate.paths {
+    for (id, summary) in &inventory.krate().paths {
         let path = summary.path.join("::");
-        if inventory.items.iter().any(|item| item.path == path) {
+        if inventory.items().iter().any(|item| item.path() == &path) {
             continue;
         }
-        let Some(item) = inventory.krate.index.get(id) else {
+        let Some(item) = inventory.krate().index.get(id) else {
             continue;
         };
         let Some(name) = item.name.as_deref() else {
@@ -185,8 +187,11 @@ pub fn canonical_to_public_map(inventory: &RustdocInventory) -> HashMap<String, 
         let Some(candidates) = by_name.get(name) else {
             continue;
         };
-        if let Some(public) = candidates.iter().find(|candidate| candidate.kind.is_type()) {
-            map.insert(path, public.path.clone());
+        if let Some(public) = candidates
+            .iter()
+            .find(|candidate| candidate.kind().is_type())
+        {
+            map.insert(path, public.path().clone());
         }
     }
     map

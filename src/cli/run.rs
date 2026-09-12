@@ -199,7 +199,7 @@ pub(super) fn execute_run_plugins(
     deny_open: bool,
 ) -> CordialResult<()> {
     let mut builder = SessionBuilder::new(project_root)
-        .with_store_root(store.root.clone())
+        .with_store_root(store.root().clone())
         .with_store_home(store_home.unwrap_or_else(default_store_home))
         .with_progress_sink(progress.clone());
     for plugin in plugins {
@@ -291,7 +291,7 @@ struct RunSummary {
 
 #[instrument(level = "debug", skip(store, path), err(level = "warn"))]
 pub(super) fn view_store_file(store: &StoreLayout, path: &Path) -> CordialResult<()> {
-    let full = store.root.join(path);
+    let full = store.root().join(path);
     if !full.is_file() {
         return Err(CordialError::not_found(full));
     }
@@ -310,7 +310,7 @@ pub(super) fn execute_backup_exceptions(
     let copied = backup_exception_files(store, &backup_root)?;
     tracing::info!(
         copied,
-        path = %backup_root.join(&store.project_slug).display(),
+        path = %backup_root.join(store.project_slug()).display(),
         "backed up exception files"
     );
     Ok(())
@@ -326,7 +326,7 @@ pub(super) fn execute_load_exceptions(
     let copied = load_exception_files(store, &backup_root)?;
     tracing::info!(
         copied,
-        path = %backup_root.join(&store.project_slug).display(),
+        path = %backup_root.join(store.project_slug()).display(),
         "loaded exception files"
     );
     Ok(())
@@ -459,7 +459,7 @@ pub(super) fn export_surreal(
                 .ok()
                 .and_then(|targets| targets.into_iter().next().map(|t| t.crate_name().clone()))
         })
-        .unwrap_or_else(|| store.project_slug.clone());
+        .unwrap_or_else(|| store.project_slug().clone());
     let cache_path = store.ir_cache_path(&crate_name);
     if !cache_path.is_file() {
         return Err(CordialError::no_cached_ir(cache_path));

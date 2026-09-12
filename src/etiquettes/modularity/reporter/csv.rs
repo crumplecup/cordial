@@ -26,8 +26,8 @@ impl Reporter for ModularityCsvReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
-        let session = view.session;
+        let findings = view.findings();
+        let session = view.session();
 
         let all_rows = modularity_rows(findings);
         let config = crate::config::load_session_config(session);
@@ -42,23 +42,23 @@ impl Reporter for ModularityCsvReporter {
         for row in rows {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{},{}\n",
-                csv_field(&row.crate_name),
-                csv_field(&row.kind),
-                csv_field(&row.context),
-                csv_field(&row.file),
-                csv_field(&row.line),
-                csv_field(&row.lines),
-                csv_field(&row.checklist),
-                csv_field(&row.zscore),
-                csv_field(&row.share),
-                csv_field(&row.detail),
+                csv_field(row.crate_name()),
+                csv_field(row.kind()),
+                csv_field(row.context()),
+                csv_field(row.file()),
+                csv_field(row.line()),
+                csv_field(row.lines()),
+                csv_field(row.checklist()),
+                csv_field(row.zscore()),
+                csv_field(row.share()),
+                csv_field(row.detail()),
             ));
         }
-        let mut artifacts: Vec<Box<dyn Artifact>> = vec![Box::new(TextArtifact {
-            name: "modularity.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        let mut artifacts: Vec<Box<dyn Artifact>> = vec![Box::new(TextArtifact::new(
+            "modularity.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })];
+        ))];
         artifacts.push(branches_csv_artifact(&all_rows));
         Ok(artifacts)
     }
@@ -73,7 +73,7 @@ fn branches_csv_artifact(all_rows: &[ModularityRow]) -> Box<dyn Artifact> {
         let crate_rows: Vec<_> = open
             .iter()
             .copied()
-            .filter(|row| row.crate_name == crate_name)
+            .filter(|row| row.crate_name() == &crate_name)
             .collect();
         let mut nodes = build_module_hierarchy(&file_module_inputs(&crate_rows));
         nodes.sort_by(|left, right| {
@@ -98,9 +98,9 @@ fn branches_csv_artifact(all_rows: &[ModularityRow]) -> Box<dyn Artifact> {
             ));
         }
     }
-    Box::new(TextArtifact {
-        name: "modularity-branches.csv".to_string(),
-        media_type: "text/csv".to_string(),
+    Box::new(TextArtifact::new(
+        "modularity-branches.csv".to_string(),
+        "text/csv".to_string(),
         body,
-    })
+    ))
 }

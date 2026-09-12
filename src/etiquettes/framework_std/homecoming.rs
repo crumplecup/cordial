@@ -29,14 +29,14 @@ impl Rule for FrameworkStdRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct FrameworkStdScopeMarker {
-    pub anchor: NodeAnchor,
-    pub probe_id: String,
+    anchor: NodeAnchor,
+    probe_id: String,
     /// Carried for traceability; batch assessor uses full inventory today (R2).
-    pub type_path: String,
-    pub type_kind: InventoryItemKind,
-    pub is_generic: bool,
+    type_path: String,
+    type_kind: InventoryItemKind,
+    is_generic: bool,
 }
 
 impl Marker for FrameworkStdScopeMarker {
@@ -77,19 +77,19 @@ impl Marker for FrameworkStdScopeMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct FrameworkStdRowFinding {
-    pub rule: FrameworkStdRule,
-    pub disposition: Disposition,
-    pub anchor: NodeAnchor,
-    pub source_crate: String,
-    pub trait_name: String,
-    pub impl_crate: String,
-    pub type_path: String,
-    pub type_kind: String,
-    pub is_generic: bool,
-    pub trait_status: FrameworkTraitStatus,
-    pub skip_reason: Option<String>,
+    rule: FrameworkStdRule,
+    disposition: Disposition,
+    anchor: NodeAnchor,
+    source_crate: String,
+    trait_name: String,
+    impl_crate: String,
+    type_path: String,
+    type_kind: String,
+    is_generic: bool,
+    trait_status: FrameworkTraitStatus,
+    skip_reason: Option<String>,
 }
 
 impl Finding for FrameworkStdRowFinding {
@@ -167,7 +167,7 @@ pub fn framework_report_from_findings(
         let mut sink = crate::objects::MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -196,16 +196,16 @@ pub fn framework_report_from_findings(
                 Some(reason)
             }
         };
-        entries.push(FrameworkTraitEntry {
-            type_path: field("type_path"),
-            type_kind: field("type_kind"),
-            is_generic: field("is_generic") == "true",
+        entries.push(FrameworkTraitEntry::new(
+            field("type_path"),
+            field("type_kind"),
+            field("is_generic") == "true",
             trait_status,
             skip_reason,
-        });
+        ));
     }
 
-    Some(FrameworkTraitReport {
+    Some(FrameworkTraitReport::new(
         source_crate,
         trait_name,
         impl_crate,
@@ -214,7 +214,7 @@ pub fn framework_report_from_findings(
         complete_count,
         missing_count,
         skipped_count,
-    })
+    ))
 }
 
 #[instrument(level = "debug", skip(findings))]
@@ -229,20 +229,20 @@ pub fn framework_gaps_from_findings(findings: &[&dyn Finding]) -> Vec<FrameworkG
             let mut sink = crate::objects::MapFindingSink::default();
             finding.emit(&mut sink);
             let field = |name: &str| {
-                sink.fields
+                sink.fields()
                     .iter()
                     .find(|(key, _)| key == name)
                     .map(|(_, value)| value.clone())
                     .unwrap_or_default()
             };
-            FrameworkGapEntry {
-                source_crate: field("source_crate"),
-                type_path: field("type_path"),
-                type_kind: field("type_kind"),
-                trait_name: field("trait_name"),
-                impl_crate: field("impl_crate"),
-                action: field("action"),
-            }
+            FrameworkGapEntry::new(
+                field("source_crate"),
+                field("type_path"),
+                field("type_kind"),
+                field("trait_name"),
+                field("impl_crate"),
+                field("action"),
+            )
         })
         .collect()
 }

@@ -277,7 +277,7 @@ impl ExceptionCommands {
             } => show_exceptions(
                 &ctx.store,
                 &etiquette,
-                crate_name.as_deref().unwrap_or(&ctx.store.project_slug),
+                crate_name.as_deref().unwrap_or(ctx.store.project_slug()),
             ),
             Self::Backup { root } => {
                 execute_backup_exceptions(&ctx.project_root, &ctx.store, &root)
@@ -311,7 +311,7 @@ impl ExceptionCommands {
                     })?;
                     let crate_name = crate_name
                         .or_else(|| ctx.crate_name.clone())
-                        .unwrap_or_else(|| ctx.store.project_slug.clone());
+                        .unwrap_or_else(|| ctx.store.project_slug().clone());
                     let mut entry = ExceptionEntry::new(file, reason);
                     if let Some(line) = line {
                         entry = entry.with_line(line);

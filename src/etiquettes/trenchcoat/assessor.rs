@@ -25,8 +25,8 @@ impl Assessor for TrenchcoatAssessor {
 
     #[instrument(level = "trace", skip(self, view))]
     fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
-        let markers = view.markers;
-        let ir = view.ir;
+        let markers = view.markers();
+        let ir = view.ir();
 
         let mut findings = Vec::new();
         for marker in markers {
@@ -42,7 +42,7 @@ impl Assessor for TrenchcoatAssessor {
             findings.push(Box::new(UnwrappedFinding::new(
                 TrenchcoatRule,
                 Disposition::Open,
-                crate::objects::NodeAnchor(node_id),
+                crate::objects::NodeAnchor::new(node_id),
                 ir.crate_name().to_string(),
                 type_path,
             )) as Box<dyn Finding>);

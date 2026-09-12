@@ -33,7 +33,7 @@ impl Reporter for VersionInMemberCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from("crate,rule_id,context,file,line,snippet\n");
         for row in version_rows(findings)
@@ -50,11 +50,11 @@ impl Reporter for VersionInMemberCsvReporter {
                 csv_field(row.snippet()),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "version-in-member.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "version-in-member.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -72,8 +72,8 @@ impl Reporter for VersionInMemberChecklistReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
-        let ir = view.ir;
+        let findings = view.findings();
+        let ir = view.ir();
 
         let version = version_rows(findings);
         let rows: Vec<_> = version
@@ -113,11 +113,11 @@ impl Reporter for VersionInMemberChecklistReporter {
             }
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "version-in-member.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "version-in-member.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -137,7 +137,7 @@ impl Reporter for VersionInMemberSummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let summary = build_workspace_version_in_member_summary(findings);
         let mut body = String::new();
@@ -162,10 +162,10 @@ impl Reporter for VersionInMemberSummaryReporter {
             body.push('\n');
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "version-in-member-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "version-in-member-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

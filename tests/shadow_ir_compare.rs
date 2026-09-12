@@ -30,11 +30,7 @@ fn workspace_ir_shadow_report_matches_inventory_oracle() -> miette::Result<()> {
         .wrap_err("populate")?;
     let session = SessionBuilder::new(temp.path()).build();
     RustdocStructureEnricher
-        .enrich(EnrichView {
-            ir: &mut ir,
-            load: &load as &dyn LoadView,
-            session: &session,
-        })
+        .enrich(EnrichView::new(&mut ir, &load as &dyn LoadView, &session))
         .into_diagnostic()
         .wrap_err("structure")?;
     workspace.insert_crate(ir);
@@ -43,7 +39,7 @@ fn workspace_ir_shadow_report_matches_inventory_oracle() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("ir report")?;
     let oracle = build_shadow_pair_report_from_inventories(&inventory, &inventory);
-    assert_eq!(ir_report.covered_count, oracle.covered_count);
-    assert_eq!(ir_report.rows[0].status, ShadowStatus::Covered);
+    assert_eq!(ir_report.covered_count(), oracle.covered_count());
+    assert_eq!(ir_report.rows()[0].status(), ShadowStatus::Covered);
     Ok(())
 }

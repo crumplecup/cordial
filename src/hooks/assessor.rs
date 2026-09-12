@@ -22,12 +22,22 @@ pub trait Assessor: Send + Sync {
 ///
 /// Take the fields the assessor needs; unused neighbors are not unused
 /// arguments.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, derive_getters::Getters, derive_new::new)]
 pub struct AssessView<'a> {
     /// Markers produced by probes in this session.
-    pub markers: &'a [&'a dyn Marker],
+    #[getter(copy)]
+    markers: &'a [&'a dyn Marker],
     /// Crate IR graph for this hook invocation.
-    pub ir: &'a dyn IrView,
+    #[getter(copy)]
+    ir: &'a dyn IrView,
     /// Session this hook is running in.
-    pub session: &'a dyn SessionView,
+    #[getter(copy)]
+    session: &'a dyn SessionView,
+}
+
+impl<'a> AssessView<'a> {
+    /// Consume the view into its hook inputs.
+    pub fn into_parts(self) -> (&'a dyn IrView, &'a [&'a dyn Marker], &'a dyn SessionView) {
+        (self.ir, self.markers, self.session)
+    }
 }

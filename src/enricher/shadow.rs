@@ -40,8 +40,7 @@ impl IrEnricher for ShadowLinkEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let ir = view.ir;
-        let session = view.session;
+        let (ir, _, session) = view.into_parts();
 
         let entries = resolve_shadow_entries(session, ir)?;
         for entry in entries {
@@ -78,16 +77,10 @@ pub fn resolve_shadow_entries(
 /// Pair public items with a sibling whose last path segment adds the `Shadow` suffix.
 #[instrument(level = "debug", skip(ir))]
 pub fn discover_same_crate_shadow_pairs(ir: &dyn IrView) -> Vec<ShadowMapEntry> {
-    static ALL_NODES: BasicQuery = BasicQuery {
-        node_kinds: Vec::new(),
-        edge_kinds: Vec::new(),
-        attr_key: None,
-        attr_value: None,
-    };
-
+    let all_nodes = BasicQuery::all_nodes();
     let mut entries = Vec::new();
     let mut seen = HashSet::new();
-    for node in ir.nodes_matching(&ALL_NODES) {
+    for node in ir.nodes_matching(&all_nodes) {
         let Some(target_path) = node.attr("qualified_path").and_then(|value| value.as_str()) else {
             continue;
         };

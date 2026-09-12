@@ -49,8 +49,7 @@ impl Probe for MissingShadowMirrorProbe {
 
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
-        let ir = view.ir;
-        let session = view.session;
+        let (ir, _, session) = view.into_parts();
 
         let entries = resolve_shadow_entries(session, ir)?;
         let mut markers = Vec::new();
@@ -69,8 +68,9 @@ impl Probe for MissingShadowMirrorProbe {
                 continue;
             }
             markers.push(
-                Box::new(MissingMirrorMarker::new(crate::objects::NodeAnchor(target)))
-                    as Box<dyn Marker>,
+                Box::new(MissingMirrorMarker::new(crate::objects::NodeAnchor::new(
+                    target,
+                ))) as Box<dyn Marker>,
             );
         }
 

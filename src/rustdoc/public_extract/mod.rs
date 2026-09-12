@@ -17,20 +17,23 @@ mod type_walk;
 pub(super) use reexport::collect_public_same_crate_reexport_aliases;
 
 /// One public item extracted from rustdoc JSON.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct ExtractedItem {
     /// Path segments of this public item.
-    pub path: Vec<String>,
+    path: Vec<String>,
     /// rustdoc item kind.
-    pub kind: InventoryItemKind,
+    #[getter(copy)]
+    kind: InventoryItemKind,
     /// Unqualified item name.
-    pub name: String,
+    name: String,
     /// Whether the type is generic.
-    pub is_generic: bool,
+    #[getter(copy)]
+    is_generic: bool,
     /// Path this type alias points at, when it is an alias.
-    pub alias_target: Option<String>,
+    alias_target: Option<String>,
     /// Whether rustdoc marked this item unstable.
-    pub is_unstable: bool,
+    #[getter(copy)]
+    is_unstable: bool,
 }
 
 impl ExtractedItem {
@@ -158,7 +161,7 @@ pub fn extract_items(
         }
     }
 
-    items.sort_by(|a, b| a.path.cmp(&b.path));
+    items.sort_by(|a, b| a.path().cmp(b.path()));
     tracing::debug!(count = items.len(), "extracted items");
     items
 }
@@ -202,12 +205,12 @@ fn item_path_is_publicly_reachable(
     item: &ExtractedItem,
     public_module_paths: &HashSet<String>,
 ) -> bool {
-    if item.path.len() <= 2 {
+    if item.path().len() <= 2 {
         return true;
     }
 
-    for idx in 1..item.path.len() - 1 {
-        let module_path = item.path[..=idx].join("::");
+    for idx in 1..item.path().len() - 1 {
+        let module_path = item.path()[..=idx].join("::");
         if !public_module_paths.contains(&module_path) {
             debug!(
                 item_path = %item.path_str(),

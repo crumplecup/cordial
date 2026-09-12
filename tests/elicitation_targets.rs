@@ -64,9 +64,9 @@ resolver = "2"
         .wrap_err("targets")?;
     assert!(
         targets.iter().any(|target| {
-            target.kind == CoverageTargetKind::ShadowPair
-                && target.crate_name == "url"
-                && target.shadow_crate.as_deref() == Some("elicit_url")
+            target.kind() == CoverageTargetKind::ShadowPair
+                && target.crate_name() == "url"
+                && target.shadow_crate().as_deref() == Some("elicit_url")
         }),
         "expected url ↔ elicit_url shadow pair"
     );

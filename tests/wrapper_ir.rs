@@ -31,11 +31,7 @@ fn hub_ir_wrapper_map_matches_inventory_oracle() -> miette::Result<()> {
         .wrap_err("populate")?;
     let session = SessionBuilder::new(temp.path()).build();
     RustdocStructureEnricher
-        .enrich(EnrichView {
-            ir: &mut ir,
-            load: &load as &dyn LoadView,
-            session: &session,
-        })
+        .enrich(EnrichView::new(&mut ir, &load as &dyn LoadView, &session))
         .into_diagnostic()
         .wrap_err("structure")?;
     workspace.insert_crate(ir);

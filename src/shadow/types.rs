@@ -30,72 +30,80 @@ impl ShadowStatus {
 }
 
 /// One upstream ↔ shadow compare row.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new, PartialEq, Eq)]
 pub struct ShadowRow {
     /// Qualified path of the inventory item.
-    pub item_path: String,
+    item_path: String,
     /// rustdoc inventory kind of this item.
-    pub item_kind: InventoryItemKind,
+    #[getter(copy)]
+    item_kind: InventoryItemKind,
     /// Rollup status for this row.
-    pub status: ShadowStatus,
+    #[getter(copy)]
+    status: ShadowStatus,
     /// Matching shadow path, when one exists.
-    pub shadow_item: String,
+    shadow_item: String,
     /// How confident the compare is that this is drift vs a rename.
-    pub drift_confidence: String,
+    drift_confidence: String,
     /// Whether the shadow item impls the elicitation trait.
-    pub shadow_elicit_impl: String,
+    shadow_elicit_impl: String,
     /// Whether the shadow item can take a direct elicitation impl.
-    pub shadow_can_be_direct: String,
+    shadow_can_be_direct: String,
     /// External traits still missing on the shadow item.
-    pub shadow_missing_external_traits: String,
+    shadow_missing_external_traits: String,
     /// Our traits still missing on the shadow item.
-    pub shadow_missing_our_traits: String,
+    shadow_missing_our_traits: String,
     /// Free-form notes for the report row.
-    pub notes: String,
+    notes: String,
 }
 
 /// Full shadow-mirror report for one target crate.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new, PartialEq)]
 pub struct ShadowReport {
     /// Upstream crate being compared or covered.
-    pub target_crate: String,
+    target_crate: String,
     /// Shadow crate that should mirror the target.
-    pub shadow_crate: String,
+    shadow_crate: String,
     /// Per-item compare rows.
-    pub rows: Vec<ShadowRow>,
+    rows: Vec<ShadowRow>,
     /// How many items are covered.
-    pub covered_count: usize,
+    #[getter(copy)]
+    covered_count: usize,
     /// How many items are still missing.
-    pub missing_count: usize,
+    #[getter(copy)]
+    missing_count: usize,
     /// How many items drifted.
-    pub drifted_count: usize,
+    #[getter(copy)]
+    drifted_count: usize,
     /// How many extra shadow-only items were found.
-    pub extra_count: usize,
+    #[getter(copy)]
+    extra_count: usize,
     /// Covered fraction as a percentage.
-    pub coverage_pct: f64,
+    #[getter(copy)]
+    coverage_pct: f64,
     /// How many items have a verification gap.
-    pub verification_gap_count: usize,
+    #[getter(copy)]
+    verification_gap_count: usize,
     /// Per-type method coverage for matched pairs.
-    pub method_coverage: Vec<TypeMethodCoverage>,
+    method_coverage: Vec<TypeMethodCoverage>,
     /// Matched types whose methods are still missing.
-    pub missing_type_methods: Vec<TypeMethodCoverage>,
+    missing_type_methods: Vec<TypeMethodCoverage>,
     /// Per-trait impl coverage for the shadow crate.
-    pub trait_coverage: Vec<TraitImplCoverage>,
+    trait_coverage: Vec<TraitImplCoverage>,
 }
 
 /// Method-level coverage for one matched upstream ↔ shadow type pair.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new, PartialEq, Eq)]
 pub struct TypeMethodCoverage {
     /// Upstream type path.
-    pub upstream_type: String,
+    upstream_type: String,
     /// Matching shadow type path.
-    pub shadow_type: String,
+    shadow_type: String,
     /// Names present on both sides.
-    pub covered: Vec<String>,
+    covered: Vec<String>,
     /// Names present upstream but missing on the shadow.
-    pub missing: Vec<String>,
+    missing: Vec<String>,
     /// Names present on the shadow with no upstream match.
-    pub extra: Vec<String>,
+    extra: Vec<String>,
 }
 
 impl TypeMethodCoverage {
@@ -107,29 +115,31 @@ impl TypeMethodCoverage {
 }
 
 /// Trait-impl coverage for one upstream trait missing from the shadow inventory.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new, PartialEq, Eq)]
 pub struct TraitImplCoverage {
     /// Qualified path of the trait.
-    pub trait_path: String,
+    trait_path: String,
     /// Upstream impls missing from the shadow type.
-    pub missing_on_shadow: Vec<String>,
+    missing_on_shadow: Vec<String>,
     /// Upstream impls also present on the shadow type.
-    pub covered_on_shadow: Vec<String>,
+    covered_on_shadow: Vec<String>,
 }
 
 /// Optional method/trait maps passed into [`super::report::build_shadow_report`].
-#[derive(Debug)]
+#[derive(Debug, derive_getters::Getters, derive_new::new)]
 pub struct ShadowBuildMaps<'a> {
     /// Upstream type → method names.
-    pub target_methods: &'a std::collections::HashMap<String, std::collections::BTreeSet<String>>,
+    #[getter(copy)]
+    target_methods: &'a std::collections::HashMap<String, std::collections::BTreeSet<String>>,
     /// Shadow type → method names.
-    pub shadow_methods: &'a std::collections::HashMap<String, std::collections::BTreeSet<String>>,
+    #[getter(copy)]
+    shadow_methods: &'a std::collections::HashMap<String, std::collections::BTreeSet<String>>,
     /// Upstream type → trait impls.
-    pub target_trait_impls:
-        &'a std::collections::HashMap<String, std::collections::BTreeSet<String>>,
+    #[getter(copy)]
+    target_trait_impls: &'a std::collections::HashMap<String, std::collections::BTreeSet<String>>,
     /// Shadow type → trait impls.
-    pub shadow_trait_impls:
-        &'a std::collections::HashMap<String, std::collections::BTreeSet<String>>,
+    #[getter(copy)]
+    shadow_trait_impls: &'a std::collections::HashMap<String, std::collections::BTreeSet<String>>,
 }
 
 impl ShadowBuildMaps<'static> {
@@ -140,12 +150,7 @@ impl ShadowBuildMaps<'static> {
             std::collections::HashMap<String, std::collections::BTreeSet<String>>,
         > = std::sync::OnceLock::new();
         let empty = EMPTY.get_or_init(std::collections::HashMap::new);
-        Self {
-            target_methods: empty,
-            shadow_methods: empty,
-            target_trait_impls: empty,
-            shadow_trait_impls: empty,
-        }
+        Self::new(empty, empty, empty, empty)
     }
 }
 
@@ -179,32 +184,33 @@ impl ShadowGapKind {
 }
 
 /// One classified gap in a shadow report.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new, PartialEq, Eq)]
 pub struct ShadowGapEntry {
     /// Upstream crate being compared or covered.
-    pub target_crate: String,
+    target_crate: String,
     /// Shadow crate that should mirror the target.
-    pub shadow_crate: String,
+    shadow_crate: String,
     /// Qualified path of the inventory item.
-    pub item_path: String,
+    item_path: String,
     /// rustdoc inventory kind of this item.
-    pub item_kind: String,
+    item_kind: String,
     /// How this coverage gap is classified.
-    pub gap_kind: ShadowGapKind,
+    #[getter(copy)]
+    gap_kind: ShadowGapKind,
     /// Shadow path matched to this gap, if any.
-    pub matched_shadow_item: String,
+    matched_shadow_item: String,
     /// How confident the compare is that this is drift vs a rename.
-    pub drift_confidence: String,
+    drift_confidence: String,
     /// Whether the shadow item impls the elicitation trait.
-    pub shadow_elicit_impl: String,
+    shadow_elicit_impl: String,
     /// Whether the shadow item can take a direct elicitation impl.
-    pub shadow_can_be_direct: String,
+    shadow_can_be_direct: String,
     /// External traits still missing on the shadow item.
-    pub shadow_missing_external_traits: String,
+    shadow_missing_external_traits: String,
     /// Our traits still missing on the shadow item.
-    pub shadow_missing_our_traits: String,
+    shadow_missing_our_traits: String,
     /// Recommended next action for this gap.
-    pub action: String,
+    action: String,
     /// Free-form notes for the report row.
-    pub notes: String,
+    notes: String,
 }

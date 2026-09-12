@@ -30,7 +30,7 @@ impl TracingRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -92,7 +92,7 @@ impl Reporter for TracingCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from(
             "crate,qualified_name,role,complexity,rule,function_kind,visibility,recipe,file,line,disposition\n",
@@ -113,11 +113,11 @@ impl Reporter for TracingCsvReporter {
                 csv_field(&row.disposition),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "tracing-instrument.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "tracing-instrument.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -135,7 +135,7 @@ impl Reporter for TracingChecklistReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = tracing_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -218,11 +218,11 @@ impl Reporter for TracingChecklistReporter {
             body.push('\n');
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "tracing-instrument.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "tracing-instrument.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -242,7 +242,7 @@ impl Reporter for TracingSummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = tracing_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -290,11 +290,11 @@ impl Reporter for TracingSummaryReporter {
             body.push_str(&format!(" {crate_suppressed} |\n"));
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "tracing-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "tracing-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 

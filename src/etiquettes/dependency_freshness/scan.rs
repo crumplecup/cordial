@@ -45,18 +45,19 @@ pub(crate) fn survey_crate_dependency_freshness(
 
     for entry in dependency_entries(&manifest, &manifest_table, &workspace_dependencies) {
         let locked_versions = locked_versions_for_entry(&entry, &lockfile_index);
-        let record = DependencySurveyRecord::from_input(DependencySurveyRecordInput {
-            crate_name: crate_name.to_string(),
-            dependency_name: entry.dependency_name,
-            package_name: entry.package_name.clone(),
-            manifest_path: manifest_path.clone(),
-            line: entry.line,
-            section: entry.section,
-            version_spec: entry.version_spec,
-            source_kind: entry.source_kind,
-            locked_versions,
-            indicators: entry.indicators,
-        });
+        let input = DependencySurveyRecordInput::builder()
+            .crate_name(crate_name.to_string())
+            .dependency_name(entry.dependency_name)
+            .package_name(entry.package_name.clone())
+            .manifest_path(manifest_path.clone())
+            .line(entry.line)
+            .section(entry.section)
+            .version_spec(entry.version_spec)
+            .source_kind(entry.source_kind)
+            .locked_versions(locked_versions)
+            .indicators(entry.indicators)
+            .build()?;
+        let record = DependencySurveyRecord::from_input(input);
         records.push(record);
     }
     if records.iter().any(record_can_have_freshness_observations) {

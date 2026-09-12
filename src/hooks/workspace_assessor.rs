@@ -18,12 +18,15 @@ pub trait WorkspaceAssessor: Send + Sync {
 ///
 /// Take the fields the assessor needs; unused neighbors are not unused
 /// arguments.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, derive_getters::Getters, derive_new::new)]
 pub struct WorkspaceAssessView<'a> {
     /// Workspace IR this assessor reads.
-    pub workspace: &'a WorkspaceIr,
+    #[getter(copy)]
+    workspace: &'a WorkspaceIr,
     /// Session this hook is running in.
-    pub session: &'a dyn SessionView,
+    #[getter(copy)]
+    session: &'a dyn SessionView,
     /// Run filter for workspace-scoped assessment.
-    pub filter: &'a dyn RunFilter,
+    #[getter(copy)]
+    filter: &'a dyn RunFilter,
 }

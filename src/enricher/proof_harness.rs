@@ -37,8 +37,7 @@ impl IrEnricher for ProofHarnessEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let ir = view.ir;
-        let session = view.session;
+        let (ir, _, session) = view.into_parts();
 
         let filter = NamedRunFilter::all_etiquettes();
         let harness = load_workspace_proof_harness(session.project_root(), &filter)?;
@@ -49,7 +48,7 @@ impl IrEnricher for ProofHarnessEnricher {
             .filter(|node| matches!(node.kind(), NodeKind::Item(_)))
             .filter_map(|node| {
                 let path = node.attr("qualified_path")?.as_str()?.to_string();
-                Some((node.id, path))
+                Some((node.id(), path))
             })
             .collect();
 

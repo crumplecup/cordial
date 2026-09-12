@@ -50,13 +50,14 @@ impl Probe for CliLayoutSiteProbe {
 
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
-        let ir = view.ir;
+        let ir = view.ir();
 
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&CLI_LAYOUT_SITES_QUERY) {
             markers.push(
-                Box::new(CliLayoutMarker::new(crate::objects::NodeAnchor(node.id)))
-                    as Box<dyn Marker>,
+                Box::new(CliLayoutMarker::new(crate::objects::NodeAnchor::new(
+                    node.id(),
+                ))) as Box<dyn Marker>,
             );
         }
         Ok(markers)

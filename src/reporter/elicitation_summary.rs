@@ -45,11 +45,11 @@ pub fn build_elicitation_coverage_rollup(
     out.push_str(&crate::digest::render_shadow_core_support_summary_section(
         &digest,
     ));
-    let extra_artifacts = vec![Box::new(TextArtifact {
-        name: "shadow-core-support.json".to_string(),
-        media_type: "application/json".to_string(),
-        body: serde_json::to_string_pretty(&digest)?,
-    }) as Box<dyn Artifact>];
+    let extra_artifacts = vec![Box::new(TextArtifact::new(
+        "shadow-core-support.json".to_string(),
+        "application/json".to_string(),
+        serde_json::to_string_pretty(&digest)?,
+    )) as Box<dyn Artifact>];
     Ok(ElicitationCoverageRollup::new(out, extra_artifacts))
 }
 
@@ -363,7 +363,7 @@ fn lookup_crate_version(workspace: &WorkspaceIr, crate_name: &str) -> String {
 fn finding_row(finding: &dyn Finding) -> BTreeMap<String, String> {
     let mut sink = MapFindingSink::default();
     finding.emit(&mut sink);
-    sink.fields.into_iter().collect()
+    sink.into_fields().into_iter().collect()
 }
 
 #[instrument(level = "debug")]

@@ -23,10 +23,19 @@ pub trait Probe: Send + Sync {
 /// Shared inputs for [`Probe::probe`].
 ///
 /// Take the fields the probe needs; unused neighbors are not unused arguments.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, derive_getters::Getters, derive_new::new)]
 pub struct ProbeView<'a> {
     /// Crate IR graph for this hook invocation.
-    pub ir: &'a dyn IrView,
+    #[getter(copy)]
+    ir: &'a dyn IrView,
     /// Session this hook is running in.
-    pub session: &'a dyn SessionView,
+    #[getter(copy)]
+    session: &'a dyn SessionView,
+}
+
+impl<'a> ProbeView<'a> {
+    /// Consume the view into its hook inputs.
+    pub fn into_parts(self) -> (&'a dyn IrView, (), &'a dyn SessionView) {
+        (self.ir, (), self.session)
+    }
 }

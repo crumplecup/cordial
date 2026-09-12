@@ -24,7 +24,7 @@ impl CfgHygieneRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -86,7 +86,7 @@ impl Reporter for CfgHygieneCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let all_rows = cfg_hygiene_rows(findings);
         let mut rows: Vec<_> = open_rows(&all_rows).collect();
@@ -105,17 +105,17 @@ impl Reporter for CfgHygieneCsvReporter {
                 csv_field(&row.snippet),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "cfg-hygiene.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "cfg-hygiene.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
 /// Writes `cfg-hygiene.checklist.md`, grouped by the crate each finding
 /// actually belongs to (from its own `crate` field) — not the crate
-/// currently being rendered, since `view.findings` accumulates every
+/// currently being rendered, since `view.findings()` accumulates every
 /// crate's findings across a whole workspace run.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CfgHygieneChecklistReporter;
@@ -130,7 +130,7 @@ impl Reporter for CfgHygieneChecklistReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = cfg_hygiene_rows(findings);
         let mut open: Vec<_> = open_rows(&rows).collect();
@@ -168,11 +168,11 @@ impl Reporter for CfgHygieneChecklistReporter {
             }
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "cfg-hygiene.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "cfg-hygiene.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -203,7 +203,7 @@ impl Reporter for CfgHygieneSummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = cfg_hygiene_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -244,10 +244,10 @@ impl Reporter for CfgHygieneSummaryReporter {
             ));
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "cfg-hygiene-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "cfg-hygiene-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

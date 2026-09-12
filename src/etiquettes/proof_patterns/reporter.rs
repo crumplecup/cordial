@@ -27,7 +27,7 @@ impl ProofPatternRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -62,7 +62,7 @@ fn open_rows(rows: &[ProofPatternRow]) -> impl Iterator<Item = &ProofPatternRow>
     rows.iter().filter(|row| row.disposition == "open")
 }
 
-/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// Distinct crate names present in `rows`, sorted -- `view.ir().crate_name()`
 /// is pinned to whichever crate the run's target discovery lists first, not
 /// the crate a given row actually belongs to, so a workspace-spanning
 /// artifact must derive its own crate breakdown from `row.crate_name`
@@ -91,7 +91,7 @@ impl Reporter for ProofPatternCsvReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from(
             "crate,kind,context,file,line,snippet,cfg_test,tracked_params,recommends\n",
@@ -110,11 +110,11 @@ impl Reporter for ProofPatternCsvReporter {
                 csv_field(&row.recommends),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "proof-patterns.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "proof-patterns.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -134,7 +134,7 @@ impl Reporter for ProofPatternChecklistReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = pattern_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -184,11 +184,11 @@ impl Reporter for ProofPatternChecklistReporter {
             }
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "proof-patterns.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "proof-patterns.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -208,7 +208,7 @@ impl Reporter for ProofPatternSummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = pattern_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -248,10 +248,10 @@ impl Reporter for ProofPatternSummaryReporter {
             "\n| **Total** | **{trusted}** | **{broadcasts}** | **{total}** |\n"
         ));
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "proof-patterns-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "proof-patterns-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

@@ -27,8 +27,8 @@ impl Reporter for ModularityChecklistReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
-        let session = view.session;
+        let findings = view.findings();
+        let session = view.session();
 
         let rows = modularity_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -80,7 +80,7 @@ impl Reporter for ModularityChecklistReporter {
             let crate_open: Vec<_> = open
                 .iter()
                 .copied()
-                .filter(|row| row.crate_name == crate_name)
+                .filter(|row| row.crate_name() == &crate_name)
                 .collect();
             let (section, count) = render_crate_checklist(&crate_open);
             if section.is_empty() {
@@ -101,11 +101,11 @@ impl Reporter for ModularityChecklistReporter {
             body.push_str(&rendered);
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "modularity.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "modularity.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -132,30 +132,30 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
             hotspot
                 .methods
                 .iter()
-                .map(|method| (method.file.as_str(), method.context.as_str()))
+                .map(|method| (method.file().as_str(), method.context().as_str()))
         })
         .collect();
 
     let nested_lopsided: BTreeSet<&str> = hotspots
         .iter()
-        .filter_map(|hotspot| hotspot.lopsided.map(|row| row.context.as_str()))
+        .filter_map(|hotspot| hotspot.lopsided.map(|row| row.context().as_str()))
         .collect();
     let nested_top_heavy: BTreeSet<&str> = hotspots
         .iter()
-        .filter_map(|hotspot| hotspot.top_heavy.map(|row| row.context.as_str()))
+        .filter_map(|hotspot| hotspot.top_heavy.map(|row| row.context().as_str()))
         .collect();
     let nested_collapse: BTreeSet<&str> = hotspots
         .iter()
-        .filter_map(|hotspot| hotspot.collapse.map(|row| row.context.as_str()))
+        .filter_map(|hotspot| hotspot.collapse.map(|row| row.context().as_str()))
         .collect();
 
     let mut leftover_functions: Vec<&ModularityRow> = open
         .iter()
         .copied()
         .filter(|row| {
-            row.kind == "MODULARITY-FUNCTION"
+            row.kind() == "MODULARITY-FUNCTION"
                 && row.is_checklist()
-                && !nested_methods.contains(&(row.file.as_str(), row.context.as_str()))
+                && !nested_methods.contains(&(row.file().as_str(), row.context().as_str()))
         })
         .collect();
     sort_by_lines_desc(&mut leftover_functions);
@@ -164,9 +164,9 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
         .iter()
         .copied()
         .filter(|row| {
-            row.kind == "MODULARITY-TYPES-PER-FILE"
+            row.kind() == "MODULARITY-TYPES-PER-FILE"
                 && row.is_checklist()
-                && !nested_files.contains(row.file.as_str())
+                && !nested_files.contains(row.file().as_str())
         })
         .collect();
     sort_by_lines_desc(&mut leftover_types);
@@ -200,8 +200,8 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
                     } else {
                         "extract helpers from"
                     },
-                    method.context,
-                    method.lines
+                    method.context(),
+                    method.lines()
                 ));
             }
             if hotspot.methods.is_empty() {
@@ -210,14 +210,14 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
                 );
             }
             if let Some(types) = hotspot.types {
-                let names = if types.context.is_empty() {
+                let names = if types.context().is_empty() {
                     String::new()
                 } else {
-                    format!(" (`{}`)", types.context)
+                    format!(" (`{}`)", types.context())
                 };
                 body.push_str(&format!(
                     "  - peel types: **{} types**{names}\n",
-                    types.lines
+                    types.lines()
                 ));
             }
             if hotspot.grow_subtree {
@@ -228,23 +228,23 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
             if let Some(top_heavy) = hotspot.top_heavy {
                 body.push_str(&format!(
                     "  - peel the parent — **{} lines** still live here (top-heavy {}){}\n",
-                    top_heavy.lines,
-                    top_heavy.share,
-                    detail_suffix(&top_heavy.detail),
+                    top_heavy.lines(),
+                    top_heavy.share(),
+                    detail_suffix(top_heavy.detail()),
                 ));
             }
             if let Some(lopsided) = hotspot.lopsided {
                 body.push_str(&format!(
                     "  - split this dominant sibling — {} of sibling mass{}\n",
                     share_label(lopsided),
-                    detail_suffix(&lopsided.detail),
+                    detail_suffix(lopsided.detail()),
                 ));
             }
             if let Some(collapse) = hotspot.collapse {
                 body.push_str(&format!(
                     "  - collapse this extra hop — **{} lines**{}\n",
-                    collapse.lines,
-                    detail_suffix(&collapse.detail),
+                    collapse.lines(),
+                    detail_suffix(collapse.detail()),
                 ));
             }
         }
@@ -257,7 +257,10 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
             count += 1;
             body.push_str(&format!(
                 "- [ ] `{}` — `{}:{}` — **{} lines** — split this body\n",
-                entry.context, entry.file, entry.line, entry.lines
+                entry.context(),
+                entry.file(),
+                entry.line(),
+                entry.lines()
             ));
         }
         body.push('\n');
@@ -267,14 +270,15 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
         body.push_str("### Packed types\n\n");
         for entry in leftover_types {
             count += 1;
-            let names = if entry.context.is_empty() {
+            let names = if entry.context().is_empty() {
                 String::new()
             } else {
-                format!(" (`{}`)", entry.context)
+                format!(" (`{}`)", entry.context())
             };
             body.push_str(&format!(
                 "- [ ] `{}` — **{} types**{names}\n",
-                entry.file, entry.lines
+                entry.file(),
+                entry.lines()
             ));
         }
         body.push('\n');
@@ -311,29 +315,29 @@ fn render_rebalance(
         count += 1;
         body.push_str(&format!(
             "- [ ] peel `{}` — **{} lines** still in the parent (top-heavy {}){}\n",
-            entry.context,
-            entry.lines,
-            entry.share,
-            detail_suffix(&entry.detail),
+            entry.context(),
+            entry.lines(),
+            entry.share(),
+            detail_suffix(entry.detail()),
         ));
     }
     for entry in leftover_lopsided {
         count += 1;
         body.push_str(&format!(
             "- [ ] split `{}` — **{} lines**, {} of sibling mass{}\n",
-            entry.context,
-            entry.lines,
+            entry.context(),
+            entry.lines(),
             share_label(entry),
-            detail_suffix(&entry.detail),
+            detail_suffix(entry.detail()),
         ));
     }
     for entry in leftover_collapse {
         count += 1;
         body.push_str(&format!(
             "- [ ] collapse `{}` — **{} lines**{}\n",
-            entry.context,
-            entry.lines,
-            detail_suffix(&entry.detail),
+            entry.context(),
+            entry.lines(),
+            detail_suffix(entry.detail()),
         ));
     }
     body.push('\n');
@@ -350,7 +354,7 @@ fn leftover_kind<'a>(
         .iter()
         .copied()
         .filter(|row| {
-            row.kind == kind && row.is_checklist() && !nested.contains(row.context.as_str())
+            row.kind() == kind && row.is_checklist() && !nested.contains(row.context().as_str())
         })
         .collect();
     sort_by_lines_desc(&mut rows);
@@ -359,10 +363,10 @@ fn leftover_kind<'a>(
 
 #[instrument(level = "debug", skip(row))]
 fn share_label(row: &ModularityRow) -> String {
-    if row.share.is_empty() {
+    if row.share().is_empty() {
         "most".to_string()
     } else {
-        format!("{}%", share_as_percent(&row.share))
+        format!("{}%", share_as_percent(row.share()))
     }
 }
 
@@ -393,47 +397,47 @@ fn file_hotspots<'a>(open: &[&'a ModularityRow]) -> Vec<FileHotspot<'a>> {
     let mut by_file: BTreeMap<&str, Vec<&ModularityRow>> = BTreeMap::new();
     for row in open {
         if matches!(
-            row.kind.as_str(),
+            row.kind().as_str(),
             "MODULARITY-FILE" | "MODULARITY-MODULE-SIZE"
         ) && row.is_checklist()
         {
-            by_file.entry(row.file.as_str()).or_default().push(*row);
+            by_file.entry(row.file().as_str()).or_default().push(*row);
         }
     }
 
     let mut hotspots = Vec::new();
     for (file, size_rows) in by_file {
-        let file_row = size_rows.iter().find(|row| row.kind == "MODULARITY-FILE");
+        let file_row = size_rows.iter().find(|row| row.kind() == "MODULARITY-FILE");
         let module_row = size_rows
             .iter()
-            .filter(|row| row.kind == "MODULARITY-MODULE-SIZE")
+            .filter(|row| row.kind() == "MODULARITY-MODULE-SIZE")
             .max_by_key(|row| row.line_count());
         let lines = file_row
             .or(module_row)
             .map(|row| row.line_count())
             .unwrap_or(0);
-        let zscore = module_row.map(|row| row.zscore.as_str()).unwrap_or("");
+        let zscore = module_row.map(|row| row.zscore().as_str()).unwrap_or("");
         let mut methods: Vec<&ModularityRow> = open
             .iter()
             .copied()
-            .filter(|row| row.kind == "MODULARITY-FUNCTION" && row.file == file)
+            .filter(|row| row.kind() == "MODULARITY-FUNCTION" && row.file() == file)
             .collect();
         sort_by_lines_desc(&mut methods);
         methods.truncate(HOTSPOT_METHODS);
         let types = open.iter().copied().find(|row| {
-            row.kind == "MODULARITY-TYPES-PER-FILE" && row.file == file && row.is_checklist()
+            row.kind() == "MODULARITY-TYPES-PER-FILE" && row.file() == file && row.is_checklist()
         });
-        let module_path = module_row.map(|row| row.context.as_str());
+        let module_path = module_row.map(|row| row.context().as_str());
         let top_heavy = module_path.and_then(|path| {
             open.iter().copied().find(|row| {
-                row.kind == "MODULARITY-TOP-HEAVY" && row.context == path && row.is_checklist()
+                row.kind() == "MODULARITY-TOP-HEAVY" && row.context() == path && row.is_checklist()
             })
         });
         let lopsided = open.iter().copied().find(|row| {
-            row.kind == "MODULARITY-LOPSIDED" && row.file == file && row.is_checklist()
+            row.kind() == "MODULARITY-LOPSIDED" && row.file() == file && row.is_checklist()
         });
         let collapse = open.iter().copied().find(|row| {
-            row.kind == "MODULARITY-COLLAPSE" && row.file == file && row.is_checklist()
+            row.kind() == "MODULARITY-COLLAPSE" && row.file() == file && row.is_checklist()
         });
         let grow_subtree = module_path
             .map(|path| fat_leaf_paths.contains(path))

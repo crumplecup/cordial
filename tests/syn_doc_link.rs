@@ -74,7 +74,7 @@ fn find_item_id(ir: &cordial::CrateIr, path: &str, origin: &str) -> Option<cordi
             node.attr("qualified_path").and_then(|value| value.as_str()) == Some(path)
                 && node.attr(ATTR_IR_ORIGIN).and_then(|value| value.as_str()) == Some(origin)
         })
-        .map(|node| node.id)
+        .map(|node| node.id())
 }
 
 #[test]

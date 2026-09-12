@@ -133,9 +133,9 @@ mod coverage_targets {
         for target in targets {
             let key = format!(
                 "{:?}:{}:{}",
-                target.kind,
-                target.crate_name,
-                target.shadow_crate.as_deref().unwrap_or("")
+                target.kind(),
+                target.crate_name(),
+                target.shadow_crate().as_deref().unwrap_or("")
             );
             if seen.insert(key) {
                 out.push(target);

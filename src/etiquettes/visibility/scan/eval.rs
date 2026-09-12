@@ -69,12 +69,12 @@ fn peel_branching_floor(root: &ModuleNode, thresholds: VisibilityThresholds) -> 
         }
         if reserved
             .iter()
-            .any(|parent| is_path_under(&module.path, parent))
+            .any(|parent| is_path_under(module.path(), parent))
         {
             continue;
         }
         remaining = remaining.saturating_sub(size);
-        reserved.push(&module.path);
+        reserved.push(module.path());
     }
     if remaining < thresholds.max_crate_names_for_flat() {
         return floor;
@@ -88,13 +88,13 @@ fn peel_branching_floor(root: &ModuleNode, thresholds: VisibilityThresholds) -> 
                 && size < thresholds.min_module_names()
                 && !reserved
                     .iter()
-                    .any(|parent| is_path_under(&module.path, parent))
+                    .any(|parent| is_path_under(module.path(), parent))
         })
         .collect();
     candidates.sort_by(|left, right| {
         external_name_count(right)
             .cmp(&external_name_count(left))
-            .then_with(|| left.path.cmp(&right.path))
+            .then_with(|| left.path().cmp(right.path()))
     });
     for candidate in candidates {
         if remaining < thresholds.max_crate_names_for_flat() {
@@ -102,14 +102,14 @@ fn peel_branching_floor(root: &ModuleNode, thresholds: VisibilityThresholds) -> 
         }
         if reserved
             .iter()
-            .any(|parent| is_path_under(&candidate.path, parent))
+            .any(|parent| is_path_under(candidate.path(), parent))
         {
             continue;
         }
         let size = external_name_count(candidate);
         remaining = remaining.saturating_sub(size);
         floor = size;
-        reserved.push(&candidate.path);
+        reserved.push(candidate.path());
     }
     floor
 }

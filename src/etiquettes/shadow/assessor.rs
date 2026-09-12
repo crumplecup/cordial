@@ -25,8 +25,8 @@ impl Assessor for ShadowAssessor {
 
     #[instrument(level = "trace", skip(self, view))]
     fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
-        let markers = view.markers;
-        let ir = view.ir;
+        let markers = view.markers();
+        let ir = view.ir();
 
         let mut findings = Vec::new();
         for marker in markers {
@@ -44,14 +44,14 @@ impl Assessor for ShadowAssessor {
                 .and_then(|v| v.as_str())
                 .unwrap_or("?")
                 .to_string();
-            findings.push(Box::new(MissingMirrorFinding {
-                rule: ShadowRule,
-                disposition: Disposition::Open,
-                anchor: crate::objects::NodeAnchor(node_id),
-                crate_name: ir.crate_name().to_string(),
+            findings.push(Box::new(MissingMirrorFinding::new(
+                ShadowRule,
+                Disposition::Open,
+                crate::objects::NodeAnchor::new(node_id),
+                ir.crate_name().to_string(),
                 target_path,
                 shadow_path,
-            }) as Box<dyn Finding>);
+            )) as Box<dyn Finding>);
         }
         Ok(findings)
     }

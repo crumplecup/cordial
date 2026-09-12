@@ -23,7 +23,7 @@ impl AllowRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -55,7 +55,7 @@ fn open_rows(rows: &[AllowRow]) -> impl Iterator<Item = &AllowRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
-/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// Distinct crate names present in `rows`, sorted -- `view.ir().crate_name()`
 /// is pinned to whichever crate the run's target discovery lists first, not
 /// the crate a given row actually belongs to, so a workspace-spanning
 /// artifact must derive its own crate breakdown from `row.crate_name`
@@ -82,7 +82,7 @@ impl Reporter for AllowCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from("crate,rule_id,context,file,line,snippet\n");
         for row in allow_rows(findings) {
@@ -96,11 +96,11 @@ impl Reporter for AllowCsvReporter {
                 csv_field(&row.snippet),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "allows.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "allows.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -118,7 +118,7 @@ impl Reporter for AllowChecklistReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = allow_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -157,11 +157,11 @@ impl Reporter for AllowChecklistReporter {
             }
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "allows.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "allows.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -181,7 +181,7 @@ impl Reporter for AllowSummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = allow_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -207,10 +207,10 @@ impl Reporter for AllowSummaryReporter {
         }
         body.push_str(&format!("\n| **Total** | **{total}** | **{attr}** |\n"));
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "allows-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "allows-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

@@ -197,34 +197,23 @@ impl Plugin for StaticPlugin {
 }
 
 /// One strategy-selected portfolio for a [`StrategicPlugin`].
-#[derive(Clone, Copy)]
-pub struct StrategicPortfolio<I> {
+#[derive(Clone, Copy, derive_getters::Getters)]
+pub struct StrategicPortfolio<I: Copy> {
     /// Indicator value selecting this portfolio.
+    #[getter(copy)]
     indicator: I,
     /// Etiquettes contributed when this portfolio is selected.
+    #[getter(copy)]
     etiquettes: &'static [&'static dyn Etiquette],
 }
 
-impl<I> StrategicPortfolio<I> {
+impl<I: Copy> StrategicPortfolio<I> {
     /// Build a strategy-selected etiquette portfolio.
     pub const fn new(indicator: I, etiquettes: &'static [&'static dyn Etiquette]) -> Self {
         Self {
             indicator,
             etiquettes,
         }
-    }
-
-    /// Indicator value selecting this portfolio.
-    pub fn indicator(&self) -> I
-    where
-        I: Copy,
-    {
-        self.indicator
-    }
-
-    /// Etiquettes contributed when this portfolio is selected.
-    pub fn etiquettes(&self) -> &[&'static dyn Etiquette] {
-        self.etiquettes
     }
 }
 
@@ -323,7 +312,7 @@ where
             .as_ref()
             .iter()
             .find(|portfolio| self.accepts(portfolio))
-            .map(StrategicPortfolio::etiquettes)
+            .map(|portfolio| portfolio.etiquettes)
             .unwrap_or(EMPTY_ETIQUETTES)
     }
 

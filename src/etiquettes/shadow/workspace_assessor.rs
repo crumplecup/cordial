@@ -27,9 +27,9 @@ impl WorkspaceAssessor for CrossCrateShadowWorkspaceAssessor {
 
     #[instrument(level = "trace", skip(self, view))]
     fn assess(&self, view: WorkspaceAssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
-        let workspace = view.workspace;
-        let session = view.session;
-        let filter = view.filter;
+        let workspace = view.workspace();
+        let session = view.session();
+        let filter = view.filter();
 
         let pairs = discover_active_shadow_pairs(session.project_root(), filter)?;
         let mut findings = Vec::new();
@@ -39,8 +39,8 @@ impl WorkspaceAssessor for CrossCrateShadowWorkspaceAssessor {
                 build_shadow_pair_report_from_workspace(workspace, pair.upstream(), pair.shadow())?;
             let anchor = workspace
                 .crate_ir(pair.upstream())
-                .map(|ir| NodeAnchor(ir.root))
-                .unwrap_or(NodeAnchor(crate::ir::NodeId(0)));
+                .map(|ir| NodeAnchor::new(ir.root()))
+                .unwrap_or(NodeAnchor::new(crate::ir::NodeId::new(0)));
             findings.extend(findings_from_shadow_pair_report(
                 &report,
                 pair.upstream(),
@@ -63,54 +63,56 @@ pub fn findings_from_shadow_pair_report(
     let gaps = build_shadow_gaps(&pair_refs);
     let gap_paths: std::collections::HashSet<String> = gaps
         .iter()
-        .filter(|entry| entry.gap_kind != crate::shadow::ShadowGapKind::ShadowVerificationGap)
-        .map(|entry| entry.item_path.clone())
+        .filter(|entry| entry.gap_kind() != crate::shadow::ShadowGapKind::ShadowVerificationGap)
+        .map(|entry| entry.item_path().clone())
         .collect();
 
     let mut findings: Vec<Box<dyn Finding>> = report
-        .rows
+        .rows()
         .iter()
         .map(|row| {
-            let disposition = if row.status == ShadowStatus::Covered
+            let disposition = if row.status() == ShadowStatus::Covered
                 && !gaps.iter().any(|entry| {
-                    entry.item_path == row.item_path
-                        && entry.gap_kind == crate::shadow::ShadowGapKind::ShadowVerificationGap
+                    entry.item_path() == row.item_path()
+                        && entry.gap_kind() == crate::shadow::ShadowGapKind::ShadowVerificationGap
                 }) {
                 Disposition::Exemplar
-            } else if gap_paths.contains(&row.item_path)
-                || gaps.iter().any(|entry| entry.item_path == row.item_path)
+            } else if gap_paths.contains(row.item_path())
+                || gaps
+                    .iter()
+                    .any(|entry| entry.item_path() == row.item_path())
             {
                 Disposition::Open
-            } else if row.status == ShadowStatus::Extra {
+            } else if row.status() == ShadowStatus::Extra {
                 Disposition::Suppressed
             } else {
                 Disposition::Exemplar
             };
 
-            Box::new(CrossCrateShadowFinding {
-                rule: ShadowPairRule,
+            Box::new(CrossCrateShadowFinding::new(
+                ShadowPairRule,
                 disposition,
                 anchor,
-                target_crate: upstream.to_string(),
-                shadow_crate: shadow.to_string(),
-                row: row.clone(),
-                coverage_pct: report.coverage_pct,
-            }) as Box<dyn Finding>
+                upstream.to_string(),
+                shadow.to_string(),
+                row.clone(),
+                report.coverage_pct(),
+            )) as Box<dyn Finding>
         })
         .collect();
 
-    if !report.method_coverage.is_empty()
-        || !report.missing_type_methods.is_empty()
-        || !report.trait_coverage.is_empty()
+    if !report.method_coverage().is_empty()
+        || !report.missing_type_methods().is_empty()
+        || !report.trait_coverage().is_empty()
     {
-        findings.push(Box::new(ShadowMethodChecklistFinding {
-            rule: ShadowPairChecklistRule,
-            disposition: Disposition::Exemplar,
+        findings.push(Box::new(ShadowMethodChecklistFinding::new(
+            ShadowPairChecklistRule,
+            Disposition::Exemplar,
             anchor,
-            target_crate: upstream.to_string(),
-            shadow_crate: shadow.to_string(),
-            body: render_shadow_method_checklist(report)?,
-        }));
+            upstream.to_string(),
+            shadow.to_string(),
+            render_shadow_method_checklist(report)?,
+        )));
     }
 
     Ok(findings)

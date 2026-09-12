@@ -26,29 +26,29 @@ impl Rule for AmenableStdRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct AmenableStdRowFinding {
-    pub rule: AmenableStdRule,
-    pub disposition: Disposition,
-    pub anchor: NodeAnchor,
-    pub source_crate: String,
-    pub impl_crate: String,
-    pub type_path: String,
-    pub type_kind: String,
-    pub is_generic: bool,
-    pub status: AmenableStdStatus,
-    pub evidence_link: bool,
-    pub evidence_name: Option<String>,
-    pub kani_witness: bool,
-    pub creusot_witness: bool,
-    pub verus_witness: bool,
-    pub proof_test: bool,
-    pub skip_reason: Option<String>,
-    pub kani_excepted: bool,
-    pub creusot_excepted: bool,
-    pub verus_excepted: bool,
-    pub missing_layers: String,
-    pub action: String,
+    rule: AmenableStdRule,
+    disposition: Disposition,
+    anchor: NodeAnchor,
+    source_crate: String,
+    impl_crate: String,
+    type_path: String,
+    type_kind: String,
+    is_generic: bool,
+    status: AmenableStdStatus,
+    evidence_link: bool,
+    evidence_name: Option<String>,
+    kani_witness: bool,
+    creusot_witness: bool,
+    verus_witness: bool,
+    proof_test: bool,
+    skip_reason: Option<String>,
+    kani_excepted: bool,
+    creusot_excepted: bool,
+    verus_excepted: bool,
+    missing_layers: String,
+    action: String,
 }
 
 impl Finding for AmenableStdRowFinding {
@@ -178,7 +178,7 @@ pub fn amenable_report_from_findings(
         let mut sink = crate::objects::MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -212,25 +212,25 @@ pub fn amenable_report_from_findings(
                 Some(reason)
             }
         };
-        entries.push(AmenableStdEntry {
-            type_path: field("type_path"),
-            type_kind: field("type_kind"),
-            is_generic: field("is_generic") == "true",
-            evidence_link: field("evidence_link") == "true",
+        entries.push(AmenableStdEntry::new(
+            field("type_path"),
+            field("type_kind"),
+            field("is_generic") == "true",
+            field("evidence_link") == "true",
             evidence_name,
-            kani_witness: field("kani_witness") == "true",
-            creusot_witness: field("creusot_witness") == "true",
-            verus_witness: field("verus_witness") == "true",
-            proof_test: field("proof_test") == "true",
+            field("kani_witness") == "true",
+            field("creusot_witness") == "true",
+            field("verus_witness") == "true",
+            field("proof_test") == "true",
             status,
             skip_reason,
-            kani_excepted: field("kani_excepted") == "true",
-            creusot_excepted: field("creusot_excepted") == "true",
-            verus_excepted: field("verus_excepted") == "true",
-        });
+            field("kani_excepted") == "true",
+            field("creusot_excepted") == "true",
+            field("verus_excepted") == "true",
+        ));
     }
 
-    Some(AmenableStdReport {
+    Some(AmenableStdReport::new(
         source_crate,
         impl_crate,
         include_nightly,
@@ -239,7 +239,7 @@ pub fn amenable_report_from_findings(
         partial_count,
         missing_count,
         skipped_count,
-    })
+    ))
 }
 
 #[instrument(level = "debug", skip(findings))]
@@ -254,7 +254,7 @@ pub fn amenable_gaps_from_findings(findings: &[&dyn Finding]) -> Vec<AmenableStd
             let mut sink = crate::objects::MapFindingSink::default();
             finding.emit(&mut sink);
             let field = |name: &str| {
-                sink.fields
+                sink.fields()
                     .iter()
                     .find(|(key, _)| key == name)
                     .map(|(_, value)| value.clone())
@@ -266,14 +266,14 @@ pub fn amenable_gaps_from_findings(findings: &[&dyn Finding]) -> Vec<AmenableStd
                 "Complete" => AmenableStdStatus::Complete,
                 _ => AmenableStdStatus::Missing,
             };
-            AmenableStdGapEntry {
-                source_crate: field("source_crate"),
-                type_path: field("type_path"),
-                type_kind: field("type_kind"),
+            AmenableStdGapEntry::new(
+                field("source_crate"),
+                field("type_path"),
+                field("type_kind"),
                 status,
-                missing_layers: field("missing_layers"),
-                action: field("action"),
-            }
+                field("missing_layers"),
+                field("action"),
+            )
         })
         .collect()
 }

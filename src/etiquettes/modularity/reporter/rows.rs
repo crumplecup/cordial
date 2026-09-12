@@ -7,20 +7,20 @@ pub(super) const SUMMARY_MODULE_ROWS: usize = 20;
 pub(super) const SUMMARY_RANK_ROWS: usize = 10;
 pub(super) const HOTSPOT_METHODS: usize = 3;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, derive_getters::Getters)]
 pub(super) struct ModularityRow {
-    pub crate_name: String,
-    pub kind: String,
-    pub context: String,
-    pub file: String,
-    pub line: String,
-    pub lines: String,
-    pub checklist: String,
-    pub disposition: String,
-    pub zscore: String,
-    pub inline: String,
-    pub share: String,
-    pub detail: String,
+    crate_name: String,
+    kind: String,
+    context: String,
+    file: String,
+    line: String,
+    lines: String,
+    checklist: String,
+    disposition: String,
+    zscore: String,
+    inline: String,
+    share: String,
+    detail: String,
 }
 
 impl ModularityRow {
@@ -29,7 +29,7 @@ impl ModularityRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -53,12 +53,12 @@ impl ModularityRow {
 
     #[instrument(level = "trace", skip(self))]
     pub(super) fn line_count(&self) -> u32 {
-        self.lines.parse().unwrap_or(0)
+        self.lines().parse().unwrap_or(0)
     }
 
     #[instrument(level = "trace", skip(self))]
     pub(super) fn is_checklist(&self) -> bool {
-        self.checklist == "true"
+        self.checklist() == "true"
     }
 }
 
@@ -67,7 +67,7 @@ pub(super) fn is_inventory_row(
     row: &ModularityRow,
     thresholds: &crate::config::ModularityThresholds,
 ) -> bool {
-    if row.kind == "MODULARITY-FUNCTION" {
+    if row.kind() == "MODULARITY-FUNCTION" {
         row.line_count() >= thresholds.function_inventory_min_lines()
     } else {
         true
@@ -85,12 +85,12 @@ pub(super) fn modularity_rows(findings: &[&dyn Finding]) -> Vec<ModularityRow> {
 
 #[instrument(level = "debug", skip(rows))]
 pub(super) fn open_rows(rows: &[ModularityRow]) -> impl Iterator<Item = &ModularityRow> {
-    rows.iter().filter(|row| row.disposition == "open")
+    rows.iter().filter(|row| row.disposition() == "open")
 }
 
 #[instrument(level = "debug", skip(rows))]
 pub(super) fn crate_names(rows: &[&ModularityRow]) -> Vec<String> {
-    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name.clone()).collect();
+    let mut names: Vec<String> = rows.iter().map(|row| row.crate_name().clone()).collect();
     names.sort();
     names.dedup();
     names
@@ -102,20 +102,20 @@ pub(super) fn sort_by_lines_desc(rows: &mut [&ModularityRow]) {
         right
             .line_count()
             .cmp(&left.line_count())
-            .then_with(|| left.kind.cmp(&right.kind))
-            .then_with(|| left.context.cmp(&right.context))
+            .then_with(|| left.kind().cmp(right.kind()))
+            .then_with(|| left.context().cmp(right.context()))
     });
 }
 
 #[instrument(level = "debug", skip(rows))]
 pub(super) fn count_kind(rows: &[&ModularityRow], kind: &str) -> usize {
-    rows.iter().filter(|row| row.kind == kind).count()
+    rows.iter().filter(|row| row.kind() == kind).count()
 }
 
 #[instrument(level = "debug", skip(rows))]
 pub(super) fn max_lines(rows: &[&ModularityRow], kind: &str) -> u32 {
     rows.iter()
-        .filter(|row| row.kind == kind)
+        .filter(|row| row.kind() == kind)
         .map(|row| row.line_count())
         .max()
         .unwrap_or(0)
@@ -124,12 +124,12 @@ pub(super) fn max_lines(rows: &[&ModularityRow], kind: &str) -> u32 {
 #[instrument(level = "debug", skip(rows))]
 pub(super) fn file_module_inputs(rows: &[&ModularityRow]) -> Vec<ModuleSizeInput> {
     rows.iter()
-        .filter(|row| row.kind == "MODULARITY-MODULE-SIZE" && row.inline != "true")
+        .filter(|row| row.kind() == "MODULARITY-MODULE-SIZE" && row.inline() != "true")
         .filter_map(|row| {
             Some(ModuleSizeInput::new(
-                row.context.clone(),
-                row.file.clone(),
-                row.lines.parse().ok()?,
+                row.context().clone(),
+                row.file().clone(),
+                row.lines().parse().ok()?,
             ))
         })
         .collect()

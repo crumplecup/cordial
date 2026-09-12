@@ -102,7 +102,7 @@ impl ExceptionEntry {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.as_str())
@@ -414,7 +414,7 @@ pub fn resolve_exceptions_root(project_root: &Path, root: &Path) -> PathBuf {
 #[instrument(level = "info", skip(store), err(level = "warn"))]
 pub fn backup_exception_files(store: &StoreLayout, backup_root: &Path) -> CordialResult<usize> {
     store.ensure_dirs()?;
-    let backup_slug_root = backup_root.join(&store.project_slug);
+    let backup_slug_root = backup_root.join(store.project_slug());
     let mut copied = 0usize;
     for (relative, from) in exception_subtrees(store) {
         copied += sync_exception_subtree(&from, &backup_slug_root.join(relative))?;
@@ -429,7 +429,7 @@ pub fn backup_exception_files(store: &StoreLayout, backup_root: &Path) -> Cordia
 /// corresponding store dirs so the registry is the source of truth.
 #[instrument(level = "info", skip(store), err(level = "warn"))]
 pub fn load_exception_files(store: &StoreLayout, backup_root: &Path) -> CordialResult<usize> {
-    let backup_slug_root = backup_root.join(&store.project_slug);
+    let backup_slug_root = backup_root.join(store.project_slug());
     if !backup_slug_root.is_dir() {
         return Err(CordialError::not_found(backup_slug_root));
     }

@@ -26,7 +26,7 @@ impl DeriveRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -61,7 +61,7 @@ fn open_rows(rows: &[DeriveRow]) -> impl Iterator<Item = &DeriveRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
-/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// Distinct crate names present in `rows`, sorted -- `view.ir().crate_name()`
 /// is pinned to whichever crate the run's target discovery lists first, not
 /// the crate a given row actually belongs to, so a workspace-spanning
 /// artifact must derive its own crate breakdown from `row.crate_name`
@@ -88,7 +88,7 @@ impl Reporter for DeriveCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from(
             "crate,rule_id,struct_name,method_name,qualified_name,recommendation,file,line,evidence\n",
@@ -107,11 +107,11 @@ impl Reporter for DeriveCsvReporter {
                 csv_field(&row.evidence),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "derives.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "derives.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -129,7 +129,7 @@ impl Reporter for DeriveChecklistReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = derive_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -177,11 +177,11 @@ impl Reporter for DeriveChecklistReporter {
             }
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "derives.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "derives.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -201,7 +201,7 @@ impl Reporter for DeriveSummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = derive_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -271,10 +271,10 @@ impl Reporter for DeriveSummaryReporter {
             "\n| **Total** | **{total}** | **{builder}** | **{use_builder}** | **{getter}** | **{setter}** | **{as_ref}** | **{as_str}** | **{new}** | **{pub_field}** |\n"
         ));
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "derives-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "derives-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

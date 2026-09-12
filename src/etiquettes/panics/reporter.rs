@@ -26,7 +26,7 @@ impl PanicRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -66,7 +66,7 @@ fn checklist_panic_rows(rows: &[PanicRow]) -> impl Iterator<Item = &PanicRow> {
     open_panic_rows(rows).filter(|row| row.checklist != "false")
 }
 
-/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// Distinct crate names present in `rows`, sorted -- `view.ir().crate_name()`
 /// is pinned to whichever crate the run's target discovery lists first, not
 /// the crate a given row actually belongs to, so a workspace-spanning
 /// artifact must derive its own crate breakdown from `row.crate_name`
@@ -93,7 +93,7 @@ impl Reporter for PanicCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from("crate,kind,surface,context,file,line,snippet\n");
         for row in panic_rows(findings) {
@@ -108,11 +108,11 @@ impl Reporter for PanicCsvReporter {
                 csv_field(&row.snippet),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "panics.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "panics.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -130,7 +130,7 @@ impl Reporter for PanicChecklistReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = panic_rows(findings);
         let open: Vec<_> = checklist_panic_rows(&rows).collect();
@@ -230,11 +230,11 @@ impl Reporter for PanicChecklistReporter {
             }
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "panics.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "panics.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -254,7 +254,7 @@ impl Reporter for PanicSummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = panic_rows(findings);
         let inventory: Vec<_> = open_panic_rows(&rows).collect();
@@ -323,10 +323,10 @@ impl Reporter for PanicSummaryReporter {
             "\n| **Total** | **{total}** | **{panic}** | **{unreachable}** | **{expect}** | **{unwrap}** | **{compile_error}** |\n"
         ));
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "panics-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "panics-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

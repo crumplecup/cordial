@@ -19,7 +19,7 @@ impl Reporter for TrenchcoatCsvReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from("crate,type_path,disposition\n");
         for finding in findings
@@ -29,7 +29,7 @@ impl Reporter for TrenchcoatCsvReporter {
             let mut sink = MapFindingSink::default();
             finding.emit(&mut sink);
             let field = |name: &str| {
-                sink.fields
+                sink.fields()
                     .iter()
                     .find(|(key, _)| key == name)
                     .map(|(_, value)| value.as_str())
@@ -42,10 +42,10 @@ impl Reporter for TrenchcoatCsvReporter {
                 csv_field(&finding.disposition().to_string())
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "trenchcoats.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "trenchcoats.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }

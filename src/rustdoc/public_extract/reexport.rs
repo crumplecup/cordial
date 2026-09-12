@@ -97,7 +97,7 @@ pub(in crate::rustdoc) fn collect_public_same_crate_reexport_aliases(
                 slot.insert(alias_item);
             }
             std::collections::hash_map::Entry::Occupied(mut slot) => {
-                if item_path_preferred_over(&alias_item.path, &slot.get().path) {
+                if item_path_preferred_over(alias_item.path(), slot.get().path()) {
                     debug!(
                         target_path = %target_summary.path.join("::"),
                         previous_alias = %slot.get().path_str(),

@@ -24,7 +24,7 @@ pub fn collect_trait_impl_paths_from_json(
 #[instrument(level = "debug", skip(inventory))]
 pub fn collect_trait_impl_paths(inventory: &RustdocInventory, trait_name: &str) -> HashSet<String> {
     let mut paths = HashSet::new();
-    for item in inventory.krate.index.values() {
+    for item in inventory.krate().index.values() {
         let ItemEnum::Impl(impl_item) = &item.inner else {
             continue;
         };
@@ -34,7 +34,7 @@ pub fn collect_trait_impl_paths(inventory: &RustdocInventory, trait_name: &str) 
         if trait_.path.rsplit("::").next() != Some(trait_name) {
             continue;
         }
-        if let Some(path) = impl_type_path(&inventory.krate, &impl_item.for_) {
+        if let Some(path) = impl_type_path(inventory.krate(), &impl_item.for_) {
             paths.insert(path);
         }
     }

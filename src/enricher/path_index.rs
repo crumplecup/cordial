@@ -24,7 +24,7 @@ impl IrEnricher for PathIndexEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let ir = view.ir;
+        let ir = view.ir();
 
         ir.rebuild_path_index()?;
         Ok(())

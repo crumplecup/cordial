@@ -50,7 +50,7 @@ impl Probe for AllowSiteProbe {
 
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
-        let ir = view.ir;
+        let ir = view.ir();
 
         let mut markers = Vec::new();
         for node in ir.nodes_matching(&ALLOW_SITES_QUERY) {
@@ -62,7 +62,8 @@ impl Probe for AllowSiteProbe {
             }
 
             markers.push(
-                Box::new(AllowMarker::new(crate::objects::NodeAnchor(node.id))) as Box<dyn Marker>,
+                Box::new(AllowMarker::new(crate::objects::NodeAnchor::new(node.id())))
+                    as Box<dyn Marker>,
             );
         }
         Ok(markers)

@@ -22,9 +22,9 @@ impl Reporter for RollupReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
-        let ir = view.ir;
-        let session = view.session;
+        let findings = view.findings();
+        let ir = view.ir();
+        let session = view.session();
 
         let mut by_category: BTreeMap<String, CategoryCounts> = BTreeMap::new();
         let mut by_rule: BTreeMap<String, usize> = BTreeMap::new();
@@ -129,11 +129,11 @@ impl Reporter for RollupReporter {
             body.push('\n');
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "rollup-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "rollup-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -153,7 +153,7 @@ impl CategoryCounts {
 
 #[instrument(level = "debug", skip(sink))]
 fn field(sink: &MapFindingSink, name: &str) -> Option<String> {
-    sink.fields
+    sink.fields()
         .iter()
         .find(|(key, _)| key == name)
         .map(|(_, value)| value.clone())

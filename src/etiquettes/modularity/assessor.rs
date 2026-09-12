@@ -44,9 +44,8 @@ impl Assessor for ModularityAssessor {
 
     #[instrument(level = "trace", skip(self, view))]
     fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
-        let markers = view.markers;
-        let ir = view.ir;
-        let session = view.session;
+        let markers = view.markers();
+        let (ir, _, session) = view.into_parts();
 
         let config = crate::config::load_session_config(session);
         let thresholds = config.modularity();
@@ -266,7 +265,7 @@ fn finding_from_site(site: &PendingSite, args: FindingArgs<'_>) -> CordialResult
         ModularityFinding::builder()
             .rule(ModularityRule::new(args.kind))
             .disposition(Disposition::Open)
-            .anchor(crate::objects::NodeAnchor(site.node_id))
+            .anchor(crate::objects::NodeAnchor::new(site.node_id))
             .crate_name(args.crate_name.to_string())
             .context(args.context)
             .span(FileSpan::new(site.file.clone(), site.line, 1))

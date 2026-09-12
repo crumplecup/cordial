@@ -26,7 +26,7 @@ impl ErrorChainRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -59,7 +59,7 @@ fn open_rows(rows: &[ErrorChainRow]) -> impl Iterator<Item = &ErrorChainRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
-/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// Distinct crate names present in `rows`, sorted -- `view.ir().crate_name()`
 /// is pinned to whichever crate the run's target discovery lists first, not
 /// the crate a given row actually belongs to, so a workspace-spanning
 /// artifact must derive its own crate breakdown from `row.crate_name`
@@ -95,7 +95,7 @@ impl Reporter for ErrorChainCsvReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from("crate,rule_id,foreign_error_type,context,file,line,snippet\n");
         for row in error_chain_rows(findings) {
@@ -110,11 +110,11 @@ impl Reporter for ErrorChainCsvReporter {
                 csv_field(&row.snippet),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "error-chain-preserved.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "error-chain-preserved.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -132,7 +132,7 @@ impl Reporter for ErrorChainChecklistReporter {
     }
 
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = error_chain_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -182,11 +182,11 @@ impl Reporter for ErrorChainChecklistReporter {
             }
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "error-chain-preserved.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "error-chain-preserved.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -206,7 +206,7 @@ impl Reporter for ErrorChainSummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = error_chain_rows(findings);
         let counts = probe_counts_from_rows(&rows);
@@ -242,10 +242,10 @@ impl Reporter for ErrorChainSummaryReporter {
             "\n| **Total** | **{total}** | **{propagation}** | **{infrastructure}** |\n"
         ));
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "error-chain-preserved-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "error-chain-preserved-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

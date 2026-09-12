@@ -50,7 +50,7 @@ pub fn assess_impl_gap(
     lifetime_blocks_elicitation: bool,
     wrappers: Option<&[WrapperCoverage]>,
 ) -> ImplGapAssessment {
-    if prereqs.elicit_complete {
+    if prereqs.elicit_complete() {
         return covered_assessment(wrappers);
     }
 
@@ -151,9 +151,9 @@ fn covered_assessment(wrappers: Option<&[WrapperCoverage]>) -> ImplGapAssessment
 #[instrument(level = "debug", skip(prereqs))]
 fn missing_external_traits(prereqs: &TraitPrereqs) -> Vec<String> {
     [
-        (prereqs.serialize, "Serialize"),
-        (prereqs.deserialize, "Deserialize"),
-        (prereqs.json_schema, "JsonSchema"),
+        (prereqs.serialize(), "Serialize"),
+        (prereqs.deserialize(), "Deserialize"),
+        (prereqs.json_schema(), "JsonSchema"),
     ]
     .into_iter()
     .filter(|(present, _)| !present)

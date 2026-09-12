@@ -150,20 +150,20 @@ impl Reporter for QualityReportReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let report = build_quality_report(findings)?;
         Ok(vec![
-            Box::new(TextArtifact {
-                name: "quality-report.md".to_string(),
-                media_type: "text/markdown".to_string(),
-                body: render_quality_report_markdown(&report)?,
-            }),
-            Box::new(TextArtifact {
-                name: "summary.md".to_string(),
-                media_type: "text/markdown".to_string(),
-                body: render_quality_workspace_summary_markdown(&report)?,
-            }),
+            Box::new(TextArtifact::new(
+                "quality-report.md".to_string(),
+                "text/markdown".to_string(),
+                render_quality_report_markdown(&report)?,
+            )),
+            Box::new(TextArtifact::new(
+                "summary.md".to_string(),
+                "text/markdown".to_string(),
+                render_quality_workspace_summary_markdown(&report)?,
+            )),
         ])
     }
 }

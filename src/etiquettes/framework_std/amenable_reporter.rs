@@ -30,8 +30,8 @@ impl Reporter for AmenableStdReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
-        let session = view.session;
+        let findings = view.findings();
+        let session = view.session();
 
         let options = AmenableStdOptions::default();
         let report = amenable_report_from_findings(findings, options.include_nightly())
@@ -67,9 +67,9 @@ impl Reporter for AmenableStdReporter {
 
 #[instrument(level = "debug")]
 fn artifact(name: &str, media_type: &str, body: String) -> Box<dyn Artifact> {
-    Box::new(TextArtifact {
-        name: name.to_string(),
-        media_type: media_type.to_string(),
+    Box::new(TextArtifact::new(
+        name.to_string(),
+        media_type.to_string(),
         body,
-    })
+    ))
 }

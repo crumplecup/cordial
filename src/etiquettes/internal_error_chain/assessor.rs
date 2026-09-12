@@ -30,9 +30,8 @@ impl Assessor for InternalErrorChainAssessor {
 
     #[instrument(level = "trace", skip(self, view))]
     fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
-        let markers = view.markers;
-        let ir = view.ir;
-        let session = view.session;
+        let markers = view.markers();
+        let (ir, _, session) = view.into_parts();
 
         let crate_name = ir.crate_name().to_string();
         let mut findings = Vec::new();
@@ -102,7 +101,7 @@ impl Assessor for InternalErrorChainAssessor {
                             .rule(InternalErrorChainRule::from_probe(probe_id))
                             .record_kind(record_kind)
                             .disposition(Disposition::Open)
-                            .anchor(crate::objects::NodeAnchor(node_id))
+                            .anchor(crate::objects::NodeAnchor::new(node_id))
                             .crate_name(crate_name.clone())
                             .context(type_path.clone())
                             .span(span)
@@ -147,7 +146,7 @@ impl Assessor for InternalErrorChainAssessor {
                             .rule(InternalErrorChainRule::from_compliance(compliance_id))
                             .record_kind(record_kind)
                             .disposition(Disposition::Open)
-                            .anchor(crate::objects::NodeAnchor(node_id))
+                            .anchor(crate::objects::NodeAnchor::new(node_id))
                             .crate_name(crate_name.clone())
                             .context(context)
                             .span(span)

@@ -5,12 +5,12 @@ use tracing::instrument;
 use crate::error::CordialResult;
 
 /// Local store layout under `~/.cordial/{project}/`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub struct StoreLayout {
     /// Directory-name slug identifying this project in the store.
-    pub project_slug: String,
+    project_slug: String,
     /// Filesystem or graph root.
-    pub root: PathBuf,
+    root: PathBuf,
 }
 
 impl StoreLayout {
@@ -149,10 +149,10 @@ impl StoreLayout {
 ///
 /// Std-family inventories (`std`, `core`, `alloc`) are toolchain-global and live
 /// here rather than in per-project stores.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub struct SysrootCache {
     /// Filesystem or graph root.
-    pub root: PathBuf,
+    root: PathBuf,
 }
 
 impl SysrootCache {

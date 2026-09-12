@@ -27,9 +27,8 @@ impl Assessor for ForeignErrorTypeAssessor {
 
     #[instrument(level = "trace", skip(self, view))]
     fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
-        let markers = view.markers;
-        let ir = view.ir;
-        let session = view.session;
+        let markers = view.markers();
+        let (ir, _, session) = view.into_parts();
 
         let crate_name = ir.crate_name().to_string();
         let mut findings = Vec::new();
@@ -110,7 +109,7 @@ impl Assessor for ForeignErrorTypeAssessor {
                         ForeignErrorTypeFinding::builder()
                             .rule(ForeignErrorTypeRule::new(inference_rule_id.clone()))
                             .disposition(Disposition::Open)
-                            .anchor(crate::objects::NodeAnchor(node_id))
+                            .anchor(crate::objects::NodeAnchor::new(node_id))
                             .record_kind(record_kind)
                             .crate_name(crate_name.clone())
                             .foreign_error_type(foreign_error_type)
@@ -149,7 +148,7 @@ impl Assessor for ForeignErrorTypeAssessor {
                         ForeignErrorTypeFinding::builder()
                             .rule(ForeignErrorTypeRule::new("FOREIGN-ERROR-CANDIDATE"))
                             .disposition(Disposition::Open)
-                            .anchor(crate::objects::NodeAnchor(node_id))
+                            .anchor(crate::objects::NodeAnchor::new(node_id))
                             .record_kind(ForeignErrorRecordKind::Candidate)
                             .crate_name(crate_name.clone())
                             .foreign_error_type(String::new())

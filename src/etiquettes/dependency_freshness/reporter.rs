@@ -62,7 +62,7 @@ fn survey_rows(view: RenderView<'_>) -> Vec<DependencyFreshnessSurveyRow> {
         .has_attr(DependencyFreshnessSurveyEnricher::ATTR_NODE_KIND)
         .build();
     let mut rows: Vec<_> = view
-        .ir
+        .ir()
         .nodes_matching(&query)
         .into_iter()
         .map(DependencyFreshnessSurveyRow::from_node)
@@ -109,11 +109,11 @@ impl Reporter for DependencyFreshnessSurveyReporter {
                 csv_field(&row.indicators),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "dependency-freshness-survey.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "dependency-freshness-survey.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -140,7 +140,7 @@ impl DependencyFreshnessRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -206,7 +206,7 @@ impl Reporter for DependencyFreshnessCsvReporter {
         let mut body = String::from(
             "crate,rule_id,dependency,package,file,line,section,version_spec,locked_versions,available_versions,update_kinds,snippet\n",
         );
-        for row in finding_rows(view.findings) {
+        for row in finding_rows(view.findings()) {
             body.push_str(&format!(
                 "{},{},{},{},{},{},{},{},{},{},{},{}\n",
                 csv_field(&row.crate_name),
@@ -223,11 +223,11 @@ impl Reporter for DependencyFreshnessCsvReporter {
                 csv_field(&row.snippet),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "dependency-freshness.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "dependency-freshness.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -248,7 +248,7 @@ impl Reporter for DependencyFreshnessChecklistReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let rows = finding_rows(view.findings);
+        let rows = finding_rows(view.findings());
         let open: Vec<_> = open_rows(&rows).collect();
         let mut body = String::new();
         body.push_str("# Dependency freshness checklist\n\n");
@@ -276,11 +276,11 @@ impl Reporter for DependencyFreshnessChecklistReporter {
             body.push('\n');
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "dependency-freshness.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "dependency-freshness.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -301,7 +301,7 @@ impl Reporter for DependencyFreshnessSummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let rows = finding_rows(view.findings);
+        let rows = finding_rows(view.findings());
         let open: Vec<_> = open_rows(&rows).collect();
         let total = open.len();
         let mut body = String::new();
@@ -321,10 +321,10 @@ impl Reporter for DependencyFreshnessSummaryReporter {
         }
         body.push_str(&format!("\n| **Total** | **{total}** |\n"));
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "dependency-freshness-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "dependency-freshness-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

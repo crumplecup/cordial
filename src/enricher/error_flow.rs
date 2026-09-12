@@ -38,9 +38,7 @@ impl IrEnricher for ErrorFlowEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let ir = view.ir;
-        let load = view.load;
-        let session = view.session;
+        let (ir, load, session) = view.into_parts();
 
         let crate_name = ir.crate_name().to_string();
         let crate_root = ir.root()?;
@@ -55,7 +53,7 @@ impl IrEnricher for ErrorFlowEnricher {
             .into_iter()
             .filter(|node| matches!(node.kind(), NodeKind::Expr))
             .filter(|node| node.attr("error_site_kind").is_some())
-            .map(|node| node.id)
+            .map(|node| node.id())
             .collect();
 
         for site_id in site_ids {

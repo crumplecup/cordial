@@ -31,12 +31,12 @@ impl Assessor for DependencyFreshnessAssessor {
     #[instrument(level = "trace", skip(self, view))]
     fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
         let mut findings = Vec::new();
-        let policy = crate::config::load_session_config(view.session)
+        let policy = crate::config::load_session_config(view.session())
             .dependency_freshness()
             .clone();
-        for marker in view.markers {
+        for marker in view.markers() {
             let node_id = marker.anchor().node_id();
-            let Some(node) = view.ir.node(node_id) else {
+            let Some(node) = view.ir().node(node_id) else {
                 continue;
             };
             let Some(rule_ids) = node
@@ -59,8 +59,8 @@ impl Assessor for DependencyFreshnessAssessor {
             let file = node
                 .attr("manifest_path")
                 .and_then(serde_json::Value::as_str)
-                .map(|path| resolve_source_path(view.session, path))
-                .unwrap_or_else(|| view.session.project_root().join("Cargo.toml"));
+                .map(|path| resolve_source_path(view.session(), path))
+                .unwrap_or_else(|| view.session().project_root().join("Cargo.toml"));
             for rule_id in rule_ids
                 .split('|')
                 .filter_map(DependencyFreshnessRuleId::from_attr)
@@ -79,8 +79,8 @@ impl Assessor for DependencyFreshnessAssessor {
                     DependencyFreshnessFinding::builder()
                         .rule(DependencyFreshnessRule::new(rule_id))
                         .disposition(Disposition::Open)
-                        .anchor(crate::objects::NodeAnchor(node_id))
-                        .crate_name(view.ir.crate_name().to_string())
+                        .anchor(crate::objects::NodeAnchor::new(node_id))
+                        .crate_name(view.ir().crate_name().to_string())
                         .dependency_name(dependency_name.clone())
                         .package_name(package_name.clone())
                         .span(FileSpan::new(file.clone(), line, 1))

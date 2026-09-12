@@ -27,19 +27,11 @@ fn trait_impl_enricher_builds_edges_from_graph_attrs() -> miette::Result<()> {
 
     let session = SessionBuilder::new(temp.path()).build();
     RustdocStructureEnricher
-        .enrich(EnrichView {
-            ir: &mut ir,
-            load: &load as &dyn LoadView,
-            session: &session,
-        })
+        .enrich(EnrichView::new(&mut ir, &load as &dyn LoadView, &session))
         .into_diagnostic()
         .wrap_err("structure")?;
     TraitImplEnricher
-        .enrich(EnrichView {
-            ir: &mut ir,
-            load: &load as &dyn LoadView,
-            session: &session,
-        })
+        .enrich(EnrichView::new(&mut ir, &load as &dyn LoadView, &session))
         .into_diagnostic()
         .wrap_err("trait impl")?;
 
@@ -82,19 +74,11 @@ fn trenchcoat_enricher_builds_wraps_edges_from_graph_attrs() -> miette::Result<(
 
     let session = SessionBuilder::new(temp.path()).build();
     RustdocStructureEnricher
-        .enrich(EnrichView {
-            ir: &mut ir,
-            load: &load as &dyn LoadView,
-            session: &session,
-        })
+        .enrich(EnrichView::new(&mut ir, &load as &dyn LoadView, &session))
         .into_diagnostic()
         .wrap_err("structure")?;
     TrenchcoatEnricher
-        .enrich(EnrichView {
-            ir: &mut ir,
-            load: &load as &dyn LoadView,
-            session: &session,
-        })
+        .enrich(EnrichView::new(&mut ir, &load as &dyn LoadView, &session))
         .into_diagnostic()
         .wrap_err("trenchcoat")?;
 

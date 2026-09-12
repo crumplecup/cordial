@@ -14,7 +14,7 @@ impl SourceLoadView {
     /// Fill the crate IR from loaded views.
     #[instrument(level = "debug", skip(self, ir), err(level = "warn"))]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
-        let root = ir.root;
+        let root = ir.root();
         for file in self.files() {
             self.load_file(ir, root, file)?;
         }

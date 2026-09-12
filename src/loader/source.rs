@@ -27,7 +27,7 @@ impl Loader for SourceLoader {
 
     #[instrument(level = "trace", skip(self, view))]
     fn load(&self, view: LoadContext<'_>) -> CordialResult<Box<dyn LoadView>> {
-        let target = view.target;
+        let target = view.target();
 
         let mut files = Vec::new();
         let src_root = target.crate_root().join("src");

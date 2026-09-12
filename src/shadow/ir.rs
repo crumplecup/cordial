@@ -17,28 +17,32 @@ use super::report::build_shadow_report;
 use super::types::{ShadowBuildMaps, ShadowReport};
 
 /// One public inventory row materialized from graph IR.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new, PartialEq, Eq)]
 pub struct ShadowIrItem {
-    pub path: String,
-    pub name: String,
-    pub kind: InventoryItemKind,
-    pub is_public: bool,
-    pub public_methods: BTreeSet<String>,
-    pub trait_impls: BTreeSet<String>,
-    pub trait_prereqs: Option<TraitPrereqs>,
-    pub elicit_complete: bool,
-    pub elicit_complete_factory: bool,
+    path: String,
+    name: String,
+    #[getter(copy)]
+    kind: InventoryItemKind,
+    #[getter(copy)]
+    is_public: bool,
+    public_methods: BTreeSet<String>,
+    trait_impls: BTreeSet<String>,
+    trait_prereqs: Option<TraitPrereqs>,
+    #[getter(copy)]
+    elicit_complete: bool,
+    #[getter(copy)]
+    elicit_complete_factory: bool,
 }
 
 impl ShadowIrItem {
     #[instrument(level = "trace", skip(self))]
     pub fn to_rustdoc_item(&self) -> RustdocItem {
-        RustdocItem {
-            path: self.path.clone(),
-            name: self.name.clone(),
-            kind: self.kind,
-            is_public: self.is_public,
-        }
+        RustdocItem::new(
+            self.path.clone(),
+            self.name.clone(),
+            self.kind,
+            self.is_public,
+        )
     }
 }
 
@@ -56,14 +60,8 @@ pub fn collect_shadow_items_from_workspace(
 
 #[instrument(level = "debug", skip(ir))]
 pub fn collect_shadow_items_from_ir(ir: &crate::ir::CrateIr) -> Vec<ShadowIrItem> {
-    static ALL_NODES: BasicQuery = BasicQuery {
-        node_kinds: Vec::new(),
-        edge_kinds: Vec::new(),
-        attr_key: None,
-        attr_value: None,
-    };
-
-    ir.nodes_matching(&ALL_NODES)
+    let all_nodes = BasicQuery::all_nodes();
+    ir.nodes_matching(&all_nodes)
         .into_iter()
         .filter_map(|node| {
             if !matches!(node.kind(), NodeKind::Item(_)) {
@@ -96,8 +94,8 @@ pub fn collect_shadow_items_from_ir(ir: &crate::ir::CrateIr) -> Vec<ShadowIrItem
                 .attr(ATTR_ELICIT_COMPLETE_FACTORY)
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-            Some(ShadowIrItem {
-                path: path.to_string(),
+            Some(ShadowIrItem::new(
+                path.to_string(),
                 name,
                 kind,
                 is_public,
@@ -106,7 +104,7 @@ pub fn collect_shadow_items_from_ir(ir: &crate::ir::CrateIr) -> Vec<ShadowIrItem
                 trait_prereqs,
                 elicit_complete,
                 elicit_complete_factory,
-            })
+            ))
         })
         .collect()
 }
@@ -124,18 +122,18 @@ pub fn materialize_cross_crate_shadow_mirrors(
     let mut shadow_by_name: HashMap<&str, Vec<&ShadowIrItem>> = HashMap::new();
     for item in &shadow_items {
         shadow_by_name
-            .entry(item.name.as_str())
+            .entry(item.name().as_str())
             .or_default()
             .push(item);
     }
 
     let mut shadow_normalized: HashMap<String, Vec<&ShadowIrItem>> = HashMap::new();
     for item in &shadow_items {
-        if !counts_toward_shadow_kind(item.kind) {
+        if !counts_toward_shadow_kind(item.kind()) {
             continue;
         }
         shadow_normalized
-            .entry(normalize_name(&item.name))
+            .entry(normalize_name(item.name()))
             .or_default()
             .push(item);
     }
@@ -143,18 +141,18 @@ pub fn materialize_cross_crate_shadow_mirrors(
     let mut matched_pairs: Vec<(String, String)> = Vec::new();
     for target_item in &target_items {
         let shadow_item = shadow_by_name
-            .get(target_item.name.as_str())
+            .get(target_item.name().as_str())
             .and_then(|candidates| {
                 candidates
                     .iter()
-                    .find(|candidate| candidate.kind == target_item.kind)
+                    .find(|candidate| candidate.kind() == target_item.kind())
                     .or_else(|| candidates.first())
                     .copied()
             })
             .or_else(|| find_drift_shadow_item(target_item, &shadow_normalized));
 
         if let Some(shadow_item) = shadow_item {
-            matched_pairs.push((target_item.path.clone(), shadow_item.path.clone()));
+            matched_pairs.push((target_item.path().clone(), shadow_item.path().clone()));
         }
     }
 
@@ -199,12 +197,12 @@ pub fn build_shadow_pair_report_from_workspace_ir(
     let shadow_methods = methods_map_from_items(&shadow_items);
     let target_trait_impls = trait_impl_map_from_items(upstream, &target_items);
     let shadow_trait_impls = trait_impl_map_from_items(shadow, &shadow_items);
-    let maps = ShadowBuildMaps {
-        target_methods: &target_methods,
-        shadow_methods: &shadow_methods,
-        target_trait_impls: &target_trait_impls,
-        shadow_trait_impls: &shadow_trait_impls,
-    };
+    let maps = ShadowBuildMaps::new(
+        &target_methods,
+        &shadow_methods,
+        &target_trait_impls,
+        &shadow_trait_impls,
+    );
 
     let target = rustdoc_inventory_from_items(upstream, &target_items);
     let shadow_inv = rustdoc_inventory_from_items(shadow, &shadow_items);
@@ -225,12 +223,12 @@ fn rustdoc_inventory_from_items(
     crate_name: &str,
     items: &[ShadowIrItem],
 ) -> crate::rustdoc::RustdocInventory {
-    crate::rustdoc::RustdocInventory {
-        crate_name: crate_name.to_string(),
-        crate_version: String::new(),
-        items: items.iter().map(|item| item.to_rustdoc_item()).collect(),
-        krate: empty_krate(),
-    }
+    crate::rustdoc::RustdocInventory::new(
+        crate_name.to_string(),
+        String::new(),
+        items.iter().map(|item| item.to_rustdoc_item()).collect(),
+        empty_krate(),
+    )
 }
 
 #[instrument(level = "debug")]
@@ -254,8 +252,8 @@ fn empty_krate() -> rustdoc_types::Crate {
 fn methods_map_from_items(items: &[ShadowIrItem]) -> HashMap<String, BTreeSet<String>> {
     items
         .iter()
-        .filter(|item| item.kind.is_type())
-        .map(|item| (item.path.clone(), item.public_methods.clone()))
+        .filter(|item| item.kind().is_type())
+        .map(|item| (item.path().clone(), item.public_methods().clone()))
         .collect()
 }
 
@@ -265,21 +263,22 @@ fn trait_impl_map_from_items(
     items: &[ShadowIrItem],
 ) -> HashMap<String, BTreeSet<String>> {
     let mut map: HashMap<String, BTreeSet<String>> = HashMap::new();
-    for item in items.iter().filter(|item| item.kind.is_type()) {
+    for item in items.iter().filter(|item| item.kind().is_type()) {
         let bare = item
-            .path
+            .path()
             .rsplit("::")
             .next()
-            .unwrap_or(item.name.as_str())
+            .unwrap_or(item.name().as_str())
             .to_string();
-        for trait_short in &item.trait_impls {
+        for trait_short in item.trait_impls() {
             let trait_path = items
                 .iter()
                 .find(|candidate| {
-                    candidate.kind == InventoryItemKind::Trait
-                        && (candidate.name == *trait_short || candidate.path.ends_with(trait_short))
+                    candidate.kind() == InventoryItemKind::Trait
+                        && (candidate.name() == trait_short
+                            || candidate.path().ends_with(trait_short))
                 })
-                .map(|candidate| candidate.path.clone())
+                .map(|candidate| candidate.path().clone())
                 .unwrap_or_else(|| format!("{crate_name}::{trait_short}"));
             map.entry(trait_path).or_default().insert(bare.clone());
         }
@@ -293,15 +292,15 @@ fn elicit_complete_set_from_items(items: &[ShadowIrItem]) -> ElicitCompleteSet {
     let mut factory = HashSet::new();
     for item in items
         .iter()
-        .filter(|item| item.kind.is_type() && item.elicit_complete)
+        .filter(|item| item.kind().is_type() && item.elicit_complete())
     {
-        if item.elicit_complete_factory {
-            factory.insert(item.path.clone());
+        if item.elicit_complete_factory() {
+            factory.insert(item.path().clone());
         } else {
-            concrete.insert(item.path.clone());
+            concrete.insert(item.path().clone());
         }
     }
-    ElicitCompleteSet { concrete, factory }
+    ElicitCompleteSet::new(concrete, factory)
 }
 
 #[instrument(level = "debug", skip(items))]
@@ -309,9 +308,9 @@ fn prereqs_map_from_items(items: &[ShadowIrItem]) -> HashMap<String, TraitPrereq
     items
         .iter()
         .filter_map(|item| {
-            item.trait_prereqs
+            item.trait_prereqs()
                 .clone()
-                .map(|prereqs| (item.path.clone(), prereqs))
+                .map(|prereqs| (item.path().clone(), prereqs))
         })
         .collect()
 }
@@ -347,7 +346,7 @@ fn find_drift_shadow_item<'a>(
     target_item: &ShadowIrItem,
     shadow_names: &HashMap<String, Vec<&'a ShadowIrItem>>,
 ) -> Option<&'a ShadowIrItem> {
-    let target_norm = normalize_name(&target_item.name);
+    let target_norm = normalize_name(target_item.name());
     let mut best: Option<(&ShadowIrItem, f32)> = None;
 
     for (shadow_norm, candidates) in shadow_names {
@@ -361,7 +360,7 @@ fn find_drift_shadow_item<'a>(
             continue;
         }
         for shadow_item in candidates {
-            if shadow_item.kind != target_item.kind {
+            if shadow_item.kind() != target_item.kind() {
                 continue;
             }
             if best.is_none_or(|(_, score)| confidence > score) {
@@ -407,7 +406,7 @@ fn has_cross_crate_mirror(
     shadow_node: crate::ir::NodeId,
 ) -> bool {
     workspace
-        .cross_crate_edges
+        .cross_crate_edges()
         .iter()
         .any(|(from_crate, from, to_crate, to, weight)| {
             weight.kind() == EdgeKind::Mirrors

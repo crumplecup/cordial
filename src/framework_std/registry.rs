@@ -17,52 +17,71 @@ const PROOF_CHAIN_RUST_STD_PREFIX: &str = "RustStdStandard<";
 pub const AMENABLE_DUMP_REGISTRY_FEATURES: &str = "creusot,verus";
 
 /// Serializable dump of a std-family coverage registry.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    derive_new::new,
+    derive_getters::Getters,
+)]
 pub struct RegistryDump {
     /// Evidence links dumped from the registry.
-    pub evidence_links: Vec<EvidenceLinkDump>,
+    evidence_links: Vec<EvidenceLinkDump>,
     /// Proof records dumped from the registry.
-    pub proof_records: Vec<ProofRecordDump>,
+    proof_records: Vec<ProofRecordDump>,
     /// Contract-bound records dumped from the registry.
     #[serde(default)]
-    pub contract_records: Vec<ContractRecordDump>,
+    contract_records: Vec<ContractRecordDump>,
     /// Kani proof records dumped from the registry.
-    pub kani_proofs: Vec<KaniProofDump>,
+    kani_proofs: Vec<KaniProofDump>,
 }
 
 /// Serializable evidence link inside a registry dump.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new, derive_getters::Getters,
+)]
 pub struct EvidenceLinkDump {
     /// Evidence item name.
-    pub name: String,
+    name: String,
     /// Evidence basis label.
-    pub basis: String,
+    basis: String,
     /// Ordinal of this record in its list.
-    pub index: usize,
+    #[getter(copy)]
+    index: usize,
 }
 
 /// Serializable proof record inside a registry dump.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new, derive_getters::Getters,
+)]
 pub struct ProofRecordDump {
     /// Supporting evidence paths or labels.
-    pub evidence: String,
+    evidence: String,
     /// Proof verifier this row is about (`kani`, `creusot`, …).
-    pub verifier: String,
+    verifier: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new, derive_getters::Getters,
+)]
 pub struct KaniProofDump {
-    pub id: String,
-    pub harness: String,
-    pub package: String,
+    id: String,
+    harness: String,
+    package: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new, derive_getters::Getters,
+)]
 pub struct ContractRecordDump {
-    pub evidence: String,
-    pub verifier: String,
-    pub kind: String,
-    pub fragment: String,
+    evidence: String,
+    verifier: String,
+    kind: String,
+    fragment: String,
 }
 
 /// Run `cargo run -p amenable -- dump-registry` in the workspace.
@@ -120,7 +139,7 @@ pub fn parse_rust_std_standard_inner(evidence: &str) -> Option<String> {
 /// Evidence for std type.
 #[instrument(level = "debug", skip(registry))]
 pub fn evidence_for_std_type(registry: &RegistryDump, type_path: &str) -> Option<String> {
-    for link in &registry.evidence_links {
+    for link in registry.evidence_links() {
         let Some(inner) = parse_rust_std_standard_inner(&link.name) else {
             continue;
         };
@@ -153,7 +172,7 @@ pub fn proof_chain_subject_matches_type(subject: &str, type_path: &str) -> bool 
 #[instrument(level = "debug", skip(registry))]
 pub fn witness_verifiers_for_std_type(registry: &RegistryDump, type_path: &str) -> HashSet<String> {
     let mut verifiers = HashSet::new();
-    for record in &registry.proof_records {
+    for record in registry.proof_records() {
         let Some(inner) = parse_rust_std_standard_inner(&record.evidence) else {
             continue;
         };

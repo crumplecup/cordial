@@ -75,12 +75,12 @@ fn method_checklist_artifact_emitted_when_maps_differ() -> miette::Result<()> {
         BTreeSet::from(["draw".to_string()]),
     );
     let empty_traits: HashMap<String, BTreeSet<String>> = HashMap::new();
-    let maps = ShadowBuildMaps {
-        target_methods: &target_methods,
-        shadow_methods: &shadow_methods,
-        target_trait_impls: &empty_traits,
-        shadow_trait_impls: &empty_traits,
-    };
+    let maps = ShadowBuildMaps::new(
+        &target_methods,
+        &shadow_methods,
+        &empty_traits,
+        &empty_traits,
+    );
 
     let report = build_shadow_report_from_inventories_with_maps(&target, &shadow, &maps);
     let checklist = render_shadow_method_checklist(&report)
@@ -89,8 +89,8 @@ fn method_checklist_artifact_emitted_when_maps_differ() -> miette::Result<()> {
     assert!(checklist.contains("Methods to add"));
     assert!(checklist.contains("resize"));
     assert!(checklist.contains("url::Widget"));
-    assert_eq!(report.method_coverage[0].missing, vec!["resize"]);
-    assert_eq!(target.items[0].kind, InventoryItemKind::Struct);
+    assert_eq!(report.method_coverage()[0].missing(), &vec!["resize"]);
+    assert_eq!(target.items()[0].kind(), InventoryItemKind::Struct);
     Ok(())
 }
 
@@ -113,8 +113,8 @@ fn build_shadow_report_unit_exact_match() -> miette::Result<()> {
     .into_diagnostic()
     .wrap_err("shadow inventory")?;
     let report = build_shadow_report_from_inventories(&target, &shadow);
-    assert_eq!(report.covered_count, 1);
-    assert_eq!(report.rows[0].status, ShadowStatus::Covered);
+    assert_eq!(report.covered_count(), 1);
+    assert_eq!(report.rows()[0].status(), ShadowStatus::Covered);
     Ok(())
 }
 
@@ -137,9 +137,9 @@ fn prefix_rename_is_missing_not_drift() -> miette::Result<()> {
     .into_diagnostic()
     .wrap_err("shadow")?;
     let report = build_shadow_report_from_inventories(&target, &shadow);
-    assert_eq!(report.missing_count, 1);
-    assert_eq!(report.extra_count, 1);
-    assert_eq!(report.drifted_count, 0);
+    assert_eq!(report.missing_count(), 1);
+    assert_eq!(report.extra_count(), 1);
+    assert_eq!(report.drifted_count(), 0);
     Ok(())
 }
 
@@ -180,19 +180,19 @@ fn method_coverage_diffs_matched_types() -> miette::Result<()> {
         BTreeSet::from(["draw".to_string(), "extra_fn".to_string()]),
     );
     let empty_traits: HashMap<String, BTreeSet<String>> = HashMap::new();
-    let maps = ShadowBuildMaps {
-        target_methods: &target_methods,
-        shadow_methods: &shadow_methods,
-        target_trait_impls: &empty_traits,
-        shadow_trait_impls: &empty_traits,
-    };
+    let maps = ShadowBuildMaps::new(
+        &target_methods,
+        &shadow_methods,
+        &empty_traits,
+        &empty_traits,
+    );
 
     let report = build_shadow_report_from_inventories_with_maps(&target, &shadow, &maps);
-    assert_eq!(report.method_coverage.len(), 1);
-    let coverage = &report.method_coverage[0];
-    assert_eq!(coverage.covered, vec!["draw"]);
-    assert_eq!(coverage.missing, vec!["resize"]);
-    assert_eq!(coverage.extra, vec!["extra_fn"]);
+    assert_eq!(report.method_coverage().len(), 1);
+    let coverage = &report.method_coverage()[0];
+    assert_eq!(coverage.covered(), &vec!["draw"]);
+    assert_eq!(coverage.missing(), &vec!["resize"]);
+    assert_eq!(coverage.extra(), &vec!["extra_fn"]);
     Ok(())
 }
 
@@ -217,10 +217,10 @@ fn upstream_inventory_prefers_shadow_dep_cache() -> miette::Result<()> {
         .wrap_err("shadow pair report")?;
 
     let alt = report
-        .rows
+        .rows()
         .iter()
-        .find(|row| row.item_path.ends_with("AltWidget"))
+        .find(|row| row.item_path().ends_with("AltWidget"))
         .ok_or_else(|| miette::miette!("shadow-dep upstream type should drive the pair report"))?;
-    assert_eq!(alt.status, ShadowStatus::Missing);
+    assert_eq!(alt.status(), ShadowStatus::Missing);
     Ok(())
 }

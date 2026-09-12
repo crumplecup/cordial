@@ -10,17 +10,25 @@ use crate::error::CordialResult;
 use super::vis::{VisKind, is_cfg_test, is_doc_hidden, item_vis, leaf_name_count, vis_kind};
 
 use tracing::instrument;
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub(super) struct ModuleNode {
-    pub(super) path: String,
-    pub(super) file: PathBuf,
-    pub(super) line: u32,
-    pub(super) declared_vis: VisKind,
-    pub(super) parent_declared_pub: bool,
-    pub(super) ancestors_all_pub: bool,
-    pub(super) is_crate_root: bool,
-    pub(super) leaf_pub: usize,
-    pub(super) leaf_crate: usize,
-    pub(super) children: Vec<ModuleNode>,
+    path: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    #[getter(copy)]
+    declared_vis: VisKind,
+    #[getter(copy)]
+    parent_declared_pub: bool,
+    #[getter(copy)]
+    ancestors_all_pub: bool,
+    #[getter(copy)]
+    is_crate_root: bool,
+    #[getter(copy)]
+    leaf_pub: usize,
+    #[getter(copy)]
+    leaf_crate: usize,
+    children: Vec<ModuleNode>,
 }
 
 pub(super) struct ScanHeader<'a> {

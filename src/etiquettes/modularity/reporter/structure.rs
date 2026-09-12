@@ -60,7 +60,7 @@ fn crate_tree(modules: &[&ModularityRow], crate_name: &str) -> Vec<ModuleHierarc
     let crate_rows: Vec<_> = modules
         .iter()
         .copied()
-        .filter(|row| row.crate_name == crate_name)
+        .filter(|row| row.crate_name() == crate_name)
         .collect();
     build_module_hierarchy(&file_module_inputs(&crate_rows))
 }

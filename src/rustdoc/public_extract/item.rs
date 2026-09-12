@@ -61,14 +61,14 @@ pub(super) fn build_inventory_item_with_path(
         None
     };
 
-    Some(ExtractedItem {
+    Some(ExtractedItem::new(
         path,
-        kind: kind.to_inventory(),
+        kind.to_inventory(),
         name,
         is_generic,
         alias_target,
-        is_unstable: index_item.is_some_and(|item| rustdoc_item_is_unstable(krate, id, item)),
-    })
+        index_item.is_some_and(|item| rustdoc_item_is_unstable(krate, id, item)),
+    ))
 }
 /// Extract a human-readable path string from a rustdoc `Type`, used to record
 /// what a type alias resolves to. Handles `ResolvedPath` (another named

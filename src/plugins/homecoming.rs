@@ -5,8 +5,7 @@ use crate::etiquette::Etiquette;
 use crate::etiquettes::framework_std::HOMECOMING_STD_ETIQUETTE;
 use crate::framework_std::{FRAMEWORK_STD_SOURCES, HOMECOMING_TRAIT};
 use crate::plugin::{
-    Coverage, CoverageTarget, CoverageTargetKind, Plugin, PluginCategory, TargetProvider,
-    TraitRequirement,
+    Coverage, CoverageTarget, Plugin, PluginCategory, TargetProvider, TraitRequirement,
 };
 use crate::session::{RunFilter, SessionView};
 use crate::targets::discover_crate_targets;
@@ -45,11 +44,7 @@ impl TargetProvider for FrameworkStdTargetProvider {
     ) -> CordialResult<Vec<CoverageTarget>> {
         let mut targets = Vec::new();
         for source in FRAMEWORK_STD_SOURCES {
-            targets.push(CoverageTarget {
-                kind: CoverageTargetKind::StdInventory,
-                crate_name: (*source).to_string(),
-                shadow_crate: None,
-            });
+            targets.push(CoverageTarget::std_inventory(*source));
         }
         for member in discover_crate_targets(session.project_root(), filter)? {
             targets.push(CoverageTarget::workspace_member(member.crate_name()));

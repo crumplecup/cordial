@@ -325,13 +325,13 @@ pub fn build_workspace_antipatterns_summary(
         let mut sink = crate::objects::MapFindingSink::default();
         finding.emit(&mut sink);
         let crate_name = sink
-            .fields
+            .fields()
             .iter()
             .find(|(key, _)| key == "crate")
             .map(|(_, value)| value.clone())
             .unwrap_or_else(|| "unknown".to_string());
         let rule_id = sink
-            .fields
+            .fields()
             .iter()
             .find(|(key, _)| key == "rule_id")
             .and_then(|(_, value)| AntipatternRuleId::from_attr(value));
@@ -405,7 +405,7 @@ pub fn build_workspace_version_in_member_summary(
         let mut sink = crate::objects::MapFindingSink::default();
         finding.emit(&mut sink);
         let crate_name = sink
-            .fields
+            .fields()
             .iter()
             .find(|(key, _)| key == "crate")
             .map(|(_, value)| value.clone())

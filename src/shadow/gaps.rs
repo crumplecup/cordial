@@ -38,58 +38,58 @@ pub fn build_shadow_gaps(pairs: &[(&str, &str, &ShadowReport)]) -> Vec<ShadowGap
     let mut entries = Vec::new();
 
     for (target_crate, shadow_crate, report) in pairs {
-        for row in &report.rows {
+        for row in report.rows() {
             let assessment = assess_shadow_row(row);
-            if row.status == ShadowStatus::Covered {
+            if row.status() == ShadowStatus::Covered {
                 continue;
             }
             let Some(gap_kind) = assessment.primary_gap_kind else {
                 continue;
             };
-            entries.push(ShadowGapEntry {
-                target_crate: (*target_crate).to_string(),
-                shadow_crate: (*shadow_crate).to_string(),
-                item_path: row.item_path.clone(),
-                item_kind: row.item_kind.as_str().to_string(),
+            entries.push(ShadowGapEntry::new(
+                (*target_crate).to_string(),
+                (*shadow_crate).to_string(),
+                row.item_path().clone(),
+                row.item_kind().as_str().to_string(),
                 gap_kind,
-                matched_shadow_item: row.shadow_item.clone(),
-                drift_confidence: row.drift_confidence.clone(),
-                shadow_elicit_impl: row.shadow_elicit_impl.clone(),
-                shadow_can_be_direct: row.shadow_can_be_direct.clone(),
-                shadow_missing_external_traits: row.shadow_missing_external_traits.clone(),
-                shadow_missing_our_traits: row.shadow_missing_our_traits.clone(),
-                action: assessment.action,
-                notes: row.notes.clone(),
-            });
+                row.shadow_item().clone(),
+                row.drift_confidence().clone(),
+                row.shadow_elicit_impl().clone(),
+                row.shadow_can_be_direct().clone(),
+                row.shadow_missing_external_traits().clone(),
+                row.shadow_missing_our_traits().clone(),
+                assessment.action,
+                row.notes().clone(),
+            ));
         }
 
-        for row in &report.rows {
+        for row in report.rows() {
             if !shadow_verification_gap(row) {
                 continue;
             }
-            entries.push(ShadowGapEntry {
-                target_crate: (*target_crate).to_string(),
-                shadow_crate: (*shadow_crate).to_string(),
-                item_path: row.item_path.clone(),
-                item_kind: row.item_kind.as_str().to_string(),
-                gap_kind: ShadowGapKind::ShadowVerificationGap,
-                matched_shadow_item: row.shadow_item.clone(),
-                drift_confidence: row.drift_confidence.clone(),
-                shadow_elicit_impl: row.shadow_elicit_impl.clone(),
-                shadow_can_be_direct: row.shadow_can_be_direct.clone(),
-                shadow_missing_external_traits: row.shadow_missing_external_traits.clone(),
-                shadow_missing_our_traits: row.shadow_missing_our_traits.clone(),
-                action: build_shadow_verification_action(row),
-                notes: row.notes.clone(),
-            });
+            entries.push(ShadowGapEntry::new(
+                (*target_crate).to_string(),
+                (*shadow_crate).to_string(),
+                row.item_path().clone(),
+                row.item_kind().as_str().to_string(),
+                ShadowGapKind::ShadowVerificationGap,
+                row.shadow_item().clone(),
+                row.drift_confidence().clone(),
+                row.shadow_elicit_impl().clone(),
+                row.shadow_can_be_direct().clone(),
+                row.shadow_missing_external_traits().clone(),
+                row.shadow_missing_our_traits().clone(),
+                build_shadow_verification_action(row),
+                row.notes().clone(),
+            ));
         }
     }
 
     entries.sort_by(|left, right| {
-        shadow_gap_order(&left.gap_kind)
-            .cmp(&shadow_gap_order(&right.gap_kind))
-            .then(left.target_crate.cmp(&right.target_crate))
-            .then(left.item_path.cmp(&right.item_path))
+        shadow_gap_order(&left.gap_kind())
+            .cmp(&shadow_gap_order(&right.gap_kind()))
+            .then(left.target_crate().cmp(right.target_crate()))
+            .then(left.item_path().cmp(right.item_path()))
     });
 
     entries
@@ -122,12 +122,16 @@ fn assess_shadow_row(row: &ShadowRow) -> ShadowRowAssessment {
 
 #[instrument(level = "debug", skip(row))]
 fn classify_shadow_coverage_kind(row: &ShadowRow) -> ShadowCoverageKind {
-    match row.status {
+    match row.status() {
         ShadowStatus::Covered => ShadowCoverageKind::Covered,
         ShadowStatus::Missing => ShadowCoverageKind::Missing,
         ShadowStatus::Drifted => ShadowCoverageKind::Drifted,
         ShadowStatus::Extra => {
-            let bare = row.item_path.rsplit("::").next().unwrap_or(&row.item_path);
+            let bare = row
+                .item_path()
+                .rsplit("::")
+                .next()
+                .unwrap_or(row.item_path());
             if is_shadow_infrastructure_name(bare) {
                 ShadowCoverageKind::InfrastructureExtra
             } else {
@@ -153,25 +157,26 @@ fn shadow_coverage_action(row: &ShadowRow, coverage_kind: &ShadowCoverageKind) -
     match coverage_kind {
         ShadowCoverageKind::Covered => String::new(),
         ShadowCoverageKind::Missing => {
-            if row.item_kind.is_type() {
+            if row.item_kind().is_type() {
                 format!(
                     "Add a shadow for upstream `{}` and make the new wrapper `ElicitComplete`",
-                    row.item_path
+                    row.item_path()
                 )
             } else {
                 format!(
                     "Add a shadow item for upstream `{}` so the full public API surface is represented",
-                    row.item_path
+                    row.item_path()
                 )
             }
         }
         ShadowCoverageKind::Drifted => format!(
             "Rename or replace `{}` so upstream `{}` is shadowed exactly",
-            row.shadow_item, row.item_path
+            row.shadow_item(),
+            row.item_path()
         ),
         ShadowCoverageKind::PossiblyStale => format!(
             "Audit `{}`: remove it if stale, or rename/remap it to an upstream public item",
-            row.item_path
+            row.item_path()
         ),
         ShadowCoverageKind::InfrastructureExtra => {
             "Shadow-only infrastructure item; keep unless it should instead map to an upstream API item"
@@ -193,42 +198,44 @@ fn shadow_gap_order(kind: &ShadowGapKind) -> u8 {
 
 #[instrument(level = "debug", skip(row))]
 fn build_shadow_verification_action(row: &ShadowRow) -> String {
-    let missing_our = row.shadow_missing_our_traits.as_str();
-    let missing_external = row.shadow_missing_external_traits.as_str();
-    let can_be_direct = row.shadow_can_be_direct == "true";
+    let missing_our = row.shadow_missing_our_traits().as_str();
+    let missing_external = row.shadow_missing_external_traits().as_str();
+    let can_be_direct = row.shadow_can_be_direct() == "true";
 
     if !missing_our.is_empty() && can_be_direct {
         format!(
             "Finish `{}` by adding our traits: {}; then add `impl ElicitComplete`",
-            row.shadow_item,
+            row.shadow_item(),
             missing_our.replace(';', ", ")
         )
     } else if !missing_our.is_empty() {
         format!(
             "Finish `{}` by adding our traits: {}; also add external traits: {}",
-            row.shadow_item,
+            row.shadow_item(),
             missing_our.replace(';', ", "),
             missing_external.replace(';', ", ")
         )
     } else if can_be_direct {
-        format!("Add `impl ElicitComplete for {} {{}}`", row.shadow_item)
+        format!("Add `impl ElicitComplete for {} {{}}`", row.shadow_item())
     } else {
         format!(
             "Add external traits to `{}` so it can support `ElicitComplete`: {}",
-            row.shadow_item,
+            row.shadow_item(),
             missing_external.replace(';', ", ")
         )
     }
 }
 
 /// Row assessment fields used when rendering per-pair shadow CSV.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_new::new, PartialEq, Eq)]
 pub struct ShadowRowRender {
-    pub coverage_kind: String,
-    pub primary_gap_kind: String,
-    pub verification_gap: bool,
-    pub verification_ready: bool,
-    pub action: String,
+    coverage_kind: String,
+    primary_gap_kind: String,
+    #[getter(copy)]
+    verification_gap: bool,
+    #[getter(copy)]
+    verification_ready: bool,
+    action: String,
 }
 
 #[instrument(level = "debug", skip(row))]
@@ -241,19 +248,19 @@ pub fn render_shadow_row(row: &ShadowRow) -> ShadowRowRender {
         ShadowCoverageKind::PossiblyStale => "PossiblyStale",
         ShadowCoverageKind::InfrastructureExtra => "InfrastructureExtra",
     };
-    let verification_ready = row.shadow_elicit_impl == ShadowImplStatus::Complete.as_str()
-        || row.shadow_elicit_impl == ShadowImplStatus::CompleteFactory.as_str();
-    ShadowRowRender {
-        coverage_kind: coverage_kind.to_string(),
-        primary_gap_kind: assessment
+    let verification_ready = row.shadow_elicit_impl() == ShadowImplStatus::Complete.as_str()
+        || row.shadow_elicit_impl() == ShadowImplStatus::CompleteFactory.as_str();
+    ShadowRowRender::new(
+        coverage_kind.to_string(),
+        assessment
             .primary_gap_kind
             .map(ShadowGapKind::as_str)
             .unwrap_or("")
             .to_string(),
-        verification_gap: shadow_verification_gap(row),
+        shadow_verification_gap(row),
         verification_ready,
-        action: assessment.action,
-    }
+        assessment.action,
+    )
 }
 
 #[instrument(level = "debug", skip(path))]

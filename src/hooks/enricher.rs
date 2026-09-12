@@ -34,11 +34,27 @@ pub trait IrEnricher: Send + Sync {
 ///
 /// Passed by value so the enricher can take `ir` mutably and ignore `load` or
 /// `session` without unused-argument noise.
+#[derive(derive_getters::Getters, derive_new::new)]
 pub struct EnrichView<'a> {
     /// Crate IR graph for this hook invocation.
-    pub ir: &'a mut dyn IrMut,
+    #[getter(skip)]
+    ir: &'a mut dyn IrMut,
     /// Loader output this enricher may read.
-    pub load: &'a dyn LoadView,
+    #[getter(copy)]
+    load: &'a dyn LoadView,
     /// Session this hook is running in.
-    pub session: &'a dyn SessionView,
+    #[getter(copy)]
+    session: &'a dyn SessionView,
+}
+
+impl<'a> EnrichView<'a> {
+    /// Consume the view into its hook inputs.
+    pub fn into_parts(self) -> (&'a mut dyn IrMut, &'a dyn LoadView, &'a dyn SessionView) {
+        (self.ir, self.load, self.session)
+    }
+
+    /// Consume the view into its mutable IR input.
+    pub fn ir(self) -> &'a mut dyn IrMut {
+        self.ir
+    }
 }

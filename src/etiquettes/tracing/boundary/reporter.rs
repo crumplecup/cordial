@@ -26,7 +26,7 @@ impl BoundaryRow {
         let mut sink = MapFindingSink::default();
         finding.emit(&mut sink);
         let field = |name: &str| {
-            sink.fields
+            sink.fields()
                 .iter()
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.clone())
@@ -58,7 +58,7 @@ fn open_rows(rows: &[BoundaryRow]) -> impl Iterator<Item = &BoundaryRow> {
     rows.iter().filter(|row| row.disposition == "open")
 }
 
-/// Distinct crate names present in `rows`, sorted -- `view.ir.crate_name()`
+/// Distinct crate names present in `rows`, sorted -- `view.ir().crate_name()`
 /// is pinned to whichever crate the run's target discovery lists first, not
 /// the crate a given row actually belongs to, so a workspace-spanning
 /// artifact must derive its own crate breakdown from `row.crate_name`
@@ -87,7 +87,7 @@ impl Reporter for BoundaryCsvReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from("crate,rule_id,context,file,line,snippet\n");
         for row in boundary_rows(findings) {
@@ -101,11 +101,11 @@ impl Reporter for BoundaryCsvReporter {
                 csv_field(&row.snippet),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "tracing-boundary.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "tracing-boundary.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -125,7 +125,7 @@ impl Reporter for BoundaryChecklistReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = boundary_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -166,11 +166,11 @@ impl Reporter for BoundaryChecklistReporter {
             }
         }
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "tracing-boundary.checklist.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "tracing-boundary.checklist.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }
 
@@ -190,7 +190,7 @@ impl Reporter for BoundarySummaryReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let rows = boundary_rows(findings);
         let open: Vec<_> = open_rows(&rows).collect();
@@ -213,10 +213,10 @@ impl Reporter for BoundarySummaryReporter {
         }
         body.push_str(&format!("\n| **Total** | **{total}** |\n"));
 
-        Ok(vec![Box::new(TextArtifact {
-            name: "tracing-boundary-summary.md".to_string(),
-            media_type: "text/markdown".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "tracing-boundary-summary.md".to_string(),
+            "text/markdown".to_string(),
             body,
-        })])
+        ))])
     }
 }

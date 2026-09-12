@@ -6,9 +6,21 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 /// Opaque stable node identifier wrapping a petgraph index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct NodeId(pub u32);
+pub struct NodeId(u32);
 
 impl NodeId {
+    /// Build a node id from its stable numeric value.
+    #[instrument(level = "debug", ret)]
+    pub fn new(value: u32) -> Self {
+        Self(value)
+    }
+
+    /// Stable numeric value for serialization-adjacent attributes.
+    #[instrument(level = "trace", skip(self))]
+    pub fn value(self) -> u32 {
+        self.0
+    }
+
     #[instrument(level = "debug", skip(index), ret)]
     pub(crate) fn from_index(index: NodeIndex) -> Self {
         Self(index.index() as u32)
@@ -94,19 +106,19 @@ impl NodeKind {
 }
 
 /// Weight stored at each graph node.
-#[derive(Debug, Clone, Serialize, Deserialize, derive_new::new)]
+#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters, derive_new::new)]
 pub struct NodeWeight {
     /// Kind of this node.
-    pub kind: NodeKind,
+    kind: NodeKind,
     /// Optional item name.
     #[new(default)]
-    pub name: Option<String>,
+    name: Option<String>,
     /// Optional source span.
     #[new(default)]
-    pub span: Option<crate::objects::FileSpan>,
+    span: Option<crate::objects::FileSpan>,
     /// JSON attributes attached to this node.
     #[new(default)]
-    pub attrs: Vec<(String, serde_json::Value)>,
+    attrs: Vec<(String, serde_json::Value)>,
 }
 
 impl NodeWeight {
