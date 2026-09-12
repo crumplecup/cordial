@@ -196,10 +196,13 @@ impl Catalog {
     }
 }
 
+#[derive(derive_setters::Setters)]
+#[setters(generate = false, borrow_self)]
 pub(super) struct CatalogVisitor<'a> {
     file: PathBuf,
     module_prefix: Vec<String>,
     catalog: &'a mut Catalog,
+    #[setters(generate, rename = "set_phase")]
     phase: CatalogPhase,
 }
 
@@ -217,11 +220,6 @@ impl<'a> CatalogVisitor<'a> {
             catalog,
             phase,
         }
-    }
-
-    #[instrument(level = "debug", skip(self))]
-    pub(super) fn set_phase(&mut self, phase: CatalogPhase) {
-        self.phase = phase;
     }
 
     #[instrument(level = "debug", skip(self, module_prefix))]

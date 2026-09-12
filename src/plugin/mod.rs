@@ -222,7 +222,7 @@ impl<I: Copy> StrategicPortfolio<I> {
 /// This avoids making every etiquette configurable at once. A plugin can expose
 /// a small set of portfolios, each keyed by an indicator enum, while ordinary
 /// plugins continue to use [`StaticPlugin`] or [`EtiquettePlugin`].
-#[derive(Clone)]
+#[derive(Clone, derive_more::AsRef)]
 pub struct StrategicPlugin<I: Copy + 'static> {
     /// Stable identifier.
     id: Cow<'static, str>,
@@ -233,6 +233,7 @@ pub struct StrategicPlugin<I: Copy + 'static> {
     /// Active strategy indicator.
     indicator: I,
     /// Available portfolios.
+    #[as_ref(forward)]
     portfolios: Cow<'static, [StrategicPortfolio<I>]>,
 }
 
@@ -273,7 +274,7 @@ impl<I: Copy + 'static> StrategicPlugin<I> {
 
     /// Available portfolios for this plugin.
     pub fn portfolios(&self) -> &[StrategicPortfolio<I>] {
-        self.portfolios.as_ref()
+        self.as_ref()
     }
 }
 
