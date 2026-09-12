@@ -165,9 +165,7 @@ impl IrEnricher for TodoInventoryEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let ir = view.ir;
-        let load = view.load;
-        let session = view.session;
+        let (ir, load, session) = view.into_parts();
 
         let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
             return Ok(());
@@ -299,14 +297,14 @@ impl Probe for TodoSiteProbe {
 
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
-        let ir = view.ir;
+        let ir = view.ir();
 
         Ok(ir
             .nodes_matching(&TODO_SITES_QUERY)
             .into_iter()
             .map(|node| {
                 Box::new(TodoMarker {
-                    anchor: NodeAnchor(node.id),
+                    anchor: NodeAnchor::new(node.id()),
                 }) as Box<dyn Marker>
             })
             .collect())
@@ -329,9 +327,9 @@ impl Assessor for TodoAssessor {
 
     #[instrument(level = "trace", skip(self, view))]
     fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>> {
-        let markers = view.markers;
-        let ir = view.ir;
-        let session = view.session;
+        let markers = view.markers();
+        let ir = view.ir();
+        let session = view.session();
 
         let mut findings = Vec::new();
         for marker in markers {
@@ -358,7 +356,7 @@ impl Assessor for TodoAssessor {
             findings.push(Box::new(TodoFinding {
                 rule: TodoRule,
                 disposition: Disposition::Open,
-                anchor: NodeAnchor(node_id),
+                anchor: NodeAnchor::new(node_id),
                 crate_name: ir.crate_name().to_string(),
                 context,
                 span: FileSpan::new(file, line, 1),
@@ -380,7 +378,7 @@ impl Reporter for TodoCsvReporter {
 
     #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn cordial::Artifact>>> {
-        let findings = view.findings;
+        let findings = view.findings();
 
         let mut body = String::from("crate,context,file,line,snippet\n");
         for finding in findings {
@@ -390,7 +388,7 @@ impl Reporter for TodoCsvReporter {
             let mut sink = cordial::MapFindingSink::default();
             finding.emit(&mut sink);
             let field = |name: &str| {
-                sink.fields
+                sink.fields()
                     .iter()
                     .find(|(key, _)| key == name)
                     .map(|(_, value)| value.clone())
@@ -405,10 +403,10 @@ impl Reporter for TodoCsvReporter {
                 field("snippet"),
             ));
         }
-        Ok(vec![Box::new(TextArtifact {
-            name: "acme-todo.csv".to_string(),
-            media_type: "text/csv".to_string(),
+        Ok(vec![Box::new(TextArtifact::new(
+            "acme-todo.csv".to_string(),
+            "text/csv".to_string(),
             body,
-        })])
+        ))])
     }
 }

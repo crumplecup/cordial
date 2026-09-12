@@ -110,15 +110,19 @@ pub(super) fn run_session(
     filter: &dyn RunFilter,
 ) -> CordialResult<Box<dyn RunOutcome>> {
     let store = StoreLayout::from_root(
-        &session.store_root,
-        crate::store::project_slug_from_path(&session.project_root),
+        session.store_root(),
+        crate::store::project_slug_from_path(session.project_root()),
     );
     store.ensure_dirs()?;
 
     let setup = session
         .progress()
         .spinner("Preparing cordial run".to_string());
-    let etiquettes = resolved_etiquettes(&session.plugins, &session.etiquettes, filter);
+    let etiquettes = resolved_etiquettes(
+        session.registered_plugins(),
+        session.registered_etiquettes(),
+        filter,
+    );
     let config = crate::load_session_config(session);
     let etiquettes: Vec<&'static dyn Etiquette> = etiquettes
         .into_iter()
@@ -130,8 +134,8 @@ pub(super) fn run_session(
     }
 
     let targets = crate::targets::discover_run_crate_targets(
-        &session.plugins,
-        &session.project_root,
+        session.registered_plugins(),
+        session.project_root(),
         session,
         filter,
     )?;
@@ -445,7 +449,7 @@ fn render_and_write(
     all_artifacts.append(&mut rollup_artifacts);
 
     #[cfg(feature = "quality")]
-    let includes_quality = run_includes_quality(&session.plugins, filter, etiquettes);
+    let includes_quality = run_includes_quality(session.registered_plugins(), filter, etiquettes);
     #[cfg(not(feature = "quality"))]
     let includes_quality = false;
 
@@ -462,9 +466,9 @@ fn render_and_write(
         feature = "amenable_std",
         feature = "elicitation"
     ))]
-    if run_includes_coverage(&session.plugins, filter, etiquettes) {
+    if run_includes_coverage(session.registered_plugins(), filter, etiquettes) {
         let summary = build_coverage_summary(
-            &session.plugins,
+            session.registered_plugins(),
             etiquette_ids,
             filter,
             session,

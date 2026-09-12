@@ -232,12 +232,24 @@ impl SessionBuilder {
 /// This type is what the CLI and most library callers use. It has no global
 /// mutable state; all registered plugins and etiquettes are explicit fields.
 pub struct RuntimeSession {
-    pub(super) project_root: PathBuf,
-    pub(super) store_home: PathBuf,
-    pub(super) store_root: PathBuf,
-    pub(super) plugins: Vec<&'static dyn Plugin>,
-    pub(super) etiquettes: Vec<&'static dyn Etiquette>,
-    pub(super) progress: Arc<dyn ProgressSink>,
+    project_root: PathBuf,
+    store_home: PathBuf,
+    store_root: PathBuf,
+    plugins: Vec<&'static dyn Plugin>,
+    etiquettes: Vec<&'static dyn Etiquette>,
+    progress: Arc<dyn ProgressSink>,
+}
+
+impl RuntimeSession {
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn registered_plugins(&self) -> &[&'static dyn Plugin] {
+        &self.plugins
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn registered_etiquettes(&self) -> &[&'static dyn Etiquette] {
+        &self.etiquettes
+    }
 }
 
 impl SessionView for RuntimeSession {
