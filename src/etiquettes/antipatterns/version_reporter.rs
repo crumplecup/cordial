@@ -15,7 +15,7 @@ use tracing::instrument;
 fn version_rows(findings: &[&dyn Finding]) -> Vec<AntipatternRow> {
     antipattern_rows(findings)
         .into_iter()
-        .filter(|row| row.rule_id == AntipatternRuleId::VersionInMember001.as_str())
+        .filter(|row| row.rule_id() == AntipatternRuleId::VersionInMember001.as_str())
         .collect()
 }
 
@@ -38,16 +38,16 @@ impl Reporter for VersionInMemberCsvReporter {
         let mut body = String::from("crate,rule_id,context,file,line,snippet\n");
         for row in version_rows(findings)
             .iter()
-            .filter(|row| row.disposition == "open")
+            .filter(|row| row.disposition() == "open")
         {
             body.push_str(&format!(
                 "{},{},{},{},{},{}\n",
-                csv_field(&row.crate_name),
-                csv_field(&row.rule_id),
-                csv_field(&row.context),
-                csv_field(&row.file),
-                csv_field(&row.line),
-                csv_field(&row.snippet),
+                csv_field(row.crate_name()),
+                csv_field(row.rule_id()),
+                csv_field(row.context()),
+                csv_field(row.file()),
+                csv_field(row.line()),
+                csv_field(row.snippet()),
             ));
         }
         Ok(vec![Box::new(TextArtifact {
@@ -78,7 +78,7 @@ impl Reporter for VersionInMemberChecklistReporter {
         let version = version_rows(findings);
         let rows: Vec<_> = version
             .iter()
-            .filter(|row| row.disposition == "open")
+            .filter(|row| row.disposition() == "open")
             .collect();
         let mut body = String::new();
         body.push_str("# Version in member checklist\n\n");
@@ -96,14 +96,17 @@ impl Reporter for VersionInMemberChecklistReporter {
             body.push_str(&format!("## `{}`\n\n", ir.crate_name()));
             let mut by_rule: BTreeMap<String, Vec<&&AntipatternRow>> = BTreeMap::new();
             for row in &rows {
-                by_rule.entry(row.rule_id.clone()).or_default().push(row);
+                by_rule.entry(row.rule_id().clone()).or_default().push(row);
             }
             for (rule_id, entries) in by_rule {
                 body.push_str(&format!("### {rule_id}\n\n"));
                 for entry in entries {
                     body.push_str(&format!(
                         "- [ ] `{}` — `{}:{}` — `{}`\n",
-                        entry.context, entry.file, entry.line, entry.snippet
+                        entry.context(),
+                        entry.file(),
+                        entry.line(),
+                        entry.snippet()
                     ));
                 }
                 body.push('\n');

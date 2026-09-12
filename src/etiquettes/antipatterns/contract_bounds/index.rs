@@ -37,10 +37,17 @@ impl ContractRecordDump {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, derive_getters::Getters)]
 pub(super) struct RegistryDump {
     #[serde(default)]
-    pub(super) contract_records: Vec<ContractRecordDump>,
+    contract_records: Vec<ContractRecordDump>,
+}
+
+impl RegistryDump {
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn into_contract_records(self) -> Vec<ContractRecordDump> {
+        self.contract_records
+    }
 }
 
 /// Registered contract records indexed by `(verifier, kind)` for lookup —

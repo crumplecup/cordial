@@ -71,7 +71,7 @@ fn load_registry_dump(path: &Path) -> CordialResult<Vec<ContractRecordDump>> {
     let content = std::fs::read_to_string(path)?;
     let dump: RegistryDump = serde_json::from_str(&content)
         .map_err(|err| CordialError::json_parse(path.display().to_string(), err))?;
-    Ok(dump.contract_records)
+    Ok(dump.into_contract_records())
 }
 
 #[instrument(level = "debug")]

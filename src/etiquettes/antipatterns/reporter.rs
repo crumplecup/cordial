@@ -10,16 +10,16 @@ use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
 use super::types::{AntipatternRuleId, build_workspace_antipatterns_summary};
 
 use tracing::instrument;
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, derive_getters::Getters)]
 pub(super) struct AntipatternRow {
-    pub(super) crate_name: String,
-    pub(super) rule_id: String,
-    pub(super) context: String,
-    pub(super) file: String,
-    pub(super) line: String,
-    pub(super) snippet: String,
-    pub(super) disposition: String,
-    pub(super) suppression_reason: String,
+    crate_name: String,
+    rule_id: String,
+    context: String,
+    file: String,
+    line: String,
+    snippet: String,
+    disposition: String,
+    suppression_reason: String,
 }
 
 impl AntipatternRow {

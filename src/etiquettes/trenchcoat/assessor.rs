@@ -39,13 +39,13 @@ impl Assessor for TrenchcoatAssessor {
                 .and_then(|v| v.as_str())
                 .unwrap_or("?")
                 .to_string();
-            findings.push(Box::new(UnwrappedFinding {
-                rule: TrenchcoatRule,
-                disposition: Disposition::Open,
-                anchor: crate::objects::NodeAnchor(node_id),
-                crate_name: ir.crate_name().to_string(),
+            findings.push(Box::new(UnwrappedFinding::new(
+                TrenchcoatRule,
+                Disposition::Open,
+                crate::objects::NodeAnchor(node_id),
+                ir.crate_name().to_string(),
                 type_path,
-            }) as Box<dyn Finding>);
+            )) as Box<dyn Finding>);
         }
         Ok(findings)
     }

@@ -75,8 +75,8 @@ impl Assessor for ImplGapAssessor {
             let composition_test =
                 composition_test_from_node(&node).unwrap_or_else(|| "Missing".to_string());
 
-            let Some(gap_kind) = assessment.gap_kind else {
-                let disposition = if assessment.blocked_by_orphan_rule {
+            let Some(gap_kind) = assessment.gap_kind() else {
+                let disposition = if assessment.blocked_by_orphan_rule() {
                     Disposition::Suppressed
                 } else {
                     Disposition::Exemplar
@@ -128,23 +128,23 @@ struct CoverageFindingArgs<'a> {
 
 #[instrument(level = "debug", skip(node_id, args))]
 fn coverage_finding(node_id: crate::ir::NodeId, args: CoverageFindingArgs<'_>) -> Box<dyn Finding> {
-    Box::new(ImplGapFinding {
-        rule: CoverageRule,
-        disposition: args.disposition,
-        anchor: crate::objects::NodeAnchor(node_id),
-        crate_name: args.crate_name.to_string(),
-        type_path: args.type_path.to_string(),
-        gap_kind: args.gap_kind,
-        missing_our_traits: args.assessment.missing_our_traits,
-        missing_external_traits: args.assessment.missing_external_traits,
-        elicit_complete_gap: args.assessment.elicit_complete_gap,
-        proof_test: args.proof_test.to_string(),
-        composition_test: args.composition_test.to_string(),
-        feature_gated_external: args.assessment.feature_gated_external,
-        feature_owner_crate: args.assessment.feature_owner_crate,
-        candidate_unlock_features: args.assessment.candidate_unlock_features,
-        coverage_provider: args.assessment.coverage_provider,
-        wrapper_paths: args.assessment.wrapper_paths,
-        covered_indirectly: args.assessment.covered_indirectly,
-    })
+    Box::new(ImplGapFinding::new(
+        CoverageRule,
+        args.disposition,
+        crate::objects::NodeAnchor(node_id),
+        args.crate_name.to_string(),
+        args.type_path.to_string(),
+        args.gap_kind,
+        args.assessment.missing_our_traits().clone(),
+        args.assessment.missing_external_traits().clone(),
+        args.assessment.elicit_complete_gap(),
+        args.proof_test.to_string(),
+        args.composition_test.to_string(),
+        args.assessment.feature_gated_external(),
+        args.assessment.feature_owner_crate().clone(),
+        args.assessment.candidate_unlock_features().clone(),
+        args.assessment.coverage_provider().clone(),
+        args.assessment.wrapper_paths().clone(),
+        args.assessment.covered_indirectly(),
+    ))
 }

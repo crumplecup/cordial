@@ -36,11 +36,11 @@ fn wrapper_elicit_complete_suppresses_foreign_gap() {
     };
     let assessment = assess_impl_gap("demo", &prereqs, None, false, wrappers);
     assert!(
-        assessment.gap_kind.is_none(),
+        assessment.gap_kind().is_none(),
         "wrapper-complete foreign type is covered"
     );
-    assert!(assessment.wrapper_paths.contains(wrapper));
-    assert!(assessment.covered_indirectly);
+    assert!(assessment.wrapper_paths().contains(wrapper));
+    assert!(assessment.covered_indirectly());
 }
 
 #[test]
@@ -75,12 +75,12 @@ fn partial_wrapper_prereqs_credit_indirect_our_traits() {
     };
     let assessment = assess_impl_gap("demo", &prereqs, None, false, wrappers);
     assert!(
-        assessment.gap_kind.is_none(),
+        assessment.gap_kind().is_none(),
         "our traits satisfied via wrapper"
     );
-    assert!(assessment.covered_indirectly);
-    assert_eq!(assessment.coverage_provider, "wrapper");
-    assert!(assessment.blocked_by_orphan_rule);
+    assert!(assessment.covered_indirectly());
+    assert_eq!(assessment.coverage_provider(), "wrapper");
+    assert!(assessment.blocked_by_orphan_rule());
 }
 
 #[test]

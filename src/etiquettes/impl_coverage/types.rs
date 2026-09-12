@@ -47,9 +47,9 @@ impl Rule for CoverageRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct ImplGapMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for ImplGapMarker {
@@ -74,25 +74,25 @@ impl Marker for ImplGapMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct ImplGapFinding {
-    pub rule: CoverageRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub type_path: String,
-    pub gap_kind: Option<ImplGapKind>,
-    pub missing_our_traits: String,
-    pub missing_external_traits: String,
-    pub elicit_complete_gap: bool,
-    pub proof_test: String,
-    pub composition_test: String,
-    pub feature_gated_external: bool,
-    pub feature_owner_crate: String,
-    pub candidate_unlock_features: String,
-    pub coverage_provider: String,
-    pub wrapper_paths: String,
-    pub covered_indirectly: bool,
+    rule: CoverageRule,
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    type_path: String,
+    gap_kind: Option<ImplGapKind>,
+    missing_our_traits: String,
+    missing_external_traits: String,
+    elicit_complete_gap: bool,
+    proof_test: String,
+    composition_test: String,
+    feature_gated_external: bool,
+    feature_owner_crate: String,
+    candidate_unlock_features: String,
+    coverage_provider: String,
+    wrapper_paths: String,
+    covered_indirectly: bool,
 }
 
 impl Finding for ImplGapFinding {

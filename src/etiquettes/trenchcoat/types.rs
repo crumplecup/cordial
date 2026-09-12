@@ -21,9 +21,9 @@ impl Rule for TrenchcoatRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct UnwrappedMarker {
-    pub anchor: crate::objects::NodeAnchor,
+    anchor: crate::objects::NodeAnchor,
 }
 
 impl Marker for UnwrappedMarker {
@@ -48,13 +48,13 @@ impl Marker for UnwrappedMarker {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct UnwrappedFinding {
-    pub rule: TrenchcoatRule,
-    pub disposition: Disposition,
-    pub anchor: crate::objects::NodeAnchor,
-    pub crate_name: String,
-    pub type_path: String,
+    rule: TrenchcoatRule,
+    disposition: Disposition,
+    anchor: crate::objects::NodeAnchor,
+    crate_name: String,
+    type_path: String,
 }
 
 impl Finding for UnwrappedFinding {

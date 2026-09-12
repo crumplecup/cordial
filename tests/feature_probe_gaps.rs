@@ -35,11 +35,11 @@ fn flags_feature_gated_external_when_probe_unlocks_direct_impl() {
     );
 
     let assessment = assess_impl_gap("reqwest", &prereqs, Some(&probe), false, None);
-    assert_eq!(assessment.gap_kind, Some(ImplGapKind::MissingOurTraits));
-    assert!(assessment.feature_gated_external);
-    assert!(!assessment.blocked_by_orphan_rule);
-    assert_eq!(assessment.feature_owner_crate, "reqwest");
-    assert_eq!(assessment.candidate_unlock_features, "json");
+    assert_eq!(assessment.gap_kind(), Some(ImplGapKind::MissingOurTraits));
+    assert!(assessment.feature_gated_external());
+    assert!(!assessment.blocked_by_orphan_rule());
+    assert_eq!(assessment.feature_owner_crate(), "reqwest");
+    assert_eq!(assessment.candidate_unlock_features(), "json");
 }
 
 #[test]
@@ -68,9 +68,12 @@ fn classifies_pure_feature_gated_external_when_our_traits_complete() {
     );
 
     let assessment = assess_impl_gap("reqwest", &prereqs, Some(&probe), false, None);
-    assert_eq!(assessment.gap_kind, Some(ImplGapKind::FeatureGatedExternal));
-    assert!(assessment.feature_gated_external);
-    assert!(!assessment.blocked_by_orphan_rule);
+    assert_eq!(
+        assessment.gap_kind(),
+        Some(ImplGapKind::FeatureGatedExternal)
+    );
+    assert!(assessment.feature_gated_external());
+    assert!(!assessment.blocked_by_orphan_rule());
 }
 
 #[test]
@@ -89,9 +92,9 @@ fn marks_externally_blocked_when_no_probe_unlock() {
     };
 
     let assessment = assess_impl_gap("reqwest", &prereqs, None, false, None);
-    assert!(assessment.gap_kind.is_none());
-    assert!(assessment.blocked_by_orphan_rule);
-    assert!(!assessment.feature_gated_external);
+    assert!(assessment.gap_kind().is_none());
+    assert!(assessment.blocked_by_orphan_rule());
+    assert!(!assessment.feature_gated_external());
 }
 
 #[test]
