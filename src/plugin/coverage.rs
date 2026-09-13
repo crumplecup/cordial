@@ -2,7 +2,7 @@
 
 use crate::error::CordialResult;
 #[cfg(feature = "impl_coverage")]
-use crate::etiquettes::impl_coverage::ImplGapKind;
+use crate::etiquettes::ImplGapKind;
 use crate::loader::CrateTarget;
 use crate::plugin::{Plugin, PluginCategory};
 use crate::rustdoc::{ELICIT_COMPLETE_SUPERTRAITS, ELICIT_COMPLETE_TRAIT, TraitPrereqs};

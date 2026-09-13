@@ -71,6 +71,12 @@ mod tracing_init;
 #[cfg(feature = "verus_ir")]
 mod verus_ir;
 
+#[cfg(feature = "dependency_freshness")]
+pub use etiquettes::DEPENDENCY_FRESHNESS_ETIQUETTE;
+#[cfg(feature = "impl_coverage")]
+pub use etiquettes::IMPL_COVERAGE_ETIQUETTE;
+#[cfg(feature = "trenchcoat")]
+pub use etiquettes::TRENCHCOAT_ETIQUETTE;
 #[cfg(feature = "allows")]
 pub use etiquettes::allows::{
     ALLOWS_ETIQUETTE, AllowRuleId, AllowSiteRecord, scan_crate_allows,
@@ -92,10 +98,6 @@ pub use etiquettes::cfg_hygiene::{
     declared_names_for_crate, expected_verifier_for, scan_crate_cfg_hygiene,
     scan_rust_source as scan_cfg_hygiene_rust_source,
 };
-#[cfg(feature = "cfg_scatter")]
-pub use etiquettes::cfg_scatter::{
-    CFG_SCATTER_ETIQUETTE, CfgSiteKind, scan_rust_source as scan_cfg_scatter_rust_source,
-};
 #[cfg(feature = "cli_layout")]
 pub use etiquettes::cli_layout::{
     CLI_LAYOUT_ETIQUETTE, CliLayoutId, CliLayoutRecord, scan_crate_cli_layout,
@@ -110,8 +112,6 @@ pub use etiquettes::creusot_diagnostics::{
     CREUSOT_DIAGNOSTICS_ETIQUETTE, CreusotDiagnosticRecord, CreusotDiagnosticRuleId,
     crate_is_creusot_target, parse_creusot_compiler_output, scan_crate_creusot_diagnostics,
 };
-#[cfg(feature = "dependency_freshness")]
-pub use etiquettes::dependency_freshness::DEPENDENCY_FRESHNESS_ETIQUETTE;
 #[cfg(feature = "derives")]
 pub use etiquettes::derives::{
     DERIVES_ETIQUETTE, DeriveRuleId, DeriveSiteRecord, PathInclusionFacts,
@@ -151,8 +151,6 @@ pub use etiquettes::glob_imports::{
     GLOB_IMPORTS_ETIQUETTE, GlobImportRuleId, scan_crate_glob_imports,
     scan_rust_source as scan_glob_imports_rust_source,
 };
-#[cfg(feature = "impl_coverage")]
-pub use etiquettes::impl_coverage::IMPL_COVERAGE_ETIQUETTE;
 #[cfg(feature = "inline_tests")]
 pub use etiquettes::inline_tests::{
     INLINE_TESTS_ETIQUETTE, InlineTestRuleId, scan_crate_inline_tests,
@@ -182,10 +180,6 @@ pub use etiquettes::pageantry::{
 pub use etiquettes::panics::{
     PANICS_ETIQUETTE, PanicKind, scan_crate_panics, scan_rust_source, scan_source_tree,
 };
-#[cfg(feature = "proof_patterns")]
-pub use etiquettes::proof_patterns::{
-    PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, scan_crate_proof_patterns,
-};
 #[cfg(feature = "tracing")]
 pub use etiquettes::tracing::{
     BoundaryRuleId, BoundarySiteRecord, InstrumentApplySummary, InstrumentGap, PrintRuleId,
@@ -195,8 +189,6 @@ pub use etiquettes::tracing::{
     scan_crate_tracing_subscriber, scan_rust_source as scan_tracing_rust_source,
     scan_tracing_print_rust_source,
 };
-#[cfg(feature = "trenchcoat")]
-pub use etiquettes::trenchcoat::TRENCHCOAT_ETIQUETTE;
 #[cfg(feature = "verus_warnings")]
 pub use etiquettes::verus_warnings::{
     VERUS_WARNINGS_ETIQUETTE, VerusWarningRecord, VerusWarningRuleId, crate_is_verus_target,
@@ -207,6 +199,10 @@ pub use etiquettes::visibility::{
     BranchingCache, VISIBILITY_ETIQUETTE, VisibilityRecord, VisibilityRuleId,
     scan_crate_visibility, scan_crate_visibility_with_cache,
 };
+#[cfg(feature = "cfg_scatter")]
+pub use etiquettes::{CFG_SCATTER_ETIQUETTE, CfgSiteKind, scan_cfg_scatter_rust_source};
+#[cfg(feature = "proof_patterns")]
+pub use etiquettes::{PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, scan_crate_proof_patterns};
 #[cfg(feature = "verus_ir")]
 pub use verus_ir::{
     VerusCrateIr, VerusEnumFacts, VerusEnumVariantFacts, VerusFnFacts, VerusFnMode, VerusPanicKind,
@@ -273,13 +269,13 @@ pub use etiquette::{
     QualityEtiquette, QualityReportArea, StaticEtiquette, StaticQualityEtiquette, lookup_etiquette,
     render_explain_list, render_explain_page,
 };
+#[cfg(feature = "shadow")]
+pub use etiquettes::SHADOW_ETIQUETTE;
 #[cfg(feature = "elicitation")]
 pub use etiquettes::coverage_etiquettes;
 #[cfg(feature = "amenable_std")]
 pub use etiquettes::framework_std::{AMENABLE_STD_ETIQUETTE, AmenableStdReporter};
 pub use etiquettes::quality_etiquettes;
-#[cfg(feature = "shadow")]
-pub use etiquettes::shadow::SHADOW_ETIQUETTE;
 #[cfg(all(feature = "rustdoc", feature = "impl_coverage"))]
 pub use plugin::classify_elicit_complete_gap;
 #[cfg(feature = "elicitation")]

@@ -30,7 +30,7 @@ pub use {
     crate::cargo_rustdoc::{
         DepBuildConfig, collect_dep_serde_features, collect_member_dep_build_config,
     },
-    crate::etiquettes::impl_coverage::{ImplGapAssessment, ImplGapKind, assess_impl_gap},
+    crate::etiquettes::{ImplGapAssessment, ImplGapKind, assess_impl_gap},
     crate::feature_probe::{
         TypeFeatureProbe, build_type_feature_probes, hub_crate_name, load_crate_feature_probes,
     },
@@ -64,7 +64,7 @@ pub use crate::framework_std::{
 };
 
 #[cfg(feature = "rustdoc")]
-pub use crate::enricher::syn_doc_link::inventory_link_key;
+pub use crate::enricher::inventory_link_key;
 
 #[cfg(feature = "rustdoc")]
 pub use crate::cargo_rustdoc::rustdoc_cache_is_fresh;

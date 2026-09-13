@@ -341,7 +341,7 @@ etiquette_plugin_fn!(
 #[cfg(feature = "cfg_scatter")]
 etiquette_plugin_fn!(
     cfg_scatter_plugin,
-    &crate::etiquettes::cfg_scatter::CFG_SCATTER_ETIQUETTE
+    &crate::etiquettes::CFG_SCATTER_ETIQUETTE
 );
 #[cfg(feature = "cfg_hygiene")]
 etiquette_plugin_fn!(
@@ -391,12 +391,12 @@ etiquette_plugin_fn!(
 #[cfg(feature = "dependency_freshness")]
 etiquette_plugin_fn!(
     dependency_freshness_plugin,
-    &crate::etiquettes::dependency_freshness::DEPENDENCY_FRESHNESS_ETIQUETTE
+    &crate::etiquettes::DEPENDENCY_FRESHNESS_ETIQUETTE
 );
 #[cfg(feature = "proof_patterns")]
 etiquette_plugin_fn!(
     proof_patterns_plugin,
-    &crate::etiquettes::proof_patterns::PROOF_PATTERNS_ETIQUETTE
+    &crate::etiquettes::PROOF_PATTERNS_ETIQUETTE
 );
 #[cfg(feature = "pageantry")]
 etiquette_plugin_fn!(

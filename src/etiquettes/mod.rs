@@ -63,7 +63,7 @@ pub(crate) mod antipatterns;
 #[cfg(feature = "cfg_hygiene")]
 pub(crate) mod cfg_hygiene;
 #[cfg(feature = "cfg_scatter")]
-pub(crate) mod cfg_scatter;
+mod cfg_scatter;
 #[cfg(feature = "cli_layout")]
 pub(crate) mod cli_layout;
 #[cfg(feature = "crate_attrs")]
@@ -71,7 +71,7 @@ pub(crate) mod crate_attrs;
 #[cfg(feature = "creusot_diagnostics")]
 pub(crate) mod creusot_diagnostics;
 #[cfg(feature = "dependency_freshness")]
-pub(crate) mod dependency_freshness;
+mod dependency_freshness;
 #[cfg(feature = "derives")]
 pub(crate) mod derives;
 #[cfg(feature = "doc_warnings")]
@@ -99,7 +99,7 @@ pub(crate) mod foreign_error_types;
 #[cfg(feature = "homecoming_std")]
 pub(crate) mod framework_std;
 #[cfg(feature = "impl_coverage")]
-pub(crate) mod impl_coverage;
+mod impl_coverage;
 #[cfg(feature = "internal_error_chain")]
 pub(crate) mod internal_error_chain;
 #[cfg(feature = "modularity")]
@@ -109,13 +109,28 @@ pub(crate) mod pageantry;
 #[cfg(feature = "panics")]
 pub(crate) mod panics;
 #[cfg(feature = "proof_patterns")]
-pub(crate) mod proof_patterns;
+mod proof_patterns;
 #[cfg(feature = "shadow")]
-pub(crate) mod shadow;
+mod shadow;
 #[cfg(feature = "tracing")]
 pub(crate) mod tracing;
 #[cfg(feature = "trenchcoat")]
-pub(crate) mod trenchcoat;
+mod trenchcoat;
+
+#[cfg(feature = "cfg_scatter")]
+pub use cfg_scatter::{
+    CFG_SCATTER_ETIQUETTE, CfgSiteKind, scan_rust_source as scan_cfg_scatter_rust_source,
+};
+#[cfg(feature = "dependency_freshness")]
+pub use dependency_freshness::DEPENDENCY_FRESHNESS_ETIQUETTE;
+#[cfg(feature = "impl_coverage")]
+pub use impl_coverage::{IMPL_COVERAGE_ETIQUETTE, ImplGapAssessment, ImplGapKind, assess_impl_gap};
+#[cfg(feature = "proof_patterns")]
+pub use proof_patterns::{PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, scan_crate_proof_patterns};
+#[cfg(feature = "shadow")]
+pub use shadow::SHADOW_ETIQUETTE;
+#[cfg(feature = "trenchcoat")]
+pub use trenchcoat::TRENCHCOAT_ETIQUETTE;
 
 /// Every built-in quality etiquette in the current feature set, as the
 /// combined `Etiquette + QualityReportArea` supertrait -- the one

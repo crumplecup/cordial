@@ -1,9 +1,7 @@
 //! Elicitation coverage profile: ElicitComplete + trenchcoat + shadow.
 
 use crate::etiquette::Etiquette;
-use crate::etiquettes::impl_coverage::IMPL_COVERAGE_ETIQUETTE;
-use crate::etiquettes::shadow::SHADOW_ETIQUETTE;
-use crate::etiquettes::trenchcoat::TRENCHCOAT_ETIQUETTE;
+use crate::etiquettes::{IMPL_COVERAGE_ETIQUETTE, SHADOW_ETIQUETTE, TRENCHCOAT_ETIQUETTE};
 use crate::plugin::{
     Coverage, ElicitCompleteRequirement, ElicitationTargetProvider, Plugin, PluginCategory,
     TargetProvider, TraitRequirement,
