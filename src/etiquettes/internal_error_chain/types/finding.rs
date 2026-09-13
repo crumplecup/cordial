@@ -30,6 +30,7 @@ pub struct InternalErrorChainFinding {
 
 impl InternalErrorChainFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> InternalErrorChainFindingBuilder {
         InternalErrorChainFindingBuilder::default()
     }

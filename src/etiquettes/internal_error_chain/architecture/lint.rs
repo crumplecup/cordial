@@ -36,6 +36,7 @@ struct SiteClassifier {
 
 impl SiteClassifier {
     /// Only the foreign error type is known.
+    #[instrument(level = "debug")]
     fn foreign(foreign_error_type: Option<String>) -> Self {
         Self {
             foreign_error_type,
@@ -44,6 +45,7 @@ impl SiteClassifier {
     }
 
     /// The internal constructor, and optionally the foreign type it wraps.
+    #[instrument(level = "debug")]
     fn constructor(foreign_error_type: Option<String>, name: String) -> Self {
         Self {
             foreign_error_type,
@@ -585,7 +587,7 @@ impl Catalog {
         Ok(())
     }
 
-    #[instrument(level = "trace", skip(self, rule_id, site))]
+    #[instrument(level = "debug", skip(self, rule_id, site, classifier))]
     fn finding(
         &self,
         rule_id: InternalErrorComplianceId,

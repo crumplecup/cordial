@@ -59,7 +59,7 @@ pub fn scan_crate_verus_ir(crate_root: &Path) -> crate::error::CordialResult<Ver
 /// point for testing against one file's content without a real crate
 /// tree on disk, matching [`scan_crate_verus_ir`]'s own best-effort
 /// posture.
-#[instrument(level = "debug", skip(source))]
+#[instrument(level = "debug", skip(source, file))]
 pub fn scan_verus_rust_source(source: &str, file: &Path, module_path: &str) -> VerusCrateIr {
     let blocks = parse::blocks_in_source(source, file, module_path);
     facts::build_crate_ir(blocks)

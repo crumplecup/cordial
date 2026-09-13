@@ -26,14 +26,17 @@ pub trait Query: Send + Sync {
 pub struct PanicSitesQuery;
 
 impl Query for PanicSitesQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &[NodeKind::Expr]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn NodeView) -> bool {
         node.attr("panic_kind").is_some()
     }

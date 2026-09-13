@@ -3,6 +3,7 @@ use crate::ir::IrView;
 use crate::objects::{Finding, Marker};
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Consumes markers and emits findings.
 ///
 /// Assessors are where an etiquette makes judgments: rule id, disposition,
@@ -37,6 +38,7 @@ pub struct AssessView<'a> {
 
 impl<'a> AssessView<'a> {
     /// Consume the view into its hook inputs.
+    #[instrument(level = "debug", skip(self))]
     pub fn into_parts(self) -> (&'a dyn IrView, &'a [&'a dyn Marker], &'a dyn SessionView) {
         (self.ir, self.markers, self.session)
     }

@@ -13,14 +13,17 @@ pub trait SourceSpan: Send + Sync {
 }
 
 impl SourceSpan for () {
+    #[instrument(level = "trace", skip(self))]
     fn file(&self) -> &Path {
         Path::new("")
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn line(&self) -> u32 {
         0
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn column(&self) -> u32 {
         0
     }

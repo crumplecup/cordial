@@ -147,6 +147,7 @@ pub struct AntipatternFinding {
 
 impl AntipatternFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> AntipatternFindingBuilder {
         AntipatternFindingBuilder::default()
     }
@@ -200,6 +201,7 @@ pub struct AntipatternSiteRecord {
 
 impl AntipatternSiteRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> AntipatternSiteRecordBuilder {
         AntipatternSiteRecordBuilder::default()
     }
@@ -259,6 +261,7 @@ pub struct AntipatternCrateSummary {
 
 impl AntipatternCrateSummary {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> AntipatternCrateSummaryBuilder {
         AntipatternCrateSummaryBuilder::default()
     }
@@ -287,6 +290,7 @@ pub struct WorkspaceAntipatternsSummary {
 
 impl WorkspaceAntipatternsSummary {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> WorkspaceAntipatternsSummaryBuilder {
         WorkspaceAntipatternsSummaryBuilder::default()
     }

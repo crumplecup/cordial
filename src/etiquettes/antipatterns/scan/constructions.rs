@@ -86,7 +86,7 @@ fn is_type_ident(name: &str) -> bool {
 /// itself only accepts a const-evaluable value there -- it expands to a
 /// `static` -- so a type named here is unconditionally const-placed
 /// regardless of which crate submits it.
-#[instrument(level = "trace", ret)]
+#[instrument(level = "debug", skip(mac))]
 fn inventory_collect_target(mac: &syn::Macro) -> Option<String> {
     let segments: Vec<String> = mac
         .path
@@ -114,7 +114,7 @@ fn inventory_collect_target(mac: &syn::Macro) -> Option<String> {
 /// Matches a method with a default body too (e.g. `fn root_entries() ->
 /// &'static [RootEntry] { &[] }`): a default can still be overridden, and
 /// the signature itself is what binds every implementor, body or not.
-#[instrument(level = "trace", ret)]
+#[instrument(level = "debug", skip(sig))]
 fn static_slice_or_ref_return_type(sig: &syn::Signature) -> Option<String> {
     let ReturnType::Type(_, ty) = &sig.output else {
         return None;

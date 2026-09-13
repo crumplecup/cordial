@@ -49,7 +49,7 @@ pub(super) struct InitBodyFacts {
 }
 
 impl InitBodyFacts {
-    #[instrument(level = "debug", skip(known_helper_paths))]
+    #[instrument(level = "debug", skip(block))]
     pub(super) fn from_block(block: &Block, known_helper_paths: &[String]) -> Self {
         let mut facts = Self {
             known_helper_paths: known_helper_paths.to_vec(),
@@ -59,25 +59,25 @@ impl InitBodyFacts {
         facts
     }
 
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub(super) fn rust_log_ok(&self) -> bool {
         (self.has_try_from_default_env && self.has_fallback)
             || (self.has_rust_log_literal && self.has_fallback)
     }
 
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub(super) fn idempotent_ok(&self) -> bool {
         self.calls_try_init || (self.has_once && self.calls_install)
     }
 
     /// What `Main`/`Test` actually require: either real install code
     /// inline, or a documented call to a configured cross-crate helper.
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub(super) fn installs_or_delegates(&self) -> bool {
         self.calls_install || self.calls_known_helper
     }
 
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub(super) fn calls_helper(&self, helpers: &[&str]) -> bool {
         self.called_names
             .iter()
@@ -85,7 +85,7 @@ impl InitBodyFacts {
     }
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "trace", ret)]
 pub(super) fn is_install_name(name: &str) -> bool {
     matches!(name, "init" | "try_init" | "set_global_default")
 }

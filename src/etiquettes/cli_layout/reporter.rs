@@ -75,10 +75,12 @@ impl CliLayoutCsvReporter {
 }
 
 impl Reporter for CliLayoutCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 
@@ -114,10 +116,12 @@ impl CliLayoutChecklistReporter {
 }
 
 impl Reporter for CliLayoutChecklistReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 

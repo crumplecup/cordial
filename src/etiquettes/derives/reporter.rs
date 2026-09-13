@@ -83,10 +83,12 @@ impl DeriveCsvReporter {
 }
 
 impl Reporter for DeriveCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 
@@ -124,10 +126,12 @@ impl DeriveChecklistReporter {
 }
 
 impl Reporter for DeriveChecklistReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 

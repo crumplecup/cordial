@@ -56,12 +56,12 @@ impl BoundaryBodyFacts {
     /// Whether this function's own signature/body already directs an
     /// error to the UI-facing tracing channel — the binary-boundary
     /// policy this crate cares about, regardless of delegation.
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub(super) fn reports_errors(&self) -> bool {
         self.has_err_instrument || self.has_error_emission || self.calls_known_helper
     }
 
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub(super) fn calls_safe_helper(&self, safe_names: &[&str]) -> bool {
         self.called_names
             .iter()

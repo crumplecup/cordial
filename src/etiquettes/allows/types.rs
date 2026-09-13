@@ -116,6 +116,7 @@ pub struct AllowFinding {
 
 impl AllowFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> AllowFindingBuilder {
         AllowFindingBuilder::default()
     }
@@ -169,6 +170,7 @@ pub struct AllowSiteRecord {
 
 impl AllowSiteRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> AllowSiteRecordBuilder {
         AllowSiteRecordBuilder::default()
     }

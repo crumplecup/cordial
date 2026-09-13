@@ -42,7 +42,7 @@ pub(super) struct ErrorIrUnifiedVisitor {
 }
 
 impl ErrorIrUnifiedVisitor {
-    #[instrument(level = "debug", skip(layers))]
+    #[instrument(level = "debug", skip(layers, file), fields(crate_name = crate_name))]
     pub(super) fn new(
         layers: ErrorIrScanLayers,
         crate_name: String,

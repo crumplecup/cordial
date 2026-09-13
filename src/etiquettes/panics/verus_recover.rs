@@ -39,6 +39,7 @@ pub(super) struct VerusFunctionChunk {
 }
 
 impl VerusFunctionChunk {
+    #[instrument(level = "debug", skip(self))]
     pub(super) fn into_parts(self) -> (String, TokenStream) {
         (self.name, self.body)
     }

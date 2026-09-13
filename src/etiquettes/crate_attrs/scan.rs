@@ -92,7 +92,7 @@ fn is_unsafe_forbid_exempt_verus_target(crate_root: &Path) -> bool {
 }
 
 #[cfg(not(feature = "verus_warnings"))]
-#[instrument(level = "debug")]
+#[instrument(level = "trace", ret)]
 fn is_unsafe_forbid_exempt_verus_target(_crate_root: &Path) -> bool {
     false
 }
@@ -144,7 +144,7 @@ pub fn library_root_rs(crate_root: &Path) -> Option<PathBuf> {
     default.is_file().then_some(default)
 }
 
-#[instrument(level = "debug", skip(source), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, file))]
 fn inspect_source(source: &str, file: &Path) -> CordialResult<CrateLintPresence> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
@@ -179,7 +179,7 @@ fn apply_attr(attr: &Attribute, presence: &mut CrateLintPresence) {
     }
 }
 
-#[instrument(level = "debug", skip(path))]
+#[instrument(level = "trace", skip(path), ret)]
 fn is_lint_level(path: &syn::Path, level: &str) -> bool {
     path.is_ident(level)
 }

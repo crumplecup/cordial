@@ -105,10 +105,12 @@ impl ErrorSitesCsvReporter {
 }
 
 impl Reporter for ErrorSitesCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 
@@ -143,10 +145,12 @@ impl ErrorSitesChecklistReporter {
 }
 
 impl Reporter for ErrorSitesChecklistReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 
@@ -208,10 +212,12 @@ impl ErrorSitesSummaryReporter {
 }
 
 impl Reporter for ErrorSitesSummaryReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 
@@ -282,10 +288,12 @@ impl ErrorSitesPartitionedCsvReporter {
 }
 
 impl Reporter for ErrorSitesPartitionedCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 

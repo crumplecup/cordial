@@ -111,7 +111,7 @@ pub(super) fn scan_verus_source(
 /// `ensures`/`requires` identically to the real clause-list keyword,
 /// but is never one: a genuine `requires`/`ensures` keyword always
 /// follows a function signature directly, never a `.`.
-#[instrument(level = "trace", ret)]
+#[instrument(level = "debug", skip(items))]
 fn preceded_by_dot(items: &[TokenTree], idx: usize) -> bool {
     idx > 0
         && matches!(

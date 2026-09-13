@@ -123,6 +123,7 @@ pub struct VisibilityFinding {
 
 impl VisibilityFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> VisibilityFindingBuilder {
         VisibilityFindingBuilder::default()
     }
@@ -183,6 +184,7 @@ pub struct VisibilityRecord {
 
 impl VisibilityRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> VisibilityRecordBuilder {
         VisibilityRecordBuilder::default()
     }

@@ -32,6 +32,7 @@ pub struct ContractRecordDump {
 
 impl ContractRecordDump {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ContractRecordDumpBuilder {
         ContractRecordDumpBuilder::default()
     }
@@ -248,7 +249,7 @@ impl ContractIndex {
     /// (spaced) but parses from real source as `type_id_spec ::< i32 >
     /// ()` (unspaced) — identical after whitespace stripping, distinct
     /// under plain `.to_string()` equality.
-    #[instrument(level = "debug", skip(self, clause, siblings))]
+    #[instrument(level = "trace", skip(self, clause, siblings))]
     pub(super) fn is_raw_duplicate_of_named_sibling(
         &self,
         verifier: &str,
@@ -271,7 +272,7 @@ impl ContractIndex {
     /// fragment whose own `fn` name is `name`, if any — the counterpart
     /// [`fragment_fn_name`] needs to look inside a fragment's body rather
     /// than just its name, for [`Self::is_raw_duplicate_of_named_sibling`].
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     fn named_fragment_body(&self, verifier: &str, kind: &str, name: &str) -> Option<String> {
         let known = self
             .records
@@ -583,7 +584,7 @@ fn is_bare_result_is_none(normalized: &str) -> bool {
 /// doesn't need a registered fragment at all -- a real
 /// `syn::Expr::MethodCall` whose own method name is exactly `kind` is
 /// this shape, unconditionally, no registry lookup involved.
-#[instrument(level = "debug", skip(clause))]
+#[instrument(level = "trace", skip(clause), ret)]
 pub(super) fn is_builtin_contract_inspection(kind: &str, clause: TokenStream) -> bool {
     let Ok(syn::Expr::MethodCall(method_call)) = syn::parse2::<syn::Expr>(clause) else {
         return false;

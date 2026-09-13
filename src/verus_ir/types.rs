@@ -290,7 +290,7 @@ pub struct VerusCrateIr {
 impl VerusCrateIr {
     /// Every function resting on a real, local soundness escape hatch --
     /// see [`VerusFnFacts::is_trusted_not_proven`].
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub fn trusted_not_proven(&self) -> impl Iterator<Item = &VerusFnFacts> {
         self.functions.iter().filter(|f| f.is_trusted_not_proven())
     }
@@ -298,7 +298,7 @@ impl VerusCrateIr {
     /// Every `(function, panic site)` pair across the whole crate -- the
     /// complete replacement for `panics::verus_recover`'s best-effort
     /// 7-of-13 recovery, once a consumer wires this in.
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub fn panic_sites(&self) -> impl Iterator<Item = (&VerusFnFacts, &VerusPanicSite)> {
         self.functions
             .iter()
@@ -307,7 +307,7 @@ impl VerusCrateIr {
 
     /// Every function declared `broadcast` -- see
     /// [`VerusFnFacts::is_broadcast`].
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub fn broadcasts(&self) -> impl Iterator<Item = &VerusFnFacts> {
         self.functions.iter().filter(|f| f.is_broadcast)
     }
@@ -319,7 +319,7 @@ impl VerusCrateIr {
     /// pattern-projection accessor. See [`VerusEnumFacts::
     /// synthesizes_pattern_projection_accessors`]/[`VerusEnumFacts::
     /// fully_documented`].
-    #[instrument(level = "debug", skip(self), ret)]
+    #[instrument(level = "trace", skip(self, file))]
     pub fn is_documented_pattern_projection_enum(&self, file: &Path, line: u32) -> bool {
         self.enums.iter().any(|item| {
             item.span.file() == file

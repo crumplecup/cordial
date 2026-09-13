@@ -49,7 +49,7 @@ impl PrintRuleId {
     }
 
     /// Whether `id` is a leftover-stdio rule (`TRACING-STD-*`).
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace", ret)]
     pub fn is_print_rule(id: &str) -> bool {
         Self::from_attr(id).is_some()
     }
@@ -155,6 +155,7 @@ pub struct PrintFinding {
 
 impl PrintFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> PrintFindingBuilder {
         PrintFindingBuilder::default()
     }
@@ -209,6 +210,7 @@ pub struct PrintSiteRecord {
 
 impl PrintSiteRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> PrintSiteRecordBuilder {
         PrintSiteRecordBuilder::default()
     }

@@ -51,7 +51,7 @@ impl SubscriberRuleId {
     }
 
     /// Whether `id` is a tracing-subscriber rule (`TRACING-SUBSCRIBER-*`).
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace", ret)]
     pub fn is_subscriber_rule(id: &str) -> bool {
         id.starts_with("TRACING-SUBSCRIBER-")
     }
@@ -151,6 +151,7 @@ pub struct SubscriberFinding {
 
 impl SubscriberFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> SubscriberFindingBuilder {
         SubscriberFindingBuilder::default()
     }
@@ -205,6 +206,7 @@ pub struct SubscriberSiteRecord {
 
 impl SubscriberSiteRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> SubscriberSiteRecordBuilder {
         SubscriberSiteRecordBuilder::default()
     }

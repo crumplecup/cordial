@@ -34,6 +34,7 @@ use std::path::Path;
 
 use crate::{PathInclusionFacts, TracingThresholds};
 
+use tracing::instrument;
 /// What `--apply` should do with one function's `#[instrument(..)]`
 /// insertion, given every crate that really compiles the file it lives
 /// in.
@@ -51,6 +52,7 @@ pub enum TracingApplyPolicy {
 
 /// Resolve the real tracing-apply policy for one file, given every
 /// crate whose own compilation actually includes its text.
+#[instrument(level = "debug", skip(file, config, facts))]
 pub fn resolve_tracing_apply_policy(
     crate_name: &str,
     file: &Path,
@@ -99,6 +101,7 @@ pub fn resolve_tracing_apply_policy(
 /// computation -- this is "what cfg names make an item unreachable
 /// *within `crate_name`'s own source*," not "what governs a file `crate_
 /// name` happens to also compile under a different crate's rules."
+#[instrument(level = "debug", skip(config, facts))]
 pub(crate) fn crate_gate_cfgs(
     crate_name: &str,
     config: &TracingThresholds,
@@ -113,6 +116,7 @@ pub(crate) fn crate_gate_cfgs(
 /// Render the `not(..)` predicate for [`TracingApplyPolicy::Gated`]'s
 /// cfg list: `kani` for one name, `any(creusot, kani)` for more than
 /// one.
+#[instrument(level = "debug")]
 pub fn gate_predicate(cfgs: &[String]) -> String {
     match cfgs {
         [only] => only.clone(),
@@ -127,6 +131,7 @@ pub fn gate_predicate(cfgs: &[String]) -> String {
 /// inner attribute is ever expanded. Shared between `--apply`'s write
 /// path and the checklist reporter's recipe column so the two can never
 /// drift.
+#[instrument(level = "debug")]
 pub fn gate_attr(attr: &str, predicate: &str) -> String {
     let inner = attr
         .strip_prefix('#')

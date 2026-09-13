@@ -208,7 +208,7 @@ fn push_record(
     Ok(())
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(file))]
 fn resolve_diagnostic_file(resolve_root: &Path, file: &str) -> PathBuf {
     let path = PathBuf::from(file);
     if path.is_absolute() {
@@ -244,7 +244,7 @@ fn which_cargo() -> Option<PathBuf> {
     None
 }
 
-#[instrument(level = "info", skip(cargo, policy), err(level = "warn"))]
+#[instrument(level = "info", skip(policy), fields(crate_name = crate_name))]
 fn run_cargo_doc(
     cargo: &Path,
     crate_root: &Path,

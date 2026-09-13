@@ -105,6 +105,7 @@ pub struct PageantryFinding {
 }
 
 impl PageantryFinding {
+    #[instrument(level = "debug")]
     pub fn builder() -> PageantryFindingBuilder {
         PageantryFindingBuilder::default()
     }
@@ -152,6 +153,7 @@ pub struct PageantrySiteRecord {
 }
 
 impl PageantrySiteRecord {
+    #[instrument(level = "debug")]
     pub fn builder() -> PageantrySiteRecordBuilder {
         PageantrySiteRecordBuilder::default()
     }

@@ -33,6 +33,7 @@ struct Items {
 }
 
 impl Parse for Items {
+    #[instrument(level = "trace", skip(input))]
     fn parse(input: ParseStream) -> verus_syn::parse::Result<Items> {
         let mut items = Vec::new();
         while !input.is_empty() {
@@ -57,6 +58,7 @@ pub(super) struct VerusBlock {
 }
 
 impl VerusBlock {
+    #[instrument(level = "debug", skip(self))]
     pub(super) fn into_parts(self) -> (PathBuf, String, bool, Vec<verus_syn::Item>) {
         (self.file, self.module_path, self.cfg_test, self.items)
     }
@@ -101,7 +103,7 @@ pub(super) fn collect_verus_blocks(
 /// source string -- the shared core `collect_verus_blocks` uses per
 /// file, and a direct entry point for testing against one file's
 /// content without needing a real crate tree on disk.
-#[instrument(level = "debug", skip(source), fields(file = %file.display()))]
+#[instrument(level = "debug", skip(source, file))]
 pub(super) fn blocks_in_source(source: &str, file: &Path, module_path: &str) -> Vec<VerusBlock> {
     let Ok(syntax) = syn::parse_file(source) else {
         return Vec::new();

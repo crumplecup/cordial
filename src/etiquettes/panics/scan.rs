@@ -201,7 +201,7 @@ fn verus_ir_findings(
 }
 
 #[cfg(feature = "verus_ir")]
-#[instrument(level = "trace", ret)]
+#[instrument(level = "debug", skip(kind))]
 fn verus_panic_kind(kind: crate::verus_ir::VerusPanicKind) -> PanicKind {
     match kind {
         crate::verus_ir::VerusPanicKind::Panic => PanicKind::Panic,
@@ -655,7 +655,7 @@ pub(super) fn has_cfg_not_flag(attrs: &[syn::Attribute], flag: &str) -> bool {
 }
 
 /// Cheap prefilter so every string literal is not run through `syn`.
-#[instrument(level = "trace", ret)]
+#[instrument(level = "debug", skip(source))]
 fn looks_like_embedded_panic_source(source: &str) -> bool {
     source.contains("panic!")
         || source.contains("unreachable!")

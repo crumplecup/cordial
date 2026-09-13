@@ -139,6 +139,7 @@ pub struct PanicFinding {
 
 impl PanicFinding {
     /// Start a builder for this finding.
+    #[instrument(level = "debug")]
     pub fn builder() -> PanicFindingBuilder {
         PanicFindingBuilder::default()
     }
@@ -191,6 +192,7 @@ pub struct PanicSiteRecord {
 
 impl PanicSiteRecord {
     /// Start a builder for this scan row.
+    #[instrument(level = "debug")]
     pub fn builder() -> PanicSiteRecordBuilder {
         PanicSiteRecordBuilder::default()
     }

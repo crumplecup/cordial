@@ -12,6 +12,7 @@ use super::types::{
     DependencySourceKind, DependencySurveyRecord, DependencySurveyRecordInput, ManifestVersionSpec,
 };
 
+use tracing::instrument;
 type LockfileIndex = BTreeMap<String, Vec<String>>;
 type FreshnessIndex = BTreeMap<String, Vec<String>>;
 
@@ -30,6 +31,7 @@ struct DependencyEntry {
 }
 
 /// Survey one crate and join Cargo registry freshness facts.
+#[instrument(level = "debug")]
 pub(crate) fn survey_crate_dependency_freshness(
     project_root: &Path,
     crate_root: &Path,
@@ -71,12 +73,14 @@ pub(crate) fn survey_crate_dependency_freshness(
 }
 
 /// Path of the optional deterministic freshness override.
+#[instrument(level = "debug")]
 fn dependency_freshness_cache_path(store_root: &Path) -> PathBuf {
     store_root
         .join("cache")
         .join(DEPENDENCY_FRESHNESS_CACHE_FILE)
 }
 
+#[instrument(level = "debug")]
 fn workspace_dependencies(project_root: &Path) -> CordialResult<BTreeMap<String, DependencyEntry>> {
     let manifest_path = project_root.join("Cargo.toml");
     if !manifest_path.is_file() {
@@ -105,6 +109,7 @@ fn workspace_dependencies(project_root: &Path) -> CordialResult<BTreeMap<String,
         .collect())
 }
 
+#[instrument(level = "debug", skip(manifest, table, workspace_dependencies))]
 fn dependency_entries(
     manifest: &str,
     table: &toml::Table,
@@ -144,6 +149,10 @@ fn dependency_entries(
     entries
 }
 
+#[instrument(
+    level = "debug",
+    skip(manifest, table, section, workspace_dependencies, entries)
+)]
 fn collect_root_dependency_table(
     manifest: &str,
     table: &toml::Table,
@@ -162,6 +171,10 @@ fn collect_root_dependency_table(
     }
 }
 
+#[instrument(
+    level = "debug",
+    skip(manifest, table, workspace_dependencies, entries)
+)]
 fn collect_target_dependency_tables(
     manifest: &str,
     table: &toml::Table,
@@ -202,6 +215,10 @@ fn collect_target_dependency_tables(
     }
 }
 
+#[instrument(
+    level = "debug",
+    skip(manifest, target_table, section, workspace_dependencies, entries)
+)]
 fn collect_target_dependency_table(
     manifest: &str,
     target_table: &toml::map::Map<String, toml::Value>,
@@ -224,6 +241,10 @@ fn collect_target_dependency_table(
     ));
 }
 
+#[instrument(
+    level = "debug",
+    skip(manifest, section, dependencies, workspace_dependencies)
+)]
 fn parse_dependency_table(
     manifest: &str,
     section: DependencySection,
@@ -244,6 +265,10 @@ fn parse_dependency_table(
         .collect()
 }
 
+#[instrument(
+    level = "debug",
+    skip(manifest, section, declaration, workspace_dependencies)
+)]
 fn parse_dependency_entry(
     manifest: &str,
     section: DependencySection,
@@ -315,6 +340,7 @@ fn parse_dependency_entry(
     }
 }
 
+#[instrument(level = "debug", skip(workspace_dependencies))]
 fn workspace_bypass_indicators(
     workspace_dependencies: &BTreeMap<String, DependencyEntry>,
     dependency_name: &str,
@@ -327,6 +353,7 @@ fn workspace_bypass_indicators(
     }
 }
 
+#[instrument(level = "debug", skip(table))]
 fn source_kind(
     table: &toml::map::Map<String, toml::Value>,
     workspace_inherited: bool,
@@ -344,6 +371,7 @@ fn source_kind(
     }
 }
 
+#[instrument(level = "debug")]
 fn lockfile_index(project_root: &Path) -> CordialResult<LockfileIndex> {
     let lockfile_path = project_root.join("Cargo.lock");
     if !lockfile_path.is_file() {
@@ -376,6 +404,7 @@ fn lockfile_index(project_root: &Path) -> CordialResult<LockfileIndex> {
     Ok(out)
 }
 
+#[instrument(level = "debug", skip(entry, lockfile_index))]
 fn locked_versions_for_entry(
     entry: &DependencyEntry,
     lockfile_index: &LockfileIndex,
@@ -406,6 +435,7 @@ fn locked_versions_for_entry(
     }
 }
 
+#[instrument(level = "debug", skip(version_spec))]
 fn version_requirement(version_spec: &ManifestVersionSpec) -> Option<&str> {
     match version_spec {
         ManifestVersionSpec::Requirement(requirement)
@@ -414,6 +444,7 @@ fn version_requirement(version_spec: &ManifestVersionSpec) -> Option<&str> {
     }
 }
 
+#[instrument(level = "debug")]
 fn freshness_cache_index(store_root: &Path) -> CordialResult<FreshnessIndex> {
     let path = dependency_freshness_cache_path(store_root);
     if !path.is_file() {
@@ -436,6 +467,7 @@ fn freshness_cache_index(store_root: &Path) -> CordialResult<FreshnessIndex> {
     Ok(out)
 }
 
+#[instrument(level = "debug")]
 fn freshness_index(
     project_root: &Path,
     store_root: Option<&Path>,
@@ -449,6 +481,7 @@ fn freshness_index(
     cargo_update_dry_run_freshness_index(project_root)
 }
 
+#[instrument(level = "debug")]
 fn cargo_update_dry_run_freshness_index(project_root: &Path) -> CordialResult<FreshnessIndex> {
     let output = Command::new("cargo")
         .current_dir(project_root)
@@ -472,6 +505,7 @@ fn cargo_update_dry_run_freshness_index(project_root: &Path) -> CordialResult<Fr
     Ok(parse_cargo_update_dry_run_freshness(&text))
 }
 
+#[instrument(level = "debug")]
 fn parse_cargo_update_dry_run_freshness(output: &str) -> FreshnessIndex {
     let mut out: FreshnessIndex = BTreeMap::new();
     for line in output.lines() {
@@ -487,11 +521,13 @@ fn parse_cargo_update_dry_run_freshness(output: &str) -> FreshnessIndex {
     out
 }
 
+#[instrument(level = "debug")]
 fn parse_cargo_update_line(line: &str) -> Option<(String, String)> {
     let trimmed = line.trim();
     parse_cargo_updating_line(trimmed).or_else(|| parse_cargo_unchanged_line(trimmed))
 }
 
+#[instrument(level = "debug")]
 fn parse_cargo_updating_line(line: &str) -> Option<(String, String)> {
     let rest = line.strip_prefix("Updating ")?;
     let (left, right) = rest.split_once(" -> ")?;
@@ -500,6 +536,7 @@ fn parse_cargo_updating_line(line: &str) -> Option<(String, String)> {
     Some((name.to_string(), version.to_string()))
 }
 
+#[instrument(level = "debug")]
 fn parse_cargo_unchanged_line(line: &str) -> Option<(String, String)> {
     let rest = line.strip_prefix("Unchanged ")?;
     let (left, right) = rest.split_once(" (available: ")?;
@@ -508,6 +545,7 @@ fn parse_cargo_unchanged_line(line: &str) -> Option<(String, String)> {
     Some((name.to_string(), version.to_string()))
 }
 
+#[instrument(level = "debug", skip(record, freshness))]
 fn add_freshness_observations(record: &mut DependencySurveyRecord, freshness: &FreshnessIndex) {
     if !record_can_have_freshness_observations(record) {
         return;
@@ -528,6 +566,7 @@ fn add_freshness_observations(record: &mut DependencySurveyRecord, freshness: &F
     }
 }
 
+#[instrument(level = "debug", skip(record))]
 fn record_can_have_freshness_observations(record: &DependencySurveyRecord) -> bool {
     matches!(
         record.source_kind(),
@@ -547,12 +586,14 @@ struct DependencyFreshnessCachePackage {
     available_version: String,
 }
 
+#[instrument(level = "debug", skip(path))]
 fn parse_table(content: &str, path: &Path) -> CordialResult<toml::Table> {
     toml::from_str(content).map_err(|error| {
         CordialError::invariant(format!("failed to parse {}: {error}", path.display()))
     })
 }
 
+#[instrument(level = "debug", skip(manifest, section))]
 fn dependency_line(
     manifest: &str,
     section: &DependencySection,
@@ -583,6 +624,7 @@ fn dependency_line(
         .map(|(index, _)| (index + 1) as u32)
 }
 
+#[instrument(level = "debug", skip(section))]
 fn section_headers(section: &DependencySection) -> Vec<String> {
     match section {
         DependencySection::Normal => vec!["[dependencies]".to_string()],
@@ -595,6 +637,7 @@ fn section_headers(section: &DependencySection) -> Vec<String> {
     }
 }
 
+#[instrument(level = "debug")]
 fn target_headers(target: &str, section: &str) -> Vec<String> {
     vec![
         format!("[target.'{target}'.{section}]"),

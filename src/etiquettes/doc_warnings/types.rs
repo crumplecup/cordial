@@ -107,6 +107,7 @@ pub struct DocWarningFinding {
 }
 
 impl DocWarningFinding {
+    #[instrument(level = "debug")]
     pub fn builder() -> DocWarningFindingBuilder {
         DocWarningFindingBuilder::default()
     }
@@ -160,6 +161,7 @@ pub struct DocWarningRecord {
 
 impl DocWarningRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> DocWarningRecordBuilder {
         DocWarningRecordBuilder::default()
     }

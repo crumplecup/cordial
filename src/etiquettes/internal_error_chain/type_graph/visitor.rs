@@ -77,6 +77,7 @@ pub(crate) struct RawTypeNode {
 
 impl RawTypeNode {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> RawTypeNodeBuilder {
         RawTypeNodeBuilder::default()
     }
@@ -91,7 +92,7 @@ struct TypeGraphScanVisitor {
 }
 
 impl TypeGraphScanVisitor {
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "debug", skip(self, probe_id))]
     fn push_node(
         &mut self,
         type_path: String,

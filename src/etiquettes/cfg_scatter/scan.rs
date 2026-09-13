@@ -376,7 +376,7 @@ impl<'ast> Visit<'ast> for CfgScatterVisitor {
 /// these are only recognized on a free function at the proc-macro
 /// crate's own root, so a `#[cfg(...)]`-gated one can never be
 /// consolidated into a `mod` the way an ordinary function can.
-#[instrument(level = "debug", skip(attrs))]
+#[instrument(level = "trace", skip(attrs), ret)]
 fn is_proc_macro_entry_point(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {
         attr.path().is_ident("proc_macro")

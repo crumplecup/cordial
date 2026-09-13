@@ -50,14 +50,17 @@ fn is_forbidden_instrument(node: &dyn NodeView) -> bool {
 pub struct MissingInstrumentQuery;
 
 impl Query for MissingInstrumentQuery {
+    #[instrument(level = "trace", skip(self))]
     fn node_kinds(&self) -> &[NodeKind] {
         &[NodeKind::Item(ItemKind::Fn)]
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn edge_kinds(&self) -> &[crate::ir::EdgeKind] {
         &[]
     }
 
+    #[instrument(level = "trace", skip(self, node))]
     fn matches_node(&self, node: &dyn NodeView) -> bool {
         is_inventory_fn(node)
             && !bool_attr(node, "instrumented")
@@ -124,14 +127,17 @@ impl MissingInstrumentProbe {
 }
 
 impl Probe for MissingInstrumentProbe {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn interests(&self) -> &dyn Query {
         &MISSING_INSTRUMENT_QUERY
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
         let ir = view.ir();
 

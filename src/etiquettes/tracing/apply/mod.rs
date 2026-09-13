@@ -54,6 +54,7 @@ pub struct InstrumentGap {
 
 impl InstrumentGap {
     /// Start a builder for this value.
+    #[tracing::instrument(level = "debug")]
     pub fn builder() -> InstrumentGapBuilder {
         InstrumentGapBuilder::default()
     }

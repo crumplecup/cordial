@@ -181,6 +181,7 @@ pub struct ProofPatternFinding {
 
 impl ProofPatternFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ProofPatternFindingBuilder {
         ProofPatternFindingBuilder::default()
     }
@@ -236,6 +237,7 @@ pub struct ProofPatternRecord {
 
 impl ProofPatternRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ProofPatternRecordBuilder {
         ProofPatternRecordBuilder::default()
     }

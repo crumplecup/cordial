@@ -76,6 +76,7 @@ impl FunctionRole {
 }
 
 impl Display for FunctionRole {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.write_str(self.as_str())
     }
@@ -117,6 +118,7 @@ impl FunctionComplexity {
 }
 
 impl Display for FunctionComplexity {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.write_str(self.as_str())
     }
@@ -155,6 +157,7 @@ impl InstrumentLevel {
 }
 
 impl Display for InstrumentLevel {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         f.write_str(self.as_str())
     }
@@ -193,6 +196,7 @@ pub struct FnContext {
 
 impl FnContext {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> FnContextBuilder {
         FnContextBuilder::default()
     }
@@ -214,6 +218,7 @@ pub struct InstrumentRecipe {
 
 impl InstrumentRecipe {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> InstrumentRecipeBuilder {
         InstrumentRecipeBuilder::default()
     }
@@ -264,6 +269,7 @@ impl InstrumentRecipe {
 }
 
 impl Display for FunctionKind {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Free => write!(f, "free"),

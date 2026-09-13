@@ -151,7 +151,7 @@ pub(super) fn type_is_location_capture(ty: &Type) -> bool {
     }
 }
 
-#[instrument(level = "debug", skip(ty))]
+#[instrument(level = "debug", skip(ty, strategy))]
 pub(super) fn static_ref_field_snippet(ty: &Type, strategy: StaticRefStrategy) -> String {
     if type_is_location_capture(ty) {
         "copy `file` and `line` from Location; do not store &'static Location".to_string()
@@ -215,7 +215,7 @@ fn type_is_str(ty: &Type) -> bool {
     }
 }
 
-#[instrument(level = "debug", skip(ty))]
+#[instrument(level = "debug", skip(ty, strategy))]
 fn static_str_field_snippet(ty: &Type, strategy: StaticRefStrategy) -> String {
     let found = static_ref_snippet(ty);
     let message = match strategy {
@@ -234,7 +234,7 @@ fn static_str_field_snippet(ty: &Type, strategy: StaticRefStrategy) -> String {
     truncate_snippet(&message, 128)
 }
 
-#[instrument(level = "debug", skip(ty))]
+#[instrument(level = "debug", skip(ty, strategy))]
 fn owned_static_ref_snippet(ty: &Type, strategy: StaticRefStrategy) -> String {
     let found = static_ref_snippet(ty);
     let message = match strategy {
@@ -368,7 +368,7 @@ fn is_unused_argument_ident(ident: &syn::Ident) -> bool {
 /// or `#[proc_macro]`. Same reasoning as skipping a foreign trait impl's
 /// signature -- the parameter list isn't this function's own to shrink --
 /// just enforced by the macro system instead of a trait declaration.
-#[instrument(level = "debug", skip(attrs), ret)]
+#[instrument(level = "trace", skip(attrs), ret)]
 pub(super) fn has_proc_macro_abi_attr(attrs: &[syn::Attribute]) -> bool {
     ["proc_macro_attribute", "proc_macro_derive", "proc_macro"]
         .iter()
@@ -386,7 +386,7 @@ pub(super) fn has_proc_macro_abi_attr(attrs: &[syn::Attribute]) -> bool {
 /// `#[logic(opaque)]` alone doesn't guarantee a `dead` body, and a
 /// function that merely happens to reference an identifier named `dead`
 /// without the attribute isn't this pattern.
-#[instrument(level = "debug", skip(attrs, block), ret)]
+#[instrument(level = "trace", skip(attrs, block))]
 pub(super) fn is_creusot_opaque_logic_stub(attrs: &[syn::Attribute], block: &syn::Block) -> bool {
     let has_logic_opaque = attrs.iter().any(|attr| {
         let syn::Meta::List(list) = &attr.meta else {

@@ -37,10 +37,12 @@ impl ShadowPairCsvReporter {
 }
 
 impl Reporter for ShadowPairCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 
@@ -99,10 +101,12 @@ impl ShadowGapsCsvReporter {
 }
 
 impl Reporter for ShadowGapsCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 
@@ -163,10 +167,12 @@ impl ShadowCsvReporter {
 }
 
 impl Reporter for ShadowCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 

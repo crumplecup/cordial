@@ -61,6 +61,7 @@ pub struct CliLayoutRecord {
 
 impl CliLayoutRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> CliLayoutRecordBuilder {
         CliLayoutRecordBuilder::default()
     }
@@ -129,6 +130,7 @@ pub struct CliLayoutFinding {
 }
 
 impl CliLayoutFinding {
+    #[instrument(level = "debug")]
     pub fn builder() -> CliLayoutFindingBuilder {
         CliLayoutFindingBuilder::default()
     }

@@ -105,6 +105,7 @@ pub struct VerusWarningFinding {
 }
 
 impl VerusWarningFinding {
+    #[instrument(level = "debug")]
     pub fn builder() -> VerusWarningFindingBuilder {
         VerusWarningFindingBuilder::default()
     }
@@ -158,6 +159,7 @@ pub struct VerusWarningRecord {
 
 impl VerusWarningRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> VerusWarningRecordBuilder {
         VerusWarningRecordBuilder::default()
     }

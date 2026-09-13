@@ -56,7 +56,7 @@ pub fn recipe(ctx: &FnContext, extra_skip: &[String]) -> CordialResult<Instrumen
     }
 }
 
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(level, err))]
 fn make_recipe(
     level: InstrumentLevel,
     skip: Vec<String>,

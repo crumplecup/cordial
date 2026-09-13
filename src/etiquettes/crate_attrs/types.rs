@@ -116,6 +116,7 @@ pub struct CrateAttrsFinding {
 }
 
 impl CrateAttrsFinding {
+    #[instrument(level = "debug")]
     pub fn builder() -> CrateAttrsFindingBuilder {
         CrateAttrsFindingBuilder::default()
     }
@@ -169,6 +170,7 @@ pub struct CrateAttrsSiteRecord {
 
 impl CrateAttrsSiteRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> CrateAttrsSiteRecordBuilder {
         CrateAttrsSiteRecordBuilder::default()
     }

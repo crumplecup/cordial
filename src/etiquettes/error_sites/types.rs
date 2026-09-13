@@ -93,6 +93,7 @@ impl ErrorSiteKind {
 }
 
 impl Display for ErrorSiteKind {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::QuestionMark => write!(f, "ERROR-SITE-QUESTION-MARK"),
@@ -205,6 +206,7 @@ pub struct ErrorSiteFinding {
 
 impl ErrorSiteFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ErrorSiteFindingBuilder {
         ErrorSiteFindingBuilder::default()
     }
@@ -258,6 +260,7 @@ pub struct ErrorSiteRecord {
 
 impl ErrorSiteRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ErrorSiteRecordBuilder {
         ErrorSiteRecordBuilder::default()
     }
@@ -287,6 +290,7 @@ pub struct ErrorSiteScanRow {
 
 impl ErrorSiteScanRow {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ErrorSiteScanRowBuilder {
         ErrorSiteScanRowBuilder::default()
     }

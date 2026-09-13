@@ -29,18 +29,21 @@ impl JsonSource {
 
 impl From<serde_json::Error> for JsonSource {
     #[track_caller]
+    #[instrument(level = "debug", skip(source))]
     fn from(source: serde_json::Error) -> Self {
         Self::new(source)
     }
 }
 
 impl Display for JsonSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(formatter, "JSON error: {}", self.source)
     }
 }
 
 impl std::error::Error for JsonSource {
+    #[instrument(level = "trace", skip(self))]
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.source)
     }
@@ -72,12 +75,14 @@ impl JsonParseSource {
 }
 
 impl Display for JsonParseSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(formatter, "JSON error in {}: {}", self.path, self.source)
     }
 }
 
 impl std::error::Error for JsonParseSource {
+    #[instrument(level = "trace", skip(self))]
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.source)
     }
@@ -107,18 +112,21 @@ impl ConfigSource {
 
 impl From<config::ConfigError> for ConfigSource {
     #[track_caller]
+    #[instrument(level = "debug", skip(source))]
     fn from(source: config::ConfigError) -> Self {
         Self::new(source)
     }
 }
 
 impl Display for ConfigSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(formatter, "config error: {}", self.source)
     }
 }
 
 impl std::error::Error for ConfigSource {
+    #[instrument(level = "trace", skip(self))]
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.source)
     }
@@ -150,6 +158,7 @@ impl SynParseSource {
 }
 
 impl Display for SynParseSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(
             formatter,

@@ -56,7 +56,7 @@ impl PathInclusionFacts {
     /// `needed_dep`, if any -- excluding whichever crate natively owns
     /// `owning_crate_root` (splicing a file into the crate that already
     /// natively contains it isn't a real conflict).
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self, file))]
     pub fn blocking_consumer(
         &self,
         file: &Path,
@@ -84,7 +84,7 @@ impl PathInclusionFacts {
     /// Every crate that splices `file` in via `#[path]`, excluding
     /// whichever crate natively owns it -- the set of *other*
     /// compilation units this file's real content also compiles under.
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self, file))]
     pub fn splice_consumers(&self, file: &Path, owning_crate_root: &Path) -> Vec<&str> {
         let file = canonical_or(file);
         let owning_name = self
@@ -284,7 +284,7 @@ fn normalize(name: &str) -> String {
     name.replace('-', "_")
 }
 
-#[instrument(level = "trace")]
+#[instrument(level = "debug", skip(path))]
 fn canonical_or(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }

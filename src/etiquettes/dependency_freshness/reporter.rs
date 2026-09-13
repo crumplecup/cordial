@@ -26,6 +26,7 @@ struct DependencyFreshnessSurveyRow {
 }
 
 impl DependencyFreshnessSurveyRow {
+    #[instrument(level = "debug", skip(node))]
     fn from_node(node: crate::ir::NodeRef<'_>) -> Self {
         let field = |key: &str| {
             node.attr(key)

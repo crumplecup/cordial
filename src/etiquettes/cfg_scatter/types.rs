@@ -28,6 +28,7 @@ impl CfgScatterRuleId {
 }
 
 impl Display for CfgScatterRuleId {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}", self.as_str())
     }
@@ -131,6 +132,7 @@ pub struct CfgSiteOccurrence {
 
 impl CfgSiteOccurrence {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> CfgSiteOccurrenceBuilder {
         CfgSiteOccurrenceBuilder::default()
     }
@@ -240,6 +242,7 @@ pub struct CfgScatterFinding {
 
 impl CfgScatterFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> CfgScatterFindingBuilder {
         CfgScatterFindingBuilder::default()
     }
@@ -287,6 +290,7 @@ pub struct CfgScatterRecord {
 
 impl CfgScatterRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> CfgScatterRecordBuilder {
         CfgScatterRecordBuilder::default()
     }

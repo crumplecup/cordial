@@ -80,10 +80,12 @@ impl ImplCoverageCsvReporter {
 }
 
 impl Reporter for ImplCoverageCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 
@@ -120,10 +122,12 @@ impl ImplGapsCsvReporter {
 }
 
 impl Reporter for ImplGapsCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 

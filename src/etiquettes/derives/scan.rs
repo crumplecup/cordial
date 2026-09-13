@@ -21,7 +21,7 @@ use super::types::{DeriveRuleId, DeriveSiteRecord};
 
 use tracing::instrument;
 
-#[instrument(level = "debug", skip(path_inclusions), err(level = "warn"))]
+#[instrument(level = "debug", skip(thresholds, path_inclusions))]
 pub fn scan_source_tree(
     src_root: &Path,
     crate_root: &Path,
@@ -63,11 +63,7 @@ pub fn scan_source_tree(
     Ok(findings)
 }
 
-#[instrument(
-    level = "debug",
-    skip(source, file, path_inclusions),
-    err(level = "warn")
-)]
+#[instrument(level = "debug", skip(source, file, thresholds, path_inclusions))]
 /// Scan one Rust source file and return records.
 pub fn scan_rust_source(
     source: &str,
@@ -728,7 +724,7 @@ impl DeriveScanVisitor<'_> {
         ));
     }
 
-    #[instrument(level = "debug", skip(self, method))]
+    #[instrument(level = "trace", skip(self, method))]
     fn is_error_constructor(&self, self_ty: &str, method: &syn::ImplItemFn) -> bool {
         self.error_types.contains(self_ty) || has_track_caller(&method.attrs)
     }

@@ -36,7 +36,7 @@ impl BoundaryRuleId {
     }
 
     /// Whether `id` is a binary-error-boundary rule (`TRACING-BOUNDARY-*`).
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace", ret)]
     pub fn is_boundary_rule(id: &str) -> bool {
         id.starts_with("TRACING-BOUNDARY-")
     }
@@ -125,6 +125,7 @@ pub struct BoundaryFinding {
 
 impl BoundaryFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> BoundaryFindingBuilder {
         BoundaryFindingBuilder::default()
     }
@@ -179,6 +180,7 @@ pub struct BoundarySiteRecord {
 
 impl BoundarySiteRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> BoundarySiteRecordBuilder {
         BoundarySiteRecordBuilder::default()
     }

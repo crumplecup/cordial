@@ -53,7 +53,7 @@ pub fn scan_crate_cfg_hygiene(
     Ok(records)
 }
 
-#[instrument(level = "debug", skip(occurrence))]
+#[instrument(level = "debug", skip(occurrence, rule_id))]
 fn record_for(
     occurrence: &CfgNameOccurrence,
     rule_id: CfgHygieneRuleId,

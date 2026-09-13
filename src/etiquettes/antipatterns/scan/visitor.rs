@@ -41,7 +41,10 @@ pub(super) struct AntipatternScanVisitor<'a> {
 }
 
 impl<'a> AntipatternScanVisitor<'a> {
-    #[instrument(level = "debug", skip(local_trait_names, const_placed_types))]
+    #[instrument(
+        level = "debug",
+        skip(file, local_trait_names, const_placed_types, static_ref_strategy)
+    )]
     pub(super) fn new(
         file: PathBuf,
         crate_root: PathBuf,
@@ -91,7 +94,7 @@ impl AntipatternScanVisitor<'_> {
         }
     }
 
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self, rule_id))]
     fn push_record(
         &mut self,
         rule_id: AntipatternRuleId,
@@ -115,6 +118,7 @@ impl AntipatternScanVisitor<'_> {
         }
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn rel_file(&self) -> PathBuf {
         self.file
             .strip_prefix(&self.crate_root)

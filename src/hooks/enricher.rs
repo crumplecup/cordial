@@ -3,6 +3,7 @@ use crate::ir::IrMut;
 use crate::loader::{LoadView, SourceLoader};
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Extends the IR with derived structure and attributes.
 ///
 /// Enrichers translate loader output into reusable graph facts. They should not
@@ -49,11 +50,13 @@ pub struct EnrichView<'a> {
 
 impl<'a> EnrichView<'a> {
     /// Consume the view into its hook inputs.
+    #[instrument(level = "debug", skip(self))]
     pub fn into_parts(self) -> (&'a mut dyn IrMut, &'a dyn LoadView, &'a dyn SessionView) {
         (self.ir, self.load, self.session)
     }
 
     /// Consume the view into its mutable IR input.
+    #[instrument(level = "debug", skip(self))]
     pub fn ir(self) -> &'a mut dyn IrMut {
         self.ir
     }

@@ -36,6 +36,7 @@ pub struct PartitionedErrorSiteRow {
 
 impl PartitionedErrorSiteRow {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> PartitionedErrorSiteRowBuilder {
         PartitionedErrorSiteRowBuilder::default()
     }

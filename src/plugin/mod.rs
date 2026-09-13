@@ -108,18 +108,22 @@ impl EtiquettePlugin {
 }
 
 impl Plugin for EtiquettePlugin {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.0.id()
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn name(&self) -> &str {
         self.0.name()
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn etiquettes(&self) -> &[&'static dyn Etiquette] {
         std::slice::from_ref(&self.0)
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> PluginCategory {
         PluginCategory::Quality
     }
@@ -159,6 +163,7 @@ impl StaticPlugin {
     }
 
     /// Build a plugin definition from runtime-owned metadata.
+    #[instrument(level = "debug", skip(id, name, category, etiquettes))]
     pub fn owned(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -256,6 +261,7 @@ impl<I: Copy + 'static> StrategicPlugin<I> {
     }
 
     /// Build a strategic plugin definition from runtime-owned metadata.
+    #[instrument(level = "debug", skip(id, name, category, indicator, portfolios))]
     pub fn owned(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -273,6 +279,7 @@ impl<I: Copy + 'static> StrategicPlugin<I> {
     }
 
     /// Available portfolios for this plugin.
+    #[instrument(level = "trace", skip(self))]
     pub fn portfolios(&self) -> &[StrategicPortfolio<I>] {
         self.as_ref()
     }
@@ -284,10 +291,12 @@ where
 {
     type Indicator = I;
 
+    #[instrument(level = "trace", skip(self))]
     fn indicator(&self) -> Self::Indicator {
         self.indicator
     }
 
+    #[instrument(level = "trace", skip(self, target))]
     fn accepts(&self, target: &StrategicPortfolio<I>) -> bool {
         target.indicator == self.indicator
     }

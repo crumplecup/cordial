@@ -28,10 +28,12 @@ impl VersionInMemberCsvReporter {
 }
 
 impl Reporter for VersionInMemberCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 
@@ -67,10 +69,12 @@ impl VersionInMemberChecklistReporter {
 }
 
 impl Reporter for VersionInMemberChecklistReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
         let ir = view.ir();

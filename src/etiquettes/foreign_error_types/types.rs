@@ -53,6 +53,7 @@ pub struct ForeignErrorTypeRecord {
 
 impl ForeignErrorTypeRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ForeignErrorTypeRecordBuilder {
         ForeignErrorTypeRecordBuilder::default()
     }
@@ -143,14 +144,17 @@ pub struct ForeignErrorTypeRule {
 }
 
 impl Rule for ForeignErrorTypeRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         &self.rule_id
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "foreign_error_types"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Inferred std or third-party error type at a foreign error boundary"
     }
@@ -233,6 +237,7 @@ pub struct ForeignErrorTypeFinding {
 
 impl ForeignErrorTypeFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ForeignErrorTypeFindingBuilder {
         ForeignErrorTypeFindingBuilder::default()
     }

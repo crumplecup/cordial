@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::InternalErrorComplianceId;
 
+use tracing::instrument;
 /// One non-compliant error-handling site.
 #[derive(
     Debug,
@@ -39,10 +40,12 @@ pub struct InternalErrorComplianceFinding {
 
 impl InternalErrorComplianceFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> InternalErrorComplianceFindingBuilder {
         InternalErrorComplianceFindingBuilder::default()
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub(crate) fn strip_file_prefix(&mut self, root: &std::path::Path) {
         if let Ok(rel) = self.file.strip_prefix(root) {
             self.file = rel.to_path_buf();

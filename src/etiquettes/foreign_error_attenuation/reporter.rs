@@ -180,10 +180,12 @@ impl ForeignErrorAttenuationCsvReporter {
 }
 
 impl Reporter for ForeignErrorAttenuationCsvReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 
@@ -227,10 +229,12 @@ impl ForeignErrorAttenuationChecklistReporter {
 }
 
 impl Reporter for ForeignErrorAttenuationChecklistReporter {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
+    #[instrument(level = "trace", skip(self, view))]
     fn render(&self, view: RenderView<'_>) -> CordialResult<Vec<Box<dyn Artifact>>> {
         let findings = view.findings();
 

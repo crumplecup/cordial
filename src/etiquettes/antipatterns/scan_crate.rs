@@ -24,7 +24,7 @@ pub fn scan_crate_antipatterns(
 }
 
 /// Scan one crate for antipatterns using a static-reference remediation strategy.
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(static_ref_strategy))]
 pub fn scan_crate_antipatterns_with_static_ref_strategy(
     crate_root: &Path,
     crate_name: &str,

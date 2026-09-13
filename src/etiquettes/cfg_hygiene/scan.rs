@@ -42,6 +42,7 @@ pub struct CfgNameOccurrence {
 }
 
 impl CfgNameOccurrence {
+    #[instrument(level = "debug")]
     pub fn builder() -> CfgNameOccurrenceBuilder {
         CfgNameOccurrenceBuilder::default()
     }
@@ -96,7 +97,7 @@ impl CfgNameVisitor {
         }
     }
 
-    #[instrument(level = "debug", skip(self, body))]
+    #[instrument(level = "trace", skip(self, body))]
     fn with_item<T>(&mut self, label: String, body: impl FnOnce(&mut Self) -> T) -> T {
         self.item_stack.push(label);
         let result = body(self);

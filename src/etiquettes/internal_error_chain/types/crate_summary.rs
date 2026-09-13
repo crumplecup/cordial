@@ -1,3 +1,4 @@
+use tracing::instrument;
 /// Per-crate rollup row.
 #[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
@@ -21,6 +22,7 @@ pub struct InternalErrorChainCrateSummary {
 
 impl InternalErrorChainCrateSummary {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> InternalErrorChainCrateSummaryBuilder {
         InternalErrorChainCrateSummaryBuilder::default()
     }

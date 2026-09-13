@@ -45,6 +45,7 @@ pub struct FunctionRecord {
 
 impl FunctionRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> FunctionRecordBuilder {
         FunctionRecordBuilder::default()
     }
@@ -192,6 +193,7 @@ pub struct TracingFinding {
 
 impl TracingFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> TracingFindingBuilder {
         TracingFindingBuilder::default()
     }

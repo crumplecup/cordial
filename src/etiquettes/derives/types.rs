@@ -136,6 +136,7 @@ pub struct DeriveFinding {
 
 impl DeriveFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> DeriveFindingBuilder {
         DeriveFindingBuilder::default()
     }
@@ -197,6 +198,7 @@ pub struct DeriveSiteRecord {
 
 impl DeriveSiteRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> DeriveSiteRecordBuilder {
         DeriveSiteRecordBuilder::default()
     }

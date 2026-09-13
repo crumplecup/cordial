@@ -13,11 +13,13 @@ pub struct NodeAnchor(NodeId);
 
 impl NodeAnchor {
     /// Create an anchor for a graph node.
+    #[instrument(level = "debug", skip(node_id))]
     pub fn new(node_id: NodeId) -> Self {
         Self(node_id)
     }
 
     /// Graph node this anchor refers to.
+    #[instrument(level = "trace", skip(self))]
     pub fn node_id(&self) -> NodeId {
         self.0
     }

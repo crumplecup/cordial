@@ -108,18 +108,22 @@ pub struct CrateView<'a> {
 }
 
 impl IrView for CrateView<'_> {
+    #[instrument(level = "trace", skip(self))]
     fn crate_name(&self) -> &str {
         &self.crate_name
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn root(&self) -> CordialResult<NodeId> {
         Ok(self.workspace.require_crate(&self.crate_name)?.root())
     }
 
+    #[instrument(level = "trace", skip(self, id))]
     fn node(&self, id: NodeId) -> Option<crate::ir::NodeRef<'_>> {
         self.workspace.crate_ir(&self.crate_name)?.node(id)
     }
 
+    #[instrument(level = "trace", skip(self, query))]
     fn nodes_matching(&self, query: &dyn crate::ir::Query) -> Vec<crate::ir::NodeRef<'_>> {
         self.workspace
             .crate_ir(&self.crate_name)
@@ -127,6 +131,7 @@ impl IrView for CrateView<'_> {
             .unwrap_or_default()
     }
 
+    #[instrument(level = "trace", skip(self, id, kind))]
     fn parents(&self, id: NodeId, kind: EdgeKind) -> Vec<NodeId> {
         self.workspace
             .crate_ir(&self.crate_name)
@@ -134,6 +139,7 @@ impl IrView for CrateView<'_> {
             .unwrap_or_default()
     }
 
+    #[instrument(level = "trace", skip(self, id, kind))]
     fn children(&self, id: NodeId, kind: EdgeKind) -> Vec<NodeId> {
         self.workspace
             .crate_ir(&self.crate_name)
@@ -141,6 +147,7 @@ impl IrView for CrateView<'_> {
             .unwrap_or_default()
     }
 
+    #[instrument(level = "trace", skip(self, path))]
     fn node_by_path(&self, path: &str) -> Option<NodeId> {
         self.workspace
             .crate_ir(&self.crate_name)

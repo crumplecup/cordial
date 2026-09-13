@@ -7,6 +7,7 @@ use crate::objects::{
     Disposition, FileSpan, Finding, FindingSink, IrAnchor, Marker, Rule, SourceSpan,
 };
 
+use tracing::instrument;
 /// Cargo dependency section that declared a dependency.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum DependencySection {
@@ -27,6 +28,7 @@ pub enum DependencySection {
 }
 
 impl Display for DependencySection {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Normal => formatter.write_str("dependencies"),
@@ -56,6 +58,7 @@ pub enum DependencySourceKind {
 }
 
 impl Display for DependencySourceKind {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Registry => formatter.write_str("registry"),
@@ -79,6 +82,7 @@ pub enum ManifestVersionSpec {
 }
 
 impl Display for ManifestVersionSpec {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Requirement(requirement) => formatter.write_str(requirement),
@@ -160,6 +164,7 @@ impl DependencyUpdateKind {
 }
 
 impl Display for DependencyUpdateKind {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str(self.as_str())
     }
@@ -202,6 +207,7 @@ impl DependencyFreshnessRuleId {
     }
 
     /// Parse from the stable identifier string.
+    #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "DEPENDENCY-FRESHNESS-PATCH" => Some(Self::Patch),
@@ -218,6 +224,7 @@ impl DependencyFreshnessRuleId {
 }
 
 impl Display for DependencyFreshnessRuleId {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str(self.as_str())
     }
@@ -229,14 +236,17 @@ pub struct DependencyFreshnessRule {
 }
 
 impl Rule for DependencyFreshnessRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "dependency_freshness"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         match self.rule_id {
             DependencyFreshnessRuleId::Patch => {
@@ -273,18 +283,22 @@ pub struct DependencyFreshnessMarker {
 }
 
 impl Marker for DependencyFreshnessMarker {
+    #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         "dependency-freshness-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn label(&self) -> &str {
         "dependency-freshness-site"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn span(&self) -> Option<&dyn SourceSpan> {
         None
     }
@@ -310,24 +324,29 @@ pub struct DependencyFreshnessFinding {
 }
 
 impl DependencyFreshnessFinding {
+    #[instrument(level = "debug")]
     pub fn builder() -> DependencyFreshnessFindingBuilder {
         DependencyFreshnessFindingBuilder::default()
     }
 }
 
 impl Finding for DependencyFreshnessFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("crate", &self.crate_name);
         sink.field("rule_id", &self.rule.rule_id.as_str());
@@ -349,6 +368,7 @@ impl Finding for DependencyFreshnessFinding {
 ///
 /// Invalid semver inputs and non-newer versions return `None`; callers can
 /// decide whether to record those as registry-data errors.
+#[instrument(level = "debug")]
 pub fn classify_dependency_update(current: &str, available: &str) -> Option<DependencyUpdateKind> {
     let current = semver::Version::parse(current).ok()?;
     let available = semver::Version::parse(available).ok()?;
@@ -392,6 +412,7 @@ impl DependencyFreshnessObservation {
     /// Build an observation when `available_version` is newer than `locked_version`.
     ///
     /// Invalid semver inputs and non-newer versions return `None`.
+    #[instrument(level = "debug", skip(package_name, locked_version, available_version))]
     pub fn from_versions(
         package_name: impl Into<String>,
         locked_version: impl Into<String>,
@@ -450,6 +471,7 @@ impl DependencyFreshnessIndicator {
 }
 
 impl Display for DependencyFreshnessIndicator {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str(self.as_str())
     }
@@ -484,6 +506,7 @@ pub struct DependencySurveyRecord {
 
 impl DependencySurveyRecord {
     /// Construct a dependency survey record.
+    #[instrument(level = "debug", skip(input))]
     pub(crate) fn from_input(input: DependencySurveyRecordInput) -> Self {
         let mut indicators = indicators_for(&input.version_spec, &input.locked_versions);
         indicators.extend(input.indicators);
@@ -505,6 +528,7 @@ impl DependencySurveyRecord {
     }
 
     /// Attach one registry freshness observation to this dependency row.
+    #[instrument(level = "debug", skip(self, observation))]
     pub(crate) fn add_freshness_observation(
         &mut self,
         observation: DependencyFreshnessObservation,
@@ -518,11 +542,13 @@ impl DependencySurveyRecord {
     }
 
     /// `Cargo.lock` versions formatted for a flat artifact row.
+    #[instrument(level = "trace", skip(self))]
     pub fn locked_versions_display(&self) -> String {
         self.locked_versions.join("|")
     }
 
     /// Indicators formatted for a flat artifact row.
+    #[instrument(level = "trace", skip(self))]
     pub fn indicators_display(&self) -> String {
         self.indicators
             .iter()
@@ -532,6 +558,7 @@ impl DependencySurveyRecord {
     }
 
     /// Available versions formatted for a flat artifact row.
+    #[instrument(level = "trace", skip(self))]
     pub fn available_versions_display(&self) -> String {
         self.freshness_observations
             .iter()
@@ -542,6 +569,7 @@ impl DependencySurveyRecord {
     }
 
     /// Registry update kinds formatted for a flat artifact row.
+    #[instrument(level = "trace", skip(self))]
     pub fn update_kinds_display(&self) -> String {
         self.freshness_observations
             .iter()
@@ -551,6 +579,7 @@ impl DependencySurveyRecord {
     }
 
     /// Finding rule ids formatted for a flat artifact row.
+    #[instrument(level = "debug", skip(self))]
     pub fn freshness_rule_ids_display(&self) -> String {
         let mut rule_ids = self
             .freshness_observations
@@ -600,11 +629,13 @@ pub(crate) struct DependencySurveyRecordInput {
 
 impl DependencySurveyRecordInput {
     /// Start building a dependency survey record input.
+    #[instrument(level = "debug")]
     pub(crate) fn builder() -> DependencySurveyRecordInputBuilder {
         DependencySurveyRecordInputBuilder::default()
     }
 }
 
+#[instrument(level = "debug", skip(version_spec))]
 fn indicators_for(
     version_spec: &ManifestVersionSpec,
     locked_versions: &[String],
@@ -630,6 +661,7 @@ fn indicators_for(
     indicators
 }
 
+#[instrument(level = "debug", skip(indicators))]
 fn requirement_indicators(requirement: &str, indicators: &mut Vec<DependencyFreshnessIndicator>) {
     if requirement.trim_start().starts_with('=') {
         indicators.push(DependencyFreshnessIndicator::ManifestExactPin);

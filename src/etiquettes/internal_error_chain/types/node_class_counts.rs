@@ -15,7 +15,7 @@ pub struct InternalErrorNodeClassCounts {
 }
 
 impl InternalErrorNodeClassCounts {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self, node_class))]
     pub(super) fn record_node_class(&mut self, node_class: InternalErrorNodeClass) {
         match node_class {
             InternalErrorNodeClass::InternalLeaf => self.internal_leaf += 1,

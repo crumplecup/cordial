@@ -29,6 +29,7 @@ impl InvariantSource {
 }
 
 impl Display for InvariantSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(formatter, "invariant violated: {}", self.message)
     }
@@ -64,6 +65,7 @@ impl UnreachableSource {
 }
 
 impl Display for UnreachableSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(
             formatter,
@@ -111,6 +113,7 @@ impl From<derive_builder::UninitializedFieldError> for BuilderSource {
 }
 
 impl Display for BuilderSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(
             formatter,
@@ -150,6 +153,7 @@ impl UnknownEtiquetteSource {
 }
 
 impl Display for UnknownEtiquetteSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(formatter, "etiquette not registered: {}", self.id)
     }
@@ -188,6 +192,7 @@ impl From<cargo_metadata::Error> for CargoMetadataSource {
 }
 
 impl Display for CargoMetadataSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(formatter, "cargo metadata error: {}", self.source)
     }
@@ -223,6 +228,7 @@ impl NotFoundSource {
 }
 
 impl Display for NotFoundSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(formatter, "not found: {}", self.path.display())
     }
@@ -256,6 +262,7 @@ impl NoExceptionsSource {
 }
 
 impl Display for NoExceptionsSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(
             formatter,
@@ -328,6 +335,7 @@ impl MissingRustdocJsonSource {
 }
 
 impl Display for MissingRustdocJsonSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(
             formatter,
@@ -363,6 +371,7 @@ impl OpenFindingsSource {
 }
 
 impl Display for OpenFindingsSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(
             formatter,

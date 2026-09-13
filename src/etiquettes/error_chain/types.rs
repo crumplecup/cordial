@@ -124,6 +124,7 @@ pub struct ErrorChainFinding {
 
 impl ErrorChainFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ErrorChainFindingBuilder {
         ErrorChainFindingBuilder::default()
     }
@@ -183,6 +184,7 @@ pub struct ErrorChainRecord {
 
 impl ErrorChainRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ErrorChainRecordBuilder {
         ErrorChainRecordBuilder::default()
     }
@@ -204,7 +206,7 @@ pub struct ErrorChainProbeCounts {
 }
 
 impl ErrorChainProbeCounts {
-    #[instrument(level = "trace", skip(self))]
+    #[instrument(level = "debug", skip(self, probe_id))]
     fn record_probe(&mut self, probe_id: ErrorChainProbeId) {
         match probe_id {
             ErrorChainProbeId::WrapperSourceField001 => self.wrapper_source += 1,

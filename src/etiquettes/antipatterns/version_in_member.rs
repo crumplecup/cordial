@@ -410,6 +410,7 @@ fn find_dependency_line(content: &str, section_path: &str, dep_name: &str) -> Op
     find_line(content, dep_name)
 }
 
+#[instrument(level = "debug", skip(file))]
 fn version_record(
     context: String,
     file: PathBuf,
@@ -425,6 +426,7 @@ fn version_record(
         .build()
 }
 
+#[instrument(level = "debug")]
 fn parse_manifest_table(content: &str, manifest_path: &Path) -> CordialResult<toml::Table> {
     toml::from_str(content).map_err(|error| {
         CordialError::invariant(format!(

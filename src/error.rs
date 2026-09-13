@@ -182,6 +182,7 @@ impl CordialError {
 }
 
 impl Display for CordialError {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         self.kind.fmt(formatter)
     }

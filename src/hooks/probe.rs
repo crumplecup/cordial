@@ -3,6 +3,7 @@ use crate::ir::{IrView, Query};
 use crate::objects::Marker;
 use crate::session::SessionView;
 
+use tracing::instrument;
 /// Walks the IR and emits markers.
 ///
 /// Probes are observation producers. They should attach marker labels and
@@ -35,6 +36,7 @@ pub struct ProbeView<'a> {
 
 impl<'a> ProbeView<'a> {
     /// Consume the view into its hook inputs.
+    #[instrument(level = "debug", skip(self))]
     pub fn into_parts(self) -> (&'a dyn IrView, (), &'a dyn SessionView) {
         (self.ir, (), self.session)
     }

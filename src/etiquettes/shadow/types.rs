@@ -5,14 +5,17 @@ use tracing::instrument;
 pub struct ShadowRule;
 
 impl Rule for ShadowRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "SHADOW-MISSING-MIRROR"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "shadow"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Upstream item lacks a shadow mirror link"
     }
@@ -62,14 +65,17 @@ pub struct MissingMirrorFinding {
 pub struct ShadowPairRule;
 
 impl Rule for ShadowPairRule {
+    #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "SHADOW-PAIR"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
         "shadow-pair"
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
         "Cross-crate upstream ↔ shadow mirror coverage row"
     }
@@ -109,18 +115,22 @@ pub struct ShadowMethodChecklistFinding {
 }
 
 impl Finding for ShadowMethodChecklistFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         sink.field("target_crate", &self.target_crate);
         sink.field("shadow_crate", &self.shadow_crate);
@@ -144,18 +154,22 @@ pub struct CrossCrateShadowFinding {
 }
 
 impl Finding for CrossCrateShadowFinding {
+    #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn disposition(&self) -> Disposition {
         self.disposition
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn anchor(&self) -> &dyn IrAnchor {
         &self.anchor
     }
 
+    #[instrument(level = "trace", skip(self, sink))]
     fn emit(&self, sink: &mut dyn FindingSink) {
         let render = crate::shadow::render_shadow_row(&self.row);
         sink.field("target_crate", &self.target_crate);

@@ -266,7 +266,7 @@ fn classify_allow(parsed: &ParsedAllow, use_targets: &[String]) -> Option<AllowR
     Some(AllowRuleId::VerusReason001)
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "trace", skip(path), ret)]
 fn is_verus_import(path: &str) -> bool {
     path.split("::")
         .next()

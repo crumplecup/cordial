@@ -309,7 +309,7 @@ fn parse_arrow_span(line: &str) -> Option<(String, u32)> {
     Some((file, line_no))
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(file))]
 fn resolve_diagnostic_file(crate_root: &Path, file: &str) -> PathBuf {
     let path = PathBuf::from(file);
     if path.is_absolute() {
@@ -322,7 +322,7 @@ fn resolve_diagnostic_file(crate_root: &Path, file: &str) -> PathBuf {
     canonical_or_original(crate_root.join(path))
 }
 
-#[instrument(level = "trace")]
+#[instrument(level = "debug", skip(path))]
 fn canonical_or_original(path: PathBuf) -> PathBuf {
     std::fs::canonicalize(&path).unwrap_or(path)
 }

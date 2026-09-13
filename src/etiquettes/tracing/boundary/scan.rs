@@ -140,7 +140,7 @@ fn collect_tree(
     Ok(sites)
 }
 
-#[instrument(level = "debug", skip(source, known_helper_paths), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, file))]
 fn scan_file(
     source: &str,
     file: &Path,
@@ -167,7 +167,7 @@ fn scan_file(
     Ok(visitor.sites)
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(path))]
 fn file_kind(path: &Path, crate_root: &Path) -> FileKind {
     let relative = path.strip_prefix(crate_root).unwrap_or(path);
     let components: Vec<_> = relative

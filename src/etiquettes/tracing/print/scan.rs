@@ -126,7 +126,7 @@ impl PrintVisitor {
         }
     }
 
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "debug", skip(self, rule))]
     fn rule_enabled(&self, rule: PrintRuleId) -> bool {
         match rule {
             PrintRuleId::Println => self.policy.println(),

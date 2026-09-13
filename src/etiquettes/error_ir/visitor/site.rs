@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use tracing::instrument;
 /// Anchoring context shared by the chain and compliance layers: where a
 /// finding sits (module/fn path), and which file/crate it belongs to.
 /// Compiled only with those layers (`error_chain` / `internal_error_chain`).
@@ -16,6 +17,7 @@ pub struct SiteCtx {
 
 impl SiteCtx {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> SiteCtxBuilder {
         SiteCtxBuilder::default()
     }

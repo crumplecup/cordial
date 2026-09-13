@@ -61,6 +61,7 @@ pub(crate) struct PendingAct {
 }
 
 impl PendingAct {
+    #[instrument(level = "debug", skip(self))]
     pub(crate) fn into_parts(self) -> (String, PathBuf, u32, syn::Block) {
         (self.ident, self.file, self.line, self.block)
     }
@@ -87,6 +88,7 @@ pub(crate) struct LayoutCatalog {
 }
 
 impl LayoutCatalog {
+    #[instrument(level = "debug", fields(crate_name = crate_name))]
     pub(crate) fn new(crate_name: String) -> Self {
         Self {
             crate_name,
@@ -97,10 +99,12 @@ impl LayoutCatalog {
         }
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub(crate) fn acts_mut(&mut self) -> &mut BTreeMap<String, ActRec> {
         &mut self.acts
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub(crate) fn pending_acts_mut(&mut self) -> &mut Vec<PendingAct> {
         &mut self.pending_acts
     }

@@ -265,6 +265,7 @@ fn default_prefer_root() -> bool {
 }
 
 impl Default for VisibilityThresholds {
+    #[instrument(level = "debug")]
     fn default() -> Self {
         Self {
             max_crate_names_for_flat: default_max_crate_names_for_flat(),
@@ -412,6 +413,7 @@ fn default_hierarchy_min_lines() -> u32 {
 }
 
 impl Default for ModularityThresholds {
+    #[instrument(level = "debug")]
     fn default() -> Self {
         Self {
             file_inventory_min_lines: default_file_inventory_min_lines(),
@@ -434,7 +436,7 @@ impl Default for ModularityThresholds {
 
 impl ModularityThresholds {
     /// Return a copy with `module_size_ignore_lower_tail` set.
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace", skip(self))]
     pub fn with_module_size_ignore_lower_tail(self, ignore: bool) -> Self {
         Self {
             module_size_ignore_lower_tail: ignore,
@@ -443,7 +445,7 @@ impl ModularityThresholds {
     }
 
     /// Return a copy with `file_inventory_min_lines` set.
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace", skip(self))]
     pub fn with_file_inventory_min_lines(self, value: u32) -> Self {
         Self {
             file_inventory_min_lines: value,
@@ -452,7 +454,7 @@ impl ModularityThresholds {
     }
 
     /// Return a copy with `function_inventory_min_lines` set.
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace", skip(self))]
     pub fn with_function_inventory_min_lines(self, value: u32) -> Self {
         Self {
             function_inventory_min_lines: value,
@@ -461,7 +463,7 @@ impl ModularityThresholds {
     }
 
     /// Return a copy with `function_hotspot_min_lines` set.
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace", skip(self))]
     pub fn with_function_hotspot_min_lines(self, value: u32) -> Self {
         Self {
             function_hotspot_min_lines: value,
@@ -470,7 +472,7 @@ impl ModularityThresholds {
     }
 
     /// Return a copy with `file_checklist_min_lines` set.
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace", skip(self))]
     pub fn with_file_checklist_min_lines(self, value: u32) -> Self {
         Self {
             file_checklist_min_lines: value,
@@ -479,7 +481,7 @@ impl ModularityThresholds {
     }
 
     /// Return a copy with `function_checklist_min_lines` set.
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace", skip(self))]
     pub fn with_function_checklist_min_lines(self, value: u32) -> Self {
         Self {
             function_checklist_min_lines: value,
@@ -488,7 +490,7 @@ impl ModularityThresholds {
     }
 
     /// Return a copy with `max_types_per_file` set.
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace", skip(self))]
     pub fn with_max_types_per_file(self, value: u32) -> Self {
         Self {
             max_types_per_file: value,
@@ -497,7 +499,7 @@ impl ModularityThresholds {
     }
 
     /// Return a copy with `lopsided_min_percent` set.
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace", skip(self))]
     pub fn with_lopsided_min_percent(self, value: u32) -> Self {
         Self {
             lopsided_min_percent: value,
@@ -506,7 +508,7 @@ impl ModularityThresholds {
     }
 
     /// Return a copy with `hierarchy_min_lines` set.
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace", skip(self))]
     pub fn with_hierarchy_min_lines(self, value: u32) -> Self {
         Self {
             hierarchy_min_lines: value,
@@ -515,7 +517,7 @@ impl ModularityThresholds {
     }
 
     /// Return a copy with `generated_files` set.
-    #[instrument(level = "debug", skip(value))]
+    #[instrument(level = "trace", skip(self))]
     pub fn with_generated_files(self, value: Vec<String>) -> Self {
         Self {
             generated_files: value,
@@ -625,6 +627,7 @@ fn default_min_occurrences() -> usize {
 }
 
 impl Default for CfgScatterThresholds {
+    #[instrument(level = "debug")]
     fn default() -> Self {
         Self {
             min_distinct_kinds: default_min_distinct_kinds(),
@@ -714,13 +717,13 @@ impl Default for CrateAttrsThresholds {
 
 impl CrateAttrsThresholds {
     /// Whether this package is exempt from `forbid(unsafe_code)`.
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub fn skip_unsafe(&self, crate_name: &str) -> bool {
         !self.forbid_unsafe || self.allow_unsafe.iter().any(|name| name == crate_name)
     }
 
     /// Whether this package is exempt from `warn(missing_docs)`.
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub fn skip_missing_docs(&self, crate_name: &str) -> bool {
         !self.missing_docs
             || self
@@ -764,7 +767,7 @@ impl Default for DocWarningsThresholds {
 
 impl DocWarningsThresholds {
     /// Whether this package should not run `cargo doc`.
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub fn skip(&self, crate_name: &str) -> bool {
         self.skip_crates.iter().any(|name| name == crate_name)
     }
@@ -794,7 +797,7 @@ impl Default for CreusotDiagnosticsThresholds {
 
 impl CreusotDiagnosticsThresholds {
     /// Whether this package should not run `cargo creusot prove`.
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub fn skip(&self, crate_name: &str) -> bool {
         self.skip_crates.iter().any(|name| name == crate_name)
     }
@@ -917,6 +920,7 @@ fn default_min_fluent_setters() -> usize {
 }
 
 impl Default for DerivesThresholds {
+    #[instrument(level = "debug")]
     fn default() -> Self {
         Self {
             max_constructor_args: default_max_constructor_args(),
@@ -1114,7 +1118,7 @@ fn default_stdio_skip_folders() -> Vec<String> {
 
 impl TracingStdioPolicy {
     /// Whether `file` lives under a configured skip folder.
-    #[instrument(level = "debug", skip(self, file, crate_root), ret)]
+    #[instrument(level = "trace", skip(self, file))]
     pub fn skips_file(&self, file: &Path, crate_root: &Path) -> bool {
         let rel = file.strip_prefix(crate_root).unwrap_or(file);
         self.skip_folders.iter().any(|folder| {

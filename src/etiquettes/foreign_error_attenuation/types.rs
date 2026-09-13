@@ -23,6 +23,7 @@ pub enum ForeignErrorHandlingClass {
 }
 
 impl Display for ForeignErrorHandlingClass {
+    #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::ChainPreserved => write!(f, "ERROR-HANDLING-CHAIN-PRESERVED"),
@@ -86,6 +87,7 @@ pub struct ForeignErrorAttenuationRecord {
 
 impl ForeignErrorAttenuationRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ForeignErrorAttenuationRecordBuilder {
         ForeignErrorAttenuationRecordBuilder::default()
     }
@@ -164,6 +166,7 @@ pub struct ForeignErrorAttenuationTypeRow {
 
 impl ForeignErrorAttenuationTypeRow {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ForeignErrorAttenuationTypeRowBuilder {
         ForeignErrorAttenuationTypeRowBuilder::default()
     }
@@ -202,6 +205,7 @@ pub struct WorkspaceForeignErrorAttenuationSummary {
 
 impl WorkspaceForeignErrorAttenuationSummary {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> WorkspaceForeignErrorAttenuationSummaryBuilder {
         WorkspaceForeignErrorAttenuationSummaryBuilder::default()
     }
@@ -390,6 +394,7 @@ pub struct ForeignErrorAttenuationFinding {
 
 impl ForeignErrorAttenuationFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ForeignErrorAttenuationFindingBuilder {
         ForeignErrorAttenuationFindingBuilder::default()
     }

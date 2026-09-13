@@ -95,7 +95,7 @@ impl ModularityThresholds {
     /// folder-or-file idiom `[tracing.stdio] skip_folders` already uses,
     /// so one entry can name either a single generated file or a whole
     /// directory of them (e.g. a `derived_witness/` tree).
-    #[instrument(level = "debug", skip(self, file, crate_root), ret)]
+    #[instrument(level = "trace", skip(self, file))]
     pub fn is_generated_file(&self, file: &Path, crate_root: &Path) -> bool {
         let rel = file.strip_prefix(crate_root).unwrap_or(file);
         self.generated_files().iter().any(|entry| {
@@ -182,6 +182,7 @@ pub struct ModularityFinding {
 
 impl ModularityFinding {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ModularityFindingBuilder {
         ModularityFindingBuilder::default()
     }
@@ -245,6 +246,7 @@ pub struct ModularitySiteRecord {
 
 impl ModularitySiteRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> ModularitySiteRecordBuilder {
         ModularitySiteRecordBuilder::default()
     }

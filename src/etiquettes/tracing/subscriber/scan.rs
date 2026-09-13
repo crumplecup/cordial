@@ -148,7 +148,7 @@ fn trusted_helper_names(sites: &[FnSite]) -> Vec<String> {
     helper_names
 }
 
-#[instrument(level = "debug", skip(site), err(level = "warn"))]
+#[instrument(level = "debug", skip(rule_id, site))]
 fn record(
     rule_id: SubscriberRuleId,
     site: &FnSite,
@@ -198,7 +198,7 @@ fn collect_tree(
     Ok(sites)
 }
 
-#[instrument(level = "debug", skip(source, known_helper_paths), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, file))]
 fn scan_file(
     source: &str,
     file: &Path,
@@ -225,7 +225,7 @@ fn scan_file(
     Ok(visitor.sites)
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(path))]
 fn file_kind(path: &Path, crate_root: &Path) -> FileKind {
     let relative = path.strip_prefix(crate_root).unwrap_or(path);
     let components: Vec<_> = relative
@@ -282,7 +282,7 @@ impl SiteVisitor {
     }
 }
 
-#[instrument(level = "debug", skip(attrs))]
+#[instrument(level = "trace", skip(attrs), ret)]
 fn is_test_fn(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {
         attr.path()

@@ -71,7 +71,7 @@ impl ExceptionEntry {
     }
 
     /// Return a copy with `line` set.
-    #[instrument(level = "debug", skip(self), ret)]
+    #[instrument(level = "trace", skip(self))]
     pub fn with_line(self, line: u32) -> Self {
         Self {
             line: Some(line),
@@ -80,7 +80,7 @@ impl ExceptionEntry {
     }
 
     /// Return a copy with `rule_id` set.
-    #[instrument(level = "debug", skip(self, rule_id), ret)]
+    #[instrument(level = "trace", skip(self, rule_id))]
     pub fn with_rule_id(self, rule_id: impl Into<String>) -> Self {
         Self {
             rule_id: Some(rule_id.into()),
@@ -89,7 +89,7 @@ impl ExceptionEntry {
     }
 
     /// Return a copy with `context` set.
-    #[instrument(level = "debug", skip(self, context), ret)]
+    #[instrument(level = "trace", skip(self, context))]
     pub fn with_context(self, context: impl Into<String>) -> Self {
         Self {
             context: Some(context.into()),
@@ -269,7 +269,7 @@ impl AddExceptionOutcome {
 ///
 /// Creates the file when missing. An identical row is a no-op. Rows that
 /// already live in the elicit_doc alias are left there and not duplicated.
-#[instrument(level = "info", skip(store, entry), fields(crate_name = crate_name), err(level = "warn"))]
+#[instrument(level = "debug", skip(store, entry))]
 pub fn add_exception(
     store: &StoreLayout,
     etiquette_id: &str,
@@ -310,7 +310,7 @@ pub fn add_exception(
 /// Existing objects keep unknown fields (for example `verifiers`). An
 /// identical `path` in the canonical file or the `exceptions/` alias is a
 /// no-op.
-#[instrument(level = "info", skip(store, entry), err(level = "warn"))]
+#[instrument(level = "debug", skip(store, entry))]
 pub fn add_coverage_skip(
     store: &StoreLayout,
     patch_set: &str,
@@ -411,7 +411,7 @@ pub fn resolve_exceptions_root(project_root: &Path, root: &Path) -> PathBuf {
 /// Writes `exceptions/`, `quality/patches/`, and `patches/` (coverage skip
 /// lists). The last two keep elicit_doc's registry layout so a checkout like
 /// elicitation's `.elicit_doc-exceptions/` loads without renaming.
-#[instrument(level = "info", skip(store), err(level = "warn"))]
+#[instrument(level = "debug", skip(store))]
 pub fn backup_exception_files(store: &StoreLayout, backup_root: &Path) -> CordialResult<usize> {
     store.ensure_dirs()?;
     let backup_slug_root = backup_root.join(store.project_slug());
@@ -556,7 +556,7 @@ fn parse_json_array(path: &Path) -> CordialResult<Vec<serde_json::Value>> {
         .map_err(|err| CordialError::json_parse(path.display().to_string(), err))
 }
 
-#[instrument(level = "trace", skip(rows))]
+#[instrument(level = "debug", skip(rows, path))]
 fn json_rows_contain_path(rows: &[serde_json::Value], path: &str) -> bool {
     rows.iter().any(|row| {
         row.get("path")

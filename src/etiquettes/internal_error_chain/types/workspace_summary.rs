@@ -34,6 +34,7 @@ pub struct WorkspaceInternalErrorChainSummary {
 
 impl WorkspaceInternalErrorChainSummary {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> WorkspaceInternalErrorChainSummaryBuilder {
         WorkspaceInternalErrorChainSummaryBuilder::default()
     }

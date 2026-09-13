@@ -29,18 +29,21 @@ impl IoSource {
 
 impl From<std::io::Error> for IoSource {
     #[track_caller]
+    #[instrument(level = "debug", skip(source))]
     fn from(source: std::io::Error) -> Self {
         Self::new(source)
     }
 }
 
 impl Display for IoSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(formatter, "I/O error: {}", self.source)
     }
 }
 
 impl std::error::Error for IoSource {
+    #[instrument(level = "trace", skip(self))]
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.source)
     }
@@ -70,18 +73,21 @@ impl FmtSource {
 
 impl From<std::fmt::Error> for FmtSource {
     #[track_caller]
+    #[instrument(level = "debug", skip(source))]
     fn from(source: std::fmt::Error) -> Self {
         Self::new(source)
     }
 }
 
 impl Display for FmtSource {
+    #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         write!(formatter, "fmt error: {}", self.source)
     }
 }
 
 impl std::error::Error for FmtSource {
+    #[instrument(level = "trace", skip(self))]
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.source)
     }

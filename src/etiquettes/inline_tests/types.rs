@@ -113,6 +113,7 @@ pub struct InlineTestFinding {
 }
 
 impl InlineTestFinding {
+    #[instrument(level = "debug")]
     pub fn builder() -> InlineTestFindingBuilder {
         InlineTestFindingBuilder::default()
     }
@@ -160,6 +161,7 @@ pub struct InlineTestSiteRecord {
 }
 
 impl InlineTestSiteRecord {
+    #[instrument(level = "debug")]
     pub fn builder() -> InlineTestSiteRecordBuilder {
         InlineTestSiteRecordBuilder::default()
     }

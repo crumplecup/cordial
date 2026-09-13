@@ -40,7 +40,7 @@ pub struct DocFingerprint {
 
 impl BuildArtifact {
     /// Artifact for a workspace-member rustdoc build.
-    #[instrument(level = "debug", skip(crate_name))]
+    #[instrument(level = "debug", skip(crate_name, fingerprint))]
     pub fn workspace_member(
         crate_name: impl Into<String>,
         rustdoc_json: PathBuf,
@@ -61,7 +61,7 @@ impl BuildArtifact {
     }
 
     /// Artifact for a sysroot library rustdoc build.
-    #[instrument(level = "debug", skip(crate_name))]
+    #[instrument(level = "debug", skip(crate_name, fingerprint))]
     pub fn sysroot_library(
         crate_name: impl Into<String>,
         rustdoc_json: PathBuf,
@@ -82,7 +82,7 @@ impl BuildArtifact {
     }
 
     /// Artifact for a shadow-crate dependency rustdoc build.
-    #[instrument(level = "debug", skip(shadow_crate, upstream_crate))]
+    #[instrument(level = "debug", skip(shadow_crate, upstream_crate, fingerprint))]
     pub fn shadow_dep(
         shadow_crate: impl Into<String>,
         upstream_crate: impl Into<String>,

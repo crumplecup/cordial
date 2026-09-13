@@ -109,6 +109,7 @@ pub struct CreusotDiagnosticFinding {
 }
 
 impl CreusotDiagnosticFinding {
+    #[instrument(level = "debug")]
     pub fn builder() -> CreusotDiagnosticFindingBuilder {
         CreusotDiagnosticFindingBuilder::default()
     }
@@ -162,6 +163,7 @@ pub struct CreusotDiagnosticRecord {
 
 impl CreusotDiagnosticRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> CreusotDiagnosticRecordBuilder {
         CreusotDiagnosticRecordBuilder::default()
     }

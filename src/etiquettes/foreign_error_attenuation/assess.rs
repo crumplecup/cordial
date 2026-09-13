@@ -190,6 +190,7 @@ fn classify_foreign_site(
     )
 }
 
+#[instrument(level = "debug", skip(foreign, handling_class, resolution_id))]
 fn record_from_foreign(
     foreign: &ForeignErrorTypeRecord,
     handling_class: ForeignErrorHandlingClass,

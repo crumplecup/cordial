@@ -105,6 +105,7 @@ pub struct GlobImportFinding {
 }
 
 impl GlobImportFinding {
+    #[instrument(level = "debug")]
     pub fn builder() -> GlobImportFindingBuilder {
         GlobImportFindingBuilder::default()
     }
@@ -152,6 +153,7 @@ pub struct GlobImportSiteRecord {
 }
 
 impl GlobImportSiteRecord {
+    #[instrument(level = "debug")]
     pub fn builder() -> GlobImportSiteRecordBuilder {
         GlobImportSiteRecordBuilder::default()
     }

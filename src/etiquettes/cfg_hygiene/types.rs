@@ -125,6 +125,7 @@ pub struct CfgHygieneFinding {
 }
 
 impl CfgHygieneFinding {
+    #[instrument(level = "debug")]
     pub fn builder() -> CfgHygieneFindingBuilder {
         CfgHygieneFindingBuilder::default()
     }
@@ -183,6 +184,7 @@ pub struct CfgHygieneSiteRecord {
 
 impl CfgHygieneSiteRecord {
     /// Start a builder for this value.
+    #[instrument(level = "debug")]
     pub fn builder() -> CfgHygieneSiteRecordBuilder {
         CfgHygieneSiteRecordBuilder::default()
     }

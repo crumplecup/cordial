@@ -100,6 +100,7 @@ pub struct ErrorIrFileScan {
 }
 
 impl ErrorIrFileScan {
+    #[instrument(level = "trace", skip(self, type_graph_raw, error_impls))]
     #[cfg(feature = "internal_error_chain")]
     pub(super) fn with_type_graph(
         mut self,
@@ -111,6 +112,10 @@ impl ErrorIrFileScan {
         self
     }
 
+    #[instrument(
+        level = "debug",
+        skip(sites, chain, compliance, type_graph_raw, error_impls)
+    )]
     pub(super) fn from_parts(
         sites: Vec<ErrorSiteRecord>,
         #[cfg(feature = "error_chain")] chain: Vec<ErrorChainRecord>,

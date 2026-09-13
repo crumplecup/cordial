@@ -28,7 +28,7 @@ pub fn scan_crate_trees(crate_root: &Path) -> CordialResult<Vec<AntipatternSiteR
 }
 
 /// Scan every quality tree under `crate_root` using a static-reference strategy.
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(static_ref_strategy))]
 pub fn scan_crate_trees_with_static_ref_strategy(
     crate_root: &Path,
     static_ref_strategy: StaticRefStrategy,
@@ -86,7 +86,7 @@ pub fn scan_rust_source(
 }
 
 /// Scan one Rust source file and return records using a static-reference strategy.
-#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, file, static_ref_strategy))]
 pub fn scan_rust_source_with_static_ref_strategy(
     source: &str,
     file: &Path,
@@ -115,7 +115,13 @@ pub fn scan_rust_source_with_static_ref_strategy(
 
 #[instrument(
     level = "debug",
-    skip(syntax, local_trait_names, const_placed_types, file)
+    skip(
+        syntax,
+        file,
+        local_trait_names,
+        const_placed_types,
+        static_ref_strategy
+    )
 )]
 fn scan_parsed(
     syntax: syn::File,

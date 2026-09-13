@@ -38,6 +38,7 @@ pub struct MapFindingSink {
 
 impl MapFindingSink {
     /// Consume the sink into its collected named fields.
+    #[instrument(level = "debug", skip(self))]
     pub fn into_fields(self) -> Vec<(String, String)> {
         self.fields
     }

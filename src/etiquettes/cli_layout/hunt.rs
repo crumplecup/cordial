@@ -198,7 +198,7 @@ impl ActCallHunt<'_> {
     /// transparent wrapper variants (`Some`, `Ok`) whose inner value
     /// keeps exactly the type already resolved for the pattern's own
     /// scrutinee. `None`/`Err` carry no such value and aren't included.
-    #[instrument(level = "debug")]
+    #[instrument(level = "trace", skip(path), ret)]
     fn is_transparent_wrapper(path: &syn::Path) -> bool {
         matches!(
             path.segments

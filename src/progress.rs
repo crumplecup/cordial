@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use tracing::instrument;
 /// User-facing progress reporter used by frontends such as the CLI.
 ///
 /// Library callers get a no-op sink by default. Frontends that own a user
@@ -34,10 +35,12 @@ pub trait ProgressTask: Send + Sync {
 struct NoopProgress;
 
 impl ProgressSink for NoopProgress {
+    #[instrument(level = "trace", skip(self))]
     fn spinner(&self, _message: String) -> Box<dyn ProgressTask> {
         Box::new(NoopProgressTask)
     }
 
+    #[instrument(level = "trace", skip(self))]
     fn bar(&self, _message: String, _len: u64) -> Box<dyn ProgressTask> {
         Box::new(NoopProgressTask)
     }
@@ -47,20 +50,25 @@ impl ProgressSink for NoopProgress {
 struct NoopProgressTask;
 
 impl ProgressTask for NoopProgressTask {
+    #[instrument(level = "trace", skip(self))]
     fn set_message(&self, _message: String) {}
 
+    #[instrument(level = "trace", skip(self))]
     fn inc(&self, _delta: u64) {}
 
+    #[instrument(level = "trace", skip(self))]
     fn finish(&self, _message: String) {}
 }
 
 static NOOP_PROGRESS: NoopProgress = NoopProgress;
 
 /// Shared no-op progress reporter.
+#[instrument(level = "debug")]
 pub fn noop_progress() -> &'static dyn ProgressSink {
     &NOOP_PROGRESS
 }
 
+#[instrument(level = "debug")]
 pub(crate) fn noop_progress_arc() -> Arc<dyn ProgressSink> {
     Arc::new(NoopProgress)
 }
