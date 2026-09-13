@@ -232,6 +232,135 @@ fn scan_cfg_scatter_rust_source_never_flags_proc_macro_entry_points() -> miette:
     Ok(())
 }
 
+const CLI_COMMAND_SURFACE_SOURCE: &str = r#"
+use clap::Subcommand;
+
+#[derive(Subcommand)]
+pub enum Commands {
+    Quality,
+    #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
+    Coverage,
+    #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
+    Build { command: BuildCommands },
+}
+
+#[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
+#[derive(Subcommand)]
+pub enum BuildCommands {
+    Rustdoc,
+}
+
+impl Commands {
+    fn act(self) {
+        match self {
+            Self::Quality => {}
+            #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
+            Self::Coverage => {}
+            #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
+            Self::Build { command } => command.act(),
+        }
+    }
+}
+
+#[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
+impl BuildCommands {
+    fn act(self) {
+        match self {
+            Self::Rustdoc => {}
+        }
+    }
+}
+"#;
+
+#[test]
+fn scan_cfg_scatter_rust_source_skips_conditional_cli_command_surface() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("commands.rs");
+    fs::write(&file, CLI_COMMAND_SURFACE_SOURCE)
+        .into_diagnostic()
+        .wrap_err("write source")?;
+
+    let groups = scan_cfg_scatter_rust_source(
+        CLI_COMMAND_SURFACE_SOURCE,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+
+    let command_surface_flagged = groups
+        .iter()
+        .find(|group| {
+            group
+                .predicate()
+                .contains(r#"feature = "elicitation", feature = "homecoming_std""#)
+        })
+        .map(|group| group.is_scatter(&test_thresholds()))
+        .unwrap_or(false);
+    assert!(
+        !command_surface_flagged,
+        "feature-gated command enum, command impl, and Commands::act arms \
+         describe one Clap CLI surface, not scattered movable logic"
+    );
+    Ok(())
+}
+
+const ORDINARY_ENUM_ARM_SCATTERED_SOURCE: &str = r#"
+#[cfg(feature = "sync")]
+enum SyncState {
+    Ready,
+}
+
+impl Runner {
+    fn act(self) {
+        match self {
+            #[cfg(feature = "sync")]
+            Self::Sync => {}
+            #[cfg(feature = "sync")]
+            Self::Refresh => {}
+        }
+    }
+}
+
+#[cfg(feature = "sync")]
+impl SyncState {
+    fn is_ready(&self) -> bool {
+        matches!(self, Self::Ready)
+    }
+}
+"#;
+
+#[test]
+fn scan_cfg_scatter_rust_source_still_flags_non_cli_enum_arm_scatter() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("runner.rs");
+    fs::write(&file, ORDINARY_ENUM_ARM_SCATTERED_SOURCE)
+        .into_diagnostic()
+        .wrap_err("write source")?;
+
+    let groups = scan_cfg_scatter_rust_source(
+        ORDINARY_ENUM_ARM_SCATTERED_SOURCE,
+        &file,
+        fixture.path(),
+        fixture.path(),
+    )
+    .into_diagnostic()
+    .wrap_err("scan")?;
+
+    let sync = groups
+        .iter()
+        .find(|group| group.predicate().contains("sync"))
+        .ok_or_else(|| miette::miette!("sync predicate group present"))?;
+    assert!(
+        sync.is_scatter(&test_thresholds()),
+        "ordinary enum+impl+arm gating should remain visible to cfg-scatter"
+    );
+    Ok(())
+}
+
 #[test]
 fn cfg_scatter_default_thresholds() {
     cordial::init_tracing();

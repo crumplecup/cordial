@@ -164,9 +164,53 @@ impl CfgScatterGroup {
         self.non_field_occurrences().count()
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
+    fn is_conditional_cli_surface(&self) -> bool {
+        let distinct = self.distinct_non_field_kinds();
+        if distinct.is_empty()
+            || !distinct.iter().all(|kind| {
+                matches!(
+                    kind,
+                    CfgSiteKind::Enum | CfgSiteKind::Impl | CfgSiteKind::Arm
+                )
+            })
+        {
+            return false;
+        }
+
+        let has_command_enum = self.non_field_occurrences().any(|occurrence| {
+            occurrence.kind() == CfgSiteKind::Enum
+                && occurrence.snippet().starts_with("enum ")
+                && occurrence.snippet().ends_with("Commands")
+        });
+        let has_command_impl = self.non_field_occurrences().any(|occurrence| {
+            occurrence.kind() == CfgSiteKind::Impl
+                && occurrence.snippet().starts_with("impl ")
+                && occurrence.snippet().ends_with("Commands")
+        });
+        let has_command_dispatch_arm = self.non_field_occurrences().any(|occurrence| {
+            occurrence.kind() == CfgSiteKind::Arm && occurrence.context().ends_with("Commands::act")
+        });
+
+        has_command_enum && has_command_impl && has_command_dispatch_arm
+    }
+
     /// Fields-only gating (any count) never flags — see [`CfgSiteKind`] docs.
     #[instrument(level = "trace", skip(self, thresholds))]
     pub fn is_scatter(&self, thresholds: &CfgScatterThresholds) -> bool {
+        // ADR: Conditional CLI command surfaces are not cfg scatter.
+        //
+        // Motivation: `src/cli/commands.rs` gates `BuildCommands` and its
+        // `Commands::act` dispatch arms behind the same feature predicate.
+        // Clap command enums and exhaustive dispatch matches have to stay
+        // aligned at that surface, and forcing a cfg-gated module there would
+        // duplicate the command enum shape or hide the CLI flow. Keep scanning
+        // these sites, but treat the matched command enum/impl/dispatch arms as
+        // one conditional surface instead of movable scattered logic.
+        if self.is_conditional_cli_surface() {
+            return false;
+        }
+
         let distinct = self.distinct_non_field_kinds();
         !distinct.is_empty()
             && (distinct.len() >= thresholds.min_distinct_kinds()
