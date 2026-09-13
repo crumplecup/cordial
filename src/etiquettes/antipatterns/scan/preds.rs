@@ -53,10 +53,9 @@ pub(super) fn type_contains_disallowed_static_ref(
                                 if type_contains_disallowed_static_ref(inner, local_trait_names)
                         )
                     }),
-                    PathArguments::Parenthesized(args) => args
-                        .inputs
-                        .iter()
-                        .any(|inner| type_contains_disallowed_static_ref(inner, local_trait_names)),
+                    PathArguments::Parenthesized(args) => args.inputs.iter().any(|inner| {
+                        type_contains_disallowed_static_ref(&inner.ty, local_trait_names)
+                    }),
                     PathArguments::None => false,
                 })
         }
@@ -185,9 +184,10 @@ fn type_contains_static_str_ref(ty: &Type) -> bool {
                             syn::GenericArgument::Type(inner) if type_contains_static_str_ref(inner)
                         )
                     }),
-                    PathArguments::Parenthesized(args) => {
-                        args.inputs.iter().any(type_contains_static_str_ref)
-                    }
+                    PathArguments::Parenthesized(args) => args
+                        .inputs
+                        .iter()
+                        .any(|inner| type_contains_static_str_ref(&inner.ty)),
                     PathArguments::None => false,
                 })
         }

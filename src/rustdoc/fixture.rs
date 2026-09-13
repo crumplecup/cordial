@@ -49,6 +49,8 @@ pub fn demo_impl_coverage_crate() -> Crate {
             links: HashMap::new(),
             attrs: Vec::new(),
             deprecation: None,
+            stability: None,
+            const_stability: None,
             inner: ItemEnum::Impl(Impl {
                 is_unsafe: false,
                 generics: empty_generics(),
@@ -82,6 +84,8 @@ pub fn demo_impl_coverage_crate() -> Crate {
             links: HashMap::new(),
             attrs: Vec::new(),
             deprecation: None,
+            stability: None,
+            const_stability: None,
             inner: ItemEnum::Impl(Impl {
                 is_unsafe: false,
                 generics: empty_generics(),
@@ -111,6 +115,8 @@ pub fn demo_impl_coverage_crate() -> Crate {
             links: HashMap::new(),
             attrs: Vec::new(),
             deprecation: None,
+            stability: None,
+            const_stability: None,
             inner: ItemEnum::Function(empty_function()),
         },
     );
@@ -168,6 +174,8 @@ pub fn demo_trenchcoat_crate() -> Crate {
             links: HashMap::new(),
             attrs: Vec::new(),
             deprecation: None,
+            stability: None,
+            const_stability: None,
             inner: ItemEnum::Impl(Impl {
                 is_unsafe: false,
                 generics: empty_generics(),
@@ -276,6 +284,8 @@ fn module_item(id: Id, name: &str, is_crate: bool, items: Vec<Id>) -> Item {
         links: HashMap::new(),
         attrs: Vec::new(),
         deprecation: None,
+        stability: None,
+        const_stability: None,
         inner: ItemEnum::Module(Module {
             is_crate,
             items,
@@ -296,6 +306,8 @@ fn struct_item(id: Id, name: &str, impls: Vec<Id>) -> Item {
         links: HashMap::new(),
         attrs: Vec::new(),
         deprecation: None,
+        stability: None,
+        const_stability: None,
         inner: ItemEnum::Struct(Struct {
             kind: StructKind::Unit,
             generics: empty_generics(),
@@ -337,6 +349,7 @@ fn empty_function() -> Function {
             abi: Abi::Rust,
         },
         has_body: true,
+        default_unstable: None,
     }
 }
 

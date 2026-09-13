@@ -239,7 +239,7 @@ impl TypeGraphScanVisitor {
 
     #[instrument(level = "debug", skip(self, item_impl))]
     fn check_error_source_impl(&mut self, item_impl: &ItemImpl) {
-        let Some((_, trait_path, _)) = &item_impl.trait_ else {
+        let Some((trait_path, _)) = &item_impl.trait_ else {
             return;
         };
         if !trait_is_std_error(trait_path) {

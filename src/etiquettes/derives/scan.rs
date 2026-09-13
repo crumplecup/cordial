@@ -465,7 +465,7 @@ impl DeriveScanVisitor<'_> {
         let Some(recv) = method.sig.receiver() else {
             return;
         };
-        if recv.mutability.is_some() || recv.reference.is_none() {
+        if !super::syntax::receiver_is_immutable_reference(recv) {
             return;
         }
         let Some((field_name, read)) = classify_field_read(&method.block) else {
@@ -537,7 +537,7 @@ impl DeriveScanVisitor<'_> {
         let Some(recv) = method.sig.receiver() else {
             return;
         };
-        if recv.mutability.is_some() || recv.reference.is_none() {
+        if !super::syntax::receiver_is_immutable_reference(recv) {
             return;
         }
         let Some((field_name, read)) = classify_field_read(&method.block) else {
@@ -615,7 +615,7 @@ impl DeriveScanVisitor<'_> {
         let Some(recv) = method.sig.receiver() else {
             return;
         };
-        if recv.mutability.is_none() {
+        if !super::syntax::receiver_is_mutable(recv) {
             return;
         }
         let Some(shape) = classify_setter_body(&method.block, field_name, &method.sig) else {

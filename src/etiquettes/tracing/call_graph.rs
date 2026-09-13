@@ -352,7 +352,7 @@ impl CollectVisitor<'_> {
         let trait_name = item_impl
             .trait_
             .as_ref()
-            .map(|(_, path, _)| syn_path_label(path));
+            .map(|(path, _)| syn_path_label(path));
         for impl_item in &item_impl.items {
             let ImplItem::Fn(method) = impl_item else {
                 continue;

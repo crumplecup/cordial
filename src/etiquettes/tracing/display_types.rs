@@ -126,7 +126,7 @@ fn derives_display(attrs: &[syn::Attribute]) -> bool {
 
 #[instrument(level = "debug", skip(item_impl, facts))]
 fn record_display_impl(item_impl: &ItemImpl, facts: &mut DisplayTypeFacts) {
-    let Some((_, trait_path, _)) = &item_impl.trait_ else {
+    let Some((trait_path, _)) = &item_impl.trait_ else {
         return;
     };
     if !trait_path

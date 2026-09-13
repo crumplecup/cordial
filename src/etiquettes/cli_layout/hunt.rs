@@ -378,9 +378,6 @@ impl<'ast> Visit<'ast> for ActCallHunt<'_> {
         syn::visit::visit_expr(self, &node.expr);
         for arm in &node.arms {
             self.with_pat_bindings(&arm.pat, &node.expr, |hunt| {
-                if let Some((_, guard)) = &arm.guard {
-                    syn::visit::visit_expr(hunt, guard);
-                }
                 syn::visit::visit_expr(hunt, &arm.body);
             });
         }

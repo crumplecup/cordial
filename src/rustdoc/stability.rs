@@ -1,7 +1,7 @@
 //! Parse rustdoc `Stability { … }` markers from attribute debug text.
 
 use nom::{
-    IResult,
+    IResult, Parser,
     branch::alt,
     bytes::complete::{tag, take_until},
     combinator::value,
@@ -97,5 +97,6 @@ fn parse_stability_level(input: &str) -> IResult<&str, StabilityLevel> {
             value(StabilityLevel::Unstable, tag("Unstable")),
             value(StabilityLevel::Stable, tag("Stable")),
         )),
-    )(rest)
+    )
+    .parse(rest)
 }

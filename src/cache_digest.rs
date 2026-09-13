@@ -136,5 +136,6 @@ mod rustdoc_digest {
 fn digest_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    format!("{:x}", hasher.finalize())
+    let digest = hasher.finalize();
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }

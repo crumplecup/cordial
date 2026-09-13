@@ -137,7 +137,7 @@ impl ChainLayer {
 
     #[instrument(level = "debug", skip(self, item_impl, ctx))]
     pub(super) fn on_item_impl(&mut self, item_impl: &ItemImpl, ctx: &SiteCtx) {
-        let Some((_, trait_path, _)) = &item_impl.trait_ else {
+        let Some((trait_path, _)) = &item_impl.trait_ else {
             return;
         };
         let Some(from_type) = extract_from_source_type(trait_path) else {

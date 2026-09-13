@@ -2,7 +2,10 @@
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Block, ExprIf, ExprMatch, FnArg, ReturnType, Signature, Stmt, Type, TypePath};
+use syn::{
+    Block, ExprIf, ExprMatch, FnArg, Receiver, ReceiverKind, ReturnType, Signature, Stmt, Type,
+    TypePath,
+};
 
 use crate::config::ModularityThresholds;
 use crate::error::CordialResult;
@@ -118,7 +121,7 @@ fn is_getter(ident: &str, sig: &Signature, peek: &BodyPeek, returns_result: bool
     let Some(recv) = sig.receiver() else {
         return false;
     };
-    if recv.reference.is_none() || recv.mutability.is_some() {
+    if !receiver_is_immutable_reference(recv) {
         return false;
     }
     if getter_name(ident) {
@@ -158,7 +161,17 @@ fn is_setter(ident: &str, sig: &Signature) -> bool {
     let Some(recv) = sig.receiver() else {
         return false;
     };
-    recv.reference.is_none() && recv.mutability.is_some() && sig.inputs.len() >= 2
+    receiver_is_mut_value(recv) && sig.inputs.len() >= 2
+}
+
+#[instrument(level = "trace", skip(recv), ret)]
+fn receiver_is_immutable_reference(recv: &Receiver) -> bool {
+    matches!(recv.kind, ReceiverKind::Reference(_, _, None)) && recv.mutability.is_none()
+}
+
+#[instrument(level = "trace", skip(recv), ret)]
+fn receiver_is_mut_value(recv: &Receiver) -> bool {
+    matches!(recv.kind, ReceiverKind::Value) && recv.mutability.is_some()
 }
 
 #[instrument(level = "trace", ret)]

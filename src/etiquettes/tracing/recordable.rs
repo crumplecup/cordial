@@ -107,7 +107,7 @@ pub(super) fn return_type_unrecordable(sig: &Signature) -> bool {
 #[instrument(level = "debug", skip(ty))]
 fn type_is_unrecordable(ty: &Type) -> bool {
     match ty {
-        Type::ImplTrait(_) | Type::TraitObject(_) | Type::BareFn(_) | Type::Infer(_) => true,
+        Type::ImplTrait(_) | Type::TraitObject(_) | Type::FnPtr(_) | Type::Infer(_) => true,
         Type::Never(_) | Type::Macro(_) | Type::Verbatim(_) => true,
         Type::Reference(reference) => type_is_unrecordable(&reference.elem),
         Type::Ptr(ptr) => type_is_unrecordable(&ptr.elem),
@@ -183,7 +183,9 @@ fn type_contains_borrow(ty: &Type) -> bool {
 #[instrument(level = "debug", skip(ty, generics))]
 fn type_is_generic_param(ty: &Type, generics: &HashSet<String>) -> bool {
     match ty {
-        Type::Path(TypePath { qself: None, path }) => path.segments.iter().any(|segment| {
+        Type::Path(TypePath {
+            qself: None, path, ..
+        }) => path.segments.iter().any(|segment| {
             generics.contains(&segment.ident.to_string())
                 || match &segment.arguments {
                     PathArguments::AngleBracketed(args) => args.args.iter().any(|arg| match arg {

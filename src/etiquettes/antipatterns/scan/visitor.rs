@@ -400,7 +400,7 @@ impl<'ast> Visit<'ast> for TraitNameCollector {
 
 #[instrument(level = "trace", skip(node, local_trait_names), ret)]
 fn is_foreign_trait_impl(node: &ItemImpl, local_trait_names: &HashSet<String>) -> bool {
-    let Some((_, path, _)) = node.trait_.as_ref() else {
+    let Some((path, _)) = node.trait_.as_ref() else {
         return false;
     };
     let Some(segment) = path.segments.last() else {

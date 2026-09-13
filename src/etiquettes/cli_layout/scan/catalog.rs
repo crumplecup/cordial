@@ -257,7 +257,7 @@ impl<'ast> Visit<'ast> for LayoutVisitor<'_> {
             return;
         }
         let self_ident = last_ident(&type_label(&node.self_ty)).to_string();
-        if let Some((_, trait_path, _)) = &node.trait_
+        if let Some((trait_path, _)) = &node.trait_
             && trait_is_std_error(trait_path)
         {
             self.error_impls.insert(self_ident);

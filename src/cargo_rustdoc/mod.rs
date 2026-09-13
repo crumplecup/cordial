@@ -189,7 +189,8 @@ pub(crate) fn hash_file(path: &Path) -> CordialResult<String> {
     let bytes = std::fs::read(path)?;
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
-    Ok(format!("{:x}", hasher.finalize()))
+    let digest = hasher.finalize();
+    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 #[instrument(level = "info")]

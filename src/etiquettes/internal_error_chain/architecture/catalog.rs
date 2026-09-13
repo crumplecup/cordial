@@ -348,7 +348,7 @@ impl CatalogVisitor<'_> {
             return;
         }
         let self_ident = Catalog::last_ident(&type_label(&item.self_ty)).to_string();
-        if let Some((_, trait_path, _)) = &item.trait_
+        if let Some((trait_path, _)) = &item.trait_
             && trait_is_std_error(trait_path)
         {
             self.catalog.error_impls.insert(self_ident);
@@ -357,7 +357,7 @@ impl CatalogVisitor<'_> {
         if !self.catalog.structs.contains_key(&self_ident) {
             return;
         }
-        if let Some((_, trait_path, _)) = &item.trait_ {
+        if let Some((trait_path, _)) = &item.trait_ {
             let Some(seg) = trait_path.segments.last() else {
                 return;
             };
