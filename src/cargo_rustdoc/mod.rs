@@ -134,11 +134,7 @@ pub(crate) fn build_workspace_members_with_progress(
 
 /// Whether cached rustdoc JSON is newer than the Rust inputs that feed it.
 #[instrument(level = "debug", skip(project_root, crate_root, cached_json))]
-pub(crate) fn rustdoc_cache_is_fresh(
-    project_root: &Path,
-    crate_root: &Path,
-    cached_json: &Path,
-) -> bool {
+pub fn rustdoc_cache_is_fresh(project_root: &Path, crate_root: &Path, cached_json: &Path) -> bool {
     let Some(cache_modified) = modified_at(cached_json) else {
         return false;
     };
@@ -216,44 +212,4 @@ pub(crate) fn write_build_artifact(path: &Path, artifact: &BuildArtifact) -> Cor
     }
     std::fs::write(path, serde_json::to_string_pretty(artifact)?)?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use miette::{IntoDiagnostic, WrapErr};
-
-    use super::*;
-
-    #[test]
-    fn rustdoc_cache_freshness_tracks_member_sources() -> miette::Result<()> {
-        let temp = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-        let project = temp.path();
-        let src = project.join("src");
-        std::fs::create_dir_all(&src)
-            .into_diagnostic()
-            .wrap_err("src dir")?;
-        let source = src.join("lib.rs");
-        let cache = project.join("cache.json");
-
-        std::fs::write(project.join("Cargo.toml"), "[package]\nname = \"demo\"\n")
-            .into_diagnostic()
-            .wrap_err("manifest")?;
-        std::fs::write(&source, "pub struct Before;\n")
-            .into_diagnostic()
-            .wrap_err("source")?;
-        std::thread::sleep(std::time::Duration::from_millis(1100));
-        std::fs::write(&cache, "{}\n")
-            .into_diagnostic()
-            .wrap_err("cache")?;
-
-        assert!(rustdoc_cache_is_fresh(project, project, &cache));
-
-        std::thread::sleep(std::time::Duration::from_millis(1100));
-        std::fs::write(&source, "pub struct After;\n")
-            .into_diagnostic()
-            .wrap_err("updated source")?;
-
-        assert!(!rustdoc_cache_is_fresh(project, project, &cache));
-        Ok(())
-    }
 }

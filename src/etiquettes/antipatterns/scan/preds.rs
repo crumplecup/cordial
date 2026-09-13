@@ -325,10 +325,7 @@ pub(super) fn unused_argument_bindings(pat: &Pat) -> Vec<UnusedArgBinding> {
 #[instrument(level = "debug", skip(pat, bindings))]
 fn collect_unused_argument_bindings(pat: &Pat, bindings: &mut Vec<UnusedArgBinding>) {
     match pat {
-        Pat::Wild(wild) => bindings.push(UnusedArgBinding::new(
-            wild.span().start().line as u32,
-            "_".to_string(),
-        )),
+        Pat::Wild(_) => {}
         Pat::Ident(ident) if is_unused_argument_ident(&ident.ident) => {
             bindings.push(UnusedArgBinding::new(
                 ident.span().start().line as u32,

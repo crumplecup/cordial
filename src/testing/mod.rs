@@ -66,6 +66,9 @@ pub use crate::framework_std::{
 #[cfg(feature = "rustdoc")]
 pub use crate::enricher::syn_doc_link::inventory_link_key;
 
+#[cfg(feature = "rustdoc")]
+pub use crate::cargo_rustdoc::rustdoc_cache_is_fresh;
+
 #[cfg(feature = "elicitation")]
 pub use crate::digest::{ImplCrateRollup, build_shadow_core_support_summary};
 

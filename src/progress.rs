@@ -16,7 +16,7 @@ pub trait ProgressSink: Send + Sync {
     fn bar(&self, message: String, len: u64) -> Box<dyn ProgressTask>;
 
     /// Show one user-facing status line.
-    fn notice(&self, _message: String) {}
+    fn notice(&self, _: String) {}
 }
 
 /// One active progress task.
@@ -36,12 +36,12 @@ struct NoopProgress;
 
 impl ProgressSink for NoopProgress {
     #[instrument(level = "trace", skip(self))]
-    fn spinner(&self, _message: String) -> Box<dyn ProgressTask> {
+    fn spinner(&self, _: String) -> Box<dyn ProgressTask> {
         Box::new(NoopProgressTask)
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn bar(&self, _message: String, _len: u64) -> Box<dyn ProgressTask> {
+    fn bar(&self, _: String, _: u64) -> Box<dyn ProgressTask> {
         Box::new(NoopProgressTask)
     }
 }
@@ -51,13 +51,13 @@ struct NoopProgressTask;
 
 impl ProgressTask for NoopProgressTask {
     #[instrument(level = "trace", skip(self))]
-    fn set_message(&self, _message: String) {}
+    fn set_message(&self, _: String) {}
 
     #[instrument(level = "trace", skip(self))]
-    fn inc(&self, _delta: u64) {}
+    fn inc(&self, _: u64) {}
 
     #[instrument(level = "trace", skip(self))]
-    fn finish(&self, _message: String) {}
+    fn finish(&self, _: String) {}
 }
 
 static NOOP_PROGRESS: NoopProgress = NoopProgress;

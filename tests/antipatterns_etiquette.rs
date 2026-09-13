@@ -130,7 +130,7 @@ fn unused_underscore_arguments_are_detected() -> miette::Result<()> {
         .iter()
         .filter(|f| f.rule_id() == AntipatternRuleId::UnusedUnderscoreArg001)
         .collect::<Vec<_>>();
-    assert_eq!(unused.len(), 6);
+    assert_eq!(unused.len(), 5);
     assert!(
         unused
             .iter()
@@ -146,11 +146,10 @@ fn unused_underscore_arguments_are_detected() -> miette::Result<()> {
             .iter()
             .any(|f| f.context().contains("tuple") && f.snippet() == "_c")
     );
-    assert!(
-        !unused
-            .iter()
-            .any(|f| f.context().contains("test_fn") || f.snippet() == "y" || f.snippet() == "b")
-    );
+    assert!(!unused.iter().any(|f| f.context().contains("test_fn")
+        || f.context().contains("ignored")
+        || f.snippet() == "y"
+        || f.snippet() == "b"));
     Ok(())
 }
 
@@ -697,7 +696,7 @@ edition = { workspace = true }
             f.rule().category() == "antipatterns" && f.disposition() == cordial::Disposition::Open
         })
         .count();
-    assert_eq!(open, 5);
+    assert_eq!(open, 4);
 
     let checklist = fs::read_to_string(store.path().join("findings/antipatterns.checklist.md"))
         .into_diagnostic()
