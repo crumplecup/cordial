@@ -127,16 +127,6 @@ pub trait Session: Send + Sync {
     fn run(&self, filter: &dyn RunFilter) -> CordialResult<Box<dyn RunOutcome>>;
 }
 
-/// Builder for a default runtime session.
-pub struct SessionBuilder {
-    project_root: PathBuf,
-    store_home: PathBuf,
-    store_root: PathBuf,
-    plugins: Vec<&'static dyn Plugin>,
-    etiquettes: Vec<&'static dyn Etiquette>,
-    progress: Arc<dyn ProgressSink>,
-}
-
 impl std::fmt::Debug for SessionBuilder {
     #[instrument(level = "trace", skip(self, f))]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -144,8 +134,8 @@ impl std::fmt::Debug for SessionBuilder {
             .field("project_root", &self.project_root)
             .field("store_home", &self.store_home)
             .field("store_root", &self.store_root)
-            .field("plugins", &self.plugins.len())
-            .field("etiquettes", &self.etiquettes.len())
+            .field("plugins", &self.plugins.as_ref().map(Vec::len))
+            .field("etiquettes", &self.etiquettes.as_ref().map(Vec::len))
             .field("progress", &"<progress-sink>")
             .finish()
     }
@@ -163,12 +153,12 @@ impl SessionBuilder {
         let store_home = crate::store::default_store_home();
         let store = crate::store::StoreLayout::from_root(store_home.join(&slug), slug);
         Self {
-            project_root,
-            store_home,
-            store_root: store.root().clone(),
-            plugins: Vec::new(),
-            etiquettes: Vec::new(),
-            progress: noop_progress_arc(),
+            project_root: Some(project_root),
+            store_home: Some(store_home),
+            store_root: Some(store.root().clone()),
+            plugins: Some(Vec::new()),
+            etiquettes: Some(Vec::new()),
+            progress: Some(noop_progress_arc()),
         }
     }
 
@@ -177,7 +167,7 @@ impl SessionBuilder {
     /// This controls where global config such as `cordial.toml` is loaded from.
     #[instrument(level = "trace", skip(self, store_home))]
     pub fn with_store_home(mut self, store_home: impl Into<PathBuf>) -> Self {
-        self.store_home = store_home.into();
+        self.store_home = Some(store_home.into());
         self
     }
 
@@ -187,42 +177,52 @@ impl SessionBuilder {
     #[instrument(level = "trace", skip(self, store_root))]
     pub fn with_store_root(mut self, store_root: impl Into<PathBuf>) -> Self {
         let store_root = store_root.into();
-        self.store_home = store_root.clone();
-        self.store_root = store_root;
+        self.store_home = Some(store_root.clone());
+        self.store_root = Some(store_root);
         self
     }
 
     /// Return a copy with a frontend progress reporter installed.
     #[instrument(level = "trace", skip(self, progress))]
     pub fn with_progress_sink(mut self, progress: Arc<dyn ProgressSink>) -> Self {
-        self.progress = progress;
+        self.progress = Some(progress);
         self
     }
 
     /// Add one directly available etiquette before building the runtime session.
     #[instrument(level = "trace", skip(self, etiquette))]
     pub fn register(mut self, etiquette: &'static dyn Etiquette) -> Self {
-        self.etiquettes.push(etiquette);
+        self.etiquettes.get_or_insert_with(Vec::new).push(etiquette);
         self
     }
 
     /// Add one directly available plugin before building the runtime session.
     #[instrument(level = "trace", skip(self, plugin))]
     pub fn register_plugin(mut self, plugin: &'static dyn Plugin) -> Self {
-        self.plugins.push(plugin);
+        self.plugins.get_or_insert_with(Vec::new).push(plugin);
         self
     }
 
     /// Finish the builder and return a runtime session.
     #[instrument(level = "debug", skip(self))]
     pub fn build(self) -> RuntimeSession {
+        let project_root = self.project_root.unwrap_or_default();
+        let store_home = self
+            .store_home
+            .unwrap_or_else(crate::store::default_store_home);
+        let slug = crate::store::project_slug_from_path(&project_root);
+        let store_root = self.store_root.unwrap_or_else(|| {
+            crate::store::StoreLayout::from_root(store_home.join(&slug), slug)
+                .root()
+                .clone()
+        });
         RuntimeSession {
-            project_root: self.project_root,
-            store_home: self.store_home,
-            store_root: self.store_root,
-            plugins: self.plugins,
-            etiquettes: self.etiquettes,
-            progress: self.progress,
+            project_root,
+            store_home,
+            store_root,
+            plugins: self.plugins.unwrap_or_default(),
+            etiquettes: self.etiquettes.unwrap_or_default(),
+            progress: self.progress.unwrap_or_else(noop_progress_arc),
         }
     }
 }
@@ -231,12 +231,27 @@ impl SessionBuilder {
 ///
 /// This type is what the CLI and most library callers use. It has no global
 /// mutable state; all registered plugins and etiquettes are explicit fields.
+#[derive(derive_builder::Builder)]
+#[builder(
+    name = "SessionBuilder",
+    pattern = "owned",
+    build_fn(name = "build_inner", private, error = "crate::error::CordialError")
+)]
 pub struct RuntimeSession {
+    /// Root of the project being analyzed.
     project_root: PathBuf,
+    /// Shared cordial store home used for global config and project stores.
     store_home: PathBuf,
+    /// Project-specific store root used for cache and report artifacts.
     store_root: PathBuf,
+    /// Registered plugins available to this session.
+    #[builder(default)]
     plugins: Vec<&'static dyn Plugin>,
+    /// Directly registered etiquettes available to this session.
+    #[builder(default)]
     etiquettes: Vec<&'static dyn Etiquette>,
+    /// User-facing progress reporter for this session.
+    #[builder(default = "noop_progress_arc()")]
     progress: Arc<dyn ProgressSink>,
 }
 

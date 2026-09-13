@@ -412,6 +412,30 @@ impl WidgetBuilder {
 }
 
 #[test]
+fn custom_derived_builder_impl_is_not_hand_rolled_builder() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+#[derive(derive_builder::Builder)]
+#[builder(name = "WidgetBuilder")]
+struct Widget {
+    name: String,
+}
+
+impl WidgetBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+"#;
+    let findings = scan_rules(source, DerivesThresholds::default())?;
+    assert!(
+        !findings.contains(&DeriveRuleId::Builder001),
+        "derived builder compatibility impl should not be flagged: {findings:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn max_constructor_args_override_keeps_fat_new_as_derive_new() -> miette::Result<()> {
     cordial::init_tracing();
     let source = r#"

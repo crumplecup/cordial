@@ -11,6 +11,7 @@ use syn::{
 };
 
 use crate::enricher::is_cfg_test;
+use crate::error::CordialResult;
 
 use super::super::source_shape::{
     block_captures_location, has_track_caller, returns_self, sig_takes_location_arg,
@@ -196,7 +197,12 @@ impl Catalog {
     }
 }
 
-#[derive(derive_setters::Setters)]
+#[derive(derive_builder::Builder, derive_setters::Setters)]
+#[builder(
+    name = "CatalogVisitorBuilder",
+    pattern = "owned",
+    build_fn(name = "build_inner", private, error = "crate::error::CordialError")
+)]
 #[setters(generate = false, borrow_self)]
 pub(super) struct CatalogVisitor<'a> {
     file: PathBuf,
@@ -207,24 +213,21 @@ pub(super) struct CatalogVisitor<'a> {
 }
 
 impl<'a> CatalogVisitor<'a> {
-    #[instrument(level = "debug", skip(catalog))]
-    pub(super) fn new(
-        file: PathBuf,
-        module_prefix: Vec<String>,
-        catalog: &'a mut Catalog,
-        phase: CatalogPhase,
-    ) -> Self {
-        Self {
-            file,
-            module_prefix,
-            catalog,
-            phase,
-        }
+    #[instrument(level = "debug")]
+    pub(super) fn builder() -> CatalogVisitorBuilder<'a> {
+        CatalogVisitorBuilder::default()
     }
 
     #[instrument(level = "debug", skip(self, module_prefix))]
     pub(super) fn reset_module_prefix(&mut self, module_prefix: Vec<String>) {
         self.module_prefix = module_prefix;
+    }
+}
+
+impl<'a> CatalogVisitorBuilder<'a> {
+    #[instrument(level = "debug", skip(self))]
+    pub(super) fn build(self) -> CordialResult<CatalogVisitor<'a>> {
+        self.build_inner()
     }
 }
 

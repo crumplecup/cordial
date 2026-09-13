@@ -39,12 +39,27 @@ impl Query for PanicSitesQuery {
     }
 }
 
-/// Fluent builder for common probe queries.
-#[derive(Debug, Default, Clone)]
-pub struct QueryBuilder {
+/// Concrete query used by built-in probes.
+#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[builder(
+    name = "QueryBuilder",
+    pattern = "owned",
+    derive(Debug, Clone),
+    setter(prefix = "set"),
+    build_fn(name = "build_inner", private, error = "crate::error::CordialError")
+)]
+pub struct BasicQuery {
+    /// Node kinds this query matches.
+    #[builder(default)]
     node_kinds: Vec<NodeKind>,
+    /// Edge kinds this query traverses.
+    #[builder(default)]
     edge_kinds: Vec<EdgeKind>,
+    /// Optional attribute key this query filters on.
+    #[builder(default)]
     attr_key: Option<String>,
+    /// Optional attribute value this query filters on.
+    #[builder(default)]
     attr_value: Option<String>,
 }
 
@@ -58,30 +73,30 @@ impl QueryBuilder {
     /// Restrict the query to these node kinds.
     #[instrument(level = "trace", skip(self, kinds))]
     pub fn node_kinds(mut self, kinds: impl IntoIterator<Item = NodeKind>) -> Self {
-        self.node_kinds.extend(kinds);
+        self.node_kinds.get_or_insert_with(Vec::new).extend(kinds);
         self
     }
 
     /// Declare edge kinds this query may traverse.
     #[instrument(level = "trace", skip(self, kinds))]
     pub fn edge_kinds(mut self, kinds: impl IntoIterator<Item = EdgeKind>) -> Self {
-        self.edge_kinds.extend(kinds);
+        self.edge_kinds.get_or_insert_with(Vec::new).extend(kinds);
         self
     }
 
     /// Restrict matches to nodes whose string attribute equals `value`.
     #[instrument(level = "trace", skip(self, key, value))]
     pub fn with_attr(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.attr_key = Some(key.into());
-        self.attr_value = Some(value.into());
+        self.attr_key = Some(Some(key.into()));
+        self.attr_value = Some(Some(value.into()));
         self
     }
 
     /// Restrict matches to nodes that carry this attribute key (any value).
     #[instrument(level = "trace", skip(self, key))]
     pub fn has_attr(mut self, key: impl Into<String>) -> Self {
-        self.attr_key = Some(key.into());
-        self.attr_value = None;
+        self.attr_key = Some(Some(key.into()));
+        self.attr_value = Some(None);
         self
     }
 
@@ -89,25 +104,12 @@ impl QueryBuilder {
     #[instrument(level = "debug", skip(self))]
     pub fn build(self) -> BasicQuery {
         BasicQuery {
-            node_kinds: self.node_kinds,
-            edge_kinds: self.edge_kinds,
-            attr_key: self.attr_key,
-            attr_value: self.attr_value,
+            node_kinds: self.node_kinds.unwrap_or_default(),
+            edge_kinds: self.edge_kinds.unwrap_or_default(),
+            attr_key: self.attr_key.unwrap_or_default(),
+            attr_value: self.attr_value.unwrap_or_default(),
         }
     }
-}
-
-/// Concrete query used by built-in probes.
-#[derive(Debug, Clone, derive_getters::Getters)]
-pub struct BasicQuery {
-    /// Node kinds this query matches.
-    node_kinds: Vec<NodeKind>,
-    /// Edge kinds this query traverses.
-    edge_kinds: Vec<EdgeKind>,
-    /// Optional attribute key this query filters on.
-    attr_key: Option<String>,
-    /// Optional attribute value this query filters on.
-    attr_value: Option<String>,
 }
 
 impl Query for BasicQuery {

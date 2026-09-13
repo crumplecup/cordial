@@ -13,9 +13,9 @@ use crate::loader::module_path_from_src_file;
 use super::path_inclusion::PathInclusionFacts;
 use super::syntax::{
     FieldRead, body_is_struct_literal, classify_field_read, classify_setter_body,
-    constructor_arg_count, constructor_fields_match_params, consumes_self, error_impl_target,
-    field_is_exposed, has_derive, has_track_caller, is_cfg_creusot, is_cfg_test, is_clap_schema,
-    is_fluent_setter, type_label,
+    constructor_arg_count, constructor_fields_match_params, consumes_self, derive_builder_names,
+    error_impl_target, field_is_exposed, has_derive, has_track_caller, is_cfg_creusot, is_cfg_test,
+    is_clap_schema, is_fluent_setter, type_label,
 };
 use super::types::{DeriveRuleId, DeriveSiteRecord};
 
@@ -85,6 +85,7 @@ pub fn scan_rust_source(
         crate_root: crate_root.to_path_buf(),
         module_prefix,
         structs: HashMap::new(),
+        generated_builders: HashSet::new(),
         error_types: HashSet::new(),
         thresholds,
         path_inclusions,
@@ -136,6 +137,7 @@ struct DeriveScanVisitor<'a> {
     crate_root: PathBuf,
     module_prefix: Vec<String>,
     structs: HashMap<String, StructInfo>,
+    generated_builders: HashSet<String>,
     error_types: HashSet<String>,
     thresholds: DerivesThresholds,
     path_inclusions: &'a PathInclusionFacts,
@@ -276,6 +278,8 @@ impl DeriveScanVisitor<'_> {
                 fields,
             },
         );
+        self.generated_builders
+            .extend(derive_builder_names(&item_struct.attrs, &name));
         if exposed_fields.is_empty()
             || is_clap_schema(&item_struct.attrs)
             || self.in_cfg_creusot_mod
@@ -303,6 +307,9 @@ impl DeriveScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, item_impl))]
     fn visit_impl(&mut self, item_impl: &ItemImpl) {
         let self_ty = type_label(&item_impl.self_ty);
+        if self.generated_builders.contains(&self_ty) {
+            return;
+        }
         let struct_info = self.structs.get(&self_ty).cloned();
         if struct_info
             .as_ref()

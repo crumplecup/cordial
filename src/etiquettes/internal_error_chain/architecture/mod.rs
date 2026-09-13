@@ -43,12 +43,12 @@ fn load_src_file(catalog: &mut Catalog, file: &Path, src_root: &Path) -> Cordial
     let syntax = syn::parse_file(&source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
     let module_prefix = module_path_from_src_file(src_root, file);
-    let mut visitor = CatalogVisitor::new(
-        file.to_path_buf(),
-        module_prefix,
-        catalog,
-        CatalogPhase::Types,
-    );
+    let mut visitor = CatalogVisitor::builder()
+        .file(file.to_path_buf())
+        .module_prefix(module_prefix)
+        .catalog(catalog)
+        .phase(CatalogPhase::Types)
+        .build()?;
     visitor.visit_file(&syntax);
     visitor.set_phase(CatalogPhase::Impls);
     visitor.reset_module_prefix(module_path_from_src_file(src_root, file));

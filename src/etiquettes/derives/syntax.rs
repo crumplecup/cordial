@@ -1,6 +1,7 @@
 use syn::{
     Attribute, Block, Expr, FnArg, ItemImpl, Pat, ReturnType, Signature, Stmt, Type, Visibility,
 };
+use syn::{Token, punctuated::Punctuated};
 
 use tracing::instrument;
 #[instrument(level = "debug", skip(vis))]
@@ -102,6 +103,50 @@ pub(super) fn has_derive(attrs: &[Attribute], needle: &str) -> bool {
                 || compact.ends_with(&format!("::{needle}"))
                 || compact.contains(&format!("::{needle}::"))
         })
+    })
+}
+
+#[instrument(level = "trace", skip(attrs))]
+pub(super) fn derive_builder_names(attrs: &[Attribute], struct_name: &str) -> Vec<String> {
+    if !has_derive(attrs, "Builder") {
+        return Vec::new();
+    }
+    let mut names = vec![format!("{struct_name}Builder")];
+    for attr in attrs {
+        let syn::Meta::List(list) = &attr.meta else {
+            continue;
+        };
+        if !list.path.is_ident("builder") {
+            continue;
+        }
+        if let Some(name) = builder_name_attr(attr) {
+            names.push(name);
+        }
+    }
+    names.sort();
+    names.dedup();
+    names
+}
+
+#[instrument(level = "trace", skip(attr))]
+fn builder_name_attr(attr: &Attribute) -> Option<String> {
+    let meta = attr
+        .parse_args_with(Punctuated::<syn::Meta, Token![,]>::parse_terminated)
+        .ok()?;
+    meta.into_iter().find_map(|meta| {
+        let syn::Meta::NameValue(name_value) = meta else {
+            return None;
+        };
+        if !name_value.path.is_ident("name") {
+            return None;
+        }
+        let Expr::Lit(lit) = name_value.value else {
+            return None;
+        };
+        let syn::Lit::Str(name) = lit.lit else {
+            return None;
+        };
+        Some(name.value())
     })
 }
 
