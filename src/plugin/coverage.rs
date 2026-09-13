@@ -1,8 +1,6 @@
 //! Coverage plugin semantics — shared supertrait for trait-impl coverage profiles.
 
 use crate::error::CordialResult;
-#[cfg(feature = "impl_coverage")]
-use crate::etiquettes::ImplGapKind;
 use crate::loader::CrateTarget;
 use crate::plugin::{Plugin, PluginCategory};
 use crate::rustdoc::{ELICIT_COMPLETE_SUPERTRAITS, ELICIT_COMPLETE_TRAIT, TraitPrereqs};
@@ -55,11 +53,6 @@ pub trait Coverage: Plugin {
         self.target_provider().coverage_targets(session, filter)
     }
 
-    /// Classify gap.
-    #[cfg(feature = "impl_coverage")]
-    fn classify_gap(&self, ctx: &GapContext) -> Option<ImplGapKind> {
-        classify_elicit_complete_gap(&ctx.prereqs)
-    }
     /// Etiquette / lint category this rule belongs to.
     fn category(&self) -> PluginCategory {
         PluginCategory::Coverage
@@ -182,15 +175,6 @@ pub struct GapContext {
     prereqs: TraitPrereqs,
 }
 
-impl GapContext {
-    /// Gap kind.
-    #[instrument(level = "trace", skip(self))]
-    #[cfg(feature = "impl_coverage")]
-    pub fn gap_kind(&self) -> Option<ImplGapKind> {
-        classify_elicit_complete_gap(&self.prereqs)
-    }
-}
-
 /// Default provider: one target per workspace member from `cargo metadata`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct WorkspaceMembersTargetProvider;
@@ -210,21 +194,40 @@ impl TargetProvider for WorkspaceMembersTargetProvider {
     }
 }
 
-/// Classify elicit complete gap.
-#[instrument(level = "debug", skip(prereqs))]
 #[cfg(feature = "impl_coverage")]
-pub fn classify_elicit_complete_gap(prereqs: &TraitPrereqs) -> Option<ImplGapKind> {
-    if prereqs.elicit_complete() {
-        return None;
+mod impl_gap_classification {
+    use crate::etiquettes::ImplGapKind;
+    use crate::rustdoc::TraitPrereqs;
+    use tracing::instrument;
+
+    use super::GapContext;
+
+    impl GapContext {
+        /// Gap kind.
+        #[instrument(level = "trace", skip(self))]
+        pub fn gap_kind(&self) -> Option<ImplGapKind> {
+            classify_elicit_complete_gap(&self.prereqs)
+        }
     }
-    if prereqs.can_be_direct() && prereqs.our_traits_complete() {
-        return Some(ImplGapKind::ReadyForElicitComplete);
+
+    /// Classify elicit complete gap.
+    #[instrument(level = "debug", skip(prereqs))]
+    pub fn classify_elicit_complete_gap(prereqs: &TraitPrereqs) -> Option<ImplGapKind> {
+        if prereqs.elicit_complete() {
+            return None;
+        }
+        if prereqs.can_be_direct() && prereqs.our_traits_complete() {
+            return Some(ImplGapKind::ReadyForElicitComplete);
+        }
+        if !prereqs.our_traits_complete() {
+            return Some(ImplGapKind::MissingOurTraits);
+        }
+        if !prereqs.can_be_direct() {
+            return Some(ImplGapKind::ExternallyBlocked);
+        }
+        None
     }
-    if !prereqs.our_traits_complete() {
-        return Some(ImplGapKind::MissingOurTraits);
-    }
-    if !prereqs.can_be_direct() {
-        return Some(ImplGapKind::ExternallyBlocked);
-    }
-    None
 }
+
+#[cfg(feature = "impl_coverage")]
+pub use impl_gap_classification::classify_elicit_complete_gap;

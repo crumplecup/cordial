@@ -1,7 +1,5 @@
 use crate::error::CordialResult;
 use crate::ir::{CrateIr, EdgeKind, NodeId, NodeKind, NodeWeight};
-#[cfg(feature = "impl_coverage")]
-use crate::rustdoc::WrapperCoverageMap;
 use tracing::instrument;
 
 use super::query::Query;
@@ -51,7 +49,7 @@ pub trait IrMut: IrView {
 
     /// Workspace-level wrapper coverage from the elicitation hub IR.
     #[cfg(feature = "impl_coverage")]
-    fn workspace_wrapper_coverage(&self) -> Option<&WrapperCoverageMap> {
+    fn workspace_wrapper_coverage(&self) -> Option<&crate::rustdoc::WrapperCoverageMap> {
         None
     }
 }

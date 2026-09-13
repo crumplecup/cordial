@@ -5,25 +5,15 @@ use std::sync::Arc;
 
 use clap::Subcommand;
 
-#[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
-use super::run::execute_build_rustdoc;
-#[cfg(feature = "homecoming_std")]
-use super::run::execute_build_sysroot;
 use super::run::{
     execute_add_coverage_skip, execute_add_exception, execute_backup_exceptions,
     execute_load_exceptions, execute_quality_apply, execute_run_plugins, export_surreal,
     list_exceptions, show_exceptions, view_store_file,
 };
-#[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
-use crate::RunAll;
-#[cfg(all(feature = "elicitation", not(feature = "homecoming_std")))]
-use crate::coverage_plugins;
 use crate::{
     CordialError, CordialResult, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,
     ProgressSink, StoreLayout, all_plugins, quality_plugins,
 };
-#[cfg(feature = "homecoming_std")]
-use crate::{coverage_plugins_for_hub, discover_workspace_hub};
 use tracing::instrument;
 
 /// Top-level `cordial` subcommands.
@@ -163,7 +153,6 @@ pub enum ExportCommands {
 #[derive(Subcommand)]
 pub enum BuildCommands {
     /// Build rustdoc JSON for workspace members and cache under the project store.
-    #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
     Rustdoc {
         /// Rebuild even when a valid cached build artifact exists.
         #[arg(long)]
@@ -232,14 +221,14 @@ impl Commands {
             Self::Coverage => {
                 #[cfg(feature = "homecoming_std")]
                 {
-                    let hub = discover_workspace_hub(&ctx.project_root, &RunAll)?;
+                    let hub = crate::discover_workspace_hub(&ctx.project_root, &crate::RunAll)?;
                     execute_run_plugins(
                         &ctx.project_root,
                         &ctx.store,
                         ctx.crate_name.as_deref(),
                         ctx.store_home.clone(),
                         ctx.progress.clone(),
-                        coverage_plugins_for_hub(hub),
+                        crate::coverage_plugins_for_hub(hub),
                         false,
                     )
                 }
@@ -251,7 +240,7 @@ impl Commands {
                         ctx.crate_name.as_deref(),
                         ctx.store_home.clone(),
                         ctx.progress.clone(),
-                        coverage_plugins(),
+                        crate::coverage_plugins(),
                         false,
                     )
                 }
@@ -349,8 +338,7 @@ impl BuildCommands {
     #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
     fn act(self, ctx: &ActCtx) -> CordialResult<()> {
         match self {
-            #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
-            Self::Rustdoc { force } => execute_build_rustdoc(
+            Self::Rustdoc { force } => super::run::execute_build_rustdoc(
                 &ctx.project_root,
                 &ctx.store,
                 ctx.crate_name.as_deref(),
@@ -358,7 +346,7 @@ impl BuildCommands {
                 force,
             ),
             #[cfg(feature = "homecoming_std")]
-            Self::Sysroot { force } => execute_build_sysroot(
+            Self::Sysroot { force } => super::run::execute_build_sysroot(
                 ctx.store_home.clone(),
                 ctx.crate_name.as_deref(),
                 ctx.progress.clone(),

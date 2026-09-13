@@ -11,16 +11,6 @@ use crate::loader::{path_has_fixtures, quality_scan_trees};
 use crate::etiquettes::error_chain::ErrorChainRecord;
 use tracing::instrument;
 
-#[cfg(feature = "internal_error_chain")]
-use std::collections::BTreeSet;
-
-#[cfg(feature = "internal_error_chain")]
-use crate::etiquettes::internal_error_chain::{
-    InternalErrorChainScanReport, InternalErrorComplianceFinding, InternalErrorComplianceReport,
-    InternalErrorTypeGraphReport, RawTypeNode, finalize_type_graph, scan_crate_error_architecture,
-    type_path_is_error_related,
-};
-
 /// Combined scan output for one crate (one parse + unified walk per file).
 #[derive(Debug, Clone, Default, derive_getters::Getters)]
 pub struct ErrorIrScanReport {
@@ -31,21 +21,27 @@ pub struct ErrorIrScanReport {
     chain: Vec<ErrorChainRecord>,
     /// Type-relationship graph for this crate.
     #[cfg(feature = "internal_error_chain")]
-    type_graph: InternalErrorTypeGraphReport,
+    type_graph: crate::etiquettes::internal_error_chain::InternalErrorTypeGraphReport,
     /// Compliance findings for this crate.
     #[cfg(feature = "internal_error_chain")]
-    compliance: Vec<InternalErrorComplianceFinding>,
+    compliance: Vec<crate::etiquettes::internal_error_chain::InternalErrorComplianceFinding>,
 }
 
 impl ErrorIrScanReport {
     /// Internal report.
     #[instrument(level = "trace", skip(self))]
     #[cfg(feature = "internal_error_chain")]
-    pub fn internal_report(&self, crate_name: &str) -> InternalErrorChainScanReport {
-        InternalErrorChainScanReport::new(
+    pub fn internal_report(
+        &self,
+        crate_name: &str,
+    ) -> crate::etiquettes::internal_error_chain::InternalErrorChainScanReport {
+        crate::etiquettes::internal_error_chain::InternalErrorChainScanReport::new(
             crate_name.to_string(),
             self.type_graph.clone(),
-            InternalErrorComplianceReport::new(crate_name.to_string(), self.compliance.clone()),
+            crate::etiquettes::internal_error_chain::InternalErrorComplianceReport::new(
+                crate_name.to_string(),
+                self.compliance.clone(),
+            ),
         )
     }
 }
@@ -60,9 +56,9 @@ pub fn scan_crate_error_ir(
     let mut report = ErrorIrScanReport::default();
 
     #[cfg(feature = "internal_error_chain")]
-    let mut type_graph_raw = Vec::<RawTypeNode>::new();
+    let mut type_graph_raw = Vec::<crate::etiquettes::internal_error_chain::RawTypeNode>::new();
     #[cfg(feature = "internal_error_chain")]
-    let mut error_impls = BTreeSet::<String>::new();
+    let mut error_impls = std::collections::BTreeSet::<String>::new();
 
     for tree_root in quality_scan_trees(crate_root) {
         if !tree_root.is_dir() {
@@ -113,15 +109,29 @@ pub fn scan_crate_error_ir(
 
     #[cfg(feature = "internal_error_chain")]
     {
-        type_graph_raw.retain(|node| type_path_is_error_related(node.type_path(), &error_impls));
-        let mut nodes = finalize_type_graph(type_graph_raw, crate_name)?;
+        type_graph_raw.retain(|node| {
+            crate::etiquettes::internal_error_chain::type_path_is_error_related(
+                node.type_path(),
+                &error_impls,
+            )
+        });
+        let mut nodes = crate::etiquettes::internal_error_chain::finalize_type_graph(
+            type_graph_raw,
+            crate_name,
+        )?;
         for node in &mut nodes {
             node.strip_file_prefix(crate_root);
         }
-        report.type_graph = InternalErrorTypeGraphReport::new(crate_name.to_string(), nodes);
-        report
-            .compliance
-            .extend(scan_crate_error_architecture(crate_root, crate_name)?);
+        report.type_graph =
+            crate::etiquettes::internal_error_chain::InternalErrorTypeGraphReport::new(
+                crate_name.to_string(),
+                nodes,
+            );
+        report.compliance.extend(
+            crate::etiquettes::internal_error_chain::scan_crate_error_architecture(
+                crate_root, crate_name,
+            )?,
+        );
         compliance_sort::sort_compliance(&mut report.compliance);
         for finding in &mut report.compliance {
             finding.strip_file_prefix(crate_root);

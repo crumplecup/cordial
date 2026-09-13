@@ -11,13 +11,8 @@ use syn::{
 use super::error_assertion;
 use super::kani_reach::{KaniReachability, build_kani_reachability};
 use super::types::{PanicKind, PanicSiteRecord};
-#[cfg(feature = "verus_ir")]
-use super::verus_reach;
-#[cfg(not(feature = "verus_ir"))]
-use super::verus_recover::{VerusFunctionChunk, collect_verus_functions};
 use crate::error::CordialResult;
 use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
-use crate::objects::SourceSpan;
 
 use tracing::instrument;
 /// Scan `src/` and `tests/` under `crate_root`, excluding `fixtures/` paths.
@@ -49,7 +44,7 @@ pub fn scan_crate_panics(crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord
     #[cfg(feature = "verus_ir")]
     {
         let verus_ir = crate::verus_ir::scan_crate_verus_ir(crate_root)?;
-        findings.extend(verus_ir_findings(&verus_ir, crate_root)?);
+        findings.extend(verus_panics::findings(&verus_ir, crate_root)?);
     }
     findings.sort_by(|a, b| {
         a.file()
@@ -133,7 +128,7 @@ pub fn scan_rust_source(
         let mut findings = findings;
         let module_path = module_path_from_src_file(src_root, file).join("::");
         let verus_ir = crate::verus_ir::scan_verus_rust_source(source, file, &module_path);
-        findings.extend(verus_ir_findings(&verus_ir, crate_root)?);
+        findings.extend(verus_panics::findings(&verus_ir, crate_root)?);
         findings
     };
     Ok(findings)
@@ -160,55 +155,112 @@ pub fn scan_rust_source(
 /// keyed on structural facts Verus's own grammar makes visible instead
 /// of call-graph reachability from a `#[kani::proof]` root.
 #[cfg(feature = "verus_ir")]
-#[instrument(level = "debug", skip(ir), err(level = "warn"))]
-fn verus_ir_findings(
-    ir: &crate::verus_ir::VerusCrateIr,
-    crate_root: &Path,
-) -> CordialResult<Vec<PanicSiteRecord>> {
-    let reachability = verus_reach::build_verus_reachability(ir);
-    let mut findings = Vec::new();
-    for function in ir
-        .functions()
-        .iter()
-        .filter(|function| !reachability.is_verification_leaf(function.name()))
-    {
-        let context = format!("{}::{}", function.module_path(), function.name());
-        let file = function
-            .span()
-            .file()
-            .strip_prefix(crate_root)
-            .unwrap_or(function.span().file())
-            .to_path_buf();
-        let cfg_test = function.cfg_test();
-        for site in function
-            .panic_sites()
+mod verus_panics {
+    use std::path::Path;
+
+    use crate::error::CordialResult;
+    use crate::objects::SourceSpan;
+
+    use super::{PanicKind, PanicSiteRecord};
+    use tracing::instrument;
+
+    #[instrument(level = "debug", skip(ir), err(level = "warn"))]
+    pub(super) fn findings(
+        ir: &crate::verus_ir::VerusCrateIr,
+        crate_root: &Path,
+    ) -> CordialResult<Vec<PanicSiteRecord>> {
+        let reachability = super::super::verus_reach::build_verus_reachability(ir);
+        let mut findings = Vec::new();
+        for function in ir
+            .functions()
             .iter()
-            .filter(|site| !site.proven_unreachable_by_ghost_sibling())
+            .filter(|function| !reachability.is_verification_leaf(function.name()))
         {
-            findings.push(
-                PanicSiteRecord::builder()
-                    .kind(verus_panic_kind(site.kind()))
-                    .context(context.clone())
-                    .file(file.clone())
-                    .line(site.line())
-                    .snippet(site.snippet().clone())
-                    .cfg_test(cfg_test)
-                    .build()?,
-            );
+            let context = format!("{}::{}", function.module_path(), function.name());
+            let file = function
+                .span()
+                .file()
+                .strip_prefix(crate_root)
+                .unwrap_or(function.span().file())
+                .to_path_buf();
+            let cfg_test = function.cfg_test();
+            for site in function
+                .panic_sites()
+                .iter()
+                .filter(|site| !site.proven_unreachable_by_ghost_sibling())
+            {
+                findings.push(
+                    PanicSiteRecord::builder()
+                        .kind(panic_kind(site.kind()))
+                        .context(context.clone())
+                        .file(file.clone())
+                        .line(site.line())
+                        .snippet(site.snippet().clone())
+                        .cfg_test(cfg_test)
+                        .build()?,
+                );
+            }
+        }
+        Ok(findings)
+    }
+
+    #[instrument(level = "debug", skip(kind))]
+    fn panic_kind(kind: crate::verus_ir::VerusPanicKind) -> PanicKind {
+        match kind {
+            crate::verus_ir::VerusPanicKind::Panic => PanicKind::Panic,
+            crate::verus_ir::VerusPanicKind::Unreachable => PanicKind::Unreachable,
+            crate::verus_ir::VerusPanicKind::Expect => PanicKind::Expect,
+            crate::verus_ir::VerusPanicKind::Unwrap => PanicKind::Unwrap,
+            crate::verus_ir::VerusPanicKind::CompileError => PanicKind::CompileError,
         }
     }
-    Ok(findings)
 }
 
-#[cfg(feature = "verus_ir")]
-#[instrument(level = "debug", skip(kind))]
-fn verus_panic_kind(kind: crate::verus_ir::VerusPanicKind) -> PanicKind {
-    match kind {
-        crate::verus_ir::VerusPanicKind::Panic => PanicKind::Panic,
-        crate::verus_ir::VerusPanicKind::Unreachable => PanicKind::Unreachable,
-        crate::verus_ir::VerusPanicKind::Expect => PanicKind::Expect,
-        crate::verus_ir::VerusPanicKind::Unwrap => PanicKind::Unwrap,
-        crate::verus_ir::VerusPanicKind::CompileError => PanicKind::CompileError,
+#[cfg(not(feature = "verus_ir"))]
+mod verus_recovery {
+    use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
+    use tracing::instrument;
+
+    #[instrument(level = "debug", skip(tokens))]
+    pub(super) fn collect_functions(
+        tokens: TokenStream,
+    ) -> Vec<super::super::verus_recover::VerusFunctionChunk> {
+        super::super::verus_recover::collect_verus_functions(tokens)
+    }
+
+    impl super::PanicScanVisitor<'_> {
+        /// Parse each recovered `verus! { .. }` function chunk as a real
+        /// `syn::Block` and visit it with this same visitor -- `fn_stack`
+        /// gets the chunk's real name pushed first, so findings inside get
+        /// the same accurate context (and the same Kani-reachability/
+        /// cfg(test) handling) as an ordinary function would. A chunk that
+        /// fails to parse (genuine Verus-only expression syntax -- see
+        /// `verus_recover`'s own doc comment) is retried one level deeper
+        /// via `collect_verus_functions` on its own body tokens, to still
+        /// opportunistically find a nested `fn` even inside an outer shell
+        /// this scanner can't fully make sense of. Only compiled in when
+        /// `verus_ir` (a genuinely complete parse) isn't available.
+        #[instrument(level = "debug", skip(self, chunks))]
+        pub(super) fn scan_verus_chunks(
+            &mut self,
+            chunks: Vec<super::super::verus_recover::VerusFunctionChunk>,
+        ) {
+            for chunk in chunks {
+                let (name, body) = chunk.into_parts();
+                let braced =
+                    TokenStream::from(TokenTree::Group(Group::new(Delimiter::Brace, body.clone())));
+                match syn::parse2::<syn::Block>(braced) {
+                    Ok(block) => {
+                        self.fn_stack.push(name);
+                        syn::visit::visit_block(self, &block);
+                        self.fn_stack.pop();
+                    }
+                    Err(_) => {
+                        self.scan_verus_chunks(collect_functions(body));
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -388,7 +440,7 @@ impl PanicScanVisitor<'_> {
         {
             let module_path = self.site_context();
             let ir = crate::verus_ir::scan_verus_rust_source(&value, &self.file, &module_path);
-            let records = match verus_ir_findings(&ir, &self.crate_root) {
+            let records = match verus_panics::findings(&ir, &self.crate_root) {
                 Ok(records) => records,
                 Err(error) => {
                     self.error = Some(error);
@@ -427,45 +479,13 @@ impl PanicScanVisitor<'_> {
             // `verus_ir_findings`) -- skip the best-effort recovery here
             // entirely rather than double-count.
             #[cfg(not(feature = "verus_ir"))]
-            self.scan_verus_chunks(collect_verus_functions(mac.tokens.clone()));
+            self.scan_verus_chunks(verus_recovery::collect_functions(mac.tokens.clone()));
             return;
         }
         let Some(kind) = macro_panic_kind(&mac.path) else {
             return;
         };
         self.push_finding(kind, mac.span().start().line as u32, macro_snippet(mac));
-    }
-
-    /// Parse each recovered `verus! { .. }` function chunk as a real
-    /// `syn::Block` and visit it with this same visitor -- `fn_stack`
-    /// gets the chunk's real name pushed first, so findings inside get
-    /// the same accurate context (and the same Kani-reachability/
-    /// cfg(test) handling) as an ordinary function would. A chunk that
-    /// fails to parse (genuine Verus-only expression syntax -- see
-    /// `verus_recover`'s own doc comment) is retried one level deeper
-    /// via `collect_verus_functions` on its own body tokens, to still
-    /// opportunistically find a nested `fn` even inside an outer shell
-    /// this scanner can't fully make sense of. Only compiled in when
-    /// `verus_ir` (a genuinely complete parse) isn't available.
-    #[cfg(not(feature = "verus_ir"))]
-    #[instrument(level = "debug", skip(self, chunks))]
-    fn scan_verus_chunks(&mut self, chunks: Vec<VerusFunctionChunk>) {
-        for chunk in chunks {
-            let (name, body) = chunk.into_parts();
-            let braced = proc_macro2::TokenStream::from(proc_macro2::TokenTree::Group(
-                proc_macro2::Group::new(proc_macro2::Delimiter::Brace, body.clone()),
-            ));
-            match syn::parse2::<syn::Block>(braced) {
-                Ok(block) => {
-                    self.fn_stack.push(name);
-                    syn::visit::visit_block(self, &block);
-                    self.fn_stack.pop();
-                }
-                Err(_) => {
-                    self.scan_verus_chunks(collect_verus_functions(body));
-                }
-            }
-        }
     }
 
     #[instrument(level = "debug", skip(self, call))]

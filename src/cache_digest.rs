@@ -7,8 +7,6 @@ use tracing::instrument;
 
 use crate::error::CordialResult;
 use crate::loader::{CrateTarget, SourceLoadView};
-#[cfg(feature = "rustdoc")]
-use crate::{RustdocLoadView, RustdocLoader};
 
 /// Fingerprints recorded alongside a cached IR graph.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,21 +49,7 @@ impl IrCacheDigest {
             .map(|view| digest_source_files(view.files()))
             .unwrap_or_default();
 
-        let rustdoc_json = {
-            #[cfg(feature = "rustdoc")]
-            {
-                let rustdoc_key = format!("{}:{}", target.crate_name(), RustdocLoader::ID);
-                load_views
-                    .get(&rustdoc_key)
-                    .and_then(|view| view.as_any().downcast_ref::<RustdocLoadView>())
-                    .and_then(RustdocLoadView::json_path)
-                    .and_then(|path| digest_file(path).ok())
-            }
-            #[cfg(not(feature = "rustdoc"))]
-            {
-                None
-            }
-        };
+        let rustdoc_json = rustdoc_digest::compute(target, load_views);
 
         Ok(Self {
             crate_name: target.crate_name().clone(),
@@ -102,11 +86,50 @@ fn digest_source_files(files: &[crate::loader::SourceFile]) -> Vec<SourceFileDig
     digests
 }
 
-#[instrument(level = "debug", skip(path), err(level = "warn"))]
 #[cfg(feature = "rustdoc")]
-fn digest_file(path: &Path) -> CordialResult<String> {
-    let bytes = std::fs::read(path)?;
-    Ok(digest_bytes(&bytes))
+mod rustdoc_digest {
+    use std::collections::HashMap;
+    use std::path::Path;
+
+    use crate::error::CordialResult;
+    use crate::loader::CrateTarget;
+    use tracing::instrument;
+
+    #[instrument(level = "debug", skip(target, load_views))]
+    pub(super) fn compute(
+        target: &CrateTarget,
+        load_views: &HashMap<String, Box<dyn crate::loader::LoadView>>,
+    ) -> Option<String> {
+        let rustdoc_key = format!("{}:{}", target.crate_name(), crate::RustdocLoader::ID);
+        load_views
+            .get(&rustdoc_key)
+            .and_then(|view| view.as_any().downcast_ref::<crate::RustdocLoadView>())
+            .and_then(crate::RustdocLoadView::json_path)
+            .and_then(|path| digest_file(path).ok())
+    }
+
+    #[instrument(level = "debug", skip(path), err(level = "warn"))]
+    fn digest_file(path: &Path) -> CordialResult<String> {
+        let bytes = std::fs::read(path)?;
+        Ok(super::digest_bytes(&bytes))
+    }
+}
+
+#[cfg(not(feature = "rustdoc"))]
+mod rustdoc_digest {
+    use std::collections::HashMap;
+
+    use crate::loader::CrateTarget;
+    use tracing::instrument;
+
+    #[instrument(level = "debug", skip(target, load_views))]
+    pub(super) fn compute(
+        target: &CrateTarget,
+        load_views: &HashMap<String, Box<dyn crate::loader::LoadView>>,
+    ) -> Option<String> {
+        let _ = (target, load_views);
+        None
+    }
 }
 
 #[instrument(level = "debug")]

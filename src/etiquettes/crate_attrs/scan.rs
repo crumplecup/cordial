@@ -10,9 +10,6 @@ use crate::error::CordialResult;
 
 use super::types::{CrateAttrsRuleId, CrateAttrsSiteRecord};
 
-#[cfg(feature = "verus_warnings")]
-use crate::etiquettes::verus_warnings::crate_is_verus_target;
-
 use tracing::instrument;
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -47,7 +44,7 @@ pub fn scan_crate_attrs(
     let mut records = Vec::new();
     if !policy.skip_unsafe(crate_name)
         && !presence.forbid_unsafe_code
-        && !is_unsafe_forbid_exempt_verus_target(crate_root)
+        && !verus_exemption::is_unsafe_forbid_exempt_verus_target(crate_root)
     {
         records.push(
             CrateAttrsSiteRecord::builder()
@@ -86,39 +83,52 @@ pub fn scan_crate_attrs(
 /// verus-target crate that never actually states an external claim this
 /// way has no reason to be exempt.
 #[cfg(feature = "verus_warnings")]
-#[instrument(level = "debug")]
-fn is_unsafe_forbid_exempt_verus_target(crate_root: &Path) -> bool {
-    crate_is_verus_target(crate_root) && crate_uses_assume_specification(crate_root)
+mod verus_exemption {
+    use std::path::Path;
+
+    use tracing::instrument;
+
+    #[instrument(level = "debug")]
+    pub(super) fn is_unsafe_forbid_exempt_verus_target(crate_root: &Path) -> bool {
+        crate::etiquettes::verus_warnings::crate_is_verus_target(crate_root)
+            && crate_uses_assume_specification(crate_root)
+    }
+
+    /// Whether any `.rs` file under `crate_root/src` literally mentions
+    /// `assume_specification` -- a plain substring search, not a real parse:
+    /// the construct only compiles under the real `verus` toolchain's own
+    /// extended grammar (`verus_syn`), which this scanner has no reason to
+    /// depend on just to recognize the one keyword that triggers the
+    /// `forbid(unsafe_code)` conflict this exemption exists for.
+    #[instrument(level = "debug")]
+    fn crate_uses_assume_specification(crate_root: &Path) -> bool {
+        let src_root = crate_root.join("src");
+        if !src_root.is_dir() {
+            return false;
+        }
+        walkdir::WalkDir::new(&src_root)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_type().is_file())
+            .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "rs"))
+            .any(|entry| {
+                std::fs::read_to_string(entry.path())
+                    .is_ok_and(|source| source.contains("assume_specification"))
+            })
+    }
 }
 
 #[cfg(not(feature = "verus_warnings"))]
-#[instrument(level = "trace", ret)]
-fn is_unsafe_forbid_exempt_verus_target(_crate_root: &Path) -> bool {
-    false
-}
+mod verus_exemption {
+    use std::path::Path;
 
-/// Whether any `.rs` file under `crate_root/src` literally mentions
-/// `assume_specification` -- a plain substring search, not a real parse:
-/// the construct only compiles under the real `verus` toolchain's own
-/// extended grammar (`verus_syn`), which this scanner has no reason to
-/// depend on just to recognize the one keyword that triggers the
-/// `forbid(unsafe_code)` conflict this exemption exists for.
-#[cfg(feature = "verus_warnings")]
-#[instrument(level = "debug")]
-fn crate_uses_assume_specification(crate_root: &Path) -> bool {
-    let src_root = crate_root.join("src");
-    if !src_root.is_dir() {
-        return false;
+    use tracing::instrument;
+
+    #[instrument(level = "trace", ret)]
+    pub(super) fn is_unsafe_forbid_exempt_verus_target(crate_root: &Path) -> bool {
+        let _ = crate_root;
+        false
     }
-    walkdir::WalkDir::new(&src_root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "rs"))
-        .any(|entry| {
-            std::fs::read_to_string(entry.path())
-                .is_ok_and(|source| source.contains("assume_specification"))
-        })
 }
 
 /// Absolute path of this package's library root, if it has one.

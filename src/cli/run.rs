@@ -5,10 +5,6 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-#[cfg(feature = "homecoming_std")]
-use crate::SysrootCache;
-#[cfg(feature = "quality")]
-use crate::build_quality_report;
 use crate::{
     AddExceptionOutcome, CordialError, CordialResult, CoverageSkipEntry, CrateIr, Disposition,
     ExceptionEntry, Finding, NamedRunFilter, Plugin, ProgressSink, RunAll, RunFilter, RunOutcome,
@@ -72,7 +68,7 @@ pub(super) fn execute_build_sysroot(
     force: bool,
 ) -> CordialResult<()> {
     let home = store_home.unwrap_or_else(default_store_home);
-    let sysroot = SysrootCache::from_home(home);
+    let sysroot = crate::SysrootCache::from_home(home);
     let artifacts = crate::cargo_rustdoc::build_sysroot_libraries_with_progress(
         &sysroot,
         crate_name,
@@ -273,7 +269,7 @@ fn print_run_summary(outcome: &dyn RunOutcome) -> CordialResult<RunSummary> {
 #[cfg(feature = "quality")]
 #[instrument(level = "debug", skip(findings), err(level = "warn"))]
 fn open_action_items(findings: &[&dyn Finding]) -> CordialResult<usize> {
-    Ok(build_quality_report(findings)?.total_open_items())
+    Ok(crate::build_quality_report(findings)?.total_open_items())
 }
 
 #[cfg(not(feature = "quality"))]

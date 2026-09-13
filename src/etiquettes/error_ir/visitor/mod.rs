@@ -12,17 +12,10 @@ use std::path::Path;
 
 use syn::visit::Visit;
 
-#[cfg(feature = "internal_error_chain")]
-use std::collections::BTreeSet;
-
 use crate::error::CordialResult;
 #[cfg(feature = "error_chain")]
 use crate::etiquettes::error_chain::ErrorChainRecord;
 use crate::etiquettes::error_sites::ErrorSiteRecord;
-#[cfg(feature = "internal_error_chain")]
-use crate::etiquettes::internal_error_chain::{
-    InternalErrorComplianceFinding, RawTypeNode, scan_error_rust_syntax_raw,
-};
 use crate::loader::module_path_from_src_file;
 use tracing::instrument;
 
@@ -92,11 +85,11 @@ pub struct ErrorIrFileScan {
     #[cfg(feature = "error_chain")]
     chain: Vec<ErrorChainRecord>,
     #[cfg(feature = "internal_error_chain")]
-    compliance: Vec<InternalErrorComplianceFinding>,
+    compliance: Vec<crate::etiquettes::internal_error_chain::InternalErrorComplianceFinding>,
     #[cfg(feature = "internal_error_chain")]
-    type_graph_raw: Vec<RawTypeNode>,
+    type_graph_raw: Vec<crate::etiquettes::internal_error_chain::RawTypeNode>,
     #[cfg(feature = "internal_error_chain")]
-    error_impls: BTreeSet<String>,
+    error_impls: std::collections::BTreeSet<String>,
 }
 
 impl ErrorIrFileScan {
@@ -104,8 +97,8 @@ impl ErrorIrFileScan {
     #[cfg(feature = "internal_error_chain")]
     pub(super) fn with_type_graph(
         mut self,
-        type_graph_raw: Vec<RawTypeNode>,
-        error_impls: BTreeSet<String>,
+        type_graph_raw: Vec<crate::etiquettes::internal_error_chain::RawTypeNode>,
+        error_impls: std::collections::BTreeSet<String>,
     ) -> Self {
         self.type_graph_raw = type_graph_raw;
         self.error_impls = error_impls;
@@ -119,9 +112,13 @@ impl ErrorIrFileScan {
     pub(super) fn from_parts(
         sites: Vec<ErrorSiteRecord>,
         #[cfg(feature = "error_chain")] chain: Vec<ErrorChainRecord>,
-        #[cfg(feature = "internal_error_chain")] compliance: Vec<InternalErrorComplianceFinding>,
-        #[cfg(feature = "internal_error_chain")] type_graph_raw: Vec<RawTypeNode>,
-        #[cfg(feature = "internal_error_chain")] error_impls: BTreeSet<String>,
+        #[cfg(feature = "internal_error_chain")] compliance: Vec<
+            crate::etiquettes::internal_error_chain::InternalErrorComplianceFinding,
+        >,
+        #[cfg(feature = "internal_error_chain")] type_graph_raw: Vec<
+            crate::etiquettes::internal_error_chain::RawTypeNode,
+        >,
+        #[cfg(feature = "internal_error_chain")] error_impls: std::collections::BTreeSet<String>,
     ) -> Self {
         Self {
             sites,
@@ -162,7 +159,9 @@ pub fn scan_rust_file_syntax(
 
     #[cfg(feature = "internal_error_chain")]
     if layers.type_graph() {
-        let graph = scan_error_rust_syntax_raw(syntax, file, src_root)?;
+        let graph = crate::etiquettes::internal_error_chain::scan_error_rust_syntax_raw(
+            syntax, file, src_root,
+        )?;
         return Ok(scan.with_type_graph(graph.nodes().clone(), graph.error_impls().clone()));
     }
 

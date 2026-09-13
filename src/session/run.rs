@@ -12,26 +12,10 @@ use crate::hooks::{
 };
 use crate::ir::{CrateIr, CrateView, CrateViewMut, WorkspaceIr};
 use crate::loader::{CrateTarget, LoadView, SourceLoadView, SourceLoader};
-#[cfg(any(
-    feature = "homecoming_std",
-    feature = "amenable_std",
-    feature = "elicitation"
-))]
-use crate::objects::TextArtifact;
 use crate::objects::{Artifact, Finding, Marker};
 use crate::plugin::{Plugin, PluginCategory, plugins_in_category, selected_plugins};
-#[cfg(feature = "quality")]
-use crate::reporter::QualityReportReporter;
 use crate::reporter::RollupReporter;
-#[cfg(any(
-    feature = "homecoming_std",
-    feature = "amenable_std",
-    feature = "elicitation"
-))]
-use crate::reporter::{build_coverage_summary, render_coverage_summary_markdown};
 use crate::store::StoreLayout;
-#[cfg(feature = "rustdoc")]
-use crate::{RustdocLoadView, RustdocLoader};
 
 use super::resolve::{
     dedupe_assessors, dedupe_enrichers, dedupe_loaders, dedupe_probes, dedupe_reporters,
@@ -292,8 +276,8 @@ fn load_and_probe(
                 source.populate_ir(&mut crate_ir)?;
             }
             #[cfg(feature = "rustdoc")]
-            if view.loader_id() == RustdocLoader::ID
-                && let Some(rustdoc) = view.as_any().downcast_ref::<RustdocLoadView>()
+            if view.loader_id() == crate::RustdocLoader::ID
+                && let Some(rustdoc) = view.as_any().downcast_ref::<crate::RustdocLoadView>()
             {
                 rustdoc.populate_ir(&mut crate_ir)?;
             }
@@ -455,7 +439,7 @@ fn render_and_write(
 
     #[cfg(feature = "quality")]
     if includes_quality {
-        let quality_report = QualityReportReporter;
+        let quality_report = crate::reporter::QualityReportReporter;
         let mut quality_artifacts =
             quality_report.render(RenderView::new(&finding_refs, &crate_view, session))?;
         all_artifacts.append(&mut quality_artifacts);
@@ -467,7 +451,7 @@ fn render_and_write(
         feature = "elicitation"
     ))]
     if run_includes_coverage(session.registered_plugins(), filter, etiquettes) {
-        let summary = build_coverage_summary(
+        let summary = crate::reporter::build_coverage_summary(
             session.registered_plugins(),
             etiquette_ids,
             filter,
@@ -475,13 +459,13 @@ fn render_and_write(
             &finding_refs,
             workspace,
         )?;
-        let body = render_coverage_summary_markdown(&summary)?;
+        let body = crate::reporter::render_coverage_summary_markdown(&summary)?;
         let summary_name = if includes_quality {
             "coverage-summary.md"
         } else {
             "summary.md"
         };
-        all_artifacts.push(Box::new(TextArtifact::new(
+        all_artifacts.push(Box::new(crate::objects::TextArtifact::new(
             summary_name.to_string(),
             "text/markdown".to_string(),
             body,

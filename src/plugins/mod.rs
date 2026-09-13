@@ -51,21 +51,55 @@ pub use error_handling_plugin_wiring::{
 
 use crate::etiquette::Etiquette;
 use crate::plugin::{EtiquettePlugin, Plugin, PluginCategory, plugins_in_category};
+
 #[cfg(feature = "rustdoc")]
 mod coverage_targets {
     use crate::error::CordialResult;
     use crate::plugin::{
-        Coverage, CoverageTarget, Plugin, PluginCategory, plugins_in_category, selected_plugins,
+        CoverageTarget, Plugin, PluginCategory, plugins_in_category, selected_plugins,
     };
     use crate::session::{RunFilter, SessionView};
     use tracing::instrument;
 
-    #[cfg(feature = "amenable_std")]
-    use super::AMENABLE_STD_COVERAGE;
-    #[cfg(feature = "elicitation")]
-    use super::ELICITATION_COVERAGE;
-    #[cfg(feature = "homecoming_std")]
-    use super::HOMECOMING_STD_COVERAGE;
+    #[derive(Clone, Copy)]
+    struct CoveragePluginEntry {
+        plugin: &'static dyn Plugin,
+        coverage: &'static dyn crate::plugin::Coverage,
+        hub: crate::plugin::WorkspaceHub,
+    }
+
+    #[instrument(level = "debug")]
+    fn coverage_plugin_entries() -> Vec<CoveragePluginEntry> {
+        [
+            #[cfg(feature = "elicitation")]
+            Some(CoveragePluginEntry {
+                plugin: &super::elicitation::ELICITATION_COVERAGE,
+                coverage: &super::elicitation::ELICITATION_COVERAGE,
+                hub: crate::plugin::WorkspaceHub::Elicitation,
+            }),
+            #[cfg(not(feature = "elicitation"))]
+            None,
+            #[cfg(feature = "homecoming_std")]
+            Some(CoveragePluginEntry {
+                plugin: &super::homecoming::HOMECOMING_STD_COVERAGE,
+                coverage: &super::homecoming::HOMECOMING_STD_COVERAGE,
+                hub: crate::plugin::WorkspaceHub::Homecoming,
+            }),
+            #[cfg(not(feature = "homecoming_std"))]
+            None,
+            #[cfg(feature = "amenable_std")]
+            Some(CoveragePluginEntry {
+                plugin: &super::amenable::AMENABLE_STD_COVERAGE,
+                coverage: &super::amenable::AMENABLE_STD_COVERAGE,
+                hub: crate::plugin::WorkspaceHub::Amenable,
+            }),
+            #[cfg(not(feature = "amenable_std"))]
+            None,
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    }
 
     /// Union [`CoverageTarget`] rows from active coverage plugins in this run.
     #[instrument(level = "debug", skip(plugins, session, filter), err(level = "warn"))]
@@ -109,19 +143,14 @@ mod coverage_targets {
         session: &dyn SessionView,
         filter: &dyn RunFilter,
     ) -> CordialResult<Vec<CoverageTarget>> {
-        match plugin.id() {
-            #[cfg(feature = "elicitation")]
-            id if id == ELICITATION_COVERAGE.id() => ELICITATION_COVERAGE.targets(session, filter),
-            #[cfg(feature = "homecoming_std")]
-            id if id == HOMECOMING_STD_COVERAGE.id() => {
-                HOMECOMING_STD_COVERAGE.targets(session, filter)
-            }
-            #[cfg(feature = "amenable_std")]
-            id if id == AMENABLE_STD_COVERAGE.id() => {
-                AMENABLE_STD_COVERAGE.targets(session, filter)
-            }
-            _ => Ok(Vec::new()),
-        }
+        let id = plugin.id();
+        coverage_plugin_entries()
+            .into_iter()
+            .find(|entry| entry.plugin.id() == id)
+            .map_or_else(
+                || Ok(Vec::new()),
+                |entry| entry.coverage.targets(session, filter),
+            )
     }
 
     #[instrument(level = "debug", skip(targets))]
@@ -142,6 +171,28 @@ mod coverage_targets {
             }
         }
         out
+    }
+
+    /// Built-in coverage plugins.
+    #[instrument(level = "debug")]
+    pub fn coverage_plugins() -> Vec<&'static dyn Plugin> {
+        coverage_plugin_entries()
+            .into_iter()
+            .map(|entry| entry.plugin)
+            .collect()
+    }
+
+    /// Coverage plugins appropriate for a detected workspace hub.
+    #[instrument(level = "debug", skip(hub))]
+    pub fn coverage_plugins_for_hub(hub: crate::plugin::WorkspaceHub) -> Vec<&'static dyn Plugin> {
+        if hub == crate::plugin::WorkspaceHub::Unknown {
+            return coverage_plugins();
+        }
+        coverage_plugin_entries()
+            .into_iter()
+            .filter(|entry| entry.hub == hub)
+            .map(|entry| entry.plugin)
+            .collect()
     }
 }
 
@@ -164,47 +215,21 @@ pub fn quality_plugins() -> Vec<&'static dyn Plugin> {
 /// Built-in coverage plugins.
 #[instrument(level = "debug")]
 pub fn coverage_plugins() -> Vec<&'static dyn Plugin> {
-    [
-        #[cfg(feature = "elicitation")]
-        Some(&ELICITATION_COVERAGE as &dyn Plugin),
-        #[cfg(not(feature = "elicitation"))]
-        None,
-        #[cfg(feature = "homecoming_std")]
-        Some(&HOMECOMING_STD_COVERAGE as &dyn Plugin),
-        #[cfg(not(feature = "homecoming_std"))]
-        None,
-        #[cfg(feature = "amenable_std")]
-        Some(&AMENABLE_STD_COVERAGE as &dyn Plugin),
-        #[cfg(not(feature = "amenable_std"))]
-        None,
-    ]
-    .into_iter()
-    .flatten()
-    .collect()
+    #[cfg(feature = "rustdoc")]
+    {
+        coverage_targets::coverage_plugins()
+    }
+    #[cfg(not(feature = "rustdoc"))]
+    {
+        Vec::new()
+    }
 }
 
 /// Coverage plugins appropriate for a detected workspace hub.
 #[instrument(level = "debug", skip(hub))]
-#[cfg(feature = "homecoming_std")]
+#[cfg(any(feature = "homecoming_std", feature = "impl_coverage"))]
 pub fn coverage_plugins_for_hub(hub: crate::plugin::WorkspaceHub) -> Vec<&'static dyn Plugin> {
-    match hub {
-        crate::plugin::WorkspaceHub::Homecoming => {
-            vec![&HOMECOMING_STD_COVERAGE as &dyn Plugin]
-        }
-        #[cfg(feature = "amenable_std")]
-        crate::plugin::WorkspaceHub::Amenable => {
-            vec![&AMENABLE_STD_COVERAGE as &dyn Plugin]
-        }
-        #[cfg(not(feature = "amenable_std"))]
-        crate::plugin::WorkspaceHub::Amenable => Vec::new(),
-        #[cfg(feature = "elicitation")]
-        crate::plugin::WorkspaceHub::Elicitation => {
-            vec![&ELICITATION_COVERAGE as &dyn Plugin]
-        }
-        #[cfg(not(feature = "elicitation"))]
-        crate::plugin::WorkspaceHub::Elicitation => Vec::new(),
-        _ => coverage_plugins(),
-    }
+    coverage_targets::coverage_plugins_for_hub(hub)
 }
 
 /// All built-in plugins for the current feature set.

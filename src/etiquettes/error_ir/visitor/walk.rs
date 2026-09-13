@@ -22,9 +22,6 @@ use super::expr::{
     if_let_err_source, impl_type_label, match_has_err_arm, sites_err_payload, sites_expr_snippet,
     truncate_snippet,
 };
-#[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
-use super::site::SiteCtx;
-
 pub(super) struct ErrorIrUnifiedVisitor {
     layers: ErrorIrScanLayers,
     crate_name: String,
@@ -110,8 +107,8 @@ impl ErrorIrUnifiedVisitor {
 
     #[instrument(level = "trace", skip(self))]
     #[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
-    fn site_ctx(&self) -> CordialResult<SiteCtx> {
-        SiteCtx::builder()
+    fn site_ctx(&self) -> CordialResult<super::site::SiteCtx> {
+        super::site::SiteCtx::builder()
             .context(self.site_context())
             .rel_file(self.rel_file())
             .file(self.file.clone())
@@ -121,7 +118,7 @@ impl ErrorIrUnifiedVisitor {
 
     #[instrument(level = "trace", skip(self))]
     #[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
-    fn site_ctx_or_record(&mut self) -> Option<SiteCtx> {
+    fn site_ctx_or_record(&mut self) -> Option<super::site::SiteCtx> {
         if self.error.is_some() {
             return None;
         }

@@ -6,6 +6,8 @@ use cordial::{CordialResult, testing::rustdoc_cache_is_fresh};
 
 #[test]
 fn rustdoc_cache_freshness_tracks_member_sources() -> CordialResult<()> {
+    cordial::init_tracing();
+
     let temp = tempfile::tempdir()?;
     let project = temp.path();
     let src = project.join("src");
