@@ -12,7 +12,7 @@ use crate::session::{RunAll, RunFilter};
 use crate::store::StoreLayout;
 
 use super::artifact::BuildArtifact;
-use super::cargo::run_cargo_rustdoc;
+use super::cargo::{run_cargo_doc_for_optional_dep, run_cargo_rustdoc};
 use super::{
     copy_rustdoc_json, hash_file, read_build_artifact, read_crate_version, rustdoc_cache_is_fresh,
     write_build_artifact,
@@ -40,6 +40,7 @@ pub fn resolve_shadow_dep_build_config(
                     .map(|feature| (*feature).to_string())
                     .collect(),
                 true,
+                None,
             )
         })
         .unwrap_or_default()
@@ -95,12 +96,21 @@ pub(crate) fn build_shadow_dep_rustdoc_with_progress(
 
     let dep_config = resolve_shadow_dep_build_config(project_root, shadow_crate, upstream_crate);
     let task = progress.spinner(format!("Building rustdoc for shadow dep {upstream_crate}"));
-    let feature_refs: Vec<&str> = dep_config
-        .activated_features()
-        .iter()
-        .map(String::as_str)
-        .collect();
-    let json_path = run_cargo_rustdoc(project_root, upstream_crate, &feature_refs)?;
+    let json_path = if let Some(activating_feature) = dep_config.activating_member_feature() {
+        run_cargo_doc_for_optional_dep(
+            project_root,
+            shadow_crate,
+            activating_feature,
+            upstream_crate,
+        )?
+    } else {
+        let feature_refs: Vec<&str> = dep_config
+            .activated_features()
+            .iter()
+            .map(String::as_str)
+            .collect();
+        run_cargo_rustdoc(project_root, upstream_crate, &feature_refs)?
+    };
     copy_rustdoc_json(&json_path, &cached_json)?;
 
     let rustdoc_sha256 = hash_file(&cached_json)?;

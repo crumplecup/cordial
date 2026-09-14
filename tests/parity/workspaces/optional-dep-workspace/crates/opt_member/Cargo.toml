@@ -1,0 +1,11 @@
+[package]
+name = "opt_member"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+opt_upstream = { path = "../opt_upstream", optional = true }
+
+[features]
+default = []
+widget = ["dep:opt_upstream"]

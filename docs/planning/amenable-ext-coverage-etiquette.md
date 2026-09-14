@@ -126,6 +126,48 @@ already generic enough to be reused as-is for that target too.
 | Plugin + target provider (`plugins/amenable_ext.rs`) | done |
 | Probe + assessor + reporter (`etiquettes/framework_ext/`) | done |
 | Coverage summary wiring | done |
-| Tests | `tests/amenable_ext_registry.rs` (pure-function unit tests, no real jiff build); real end-to-end run (shadow-dep build → probe → assessor → reporter against the `amenable` repo's real `amenable_ext` crate) not yet exercised in CI |
+| Tests | `tests/amenable_ext_registry.rs` (pure-function unit tests, no real jiff build); real end-to-end run (`cordial coverage` against the `amenable` repo's real `amenable_ext` crate) exercised manually and passing — not yet wired into CI |
 | `amenable_ext_jiff` skip-map / patch set | not yet created — empty until a real exception is found and reviewed |
-| `just` recipe in the `amenable` repo | not yet added |
+| `just` recipe in the `amenable` repo | added: `just cordial-coverage` |
+
+The first real end-to-end run surfaced two genuine `build_shadow_dep_rustdoc`
+bugs, since `amenable_ext`'s dependency on `jiff` is optional (unlike every
+prior shadow-dep consumer, which depends on its upstream unconditionally):
+
+- `cargo rustdoc -p jiff` fails outright (`package ID specification 'jiff'
+  did not match any packages`) when nothing in that invocation activates
+  the optional dependency — cargo excludes an unactivated optional
+  dependency from the resolved graph entirely, so it isn't addressable via
+  a bare `-p` package spec. Fixed: `collect_member_dep_build_config`
+  (`dep_features.rs`) now detects `dep.optional` and resolves the member
+  crate's own activating feature (searching its `[features]` table for an
+  entry naming `dep:{crate}`/`{crate}`/`{crate}/...`); when found,
+  `build_shadow_dep_rustdoc` switches to a new `run_cargo_doc_for_optional_dep`
+  (`cargo.rs`), which runs `cargo doc -p {shadow_crate} --features
+  {activating_feature} -Z unstable-options --output-format json` (no
+  `--no-deps`) and reads the upstream's JSON out of the resulting
+  `target/doc/{upstream}.json` — `cargo doc` documents the whole resolved
+  dependency graph by default, so the optional dependency's JSON is a
+  side effect once its activating feature is on. Covered by
+  `tests/shadow_dep.rs`'s new `optional_dep_resolves_its_activating_member_feature`
+  / `non_optional_dep_has_no_activating_member_feature`, against a new
+  minimal fixture workspace (`tests/parity/workspaces/optional-dep-workspace`).
+- `std` and `amenable-ext-jiff` coverage share one cached registry dump
+  (`registry_dump_path`), built by `cargo run -p amenable --features
+  {AMENABLE_DUMP_REGISTRY_FEATURES} -- dump-registry` — the dump binary
+  never linked in `amenable_ext` at all (its facade feature is `jiff`, not
+  `creusot`/`verus`), so every `ExtStandard<T>` row showed as missing
+  evidence regardless of what was actually registered. Fixed by adding
+  `jiff` to the shared `AMENABLE_DUMP_REGISTRY_FEATURES` constant — a
+  superset serving every active coverage plugin, not just whichever one
+  happens to build the cache first; a future ext target adds its own
+  activating feature name there too.
+
+Verifying the fix end-to-end also surfaced two real gaps back in the
+`amenable` repo itself (not cordial bugs): `amenable_ext`'s Verus witness
+macro never called `inventory::submit!` for a `ProofRecord` (unlike its
+Kani/Creusot siblings), and the facade's own `verus` feature never wired
+`amenable_ext?/verus` at all (an orphan feature nobody could turn on). Both
+fixed in `amenable`; the checklist now shows `jiff::Timestamp`/`Zoned`/
+`civil::DateTime` as **Complete** (kani + creusot + verus + proof_test),
+not partial.

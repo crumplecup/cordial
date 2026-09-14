@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/opt_member", "crates/opt_upstream"]
+resolver = "2"

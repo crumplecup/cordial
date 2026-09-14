@@ -74,6 +74,71 @@ pub fn run_cargo_rustdoc(
     Ok(json_path)
 }
 
+/// Build rustdoc JSON for an optional upstream dependency via `cargo doc`.
+///
+/// `cargo rustdoc -p <upstream>` fails when `upstream` is an optional
+/// dependency of every workspace member and no invocation activates it
+/// (cargo excludes an unactivated optional dependency from the resolved
+/// graph entirely, so it isn't addressable via a bare `-p` package spec).
+/// `cargo doc -p <shadow_crate> --features <activating_feature>` instead
+/// documents the whole resolved dependency graph of `shadow_crate` by
+/// default (no `--no-deps`), which reaches `upstream` as a side effect once
+/// its activating feature is turned on.
+#[instrument(
+    level = "info",
+    fields(shadow_crate, activating_feature, upstream_crate),
+    err(level = "warn")
+)]
+pub fn run_cargo_doc_for_optional_dep(
+    workspace_root: &Path,
+    shadow_crate: &str,
+    activating_feature: &str,
+    upstream_crate: &str,
+) -> CordialResult<PathBuf> {
+    let workspace_root = workspace_root
+        .canonicalize()
+        .unwrap_or_else(|_| workspace_root.to_path_buf());
+    let project_target = workspace_root.join("target");
+
+    let mut cmd = nightly_cargo();
+    cmd.current_dir(&workspace_root)
+        .arg("doc")
+        .arg("-p")
+        .arg(shadow_crate)
+        .arg("--features")
+        .arg(activating_feature)
+        .arg("-Z")
+        .arg("unstable-options")
+        .arg("--output-format")
+        .arg("json")
+        .arg("--target-dir")
+        .arg(&project_target);
+
+    tracing::debug!("running cargo doc for optional shadow dependency");
+    let status = cmd.status().map_err(CordialError::from)?;
+
+    if !status.success() {
+        return Err(CordialError::invariant(format!(
+            "cargo doc for {shadow_crate} (features={activating_feature}) exited with {status}"
+        )));
+    }
+
+    let normalized = upstream_crate.replace('-', "_");
+    let json_path = project_target
+        .join("doc")
+        .join(format!("{normalized}.json"));
+
+    if !json_path.is_file() {
+        return Err(CordialError::invariant(format!(
+            "rustdoc JSON not found at {}",
+            json_path.display()
+        )));
+    }
+
+    tracing::debug!(path = %json_path.display(), "rustdoc JSON produced via cargo doc side effect");
+    Ok(json_path)
+}
+
 #[instrument(level = "debug")]
 pub(crate) fn nightly_cargo() -> Command {
     if let Some(cargo) = resolve_nightly_cargo_binary() {

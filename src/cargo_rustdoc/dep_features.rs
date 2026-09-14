@@ -12,6 +12,29 @@ pub struct DepBuildConfig {
     activated_features: Vec<String>,
     #[getter(copy)]
     uses_default_features: bool,
+    /// The member crate's own feature that must be activated to pull an
+    /// optional upstream dependency into the resolved graph at all. `None`
+    /// for a non-optional dependency, which resolves without any feature
+    /// activation.
+    activating_member_feature: Option<String>,
+}
+
+/// Find the member crate's feature that activates an optional dependency.
+///
+/// Matches `"dep:{crate_name}"`, a bare `"{crate_name}"`, or the strong
+/// `"{crate_name}/other-feature"` syntax; a weak `"{crate_name}?/..."` entry
+/// does not activate the dependency on its own, so it is not a match.
+fn find_optional_activating_feature(
+    features: &BTreeMap<String, Vec<String>>,
+    crate_name: &str,
+) -> Option<String> {
+    let dep_marker = format!("dep:{crate_name}");
+    let strong_prefix = format!("{crate_name}/");
+    features.iter().find_map(|(feature_name, deps)| {
+        deps.iter()
+            .any(|dep| dep == &dep_marker || dep == crate_name || dep.starts_with(&strong_prefix))
+            .then(|| feature_name.clone())
+    })
 }
 
 /// Resolve dependency features from a workspace member's `Cargo.toml`.
@@ -57,9 +80,15 @@ pub fn collect_member_dep_build_config(
     activated_features.sort();
     activated_features.dedup();
 
+    let activating_member_feature = dep
+        .optional
+        .then(|| find_optional_activating_feature(&member_pkg.features, crate_name))
+        .flatten();
+
     Ok(DepBuildConfig::new(
         activated_features,
         dep.uses_default_features,
+        activating_member_feature,
     ))
 }
 
