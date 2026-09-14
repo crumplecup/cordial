@@ -55,6 +55,8 @@ pub fn write_minimal_rustdoc_file(
             links: HashMap::new(),
             attrs: Vec::new(),
             deprecation: None,
+            stability: None,
+            const_stability: None,
             inner: ItemEnum::Module(Module {
                 is_crate: true,
                 items: vec![struct_id],
@@ -74,6 +76,8 @@ pub fn write_minimal_rustdoc_file(
             links: HashMap::new(),
             attrs: Vec::new(),
             deprecation: None,
+            stability: None,
+            const_stability: None,
             inner: ItemEnum::Struct(Struct {
                 kind: StructKind::Unit,
                 impls: Vec::new(),

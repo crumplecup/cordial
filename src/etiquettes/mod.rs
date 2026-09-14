@@ -96,6 +96,8 @@ pub(crate) mod error_sites;
 pub(crate) mod foreign_error_attenuation;
 #[cfg(feature = "foreign_error_types")]
 pub(crate) mod foreign_error_types;
+#[cfg(feature = "amenable_ext")]
+pub(crate) mod framework_ext;
 #[cfg(feature = "homecoming_std")]
 pub(crate) mod framework_std;
 #[cfg(feature = "impl_coverage")]

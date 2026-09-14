@@ -13,6 +13,10 @@ mod amenable;
 mod amenable_render;
 #[cfg(feature = "amenable_std")]
 mod amenable_run;
+#[cfg(feature = "amenable_ext")]
+mod ext_inventory;
+#[cfg(feature = "amenable_ext")]
+mod ext_run;
 #[cfg(feature = "amenable_std")]
 mod proof_harness;
 #[cfg(feature = "amenable_std")]
@@ -58,4 +62,24 @@ pub use self::{
         parse_rust_std_standard_inner, witness_verifiers_for_std_type,
     },
     verifier_skip::{VerifierSkipEntry, VerifierSkipMap, load_verifier_skip_map},
+};
+
+/// Amenable ext (third-party crate) registry coverage — reuses
+/// `AmenableStdEntry`/`AmenableStdReport`/`AmenableStdStatus`/
+/// `ClassifyRowArgs` above directly (already generic over which wrapper
+/// type's registrations they classify), so only the ext-specific
+/// classify/build/render/orchestration functions need their own names.
+#[cfg(feature = "amenable_ext")]
+pub use self::{
+    amenable::{
+        amenable_ext_gap_fields, build_amenable_ext_gaps, build_amenable_ext_report,
+        classify_amenable_ext_row,
+    },
+    amenable_render::{render_amenable_ext_checklist_md, render_amenable_ext_summary_md},
+    ext_inventory::load_ext_inventory_from_shadow_dep,
+    ext_run::{
+        AMENABLE_EXT_IMPL_CRATE, AMENABLE_EXT_JIFF_PATCH_SET, AMENABLE_EXT_JIFF_UPSTREAM_CRATE,
+        AmenableExtOptions, assess_amenable_ext_coverage,
+    },
+    registry::{evidence_for_ext_type, parse_ext_standard_inner, witness_verifiers_for_ext_type},
 };

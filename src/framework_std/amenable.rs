@@ -7,7 +7,8 @@ use tracing::instrument;
 
 use crate::framework_std::StdInventoryItem;
 use crate::framework_std::registry::{
-    RegistryDump, evidence_for_std_type, std_type_has_proof_test, witness_verifiers_for_std_type,
+    RegistryDump, evidence_for_ext_type, evidence_for_std_type, ext_type_has_proof_test,
+    std_type_has_proof_test, witness_verifiers_for_ext_type, witness_verifiers_for_std_type,
 };
 use crate::framework_std::types::framework_std_type_items;
 use crate::framework_std::verifier_skip::VerifierSkipMap;
@@ -126,9 +127,15 @@ pub struct AmenableStdGapEntry {
     action: String,
 }
 
-/// Build an amenable std registry coverage report.
-#[instrument(level = "debug", skip(items, registry, skip_map, proof_chain_subjects))]
-pub fn build_amenable_std_report(
+/// Build a registry coverage report, classifying each row with
+/// `classify_row` — shared by [`build_amenable_std_report`] and
+/// [`build_amenable_ext_report`], which differ only in which wrapper
+/// type's evidence/witness/proof-test lookups `classify_row` uses.
+#[instrument(
+    level = "debug",
+    skip(items, registry, skip_map, proof_chain_subjects, classify_row)
+)]
+fn build_wrapped_report(
     source_crate: &str,
     items: &[StdInventoryItem],
     impl_crate: &str,
@@ -136,6 +143,7 @@ pub fn build_amenable_std_report(
     skip_map: &VerifierSkipMap,
     proof_chain_subjects: &HashSet<String>,
     include_nightly: bool,
+    classify_row: impl Fn(&str, ClassifyRowArgs<'_>) -> AmenableStdEntry,
 ) -> AmenableStdReport {
     let mut entries = Vec::new();
     let mut complete_count = 0usize;
@@ -144,7 +152,7 @@ pub fn build_amenable_std_report(
     let mut skipped_count = 0usize;
 
     for item in framework_std_type_items(items, include_nightly) {
-        let entry = classify_amenable_std_row(
+        let entry = classify_row(
             item.path(),
             ClassifyRowArgs::new(
                 item.kind().as_str(),
@@ -177,6 +185,52 @@ pub fn build_amenable_std_report(
     )
 }
 
+/// Build an amenable std registry coverage report.
+#[instrument(level = "debug", skip(items, registry, skip_map, proof_chain_subjects))]
+pub fn build_amenable_std_report(
+    source_crate: &str,
+    items: &[StdInventoryItem],
+    impl_crate: &str,
+    registry: &RegistryDump,
+    skip_map: &VerifierSkipMap,
+    proof_chain_subjects: &HashSet<String>,
+    include_nightly: bool,
+) -> AmenableStdReport {
+    build_wrapped_report(
+        source_crate,
+        items,
+        impl_crate,
+        registry,
+        skip_map,
+        proof_chain_subjects,
+        include_nightly,
+        classify_amenable_std_row,
+    )
+}
+
+/// Build an amenable ext (third-party crate) registry coverage report.
+#[instrument(level = "debug", skip(items, registry, skip_map, proof_chain_subjects))]
+pub fn build_amenable_ext_report(
+    source_crate: &str,
+    items: &[StdInventoryItem],
+    impl_crate: &str,
+    registry: &RegistryDump,
+    skip_map: &VerifierSkipMap,
+    proof_chain_subjects: &HashSet<String>,
+    include_nightly: bool,
+) -> AmenableStdReport {
+    build_wrapped_report(
+        source_crate,
+        items,
+        impl_crate,
+        registry,
+        skip_map,
+        proof_chain_subjects,
+        include_nightly,
+        classify_amenable_ext_row,
+    )
+}
+
 /// Everything [`classify_amenable_std_row`] needs beyond the row's own
 /// `type_path`, bundled so the function takes two arguments instead of
 /// eight.
@@ -191,9 +245,28 @@ pub struct ClassifyRowArgs<'a> {
     proof_chain_subjects: &'a HashSet<String>,
 }
 
-/// Classify one std inventory row for amenable registry coverage.
-#[instrument(level = "debug", skip(args))]
-pub fn classify_amenable_std_row(type_path: &str, args: ClassifyRowArgs<'_>) -> AmenableStdEntry {
+/// Classify one inventory row for amenable registry coverage, using
+/// `evidence_for_type`/`witness_verifiers_for_type`/`type_has_proof_test`
+/// to look up its wrapper-type registration — shared by
+/// [`classify_amenable_std_row`] and [`classify_amenable_ext_row`],
+/// which differ only in which wrapper type (`RustStdStandard<T>` or
+/// `ExtStandard<T>`) those lookups target.
+#[instrument(
+    level = "debug",
+    skip(
+        args,
+        evidence_for_type,
+        witness_verifiers_for_type,
+        type_has_proof_test
+    )
+)]
+fn classify_wrapped_row(
+    type_path: &str,
+    args: ClassifyRowArgs<'_>,
+    evidence_for_type: impl Fn(&RegistryDump, &str) -> Option<String>,
+    witness_verifiers_for_type: impl Fn(&RegistryDump, &str) -> HashSet<String>,
+    type_has_proof_test: impl Fn(&HashSet<String>, &str) -> bool,
+) -> AmenableStdEntry {
     let ClassifyRowArgs {
         type_kind,
         is_generic,
@@ -226,16 +299,16 @@ pub fn classify_amenable_std_row(type_path: &str, args: ClassifyRowArgs<'_>) -> 
         );
     }
 
-    let mut evidence_name = evidence_for_std_type(registry, type_path);
-    let mut verifiers = witness_verifiers_for_std_type(registry, type_path);
-    let mut proof_test = std_type_has_proof_test(proof_chain_subjects, type_path);
+    let mut evidence_name = evidence_for_type(registry, type_path);
+    let mut verifiers = witness_verifiers_for_type(registry, type_path);
+    let mut proof_test = type_has_proof_test(proof_chain_subjects, type_path);
     if evidence_name.is_none()
         && let Some(target) = alias_target
     {
         let resolved_target = resolve_alias_chain(items, target, 5);
-        evidence_name = evidence_for_std_type(registry, &resolved_target);
-        verifiers = witness_verifiers_for_std_type(registry, &resolved_target);
-        proof_test = std_type_has_proof_test(proof_chain_subjects, &resolved_target);
+        evidence_name = evidence_for_type(registry, &resolved_target);
+        verifiers = witness_verifiers_for_type(registry, &resolved_target);
+        proof_test = type_has_proof_test(proof_chain_subjects, &resolved_target);
     }
     let evidence_link = evidence_name.is_some();
     let kani_witness = verifiers.contains("kani");
@@ -275,12 +348,57 @@ pub fn classify_amenable_std_row(type_path: &str, args: ClassifyRowArgs<'_>) -> 
     )
 }
 
+/// Classify one std inventory row for amenable registry coverage.
+#[instrument(level = "debug", skip(args))]
+pub fn classify_amenable_std_row(type_path: &str, args: ClassifyRowArgs<'_>) -> AmenableStdEntry {
+    classify_wrapped_row(
+        type_path,
+        args,
+        evidence_for_std_type,
+        witness_verifiers_for_std_type,
+        std_type_has_proof_test,
+    )
+}
+
+/// Classify one third-party (`amenable_ext`) inventory row for amenable
+/// registry coverage.
+#[instrument(level = "debug", skip(args))]
+pub fn classify_amenable_ext_row(type_path: &str, args: ClassifyRowArgs<'_>) -> AmenableStdEntry {
+    classify_wrapped_row(
+        type_path,
+        args,
+        evidence_for_ext_type,
+        witness_verifiers_for_ext_type,
+        ext_type_has_proof_test,
+    )
+}
+
 /// Gap metadata for one amenable std row.
 #[instrument(level = "debug", skip(entry))]
 pub fn amenable_gap_fields(entry: &AmenableStdEntry, impl_crate: &str) -> (String, String) {
+    wrapped_gap_fields(entry, impl_crate, "RustStdStandard")
+}
+
+/// Gap metadata for one amenable ext (third-party crate) row.
+#[instrument(level = "debug", skip(entry))]
+pub fn amenable_ext_gap_fields(entry: &AmenableStdEntry, impl_crate: &str) -> (String, String) {
+    wrapped_gap_fields(entry, impl_crate, "ExtStandard")
+}
+
+/// As [`amenable_gap_fields`]/[`amenable_ext_gap_fields`], naming the
+/// wrapper type explicitly —
+/// shared by [`build_amenable_std_gaps`] and [`build_amenable_ext_gaps`],
+/// which differ only in which wrapper type (`RustStdStandard` or
+/// `ExtStandard`) the "register evidence" action names.
+#[instrument(level = "debug", skip(entry))]
+fn wrapped_gap_fields(
+    entry: &AmenableStdEntry,
+    impl_crate: &str,
+    wrapper_name: &str,
+) -> (String, String) {
     (
         missing_layer_labels(entry).join(", "),
-        gap_action(entry, impl_crate),
+        gap_action(entry, impl_crate, wrapper_name),
     )
 }
 
@@ -305,9 +423,11 @@ pub fn resolve_alias_chain(items: &[StdInventoryItem], start: &str, max_hops: us
     current
 }
 
-/// Build consolidated gap rows from an amenable std report.
+/// Build consolidated gap rows from a report, naming `wrapper_name` in
+/// each "register evidence" action — shared by
+/// [`build_amenable_std_gaps`] and [`build_amenable_ext_gaps`].
 #[instrument(level = "debug", skip(report))]
-pub fn build_amenable_std_gaps(report: &AmenableStdReport) -> Vec<AmenableStdGapEntry> {
+fn build_wrapped_gaps(report: &AmenableStdReport, wrapper_name: &str) -> Vec<AmenableStdGapEntry> {
     report
         .entries
         .iter()
@@ -318,7 +438,8 @@ pub fn build_amenable_std_gaps(report: &AmenableStdReport) -> Vec<AmenableStdGap
             )
         })
         .map(|entry| {
-            let (missing_layers, action) = amenable_gap_fields(entry, &report.impl_crate);
+            let (missing_layers, action) =
+                wrapped_gap_fields(entry, &report.impl_crate, wrapper_name);
             AmenableStdGapEntry::new(
                 report.source_crate.clone(),
                 entry.type_path.clone(),
@@ -329,6 +450,18 @@ pub fn build_amenable_std_gaps(report: &AmenableStdReport) -> Vec<AmenableStdGap
             )
         })
         .collect()
+}
+
+/// Build consolidated gap rows from an amenable std report.
+#[instrument(level = "debug", skip(report))]
+pub fn build_amenable_std_gaps(report: &AmenableStdReport) -> Vec<AmenableStdGapEntry> {
+    build_wrapped_gaps(report, "RustStdStandard")
+}
+
+/// Build consolidated gap rows from an amenable ext report.
+#[instrument(level = "debug", skip(report))]
+pub fn build_amenable_ext_gaps(report: &AmenableStdReport) -> Vec<AmenableStdGapEntry> {
+    build_wrapped_gaps(report, "ExtStandard")
 }
 
 #[instrument(level = "debug", skip(entry))]
@@ -353,10 +486,10 @@ fn missing_layer_labels(entry: &AmenableStdEntry) -> Vec<&'static str> {
 }
 
 #[instrument(level = "debug", skip(entry))]
-fn gap_action(entry: &AmenableStdEntry, impl_crate: &str) -> String {
+fn gap_action(entry: &AmenableStdEntry, impl_crate: &str, wrapper_name: &str) -> String {
     if !entry.evidence_link {
         return format!(
-            "Register `RustStdStandard<{}>` evidence in `{impl_crate}`",
+            "Register `{wrapper_name}<{}>` evidence in `{impl_crate}`",
             entry
                 .type_path
                 .rsplit("::")

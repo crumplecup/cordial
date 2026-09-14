@@ -273,6 +273,8 @@ pub use etiquette::{
 pub use etiquettes::SHADOW_ETIQUETTE;
 #[cfg(feature = "elicitation")]
 pub use etiquettes::coverage_etiquettes;
+#[cfg(feature = "amenable_ext")]
+pub use etiquettes::framework_ext::{AMENABLE_EXT_JIFF_ETIQUETTE, AmenableExtJiffReporter};
 #[cfg(feature = "amenable_std")]
 pub use etiquettes::framework_std::{AMENABLE_STD_ETIQUETTE, AmenableStdReporter};
 pub use etiquettes::quality_etiquettes;
@@ -293,6 +295,8 @@ pub use plugin::{
     EtiquettePlugin, Plugin, PluginCategory, StaticPlugin, StrategicPlugin, StrategicPortfolio,
     Strategy, etiquettes_from_plugins, plugins_in_category, selected_plugins,
 };
+#[cfg(feature = "amenable_ext")]
+pub use plugins::{AMENABLE_EXT_COVERAGE, AmenableExtCoverage};
 #[cfg(feature = "amenable_std")]
 pub use plugins::{AMENABLE_STD_COVERAGE, AmenableStdCoverage};
 #[cfg(feature = "elicitation")]

@@ -63,6 +63,15 @@ pub use crate::framework_std::{
     witness_verifiers_for_std_type,
 };
 
+#[cfg(feature = "amenable_ext")]
+pub use crate::framework_std::{
+    AMENABLE_EXT_IMPL_CRATE, AMENABLE_EXT_JIFF_PATCH_SET, AMENABLE_EXT_JIFF_UPSTREAM_CRATE,
+    AmenableExtOptions, assess_amenable_ext_coverage, build_amenable_ext_gaps,
+    build_amenable_ext_report, evidence_for_ext_type, load_ext_inventory_from_shadow_dep,
+    parse_ext_standard_inner, render_amenable_ext_checklist_md, render_amenable_ext_summary_md,
+    witness_verifiers_for_ext_type,
+};
+
 #[cfg(feature = "rustdoc")]
 pub use crate::enricher::inventory_link_key;
 

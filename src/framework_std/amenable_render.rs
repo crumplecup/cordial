@@ -53,10 +53,52 @@ pub fn render_amenable_std_gaps_csv(gaps: &[AmenableStdGapEntry]) -> CordialResu
     Ok(body)
 }
 
+/// Amenable std registry coverage checklist.
 #[instrument(level = "debug", skip(report, skip_map), err(level = "warn"))]
 pub fn render_amenable_std_checklist_md(
     report: &AmenableStdReport,
     skip_map: &VerifierSkipMap,
+) -> CordialResult<String> {
+    render_wrapped_checklist_md(
+        report,
+        skip_map,
+        "Amenable std",
+        "RustStdStandard<T>",
+        "amenable",
+    )
+}
+
+/// Amenable ext (third-party crate) registry coverage checklist.
+#[instrument(level = "debug", skip(report, skip_map), err(level = "warn"))]
+pub fn render_amenable_ext_checklist_md(
+    report: &AmenableStdReport,
+    skip_map: &VerifierSkipMap,
+    patch_set: &str,
+) -> CordialResult<String> {
+    render_wrapped_checklist_md(
+        report,
+        skip_map,
+        "Amenable ext",
+        "ExtStandard<T>",
+        patch_set,
+    )
+}
+
+/// Registry coverage checklist, naming `profile_title` in its heading,
+/// `wrapper_type` in its "no missing evidence" note, and `patch_set` in
+/// its "no patch entries" note (matching `load_verifier_skip_map`'s own
+/// `{patch_set}.json` file-naming convention) — shared by
+/// [`render_amenable_std_checklist_md`] and
+/// [`render_amenable_ext_checklist_md`]. Every other piece of text
+/// (scope, impl crate, source crate) already reads from `report` itself
+/// rather than assuming "std", so no further parameterization is needed.
+#[instrument(level = "debug", skip(report, skip_map))]
+fn render_wrapped_checklist_md(
+    report: &AmenableStdReport,
+    skip_map: &VerifierSkipMap,
+    profile_title: &str,
+    wrapper_type: &str,
+    patch_set: &str,
 ) -> CordialResult<String> {
     let missing: Vec<_> = report
         .entries()
@@ -78,15 +120,20 @@ pub fn render_amenable_std_checklist_md(
         .entries()
         .len()
         .saturating_sub(report.skipped_count());
-    let mut out = String::from("# Amenable std registry coverage checklist\n\n");
+    let mut out = String::new();
+    writeln!(out, "# {profile_title} registry coverage checklist\n")?;
     writeln!(
         out,
-        "**Impl crate:** `{}`  \n**Scope:** {}  \n**Accountable types:** {}  \n**Complete (evidence + all witnesses):** {} ({:.1}%)  \n**Partial:** {}  \n**Missing evidence:** {}  \n**Skipped (patched):** {}\n",
+        "**Source crate:** `{}`  \n**Impl crate:** `{}`  \n**Scope:** {}  \n**Accountable types:** {}  \n**Complete (evidence + all witnesses):** {} ({:.1}%)  \n**Partial:** {}  \n**Missing evidence:** {}  \n**Skipped (patched):** {}\n",
+        report.source_crate(),
         report.impl_crate(),
         if report.include_nightly() {
-            "stable + nightly std types"
+            format!("stable + nightly {} types", report.source_crate())
         } else {
-            "stable std types only (pass `--include-nightly` for unstable items)"
+            format!(
+                "stable {} types only (pass `--include-nightly` for unstable items)",
+                report.source_crate()
+            )
         },
         accountable,
         report.complete_count(),
@@ -100,7 +147,8 @@ pub fn render_amenable_std_checklist_md(
     if missing.is_empty() {
         writeln!(
             out,
-            "\n_All accountable std types have `RustStdStandard<T>` evidence links._\n"
+            "\n_All accountable {} types have `{wrapper_type}` evidence links._\n",
+            report.source_crate()
         )?;
     } else {
         writeln!(out)?;
@@ -152,7 +200,7 @@ pub fn render_amenable_std_checklist_md(
     if documented.is_empty() {
         writeln!(
             out,
-            "\n_No patch entries. Add `~/.cordial/{{project}}/patches/amenable.json` to document intentional exclusions._\n"
+            "\n_No patch entries. Add `~/.cordial/{{project}}/patches/{patch_set}.json` to document intentional exclusions._\n"
         )?;
     } else {
         writeln!(out)?;
@@ -180,29 +228,68 @@ pub fn render_amenable_std_checklist_md(
     Ok(out)
 }
 
+/// Amenable std registry coverage summary.
 #[instrument(level = "debug", skip(report))]
 pub fn render_amenable_std_summary_md(report: &AmenableStdReport) -> String {
+    render_wrapped_summary_md(
+        report,
+        "Amenable std",
+        "RustStdStandard<T>",
+        " (std + core + alloc)",
+        "std.checklist.md",
+    )
+}
+
+/// Amenable ext (third-party crate) registry coverage summary.
+#[instrument(level = "debug", skip(report))]
+pub fn render_amenable_ext_summary_md(
+    report: &AmenableStdReport,
+    checklist_filename: &str,
+) -> String {
+    render_wrapped_summary_md(
+        report,
+        "Amenable ext",
+        "ExtStandard<T>",
+        "",
+        checklist_filename,
+    )
+}
+
+/// Registry coverage summary, naming `profile_title`/`wrapper_type` and
+/// pointing at `checklist_filename` — shared by
+/// [`render_amenable_std_summary_md`] and
+/// [`render_amenable_ext_summary_md`]. `source_note` is appended
+/// verbatim after the source-inventory crate name (`" (std + core +
+/// alloc)"` for std, empty for a single-crate ext target).
+#[instrument(level = "debug", skip(report))]
+fn render_wrapped_summary_md(
+    report: &AmenableStdReport,
+    profile_title: &str,
+    wrapper_type: &str,
+    source_note: &str,
+    checklist_filename: &str,
+) -> String {
     let accountable = report
         .entries()
         .len()
         .saturating_sub(report.skipped_count());
     format!(
-        "# Amenable std registry coverage summary\n\n\
-        **Profile:** std type list vs `RustStdStandard<T>` evidence + verifier witnesses  \n\
+        "# {profile_title} registry coverage summary\n\n\
+        **Profile:** {source} type list vs `{wrapper_type}` evidence + verifier witnesses  \n\
         **Scope:** {scope}  \n\
         **Impl crate:** `{impl_crate}`  \n\
-        **Source inventory:** `{source}` (std + core + alloc)  \n\
+        **Source inventory:** `{source}`{source_note}  \n\
         **Total types:** {total}  \n\
         **Accountable:** {accountable}  \n\
         **Complete:** {complete} ({pct:.1}%)  \n\
         **Partial:** {partial}  \n\
         **Missing evidence:** {missing}  \n\
         **Skipped:** {skipped}\n\n\
-        Open `std.checklist.md` for the actionable gap list.\n",
+        Open `{checklist_filename}` for the actionable gap list.\n",
         scope = if report.include_nightly() {
-            "stable + nightly std types"
+            format!("stable + nightly {} types", report.source_crate())
         } else {
-            "stable std types only"
+            format!("stable {} types only", report.source_crate())
         },
         impl_crate = report.impl_crate(),
         source = report.source_crate(),

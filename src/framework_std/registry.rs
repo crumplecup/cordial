@@ -12,6 +12,21 @@ use crate::framework_std::match_impl::{type_has_trait_impl, type_path_without_ge
 
 const RUST_STD_STANDARD_PREFIX: &str = "amenable_std::rust_std::RustStdStandard<";
 const PROOF_CHAIN_RUST_STD_PREFIX: &str = "RustStdStandard<";
+const RUST_STD_STANDARD_PREFIXES: &[&str] =
+    &[RUST_STD_STANDARD_PREFIX, PROOF_CHAIN_RUST_STD_PREFIX];
+
+/// `amenable_ext::ExtStandard<T>` — the third-party-crate counterpart of
+/// `RustStdStandard<T>`. Two prefixes for the same reason
+/// `RustStdStandard` needs a pair: the registry's own evidence/proof-
+/// record names are fully qualified (`amenable_ext::ExtStandard<...>`),
+/// but `collect_proof_chain_subjects` reads bare type names
+/// (`ExtStandard<...>`, no module path) out of real `proof_chain_test.rs`
+/// source text — a genuinely different naming convention, not a module-
+/// nesting difference (confirmed by a real test failure this project
+/// caught: `PROOF_CHAIN_EXT_STANDARD_PREFIX` was missing at first).
+const EXT_STANDARD_PREFIX: &str = "amenable_ext::ExtStandard<";
+const PROOF_CHAIN_EXT_STANDARD_PREFIX: &str = "ExtStandard<";
+const EXT_STANDARD_PREFIXES: &[&str] = &[EXT_STANDARD_PREFIX, PROOF_CHAIN_EXT_STANDARD_PREFIX];
 
 /// Features passed to `cargo run -p amenable -- dump-registry`.
 pub const AMENABLE_DUMP_REGISTRY_FEATURES: &str = "creusot,verus";
@@ -126,21 +141,42 @@ pub fn load_registry_dump(path: &Path) -> CordialResult<RegistryDump> {
     Ok(serde_json::from_str(&content)?)
 }
 
-/// Extract the inventory-matching base type from a `RustStdStandard<…>` evidence name.
+/// Extract the inventory-matching base type wrapped by one of `prefixes`
+/// (`RustStdStandard<…>` or `ExtStandard<…>`) from an evidence name —
+/// the one structural invariant [`parse_rust_std_standard_inner`] and
+/// [`parse_ext_standard_inner`] share, generalized over which literal
+/// prefix family each is stripping.
 #[instrument(level = "debug")]
-pub fn parse_rust_std_standard_inner(evidence: &str) -> Option<String> {
-    let rest = evidence
-        .strip_prefix(RUST_STD_STANDARD_PREFIX)
-        .or_else(|| evidence.strip_prefix(PROOF_CHAIN_RUST_STD_PREFIX))?;
+fn parse_wrapped_standard_inner(evidence: &str, prefixes: &[&str]) -> Option<String> {
+    let rest = prefixes
+        .iter()
+        .find_map(|prefix| evidence.strip_prefix(prefix))?;
     let typed = extract_wrapped_type(rest)?;
     Some(type_path_without_generics(typed))
 }
 
-/// Evidence for std type.
-#[instrument(level = "debug", skip(registry))]
-pub fn evidence_for_std_type(registry: &RegistryDump, type_path: &str) -> Option<String> {
+/// Extract the inventory-matching base type from a `RustStdStandard<…>` evidence name.
+#[instrument(level = "debug")]
+pub fn parse_rust_std_standard_inner(evidence: &str) -> Option<String> {
+    parse_wrapped_standard_inner(evidence, RUST_STD_STANDARD_PREFIXES)
+}
+
+/// Extract the inventory-matching base type from an `ExtStandard<…>` evidence name.
+#[instrument(level = "debug")]
+pub fn parse_ext_standard_inner(evidence: &str) -> Option<String> {
+    parse_wrapped_standard_inner(evidence, EXT_STANDARD_PREFIXES)
+}
+
+/// Evidence for a type wrapped by `parse_inner`'s prefix family — shared
+/// by [`evidence_for_std_type`] and [`evidence_for_ext_type`].
+#[instrument(level = "debug", skip(registry, parse_inner))]
+fn evidence_for_wrapped_type(
+    registry: &RegistryDump,
+    type_path: &str,
+    parse_inner: impl Fn(&str) -> Option<String>,
+) -> Option<String> {
     for link in registry.evidence_links() {
-        let Some(inner) = parse_rust_std_standard_inner(&link.name) else {
+        let Some(inner) = parse_inner(&link.name) else {
             continue;
         };
         let singleton: HashSet<String> = HashSet::from([inner]);
@@ -151,16 +187,54 @@ pub fn evidence_for_std_type(registry: &RegistryDump, type_path: &str) -> Option
     None
 }
 
-#[instrument(level = "debug", skip(proof_chain_subjects))]
-pub fn std_type_has_proof_test(proof_chain_subjects: &HashSet<String>, type_path: &str) -> bool {
-    proof_chain_subjects
-        .iter()
-        .any(|subject| proof_chain_subject_matches_type(subject, type_path))
+/// Evidence for std type.
+#[instrument(level = "debug", skip(registry))]
+pub fn evidence_for_std_type(registry: &RegistryDump, type_path: &str) -> Option<String> {
+    evidence_for_wrapped_type(registry, type_path, parse_rust_std_standard_inner)
 }
 
-#[instrument(level = "debug")]
-pub fn proof_chain_subject_matches_type(subject: &str, type_path: &str) -> bool {
-    if let Some(inner) = parse_rust_std_standard_inner(subject) {
+/// Evidence for a third-party (`amenable_ext`) type.
+#[instrument(level = "debug", skip(registry))]
+pub fn evidence_for_ext_type(registry: &RegistryDump, type_path: &str) -> Option<String> {
+    evidence_for_wrapped_type(registry, type_path, parse_ext_standard_inner)
+}
+
+/// Whether any proof-chain subject wrapped by `parse_inner`'s prefix
+/// family (or bare) matches `type_path` — shared by
+/// [`std_type_has_proof_test`] and [`ext_type_has_proof_test`].
+#[instrument(level = "debug", skip(proof_chain_subjects, parse_inner))]
+fn type_has_proof_test(
+    proof_chain_subjects: &HashSet<String>,
+    type_path: &str,
+    parse_inner: impl Fn(&str) -> Option<String> + Copy,
+) -> bool {
+    proof_chain_subjects
+        .iter()
+        .any(|subject| proof_chain_subject_matches_wrapped_type(subject, type_path, parse_inner))
+}
+
+#[instrument(level = "debug", skip(proof_chain_subjects))]
+pub fn std_type_has_proof_test(proof_chain_subjects: &HashSet<String>, type_path: &str) -> bool {
+    type_has_proof_test(
+        proof_chain_subjects,
+        type_path,
+        parse_rust_std_standard_inner,
+    )
+}
+
+/// As [`std_type_has_proof_test`], for a third-party (`amenable_ext`) type.
+#[instrument(level = "debug", skip(proof_chain_subjects))]
+pub fn ext_type_has_proof_test(proof_chain_subjects: &HashSet<String>, type_path: &str) -> bool {
+    type_has_proof_test(proof_chain_subjects, type_path, parse_ext_standard_inner)
+}
+
+#[instrument(level = "debug", skip(parse_inner))]
+fn proof_chain_subject_matches_wrapped_type(
+    subject: &str,
+    type_path: &str,
+    parse_inner: impl Fn(&str) -> Option<String>,
+) -> bool {
+    if let Some(inner) = parse_inner(subject) {
         let singleton: HashSet<String> = HashSet::from([inner]);
         return type_has_trait_impl(&singleton, type_path);
     }
@@ -168,12 +242,18 @@ pub fn proof_chain_subject_matches_type(subject: &str, type_path: &str) -> bool 
     type_has_trait_impl(&singleton, type_path)
 }
 
-/// Witness verifiers for std type.
-#[instrument(level = "debug", skip(registry))]
-pub fn witness_verifiers_for_std_type(registry: &RegistryDump, type_path: &str) -> HashSet<String> {
+/// Witness verifiers for a type wrapped by `parse_inner`'s prefix family
+/// — shared by [`witness_verifiers_for_std_type`] and
+/// [`witness_verifiers_for_ext_type`].
+#[instrument(level = "debug", skip(registry, parse_inner))]
+fn witness_verifiers_for_wrapped_type(
+    registry: &RegistryDump,
+    type_path: &str,
+    parse_inner: impl Fn(&str) -> Option<String>,
+) -> HashSet<String> {
     let mut verifiers = HashSet::new();
     for record in registry.proof_records() {
-        let Some(inner) = parse_rust_std_standard_inner(&record.evidence) else {
+        let Some(inner) = parse_inner(&record.evidence) else {
             continue;
         };
         let singleton: HashSet<String> = HashSet::from([inner]);
@@ -182,6 +262,18 @@ pub fn witness_verifiers_for_std_type(registry: &RegistryDump, type_path: &str) 
         }
     }
     verifiers
+}
+
+/// Witness verifiers for std type.
+#[instrument(level = "debug", skip(registry))]
+pub fn witness_verifiers_for_std_type(registry: &RegistryDump, type_path: &str) -> HashSet<String> {
+    witness_verifiers_for_wrapped_type(registry, type_path, parse_rust_std_standard_inner)
+}
+
+/// Witness verifiers for a third-party (`amenable_ext`) type.
+#[instrument(level = "debug", skip(registry))]
+pub fn witness_verifiers_for_ext_type(registry: &RegistryDump, type_path: &str) -> HashSet<String> {
+    witness_verifiers_for_wrapped_type(registry, type_path, parse_ext_standard_inner)
 }
 
 #[instrument(level = "debug")]

@@ -10,6 +10,9 @@ mod homecoming;
 #[cfg(feature = "amenable_std")]
 mod amenable;
 
+#[cfg(feature = "amenable_ext")]
+mod amenable_ext;
+
 #[cfg(feature = "elicitation")]
 pub use elicitation::{ELICITATION_COVERAGE, ElicitationCoverage};
 
@@ -18,6 +21,9 @@ pub use homecoming::{HOMECOMING_STD_COVERAGE, HomecomingStdCoverage};
 
 #[cfg(feature = "amenable_std")]
 pub use amenable::{AMENABLE_STD_COVERAGE, AmenableStdCoverage};
+
+#[cfg(feature = "amenable_ext")]
+pub use amenable_ext::{AMENABLE_EXT_COVERAGE, AmenableExtCoverage};
 
 #[cfg(any(feature = "error_sites", feature = "panics"))]
 mod error_handling;
@@ -94,6 +100,14 @@ mod coverage_targets {
                 hub: crate::plugin::WorkspaceHub::Amenable,
             }),
             #[cfg(not(feature = "amenable_std"))]
+            None,
+            #[cfg(feature = "amenable_ext")]
+            Some(CoveragePluginEntry {
+                plugin: &super::amenable_ext::AMENABLE_EXT_COVERAGE,
+                coverage: &super::amenable_ext::AMENABLE_EXT_COVERAGE,
+                hub: crate::plugin::WorkspaceHub::Amenable,
+            }),
+            #[cfg(not(feature = "amenable_ext"))]
             None,
         ]
         .into_iter()

@@ -84,6 +84,12 @@ pub fn build_coverage_summary(
                     "Amenable std coverage".to_string(),
                     amenable_section::amenable_std_section(findings)?,
                 )),
+                #[cfg(feature = "amenable_ext")]
+                "amenable-ext-jiff" => plugins.push(CoveragePluginSummary::new(
+                    "amenable-ext-jiff".to_string(),
+                    "Amenable ext (jiff) coverage".to_string(),
+                    amenable_ext_section::amenable_ext_jiff_section(findings)?,
+                )),
                 #[cfg(feature = "elicitation")]
                 "impl-coverage" | "trenchcoat" | "shadow" if !saw_elicitation => {
                     saw_elicitation = true;
@@ -133,6 +139,15 @@ fn section_for_plugin(
                 plugin.id().to_string(),
                 plugin.name().to_string(),
                 amenable_section::amenable_std_section(findings)?,
+            ),
+            extra_artifacts: Vec::new(),
+        }),
+        #[cfg(feature = "amenable_ext")]
+        "amenable-ext-coverage" => Ok(CoverageSection {
+            summary: CoveragePluginSummary::new(
+                plugin.id().to_string(),
+                plugin.name().to_string(),
+                amenable_ext_section::amenable_ext_jiff_section(findings)?,
             ),
             extra_artifacts: Vec::new(),
         }),
@@ -242,6 +257,27 @@ mod amenable_section {
             return Ok("_No amenable std findings._\n".to_string());
         };
         Ok(render_amenable_std_summary_md(&report))
+    }
+}
+
+#[cfg(feature = "amenable_ext")]
+mod amenable_ext_section {
+    use crate::error::CordialResult;
+    use crate::objects::Finding;
+    use tracing::instrument;
+
+    #[instrument(level = "debug", skip(findings), err(level = "warn"))]
+    pub(super) fn amenable_ext_jiff_section(findings: &[&dyn Finding]) -> CordialResult<String> {
+        use crate::etiquettes::framework_ext::amenable_ext_jiff_report_from_findings;
+        use crate::framework_std::render_amenable_ext_summary_md;
+
+        let Some(report) = amenable_ext_jiff_report_from_findings(findings, false) else {
+            return Ok("_No amenable ext (jiff) findings._\n".to_string());
+        };
+        Ok(render_amenable_ext_summary_md(
+            &report,
+            "amenable-ext-jiff.checklist.md",
+        ))
     }
 }
 

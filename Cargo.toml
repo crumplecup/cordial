@@ -99,11 +99,17 @@ shadow = ["rustdoc"]
 # Framework std coverage (homecoming Code, amenable registry).
 homecoming_std = ["rustdoc"]
 amenable_std = ["homecoming_std"]
+# Amenable ext (third-party target crate, e.g. jiff) registry coverage.
+# Requires amenable_std (shares its registry-dump/skip-map/proof-harness
+# machinery directly) and shadow (build_shadow_dep_rustdoc, for building
+# the target crate's own rustdoc JSON via its dependent's Cargo.toml
+# edge -- see docs/AMENABLE_EXT_PLAN.md in the `amenable` repo).
+amenable_ext = ["amenable_std", "shadow"]
 # Umbrella: all elicitation coverage plugins.
 elicitation = ["impl_coverage", "trenchcoat", "shadow"]
 # Every built-in plugin. Default for `cargo install` / `cargo test`.
 # `slow_tests` stays off (see that feature).
-full = ["quality", "elicitation", "homecoming_std", "amenable_std", "cli", "verus_ir"]
+full = ["quality", "elicitation", "homecoming_std", "amenable_std", "amenable_ext", "cli", "verus_ir"]
 # Opt-in gate for tests too expensive/environment-dependent for routine
 # `cargo test`/`cargo test --features full` runs -- deliberately NOT
 # part of `full` (or any other bundle), so it's off by default even

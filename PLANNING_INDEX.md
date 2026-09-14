@@ -28,6 +28,7 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 | Document | Status | Summary |
 | --- | --- | --- |
 | [Coverage as plugin](docs/planning/coverage-as-plugin.md) | **Reference** | Plugin / Coverage supertrait model; elicitation, homecoming, amenable profiles |
+| [amenable-ext-jiff coverage etiquette](docs/planning/amenable-ext-coverage-etiquette.md) | **Active** | Third-party target crate (jiff) registry coverage via shadow-dep rustdoc; mirrors amenable-std |
 | [Error handling as plugin](docs/planning/error-handling-as-plugin.md) | **Reference** | Unified `ErrorHandling` plugin; parent / Kind / native-source architecture lints |
 | [One crate, CLI in the library](docs/planning/one-crate-cli-layout.md) | **Reference** | One `CordialError`; `cli_layout` etiquette; clap dispatch in the library |
 
