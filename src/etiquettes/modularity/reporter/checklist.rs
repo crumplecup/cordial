@@ -42,8 +42,9 @@ impl Reporter for ModularityChecklistReporter {
         let mut body = String::new();
         body.push_str("# Modularity checklist\n\n");
         body.push_str(&format!(
-            "Large files/modules (with the longest bodies, packed types, extract-helpers, \
-             and whether to grow a subtree named on the same item), function/method bodies >= {} \
+            "Files over the human-reader limit, largest first (with the longest bodies, \
+             packed types, extract-helpers, and whether to grow a subtree named on the same item), \
+             function/method bodies >= {} \
              lines, files with more than {} types, parents that kept >= {}% of their \
              subtree, siblings that hold >= {}% of the combined child mass \
              (siblings below {} lines ignored), and unary child directories whose \
@@ -51,8 +52,8 @@ impl Reporter for ModularityChecklistReporter {
              lists smaller units \
              above the floor (files >= {}, functions/methods >= {}) plus every \
              module's size. Too-long files also name bodies >= {} lines as \
-             extract-helpers. File checklist >= {}, module size |z| > {} \
-             (upper tail also lines >= {}; {}; modules below {} lines \
+             extract-helpers. File checklist >= {}; module-size z-scores stay \
+             diagnostic in inventory/summary (|z| > {}, {}; modules below {} lines \
              ignored in the sample).\n\n",
             thresholds.function_checklist_min_lines(),
             thresholds.max_types_per_file(),
@@ -65,7 +66,6 @@ impl Reporter for ModularityChecklistReporter {
             thresholds.function_hotspot_min_lines(),
             thresholds.file_checklist_min_lines(),
             thresholds.module_size_sigma(),
-            thresholds.file_inventory_min_lines(),
             if thresholds.module_size_ignore_lower_tail() {
                 "lower tail ignored"
             } else {
@@ -112,7 +112,6 @@ impl Reporter for ModularityChecklistReporter {
 struct FileHotspot<'a> {
     file: &'a str,
     lines: u32,
-    zscore: &'a str,
     module: Option<&'a str>,
     methods: Vec<&'a ModularityRow>,
     types: Option<&'a ModularityRow>,
@@ -175,20 +174,15 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
     let mut count = 0usize;
 
     if !hotspots.is_empty() {
-        body.push_str("### Too long\n\n");
+        body.push_str("### Files over limit\n\n");
         for hotspot in &hotspots {
             count += 1;
-            let zscore = if hotspot.zscore.is_empty() {
-                String::new()
-            } else {
-                format!(" (z={})", hotspot.zscore)
-            };
             let module = hotspot
                 .module
                 .map(|path| format!(" `{path}`"))
                 .unwrap_or_default();
             body.push_str(&format!(
-                "- [ ] `{file}`{module} — **{lines} lines**{zscore}\n",
+                "- [ ] `{file}`{module} — **{lines} lines**\n",
                 file = hotspot.file,
                 lines = hotspot.lines,
             ));
@@ -206,7 +200,7 @@ fn render_crate_checklist(open: &[&ModularityRow]) -> (String, usize) {
             }
             if hotspot.methods.is_empty() {
                 body.push_str(
-                    "  - extract helpers — peel predicates, constructors, and shared match arms until this file is under the size cutoff\n",
+                    "  - extract helpers — peel predicates, constructors, and shared match arms until this file is under the file size limit\n",
                 );
             }
             if let Some(types) = hotspot.types {
@@ -394,29 +388,30 @@ fn file_hotspots<'a>(open: &[&'a ModularityRow]) -> Vec<FileHotspot<'a>> {
         .iter()
         .map(|node| node.path().clone())
         .collect();
-    let mut by_file: BTreeMap<&str, Vec<&ModularityRow>> = BTreeMap::new();
+    let mut module_by_file: BTreeMap<&str, Vec<&ModularityRow>> = BTreeMap::new();
+    let mut file_rows: Vec<&ModularityRow> = Vec::new();
     for row in open {
-        if matches!(
-            row.kind().as_str(),
-            "MODULARITY-FILE" | "MODULARITY-MODULE-SIZE"
-        ) && row.is_checklist()
-        {
-            by_file.entry(row.file().as_str()).or_default().push(*row);
+        match row.kind().as_str() {
+            "MODULARITY-FILE" if row.is_checklist() => file_rows.push(*row),
+            "MODULARITY-MODULE-SIZE" => {
+                module_by_file
+                    .entry(row.file().as_str())
+                    .or_default()
+                    .push(*row);
+            }
+            _ => {}
         }
     }
 
     let mut hotspots = Vec::new();
-    for (file, size_rows) in by_file {
-        let file_row = size_rows.iter().find(|row| row.kind() == "MODULARITY-FILE");
-        let module_row = size_rows
-            .iter()
-            .filter(|row| row.kind() == "MODULARITY-MODULE-SIZE")
+    for file_row in file_rows {
+        let file = file_row.file().as_str();
+        let module_row = module_by_file
+            .get(file)
+            .into_iter()
+            .flat_map(|rows| rows.iter().copied())
             .max_by_key(|row| row.line_count());
-        let lines = file_row
-            .or(module_row)
-            .map(|row| row.line_count())
-            .unwrap_or(0);
-        let zscore = module_row.map(|row| row.zscore().as_str()).unwrap_or("");
+        let lines = file_row.line_count();
         let mut methods: Vec<&ModularityRow> = open
             .iter()
             .copied()
@@ -445,7 +440,6 @@ fn file_hotspots<'a>(open: &[&'a ModularityRow]) -> Vec<FileHotspot<'a>> {
         hotspots.push(FileHotspot {
             file,
             lines,
-            zscore,
             module: module_path,
             methods,
             types,

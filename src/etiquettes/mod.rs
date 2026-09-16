@@ -97,7 +97,7 @@ pub(crate) mod foreign_error_attenuation;
 #[cfg(feature = "foreign_error_types")]
 pub(crate) mod foreign_error_types;
 #[cfg(feature = "amenable_ext")]
-pub(crate) mod framework_ext;
+mod framework_ext;
 #[cfg(feature = "homecoming_std")]
 pub(crate) mod framework_std;
 #[cfg(feature = "impl_coverage")]
@@ -125,6 +125,10 @@ pub use cfg_scatter::{
 };
 #[cfg(feature = "dependency_freshness")]
 pub use dependency_freshness::DEPENDENCY_FRESHNESS_ETIQUETTE;
+#[cfg(feature = "amenable_ext")]
+pub(crate) use framework_ext::amenable_ext_jiff_report_from_findings;
+#[cfg(feature = "amenable_ext")]
+pub use framework_ext::{AMENABLE_EXT_JIFF_ETIQUETTE, AmenableExtJiffReporter};
 #[cfg(feature = "impl_coverage")]
 pub use impl_coverage::{IMPL_COVERAGE_ETIQUETTE, ImplGapAssessment, ImplGapKind, assess_impl_gap};
 #[cfg(feature = "proof_patterns")]

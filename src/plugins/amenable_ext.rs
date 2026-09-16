@@ -1,9 +1,9 @@
 //! Amenable ext coverage profile: registry evidence + verifier witnesses
 //! over a third-party target crate's inventory (jiff, so far).
 
+use crate::AMENABLE_EXT_JIFF_ETIQUETTE;
 use crate::error::CordialResult;
 use crate::etiquette::Etiquette;
-use crate::etiquettes::framework_ext::AMENABLE_EXT_JIFF_ETIQUETTE;
 use crate::framework_std::AMENABLE_EXT_JIFF_UPSTREAM_CRATE;
 use crate::plugin::{
     Coverage, CoverageTarget, Plugin, PluginCategory, TargetProvider, TraitRequirement,

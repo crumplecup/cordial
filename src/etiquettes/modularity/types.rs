@@ -79,8 +79,8 @@ impl ModularityThresholds {
             ModularityKind::Function => lines >= self.function_checklist_min_lines(),
             ModularityKind::TypesPerFile => true,
             ModularityKind::TopHeavy | ModularityKind::Lopsided | ModularityKind::Collapse => true,
-            // Signed z-score in the assessor: upper tail also needs the
-            // file inventory floor; lower tail has its own ignore flag.
+            // Signed z-score in the assessor remains diagnostic context;
+            // file-size action items come from MODULARITY-FILE.
             ModularityKind::ModuleSize => false,
         }
     }

@@ -35,6 +35,18 @@ fn metrics(findings: &[&dyn Finding]) -> Metrics {
             }
         }
         metrics.inventory_total += 1;
+        if finding_field(finding, "kind").as_deref() == Some("MODULARITY-MODULE-SIZE")
+            && finding_field(finding, "zscore")
+                .and_then(|value| value.parse::<f64>().ok())
+                .is_some_and(|zscore| {
+                    zscore.abs()
+                        > f64::from(
+                            crate::config::ModularityThresholds::default().module_size_sigma(),
+                        )
+                })
+        {
+            metrics.module_outliers += 1;
+        }
         if finding_field(finding, "checklist").as_deref() != Some("true") {
             continue;
         }
@@ -43,7 +55,6 @@ fn metrics(findings: &[&dyn Finding]) -> Metrics {
             "MODULARITY-FILE" => metrics.large_files += 1,
             "MODULARITY-FUNCTION" => metrics.large_functions += 1,
             "MODULARITY-TYPES-PER-FILE" => metrics.types_per_file += 1,
-            "MODULARITY-MODULE-SIZE" => metrics.module_outliers += 1,
             "MODULARITY-TOP-HEAVY" => metrics.top_heavy += 1,
             "MODULARITY-LOPSIDED" => metrics.lopsided += 1,
             "MODULARITY-COLLAPSE" => metrics.collapse += 1,
@@ -58,7 +69,7 @@ pub(super) fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String)
     let metrics = metrics(findings);
     let detail = format!(
         "large files **{}**, large functions **{}**, types-per-file **{}**, \
-         module-size outliers **{}**, top-heavy **{}**, lopsided **{}**, \
+         diagnostic module-size outliers **{}**, top-heavy **{}**, lopsided **{}**, \
          collapse **{}** (checklist cutoffs; **{}** inventory rows tracked in CSV)",
         metrics.large_files,
         metrics.large_functions,

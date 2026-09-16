@@ -24,6 +24,7 @@ pub struct DepBuildConfig {
 /// Matches `"dep:{crate_name}"`, a bare `"{crate_name}"`, or the strong
 /// `"{crate_name}/other-feature"` syntax; a weak `"{crate_name}?/..."` entry
 /// does not activate the dependency on its own, so it is not a match.
+#[instrument(level = "debug", skip(features))]
 fn find_optional_activating_feature(
     features: &BTreeMap<String, Vec<String>>,
     crate_name: &str,

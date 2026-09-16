@@ -1,3 +1,4 @@
+use crate::config::ModularityThresholds;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, TextArtifact};
@@ -48,10 +49,6 @@ impl Reporter for ModularitySummaryReporter {
         let large_files = count_kind(&checklist, "MODULARITY-FILE");
         let large_functions = count_kind(&checklist, "MODULARITY-FUNCTION");
         let crowded_files = count_kind(&checklist, "MODULARITY-TYPES-PER-FILE");
-        let module_outliers = count_kind(&checklist, "MODULARITY-MODULE-SIZE");
-        let top_heavy = count_kind(&checklist, "MODULARITY-TOP-HEAVY");
-        let lopsided = count_kind(&checklist, "MODULARITY-LOPSIDED");
-        let collapse = count_kind(&checklist, "MODULARITY-COLLAPSE");
         let mut modules: Vec<_> = open
             .iter()
             .copied()
@@ -59,6 +56,13 @@ impl Reporter for ModularitySummaryReporter {
             .collect();
         sort_by_lines_desc(&mut modules);
         let sigma = thresholds.module_size_sigma();
+        let module_outliers = modules
+            .iter()
+            .filter(|row| is_module_outlier(row, thresholds))
+            .count();
+        let top_heavy = count_kind(&checklist, "MODULARITY-TOP-HEAVY");
+        let lopsided = count_kind(&checklist, "MODULARITY-LOPSIDED");
+        let collapse = count_kind(&checklist, "MODULARITY-COLLAPSE");
         let min_lines = thresholds.min_module_lines();
         let sample_lines: Vec<u32> = modules
             .iter()
@@ -72,11 +76,11 @@ impl Reporter for ModularitySummaryReporter {
         body.push_str("---\n\n");
         body.push_str(&format!(
             "Workspace totals: **{inventory_total}** inventory rows, **{checklist_total}** checklist items — large files **{large_files}**, \
-             large functions **{large_functions}**, types-per-file **{crowded_files}**, module-size outliers **{module_outliers}**, \
+             large functions **{large_functions}**, types-per-file **{crowded_files}**, diagnostic module-size outliers **{module_outliers}**, \
              top-heavy **{top_heavy}**, lopsided **{lopsided}**, collapse **{collapse}**.\n\n"
         ));
         body.push_str(
-            "| Crate | Inventory | Checklist | Large files | Large functions | Types per file | Module outliers | Top-heavy | Lopsided | Collapse | Largest file | Largest fn |\n",
+            "| Crate | Inventory | Checklist | Large files | Large functions | Types per file | Diagnostic module outliers | Top-heavy | Lopsided | Collapse | Largest file | Largest fn |\n",
         );
         body.push_str(
             "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
@@ -101,7 +105,13 @@ impl Reporter for ModularitySummaryReporter {
                 count_kind(&crate_checklist, "MODULARITY-FILE"),
                 count_kind(&crate_checklist, "MODULARITY-FUNCTION"),
                 count_kind(&crate_checklist, "MODULARITY-TYPES-PER-FILE"),
-                count_kind(&crate_checklist, "MODULARITY-MODULE-SIZE"),
+                crate_open
+                    .iter()
+                    .filter(|row| {
+                        row.kind() == "MODULARITY-MODULE-SIZE"
+                            && is_module_outlier(row, thresholds)
+                    })
+                    .count(),
                 count_kind(&crate_checklist, "MODULARITY-TOP-HEAVY"),
                 count_kind(&crate_checklist, "MODULARITY-LOPSIDED"),
                 count_kind(&crate_checklist, "MODULARITY-COLLAPSE"),
@@ -117,21 +127,21 @@ impl Reporter for ModularitySummaryReporter {
         } else {
             body.push_str(&format!(
                 "**{}** modules in the σ sample (min {} lines), mean **{:.1}** lines, \
-                 σ **{:.1}**. Outliers first, then the next-largest; |z| > {sigma} is a \
-                 checklist lint on the upper tail only when lines >= {}{}. \
+                 σ **{:.1}**. Outliers first, then the next-largest; |z| > {sigma} is \
+                 diagnostic context, while file-size checklist actions come from the \
+                 configured file limit{}. \
                  Full inventory is `modularity.csv`.\n\n",
                 stats.n(),
                 min_lines,
                 stats.mean(),
                 stats.stddev(),
-                thresholds.file_inventory_min_lines(),
                 if thresholds.module_size_ignore_lower_tail() {
                     "; lower tail ignored"
                 } else {
                     "; two-tailed"
                 },
             ));
-            append_truncated_module_table(&mut body, &modules);
+            append_truncated_module_table(&mut body, &modules, thresholds);
         }
         append_longest_methods(&mut body, &inventory);
         if !modules.is_empty() {
@@ -146,13 +156,43 @@ impl Reporter for ModularitySummaryReporter {
     }
 }
 
-#[instrument(level = "debug", skip(modules))]
-fn append_truncated_module_table(body: &mut String, modules: &[&ModularityRow]) {
+#[instrument(level = "debug", skip(row))]
+fn module_zscore(row: &ModularityRow) -> Option<f64> {
+    row.zscore().parse::<f64>().ok()
+}
+
+#[instrument(level = "debug", skip(row))]
+fn module_zscore_abs(row: &ModularityRow) -> Option<f64> {
+    module_zscore(row).map(f64::abs)
+}
+
+#[instrument(level = "trace", skip(row, thresholds))]
+fn is_module_outlier(row: &ModularityRow, thresholds: &ModularityThresholds) -> bool {
+    let Some(zscore) = module_zscore(row) else {
+        return false;
+    };
+    let sigma = f64::from(thresholds.module_size_sigma());
+    zscore > sigma || (zscore < -sigma && !thresholds.module_size_ignore_lower_tail())
+}
+
+#[instrument(level = "debug", skip(modules, thresholds))]
+fn append_truncated_module_table(
+    body: &mut String,
+    modules: &[&ModularityRow],
+    thresholds: &ModularityThresholds,
+) {
     let mut shown: Vec<&ModularityRow> = modules
         .iter()
         .copied()
-        .filter(|row| row.is_checklist())
+        .filter(|row| is_module_outlier(row, thresholds))
         .collect();
+    shown.sort_by(|left, right| {
+        module_zscore_abs(right)
+            .partial_cmp(&module_zscore_abs(left))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| right.line_count().cmp(&left.line_count()))
+            .then_with(|| left.file().cmp(right.file()))
+    });
     for row in modules {
         if shown.len() >= SUMMARY_MODULE_ROWS {
             break;
@@ -168,7 +208,11 @@ fn append_truncated_module_table(body: &mut String, modules: &[&ModularityRow]) 
     body.push_str("| Crate | Module | File | Lines | z | Outlier |\n");
     body.push_str("| --- | --- | --- | ---: | ---: | --- |\n");
     for row in &shown {
-        let outlier = if row.is_checklist() { "yes" } else { "" };
+        let outlier = if is_module_outlier(row, thresholds) {
+            "diagnostic"
+        } else {
+            ""
+        };
         let zscore = if row.zscore().is_empty() {
             "—"
         } else {

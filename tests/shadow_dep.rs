@@ -4,6 +4,7 @@ use std::path::Path;
 
 use cordial::testing::collect_member_dep_build_config;
 use cordial::{StoreLayout, resolve_shadow_dep_build_config};
+use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
 fn shadow_dep_cache_stem_matches_elicit_doc() {
@@ -26,28 +27,32 @@ fn tracked_target_fallback_features_for_url_pair() {
 }
 
 #[test]
-fn optional_dep_resolves_its_activating_member_feature() {
+fn optional_dep_resolves_its_activating_member_feature() -> miette::Result<()> {
     cordial::init_tracing();
     let config = collect_member_dep_build_config(
         Path::new("tests/parity/workspaces/optional-dep-workspace"),
         "opt_member",
         "opt_upstream",
     )
-    .expect("opt_member depends on opt_upstream");
+    .into_diagnostic()
+    .wrap_err("opt_member depends on opt_upstream")?;
     assert_eq!(
         config.activating_member_feature(),
         &Some("widget".to_string())
     );
+    Ok(())
 }
 
 #[test]
-fn non_optional_dep_has_no_activating_member_feature() {
+fn non_optional_dep_has_no_activating_member_feature() -> miette::Result<()> {
     cordial::init_tracing();
     let config = collect_member_dep_build_config(
         Path::new("tests/parity/workspaces/minimal-workspace"),
         "elicitation",
         "url",
     )
-    .expect("elicitation depends on url");
+    .into_diagnostic()
+    .wrap_err("elicitation depends on url")?;
     assert_eq!(config.activating_member_feature(), &None);
+    Ok(())
 }

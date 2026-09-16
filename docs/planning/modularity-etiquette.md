@@ -14,7 +14,7 @@ Thresholds live in `cordial.toml` under `[modularity]`. See
 file_inventory_min_lines = 500
 function_inventory_min_lines = 150
 function_hotspot_min_lines = 80
-file_checklist_min_lines = 1000
+file_checklist_min_lines = 500
 function_checklist_min_lines = 200
 max_types_per_file = 10
 module_size_sigma = 2
@@ -33,7 +33,7 @@ hierarchy_min_lines = 150
 | `MODULARITY-FILE` | File line count ≥ `file_inventory_min_lines` (checklist at `file_checklist_min_lines`). |
 | `MODULARITY-FUNCTION` | Function or method **body** line count ≥ `function_inventory_min_lines` (checklist at `function_checklist_min_lines`: split this body). On files already at `file_inventory_min_lines`, bodies ≥ `function_hotspot_min_lines` are also recorded so too-long hotspots can name extract-helpers; they are not CSV inventory. Free functions, inherent/trait impl methods, and trait default methods. Not signature-only trait items, not `#[cfg(test)]`. |
 | `MODULARITY-TYPES-PER-FILE` | File-level type definitions exceed `max_types_per_file`. Always a checklist item. |
-| `MODULARITY-MODULE-SIZE` | Every module is inventoried. Checklist from a signed z-score vs the crate mean (`|z| > σ`, default 2). **Upper tail** (`z > σ`) also requires `lines >= file_inventory_min_lines` (default 500) so a moving σ does not checklist files below the file inventory floor. **Lower tail** (`z < -σ`) is not gated by that floor; set `module_size_ignore_lower_tail` to drop it from the checklist. `min_module_lines` only omits modules from the σ *sample* — it is not a checklist floor and must not be used to silence the lower tail. |
+| `MODULARITY-MODULE-SIZE` | Every module is inventoried with a signed z-score vs the crate mean (`|z| > σ`, default 2). Z-scores are diagnostic context in CSV/summary, not checklist items. `min_module_lines` only omits modules from the σ *sample* -- it is not a checklist floor. |
 | `MODULARITY-TOP-HEAVY` | A parent (not the crate root) kept ≥ `top_heavy_min_percent` of its subtree in its own file, and own lines ≥ `hierarchy_min_lines`. Action: peel the leftover mass into children. |
 | `MODULARITY-LOPSIDED` | One child holds ≥ `lopsided_min_percent` of its siblings' combined subtree after dropping siblings below `hierarchy_min_lines`, and at least two siblings remain. Action: split the dominant sibling. |
 | `MODULARITY-COLLAPSE` | A parent (not the crate root) has exactly one child, that child is itself a branch, and the child's subtree ≥ `hierarchy_min_lines`. Action: collapse the extra directory and lift grandchildren into the parent. A unary *leaf* (`chain_layer` + `preds.rs`) is a peel, not this. |
@@ -76,16 +76,15 @@ plus each inline `mod { ... }` (span lines). `mod foo;` without a body is
 not counted; `foo.rs` / `foo/mod.rs` is. `#[cfg(test)]` inline mods are
 skipped. Stats are per crate (sample mean / stddev). n < 2 or σ = 0 means
 no outliers, but the ranked list still appears in `modularity-summary.md`.
-The file inventory floor applies only to the upper tail; unusually small
-modules remain checklist items unless `module_size_ignore_lower_tail` is
-set.
+Module z-scores are diagnostic only; the file-size action queue is driven
+directly by `file_checklist_min_lines`.
 
 ## Checklist composition
 
-`modularity.checklist.md` is hotspot-oriented so FILE and MODULE-SIZE do
-not appear as two unexplained rows for the same path:
+`modularity.checklist.md` is hotspot-oriented so FILE rows can carry nearby
+module-shape context without letting z-scores drive the action queue:
 
-- **Too long** — one item per oversized file/module, with the longest
+- **Files over limit** — one item per oversized file, largest first, with the longest
   method bodies, packed-type list, and structure diagnosis nested on the
   same item:
   - split this body (checklist-length methods)
@@ -132,11 +131,9 @@ masses; collapse `detail` names the parent and the grandchildren to lift).
 
 ## Status
 
-Size rules, types-per-file (default 10), module-size 2σ (upper tail gated
-on the file inventory floor; lower tail optional via
-`module_size_ignore_lower_tail`), hotspot diagnosis (including
-extract-helpers down to 80 body lines on too-long files), hierarchy
-lints (top-heavy peel, lopsided split at 75% after dropping stub siblings,
-unary-nest collapse), and a `generated_files` exceptions list for the two
-LOC-based rules are in place. Modularize means extract helpers as well as
-split into a directory.
+Size rules, types-per-file (default 10), diagnostic module-size 2σ,
+hotspot diagnosis (including extract-helpers down to 80 body lines on
+too-long files), hierarchy lints (top-heavy peel, lopsided split at 75%
+after dropping stub siblings, unary-nest collapse), and a
+`generated_files` exceptions list for the two LOC-based rules are in place.
+Modularize means extract helpers as well as split into a directory.

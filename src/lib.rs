@@ -273,11 +273,11 @@ pub use etiquette::{
 pub use etiquettes::SHADOW_ETIQUETTE;
 #[cfg(feature = "elicitation")]
 pub use etiquettes::coverage_etiquettes;
-#[cfg(feature = "amenable_ext")]
-pub use etiquettes::framework_ext::{AMENABLE_EXT_JIFF_ETIQUETTE, AmenableExtJiffReporter};
 #[cfg(feature = "amenable_std")]
 pub use etiquettes::framework_std::{AMENABLE_STD_ETIQUETTE, AmenableStdReporter};
 pub use etiquettes::quality_etiquettes;
+#[cfg(feature = "amenable_ext")]
+pub use etiquettes::{AMENABLE_EXT_JIFF_ETIQUETTE, AmenableExtJiffReporter};
 #[cfg(all(feature = "rustdoc", feature = "impl_coverage"))]
 pub use plugin::classify_elicit_complete_gap;
 #[cfg(feature = "elicitation")]

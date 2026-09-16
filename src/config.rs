@@ -280,9 +280,8 @@ impl Default for VisibilityThresholds {
 /// Modularity etiquette knobs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct ModularityThresholds {
-    /// File inventory floor, and the *upper-tail* MODULE-SIZE checklist
-    /// floor. A large-side 2σ module below this many lines stays
-    /// inventory-only. The lower tail is not gated by this number.
+    /// File inventory floor. Files at or above this size are tracked in
+    /// inventory, and the default checklist floor matches this reader budget.
     #[serde(default = "default_file_inventory_min_lines")]
     #[getter(copy)]
     file_inventory_min_lines: u32,
@@ -311,15 +310,13 @@ pub struct ModularityThresholds {
     #[serde(default = "default_module_size_sigma")]
     #[getter(copy)]
     module_size_sigma: u32,
-    /// When true, only the upper tail (`z > σ`) is a MODULE-SIZE checklist
-    /// item. The lower tail stays in the sample and the summary; it does
-    /// not become an action item. Default is two-tailed.
+    /// When true, hide lower-tail (`z < -σ`) diagnostics in module-size
+    /// summary context. Module z-scores do not become action items.
     #[serde(default)]
     #[getter(copy)]
     module_size_ignore_lower_tail: bool,
     /// Exclude modules smaller than this from the 2σ sample. `0` includes all.
-    /// This is a sample filter, not a checklist floor — do not use it to
-    /// silence the lower tail.
+    /// This is a sample filter, not a checklist floor.
     #[serde(default = "default_min_module_lines")]
     #[getter(copy)]
     min_module_lines: u32,
@@ -374,7 +371,7 @@ fn default_function_hotspot_min_lines() -> u32 {
 
 #[instrument(level = "debug")]
 fn default_file_checklist_min_lines() -> u32 {
-    1000
+    default_file_inventory_min_lines()
 }
 
 #[instrument(level = "debug")]
@@ -552,25 +549,14 @@ impl ModularityThresholds {
         passthrough_subtree >= self.hierarchy_min_lines
     }
 
-    /// MODULE-SIZE checklist from a signed z-score.
+    /// MODULE-SIZE rows are diagnostic context, not checklist items.
     ///
-    /// Upper tail (`z > σ`): checklist only when `lines` is at least
-    /// [`Self::file_inventory_min_lines`]. The file floor does not apply
-    /// to the lower tail.
-    /// Lower tail (`z < -σ`): checklist unless
-    /// [`Self::module_size_ignore_lower_tail`] is set.
+    /// The actionable file-size queue is driven by
+    /// [`Self::file_checklist_min_lines`]. Z-scores stay in the CSV and
+    /// summary so reviewers can see unusual module shapes without turning
+    /// a moving statistical threshold into a moving action list.
     #[instrument(level = "trace", skip(self))]
-    pub fn is_module_size_checklist(&self, lines: u32, zscore: Option<f64>) -> bool {
-        let Some(zscore) = zscore else {
-            return false;
-        };
-        let sigma = f64::from(self.module_size_sigma);
-        if zscore > sigma {
-            return lines >= self.file_inventory_min_lines;
-        }
-        if zscore < -sigma {
-            return !self.module_size_ignore_lower_tail;
-        }
+    pub fn is_module_size_checklist(&self) -> bool {
         false
     }
 

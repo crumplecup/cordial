@@ -268,7 +268,7 @@ mod amenable_ext_section {
 
     #[instrument(level = "debug", skip(findings), err(level = "warn"))]
     pub(super) fn amenable_ext_jiff_section(findings: &[&dyn Finding]) -> CordialResult<String> {
-        use crate::etiquettes::framework_ext::amenable_ext_jiff_report_from_findings;
+        use crate::etiquettes::amenable_ext_jiff_report_from_findings;
         use crate::framework_std::render_amenable_ext_summary_md;
 
         let Some(report) = amenable_ext_jiff_report_from_findings(findings, false) else {
