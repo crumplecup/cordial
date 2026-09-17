@@ -5,27 +5,28 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
+use crate::error::{CordialError, CordialResult};
 use crate::objects::{Disposition, Finding, MapFindingSink, Rule};
 
-use super::paths::paths_match;
+use super::paths::{normalize_rel_path, paths_match};
 
 /// One documented exception row in `{store}/exceptions/{etiquette}/{crate}.json`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct ExceptionEntry {
     /// Path relative to the crate root.
-    pub(super) file: String,
+    file: String,
     /// When set, only findings on this line match.
     #[getter(copy)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(super) line: Option<u32>,
+    line: Option<u32>,
     /// When set, only findings with this rule id match.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(super) rule_id: Option<String>,
+    rule_id: Option<String>,
     /// When set, only findings with this context/qualified name match.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(super) context: Option<String>,
+    context: Option<String>,
     /// Human-readable explanation shown in reports.
-    pub(super) reason: String,
+    reason: String,
 }
 
 /// Loaded exception patch set for one etiquette and crate.
@@ -97,6 +98,27 @@ impl ExceptionEntry {
         }
     }
 
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    pub(super) fn normalized_for_store(mut self) -> CordialResult<Self> {
+        self.file = normalize_rel_path(std::path::Path::new(self.file.trim()));
+        self.reason = self.reason.trim().to_string();
+        if let Some(rule_id) = self.rule_id.as_mut() {
+            *rule_id = rule_id.trim().to_string();
+            if rule_id.is_empty() {
+                self.rule_id = None;
+            }
+        }
+        if let Some(context) = self.context.as_mut() {
+            *context = context.trim().to_string();
+            if context.is_empty() {
+                self.context = None;
+            }
+        }
+        require_nonempty("file", &self.file)?;
+        require_nonempty("reason", &self.reason)?;
+        Ok(self)
+    }
+
     #[instrument(level = "debug", skip(self, finding))]
     fn matches(&self, finding: &dyn Finding) -> bool {
         let mut sink = MapFindingSink::default();
@@ -134,6 +156,16 @@ impl ExceptionEntry {
         }
         true
     }
+}
+
+#[instrument(level = "debug")]
+fn require_nonempty(label: &str, value: &str) -> CordialResult<()> {
+    if value.trim().is_empty() {
+        return Err(CordialError::invariant(format!(
+            "{label} must not be empty"
+        )));
+    }
+    Ok(())
 }
 
 /// Wrapper that overrides disposition and records a suppression reason.

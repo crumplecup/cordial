@@ -12,7 +12,7 @@ use super::entry::ExceptionEntry;
 use super::json::{
     json_rows_contain_path, parse_exception_file, parse_json_array, write_pretty_json,
 };
-use super::paths::{coverage_skip_file_path, exception_file_path, normalize_rel_path};
+use super::paths::{coverage_skip_file_path, exception_file_path};
 
 /// One coverage skip-list row in `{store}/patches/{patch_set}.json`.
 #[derive(
@@ -71,7 +71,7 @@ pub fn add_exception(
 ) -> CordialResult<AddExceptionOutcome> {
     require_nonempty("etiquette", etiquette_id)?;
     require_nonempty("crate_name", crate_name)?;
-    let entry = normalize_quality_entry(entry)?;
+    let entry = entry.normalized_for_store()?;
     let canonical = exception_file_path(store, etiquette_id, crate_name);
     let alias = store
         .quality_patches_dir()
@@ -139,27 +139,6 @@ fn require_nonempty(label: &str, value: &str) -> CordialResult<()> {
         )));
     }
     Ok(())
-}
-
-#[instrument(level = "debug", skip(entry), err(level = "warn"))]
-fn normalize_quality_entry(mut entry: ExceptionEntry) -> CordialResult<ExceptionEntry> {
-    entry.file = normalize_rel_path(Path::new(entry.file.trim()));
-    entry.reason = entry.reason.trim().to_string();
-    if let Some(rule_id) = entry.rule_id.as_mut() {
-        *rule_id = rule_id.trim().to_string();
-        if rule_id.is_empty() {
-            entry.rule_id = None;
-        }
-    }
-    if let Some(context) = entry.context.as_mut() {
-        *context = context.trim().to_string();
-        if context.is_empty() {
-            entry.context = None;
-        }
-    }
-    require_nonempty("file", &entry.file)?;
-    require_nonempty("reason", &entry.reason)?;
-    Ok(entry)
 }
 
 #[instrument(level = "debug", skip(entry), err(level = "warn"))]
