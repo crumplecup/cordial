@@ -195,7 +195,7 @@ pub(crate) fn resolve_or_rebuild_rustdoc_json(
     )
 }
 
-/// Find rustdoc JSON when it is available.
+/// Find rustdoc JSON in the store cache, then cargo's `target/doc` output.
 #[instrument(level = "debug")]
 pub(crate) fn find_rustdoc_json(
     crate_root: &Path,
@@ -203,26 +203,22 @@ pub(crate) fn find_rustdoc_json(
     store_root: Option<&Path>,
 ) -> Option<PathBuf> {
     let normalized = crate_name.replace('-', "_");
-    let candidates = [
-        crate_root.join("doc").join(format!("{normalized}.json")),
-        crate_root
-            .join("target")
-            .join("doc")
-            .join(format!("{normalized}.json")),
-        crate_root.join(format!("{normalized}.rustdoc.json")),
-    ];
-    candidates
-        .into_iter()
-        .find(|path| path.is_file())
-        .or_else(|| store_rustdoc_candidate(store_root, crate_name))
+    if let Some(path) = store_rustdoc_candidate(store_root, crate_name) {
+        return Some(path);
+    }
+
+    // Cargo rustdoc writes here when `crate_root` is the workspace root.
+    // This is build output, not a committed cache.
+    let cargo_json = crate_root
+        .join("target")
+        .join("doc")
+        .join(format!("{normalized}.json"));
+    cargo_json.is_file().then_some(cargo_json)
 }
 
 #[instrument(level = "debug")]
 fn store_rustdoc_candidate(store_root: Option<&Path>, crate_name: &str) -> Option<PathBuf> {
     let store_root = store_root?;
-    let path = store_root
-        .join("cache")
-        .join("rustdoc")
-        .join(format!("{crate_name}.json"));
+    let path = StoreLayout::from_root(store_root, String::new()).rustdoc_cache_path(crate_name);
     path.is_file().then_some(path)
 }

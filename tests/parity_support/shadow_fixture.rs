@@ -19,6 +19,7 @@ use rustdoc_types::{
 };
 
 /// Write a public unit struct into `{workspace}/target/doc/{crate}.json`.
+#[allow(dead_code)] // fixture helper; not every `#[path]` consumer calls it
 pub fn write_minimal_rustdoc(
     workspace: &Path,
     crate_name: &str,
@@ -131,33 +132,20 @@ pub fn write_minimal_rustdoc_file(
 }
 
 /// Seed upstream and shadow rustdoc for the url ↔ elicit_url pair.
-pub fn seed_minimal_shadow_fixture(workspace: &Path, store_root: &Path) -> miette::Result<()> {
-    write_minimal_rustdoc(workspace, "url", "Widget")?;
-    write_minimal_rustdoc(workspace, "elicit_url", "Widget")?;
-
-    for crate_name in ["url", "elicit_url"] {
-        let source = workspace
-            .join("target/doc")
-            .join(format!("{crate_name}.json"));
-        let crate_root = workspace.join("crates").join(crate_name);
-        let local_doc = crate_root.join("doc");
-        fs::create_dir_all(&local_doc)
-            .into_diagnostic()
-            .wrap_err("local doc dir")?;
-        fs::copy(&source, local_doc.join(format!("{crate_name}.json")))
-            .into_diagnostic()
-            .wrap_err("copy local doc")?;
-        fs::create_dir_all(store_root.join("cache/rustdoc"))
-            .into_diagnostic()
-            .wrap_err("store rustdoc dir")?;
-        fs::copy(
-            &source,
-            store_root
-                .join("cache/rustdoc")
-                .join(format!("{crate_name}.json")),
-        )
-        .into_diagnostic()
-        .wrap_err("copy store rustdoc")?;
-    }
+pub fn seed_minimal_shadow_fixture(_workspace: &Path, store_root: &Path) -> miette::Result<()> {
+    write_store_rustdoc(store_root, "url", "Widget")?;
+    write_store_rustdoc(store_root, "elicit_url", "Widget")?;
     Ok(())
+}
+
+fn write_store_rustdoc(
+    store_root: &Path,
+    crate_name: &str,
+    type_name: &str,
+) -> miette::Result<()> {
+    let cache = store_root.join("cache/rustdoc");
+    fs::create_dir_all(&cache)
+        .into_diagnostic()
+        .wrap_err("store rustdoc dir")?;
+    write_minimal_rustdoc_file(&cache.join(format!("{crate_name}.json")), crate_name, type_name)
 }

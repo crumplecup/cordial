@@ -3,29 +3,14 @@
 use miette::{IntoDiagnostic, WrapErr};
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use rustdoc_types::{
     Crate, Generics, Id, Item, ItemEnum, ItemKind, ItemSummary, Module, Struct, StructKind, Target,
     Visibility,
 };
 
-/// Write a public unit struct into `{workspace}/target/doc/{crate}.json`.
-pub fn write_minimal_rustdoc(
-    workspace: &Path,
-    crate_name: &str,
-    type_name: &str,
-) -> miette::Result<PathBuf> {
-    let doc_dir = workspace.join("target/doc");
-    fs::create_dir_all(&doc_dir)
-        .into_diagnostic()
-        .wrap_err("doc dir")?;
-    let path = doc_dir.join(format!("{crate_name}.json"));
-    write_minimal_rustdoc_file(&path, crate_name, type_name)?;
-    Ok(path)
-}
-
-pub fn write_minimal_rustdoc_file(
+fn write_minimal_rustdoc_file(
     path: &Path,
     crate_name: &str,
     type_name: &str,
@@ -123,35 +108,22 @@ pub fn write_minimal_rustdoc_file(
 }
 
 /// Seed the same rustdoc inputs used by elicit_doc's pipeline fixture.
-pub fn seed_minimal_impl_fixture(workspace: &Path, store_root: &Path) -> miette::Result<()> {
-    write_minimal_rustdoc(workspace, "elicitation", "Handle")?;
-    write_minimal_rustdoc(workspace, "url", "Widget")?;
-
-    for crate_name in ["elicitation", "url"] {
-        let source = workspace
-            .join("target/doc")
-            .join(format!("{crate_name}.json"));
-        let crate_root = workspace.join("crates").join(crate_name);
-        let local_doc = crate_root.join("doc");
-        fs::create_dir_all(&local_doc)
-            .into_diagnostic()
-            .wrap_err("local doc dir")?;
-        fs::copy(&source, local_doc.join(format!("{crate_name}.json")))
-            .into_diagnostic()
-            .wrap_err("copy local doc")?;
-        fs::create_dir_all(store_root.join("cache/rustdoc"))
-            .into_diagnostic()
-            .wrap_err("store rustdoc dir")?;
-        fs::copy(
-            &source,
-            store_root
-                .join("cache/rustdoc")
-                .join(format!("{crate_name}.json")),
-        )
-        .into_diagnostic()
-        .wrap_err("copy store rustdoc")?;
-    }
+pub fn seed_minimal_impl_fixture(_workspace: &Path, store_root: &Path) -> miette::Result<()> {
+    write_store_rustdoc(store_root, "elicitation", "Handle")?;
+    write_store_rustdoc(store_root, "url", "Widget")?;
     Ok(())
+}
+
+fn write_store_rustdoc(
+    store_root: &Path,
+    crate_name: &str,
+    type_name: &str,
+) -> miette::Result<()> {
+    let cache = store_root.join("cache/rustdoc");
+    fs::create_dir_all(&cache)
+        .into_diagnostic()
+        .wrap_err("store rustdoc dir")?;
+    write_minimal_rustdoc_file(&cache.join(format!("{crate_name}.json")), crate_name, type_name)
 }
 
 pub fn run_cordial_impl_coverage(

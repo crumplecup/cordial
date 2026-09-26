@@ -11,13 +11,18 @@ use cordial::{
 
 fn write_fixture(
     parent: &std::path::Path,
+    store_root: &std::path::Path,
     krate: rustdoc_types::Crate,
 ) -> miette::Result<std::path::PathBuf> {
     let crate_root = parent.join("demo");
-    fs::create_dir_all(crate_root.join("doc"))
+    fs::create_dir_all(&crate_root)
         .into_diagnostic()
-        .wrap_err("doc dir")?;
-    write_rustdoc_crate_json(&crate_root.join("doc/demo.json"), &krate)
+        .wrap_err("crate root")?;
+    let cache = store_root.join("cache/rustdoc");
+    fs::create_dir_all(&cache)
+        .into_diagnostic()
+        .wrap_err("store rustdoc dir")?;
+    write_rustdoc_crate_json(&cache.join("demo.json"), &krate)
         .into_diagnostic()
         .wrap_err("write json")?;
     Ok(crate_root)
@@ -27,9 +32,8 @@ fn write_fixture(
 fn impl_coverage_etiquette_finds_missing_traits() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let crate_root = write_fixture(fixture.path(), demo_impl_coverage_crate())?;
-
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let crate_root = write_fixture(fixture.path(), store.path(), demo_impl_coverage_crate())?;
     let session = SessionBuilder::new(&crate_root)
         .with_store_root(store.path())
         .register(&IMPL_COVERAGE_ETIQUETTE)
@@ -55,9 +59,8 @@ fn impl_coverage_etiquette_finds_missing_traits() -> miette::Result<()> {
 fn trenchcoat_etiquette_finds_unwrapped_foreign_type() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let crate_root = write_fixture(fixture.path(), demo_trenchcoat_crate())?;
-
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let crate_root = write_fixture(fixture.path(), store.path(), demo_trenchcoat_crate())?;
     let session = SessionBuilder::new(&crate_root)
         .with_store_root(store.path())
         .register(&TRENCHCOAT_ETIQUETTE)
@@ -82,9 +85,8 @@ fn trenchcoat_etiquette_finds_unwrapped_foreign_type() -> miette::Result<()> {
 fn shadow_etiquette_links_mapped_items() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let crate_root = write_fixture(fixture.path(), demo_shadow_crate())?;
-
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let crate_root = write_fixture(fixture.path(), store.path(), demo_shadow_crate())?;
     let session = SessionBuilder::new(&crate_root)
         .with_store_root(store.path())
         .register(&SHADOW_ETIQUETTE)

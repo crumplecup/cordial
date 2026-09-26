@@ -152,7 +152,7 @@ path = "src/lib.rs"
             .join("cache/rustdoc/auto_rustdoc_cache.json")
             .is_file()
     );
-    assert!(fixture.path().join("doc/auto_rustdoc_cache.json").is_file());
+    assert!(!fixture.path().join("doc/auto_rustdoc_cache.json").is_file());
     Ok(())
 }
 

@@ -1,5 +1,7 @@
 /target
 target/
+# rustdoc JSON belongs in ~/.cordial/{project}/cache/rustdoc, not the repo
+tests/**/doc/*.json
 /.env
 /tests/parity/.elicit-out/
 /tests/parity/.elicit-store/

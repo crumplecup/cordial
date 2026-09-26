@@ -94,6 +94,12 @@ impl StoreLayout {
         self.cache_dir().join("rustdoc")
     }
 
+    /// Cargo `--target-dir` for rustdoc JSON builds (`cache/rustdoc-target`).
+    #[instrument(level = "trace", skip(self))]
+    pub fn rustdoc_target_dir(&self) -> PathBuf {
+        self.cache_dir().join("rustdoc-target")
+    }
+
     /// Path of the cached rustdoc build artifact for this crate.
     #[instrument(level = "trace", skip(self))]
     pub fn build_artifact_path(&self, crate_name: &str) -> PathBuf {

@@ -167,7 +167,8 @@ bypass the PR + CI ruleset; history rewrite stays blocked.
 
 ## Coverage
 
-Coverage etiquettes read rustdoc JSON. Workspace-member rustdoc cache inputs
+Coverage etiquettes read rustdoc JSON from the store
+(`~/.cordial/{project}/cache/rustdoc/`). Workspace-member rustdoc cache inputs
 are rebuilt automatically when missing or stale:
 
 ```sh

@@ -26,10 +26,23 @@ pub fn run_cargo_rustdoc(
     crate_name: &str,
     features: &[&str],
 ) -> CordialResult<PathBuf> {
+    run_cargo_rustdoc_to(workspace_root, crate_name, features, None)
+}
+
+/// Run `cargo rustdoc` with an explicit Cargo `--target-dir`.
+#[instrument(level = "info", skip(target_dir), fields(crate_name = crate_name), err(level = "warn"))]
+pub(crate) fn run_cargo_rustdoc_to(
+    workspace_root: &Path,
+    crate_name: &str,
+    features: &[&str],
+    target_dir: Option<&Path>,
+) -> CordialResult<PathBuf> {
     let workspace_root = workspace_root
         .canonicalize()
         .unwrap_or_else(|_| workspace_root.to_path_buf());
-    let project_target = workspace_root.join("target");
+    let project_target = target_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| workspace_root.join("target"));
 
     let mut cmd = nightly_cargo();
     cmd.current_dir(workspace_root)
@@ -86,19 +99,23 @@ pub fn run_cargo_rustdoc(
 /// its activating feature is turned on.
 #[instrument(
     level = "info",
+    skip(target_dir),
     fields(shadow_crate, activating_feature, upstream_crate),
     err(level = "warn")
 )]
-pub fn run_cargo_doc_for_optional_dep(
+pub(crate) fn run_cargo_doc_for_optional_dep_to(
     workspace_root: &Path,
     shadow_crate: &str,
     activating_feature: &str,
     upstream_crate: &str,
+    target_dir: Option<&Path>,
 ) -> CordialResult<PathBuf> {
     let workspace_root = workspace_root
         .canonicalize()
         .unwrap_or_else(|_| workspace_root.to_path_buf());
-    let project_target = workspace_root.join("target");
+    let project_target = target_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| workspace_root.join("target"));
 
     let mut cmd = nightly_cargo();
     cmd.current_dir(&workspace_root)

@@ -25,7 +25,6 @@ fn build_caches_rustdoc_json_for_workspace_member() -> miette::Result<()> {
     assert_eq!(artifacts[0].crate_name(), "build_demo");
     assert!(store_layout.rustdoc_cache_path("build_demo").is_file());
     assert!(store_layout.build_artifact_path("build_demo").is_file());
-    assert!(fixture.join("doc/build_demo.json").is_file());
     Ok(())
 }
 

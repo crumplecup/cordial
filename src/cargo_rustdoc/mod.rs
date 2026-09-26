@@ -42,7 +42,7 @@ use crate::session::RunAll;
 use crate::store::StoreLayout;
 use crate::targets::discover_crate_targets;
 
-/// Build rustdoc JSON for workspace members and write elicit_doc-compatible cache artifacts.
+/// Build rustdoc JSON for workspace members and cache it under the store.
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
 pub fn build_workspace_members(
     project_root: &Path,
@@ -102,15 +102,14 @@ pub(crate) fn build_workspace_members_with_progress(
             index + 1,
             targets.len()
         ));
-        let json_path = run_cargo_rustdoc(project_root, target.crate_name(), &[])?;
+        let json_path = cargo::run_cargo_rustdoc_to(
+            project_root,
+            target.crate_name(),
+            &[],
+            Some(&store.rustdoc_target_dir()),
+        )?;
 
         copy_rustdoc_json(&json_path, &cached_json)?;
-
-        let crate_doc_dir = target.crate_root().join("doc");
-        std::fs::create_dir_all(&crate_doc_dir)?;
-        let local_json =
-            crate_doc_dir.join(format!("{}.json", target.crate_name().replace('-', "_")));
-        copy_rustdoc_json(&json_path, &local_json)?;
 
         let rustdoc_sha256 = hash_file(&cached_json)?;
         let crate_version =
