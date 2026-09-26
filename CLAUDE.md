@@ -34,7 +34,8 @@ When implementing, match conventions from sibling repos (`homecoming`, `amenable
 
 1. **Plan** — update or add a planning doc; list it in `PLANNING_INDEX.md`.
 2. **Implement** — minimal diff aligned with `CORDIAL_PLAN.md` phases.
-3. **Verify** — `cargo check`, `cargo test`, `cargo clippy` before commit.
+3. **Verify** — `just check-all` before commit; `just check-features` and
+   `just cordial-gate` before promoting `dev` to `main`.
 4. **Document** — update planning doc status when a phase completes.
 
 Pre-commit: fix all warnings and errors introduced by the change.

@@ -23,7 +23,8 @@ cordial quality -p .
 cordial view findings/quality-report.md
 ```
 
-1. Run `cordial quality -p .` to produce the local quality report.
+1. Run `just cordial-gate` (or `cordial quality -p . --deny-open`) to produce
+   the local quality report and fail if open action items remain.
 2. Open `findings/quality-report.md` with `cordial view` and start from the
    open action items.
 3. Follow the report links to the relevant checklist artifacts.
@@ -52,7 +53,8 @@ Useful routing ids:
 
 | Need | Start with |
 | --- | --- |
-| Run the standards | `cordial quality -p .`, then `cordial view findings/quality-report.md` |
+| Run the standards | `just cordial-gate`, then `cordial view findings/quality-report.md` |
+| Promote `dev` to `main` | `just check-all`, `just check-features`, `just cordial-gate`, then a PR; CI must be green |
 | Understand a finding | `cordial explain <id-or-rule-id>` |
 | Find the next checklist | Links inside `findings/quality-report.md` |
 | Review config knobs | `cordial.toml`, then any config docs under `docs/` |

@@ -1,5 +1,6 @@
 # cordial
 
+[![CI](https://github.com/crumplecup/cordial/actions/workflows/ci.yml/badge.svg)](https://github.com/crumplecup/cordial/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue.svg)](LICENSE-APACHE)
 
 **Polite standards for code development.**

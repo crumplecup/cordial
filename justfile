@@ -43,3 +43,39 @@ test:
 # verification.
 test-slow:
     {{cargo}} test --features {{features}},slow_tests
+
+fmt:
+    {{cargo}} fmt --all --check
+
+clippy:
+    {{cargo}} clippy --all-targets --features {{features}} -- -D warnings
+
+# Pre-merge rustc gates. CI runs this as `check-all (ubuntu-latest)`.
+check-all:
+    just fmt
+    just clippy
+    just test
+
+# Feature-powerset compile check. Depth 2: each unit and each pair.
+# Umbrellas (`full`, `quality`, `elicitation`) are already compiled by
+# `just check-all`. `slow_tests` stays off. Independent etiquette flags
+# that do not pull crates are grouped so the pair count stays runner-
+# sized (~80 `cargo check`s, not C(30, 2)). `--no-dev-deps` temporarily
+# edits Cargo.toml (restored on exit). Needs cargo-hack.
+# CI runs this as `check-features (ubuntu-latest)`.
+check-features:
+    {{cargo}} hack check \
+        --feature-powerset \
+        --depth 2 \
+        --no-dev-deps \
+        --keep-going \
+        --exclude-features slow_tests,full,quality,elicitation \
+        --group-features allows,modularity,derives,cfg_scatter,visibility,cli_layout,doc_warnings,glob_imports,inline_tests,pageantry,verus_warnings,creusot_diagnostics \
+        --group-features error_sites,error_chain,internal_error_chain,foreign_error_types,foreign_error_attenuation \
+        --group-features rustdoc,impl_coverage,trenchcoat,shadow,homecoming_std,amenable_std,amenable_ext
+
+# Quality-etiquette gate: write reports, then fail if `quality-report.md`
+# still has open action items. Uses this checkout's binary, not a pinned
+# install. CI runs this as `cordial-gate (ubuntu-latest)`.
+cordial-gate:
+    {{cargo}} run --features {{features}} --bin cordial -- quality --deny-open

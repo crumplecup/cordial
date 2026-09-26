@@ -1,0 +1,59 @@
+name: CI
+
+# Runs on the promotion of `dev` to `main`, on a pull request targeting
+# `main`, and on manual dispatch. Day-to-day pushes to `dev` do not trigger
+# CI -- pre-flight a promotion by running this workflow against `dev` from
+# the Actions tab (or `gh workflow run ci.yml --ref dev`) and waiting for
+# green before you open the PR that fast-forwards `dev` onto `main`. The
+# `pull_request` trigger is the required check surface; with no PR open,
+# ordinary `dev` work stays CI-free.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: check-all (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: extractions/setup-just@v4
+      - run: just check-all
+
+  features:
+    name: check-features (ubuntu-latest)
+    # Feature-powerset compile check at depth 2. Linux-only; separate
+    # from `check-all` so a feature-gate break and a fmt/clippy/test
+    # break report independently. Needs cargo-hack.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
+      - uses: extractions/setup-just@v4
+      - run: just check-features
+
+  cordial:
+    name: cordial-gate (ubuntu-latest)
+    # Quality-etiquette gate: fails if any curated action item is open
+    # (`cordial quality --deny-open`, gating `quality-report.md`'s "Total
+    # open items"). Uses the checkout's own binary so the PR dogfoods
+    # the tool it is about to ship.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: extractions/setup-just@v4
+      - run: just cordial-gate

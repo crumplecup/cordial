@@ -141,6 +141,30 @@ action items from `quality-report.md` should fail the job. Inventory-only
 `Disposition::Open` findings, exemplars, and suppressed findings remain report
 evidence; they do not trip the deny gate.
 
+## Promoting `dev` to `main`
+
+CI does not run on ordinary pushes to `dev`. A ruleset on `main` requires a
+pull request and green checks before the fast-forward lands:
+
+1. `check-all (ubuntu-latest)` — `just check-all` (`fmt`, `clippy -D warnings`,
+   `test --features full`).
+2. `check-features (ubuntu-latest)` — `just check-features`
+   (`cargo hack` feature powerset, depth 2).
+3. `cordial-gate (ubuntu-latest)` — `just cordial-gate`
+   (`cordial quality --deny-open` from this checkout).
+
+Pre-flight from `dev` without opening a PR:
+
+```sh
+just check-all
+just check-features
+just cordial-gate
+gh workflow run ci.yml --ref dev
+```
+
+`main` also requires linear history (rebase or squash). Repository admins can
+bypass the PR + CI ruleset; history rewrite stays blocked.
+
 ## Coverage
 
 Coverage etiquettes read rustdoc JSON. Workspace-member rustdoc cache inputs
