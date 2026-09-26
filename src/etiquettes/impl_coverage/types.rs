@@ -74,7 +74,8 @@ impl Marker for ImplGapMarker {
     }
 }
 
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone, derive_builder::Builder)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ImplGapFinding {
     rule: CoverageRule,
     disposition: Disposition,
@@ -93,6 +94,14 @@ pub struct ImplGapFinding {
     coverage_provider: String,
     wrapper_paths: String,
     covered_indirectly: bool,
+}
+
+impl ImplGapFinding {
+    /// Start a builder for this finding.
+    #[instrument(level = "debug")]
+    pub fn builder() -> ImplGapFindingBuilder {
+        ImplGapFindingBuilder::default()
+    }
 }
 
 impl Finding for ImplGapFinding {

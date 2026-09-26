@@ -111,7 +111,8 @@ pub struct VerusPanicSite {
 /// back to text; `uses_assume`/`uses_admit`/`is_external_body` are real
 /// soundness-relevant signals -- code paths where a claim is trusted
 /// rather than checked.
-#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_builder::Builder)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct VerusFnFacts {
     /// The function's own name.
     name: String,
@@ -190,6 +191,12 @@ pub struct VerusFnFacts {
 }
 
 impl VerusFnFacts {
+    /// Start a builder for this value.
+    #[instrument(level = "debug")]
+    pub fn builder() -> VerusFnFactsBuilder {
+        VerusFnFactsBuilder::default()
+    }
+
     /// Whether this function rests on any real, locally-visible
     /// soundness escape hatch (`assume`/`admit`/`external_body`/
     /// `uninterp`/an axiom-mode proof) -- the single boolean a first

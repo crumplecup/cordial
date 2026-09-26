@@ -54,19 +54,21 @@ impl Assessor for HomecomingStdAssessor {
             };
             let (trait_status, skip_reason) =
                 classify_framework_std_row(type_path, &impl_paths, &skip_map);
-            findings.push(Box::new(FrameworkStdRowFinding::new(
-                FrameworkStdRule,
-                homecoming_row_disposition(trait_status),
-                anchor,
-                "std".to_string(),
-                HOMECOMING_TRAIT.to_string(),
-                HOMECOMING_IMPL_CRATE.to_string(),
-                type_path.to_string(),
-                marker.field("type_kind").unwrap_or("").to_string(),
-                marker.field("is_generic") == Some("true"),
-                trait_status,
-                skip_reason,
-            )) as Box<dyn Finding>);
+            findings.push(Box::new(
+                FrameworkStdRowFinding::builder()
+                    .rule(FrameworkStdRule)
+                    .disposition(homecoming_row_disposition(trait_status))
+                    .anchor(anchor)
+                    .source_crate("std".to_string())
+                    .trait_name(HOMECOMING_TRAIT.to_string())
+                    .impl_crate(HOMECOMING_IMPL_CRATE.to_string())
+                    .type_path(type_path.to_string())
+                    .type_kind(marker.field("type_kind").unwrap_or("").to_string())
+                    .is_generic(marker.field("is_generic") == Some("true"))
+                    .trait_status(trait_status)
+                    .skip_reason(skip_reason)
+                    .build()?,
+            ) as Box<dyn Finding>);
         }
         Ok(findings)
     }
@@ -146,31 +148,33 @@ mod amenable {
                         &skip_map,
                         &proof_chain_subjects,
                     ),
-                );
+                )?;
                 let (missing_layers, action) = amenable_gap_fields(&entry, AMENABLE_IMPL_CRATE);
-                findings.push(Box::new(AmenableStdRowFinding::new(
-                    AmenableStdRule,
-                    amenable_row_disposition(entry.status()),
-                    anchor,
-                    "std".to_string(),
-                    AMENABLE_IMPL_CRATE.to_string(),
-                    entry.type_path().clone(),
-                    entry.type_kind().clone(),
-                    entry.is_generic(),
-                    entry.status(),
-                    entry.evidence_link(),
-                    entry.evidence_name().clone(),
-                    entry.kani_witness(),
-                    entry.creusot_witness(),
-                    entry.verus_witness(),
-                    entry.proof_test(),
-                    entry.skip_reason().clone(),
-                    entry.kani_excepted(),
-                    entry.creusot_excepted(),
-                    entry.verus_excepted(),
-                    missing_layers,
-                    action,
-                )) as Box<dyn Finding>);
+                findings.push(Box::new(
+                    AmenableStdRowFinding::builder()
+                        .rule(AmenableStdRule)
+                        .disposition(amenable_row_disposition(entry.status()))
+                        .anchor(anchor)
+                        .source_crate("std".to_string())
+                        .impl_crate(AMENABLE_IMPL_CRATE.to_string())
+                        .type_path(entry.type_path().clone())
+                        .type_kind(entry.type_kind().clone())
+                        .is_generic(entry.is_generic())
+                        .status(entry.status())
+                        .evidence_link(entry.evidence_link())
+                        .evidence_name(entry.evidence_name().clone())
+                        .kani_witness(entry.kani_witness())
+                        .creusot_witness(entry.creusot_witness())
+                        .verus_witness(entry.verus_witness())
+                        .proof_test(entry.proof_test())
+                        .skip_reason(entry.skip_reason().clone())
+                        .kani_excepted(entry.kani_excepted())
+                        .creusot_excepted(entry.creusot_excepted())
+                        .verus_excepted(entry.verus_excepted())
+                        .missing_layers(missing_layers)
+                        .action(action)
+                        .build()?,
+                ) as Box<dyn Finding>);
             }
             Ok(findings)
         }

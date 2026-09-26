@@ -31,7 +31,7 @@ impl Reporter for HomecomingStdReporter {
         let session = view.session();
 
         let options = FrameworkStdOptions::default();
-        let report = framework_report_from_findings(findings, options.include_nightly())
+        let report = framework_report_from_findings(findings, options.include_nightly())?
             .ok_or_else(|| {
                 CordialError::invariant("homecoming std reporter requires assessor findings")
             })?;

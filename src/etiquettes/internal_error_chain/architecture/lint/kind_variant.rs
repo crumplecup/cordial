@@ -26,7 +26,7 @@ impl Catalog {
             .collect();
         for item in self.enums().values() {
             let lint = self.is_error_kind(item)
-                || (self.impls_error(&item.ident()) && Self::is_error_enum_name(&item.ident()));
+                || (self.impls_error(item.ident()) && Self::is_error_enum_name(item.ident()));
             if !lint {
                 continue;
             }

@@ -41,8 +41,16 @@ impl std::fmt::Display for AmenableStdStatus {
 
 /// One row in an amenable std registry coverage report.
 #[derive(
-    Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new, derive_getters::Getters,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    derive_builder::Builder,
+    derive_getters::Getters,
 )]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct AmenableStdEntry {
     type_path: String,
     type_kind: String,
@@ -73,10 +81,26 @@ pub struct AmenableStdEntry {
     verus_excepted: bool,
 }
 
+impl AmenableStdEntry {
+    /// Start a builder for this entry.
+    #[instrument(level = "debug")]
+    pub fn builder() -> AmenableStdEntryBuilder {
+        AmenableStdEntryBuilder::default()
+    }
+}
+
 /// Coverage report for amenable std registry vs std type inventory.
 #[derive(
-    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_builder::Builder,
+    derive_getters::Getters,
 )]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct AmenableStdReport {
     /// Crate that defined the foreign type.
     source_crate: String,
@@ -102,6 +126,12 @@ pub struct AmenableStdReport {
 }
 
 impl AmenableStdReport {
+    /// Start a builder for this report.
+    #[instrument(level = "debug")]
+    pub fn builder() -> AmenableStdReportBuilder {
+        AmenableStdReportBuilder::default()
+    }
+
     /// Covered items as a percentage of the inventory.
     #[instrument(level = "debug", skip(self))]
     pub fn coverage_pct(&self) -> f32 {

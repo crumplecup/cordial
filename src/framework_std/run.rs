@@ -47,7 +47,7 @@ pub fn assess_homecoming_std_coverage(
     let impl_paths =
         collect_trait_impl_paths_from_json(&impl_json, HOMECOMING_IMPL_CRATE, HOMECOMING_TRAIT)?;
     let skip_map = load_framework_skip_map(store, HOMECOMING_PATCH_SET);
-    Ok(build_framework_trait_report(
+    build_framework_trait_report(
         "std",
         &merged_items,
         HOMECOMING_TRAIT,
@@ -55,5 +55,5 @@ pub fn assess_homecoming_std_coverage(
         &impl_paths,
         &skip_map,
         options.include_nightly(),
-    ))
+    )
 }

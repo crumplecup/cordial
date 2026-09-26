@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::CordialResult;
 use crate::rustdoc::InventoryItemKind;
 
 use tracing::instrument;
@@ -68,8 +69,16 @@ pub struct FrameworkTraitEntry {
 
 /// Coverage report for merged std-family inventory vs impl-crate trait impls.
 #[derive(
-    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_builder::Builder,
+    derive_getters::Getters,
 )]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct FrameworkTraitReport {
     /// Crate that defined the foreign type.
     source_crate: String,
@@ -94,6 +103,12 @@ pub struct FrameworkTraitReport {
 }
 
 impl FrameworkTraitReport {
+    /// Start a builder for this report.
+    #[instrument(level = "debug")]
+    pub fn builder() -> FrameworkTraitReportBuilder {
+        FrameworkTraitReportBuilder::default()
+    }
+
     /// Covered items as a percentage of the inventory.
     #[instrument(level = "debug", skip(self))]
     pub fn coverage_pct(&self) -> f32 {
@@ -170,7 +185,7 @@ pub fn build_framework_trait_report(
     impl_paths: &HashSet<String>,
     skip_map: &SkipMap,
     include_nightly: bool,
-) -> FrameworkTraitReport {
+) -> CordialResult<FrameworkTraitReport> {
     let mut entries = Vec::new();
     let mut complete_count = 0usize;
     let mut missing_count = 0usize;
@@ -194,16 +209,16 @@ pub fn build_framework_trait_report(
         ));
     }
 
-    FrameworkTraitReport::new(
-        source_crate.to_string(),
-        trait_name.to_string(),
-        impl_crate.to_string(),
-        include_nightly,
-        entries,
-        complete_count,
-        missing_count,
-        skipped_count,
-    )
+    FrameworkTraitReport::builder()
+        .source_crate(source_crate.to_string())
+        .trait_name(trait_name.to_string())
+        .impl_crate(impl_crate.to_string())
+        .include_nightly(include_nightly)
+        .entries(entries)
+        .complete_count(complete_count)
+        .missing_count(missing_count)
+        .skipped_count(skipped_count)
+        .build()
 }
 
 /// Build consolidated gap rows from a framework trait report.

@@ -17,7 +17,8 @@ use super::idents::{
 };
 use tracing::instrument;
 
-#[derive(derive_getters::Getters, derive_new::new)]
+#[derive(derive_getters::Getters, derive_builder::Builder)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub(crate) struct TypeRec {
     ident: String,
     type_path: String,
@@ -37,6 +38,14 @@ pub(crate) struct TypeRec {
     variants: BTreeMap<String, VariantShape>,
 }
 
+impl TypeRec {
+    #[instrument(level = "debug")]
+    pub(crate) fn builder() -> TypeRecBuilder {
+        TypeRecBuilder::default()
+    }
+}
+
+#[derive(Clone)]
 pub(crate) enum VariantShape {
     Named(BTreeMap<String, Vec<String>>),
     Unnamed(Vec<Vec<String>>),
@@ -124,8 +133,12 @@ pub(crate) fn load_file(
         in_library,
         catalog,
         error_impls: BTreeSet::new(),
+        error: None,
     };
     visitor.visit_file(&syntax);
+    if let Some(error) = visitor.error {
+        return Err(error);
+    }
     for ident in visitor.error_impls {
         if let Some(item) = catalog.types.get_mut(&ident) {
             item.error = true;
@@ -139,6 +152,7 @@ struct LayoutVisitor<'a> {
     in_library: bool,
     catalog: &'a mut LayoutCatalog,
     error_impls: BTreeSet<String>,
+    error: Option<crate::error::CordialError>,
 }
 
 struct TypeSeed {
@@ -155,25 +169,36 @@ struct TypeSeed {
 impl LayoutVisitor<'_> {
     #[instrument(level = "debug", skip(self, seed))]
     fn upsert_type(&mut self, seed: TypeSeed) {
-        let entry = self
-            .catalog
-            .types
-            .entry(seed.ident.clone())
-            .or_insert_with(|| {
-                TypeRec::new(
-                    seed.ident.clone(),
-                    format!("{}::{}", self.catalog.crate_name, seed.ident),
-                    self.file.clone(),
-                    seed.line,
-                    seed.snippet.clone(),
-                    false,
-                    false,
-                    false,
-                    self.in_library,
-                    BTreeMap::new(),
-                    BTreeMap::new(),
-                )
-            });
+        if self.error.is_some() {
+            return;
+        }
+        if !self.catalog.types.contains_key(&seed.ident) {
+            match TypeRec::builder()
+                .ident(seed.ident.clone())
+                .type_path(format!("{}::{}", self.catalog.crate_name, seed.ident))
+                .file(self.file.clone())
+                .line(seed.line)
+                .snippet(seed.snippet.clone())
+                .parser(false)
+                .subcommand(false)
+                .error(false)
+                .in_library(self.in_library)
+                .fields(BTreeMap::new())
+                .variants(BTreeMap::new())
+                .build()
+            {
+                Ok(rec) => {
+                    self.catalog.types.insert(seed.ident.clone(), rec);
+                }
+                Err(error) => {
+                    self.error = Some(error);
+                    return;
+                }
+            }
+        }
+        let Some(entry) = self.catalog.types.get_mut(&seed.ident) else {
+            return;
+        };
         entry.parser |= seed.parser;
         entry.subcommand |= seed.subcommand;
         entry.error |= seed.error;

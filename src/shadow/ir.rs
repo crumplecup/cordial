@@ -17,7 +17,8 @@ use super::report::build_shadow_report;
 use super::types::{ShadowBuildMaps, ShadowReport};
 
 /// One public inventory row materialized from graph IR.
-#[derive(Debug, Clone, derive_getters::Getters, derive_new::new, PartialEq, Eq)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_builder::Builder, PartialEq, Eq)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ShadowIrItem {
     path: String,
     name: String,
@@ -35,6 +36,12 @@ pub struct ShadowIrItem {
 }
 
 impl ShadowIrItem {
+    /// Start a builder for this item.
+    #[instrument(level = "debug")]
+    pub fn builder() -> ShadowIrItemBuilder {
+        ShadowIrItemBuilder::default()
+    }
+
     #[instrument(level = "trace", skip(self))]
     pub fn to_rustdoc_item(&self) -> RustdocItem {
         RustdocItem::new(
@@ -55,58 +62,67 @@ pub fn collect_shadow_items_from_workspace(
     let ir = workspace
         .crate_ir(crate_name)
         .ok_or_else(|| missing_crate_ir(crate_name))?;
-    Ok(collect_shadow_items_from_ir(ir))
+    collect_shadow_items_from_ir(ir)
 }
 
 #[instrument(level = "debug", skip(ir))]
-pub fn collect_shadow_items_from_ir(ir: &crate::ir::CrateIr) -> Vec<ShadowIrItem> {
+pub fn collect_shadow_items_from_ir(ir: &crate::ir::CrateIr) -> CordialResult<Vec<ShadowIrItem>> {
     let all_nodes = BasicQuery::all_nodes();
-    ir.nodes_matching(&all_nodes)
-        .into_iter()
-        .filter_map(|node| {
-            if !matches!(node.kind(), NodeKind::Item(_)) {
-                return None;
-            }
-            let path = node.attr(ATTR_QUALIFIED_PATH).and_then(|v| v.as_str())?;
-            let kind = inventory_kind_from_attr(node.attr(ATTR_RUSTDOC_KIND)?.as_str()?)?;
-            if !counts_toward_shadow_kind(kind) {
-                return None;
-            }
-            let name = node
-                .attr(ATTR_ITEM_NAME)
-                .and_then(|v| v.as_str())
-                .unwrap_or_else(|| path.rsplit("::").next().unwrap_or(path))
-                .to_string();
-            let is_public = node
-                .attr("is_public")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-            let public_methods = string_set_attr(&node, ATTR_PUBLIC_METHODS);
-            let trait_impls = string_set_attr(&node, ATTR_TRAIT_IMPLS);
-            let trait_prereqs = node
-                .attr(ATTR_TRAIT_PREREQS)
-                .and_then(|value| serde_json::from_value(value.clone()).ok());
-            let elicit_complete = node
-                .attr(ATTR_ELICIT_COMPLETE)
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let elicit_complete_factory = node
-                .attr(ATTR_ELICIT_COMPLETE_FACTORY)
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            Some(ShadowIrItem::new(
-                path.to_string(),
-                name,
-                kind,
-                is_public,
-                public_methods,
-                trait_impls,
-                trait_prereqs,
-                elicit_complete,
-                elicit_complete_factory,
-            ))
-        })
-        .collect()
+    let mut items = Vec::new();
+    for node in ir.nodes_matching(&all_nodes) {
+        if !matches!(node.kind(), NodeKind::Item(_)) {
+            continue;
+        }
+        let Some(path) = node.attr(ATTR_QUALIFIED_PATH).and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let Some(kind) = node
+            .attr(ATTR_RUSTDOC_KIND)
+            .and_then(|value| value.as_str())
+            .and_then(inventory_kind_from_attr)
+        else {
+            continue;
+        };
+        if !counts_toward_shadow_kind(kind) {
+            continue;
+        }
+        let name = node
+            .attr(ATTR_ITEM_NAME)
+            .and_then(|v| v.as_str())
+            .unwrap_or_else(|| path.rsplit("::").next().unwrap_or(path))
+            .to_string();
+        let is_public = node
+            .attr("is_public")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let public_methods = string_set_attr(&node, ATTR_PUBLIC_METHODS);
+        let trait_impls = string_set_attr(&node, ATTR_TRAIT_IMPLS);
+        let trait_prereqs = node
+            .attr(ATTR_TRAIT_PREREQS)
+            .and_then(|value| serde_json::from_value(value.clone()).ok());
+        let elicit_complete = node
+            .attr(ATTR_ELICIT_COMPLETE)
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let elicit_complete_factory = node
+            .attr(ATTR_ELICIT_COMPLETE_FACTORY)
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        items.push(
+            ShadowIrItem::builder()
+                .path(path.to_string())
+                .name(name)
+                .kind(kind)
+                .is_public(is_public)
+                .public_methods(public_methods)
+                .trait_impls(trait_impls)
+                .trait_prereqs(trait_prereqs)
+                .elicit_complete(elicit_complete)
+                .elicit_complete_factory(elicit_complete_factory)
+                .build()?,
+        );
+    }
+    Ok(items)
 }
 
 /// Match upstream ↔ shadow items and record [`EdgeKind::Mirrors`] cross-crate edges.
@@ -209,13 +225,13 @@ pub fn build_shadow_pair_report_from_workspace_ir(
     let shadow_complete = elicit_complete_set_from_items(&shadow_items);
     let shadow_prereqs = prereqs_map_from_items(&shadow_items);
 
-    Ok(build_shadow_report(
+    build_shadow_report(
         &target,
         &shadow_inv,
         &shadow_complete,
         &shadow_prereqs,
         &maps,
-    ))
+    )
 }
 
 #[instrument(level = "debug", skip(items))]

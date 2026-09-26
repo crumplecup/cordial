@@ -2,6 +2,8 @@
 
 use std::collections::HashSet;
 
+use miette::IntoDiagnostic;
+
 use cordial::testing::{
     AmenableExtOptions, AmenableStdStatus, EvidenceLinkDump, InventoryItemKind, ProofRecordDump,
     RegistryDump, StdInventoryItem, VerifierSkipEntry, VerifierSkipMap, build_amenable_ext_gaps,
@@ -109,7 +111,8 @@ fn build_amenable_ext_report_classifies_complete_partial_and_missing() -> miette
         &skip,
         &proof_chain,
         false,
-    );
+    )
+    .into_diagnostic()?;
     assert_eq!(report.complete_count(), 1);
     assert_eq!(report.partial_count(), 1);
     assert_eq!(report.missing_count(), 1);
@@ -188,7 +191,8 @@ fn a_scoped_exception_only_excepts_its_named_verifier() -> miette::Result<()> {
         &skip,
         &HashSet::new(),
         false,
-    );
+    )
+    .into_diagnostic()?;
 
     let entry = report
         .entries()

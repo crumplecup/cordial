@@ -4,6 +4,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use tracing::instrument;
 
+use crate::error::CordialResult;
 use crate::rustdoc::{
     ElicitCompleteSet, InventoryItemKind, RustdocInventory, RustdocItem, TraitPrereqs,
     collect_elicit_complete_from_inventory, collect_trait_prereqs_for_inventory,
@@ -32,10 +33,10 @@ pub fn build_shadow_report(
     shadow_complete: &ElicitCompleteSet,
     shadow_prereqs: &HashMap<String, TraitPrereqs>,
     maps: &ShadowBuildMaps<'_>,
-) -> ShadowReport {
+) -> CordialResult<ShadowReport> {
     let shadow_index = index_shadow_items(shadow);
-    let mut rows = match_target_rows(target, &shadow_index, shadow_complete, shadow_prereqs);
-    append_extra_shadow_rows(shadow, &mut rows);
+    let mut rows = match_target_rows(target, &shadow_index, shadow_complete, shadow_prereqs)?;
+    append_extra_shadow_rows(shadow, &mut rows)?;
     rows.sort_by(|left, right| left.item_path().cmp(right.item_path()));
 
     let (covered_count, missing_count, extra_count, drifted_count, coverage_pct) =
@@ -48,20 +49,20 @@ pub fn build_shadow_report(
     let missing_type_methods = collect_missing_type_methods(&rows, maps);
     let trait_coverage = collect_trait_coverage(&rows, maps);
 
-    ShadowReport::new(
-        target.crate_name().clone(),
-        shadow.crate_name().clone(),
-        rows,
-        covered_count,
-        missing_count,
-        drifted_count,
-        extra_count,
-        coverage_pct,
-        verification_gap_count,
-        method_coverage,
-        missing_type_methods,
-        trait_coverage,
-    )
+    ShadowReport::builder()
+        .target_crate(target.crate_name().clone())
+        .shadow_crate(shadow.crate_name().clone())
+        .rows(rows)
+        .covered_count(covered_count)
+        .missing_count(missing_count)
+        .drifted_count(drifted_count)
+        .extra_count(extra_count)
+        .coverage_pct(coverage_pct)
+        .verification_gap_count(verification_gap_count)
+        .method_coverage(method_coverage)
+        .missing_type_methods(missing_type_methods)
+        .trait_coverage(trait_coverage)
+        .build()
 }
 
 struct ShadowItemIndex<'a> {
@@ -95,7 +96,7 @@ fn match_target_rows(
     shadow: &ShadowItemIndex<'_>,
     shadow_complete: &ElicitCompleteSet,
     shadow_prereqs: &HashMap<String, TraitPrereqs>,
-) -> Vec<ShadowRow> {
+) -> CordialResult<Vec<ShadowRow>> {
     let mut rows = Vec::new();
     for target_item in target.items() {
         if !counts_toward_shadow_coverage(target_item) {
@@ -120,7 +121,7 @@ fn match_target_rows(
                 String::new(),
                 shadow_complete,
                 shadow_prereqs,
-            ));
+            )?);
         } else if let Some((shadow_item, confidence)) =
             find_drift_match(target_item, &shadow.normalized)
         {
@@ -132,32 +133,35 @@ fn match_target_rows(
                 format!("{confidence:.2}"),
                 shadow_complete,
                 shadow_prereqs,
-            ));
+            )?);
         } else {
-            rows.push(missing_row(target_item));
+            rows.push(missing_row(target_item)?);
         }
     }
-    rows
+    Ok(rows)
 }
 
 #[instrument(level = "debug", skip(target_item))]
-fn missing_row(target_item: &crate::rustdoc::RustdocItem) -> ShadowRow {
-    ShadowRow::new(
-        target_item.path().clone(),
-        target_item.kind(),
-        ShadowStatus::Missing,
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
-    )
+fn missing_row(target_item: &crate::rustdoc::RustdocItem) -> CordialResult<ShadowRow> {
+    ShadowRow::builder()
+        .item_path(target_item.path().clone())
+        .item_kind(target_item.kind())
+        .status(ShadowStatus::Missing)
+        .shadow_item(String::new())
+        .drift_confidence(String::new())
+        .shadow_elicit_impl(String::new())
+        .shadow_can_be_direct(String::new())
+        .shadow_missing_external_traits(String::new())
+        .shadow_missing_our_traits(String::new())
+        .notes(String::new())
+        .build()
 }
 
 #[instrument(level = "debug", skip(shadow, rows))]
-fn append_extra_shadow_rows(shadow: &RustdocInventory, rows: &mut Vec<ShadowRow>) {
+fn append_extra_shadow_rows(
+    shadow: &RustdocInventory,
+    rows: &mut Vec<ShadowRow>,
+) -> CordialResult<()> {
     let matched: HashSet<String> = rows
         .iter()
         .filter(|row| matches!(row.status(), ShadowStatus::Covered | ShadowStatus::Drifted))
@@ -167,19 +171,22 @@ fn append_extra_shadow_rows(shadow: &RustdocInventory, rows: &mut Vec<ShadowRow>
         if !counts_toward_shadow_coverage(shadow_item) || matched.contains(shadow_item.path()) {
             continue;
         }
-        rows.push(ShadowRow::new(
-            shadow_item.path().clone(),
-            shadow_item.kind(),
-            ShadowStatus::Extra,
-            String::new(),
-            String::new(),
-            String::new(),
-            String::new(),
-            String::new(),
-            String::new(),
-            "in shadow, not in target".to_string(),
-        ));
+        rows.push(
+            ShadowRow::builder()
+                .item_path(shadow_item.path().clone())
+                .item_kind(shadow_item.kind())
+                .status(ShadowStatus::Extra)
+                .shadow_item(String::new())
+                .drift_confidence(String::new())
+                .shadow_elicit_impl(String::new())
+                .shadow_can_be_direct(String::new())
+                .shadow_missing_external_traits(String::new())
+                .shadow_missing_our_traits(String::new())
+                .notes("in shadow, not in target".to_string())
+                .build()?,
+        );
     }
+    Ok(())
 }
 
 #[instrument(level = "debug", skip(rows, target))]
@@ -342,7 +349,7 @@ fn diff_type_methods(
 pub fn build_shadow_report_from_inventories(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
-) -> ShadowReport {
+) -> CordialResult<ShadowReport> {
     build_shadow_report_from_inventories_with_maps(target, shadow, &ShadowBuildMaps::empty())
 }
 
@@ -352,7 +359,7 @@ pub fn build_shadow_report_from_inventories_with_maps(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
     maps: &ShadowBuildMaps<'_>,
-) -> ShadowReport {
+) -> CordialResult<ShadowReport> {
     let shadow_complete = collect_elicit_complete_from_inventory(shadow);
     let shadow_prereqs = collect_trait_prereqs_for_inventory(shadow);
     build_shadow_report(target, shadow, &shadow_complete, &shadow_prereqs, maps)
@@ -370,28 +377,30 @@ fn row_for_match(
     drift_confidence: String,
     shadow_complete: &ElicitCompleteSet,
     shadow_prereqs: &HashMap<String, TraitPrereqs>,
-) -> ShadowRow {
+) -> CordialResult<ShadowRow> {
     let notes = if status == ShadowStatus::Drifted {
         "probable rename".to_string()
     } else {
         String::new()
     };
-    ShadowRow::new(
-        target_item.path().clone(),
-        target_item.kind(),
-        status,
-        if shadow_item_path.is_empty() {
+    ShadowRow::builder()
+        .item_path(target_item.path().clone())
+        .item_kind(target_item.kind())
+        .status(status)
+        .shadow_item(if shadow_item_path.is_empty() {
             shadow_item.path().clone()
         } else {
             shadow_item_path
-        },
-        drift_confidence,
-        shadow_impl_status(shadow_item, shadow_complete)
-            .as_str()
-            .to_string(),
-        shadow_can_be_direct(shadow_item, shadow_prereqs),
-        shadow_missing_external_traits(shadow_item, shadow_prereqs),
-        shadow_missing_our_traits(shadow_item, shadow_prereqs),
-        notes,
-    )
+        })
+        .drift_confidence(drift_confidence)
+        .shadow_elicit_impl(
+            shadow_impl_status(shadow_item, shadow_complete)
+                .as_str()
+                .to_string(),
+        )
+        .shadow_can_be_direct(shadow_can_be_direct(shadow_item, shadow_prereqs))
+        .shadow_missing_external_traits(shadow_missing_external_traits(shadow_item, shadow_prereqs))
+        .shadow_missing_our_traits(shadow_missing_our_traits(shadow_item, shadow_prereqs))
+        .notes(notes)
+        .build()
 }

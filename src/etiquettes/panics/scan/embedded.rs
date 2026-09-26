@@ -60,7 +60,13 @@ impl PanicScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, value))]
     fn scan_embedded_verus_source(&mut self, origin: u32, value: &str) {
         let module_path = self.site_context();
-        let ir = crate::verus_ir::scan_verus_rust_source(value, &self.file, &module_path);
+        let ir = match crate::verus_ir::scan_verus_rust_source(value, &self.file, &module_path) {
+            Ok(ir) => ir,
+            Err(error) => {
+                self.error = Some(error);
+                return;
+            }
+        };
         let records = match super::verus_panics::findings(&ir, &self.crate_root) {
             Ok(records) => records,
             Err(error) => {

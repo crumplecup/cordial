@@ -2,6 +2,8 @@
 
 use std::collections::HashSet;
 
+use miette::IntoDiagnostic;
+
 use cordial::testing::{
     FrameworkTraitStatus, InventoryItemKind, SkipMap, StdInventoryItem, build_framework_gaps,
     build_framework_trait_report, merge_std_inventory_items,
@@ -40,7 +42,7 @@ fn merge_std_inventories_dedupes_concrete_types() {
 }
 
 #[test]
-fn build_framework_trait_report_classifies_complete_missing_and_skipped() {
+fn build_framework_trait_report_classifies_complete_missing_and_skipped() -> miette::Result<()> {
     cordial::init_tracing();
     let source = vec![
         sample_item("std::primitive::i32"),
@@ -62,7 +64,8 @@ fn build_framework_trait_report_classifies_complete_missing_and_skipped() {
         &impls,
         &skip,
         false,
-    );
+    )
+    .into_diagnostic()?;
     assert_eq!(report.complete_count(), 2);
     assert_eq!(report.missing_count(), 0);
     assert_eq!(report.skipped_count(), 1);
@@ -77,16 +80,18 @@ fn build_framework_trait_report_classifies_complete_missing_and_skipped() {
         &impls,
         &SkipMap::new(),
         false,
-    );
+    )
+    .into_diagnostic()?;
     assert_eq!(
         missing_report.entries()[0].trait_status(),
         FrameworkTraitStatus::Missing
     );
     assert_eq!(build_framework_gaps(&missing_report).len(), 1);
+    Ok(())
 }
 
 #[test]
-fn stable_only_scope_excludes_nightly_std_types() {
+fn stable_only_scope_excludes_nightly_std_types() -> miette::Result<()> {
     cordial::init_tracing();
     let source = vec![
         sample_item("std::string::String"),
@@ -101,7 +106,8 @@ fn stable_only_scope_excludes_nightly_std_types() {
         &empty,
         &SkipMap::new(),
         false,
-    );
+    )
+    .into_diagnostic()?;
     assert_eq!(stable_report.entries().len(), 1);
     assert_eq!(
         stable_report.entries()[0].type_path(),
@@ -116,8 +122,10 @@ fn stable_only_scope_excludes_nightly_std_types() {
         &empty,
         &SkipMap::new(),
         true,
-    );
+    )
+    .into_diagnostic()?;
     assert_eq!(nightly_report.entries().len(), 2);
+    Ok(())
 }
 
 #[test]

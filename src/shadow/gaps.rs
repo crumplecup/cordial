@@ -2,6 +2,8 @@
 
 use tracing::instrument;
 
+use crate::error::CordialResult;
+
 use super::types::{ShadowGapEntry, ShadowGapKind, ShadowReport, ShadowRow, ShadowStatus};
 use super::verification::{ShadowImplStatus, shadow_verification_gap};
 
@@ -34,7 +36,9 @@ pub fn is_shadow_infrastructure_name(bare_name: &str) -> bool {
 
 /// Build the consolidated shadow gaps list from multiple per-pair reports.
 #[instrument(level = "debug", skip(pairs))]
-pub fn build_shadow_gaps(pairs: &[(&str, &str, &ShadowReport)]) -> Vec<ShadowGapEntry> {
+pub fn build_shadow_gaps(
+    pairs: &[(&str, &str, &ShadowReport)],
+) -> CordialResult<Vec<ShadowGapEntry>> {
     let mut entries = Vec::new();
 
     for (target_crate, shadow_crate, report) in pairs {
@@ -46,42 +50,26 @@ pub fn build_shadow_gaps(pairs: &[(&str, &str, &ShadowReport)]) -> Vec<ShadowGap
             let Some(gap_kind) = assessment.primary_gap_kind else {
                 continue;
             };
-            entries.push(ShadowGapEntry::new(
-                (*target_crate).to_string(),
-                (*shadow_crate).to_string(),
-                row.item_path().clone(),
-                row.item_kind().as_str().to_string(),
+            entries.push(gap_entry(
+                target_crate,
+                shadow_crate,
+                row,
                 gap_kind,
-                row.shadow_item().clone(),
-                row.drift_confidence().clone(),
-                row.shadow_elicit_impl().clone(),
-                row.shadow_can_be_direct().clone(),
-                row.shadow_missing_external_traits().clone(),
-                row.shadow_missing_our_traits().clone(),
                 assessment.action,
-                row.notes().clone(),
-            ));
+            )?);
         }
 
         for row in report.rows() {
             if !shadow_verification_gap(row) {
                 continue;
             }
-            entries.push(ShadowGapEntry::new(
-                (*target_crate).to_string(),
-                (*shadow_crate).to_string(),
-                row.item_path().clone(),
-                row.item_kind().as_str().to_string(),
+            entries.push(gap_entry(
+                target_crate,
+                shadow_crate,
+                row,
                 ShadowGapKind::ShadowVerificationGap,
-                row.shadow_item().clone(),
-                row.drift_confidence().clone(),
-                row.shadow_elicit_impl().clone(),
-                row.shadow_can_be_direct().clone(),
-                row.shadow_missing_external_traits().clone(),
-                row.shadow_missing_our_traits().clone(),
                 build_shadow_verification_action(row),
-                row.notes().clone(),
-            ));
+            )?);
         }
     }
 
@@ -92,7 +80,31 @@ pub fn build_shadow_gaps(pairs: &[(&str, &str, &ShadowReport)]) -> Vec<ShadowGap
             .then(left.item_path().cmp(right.item_path()))
     });
 
-    entries
+    Ok(entries)
+}
+
+fn gap_entry(
+    target_crate: &str,
+    shadow_crate: &str,
+    row: &ShadowRow,
+    gap_kind: ShadowGapKind,
+    action: String,
+) -> CordialResult<ShadowGapEntry> {
+    ShadowGapEntry::builder()
+        .target_crate(target_crate.to_string())
+        .shadow_crate(shadow_crate.to_string())
+        .item_path(row.item_path().clone())
+        .item_kind(row.item_kind().as_str().to_string())
+        .gap_kind(gap_kind)
+        .matched_shadow_item(row.shadow_item().clone())
+        .drift_confidence(row.drift_confidence().clone())
+        .shadow_elicit_impl(row.shadow_elicit_impl().clone())
+        .shadow_can_be_direct(row.shadow_can_be_direct().clone())
+        .shadow_missing_external_traits(row.shadow_missing_external_traits().clone())
+        .shadow_missing_our_traits(row.shadow_missing_our_traits().clone())
+        .action(action)
+        .notes(row.notes().clone())
+        .build()
 }
 
 struct ShadowRowAssessment {

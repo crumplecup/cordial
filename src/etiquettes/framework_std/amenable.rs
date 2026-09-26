@@ -1,3 +1,4 @@
+use crate::error::CordialResult;
 use crate::framework_std::{
     AmenableStdEntry, AmenableStdGapEntry, AmenableStdReport, AmenableStdStatus,
 };
@@ -26,7 +27,8 @@ impl Rule for AmenableStdRule {
     }
 }
 
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone, derive_builder::Builder)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct AmenableStdRowFinding {
     rule: AmenableStdRule,
     disposition: Disposition,
@@ -49,6 +51,14 @@ pub struct AmenableStdRowFinding {
     verus_excepted: bool,
     missing_layers: String,
     action: String,
+}
+
+impl AmenableStdRowFinding {
+    /// Start a builder for this finding.
+    #[instrument(level = "debug")]
+    pub fn builder() -> AmenableStdRowFindingBuilder {
+        AmenableStdRowFindingBuilder::default()
+    }
 }
 
 impl Finding for AmenableStdRowFinding {
@@ -157,13 +167,13 @@ pub fn amenable_row_disposition(status: AmenableStdStatus) -> Disposition {
 pub fn amenable_report_from_findings(
     findings: &[&dyn Finding],
     include_nightly: bool,
-) -> Option<AmenableStdReport> {
+) -> CordialResult<Option<AmenableStdReport>> {
     let rows: Vec<_> = findings
         .iter()
         .filter(|finding| finding.rule().category() == AMENABLE_STD_CATEGORY)
         .collect();
     if rows.is_empty() {
-        return None;
+        return Ok(None);
     }
 
     let mut entries = Vec::new();
@@ -212,33 +222,37 @@ pub fn amenable_report_from_findings(
                 Some(reason)
             }
         };
-        entries.push(AmenableStdEntry::new(
-            field("type_path"),
-            field("type_kind"),
-            field("is_generic") == "true",
-            field("evidence_link") == "true",
-            evidence_name,
-            field("kani_witness") == "true",
-            field("creusot_witness") == "true",
-            field("verus_witness") == "true",
-            field("proof_test") == "true",
-            status,
-            skip_reason,
-            field("kani_excepted") == "true",
-            field("creusot_excepted") == "true",
-            field("verus_excepted") == "true",
-        ));
+        entries.push(
+            AmenableStdEntry::builder()
+                .type_path(field("type_path"))
+                .type_kind(field("type_kind"))
+                .is_generic(field("is_generic") == "true")
+                .evidence_link(field("evidence_link") == "true")
+                .evidence_name(evidence_name)
+                .kani_witness(field("kani_witness") == "true")
+                .creusot_witness(field("creusot_witness") == "true")
+                .verus_witness(field("verus_witness") == "true")
+                .proof_test(field("proof_test") == "true")
+                .status(status)
+                .skip_reason(skip_reason)
+                .kani_excepted(field("kani_excepted") == "true")
+                .creusot_excepted(field("creusot_excepted") == "true")
+                .verus_excepted(field("verus_excepted") == "true")
+                .build()?,
+        );
     }
 
-    Some(AmenableStdReport::new(
-        source_crate,
-        impl_crate,
-        include_nightly,
-        entries,
-        complete_count,
-        partial_count,
-        missing_count,
-        skipped_count,
+    Ok(Some(
+        AmenableStdReport::builder()
+            .source_crate(source_crate)
+            .impl_crate(impl_crate)
+            .include_nightly(include_nightly)
+            .entries(entries)
+            .complete_count(complete_count)
+            .partial_count(partial_count)
+            .missing_count(missing_count)
+            .skipped_count(skipped_count)
+            .build()?,
     ))
 }
 

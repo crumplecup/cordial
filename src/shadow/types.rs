@@ -30,7 +30,8 @@ impl ShadowStatus {
 }
 
 /// One upstream ↔ shadow compare row.
-#[derive(Debug, Clone, derive_getters::Getters, derive_new::new, PartialEq, Eq)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_builder::Builder, PartialEq, Eq)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ShadowRow {
     /// Qualified path of the inventory item.
     item_path: String,
@@ -56,8 +57,17 @@ pub struct ShadowRow {
     notes: String,
 }
 
+impl ShadowRow {
+    /// Start a builder for this row.
+    #[instrument(level = "debug")]
+    pub fn builder() -> ShadowRowBuilder {
+        ShadowRowBuilder::default()
+    }
+}
+
 /// Full shadow-mirror report for one target crate.
-#[derive(Debug, Clone, derive_getters::Getters, derive_new::new, PartialEq)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_builder::Builder, PartialEq)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ShadowReport {
     /// Upstream crate being compared or covered.
     target_crate: String,
@@ -89,6 +99,14 @@ pub struct ShadowReport {
     missing_type_methods: Vec<TypeMethodCoverage>,
     /// Per-trait impl coverage for the shadow crate.
     trait_coverage: Vec<TraitImplCoverage>,
+}
+
+impl ShadowReport {
+    /// Start a builder for this report.
+    #[instrument(level = "debug")]
+    pub fn builder() -> ShadowReportBuilder {
+        ShadowReportBuilder::default()
+    }
 }
 
 /// Method-level coverage for one matched upstream ↔ shadow type pair.
@@ -184,7 +202,8 @@ impl ShadowGapKind {
 }
 
 /// One classified gap in a shadow report.
-#[derive(Debug, Clone, derive_getters::Getters, derive_new::new, PartialEq, Eq)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_builder::Builder, PartialEq, Eq)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ShadowGapEntry {
     /// Upstream crate being compared or covered.
     target_crate: String,
@@ -213,4 +232,12 @@ pub struct ShadowGapEntry {
     action: String,
     /// Free-form notes for the report row.
     notes: String,
+}
+
+impl ShadowGapEntry {
+    /// Start a builder for this gap.
+    #[instrument(level = "debug")]
+    pub fn builder() -> ShadowGapEntryBuilder {
+        ShadowGapEntryBuilder::default()
+    }
 }

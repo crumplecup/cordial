@@ -2,6 +2,8 @@
 
 use std::path::Path;
 
+use miette::IntoDiagnostic;
+
 use cordial::{
     SourceSpan, VerusCrateIr, VerusEnumFacts, VerusFnFacts, VerusFnMode, VerusPanicKind,
     VerusPublish, scan_verus_rust_source,
@@ -50,7 +52,8 @@ fn parses_a_function_whose_body_uses_the_view_operator() -> miette::Result<()> {
         VIEW_OPERATOR_SOURCE,
         Path::new("cstr_carrier.rs"),
         "rust_std::cstr_carrier",
-    );
+    )
+    .into_diagnostic()?;
 
     let names: Vec<&str> = ir.functions().iter().map(|f| f.name().as_str()).collect();
     assert!(
@@ -102,7 +105,8 @@ fn detects_real_soundness_escape_hatches() -> miette::Result<()> {
         ASSUME_AND_AXIOM_SOURCE,
         Path::new("soundness_sample.rs"),
         "gallery::soundness_sample",
-    );
+    )
+    .into_diagnostic()?;
 
     let axiom = function_named(&ir, "axiom_addition_commutes")?;
     assert_eq!(axiom.mode(), VerusFnMode::ProofAxiom);
@@ -138,7 +142,8 @@ fn extracts_signature_level_facts_and_every_panic_site_kind() -> miette::Result<
         SIGNATURE_FACTS_SOURCE,
         Path::new("signature_sample.rs"),
         "gallery::signature_sample",
-    );
+    )
+    .into_diagnostic()?;
 
     let lemma = function_named(&ir, "lemma_applies_everywhere")?;
     assert!(lemma.is_broadcast());
@@ -171,7 +176,8 @@ fn tracks_cfg_test_module_nesting_and_detects_compile_error() -> miette::Result<
         CFG_TEST_AND_COMPILE_ERROR_SOURCE,
         Path::new("cfg_test_sample.rs"),
         "gallery::cfg_test_sample",
-    );
+    )
+    .into_diagnostic()?;
 
     let library_fn = function_named(&ir, "in_library_code")?;
     assert!(!library_fn.cfg_test());
@@ -197,7 +203,8 @@ fn marks_only_the_unreachable_arm_with_a_real_ghost_sibling() -> miette::Result<
         GHOST_EXEC_UNREACHABLE_SOURCE,
         Path::new("ghost_exec_sample.rs"),
         "gallery::ghost_exec_sample",
-    );
+    )
+    .into_diagnostic()?;
 
     let paired = function_named(&ir, "matches_int_error_kind_carriers_own_shape")?;
     assert_eq!(paired.panic_sites().len(), 1, "{:?}", paired.panic_sites());
@@ -231,7 +238,8 @@ fn records_local_call_target_names() -> miette::Result<()> {
         LOCAL_CALL_SOURCE,
         Path::new("local_call_sample.rs"),
         "gallery::local_call_sample",
-    );
+    )
+    .into_diagnostic()?;
 
     let caller = function_named(&ir, "caller")?;
     assert!(
@@ -258,7 +266,8 @@ fn fully_documented_data_carrying_enum_is_a_pattern_projection_enum() -> miette:
         DOCUMENTED_DATA_CARRYING_ENUM_SOURCE,
         file,
         "gallery::transfer_error",
-    );
+    )
+    .into_diagnostic()?;
 
     let transfer_error = enum_named(&ir, "TransferError")?;
     assert!(transfer_error.synthesizes_pattern_projection_accessors());
@@ -275,7 +284,8 @@ fn undocumented_data_carrying_variant_is_not_exempt() -> miette::Result<()> {
         UNDOCUMENTED_VARIANT_ENUM_SOURCE,
         file,
         "gallery::transfer_error",
-    );
+    )
+    .into_diagnostic()?;
 
     let transfer_error = enum_named(&ir, "TransferError")?;
     assert!(transfer_error.synthesizes_pattern_projection_accessors());
@@ -291,7 +301,8 @@ fn undocumented_data_carrying_variant_is_not_exempt() -> miette::Result<()> {
 fn unit_only_enum_never_synthesizes_accessors() -> miette::Result<()> {
     cordial::init_tracing();
     let file = Path::new("selector.rs");
-    let ir = scan_verus_rust_source(UNIT_ONLY_ENUM_SOURCE, file, "gallery::selector");
+    let ir = scan_verus_rust_source(UNIT_ONLY_ENUM_SOURCE, file, "gallery::selector")
+        .into_diagnostic()?;
 
     let selector = enum_named(&ir, "Selector")?;
     assert!(
@@ -310,7 +321,8 @@ fn wrong_line_or_file_is_never_a_match() -> miette::Result<()> {
         DOCUMENTED_DATA_CARRYING_ENUM_SOURCE,
         file,
         "gallery::transfer_error",
-    );
+    )
+    .into_diagnostic()?;
     let transfer_error = enum_named(&ir, "TransferError")?;
 
     assert!(!ir.is_documented_pattern_projection_enum(file, transfer_error.span().line() + 1));

@@ -77,7 +77,7 @@ pub fn assess_amenable_std_coverage(
     let registry = ensure_registry_dump(store, project_root, options)?;
     let skip_map = load_verifier_skip_map(store, AMENABLE_PATCH_SET);
     let proof_chain_subjects = collect_proof_chain_subjects(project_root)?;
-    Ok(build_amenable_std_report(
+    build_amenable_std_report(
         "std",
         &merged_items,
         AMENABLE_IMPL_CRATE,
@@ -85,5 +85,5 @@ pub fn assess_amenable_std_coverage(
         &skip_map,
         &proof_chain_subjects,
         options.include_nightly(),
-    ))
+    )
 }

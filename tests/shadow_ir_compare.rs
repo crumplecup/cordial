@@ -38,7 +38,9 @@ fn workspace_ir_shadow_report_matches_inventory_oracle() -> miette::Result<()> {
     let ir_report = build_shadow_pair_report_from_workspace_ir(&workspace, "demo", "demo")
         .into_diagnostic()
         .wrap_err("ir report")?;
-    let oracle = build_shadow_pair_report_from_inventories(&inventory, &inventory);
+    let oracle = build_shadow_pair_report_from_inventories(&inventory, &inventory)
+        .into_diagnostic()
+        .wrap_err("oracle")?;
     assert_eq!(ir_report.covered_count(), oracle.covered_count());
     assert_eq!(ir_report.rows()[0].status(), ShadowStatus::Covered);
     Ok(())

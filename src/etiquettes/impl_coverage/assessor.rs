@@ -92,7 +92,7 @@ impl Assessor for ImplGapAssessor {
                         composition_test: &composition_test,
                         disposition,
                     },
-                ));
+                )?);
                 continue;
             };
 
@@ -107,7 +107,7 @@ impl Assessor for ImplGapAssessor {
                     composition_test: &composition_test,
                     disposition: Disposition::Open,
                 },
-            ));
+            )?);
         }
         Ok(findings)
     }
@@ -127,24 +127,29 @@ struct CoverageFindingArgs<'a> {
 }
 
 #[instrument(level = "debug", skip(node_id, args))]
-fn coverage_finding(node_id: crate::ir::NodeId, args: CoverageFindingArgs<'_>) -> Box<dyn Finding> {
-    Box::new(ImplGapFinding::new(
-        CoverageRule,
-        args.disposition,
-        crate::objects::NodeAnchor::new(node_id),
-        args.crate_name.to_string(),
-        args.type_path.to_string(),
-        args.gap_kind,
-        args.assessment.missing_our_traits().clone(),
-        args.assessment.missing_external_traits().clone(),
-        args.assessment.elicit_complete_gap(),
-        args.proof_test.to_string(),
-        args.composition_test.to_string(),
-        args.assessment.feature_gated_external(),
-        args.assessment.feature_owner_crate().clone(),
-        args.assessment.candidate_unlock_features().clone(),
-        args.assessment.coverage_provider().clone(),
-        args.assessment.wrapper_paths().clone(),
-        args.assessment.covered_indirectly(),
+fn coverage_finding(
+    node_id: crate::ir::NodeId,
+    args: CoverageFindingArgs<'_>,
+) -> CordialResult<Box<dyn Finding>> {
+    Ok(Box::new(
+        ImplGapFinding::builder()
+            .rule(CoverageRule)
+            .disposition(args.disposition)
+            .anchor(crate::objects::NodeAnchor::new(node_id))
+            .crate_name(args.crate_name.to_string())
+            .type_path(args.type_path.to_string())
+            .gap_kind(args.gap_kind)
+            .missing_our_traits(args.assessment.missing_our_traits().clone())
+            .missing_external_traits(args.assessment.missing_external_traits().clone())
+            .elicit_complete_gap(args.assessment.elicit_complete_gap())
+            .proof_test(args.proof_test.to_string())
+            .composition_test(args.composition_test.to_string())
+            .feature_gated_external(args.assessment.feature_gated_external())
+            .feature_owner_crate(args.assessment.feature_owner_crate().clone())
+            .candidate_unlock_features(args.assessment.candidate_unlock_features().clone())
+            .coverage_provider(args.assessment.coverage_provider().clone())
+            .wrapper_paths(args.assessment.wrapper_paths().clone())
+            .covered_indirectly(args.assessment.covered_indirectly())
+            .build()?,
     ))
 }

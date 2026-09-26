@@ -232,7 +232,7 @@ mod homecoming_section {
         use crate::framework_std::{FrameworkStdOptions, render_framework_summary_md};
 
         let options = FrameworkStdOptions::default();
-        let Some(report) = framework_report_from_findings(findings, options.include_nightly())
+        let Some(report) = framework_report_from_findings(findings, options.include_nightly())?
         else {
             return Ok("_No homecoming std findings._\n".to_string());
         };
@@ -252,7 +252,7 @@ mod amenable_section {
         use crate::framework_std::{AmenableStdOptions, render_amenable_std_summary_md};
 
         let options = AmenableStdOptions::default();
-        let Some(report) = amenable_report_from_findings(findings, options.include_nightly())
+        let Some(report) = amenable_report_from_findings(findings, options.include_nightly())?
         else {
             return Ok("_No amenable std findings._\n".to_string());
         };
@@ -271,7 +271,7 @@ mod amenable_ext_section {
         use crate::etiquettes::amenable_ext_jiff_report_from_findings;
         use crate::framework_std::render_amenable_ext_summary_md;
 
-        let Some(report) = amenable_ext_jiff_report_from_findings(findings, false) else {
+        let Some(report) = amenable_ext_jiff_report_from_findings(findings, false)? else {
             return Ok("_No amenable ext (jiff) findings._\n".to_string());
         };
         Ok(render_amenable_ext_summary_md(

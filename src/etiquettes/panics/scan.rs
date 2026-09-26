@@ -92,7 +92,7 @@ pub fn scan_rust_source(
     let findings = {
         let mut findings = findings;
         let module_path = module_path_from_src_file(src_root, file).join("::");
-        let verus_ir = crate::verus_ir::scan_verus_rust_source(source, file, &module_path);
+        let verus_ir = crate::verus_ir::scan_verus_rust_source(source, file, &module_path)?;
         findings.extend(verus_panics::findings(&verus_ir, crate_root)?);
         findings
     };

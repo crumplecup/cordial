@@ -82,31 +82,33 @@ impl Assessor for AmenableExtJiffAssessor {
                     &skip_map,
                     &proof_chain_subjects,
                 ),
-            );
+            )?;
             let (missing_layers, action) = amenable_ext_gap_fields(&entry, AMENABLE_EXT_IMPL_CRATE);
-            findings.push(Box::new(AmenableExtJiffRowFinding::new(
-                AmenableExtJiffRule,
-                amenable_ext_jiff_row_disposition(entry.status()),
-                anchor,
-                AMENABLE_EXT_JIFF_UPSTREAM_CRATE.to_string(),
-                AMENABLE_EXT_IMPL_CRATE.to_string(),
-                entry.type_path().clone(),
-                entry.type_kind().clone(),
-                entry.is_generic(),
-                entry.status(),
-                entry.evidence_link(),
-                entry.evidence_name().clone(),
-                entry.kani_witness(),
-                entry.creusot_witness(),
-                entry.verus_witness(),
-                entry.proof_test(),
-                entry.skip_reason().clone(),
-                entry.kani_excepted(),
-                entry.creusot_excepted(),
-                entry.verus_excepted(),
-                missing_layers,
-                action,
-            )) as Box<dyn Finding>);
+            findings.push(Box::new(
+                AmenableExtJiffRowFinding::builder()
+                    .rule(AmenableExtJiffRule)
+                    .disposition(amenable_ext_jiff_row_disposition(entry.status()))
+                    .anchor(anchor)
+                    .source_crate(AMENABLE_EXT_JIFF_UPSTREAM_CRATE.to_string())
+                    .impl_crate(AMENABLE_EXT_IMPL_CRATE.to_string())
+                    .type_path(entry.type_path().clone())
+                    .type_kind(entry.type_kind().clone())
+                    .is_generic(entry.is_generic())
+                    .status(entry.status())
+                    .evidence_link(entry.evidence_link())
+                    .evidence_name(entry.evidence_name().clone())
+                    .kani_witness(entry.kani_witness())
+                    .creusot_witness(entry.creusot_witness())
+                    .verus_witness(entry.verus_witness())
+                    .proof_test(entry.proof_test())
+                    .skip_reason(entry.skip_reason().clone())
+                    .kani_excepted(entry.kani_excepted())
+                    .creusot_excepted(entry.creusot_excepted())
+                    .verus_excepted(entry.verus_excepted())
+                    .missing_layers(missing_layers)
+                    .action(action)
+                    .build()?,
+            ) as Box<dyn Finding>);
         }
         Ok(findings)
     }

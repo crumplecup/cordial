@@ -82,7 +82,9 @@ fn method_checklist_artifact_emitted_when_maps_differ() -> miette::Result<()> {
         &empty_traits,
     );
 
-    let report = build_shadow_report_from_inventories_with_maps(&target, &shadow, &maps);
+    let report = build_shadow_report_from_inventories_with_maps(&target, &shadow, &maps)
+        .into_diagnostic()
+        .wrap_err("report")?;
     let checklist = render_shadow_method_checklist(&report)
         .into_diagnostic()
         .wrap_err("render checklist")?;
@@ -112,7 +114,9 @@ fn build_shadow_report_unit_exact_match() -> miette::Result<()> {
     )
     .into_diagnostic()
     .wrap_err("shadow inventory")?;
-    let report = build_shadow_report_from_inventories(&target, &shadow);
+    let report = build_shadow_report_from_inventories(&target, &shadow)
+        .into_diagnostic()
+        .wrap_err("report")?;
     assert_eq!(report.covered_count(), 1);
     assert_eq!(report.rows()[0].status(), ShadowStatus::Covered);
     Ok(())
@@ -136,7 +140,9 @@ fn prefix_rename_is_missing_not_drift() -> miette::Result<()> {
     )
     .into_diagnostic()
     .wrap_err("shadow")?;
-    let report = build_shadow_report_from_inventories(&target, &shadow);
+    let report = build_shadow_report_from_inventories(&target, &shadow)
+        .into_diagnostic()
+        .wrap_err("report")?;
     assert_eq!(report.missing_count(), 1);
     assert_eq!(report.extra_count(), 1);
     assert_eq!(report.drifted_count(), 0);
@@ -187,7 +193,9 @@ fn method_coverage_diffs_matched_types() -> miette::Result<()> {
         &empty_traits,
     );
 
-    let report = build_shadow_report_from_inventories_with_maps(&target, &shadow, &maps);
+    let report = build_shadow_report_from_inventories_with_maps(&target, &shadow, &maps)
+        .into_diagnostic()
+        .wrap_err("report")?;
     assert_eq!(report.method_coverage().len(), 1);
     let coverage = &report.method_coverage()[0];
     assert_eq!(coverage.covered(), &vec!["draw"]);

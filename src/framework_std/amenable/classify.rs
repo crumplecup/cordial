@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use tracing::instrument;
 
+use crate::error::CordialResult;
 use crate::framework_std::StdInventoryItem;
 use crate::framework_std::registry::{
     RegistryDump, evidence_for_ext_type, evidence_for_std_type, ext_type_has_proof_test,
@@ -16,39 +17,30 @@ use super::{AmenableStdEntry, AmenableStdReport, AmenableStdStatus};
 /// `classify_row` -- shared by [`build_amenable_std_report`] and
 /// [`build_amenable_ext_report`], which differ only in which wrapper
 /// type's evidence/witness/proof-test lookups `classify_row` uses.
-#[instrument(
-    level = "debug",
-    skip(items, registry, skip_map, proof_chain_subjects, classify_row)
-)]
+#[instrument(level = "debug", skip(args, classify_row))]
 fn build_wrapped_report(
-    source_crate: &str,
-    items: &[StdInventoryItem],
-    impl_crate: &str,
-    registry: &RegistryDump,
-    skip_map: &VerifierSkipMap,
-    proof_chain_subjects: &HashSet<String>,
-    include_nightly: bool,
-    classify_row: impl Fn(&str, ClassifyRowArgs<'_>) -> AmenableStdEntry,
-) -> AmenableStdReport {
+    args: BuildWrappedReportArgs<'_>,
+    classify_row: impl Fn(&str, ClassifyRowArgs<'_>) -> CordialResult<AmenableStdEntry>,
+) -> CordialResult<AmenableStdReport> {
     let mut entries = Vec::new();
     let mut complete_count = 0usize;
     let mut partial_count = 0usize;
     let mut missing_count = 0usize;
     let mut skipped_count = 0usize;
 
-    for item in framework_std_type_items(items, include_nightly) {
+    for item in framework_std_type_items(args.items, args.include_nightly) {
         let entry = classify_row(
             item.path(),
             ClassifyRowArgs::new(
                 item.kind().as_str(),
                 item.is_generic(),
                 item.alias_target().as_deref(),
-                items,
-                registry,
-                skip_map,
-                proof_chain_subjects,
+                args.items,
+                args.registry,
+                args.skip_map,
+                args.proof_chain_subjects,
             ),
-        );
+        )?;
         match entry.status() {
             AmenableStdStatus::Complete => complete_count += 1,
             AmenableStdStatus::Partial => partial_count += 1,
@@ -58,16 +50,16 @@ fn build_wrapped_report(
         entries.push(entry);
     }
 
-    AmenableStdReport::new(
-        source_crate.to_string(),
-        impl_crate.to_string(),
-        include_nightly,
-        entries,
-        complete_count,
-        partial_count,
-        missing_count,
-        skipped_count,
-    )
+    AmenableStdReport::builder()
+        .source_crate(args.source_crate.to_string())
+        .impl_crate(args.impl_crate.to_string())
+        .include_nightly(args.include_nightly)
+        .entries(entries)
+        .complete_count(complete_count)
+        .partial_count(partial_count)
+        .missing_count(missing_count)
+        .skipped_count(skipped_count)
+        .build()
 }
 
 /// Build an amenable std registry coverage report.
@@ -80,15 +72,17 @@ pub fn build_amenable_std_report(
     skip_map: &VerifierSkipMap,
     proof_chain_subjects: &HashSet<String>,
     include_nightly: bool,
-) -> AmenableStdReport {
+) -> CordialResult<AmenableStdReport> {
     build_wrapped_report(
-        source_crate,
-        items,
-        impl_crate,
-        registry,
-        skip_map,
-        proof_chain_subjects,
-        include_nightly,
+        BuildWrappedReportArgs::new(
+            source_crate,
+            items,
+            impl_crate,
+            registry,
+            skip_map,
+            proof_chain_subjects,
+            include_nightly,
+        ),
         classify_amenable_std_row,
     )
 }
@@ -103,15 +97,17 @@ pub fn build_amenable_ext_report(
     skip_map: &VerifierSkipMap,
     proof_chain_subjects: &HashSet<String>,
     include_nightly: bool,
-) -> AmenableStdReport {
+) -> CordialResult<AmenableStdReport> {
     build_wrapped_report(
-        source_crate,
-        items,
-        impl_crate,
-        registry,
-        skip_map,
-        proof_chain_subjects,
-        include_nightly,
+        BuildWrappedReportArgs::new(
+            source_crate,
+            items,
+            impl_crate,
+            registry,
+            skip_map,
+            proof_chain_subjects,
+            include_nightly,
+        ),
         classify_amenable_ext_row,
     )
 }
@@ -119,6 +115,17 @@ pub fn build_amenable_ext_report(
 /// Everything [`classify_amenable_std_row`] needs beyond the row's own
 /// `type_path`, bundled so the function takes two arguments instead of
 /// eight.
+#[derive(derive_new::new)]
+struct BuildWrappedReportArgs<'a> {
+    source_crate: &'a str,
+    items: &'a [StdInventoryItem],
+    impl_crate: &'a str,
+    registry: &'a RegistryDump,
+    skip_map: &'a VerifierSkipMap,
+    proof_chain_subjects: &'a HashSet<String>,
+    include_nightly: bool,
+}
+
 #[derive(derive_new::new)]
 pub struct ClassifyRowArgs<'a> {
     type_kind: &'a str,
@@ -151,7 +158,7 @@ fn classify_wrapped_row(
     evidence_for_type: impl Fn(&RegistryDump, &str) -> Option<String>,
     witness_verifiers_for_type: impl Fn(&RegistryDump, &str) -> HashSet<String>,
     type_has_proof_test: impl Fn(&HashSet<String>, &str) -> bool,
-) -> AmenableStdEntry {
+) -> CordialResult<AmenableStdEntry> {
     let ClassifyRowArgs {
         type_kind,
         is_generic,
@@ -166,22 +173,22 @@ fn classify_wrapped_row(
     if let Some(exception) = exception
         && exception.verifiers().is_none()
     {
-        return AmenableStdEntry::new(
-            type_path.to_string(),
-            type_kind.to_string(),
-            is_generic,
-            false,
-            None,
-            false,
-            false,
-            false,
-            false,
-            AmenableStdStatus::Skipped,
-            Some(exception.reason().clone()),
-            true,
-            true,
-            true,
-        );
+        return AmenableStdEntry::builder()
+            .type_path(type_path.to_string())
+            .type_kind(type_kind.to_string())
+            .is_generic(is_generic)
+            .evidence_link(false)
+            .evidence_name(None)
+            .kani_witness(false)
+            .creusot_witness(false)
+            .verus_witness(false)
+            .proof_test(false)
+            .status(AmenableStdStatus::Skipped)
+            .skip_reason(Some(exception.reason().clone()))
+            .kani_excepted(true)
+            .creusot_excepted(true)
+            .verus_excepted(true)
+            .build();
     }
 
     let mut evidence_name = evidence_for_type(registry, type_path);
@@ -215,27 +222,30 @@ fn classify_wrapped_row(
         AmenableStdStatus::Partial
     };
 
-    AmenableStdEntry::new(
-        type_path.to_string(),
-        type_kind.to_string(),
-        is_generic,
-        evidence_link,
-        evidence_name,
-        kani_witness,
-        creusot_witness,
-        verus_witness,
-        proof_test,
-        status,
-        exception.map(|e| e.reason().clone()),
-        !kani_applicable,
-        !creusot_applicable,
-        !verus_applicable,
-    )
+    AmenableStdEntry::builder()
+        .type_path(type_path.to_string())
+        .type_kind(type_kind.to_string())
+        .is_generic(is_generic)
+        .evidence_link(evidence_link)
+        .evidence_name(evidence_name)
+        .kani_witness(kani_witness)
+        .creusot_witness(creusot_witness)
+        .verus_witness(verus_witness)
+        .proof_test(proof_test)
+        .status(status)
+        .skip_reason(exception.map(|e| e.reason().clone()))
+        .kani_excepted(!kani_applicable)
+        .creusot_excepted(!creusot_applicable)
+        .verus_excepted(!verus_applicable)
+        .build()
 }
 
 /// Classify one std inventory row for amenable registry coverage.
 #[instrument(level = "debug", skip(args))]
-pub fn classify_amenable_std_row(type_path: &str, args: ClassifyRowArgs<'_>) -> AmenableStdEntry {
+pub fn classify_amenable_std_row(
+    type_path: &str,
+    args: ClassifyRowArgs<'_>,
+) -> CordialResult<AmenableStdEntry> {
     classify_wrapped_row(
         type_path,
         args,
@@ -248,7 +258,10 @@ pub fn classify_amenable_std_row(type_path: &str, args: ClassifyRowArgs<'_>) -> 
 /// Classify one third-party (`amenable_ext`) inventory row for amenable
 /// registry coverage.
 #[instrument(level = "debug", skip(args))]
-pub fn classify_amenable_ext_row(type_path: &str, args: ClassifyRowArgs<'_>) -> AmenableStdEntry {
+pub fn classify_amenable_ext_row(
+    type_path: &str,
+    args: ClassifyRowArgs<'_>,
+) -> CordialResult<AmenableStdEntry> {
     classify_wrapped_row(
         type_path,
         args,

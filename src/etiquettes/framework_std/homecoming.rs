@@ -1,3 +1,4 @@
+use crate::error::CordialResult;
 use crate::framework_std::{
     FrameworkGapEntry, FrameworkTraitEntry, FrameworkTraitReport, FrameworkTraitStatus,
 };
@@ -77,7 +78,8 @@ impl Marker for FrameworkStdScopeMarker {
     }
 }
 
-#[derive(Debug, Clone, derive_new::new)]
+#[derive(Debug, Clone, derive_builder::Builder)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct FrameworkStdRowFinding {
     rule: FrameworkStdRule,
     disposition: Disposition,
@@ -90,6 +92,14 @@ pub struct FrameworkStdRowFinding {
     is_generic: bool,
     trait_status: FrameworkTraitStatus,
     skip_reason: Option<String>,
+}
+
+impl FrameworkStdRowFinding {
+    /// Start a builder for this finding.
+    #[instrument(level = "debug")]
+    pub fn builder() -> FrameworkStdRowFindingBuilder {
+        FrameworkStdRowFindingBuilder::default()
+    }
 }
 
 impl Finding for FrameworkStdRowFinding {
@@ -146,13 +156,13 @@ pub fn homecoming_row_disposition(status: FrameworkTraitStatus) -> Disposition {
 pub fn framework_report_from_findings(
     findings: &[&dyn Finding],
     include_nightly: bool,
-) -> Option<FrameworkTraitReport> {
+) -> CordialResult<Option<FrameworkTraitReport>> {
     let rows: Vec<_> = findings
         .iter()
         .filter(|finding| finding.rule().category() == HOMECOMING_STD_CATEGORY)
         .collect();
     if rows.is_empty() {
-        return None;
+        return Ok(None);
     }
 
     let mut entries = Vec::new();
@@ -205,15 +215,17 @@ pub fn framework_report_from_findings(
         ));
     }
 
-    Some(FrameworkTraitReport::new(
-        source_crate,
-        trait_name,
-        impl_crate,
-        include_nightly,
-        entries,
-        complete_count,
-        missing_count,
-        skipped_count,
+    Ok(Some(
+        FrameworkTraitReport::builder()
+            .source_crate(source_crate)
+            .trait_name(trait_name)
+            .impl_crate(impl_crate)
+            .include_nightly(include_nightly)
+            .entries(entries)
+            .complete_count(complete_count)
+            .missing_count(missing_count)
+            .skipped_count(skipped_count)
+            .build()?,
     ))
 }
 

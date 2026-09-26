@@ -60,7 +60,7 @@ pub fn findings_from_shadow_pair_report(
     anchor: NodeAnchor,
 ) -> CordialResult<Vec<Box<dyn Finding>>> {
     let pair_refs = [(upstream, shadow, report)];
-    let gaps = build_shadow_gaps(&pair_refs);
+    let gaps = build_shadow_gaps(&pair_refs)?;
     let gap_paths: std::collections::HashSet<String> = gaps
         .iter()
         .filter(|entry| entry.gap_kind() != crate::shadow::ShadowGapKind::ShadowVerificationGap)

@@ -34,7 +34,7 @@ impl Reporter for AmenableExtJiffReporter {
         let findings = view.findings();
         let session = view.session();
 
-        let report = amenable_ext_jiff_report_from_findings(findings, false).ok_or_else(|| {
+        let report = amenable_ext_jiff_report_from_findings(findings, false)?.ok_or_else(|| {
             CordialError::invariant("amenable ext jiff reporter requires assessor findings")
         })?;
         let gaps = amenable_ext_jiff_gaps_from_findings(findings);

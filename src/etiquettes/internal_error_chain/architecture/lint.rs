@@ -80,9 +80,7 @@ impl Catalog {
         let error_enums: Vec<&EnumInfo> = self
             .enums()
             .values()
-            .filter(|item| {
-                self.impls_error(&item.ident()) && Self::is_error_enum_name(&item.ident())
-            })
+            .filter(|item| self.impls_error(item.ident()) && Self::is_error_enum_name(item.ident()))
             .collect();
 
         if parents.is_empty() {
@@ -185,7 +183,7 @@ impl Catalog {
         }
 
         for item in self.structs().values() {
-            if !self.impls_error(&item.ident()) {
+            if !self.impls_error(item.ident()) {
                 continue;
             }
             if item.kind_unboxed_of().is_some() && item.kind_box_of().is_none() {

@@ -15,7 +15,7 @@ use tracing::instrument;
 /// Build a crate's [`VerusCrateIr`] from every block `collect_verus_blocks`
 /// found.
 #[instrument(level = "debug", skip(blocks))]
-pub(super) fn build_crate_ir(blocks: Vec<VerusBlock>) -> VerusCrateIr {
+pub(super) fn build_crate_ir(blocks: Vec<VerusBlock>) -> crate::error::CordialResult<VerusCrateIr> {
     let mut functions = Vec::new();
     let mut enums = Vec::new();
     for block in blocks {
@@ -26,14 +26,18 @@ pub(super) fn build_crate_ir(blocks: Vec<VerusBlock>) -> VerusCrateIr {
             cfg_test,
             functions: Vec::new(),
             enums: Vec::new(),
+            error: None,
         };
         for item in &items {
             visitor.visit_item(item);
         }
+        if let Some(error) = visitor.error {
+            return Err(error);
+        }
         functions.extend(visitor.functions);
         enums.extend(visitor.enums);
     }
-    VerusCrateIr::new(functions, enums)
+    Ok(VerusCrateIr::new(functions, enums))
 }
 
 struct FactsVisitor {
@@ -42,6 +46,7 @@ struct FactsVisitor {
     cfg_test: bool,
     functions: Vec<VerusFnFacts>,
     enums: Vec<VerusEnumFacts>,
+    error: Option<crate::error::CordialError>,
 }
 
 impl FactsVisitor {
@@ -53,6 +58,9 @@ impl FactsVisitor {
         block: &verus_syn::Block,
         line: u32,
     ) {
+        if self.error.is_some() {
+            return;
+        }
         let spec = &sig.spec;
         let requires = spec
             .requires
@@ -77,25 +85,29 @@ impl FactsVisitor {
 
         let body = scan_body(block);
 
-        self.functions.push(VerusFnFacts::new(
-            sig.ident.to_string(),
-            self.module_path.clone(),
-            FileSpan::new(self.file.clone(), line, 0),
-            self.cfg_test,
-            fn_mode(&sig.mode),
-            publish_kind(&sig.publish),
-            requires,
-            ensures,
-            decreases,
-            body.uses_assume,
-            body.uses_admit,
-            has_external_body(attrs),
-            body.panic_sites,
-            tracked_param_names(sig),
-            recommends,
-            sig.broadcast.is_some(),
-            body.calls,
-        ));
+        match VerusFnFacts::builder()
+            .name(sig.ident.to_string())
+            .module_path(self.module_path.clone())
+            .span(FileSpan::new(self.file.clone(), line, 0))
+            .cfg_test(self.cfg_test)
+            .mode(fn_mode(&sig.mode))
+            .publish(publish_kind(&sig.publish))
+            .requires(requires)
+            .ensures(ensures)
+            .decreases(decreases)
+            .uses_assume(body.uses_assume)
+            .uses_admit(body.uses_admit)
+            .is_external_body(has_external_body(attrs))
+            .panic_sites(body.panic_sites)
+            .tracked_params(tracked_param_names(sig))
+            .recommends(recommends)
+            .is_broadcast(sig.broadcast.is_some())
+            .calls(body.calls)
+            .build()
+        {
+            Ok(facts) => self.functions.push(facts),
+            Err(error) => self.error = Some(error),
+        }
     }
 }
 

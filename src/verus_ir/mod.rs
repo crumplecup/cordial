@@ -51,7 +51,7 @@ use tracing::instrument;
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_verus_ir(crate_root: &Path) -> crate::error::CordialResult<VerusCrateIr> {
     let blocks = parse::collect_verus_blocks(crate_root)?;
-    Ok(facts::build_crate_ir(blocks))
+    facts::build_crate_ir(blocks)
 }
 
 /// Parse every `verus! { .. }` block in one already-read source string
@@ -60,7 +60,11 @@ pub fn scan_crate_verus_ir(crate_root: &Path) -> crate::error::CordialResult<Ver
 /// tree on disk, matching [`scan_crate_verus_ir`]'s own best-effort
 /// posture.
 #[instrument(level = "debug", skip(source, file))]
-pub fn scan_verus_rust_source(source: &str, file: &Path, module_path: &str) -> VerusCrateIr {
+pub fn scan_verus_rust_source(
+    source: &str,
+    file: &Path,
+    module_path: &str,
+) -> crate::error::CordialResult<VerusCrateIr> {
     let blocks = parse::blocks_in_source(source, file, module_path);
     facts::build_crate_ir(blocks)
 }

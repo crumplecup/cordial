@@ -34,7 +34,7 @@ impl Reporter for AmenableStdReporter {
         let session = view.session();
 
         let options = AmenableStdOptions::default();
-        let report = amenable_report_from_findings(findings, options.include_nightly())
+        let report = amenable_report_from_findings(findings, options.include_nightly())?
             .ok_or_else(|| {
                 CordialError::invariant("amenable std reporter requires assessor findings")
             })?;

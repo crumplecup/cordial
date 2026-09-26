@@ -22,17 +22,14 @@ pub fn build_shadow_pair_report(
 ) -> CordialResult<ShadowReport> {
     let target = load_upstream_inventory(session, upstream, shadow)?;
     let shadow_inv = load_crate_inventory(session, shadow)?;
-    Ok(build_shadow_pair_report_from_inventories(
-        &target,
-        &shadow_inv,
-    ))
+    build_shadow_pair_report_from_inventories(&target, &shadow_inv)
 }
 
 #[instrument(level = "debug", skip(target, shadow))]
 pub fn build_shadow_pair_report_from_inventories(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
-) -> ShadowReport {
+) -> CordialResult<ShadowReport> {
     let target_methods = collect_type_methods_from_inventory(target);
     let shadow_methods = collect_type_methods_from_inventory(shadow);
     let target_trait_impls = collect_trait_impl_map_from_inventory(target);

@@ -2,6 +2,8 @@
 
 use std::collections::HashSet;
 
+use miette::IntoDiagnostic;
+
 use cordial::testing::{
     AmenableStdStatus, EvidenceLinkDump, InventoryItemKind, ProofRecordDump, RegistryDump,
     StdInventoryItem, VerifierSkipEntry, VerifierSkipMap, build_amenable_std_gaps,
@@ -123,7 +125,8 @@ fn build_amenable_std_report_classifies_complete_partial_missing_and_skipped() -
         &skip,
         &proof_chain,
         false,
-    );
+    )
+    .into_diagnostic()?;
     assert_eq!(report.complete_count(), 1);
     assert_eq!(report.partial_count(), 1);
     assert_eq!(report.missing_count(), 0);
@@ -200,7 +203,8 @@ fn build_amenable_std_report_resolves_evidence_via_type_alias_target() -> miette
         &skip,
         &proof_chain,
         false,
-    );
+    )
+    .into_diagnostic()?;
 
     let nonzero_i8 = report
         .entries()
@@ -254,7 +258,8 @@ fn a_scoped_exception_only_excepts_its_named_verifier_and_keeps_real_witnesses_v
         &skip,
         &HashSet::new(),
         false,
-    );
+    )
+    .into_diagnostic()?;
 
     assert_eq!(report.skipped_count(), 0);
     let entry = report
@@ -305,7 +310,8 @@ fn a_scoped_exception_does_not_hide_a_real_gap_on_a_different_verifier() -> miet
         &skip,
         &HashSet::new(),
         false,
-    );
+    )
+    .into_diagnostic()?;
 
     let entry = report
         .entries()

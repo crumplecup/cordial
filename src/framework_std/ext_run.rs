@@ -79,7 +79,7 @@ pub fn assess_amenable_ext_coverage(
     let registry = ensure_registry_dump_for_assessor(store, project_root, &registry_options)?;
     let skip_map = load_verifier_skip_map(store, patch_set);
     let proof_chain_subjects = collect_proof_chain_subjects(project_root)?;
-    Ok(build_amenable_ext_report(
+    build_amenable_ext_report(
         upstream_crate,
         &items,
         shadow_crate,
@@ -87,5 +87,5 @@ pub fn assess_amenable_ext_coverage(
         &skip_map,
         &proof_chain_subjects,
         options.include_nightly(),
-    ))
+    )
 }
