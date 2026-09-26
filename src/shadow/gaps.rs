@@ -83,6 +83,7 @@ pub fn build_shadow_gaps(
     Ok(entries)
 }
 
+#[instrument(level = "debug", skip(row, gap_kind))]
 fn gap_entry(
     target_crate: &str,
     shadow_crate: &str,

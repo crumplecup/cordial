@@ -20,8 +20,7 @@ fn test_thresholds() -> ModularityThresholds {
         .with_hierarchy_min_lines(0)
 }
 
-const HANDLERS_RS: &str =
-    include_str!("../../elicit_doc/tests/fixtures/quality/modularity_crate/src/handlers.rs");
+const HANDLERS_RS: &str = include_str!("fixtures/quality/modularity/handlers.rs");
 
 fn large_function_fixture() -> String {
     function_with_body_lines("oversized", 202)
