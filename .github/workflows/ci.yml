@@ -27,6 +27,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      # rustdoc JSON needs nightly. Install it here so parallel tests do not
+      # race rustup's auto-install of the rolling toolchain.
+      - run: rustup toolchain install nightly --profile minimal --no-self-update
       - uses: extractions/setup-just@v4
       - run: just check-all
 
