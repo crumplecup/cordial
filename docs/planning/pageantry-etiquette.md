@@ -47,16 +47,35 @@ content is not mixed into the parent walk.
 
 Walk `File.items` (and inline mod contents) in source order. Classify
 each item as header, trait (`Item::Trait` / `Item::TraitAlias`), or
-body. After the first body item, every later trait is a record.
+body. After the first body item, every later trait is a record. Files
+named `lib.rs` or `mod.rs` also record every non-header item as
+`PAGEANTRY-BARREL-001`.
 
 Hooks: source loader, scope + inventory + attribute enrichers, probe,
 assessor, CSV / checklist / summary. Feature `pageantry`, in `quality`.
 
-Later pageantry rules (impl adjacency, inherent-before-foreign, …)
-share this etiquette; they do not go into modularity.
+## Second rule: barrel files
+
+`lib.rs` and `mod.rs` are the table of contents. They may declare
+modules and re-export names. Types and functions belong in a named
+sibling (`foo.rs`), not in the crate or directory index.
+
+| Shape | Flagged |
+| --- | --- |
+| `mod inner;` + `pub use inner::Alpha;` in `lib.rs` | no — visibility and export |
+| `pub fn helper()` in `lib.rs` or `mod.rs` | yes — `PAGEANTRY-BARREL-001` |
+| `pub struct Alpha;` in `mod.rs` | yes |
+| the same items in `foo.rs` | no — not a barrel filename |
+| item under `#[cfg(test)]` | no — skipped |
+
+One finding per disallowed item. `use` / `extern crate` / `mod` are
+legal; everything else in those two filenames is not. Later pageantry
+rules (impl adjacency, inherent-before-foreign, …) share this
+etiquette; they do not go into modularity.
 
 | Task | Detail |
 | --- | --- |
 | `PAGEANTRY-TRAIT-001` scan + bundle | done |
+| `PAGEANTRY-BARREL-001` scan + bundle | done |
 | Tests in `tests/pageantry_etiquette.rs` | done |
-| Cordial dogfood | traits sit in a leading block (`dogfood_cordial_traits_are_at_the_top`) |
+| Cordial dogfood | traits sit in a leading block; fat `mod.rs` files become named siblings |

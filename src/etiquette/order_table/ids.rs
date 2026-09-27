@@ -209,6 +209,8 @@ pub(super) const GLOB_IMPORT_RULE_IDS: &[&str] = &[
 pub(super) const PAGEANTRY_RULE_IDS: &[&str] = &[
     #[cfg(feature = "pageantry")]
     "PAGEANTRY-TRAIT-001",
+    #[cfg(feature = "pageantry")]
+    "PAGEANTRY-BARREL-001",
 ];
 
 pub(super) const DEPENDENCY_FRESHNESS_RULE_IDS: &[&str] = &[

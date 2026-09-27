@@ -8,8 +8,17 @@ use cordial::{
 };
 
 fn scan(source: &str) -> miette::Result<Vec<PageantryRuleId>> {
+    scan_named("sample.rs", source)
+}
+
+fn scan_named(name: &str, source: &str) -> miette::Result<Vec<PageantryRuleId>> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
+    let file = fixture.path().join(name);
+    if let Some(parent) = file.parent() {
+        fs::create_dir_all(parent)
+            .into_diagnostic()
+            .wrap_err("parent dir")?;
+    }
     fs::write(&file, source)
         .into_diagnostic()
         .wrap_err("write")?;
@@ -156,8 +165,11 @@ fn pageantry_etiquette_writes_checklist() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(fixture.path().join("src/lib.rs"), "mod arrange;\n")
+        .into_diagnostic()
+        .wrap_err("write lib")?;
     fs::write(
-        fixture.path().join("src/lib.rs"),
+        fixture.path().join("src/arrange.rs"),
         r#"
 pub struct Alpha;
 pub struct Beta;
@@ -219,8 +231,67 @@ fn dogfood_cordial_traits_are_at_the_top() -> miette::Result<()> {
         .collect();
     assert!(
         listed.is_empty(),
-        "cordial traits should sit in a leading block:\n{}",
+        "cordial traits should sit in a leading block, and lib.rs / mod.rs should be barrels:\n{}",
         listed.join("\n")
     );
+    Ok(())
+}
+
+#[test]
+fn barrel_lib_with_a_function_fires() -> miette::Result<()> {
+    cordial::init_tracing();
+    let ids = scan_named(
+        "lib.rs",
+        r#"
+mod inner;
+
+pub fn helper() {}
+"#,
+    )?;
+    assert_eq!(ids, vec![PageantryRuleId::Barrel001]);
+    Ok(())
+}
+
+#[test]
+fn barrel_mod_with_a_type_fires() -> miette::Result<()> {
+    cordial::init_tracing();
+    let ids = scan_named(
+        "mod.rs",
+        r#"
+pub use inner::Alpha;
+
+pub struct Alpha;
+"#,
+    )?;
+    assert_eq!(ids, vec![PageantryRuleId::Barrel001]);
+    Ok(())
+}
+
+#[test]
+fn barrel_only_mods_and_reexports_is_fine() -> miette::Result<()> {
+    cordial::init_tracing();
+    let ids = scan_named(
+        "lib.rs",
+        r#"
+mod inner;
+pub use inner::Alpha;
+"#,
+    )?;
+    assert!(ids.is_empty());
+    Ok(())
+}
+
+#[test]
+fn named_sibling_may_hold_types() -> miette::Result<()> {
+    cordial::init_tracing();
+    let ids = scan_named(
+        "inner.rs",
+        r#"
+pub struct Alpha;
+
+pub fn helper() {}
+"#,
+    )?;
+    assert!(ids.is_empty());
     Ok(())
 }

@@ -1,8 +1,9 @@
-//! syn-based scan for traits defined after the leading block.
+//! syn-based scan for trait placement and barrel-file declarations.
 
 use std::path::Path;
 
 use syn::File;
+use syn::spanned::Spanned;
 
 use crate::error::CordialResult;
 use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
@@ -89,6 +90,7 @@ fn scan_syntax(
         file,
         crate_root,
         module_prefix,
+        is_barrel_file(file),
         &mut findings,
     )?;
     Ok(findings)
@@ -104,12 +106,23 @@ fn walk_items(
     file: &Path,
     crate_root: &Path,
     module_prefix: &[String],
+    barrel: bool,
     findings: &mut Vec<PageantrySiteRecord>,
 ) -> CordialResult<()> {
     let mut body_started = false;
     for item in items {
         if is_cfg_test(item_attrs(item)) {
             continue;
+        }
+        if barrel && let Some((line, snippet)) = barrel_declaration(item) {
+            findings.push(site_record(
+                PageantryRuleId::Barrel001,
+                module_prefix,
+                file,
+                crate_root,
+                line,
+                snippet,
+            )?);
         }
         match classify(item) {
             ItemClass::Header => {
@@ -118,24 +131,19 @@ fn walk_items(
                 {
                     let mut nested_prefix = module_prefix.to_vec();
                     nested_prefix.push(item_mod.ident.to_string());
-                    walk_items(nested, file, crate_root, &nested_prefix, findings)?;
+                    walk_items(nested, file, crate_root, &nested_prefix, barrel, findings)?;
                 }
             }
             ItemClass::Trait { name, line } => {
                 if body_started {
-                    let mut path = file.to_path_buf();
-                    if let Ok(rel) = path.strip_prefix(crate_root) {
-                        path = rel.to_path_buf();
-                    }
-                    findings.push(
-                        PageantrySiteRecord::builder()
-                            .rule_id(PageantryRuleId::Trait001)
-                            .context(site_context(module_prefix))
-                            .file(path)
-                            .line(line)
-                            .snippet(format!("trait {name}"))
-                            .build()?,
-                    );
+                    findings.push(site_record(
+                        PageantryRuleId::Trait001,
+                        module_prefix,
+                        file,
+                        crate_root,
+                        line,
+                        format!("trait {name}"),
+                    )?);
                 }
             }
             ItemClass::Body => {
@@ -145,6 +153,118 @@ fn walk_items(
         }
     }
     Ok(())
+}
+
+#[instrument(level = "trace", skip(file), ret)]
+fn is_barrel_file(file: &Path) -> bool {
+    matches!(
+        file.file_name().and_then(|name| name.to_str()),
+        Some("lib.rs" | "mod.rs")
+    )
+}
+
+#[instrument(level = "trace", skip(item))]
+fn barrel_declaration(item: &syn::Item) -> Option<(u32, String)> {
+    match item {
+        syn::Item::Use(_) | syn::Item::ExternCrate(_) | syn::Item::Mod(_) => None,
+        syn::Item::Verbatim(_) => None,
+        syn::Item::Fn(item) => Some((
+            item.sig.ident.span().start().line as u32,
+            format!("fn {}", item.sig.ident),
+        )),
+        syn::Item::Struct(item) => Some((
+            item.ident.span().start().line as u32,
+            format!("struct {}", item.ident),
+        )),
+        syn::Item::Enum(item) => Some((
+            item.ident.span().start().line as u32,
+            format!("enum {}", item.ident),
+        )),
+        syn::Item::Union(item) => Some((
+            item.ident.span().start().line as u32,
+            format!("union {}", item.ident),
+        )),
+        syn::Item::Trait(item) => Some((
+            item.ident.span().start().line as u32,
+            format!("trait {}", item.ident),
+        )),
+        syn::Item::TraitAlias(item) => Some((
+            item.ident.span().start().line as u32,
+            format!("trait {}", item.ident),
+        )),
+        syn::Item::Type(item) => Some((
+            item.ident.span().start().line as u32,
+            format!("type {}", item.ident),
+        )),
+        syn::Item::Const(item) => Some((
+            item.ident.span().start().line as u32,
+            format!("const {}", item.ident),
+        )),
+        syn::Item::Static(item) => Some((
+            item.ident.span().start().line as u32,
+            format!("static {}", item.ident),
+        )),
+        syn::Item::Impl(item) => {
+            let line = item.impl_token.span.start().line as u32;
+            let snippet = match item.self_ty.as_ref() {
+                syn::Type::Path(ty) => ty
+                    .path
+                    .segments
+                    .last()
+                    .map(|segment| format!("impl {}", segment.ident))
+                    .unwrap_or_else(|| "impl".to_string()),
+                _ => "impl".to_string(),
+            };
+            Some((line, snippet))
+        }
+        syn::Item::Macro(item) => {
+            let name = item
+                .ident
+                .as_ref()
+                .map(|ident| ident.to_string())
+                .or_else(|| {
+                    item.mac
+                        .path
+                        .segments
+                        .last()
+                        .map(|segment| segment.ident.to_string())
+                })
+                .unwrap_or_else(|| "macro".to_string());
+            let line = item
+                .ident
+                .as_ref()
+                .map(|ident| ident.span().start().line as u32)
+                .unwrap_or_else(|| item.mac.path.span().start().line as u32);
+            Some((line, format!("macro {name}")))
+        }
+        syn::Item::ForeignMod(item) => Some((
+            item.abi.extern_token.span.start().line as u32,
+            "extern block".to_string(),
+        )),
+        _ => Some((1, "item".to_string())),
+    }
+}
+
+#[instrument(level = "debug", skip(rule_id, file))]
+fn site_record(
+    rule_id: PageantryRuleId,
+    module_prefix: &[String],
+    file: &Path,
+    crate_root: &Path,
+    line: u32,
+    snippet: String,
+) -> CordialResult<PageantrySiteRecord> {
+    let mut path = file.to_path_buf();
+    if let Ok(rel) = path.strip_prefix(crate_root) {
+        path = rel.to_path_buf();
+    }
+    PageantrySiteRecord::builder()
+        .rule_id(rule_id)
+        .context(site_context(module_prefix))
+        .file(path)
+        .line(line)
+        .snippet(snippet)
+        .build()
 }
 
 #[derive(Debug)]

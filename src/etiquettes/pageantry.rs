@@ -1,17 +1,20 @@
-//! Arrangement of traits in a file.
+//! Arrangement of items in a file.
 //!
-//! **What.** Keeps trait contracts in the leading declaration block.
+//! **What.** Keeps trait contracts in the leading declaration block, and
+//! keeps `lib.rs` / `mod.rs` as a table of contents.
 //!
-//! **Why.** Contracts belong at the top of the file. A trait that appears
-//! after types or functions have started is harder to find and usually means
-//! the file grew in authoring order rather than reader order.
+//! **Why.** Contracts belong at the top of the file. A crate or directory
+//! index is visibility and re-exports; types and functions live in a named
+//! sibling (`foo.rs`), not in the barrel.
 //!
 //! **Flags.** A trait definition after the leading trait block as
-//! `PAGEANTRY-TRAIT-001`.
+//! `PAGEANTRY-TRAIT-001`. A type or function declaration in `lib.rs` or
+//! `mod.rs` as `PAGEANTRY-BARREL-001`.
 //!
 //! **Ignores.** `use`, `extern crate`, and `mod` declarations are treated as
-//! the file header. Several traits in a row just below that header are valid.
-//! `#[cfg(test)]` items are skipped.
+//! the file header (and as the only legal items in a barrel file). Several
+//! traits in a row just below that header are valid. `#[cfg(test)]` items
+//! are skipped.
 //!
 //! **Outputs.** `{store}/findings/pageantry.checklist.md`,
 //! `pageantry-summary.md`, and CSV.
@@ -36,7 +39,7 @@ pub use types::PageantryRuleId;
 
 use crate::etiquette::{
     EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
-    StaticQualityEtiquette, count_open_category,
+    StaticQualityEtiquette, count_open_rule,
 };
 use crate::objects::Finding;
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
@@ -69,14 +72,20 @@ pub static PAGEANTRY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette:
         EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
         false,
         EtiquetteExplain::new(
-            "Are traits defined in a leading block just below the import / mod header?",
-            "Contracts belong at the top of the file. A trait after types have already started is ceremony in the middle of the show.",
-            "Walks each file and inline mod item list in source order. use / extern crate / mod are header. A run of traits at the front is fine. After any other item (struct, enum, impl, fn, …), every later trait is PAGEANTRY-TRAIT-001. #[cfg(test)] items are skipped.",
+            "Are traits at the top of the file, and are lib.rs / mod.rs only modules and re-exports?",
+            "Contracts belong at the top of the file. A crate or directory index is a table of contents: visibility and re-exports, not types or functions.",
+            "Walks each file and inline mod item list in source order. use / extern crate / mod are header. A run of traits at the front is fine. After any other item (struct, enum, impl, fn, …), every later trait is PAGEANTRY-TRAIT-001. Files named lib.rs or mod.rs may contain only those header items; any other item is PAGEANTRY-BARREL-001. #[cfg(test)] items are skipped.",
             "`[pageantry] enabled = false` in cordial.toml.",
-            &[EtiquetteRuleExplain::new(
-                "PAGEANTRY-TRAIT-001",
-                "A trait defined after the leading trait block has ended",
-            )],
+            &[
+                EtiquetteRuleExplain::new(
+                    "PAGEANTRY-TRAIT-001",
+                    "A trait defined after the leading trait block has ended",
+                ),
+                EtiquetteRuleExplain::new(
+                    "PAGEANTRY-BARREL-001",
+                    "A type or function declaration in lib.rs or mod.rs",
+                ),
+            ],
         ),
     ),
     Some(QualityAreaSpec::new(
@@ -89,6 +98,10 @@ pub static PAGEANTRY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette:
 
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
-    let pageantry = count_open_category(findings, "pageantry");
-    (pageantry, format!("misplaced traits **{pageantry}**"))
+    let traits = count_open_rule(findings, "PAGEANTRY-TRAIT-001");
+    let barrels = count_open_rule(findings, "PAGEANTRY-BARREL-001");
+    (
+        traits + barrels,
+        format!("misplaced traits **{traits}**, barrel items **{barrels}**"),
+    )
 }

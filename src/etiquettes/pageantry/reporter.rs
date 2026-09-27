@@ -133,7 +133,9 @@ impl Reporter for PageantryChecklistReporter {
         body.push_str(
             "Move each trait to the leading block just below the import / `mod` \
              header. A run of traits at the top is fine; a trait after types \
-             have already started is not.\n\n",
+             have already started is not. `lib.rs` and `mod.rs` may only \
+             declare modules and re-exports — move types and functions into a \
+             named sibling file (`foo.rs`).\n\n",
         );
 
         for crate_name in crate_names(&open) {
@@ -195,9 +197,9 @@ impl Reporter for PageantrySummaryReporter {
         body.push_str("# Pageantry summary\n\n");
         body.push_str("---\n\n");
         body.push_str(&format!(
-            "Workspace totals: **{total}** traits after the leading block.\n\n"
+            "Workspace totals: **{total}** pageantry items (misplaced traits and barrel declarations).\n\n"
         ));
-        body.push_str("| Crate | Misplaced traits |\n");
+        body.push_str("| Crate | Open items |\n");
         body.push_str("| --- | ---: |\n");
         for crate_name in crate_names(&open) {
             let crate_total = open

@@ -14,6 +14,8 @@ use tracing::instrument;
 pub enum PageantryRuleId {
     /// A trait definition after the leading trait block has ended.
     Trait001,
+    /// A type or function declaration in `lib.rs` or `mod.rs`.
+    Barrel001,
 }
 
 impl PageantryRuleId {
@@ -22,6 +24,7 @@ impl PageantryRuleId {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Trait001 => "PAGEANTRY-TRAIT-001",
+            Self::Barrel001 => "PAGEANTRY-BARREL-001",
         }
     }
 
@@ -30,6 +33,7 @@ impl PageantryRuleId {
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
             "PAGEANTRY-TRAIT-001" => Some(Self::Trait001),
+            "PAGEANTRY-BARREL-001" => Some(Self::Barrel001),
             _ => None,
         }
     }
@@ -60,7 +64,14 @@ impl Rule for PageantryRule {
 
     #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
-        "Trait defined after types (or other body items) have already started — move it to the leading block below the import / mod header"
+        match self.rule_id {
+            PageantryRuleId::Trait001 => {
+                "Trait defined after types (or other body items) have already started — move it to the leading block below the import / mod header"
+            }
+            PageantryRuleId::Barrel001 => {
+                "`lib.rs` / `mod.rs` may only declare modules and re-exports — move types and functions into a named sibling file"
+            }
+        }
     }
 }
 
