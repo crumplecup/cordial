@@ -10,7 +10,7 @@ const SRC_ALLOWLIST: &[&str] = &[
     "src/rustdoc/elicit_complete.rs",
     "src/rustdoc_loader.rs",
     "src/ir/crate_load.rs",
-    "src/feature_probe/mod.rs",
+    "src/feature_probe.rs",
     "src/framework_std/match_impl.rs",
     "src/testing/",
     "src/enricher/shadow.rs",
