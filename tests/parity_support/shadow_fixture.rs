@@ -11,28 +11,12 @@
 use miette::{IntoDiagnostic, WrapErr};
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use rustdoc_types::{
     Crate, Generics, Id, Item, ItemEnum, ItemKind, ItemSummary, Module, Struct, StructKind, Target,
     Visibility,
 };
-
-/// Write a public unit struct into `{workspace}/target/doc/{crate}.json`.
-#[allow(dead_code)] // fixture helper; not every `#[path]` consumer calls it
-pub fn write_minimal_rustdoc(
-    workspace: &Path,
-    crate_name: &str,
-    type_name: &str,
-) -> miette::Result<PathBuf> {
-    let doc_dir = workspace.join("target/doc");
-    fs::create_dir_all(&doc_dir)
-        .into_diagnostic()
-        .wrap_err("doc dir")?;
-    let path = doc_dir.join(format!("{crate_name}.json"));
-    write_minimal_rustdoc_file(&path, crate_name, type_name)?;
-    Ok(path)
-}
 
 pub fn write_minimal_rustdoc_file(
     path: &Path,
@@ -132,20 +116,20 @@ pub fn write_minimal_rustdoc_file(
 }
 
 /// Seed upstream and shadow rustdoc for the url ↔ elicit_url pair.
-pub fn seed_minimal_shadow_fixture(_workspace: &Path, store_root: &Path) -> miette::Result<()> {
+pub fn seed_minimal_shadow_fixture(store_root: &Path) -> miette::Result<()> {
     write_store_rustdoc(store_root, "url", "Widget")?;
     write_store_rustdoc(store_root, "elicit_url", "Widget")?;
     Ok(())
 }
 
-fn write_store_rustdoc(
-    store_root: &Path,
-    crate_name: &str,
-    type_name: &str,
-) -> miette::Result<()> {
+fn write_store_rustdoc(store_root: &Path, crate_name: &str, type_name: &str) -> miette::Result<()> {
     let cache = store_root.join("cache/rustdoc");
     fs::create_dir_all(&cache)
         .into_diagnostic()
         .wrap_err("store rustdoc dir")?;
-    write_minimal_rustdoc_file(&cache.join(format!("{crate_name}.json")), crate_name, type_name)
+    write_minimal_rustdoc_file(
+        &cache.join(format!("{crate_name}.json")),
+        crate_name,
+        type_name,
+    )
 }

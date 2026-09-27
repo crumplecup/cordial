@@ -49,7 +49,7 @@ fn elicitation_summary_includes_shadow_section_for_minimal_workspace() -> miette
     cordial::init_tracing();
     let workspace = workspace_path("minimal-workspace");
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
-    seed_minimal_shadow_fixture(&workspace, store.path())?;
+    seed_minimal_shadow_fixture(store.path())?;
 
     let session = SessionBuilder::new(&workspace)
         .with_store_root(store.path())
@@ -77,7 +77,7 @@ fn full_elicitation_run_writes_summary_md() -> miette::Result<()> {
     let workspace =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/parity/workspaces/minimal-workspace");
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
-    seed_minimal_shadow_fixture(&workspace, store.path())?;
+    seed_minimal_shadow_fixture(store.path())?;
 
     let session = SessionBuilder::new(&workspace)
         .with_store_root(store.path())

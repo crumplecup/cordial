@@ -147,5 +147,61 @@ pub fn render_explain_page(etiquette: &dyn Etiquette) -> String {
             let _ = writeln!(body, "- `{}` — {}", rule.id(), rule.summary());
         }
     }
+    append_resolution_order(&mut body, etiquette);
     body
+}
+
+#[instrument(level = "debug", skip(body, etiquette))]
+fn append_resolution_order(body: &mut String, etiquette: &dyn Etiquette) {
+    let rule_ids: Vec<&str> = etiquette
+        .explain()
+        .rules()
+        .iter()
+        .map(EtiquetteRuleExplain::id)
+        .collect();
+    let order = &super::order::BUILT_IN_ORDER;
+    let after_rows = order.constraints_for(&rule_ids);
+    let before_ids: Vec<&str> = rule_ids
+        .iter()
+        .filter(|id| order.before_mirror(id).is_some())
+        .copied()
+        .collect();
+    if after_rows.is_empty() && before_ids.is_empty() {
+        return;
+    }
+
+    body.push_str("\n## Resolution order\n\n");
+    if let Some(row) = after_rows.first() {
+        let explain = row.explain();
+        let _ = writeln!(body, "{}\n", explain.title());
+        let _ = writeln!(body, "{}\n", explain.body());
+        let _ = writeln!(
+            body,
+            "Runs after: {}",
+            row.after()
+                .iter()
+                .map(|id| format!("`{id}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+    if let Some(id) = before_ids.first()
+        && let Some(mirror) = order.before_mirror(id)
+    {
+        if after_rows.is_empty() {
+            let explain = mirror.explain();
+            let _ = writeln!(body, "{}\n", explain.title());
+            let _ = writeln!(body, "{}\n", explain.body());
+        }
+        let _ = writeln!(
+            body,
+            "Runs before: {}",
+            mirror
+                .before()
+                .iter()
+                .map(|id| format!("`{id}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
 }

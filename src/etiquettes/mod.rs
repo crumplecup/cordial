@@ -141,15 +141,15 @@ pub use trenchcoat::TRENCHCOAT_ETIQUETTE;
 /// Every built-in quality etiquette in the current feature set, as the
 /// combined `Etiquette + QualityReportArea` supertrait -- the one
 /// canonical list both [`quality_etiquettes`] (session/plugin
-/// registration) and [`quality_report_areas`] (the `quality-report.md`
-/// rollup) derive from. An etiquette module compiles into this list only
+/// registration) and the `quality-report.md` rollup derive from. An
+/// etiquette module compiles into this list only
 /// once it's a [`crate::etiquette::StaticQualityEtiquette`] with its
 /// `quality_area` field set (`Some(..)` or an explicit, documented
 /// `None`) -- there is no path to appear in `quality_etiquettes()` while
 /// silently missing from the rollup, or vice versa (see
 /// `docs/planning/quality-report-feeder-trait.md`).
 #[::tracing::instrument(level = "debug")]
-fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::QualityEtiquette> {
+pub(crate) fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::QualityEtiquette> {
     let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 24] = [
         #[cfg(feature = "panics")]
         Some(&panics::PANICS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
@@ -272,18 +272,6 @@ pub fn quality_etiquettes() -> Vec<&'static dyn crate::Etiquette> {
     quality_report_etiquettes()
         .into_iter()
         .map(|etiquette| etiquette as &dyn crate::Etiquette)
-        .collect()
-}
-
-/// Every quality etiquette's own `quality-report.md` rollup contribution
-/// (`None` for one that declines, on purpose) -- the source
-/// [`crate::reporter::build_quality_report`] iterates instead of a
-/// separately hand-maintained area list.
-#[::tracing::instrument(level = "debug")]
-pub(crate) fn quality_report_areas() -> Vec<&'static dyn crate::etiquette::QualityReportArea> {
-    quality_report_etiquettes()
-        .into_iter()
-        .map(|etiquette| etiquette as &dyn crate::etiquette::QualityReportArea)
         .collect()
 }
 

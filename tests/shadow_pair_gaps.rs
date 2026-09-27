@@ -12,7 +12,21 @@ mod shadow_coverage;
 mod shadow_fixture;
 
 use shadow_coverage::{run_cordial_shadow_coverage, seed_shadow_dep_rustdoc};
-use shadow_fixture::write_minimal_rustdoc;
+use shadow_fixture::write_minimal_rustdoc_file;
+
+fn write_minimal_rustdoc(
+    workspace: &Path,
+    crate_name: &str,
+    type_name: &str,
+) -> miette::Result<std::path::PathBuf> {
+    let doc_dir = workspace.join("target/doc");
+    fs::create_dir_all(&doc_dir)
+        .into_diagnostic()
+        .wrap_err("doc dir")?;
+    let path = doc_dir.join(format!("{crate_name}.json"));
+    write_minimal_rustdoc_file(&path, crate_name, type_name)?;
+    Ok(path)
+}
 
 #[test]
 fn cross_crate_shadow_covers_widget_in_minimal_workspace() -> miette::Result<()> {

@@ -32,7 +32,7 @@ pub fn run_cordial_shadow_coverage(
     store_root: &Path,
     upstream_crate: Option<&str>,
 ) -> miette::Result<()> {
-    seed_minimal_shadow_fixture(workspace, store_root)?;
+    seed_minimal_shadow_fixture(store_root)?;
 
     let session = SessionBuilder::new(workspace)
         .with_store_root(store_root)

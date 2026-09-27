@@ -14,25 +14,25 @@ fn quality_report_lists_resolution_order() -> miette::Result<()> {
         area_titles,
         vec![
             "Error handling",
-            "Tracing instrumentation",
-            "Allow attributes",
-            "Modularity",
-            "Derive patterns",
             "Foreign error types",
             "Antipatterns",
+            "CLI layout",
+            "Allow attributes",
+            "Crate attributes",
+            "Derive patterns",
+            "Tracing instrumentation",
+            "Inline tests",
+            "Modularity",
             "Cfg scatter",
             "Cfg hygiene",
             "Module visibility",
-            "CLI layout",
-            "Crate attributes",
-            "rustdoc warnings",
             "Glob imports",
-            "Inline tests",
-            "Verus compiler warnings",
-            "Creusot diagnostics",
-            "Dependency freshness",
-            "Proof patterns",
             "Pageantry",
+            "Dependency freshness",
+            "rustdoc warnings",
+            "Creusot diagnostics",
+            "Verus compiler warnings",
+            "Proof patterns",
         ]
     );
 
@@ -109,7 +109,7 @@ edition = { workspace = true }
         .wrap_err("quality-report.md")?;
     assert!(report.contains("# Code quality report"));
     assert!(report.contains("abort-site action items"));
-    assert!(report.contains("| 7 | Antipatterns |"));
+    assert!(report.contains("| 3 | Antipatterns |"));
     assert!(report.contains("open gaps (other **1**)"));
 
     let summary = std::fs::read_to_string(findings_dir.join("summary.md"))

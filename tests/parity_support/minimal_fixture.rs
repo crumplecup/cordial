@@ -108,22 +108,22 @@ fn write_minimal_rustdoc_file(
 }
 
 /// Seed the same rustdoc inputs used by elicit_doc's pipeline fixture.
-pub fn seed_minimal_impl_fixture(_workspace: &Path, store_root: &Path) -> miette::Result<()> {
+pub fn seed_minimal_impl_fixture(store_root: &Path) -> miette::Result<()> {
     write_store_rustdoc(store_root, "elicitation", "Handle")?;
     write_store_rustdoc(store_root, "url", "Widget")?;
     Ok(())
 }
 
-fn write_store_rustdoc(
-    store_root: &Path,
-    crate_name: &str,
-    type_name: &str,
-) -> miette::Result<()> {
+fn write_store_rustdoc(store_root: &Path, crate_name: &str, type_name: &str) -> miette::Result<()> {
     let cache = store_root.join("cache/rustdoc");
     fs::create_dir_all(&cache)
         .into_diagnostic()
         .wrap_err("store rustdoc dir")?;
-    write_minimal_rustdoc_file(&cache.join(format!("{crate_name}.json")), crate_name, type_name)
+    write_minimal_rustdoc_file(
+        &cache.join(format!("{crate_name}.json")),
+        crate_name,
+        type_name,
+    )
 }
 
 pub fn run_cordial_impl_coverage(
@@ -133,7 +133,7 @@ pub fn run_cordial_impl_coverage(
 ) -> miette::Result<()> {
     use cordial::{IMPL_COVERAGE_ETIQUETTE, NamedRunFilter, Session, SessionBuilder};
 
-    seed_minimal_impl_fixture(workspace, store_root)?;
+    seed_minimal_impl_fixture(store_root)?;
 
     let session = SessionBuilder::new(workspace)
         .with_store_root(store_root)

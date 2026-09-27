@@ -265,7 +265,8 @@ pub use enricher::{
 };
 pub use error::{CordialError, CordialErrorKind, CordialResult, TokenStreamParseError};
 pub use etiquette::{
-    Etiquette, EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec,
+    After, BUILT_IN_ORDER, Before, BeforeMirror, DERIVE_RULE_IDS, Etiquette, EtiquetteExplain,
+    EtiquetteHooks, EtiquetteRuleExplain, LintConstraint, LintOrder, OrderExplain, QualityAreaSpec,
     QualityEtiquette, QualityReportArea, StaticEtiquette, StaticQualityEtiquette, lookup_etiquette,
     render_explain_list, render_explain_page,
 };

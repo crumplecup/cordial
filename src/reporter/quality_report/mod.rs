@@ -85,15 +85,16 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
         error_detail,
     )];
 
-    // Every other area comes from each quality etiquette's own
-    // QualityReportArea::quality_area() -- see crate::etiquettes::
-    // quality_report_areas(). An etiquette that declines (None) simply
-    // contributes no row; one that's missing from that registry entirely
-    // doesn't compile into quality_etiquettes() either, so there is no
-    // way for a registered etiquette to be silently absent from this
-    // report.
+    // Remaining areas come from each quality etiquette's quality_area(),
+    // ordered by LintOrder: the resolution chain from foreign error types
+    // through proof patterns.
+    let contributing: Vec<_> = crate::etiquettes::quality_report_etiquettes()
+        .into_iter()
+        .filter(|etiquette| etiquette.quality_area().is_some())
+        .collect();
+    let ordered = crate::etiquette::sort_quality_etiquettes(&contributing, &crate::BUILT_IN_ORDER);
     let mut priority = 2u8;
-    for etiquette in crate::etiquettes::quality_report_areas() {
+    for etiquette in ordered {
         let Some(spec) = etiquette.quality_area() else {
             continue;
         };

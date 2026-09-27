@@ -1,6 +1,7 @@
 //! Crate error: parent boxes a Kind; Kind variants are native sources.
 
 mod io;
+mod lint_order;
 mod local;
 mod parse;
 
@@ -8,6 +9,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::path::{PathBuf, StripPrefixError};
 
 use io::{FmtSource, IoSource, PrefixSource};
+use lint_order::{LintOrderCycleSource, LintOrderDanglingSource, LintOrderUnknownConstraintSource};
 use local::{
     BuilderSource, CargoMetadataSource, InvariantSource, MissingRustdocJsonSource,
     NoCachedIrSource, NoExceptionsSource, NotFoundSource, OpenFindingsSource,
@@ -63,6 +65,12 @@ pub enum CordialErrorKind {
     OpenFindings(OpenFindingsSource),
     /// A path was not a prefix of another.
     Prefix(PrefixSource),
+    /// Built-in or plugin lint-order constraints contain a cycle.
+    LintOrderCycle(LintOrderCycleSource),
+    /// An `After` edge names an id that is not in the known set.
+    LintOrderDangling(LintOrderDanglingSource),
+    /// A constraint's own id is not in the known set.
+    LintOrderUnknownConstraint(LintOrderUnknownConstraintSource),
 }
 
 /// Result alias that uses [`CordialError`].
@@ -179,6 +187,31 @@ impl CordialError {
             count,
         )))
     }
+
+    /// Lint-order `After` edges contain a cycle.
+    #[track_caller]
+    #[instrument(level = "debug")]
+    pub fn lint_order_cycle() -> Self {
+        Self::from_kind(CordialErrorKind::LintOrderCycle(LintOrderCycleSource::new()))
+    }
+
+    /// `from` names `missing`, which is not in the known lint-id set.
+    #[track_caller]
+    #[instrument(level = "debug", skip(from, missing))]
+    pub fn lint_order_dangling(from: impl Into<String>, missing: impl Into<String>) -> Self {
+        Self::from_kind(CordialErrorKind::LintOrderDangling(
+            LintOrderDanglingSource::new(from, missing),
+        ))
+    }
+
+    /// Constraint `id` is not in the known lint-id set.
+    #[track_caller]
+    #[instrument(level = "debug", skip(id))]
+    pub fn lint_order_unknown_constraint(id: impl Into<String>) -> Self {
+        Self::from_kind(CordialErrorKind::LintOrderUnknownConstraint(
+            LintOrderUnknownConstraintSource::new(id),
+        ))
+    }
 }
 
 impl Display for CordialError {
@@ -209,7 +242,10 @@ impl std::error::Error for CordialError {
             | CordialErrorKind::NoExceptions(_)
             | CordialErrorKind::NoCachedIr(_)
             | CordialErrorKind::MissingRustdocJson(_)
-            | CordialErrorKind::OpenFindings(_) => None,
+            | CordialErrorKind::OpenFindings(_)
+            | CordialErrorKind::LintOrderCycle(_)
+            | CordialErrorKind::LintOrderDangling(_)
+            | CordialErrorKind::LintOrderUnknownConstraint(_) => None,
         }
     }
 }
@@ -236,6 +272,9 @@ impl Display for CordialErrorKind {
             Self::MissingRustdocJson(source) => source.fmt(formatter),
             Self::OpenFindings(source) => source.fmt(formatter),
             Self::Prefix(source) => source.fmt(formatter),
+            Self::LintOrderCycle(source) => source.fmt(formatter),
+            Self::LintOrderDangling(source) => source.fmt(formatter),
+            Self::LintOrderUnknownConstraint(source) => source.fmt(formatter),
         }
     }
 }

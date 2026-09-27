@@ -8,6 +8,8 @@
 
 mod explain;
 mod hooks;
+mod order;
+mod order_table;
 mod quality;
 mod static_table;
 mod traits;
@@ -17,6 +19,11 @@ pub use explain::{
     render_explain_page,
 };
 pub use hooks::EtiquetteHooks;
+pub(crate) use order::sort_quality_etiquettes;
+pub use order::{
+    After, BUILT_IN_ORDER, Before, BeforeMirror, DERIVE_RULE_IDS, LintConstraint, LintOrder,
+    OrderExplain,
+};
 pub use quality::{QualityAreaSpec, QualityEtiquette, QualityReportArea};
 pub(crate) use quality::{count_open_category, count_open_rule, finding_field, open_findings};
 pub use static_table::{StaticEtiquette, StaticQualityEtiquette};
