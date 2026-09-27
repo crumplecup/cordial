@@ -7,6 +7,7 @@ use std::process::Command;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
+use crate::amenable_dump_registry::AMENABLE_DUMP_REGISTRY_FEATURES;
 use crate::error::{CordialError, CordialResult};
 use crate::framework_std::match_impl::{type_has_trait_impl, type_path_without_generics};
 
@@ -27,17 +28,6 @@ const RUST_STD_STANDARD_PREFIXES: &[&str] =
 const EXT_STANDARD_PREFIX: &str = "amenable_ext::ExtStandard<";
 const PROOF_CHAIN_EXT_STANDARD_PREFIX: &str = "ExtStandard<";
 const EXT_STANDARD_PREFIXES: &[&str] = &[EXT_STANDARD_PREFIX, PROOF_CHAIN_EXT_STANDARD_PREFIX];
-
-/// Features passed to `cargo run -p amenable -- dump-registry`.
-///
-/// `std` and `amenable-ext-jiff` coverage share this one cached dump (see
-/// `registry_dump_path`), so the list has to be a superset of every active
-/// coverage plugin's needs, not just the one that happens to run first —
-/// `jiff` links `amenable_ext`'s `ExtStandard<T>` registrations into the
-/// dump binary alongside `creusot`/`verus`'s own `RustStdStandard<T>`
-/// witnesses. A future ext target (e.g. chrono) adds its own activating
-/// feature name here too.
-pub const AMENABLE_DUMP_REGISTRY_FEATURES: &str = "creusot,verus,jiff";
 
 /// Serializable dump of a std-family coverage registry.
 #[derive(

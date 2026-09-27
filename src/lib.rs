@@ -27,6 +27,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod amenable_dump_registry;
 mod cache_digest;
 #[cfg(feature = "rustdoc")]
 mod cargo_rustdoc;

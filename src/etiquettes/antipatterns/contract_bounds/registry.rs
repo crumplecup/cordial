@@ -4,13 +4,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
 
+use crate::amenable_dump_registry::AMENABLE_DUMP_REGISTRY_FEATURES;
 use crate::error::{CordialError, CordialResult};
 use crate::store::StoreLayout;
 
 use super::index::{ContractRecordDump, RegistryDump};
 
 use tracing::instrument;
-const AMENABLE_DUMP_REGISTRY_FEATURES: &str = "creusot,verus";
 
 static CONTRACT_RECORDS_CACHE: Mutex<Option<(PathBuf, Vec<ContractRecordDump>)>> = Mutex::new(None);
 
