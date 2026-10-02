@@ -211,6 +211,64 @@ impl Finding for FilteredFinding {
     }
 }
 
+/// An exception row that suppressed no finding in the run it was checked against.
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
+pub struct StaleException {
+    /// Etiquette whose exception set holds the row.
+    etiquette: String,
+    /// The row that matched nothing.
+    entry: ExceptionEntry,
+}
+
+/// Rows in `sets` that match no finding of their etiquette in `findings`.
+///
+/// Call with the findings of one crate and that crate's sets. A row an earlier
+/// row shadows is still live as long as some finding matches it. Results are
+/// ordered by etiquette, then file position.
+#[instrument(level = "debug", skip(findings, sets))]
+pub fn stale_exceptions(
+    findings: &[&dyn Finding],
+    sets: &HashMap<String, ExceptionSet>,
+) -> Vec<StaleException> {
+    let mut etiquettes: Vec<&String> = sets.keys().collect();
+    etiquettes.sort();
+    let mut stale = Vec::new();
+    for etiquette in etiquettes {
+        for entry in &sets[etiquette].entries {
+            let live = findings
+                .iter()
+                .any(|finding| finding.rule().category() == etiquette && entry.matches(*finding));
+            if !live {
+                stale.push(StaleException::new(etiquette.clone(), entry.clone()));
+            }
+        }
+    }
+    stale
+}
+
+/// Log a warning for each row in `sets` that matches no finding in `findings`.
+#[instrument(level = "debug", skip(findings, sets))]
+pub fn warn_stale_exceptions(
+    crate_name: &str,
+    findings: &[Box<dyn Finding>],
+    sets: &HashMap<String, ExceptionSet>,
+) {
+    let finding_refs: Vec<&dyn Finding> = findings.iter().map(Box::as_ref).collect();
+    for stale in stale_exceptions(&finding_refs, sets) {
+        let entry = stale.entry();
+        tracing::warn!(
+            crate_name,
+            etiquette = %stale.etiquette(),
+            file = %entry.file(),
+            line = ?entry.line(),
+            rule_id = ?entry.rule_id(),
+            context = ?entry.context(),
+            reason = %entry.reason(),
+            "exception matches no finding; remove or edit it with `cordial exceptions`"
+        );
+    }
+}
+
 /// Apply loaded exception sets, wrapping matching findings as suppressed.
 #[instrument(level = "debug", skip(findings, sets))]
 pub fn apply_exception_sets(

@@ -374,6 +374,11 @@ fn assess_targets(
 
         let exception_sets =
             crate::exceptions::load_exception_sets(store, etiquette_ids, target.crate_name())?;
+        crate::exceptions::warn_stale_exceptions(
+            target.crate_name(),
+            &crate_findings,
+            &exception_sets,
+        );
         crate_findings = crate::exceptions::apply_exception_sets(crate_findings, &exception_sets);
         all_findings.extend(crate_findings);
         progress.inc(1);
