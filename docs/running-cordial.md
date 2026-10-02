@@ -126,6 +126,30 @@ cordial exceptions add --patch-set chrono --path chrono::DateTime --reason "upst
 store back into the repo registry. The same append is available from the
 library as `add_exception` and `add_coverage_skip`.
 
+Remove or correct one quality row without hand-editing JSON. Select the row
+with any combination of `--rule-id`, `--context`, `--file`, and `--line`; the
+selector must match exactly one row, or the command errors and changes nothing
+(an ambiguous match lists the candidate rows):
+
+```sh
+cordial exceptions remove visibility --rule-id VISIBILITY-A --context ext::jiff
+cordial exceptions edit visibility --context ext::jiff \
+    --new-context jiff --new-file src/jiff/mod.rs
+```
+
+`edit` keeps the row's position and any field you do not replace; an empty
+`--new-rule-id` or `--new-context` clears that field. Removing the last row of a
+crate's file deletes the file, so the next `backup` leaves no stale copy in the
+registry. The library equivalents are `remove_exception` and
+`update_exception`.
+
+Exceptions match findings exactly (`context` included), so a refactor that
+renames a module silently disables an exception. Every `run` and `quality`
+logs a warning for each exception that matched no finding of its etiquette
+(`exception matches no finding; remove or edit it`), naming the crate, file,
+rule id, context, and reason. Fix it with `edit`, or `remove` it when the
+condition it covered no longer exists.
+
 ## Quality
 
 `cordial quality` runs every source-quality etiquette compiled into the binary.

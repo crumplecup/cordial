@@ -22,6 +22,7 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 | [cordial.toml config](docs/planning/cordial-config.md) | **Reference** | Layered config, built-in etiquette thresholds, and enabled gates |
 | [Etiquette explain](docs/planning/etiquette-explain.md) | **Reference** | Required `Etiquette::explain`; `cordial explain [id]`; rule ids alias the page |
 | [Custom plugin example](docs/planning/custom-plugin-example.md) | **Reference** | Downstream templates: `StaticPlugin`, `Coverage`, `ErrorHandling` |
+| [Exceptions remove / edit](docs/planning/exceptions-remove-edit.md) | **Active** | `cordial exceptions remove` / `edit` with unique selectors; stale-exception warnings on run |
 
 ## Plugin families
 

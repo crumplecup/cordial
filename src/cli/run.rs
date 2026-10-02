@@ -6,12 +6,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::{
-    AddExceptionOutcome, CordialError, CordialResult, CoverageSkipEntry, CrateIr, Disposition,
-    ExceptionEntry, Finding, NamedRunFilter, Plugin, ProgressSink, RunAll, RunFilter, RunOutcome,
-    Session, SessionBuilder, StoreLayout, SurrealGraphExport, add_coverage_skip, add_exception,
-    all_plugins, backup_exception_files, default_store_home, etiquettes_from_plugins,
-    load_exception_files, load_exceptions, lookup_etiquette, render_explain_list,
-    render_explain_page, resolve_exceptions_root, run_tracing_instrument_apply,
+    CordialError, CordialResult, CrateIr, Disposition, Finding, NamedRunFilter, Plugin,
+    ProgressSink, RunAll, RunFilter, RunOutcome, Session, SessionBuilder, StoreLayout,
+    SurrealGraphExport, all_plugins, default_store_home, etiquettes_from_plugins, lookup_etiquette,
+    render_explain_list, render_explain_page, run_tracing_instrument_apply,
 };
 use tracing::instrument;
 
@@ -293,150 +291,6 @@ pub(super) fn view_store_file(store: &StoreLayout, path: &Path) -> CordialResult
     }
     let bytes = fs::read(&full)?;
     io::stdout().write_all(&bytes)?;
-    Ok(())
-}
-
-#[instrument(level = "debug", skip(store), err(level = "warn"))]
-pub(super) fn execute_backup_exceptions(
-    project_root: &Path,
-    store: &StoreLayout,
-    root: &Path,
-) -> CordialResult<()> {
-    let backup_root = resolve_exceptions_root(project_root, root);
-    let copied = backup_exception_files(store, &backup_root)?;
-    tracing::info!(
-        copied,
-        path = %backup_root.join(store.project_slug()).display(),
-        "backed up exception files"
-    );
-    Ok(())
-}
-
-#[instrument(level = "debug", skip(store), err(level = "warn"))]
-pub(super) fn execute_load_exceptions(
-    project_root: &Path,
-    store: &StoreLayout,
-    root: &Path,
-) -> CordialResult<()> {
-    let backup_root = resolve_exceptions_root(project_root, root);
-    let copied = load_exception_files(store, &backup_root)?;
-    tracing::info!(
-        copied,
-        path = %backup_root.join(store.project_slug()).display(),
-        "loaded exception files"
-    );
-    Ok(())
-}
-
-#[instrument(level = "debug", skip(store, entry), err(level = "warn"))]
-pub(super) fn execute_add_exception(
-    store: &StoreLayout,
-    etiquette: &str,
-    crate_name: &str,
-    entry: ExceptionEntry,
-) -> CordialResult<()> {
-    print_add_outcome(add_exception(store, etiquette, crate_name, entry)?)
-}
-
-#[instrument(level = "debug", skip(store, entry), err(level = "warn"))]
-pub(super) fn execute_add_coverage_skip(
-    store: &StoreLayout,
-    patch_set: &str,
-    entry: CoverageSkipEntry,
-) -> CordialResult<()> {
-    print_add_outcome(add_coverage_skip(store, patch_set, entry)?)
-}
-
-#[instrument(level = "debug", skip(outcome))]
-fn print_add_outcome(outcome: AddExceptionOutcome) -> CordialResult<()> {
-    let verb = if outcome.inserted() {
-        "added"
-    } else {
-        "already present"
-    };
-    tracing::info!(verb, path = %outcome.path().display(), "exception row");
-    Ok(())
-}
-
-#[instrument(level = "debug", skip(store), err(level = "warn"))]
-pub(super) fn list_exceptions(store: &StoreLayout) -> CordialResult<()> {
-    let mut files = Vec::new();
-    let exceptions_dir = store.exceptions_dir();
-    if exceptions_dir.is_dir() {
-        collect_files(&exceptions_dir, &exceptions_dir, &mut files, "exceptions")?;
-    }
-    let quality_patches_dir = store.quality_patches_dir();
-    if quality_patches_dir.is_dir() {
-        collect_files(
-            &quality_patches_dir,
-            &quality_patches_dir,
-            &mut files,
-            "quality/patches",
-        )?;
-    }
-    let patches_dir = store.patches_dir();
-    if patches_dir.is_dir() {
-        collect_files(&patches_dir, &patches_dir, &mut files, "patches")?;
-    }
-    files.sort();
-    if files.is_empty() {
-        tracing::warn!(
-            exceptions = %exceptions_dir.display(),
-            quality_patches = %quality_patches_dir.display(),
-            patches = %patches_dir.display(),
-            "no exception files"
-        );
-        return Ok(());
-    }
-    for path in files {
-        writeln!(io::stdout(), "{}", path.display())?;
-    }
-    Ok(())
-}
-
-#[instrument(level = "debug", err(level = "warn"))]
-fn collect_files(
-    base: &Path,
-    current: &Path,
-    out: &mut Vec<PathBuf>,
-    prefix: &str,
-) -> CordialResult<()> {
-    for entry in fs::read_dir(current)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_files(base, &path, out, prefix)?;
-        } else if path.extension().is_some_and(|ext| ext == "json") {
-            let rel = path.strip_prefix(base)?;
-            out.push(PathBuf::from(prefix).join(rel));
-        }
-    }
-    Ok(())
-}
-
-#[instrument(level = "debug", skip(store), err(level = "warn"))]
-pub(super) fn show_exceptions(
-    store: &StoreLayout,
-    etiquette: &str,
-    crate_name: &str,
-) -> CordialResult<()> {
-    let set = load_exceptions(store, etiquette, crate_name)?;
-    if set.is_empty() {
-        return Err(CordialError::no_exceptions(etiquette, crate_name));
-    }
-    let file_name = format!("{crate_name}.json");
-    let canonical = store.exceptions_dir().join(etiquette).join(&file_name);
-    let alias = store.quality_patches_dir().join(etiquette).join(&file_name);
-    let path = if canonical.is_file() {
-        canonical
-    } else {
-        alias
-    };
-    let bytes = fs::read(&path)?;
-    io::stdout().write_all(&bytes)?;
-    if !bytes.ends_with(b"\n") {
-        writeln!(io::stdout())?;
-    }
     Ok(())
 }
 

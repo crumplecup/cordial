@@ -9,6 +9,7 @@ use tracing::instrument;
 use crate::{CordialResult, ProgressSink, StoreLayout, default_store_home, project_slug_from_path};
 
 mod commands;
+mod exceptions;
 mod progress;
 mod run;
 

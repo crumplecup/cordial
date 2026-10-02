@@ -5,14 +5,15 @@ use std::sync::Arc;
 
 use clap::Subcommand;
 
-use super::run::{
+use super::exceptions::{
     execute_add_coverage_skip, execute_add_exception, execute_backup_exceptions,
-    execute_load_exceptions, execute_quality_apply, execute_run_plugins, export_surreal,
-    list_exceptions, show_exceptions, view_store_file,
+    execute_edit_exception, execute_load_exceptions, execute_remove_exception, list_exceptions,
+    show_exceptions,
 };
+use super::run::{execute_quality_apply, execute_run_plugins, export_surreal, view_store_file};
 use crate::{
     CordialError, CordialResult, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,
-    ProgressSink, StoreLayout, all_plugins, quality_plugins,
+    ExceptionSelector, ExceptionUpdate, ProgressSink, StoreLayout, all_plugins, quality_plugins,
 };
 use tracing::instrument;
 
@@ -134,6 +135,114 @@ pub enum ExceptionCommands {
         #[arg(long)]
         reason: String,
     },
+    /// Delete exactly one quality exception row (errors on zero or several matches).
+    Remove {
+        /// Which row to remove.
+        #[command(flatten)]
+        target: ExceptionTargetArgs,
+    },
+    /// Correct one quality exception row in place (errors on zero or several matches).
+    Edit {
+        /// Which row to edit.
+        #[command(flatten)]
+        target: ExceptionTargetArgs,
+        /// New values for the selected row.
+        #[command(flatten)]
+        new: ExceptionNewArgs,
+    },
+}
+
+/// Selects one quality exception row: etiquette, crate, and row fields.
+#[derive(clap::Args)]
+pub struct ExceptionTargetArgs {
+    /// Quality etiquette id (for example `panics`).
+    etiquette: String,
+    /// Crate name (default: `--crate-name` or the project directory).
+    #[arg(long)]
+    crate_name: Option<String>,
+    /// Select the row with this rule id.
+    #[arg(long)]
+    rule_id: Option<String>,
+    /// Select the row with this context / qualified name.
+    #[arg(long)]
+    context: Option<String>,
+    /// Select the row with this source file.
+    #[arg(long)]
+    file: Option<String>,
+    /// Select the row with this line.
+    #[arg(long)]
+    line: Option<u32>,
+}
+
+/// Replacement values for `exceptions edit`; unset fields keep their value.
+#[derive(clap::Args)]
+pub struct ExceptionNewArgs {
+    /// Replacement source file.
+    #[arg(long)]
+    new_file: Option<String>,
+    /// Replacement line.
+    #[arg(long)]
+    new_line: Option<u32>,
+    /// Replacement rule id (empty clears it).
+    #[arg(long)]
+    new_rule_id: Option<String>,
+    /// Replacement context / qualified name (empty clears it).
+    #[arg(long)]
+    new_context: Option<String>,
+    /// Replacement reason.
+    #[arg(long)]
+    new_reason: Option<String>,
+}
+
+impl ExceptionTargetArgs {
+    #[instrument(level = "trace", skip(self))]
+    fn selector(&self) -> ExceptionSelector {
+        let mut selector = ExceptionSelector::default();
+        if let Some(file) = &self.file {
+            selector = selector.with_file(file.clone());
+        }
+        if let Some(line) = self.line {
+            selector = selector.with_line(line);
+        }
+        if let Some(rule_id) = &self.rule_id {
+            selector = selector.with_rule_id(rule_id.clone());
+        }
+        if let Some(context) = &self.context {
+            selector = selector.with_context(context.clone());
+        }
+        selector
+    }
+
+    #[instrument(level = "trace", skip(self, ctx))]
+    fn crate_name(&self, ctx: &ActCtx) -> String {
+        self.crate_name
+            .clone()
+            .or_else(|| ctx.crate_name.clone())
+            .unwrap_or_else(|| ctx.store.project_slug().clone())
+    }
+}
+
+impl ExceptionNewArgs {
+    #[instrument(level = "trace", skip(self))]
+    fn update(self) -> ExceptionUpdate {
+        let mut update = ExceptionUpdate::default();
+        if let Some(file) = self.new_file {
+            update = update.with_file(file);
+        }
+        if let Some(line) = self.new_line {
+            update = update.with_line(line);
+        }
+        if let Some(rule_id) = self.new_rule_id {
+            update = update.with_rule_id(rule_id);
+        }
+        if let Some(context) = self.new_context {
+            update = update.with_context(context);
+        }
+        if let Some(reason) = self.new_reason {
+            update = update.with_reason(reason);
+        }
+        update
+    }
 }
 
 #[derive(Subcommand)]
@@ -314,6 +423,19 @@ impl ExceptionCommands {
                     execute_add_exception(&ctx.store, &etiquette, &crate_name, entry)
                 }
             }
+            Self::Remove { target } => execute_remove_exception(
+                &ctx.store,
+                &target.etiquette,
+                &target.crate_name(ctx),
+                &target.selector(),
+            ),
+            Self::Edit { target, new } => execute_edit_exception(
+                &ctx.store,
+                &target.etiquette,
+                &target.crate_name(ctx),
+                &target.selector(),
+                &new.update(),
+            ),
         }
     }
 }

@@ -508,6 +508,91 @@ fn cli_exceptions_add_writes_quality_and_coverage_rows() -> miette::Result<()> {
 }
 
 #[test]
+fn cli_exceptions_edit_and_remove_change_one_row() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    write_minimal_crate(fixture.path(), "pub fn ok() {}")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store tempdir")?;
+    let slug = cordial::project_slug_from_path(fixture.path());
+    let quality = store_home
+        .path()
+        .join(&slug)
+        .join("exceptions/panics/demo.json");
+
+    let run = |extra: &[&str]| -> miette::Result<std::process::Output> {
+        let mut args = vec![
+            "--project",
+            utf8_path(fixture.path())?,
+            "--store-home",
+            utf8_path(store_home.path())?,
+            "--crate-name",
+            "demo",
+            "exceptions",
+        ];
+        args.extend_from_slice(extra);
+        cordial_command()
+            .args(args)
+            .output()
+            .into_diagnostic()
+            .wrap_err("cordial exceptions")
+    };
+
+    for (context, reason) in [("ext::a", "first"), ("ext::b", "second")] {
+        let added = run(&[
+            "add",
+            "panics",
+            "--file",
+            "src/lib.rs",
+            "--rule-id",
+            "PANIC-SOURCE-PANIC",
+            "--context",
+            context,
+            "--reason",
+            reason,
+        ])?;
+        assert!(added.status.success());
+    }
+
+    let ambiguous = run(&["remove", "panics", "--rule-id", "PANIC-SOURCE-PANIC"])?;
+    assert!(!ambiguous.status.success());
+    assert!(String::from_utf8_lossy(&ambiguous.stderr).contains("2 exceptions"));
+
+    let edited = run(&[
+        "edit",
+        "panics",
+        "--context",
+        "ext::a",
+        "--new-context",
+        "a",
+    ])?;
+    assert!(
+        edited.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&edited.stderr)
+    );
+    let body = fs::read_to_string(&quality)
+        .into_diagnostic()
+        .wrap_err("read")?;
+    assert!(body.contains("\"context\": \"a\""));
+    assert!(!body.contains("ext::a"));
+
+    let removed = run(&["remove", "panics", "--context", "ext::b"])?;
+    assert!(removed.status.success());
+    let body = fs::read_to_string(&quality)
+        .into_diagnostic()
+        .wrap_err("read")?;
+    assert!(!body.contains("second"));
+    assert!(body.contains("first"));
+
+    let last = run(&["remove", "panics", "--context", "a"])?;
+    assert!(last.status.success());
+    assert!(!quality.exists());
+    Ok(())
+}
+
+#[test]
 fn cli_explain_lists_compiled_etiquettes() -> miette::Result<()> {
     cordial::init_tracing();
     let output = cordial_command()
