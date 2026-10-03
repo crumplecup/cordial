@@ -10,6 +10,7 @@ mod cfg;
 mod checks;
 mod gates;
 mod modularity;
+mod pageantry;
 mod tracing;
 mod visibility;
 
@@ -27,6 +28,7 @@ pub use self::checks::{
 };
 pub use self::gates::EtiquetteGate;
 pub use self::modularity::ModularityThresholds;
+pub use self::pageantry::PageantryThresholds;
 pub use self::tracing::{
     TracingBoundaryPolicy, TracingStdioPolicy, TracingSubscriberPolicy, TracingThresholds,
 };
@@ -84,7 +86,7 @@ pub struct CordialConfig {
     #[serde(default)]
     proof_patterns: EtiquetteGate,
     #[serde(default)]
-    pageantry: EtiquetteGate,
+    pageantry: PageantryThresholds,
     #[serde(rename = "impl-coverage", default)]
     impl_coverage: EtiquetteGate,
     #[serde(default)]

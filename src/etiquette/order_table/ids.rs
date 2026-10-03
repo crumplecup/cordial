@@ -211,6 +211,8 @@ pub(super) const PAGEANTRY_RULE_IDS: &[&str] = &[
     "PAGEANTRY-TRAIT-001",
     #[cfg(feature = "pageantry")]
     "PAGEANTRY-BARREL-001",
+    #[cfg(feature = "pageantry")]
+    "PAGEANTRY-BARREL-SHIM-001",
 ];
 
 pub(super) const DEPENDENCY_FRESHNESS_RULE_IDS: &[&str] = &[

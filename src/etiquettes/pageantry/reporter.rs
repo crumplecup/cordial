@@ -3,7 +3,9 @@ use std::collections::BTreeMap;
 use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
-use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
+use crate::objects::{Artifact, Finding, MapFindingSink, Rule, TextArtifact};
+
+use super::types::{PageantryRule, PageantryRuleId};
 
 use tracing::instrument;
 
@@ -135,7 +137,9 @@ impl Reporter for PageantryChecklistReporter {
              header. A run of traits at the top is fine; a trait after types \
              have already started is not. `lib.rs` and `mod.rs` may only \
              declare modules and re-exports — move types and functions into a \
-             named sibling file (`foo.rs`).\n\n",
+             named sibling file (`foo.rs`). A proc-macro entry point may stay in \
+             the crate root, but only as a short shim that delegates to a named \
+             file.\n\n",
         );
 
         for crate_name in crate_names(&open) {
@@ -153,6 +157,9 @@ impl Reporter for PageantryChecklistReporter {
 
             for (rule_id, entries) in by_rule {
                 body.push_str(&format!("### {rule_id}\n\n"));
+                if let Some(rule) = PageantryRuleId::from_attr(&rule_id) {
+                    body.push_str(&format!("{}\n\n", PageantryRule::new(rule).description()));
+                }
                 for entry in entries {
                     body.push_str(&format!(
                         "- [ ] `{}` — `{}:{}` — `{}`\n",
@@ -197,7 +204,7 @@ impl Reporter for PageantrySummaryReporter {
         body.push_str("# Pageantry summary\n\n");
         body.push_str("---\n\n");
         body.push_str(&format!(
-            "Workspace totals: **{total}** pageantry items (misplaced traits and barrel declarations).\n\n"
+            "Workspace totals: **{total}** pageantry items (misplaced traits, barrel declarations, and oversized proc-macro shims).\n\n"
         ));
         body.push_str("| Crate | Open items |\n");
         body.push_str("| --- | ---: |\n");

@@ -16,6 +16,8 @@ pub enum PageantryRuleId {
     Trait001,
     /// A type or function declaration in `lib.rs` or `mod.rs`.
     Barrel001,
+    /// A proc-macro entry point in `lib.rs` or `mod.rs` whose body is more than a shim.
+    BarrelShim001,
 }
 
 impl PageantryRuleId {
@@ -25,6 +27,7 @@ impl PageantryRuleId {
         match self {
             Self::Trait001 => "PAGEANTRY-TRAIT-001",
             Self::Barrel001 => "PAGEANTRY-BARREL-001",
+            Self::BarrelShim001 => "PAGEANTRY-BARREL-SHIM-001",
         }
     }
 
@@ -34,6 +37,7 @@ impl PageantryRuleId {
         match value {
             "PAGEANTRY-TRAIT-001" => Some(Self::Trait001),
             "PAGEANTRY-BARREL-001" => Some(Self::Barrel001),
+            "PAGEANTRY-BARREL-SHIM-001" => Some(Self::BarrelShim001),
             _ => None,
         }
     }
@@ -70,6 +74,9 @@ impl Rule for PageantryRule {
             }
             PageantryRuleId::Barrel001 => {
                 "`lib.rs` / `mod.rs` may only declare modules and re-exports — move types and functions into a named sibling file"
+            }
+            PageantryRuleId::BarrelShim001 => {
+                "proc-macro entry points must stay at the crate root, but the root should only delegate — keep the body within the shim line limit and move the logic into a named sibling file"
             }
         }
     }

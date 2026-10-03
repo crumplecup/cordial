@@ -9,17 +9,22 @@
 //!
 //! **Flags.** A trait definition after the leading trait block as
 //! `PAGEANTRY-TRAIT-001`. A type or function declaration in `lib.rs` or
-//! `mod.rs` as `PAGEANTRY-BARREL-001`.
+//! `mod.rs` as `PAGEANTRY-BARREL-001`. A proc-macro entry point in a barrel
+//! whose body is longer than the shim limit as `PAGEANTRY-BARREL-SHIM-001`.
 //!
 //! **Ignores.** `use`, `extern crate`, and `mod` declarations are treated as
 //! the file header (and as the only legal items in a barrel file). Several
 //! traits in a row just below that header are valid. `#[cfg(test)]` items
-//! are skipped.
+//! are skipped. `#[proc_macro]`, `#[proc_macro_derive]`, and
+//! `#[proc_macro_attribute]` functions, which rustc requires at a
+//! proc-macro crate root, are allowed in a barrel as long as they stay
+//! shims (short bodies that delegate to a named file).
 //!
 //! **Outputs.** `{store}/findings/pageantry.checklist.md`,
 //! `pageantry-summary.md`, and CSV.
 //!
-//! **Config.** `[pageantry] enabled = false` opts out in `cordial.toml`.
+//! **Config.** `[pageantry]` in `cordial.toml`: `enabled`, a per-rule
+//! switch (`trait_block`, `barrel`, `barrel_shim`), and `max_shim_lines`.
 //! Register [`PAGEANTRY_ETIQUETTE`] on a [`crate::Session`]. Policy:
 //! `docs/planning/pageantry-etiquette.md`.
 
@@ -28,6 +33,7 @@ mod enricher;
 mod probe;
 mod reporter;
 mod scan;
+mod shim;
 mod types;
 
 pub use assessor::PageantryAssessor;
@@ -74,8 +80,8 @@ pub static PAGEANTRY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette:
         EtiquetteExplain::new(
             "Are traits at the top of the file, and are lib.rs / mod.rs only modules and re-exports?",
             "Contracts belong at the top of the file. A crate or directory index is a table of contents: visibility and re-exports, not types or functions.",
-            "Walks each file and inline mod item list in source order. use / extern crate / mod are header. A run of traits at the front is fine. After any other item (struct, enum, impl, fn, …), every later trait is PAGEANTRY-TRAIT-001. Files named lib.rs or mod.rs may contain only those header items; any other item is PAGEANTRY-BARREL-001. #[cfg(test)] items are skipped.",
-            "`[pageantry] enabled = false` in cordial.toml.",
+            "Walks each file and inline mod item list in source order. use / extern crate / mod are header. A run of traits at the front is fine. After any other item (struct, enum, impl, fn, …), every later trait is PAGEANTRY-TRAIT-001. Files named lib.rs or mod.rs may contain only those header items; any other item is PAGEANTRY-BARREL-001. #[cfg(test)] items are skipped, and so are #[proc_macro], #[proc_macro_derive], and #[proc_macro_attribute] functions are exempt from BARREL-001 because rustc requires them at a proc-macro crate root, but their bodies must stay shims: more than max_shim_lines lines between the braces is PAGEANTRY-BARREL-SHIM-001 (move the logic to a named file and delegate).",
+            "`[pageantry] enabled = false` in cordial.toml turns the etiquette off. `trait_block`, `barrel`, and `barrel_shim` (all default true) turn single rules off; `max_shim_lines` (default 8) sets the shim size limit.",
             &[
                 EtiquetteRuleExplain::new(
                     "PAGEANTRY-TRAIT-001",
@@ -84,6 +90,10 @@ pub static PAGEANTRY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette:
                 EtiquetteRuleExplain::new(
                     "PAGEANTRY-BARREL-001",
                     "A type or function declaration in lib.rs or mod.rs",
+                ),
+                EtiquetteRuleExplain::new(
+                    "PAGEANTRY-BARREL-SHIM-001",
+                    "A proc-macro entry point in lib.rs or mod.rs whose body is longer than max_shim_lines",
                 ),
             ],
         ),
@@ -100,8 +110,11 @@ pub static PAGEANTRY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette:
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let traits = count_open_rule(findings, "PAGEANTRY-TRAIT-001");
     let barrels = count_open_rule(findings, "PAGEANTRY-BARREL-001");
+    let shims = count_open_rule(findings, "PAGEANTRY-BARREL-SHIM-001");
     (
-        traits + barrels,
-        format!("misplaced traits **{traits}**, barrel items **{barrels}**"),
+        traits + barrels + shims,
+        format!(
+            "misplaced traits **{traits}**, barrel items **{barrels}**, oversized shims **{shims}**"
+        ),
     )
 }

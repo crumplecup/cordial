@@ -5,19 +5,24 @@ use std::path::Path;
 use syn::File;
 use syn::spanned::Spanned;
 
+use crate::config::PageantryThresholds;
 use crate::error::CordialResult;
 use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
 
+use super::shim::{proc_macro_entry_attr, shim_overflow};
 use super::types::{PageantryRuleId, PageantrySiteRecord};
 
 use tracing::instrument;
 
-/// Scan one crate for misplaced trait definitions.
-#[instrument(level = "debug", err(level = "warn"))]
-pub fn scan_crate_pageantry(crate_root: &Path) -> CordialResult<Vec<PageantrySiteRecord>> {
+/// Scan one crate for misplaced traits and logic in barrel files.
+#[instrument(level = "debug", skip(thresholds), err(level = "warn"))]
+pub fn scan_crate_pageantry(
+    crate_root: &Path,
+    thresholds: &PageantryThresholds,
+) -> CordialResult<Vec<PageantrySiteRecord>> {
     let mut findings = Vec::new();
     for tree_root in quality_scan_trees(crate_root) {
-        findings.extend(scan_source_tree(&tree_root, crate_root)?);
+        findings.extend(scan_source_tree(&tree_root, crate_root, thresholds)?);
     }
 
     findings.sort_by(|a, b| {
@@ -30,10 +35,11 @@ pub fn scan_crate_pageantry(crate_root: &Path) -> CordialResult<Vec<PageantrySit
     Ok(findings)
 }
 
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(thresholds), err(level = "warn"))]
 pub fn scan_source_tree(
     tree_root: &Path,
     crate_root: &Path,
+    thresholds: &PageantryThresholds,
 ) -> CordialResult<Vec<PageantrySiteRecord>> {
     let mut findings = Vec::new();
     if !tree_root.is_dir() {
@@ -53,29 +59,32 @@ pub fn scan_source_tree(
             continue;
         }
         let source = std::fs::read_to_string(path)?;
-        findings.extend(scan_rust_source(&source, path, tree_root, crate_root)?);
+        findings.extend(scan_rust_source(
+            &source, path, tree_root, crate_root, thresholds,
+        )?);
     }
 
     Ok(findings)
 }
 
 /// Scan one Rust source file and return records.
-#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, file, thresholds), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,
     file: &Path,
     tree_root: &Path,
     crate_root: &Path,
+    thresholds: &PageantryThresholds,
 ) -> CordialResult<Vec<PageantrySiteRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
     let module_prefix = module_path_from_src_file(tree_root, file);
-    scan_syntax(&syntax, file, crate_root, &module_prefix)
+    scan_syntax(&syntax, file, crate_root, &module_prefix, thresholds)
 }
 
 #[instrument(
     level = "debug",
-    skip(syntax, file, crate_root, module_prefix),
+    skip(syntax, file, crate_root, module_prefix, thresholds),
     err(level = "warn")
 )]
 fn scan_syntax(
@@ -83,6 +92,7 @@ fn scan_syntax(
     file: &Path,
     crate_root: &Path,
     module_prefix: &[String],
+    thresholds: &PageantryThresholds,
 ) -> CordialResult<Vec<PageantrySiteRecord>> {
     let mut findings = Vec::new();
     walk_items(
@@ -91,6 +101,7 @@ fn scan_syntax(
         crate_root,
         module_prefix,
         is_barrel_file(file),
+        thresholds,
         &mut findings,
     )?;
     Ok(findings)
@@ -98,7 +109,7 @@ fn scan_syntax(
 
 #[instrument(
     level = "debug",
-    skip(items, file, crate_root, module_prefix, findings),
+    skip(items, file, crate_root, module_prefix, thresholds, findings),
     err(level = "warn")
 )]
 fn walk_items(
@@ -107,6 +118,7 @@ fn walk_items(
     crate_root: &Path,
     module_prefix: &[String],
     barrel: bool,
+    thresholds: &PageantryThresholds,
     findings: &mut Vec<PageantrySiteRecord>,
 ) -> CordialResult<()> {
     let mut body_started = false;
@@ -114,9 +126,12 @@ fn walk_items(
         if is_cfg_test(item_attrs(item)) {
             continue;
         }
-        if barrel && let Some((line, snippet)) = barrel_declaration(item) {
+        if barrel
+            && let Some((rule_id, line, snippet)) = barrel_hit(item, thresholds)
+            && thresholds.rule_enabled(rule_id.as_str())
+        {
             findings.push(site_record(
-                PageantryRuleId::Barrel001,
+                rule_id,
                 module_prefix,
                 file,
                 crate_root,
@@ -131,11 +146,19 @@ fn walk_items(
                 {
                     let mut nested_prefix = module_prefix.to_vec();
                     nested_prefix.push(item_mod.ident.to_string());
-                    walk_items(nested, file, crate_root, &nested_prefix, barrel, findings)?;
+                    walk_items(
+                        nested,
+                        file,
+                        crate_root,
+                        &nested_prefix,
+                        barrel,
+                        thresholds,
+                        findings,
+                    )?;
                 }
             }
             ItemClass::Trait { name, line } => {
-                if body_started {
+                if body_started && thresholds.rule_enabled(PageantryRuleId::Trait001.as_str()) {
                     findings.push(site_record(
                         PageantryRuleId::Trait001,
                         module_prefix,
@@ -161,6 +184,24 @@ fn is_barrel_file(file: &Path) -> bool {
         file.file_name().and_then(|name| name.to_str()),
         Some("lib.rs" | "mod.rs")
     )
+}
+
+/// The barrel rule that `item` breaks, if any.
+///
+/// A proc-macro entry point is exempt from `PAGEANTRY-BARREL-001`
+/// because rustc pins it to the crate root, but it must stay a shim:
+/// a body longer than `max_shim_lines` raises `PAGEANTRY-BARREL-SHIM-001`.
+#[instrument(level = "trace", skip(item, thresholds))]
+fn barrel_hit(
+    item: &syn::Item,
+    thresholds: &PageantryThresholds,
+) -> Option<(PageantryRuleId, u32, String)> {
+    if let syn::Item::Fn(item_fn) = item
+        && proc_macro_entry_attr(&item_fn.attrs).is_some()
+    {
+        return shim_overflow(item_fn, thresholds.max_shim_lines());
+    }
+    barrel_declaration(item).map(|(line, snippet)| (PageantryRuleId::Barrel001, line, snippet))
 }
 
 #[instrument(level = "trace", skip(item))]

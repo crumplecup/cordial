@@ -381,6 +381,12 @@ pub(super) const CONSTRAINTS: &[LintConstraint] = &[
         GLOB_IMPORT_RULE_IDS,
         PAGEANTRY_AFTER_GLOB_IMPORTS,
     ),
+    #[cfg(all(feature = "pageantry", feature = "glob_imports"))]
+    LintConstraint::new(
+        "PAGEANTRY-BARREL-SHIM-001",
+        GLOB_IMPORT_RULE_IDS,
+        PAGEANTRY_AFTER_GLOB_IMPORTS,
+    ),
     #[cfg(all(feature = "dependency_freshness", feature = "pageantry"))]
     LintConstraint::new(
         "DEPENDENCY-FRESHNESS-PATCH",

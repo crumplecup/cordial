@@ -48,6 +48,7 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 | [Inline tests](docs/planning/inline-tests-etiquette.md) | **Reference** | `#[cfg(test)]` / `#[test]` under `src/` belong in `tests/` |
 | [Modularity etiquette](docs/planning/modularity-etiquette.md) | **Reference** | Size, packing, hierarchy, file inventory, and extraction signals |
 | [Pageantry etiquette](docs/planning/pageantry-etiquette.md) | **Reference** | File-level type arrangement; traits belong in a leading block |
+| [Proc-macro barrel](docs/planning/proc-macro-barrel.md) | **Done** | Crate kind in the IR, plus a configurable shim check (`PAGEANTRY-BARREL-SHIM-001`) for proc-macro entry points in `lib.rs` |
 | [Proof patterns etiquette](docs/planning/proof-patterns-etiquette.md) | **Reference** | `assume` / `admit` / `external_body` / `uninterp` / `axiom` / `broadcast` visibility |
 | [Tracing etiquette](docs/planning/tracing-etiquette.md) | **Reference** | Classified instrumentation recipes, apply support, subscriber init, leftover stdio |
 | [Verus compiler warnings](docs/planning/verus-warnings-etiquette.md) | **Reference** | Post-process `verus` output; rustc never sees these diagnostics |

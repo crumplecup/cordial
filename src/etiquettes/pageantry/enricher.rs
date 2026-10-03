@@ -1,3 +1,4 @@
+use crate::config::load_session_config;
 use crate::enricher::{member_crate_root, resolve_parent};
 use crate::error::CordialResult;
 use crate::hooks::{EnrichView, IrEnricher};
@@ -32,7 +33,8 @@ impl IrEnricher for PageantryInventoryEnricher {
         };
 
         let crate_root = member_crate_root(source, session);
-        let records = scan_crate_pageantry(&crate_root)?;
+        let config = load_session_config(session);
+        let records = scan_crate_pageantry(&crate_root, config.pageantry())?;
 
         for record in records {
             let parent = resolve_parent(ir, record.context())?;

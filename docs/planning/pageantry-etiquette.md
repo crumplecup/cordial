@@ -41,6 +41,10 @@ content is not mixed into the parent walk.
 ```toml
 [pageantry]
 # enabled = true
+# trait_block = true      # PAGEANTRY-TRAIT-001
+# barrel = true           # PAGEANTRY-BARREL-001
+# barrel_shim = true      # PAGEANTRY-BARREL-SHIM-001
+# max_shim_lines = 8      # body lines allowed in a proc-macro entry point
 ```
 
 ## Design
@@ -67,6 +71,21 @@ sibling (`foo.rs`), not in the crate or directory index.
 | `pub struct Alpha;` in `mod.rs` | yes |
 | the same items in `foo.rs` | no — not a barrel filename |
 | item under `#[cfg(test)]` | no — skipped |
+| `#[proc_macro]` / `#[proc_macro_derive]` / `#[proc_macro_attribute]` fn in `lib.rs`, body within `max_shim_lines` | no — rustc requires these at a proc-macro crate root; a short delegating shim is fine |
+| the same fn with a longer body | yes — `PAGEANTRY-BARREL-SHIM-001` |
+
+The proc-macro exemption is by attribute, not by `Cargo.toml`: those
+attributes only compile at a `proc-macro = true` crate root, so the scan
+needs no crate-kind fact. The exemption is conditional on the entry point
+staying a shim: the body is measured as the lines between its braces and
+compared with `max_shim_lines` (default 8, set in `cordial.toml`). The
+finding names the attribute, the function, the measured size, and the
+limit, so the checklist row says what to do without a rule-id lookup. A
+plain helper beside the entry points is still `PAGEANTRY-BARREL-001`.
+
+Every rule has its own switch under `[pageantry]` so a project can opt out
+of one without losing the others; the rule ids remain the handle for
+`cordial exceptions`.
 
 One finding per disallowed item. `use` / `extern crate` / `mod` are
 legal; everything else in those two filenames is not. Later pageantry
@@ -77,5 +96,6 @@ etiquette; they do not go into modularity.
 | --- | --- |
 | `PAGEANTRY-TRAIT-001` scan + bundle | done |
 | `PAGEANTRY-BARREL-001` scan + bundle | done |
+| `PAGEANTRY-BARREL-SHIM-001` + `[pageantry]` knobs | done |
 | Tests in `tests/pageantry_etiquette.rs` | done |
 | Cordial dogfood | traits sit in a leading block; fat `mod.rs` files become named siblings |

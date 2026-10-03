@@ -79,6 +79,13 @@ min_occurrences = 5
 max_constructor_args = 3
 min_fluent_setters = 2
 
+[pageantry]
+# enabled = true
+# trait_block = true
+# barrel = true
+# barrel_shim = true
+# max_shim_lines = 8
+
 [antipatterns]
 # enabled = true
 

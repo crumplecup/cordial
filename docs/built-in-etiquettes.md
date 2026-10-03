@@ -70,7 +70,7 @@ should be delegated to derives where the crate policy allows it.
 | --- | --- | --- |
 | `visibility` | Small crates stay flat, visible modules have enough leaf names, and child visibility does not exceed parent visibility. | `VIS-CRATE-FLAT-001`, `VIS-MOD-THIN-001`, `VIS-MOD-MISMATCH-001` |
 | `derives` | Hand-rolled builders, accessors, simple constructors, and public fields are reviewed as derive candidates. | `DERIVE-BUILDER-001`, `DERIVE-USE-BUILDER-001`, `DERIVE-GETTER-001`, `DERIVE-SETTER-001`, `DERIVE-ASREF-001`, `DERIVE-ASSTR-001`, `DERIVE-NEW-001`, `DERIVE-PUB-FIELD-001` |
-| `pageantry` | Traits live in a leading block below imports and module declarations. `lib.rs` and `mod.rs` only declare modules and re-exports. | `PAGEANTRY-TRAIT-001`, `PAGEANTRY-BARREL-001` |
+| `pageantry` | Traits live in a leading block below imports and module declarations. `lib.rs` and `mod.rs` only declare modules and re-exports (proc-macro entry points stay as short shims). | `PAGEANTRY-TRAIT-001`, `PAGEANTRY-BARREL-001`, `PAGEANTRY-BARREL-SHIM-001` |
 | `glob_imports` | Glob imports are replaced with explicit names. | `GLOB-IMPORT-001` |
 
 `visibility` and `modularity` are intentionally separate. Visibility asks
