@@ -12,6 +12,7 @@
 
 #[cfg(feature = "rustdoc")]
 mod attrs;
+mod crate_kind;
 #[cfg(feature = "rustdoc")]
 mod crate_load;
 mod edge;
@@ -36,6 +37,7 @@ pub use attrs::{
     ATTR_RUSTDOC_KIND, ATTR_TRAIT_IMPLS, ATTR_TRAIT_PREREQS, ATTR_WRAPS_FOREIGN,
 };
 
+pub use crate_kind::{ATTR_CRATE_KINDS, CrateKind};
 #[cfg(feature = "rustdoc")]
 pub use crate_load::{load_crate_ir_if_missing, resolve_crate_root, shadow_dep_rustdoc_path};
 pub use edge::{EdgeKind, EdgeWeight};

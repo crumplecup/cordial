@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use crate::error::CordialResult;
 use crate::hooks::{LoadContext, Loader};
+use crate::ir::CrateKind;
 
 use super::LoadView;
 
@@ -50,6 +51,7 @@ impl Loader for SourceLoader {
             target.crate_name().clone(),
             src_root,
             files,
+            target.kinds().clone(),
         )))
     }
 }
@@ -67,6 +69,7 @@ pub struct SourceLoadView {
     crate_name: String,
     src_root: PathBuf,
     files: Vec<SourceFile>,
+    crate_kinds: Vec<CrateKind>,
 }
 
 impl LoadView for SourceLoadView {

@@ -1,9 +1,8 @@
 //! Partitions error-site nodes and links them to inferred origins via `ErrorFlow` edges.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use crate::enricher::member_crate_root;
 use crate::error::CordialResult;
 use crate::etiquettes::error_sites::{
     ErrorOriginClass, ErrorSiteKind, ErrorSiteScanRow, ForeignErrorRecordKind,
@@ -11,8 +10,6 @@ use crate::etiquettes::error_sites::{
 };
 use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{BasicQuery, EdgeKind, IrMut, NodeKind, NodeWeight};
-use crate::loader::SourceLoadView;
-
 use tracing::instrument;
 /// Partitions error-site expression nodes and materializes `ErrorFlow` origin links.
 #[derive(Debug, Default, Clone, Copy)]
@@ -38,14 +35,16 @@ impl IrEnricher for ErrorFlowEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let (ir, load, session) = view.into_parts();
+        let (ir, _, _) = view.into_parts();
 
         let crate_name = ir.crate_name().to_string();
         let crate_root = ir.root()?;
-        let is_proc_macro_crate = load
-            .as_any()
-            .downcast_ref::<SourceLoadView>()
-            .is_some_and(|source| crate_is_proc_macro(&member_crate_root(source, session)));
+        // `syn::Error`/`syn::Result` are the idiomatic return-error currency
+        // for proc-macro expansion helpers industry-wide -- not a foreign leak
+        // that needs wrapping, since the only consumer is the compiler (the
+        // macro's public entry point returns a bare `TokenStream`, never a
+        // `Result`).
+        let is_proc_macro_crate = ir.is_proc_macro()?;
         let mut origin_nodes: BTreeMap<String, crate::ir::NodeId> = BTreeMap::new();
 
         let site_ids: Vec<_> = ir
@@ -69,38 +68,6 @@ impl IrEnricher for ErrorFlowEnricher {
 
         Ok(())
     }
-}
-
-/// Whether `crate_root`'s manifest declares `[lib] proc-macro = true`.
-///
-/// `syn::Error`/`syn::Result` are the idiomatic return-error currency for
-/// proc-macro expansion helpers industry-wide -- not a foreign leak that
-/// needs wrapping, since the only consumer is the compiler (the macro's
-/// public entry point returns a bare `TokenStream`, never a `Result`).
-#[instrument(level = "debug", skip(crate_root))]
-fn crate_is_proc_macro(crate_root: &Path) -> bool {
-    let Ok(manifest) = std::fs::read_to_string(crate_root.join("Cargo.toml")) else {
-        return false;
-    };
-    let mut in_lib_section = false;
-    for line in manifest.lines() {
-        let trimmed = line.trim();
-        if let Some(section) = trimmed
-            .strip_prefix('[')
-            .and_then(|rest| rest.strip_suffix(']'))
-        {
-            in_lib_section = section.trim() == "lib";
-            continue;
-        }
-        if in_lib_section
-            && let Some((key, value)) = trimmed.split_once('=')
-            && key.trim() == "proc-macro"
-            && value.trim().starts_with("true")
-        {
-            return true;
-        }
-    }
-    false
 }
 
 #[instrument(

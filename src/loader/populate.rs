@@ -3,7 +3,7 @@ use std::path::Path;
 use syn::spanned::Spanned;
 
 use crate::error::CordialResult;
-use crate::ir::{CrateIr, EdgeKind, ItemKind, NodeKind, NodeWeight};
+use crate::ir::{ATTR_CRATE_KINDS, CrateIr, EdgeKind, ItemKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
 
 use super::module_path_from_src_file;
@@ -15,6 +15,18 @@ impl SourceLoadView {
     #[instrument(level = "debug", skip(self, ir), err(level = "warn"))]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
         let root = ir.root();
+        if !self.crate_kinds().is_empty() {
+            ir.set_attr(
+                root,
+                ATTR_CRATE_KINDS,
+                serde_json::Value::Array(
+                    self.crate_kinds()
+                        .iter()
+                        .map(|kind| serde_json::Value::String(kind.as_str().to_string()))
+                        .collect(),
+                ),
+            )?;
+        }
         for file in self.files() {
             self.load_file(ir, root, file)?;
         }

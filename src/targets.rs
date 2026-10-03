@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use tracing::instrument;
 
 use crate::error::{CordialError, CordialResult};
+use crate::ir::CrateKind;
 use crate::loader::CrateTarget;
 use crate::plugin::{PluginCategory, plugins_in_category, selected_plugins};
 use crate::session::{RunAll, RunFilter, SessionView};
@@ -115,10 +116,10 @@ fn workspace_targets(project_root: &Path) -> CordialResult<Vec<CrateTarget>> {
                 package.manifest_path
             ))
         })?;
-        targets.push(CrateTarget::new(
-            package.name.to_string(),
-            PathBuf::from(crate_root.as_str()),
-        ));
+        targets.push(
+            CrateTarget::new(package.name.to_string(), PathBuf::from(crate_root.as_str()))
+                .with_kinds(package_kinds(package)),
+        );
     }
 
     if targets.is_empty() {
@@ -128,6 +129,35 @@ fn workspace_targets(project_root: &Path) -> CordialResult<Vec<CrateTarget>> {
         )));
     }
     Ok(targets)
+}
+
+/// Crate kinds from Cargo's own target list, sorted and de-duplicated.
+///
+/// Cargo already resolves `[lib] proc-macro = true` (and its spelling
+/// variants) into a `proc-macro` target kind, so no manifest parsing is
+/// needed here.
+#[instrument(level = "debug", skip(package))]
+fn package_kinds(package: &cargo_metadata::Package) -> Vec<CrateKind> {
+    use cargo_metadata::TargetKind;
+
+    let mut kinds: Vec<CrateKind> = package
+        .targets
+        .iter()
+        .flat_map(|target| target.kind.iter())
+        .filter_map(|kind| match kind {
+            TargetKind::Lib
+            | TargetKind::RLib
+            | TargetKind::DyLib
+            | TargetKind::CDyLib
+            | TargetKind::StaticLib => Some(CrateKind::Lib),
+            TargetKind::Bin => Some(CrateKind::Bin),
+            TargetKind::ProcMacro => Some(CrateKind::ProcMacro),
+            _ => None,
+        })
+        .collect();
+    kinds.sort();
+    kinds.dedup();
+    kinds
 }
 
 #[instrument(level = "debug", skip(targets, filter))]

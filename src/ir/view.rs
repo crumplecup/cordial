@@ -1,5 +1,5 @@
 use crate::error::CordialResult;
-use crate::ir::{CrateIr, EdgeKind, NodeId, NodeKind, NodeWeight};
+use crate::ir::{ATTR_CRATE_KINDS, CrateIr, CrateKind, EdgeKind, NodeId, NodeKind, NodeWeight};
 use tracing::instrument;
 
 use super::query::Query;
@@ -28,6 +28,35 @@ pub trait IrView {
     fn children(&self, id: NodeId, kind: EdgeKind) -> Vec<NodeId>;
     /// Node id for a `foo::bar` path, if the path index knows it.
     fn node_by_path(&self, path: &str) -> Option<NodeId>;
+
+    /// Cargo kinds recorded on the crate root, empty when unknown.
+    ///
+    /// Empty means the loader had no Cargo metadata (a synthetic target or a
+    /// cached snapshot from before kinds were recorded), not that the crate
+    /// is a plain library.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn crate_kinds(&self) -> CordialResult<Vec<CrateKind>> {
+        let root = self.root()?;
+        Ok(self
+            .node(root)
+            .and_then(|node| {
+                node.attr(ATTR_CRATE_KINDS)
+                    .and_then(|value| value.as_array())
+                    .map(|values| {
+                        values
+                            .iter()
+                            .filter_map(|value| value.as_str().and_then(CrateKind::from_attr))
+                            .collect()
+                    })
+            })
+            .unwrap_or_default())
+    }
+
+    /// Whether this crate is a `proc-macro = true` library.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn is_proc_macro(&self) -> CordialResult<bool> {
+        Ok(self.crate_kinds()?.contains(&CrateKind::ProcMacro))
+    }
 }
 
 /// Mutable crate IR view for enrichers.

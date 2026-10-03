@@ -5,6 +5,8 @@ mod source;
 
 use std::path::{Path, PathBuf};
 
+use crate::ir::CrateKind;
+
 pub use scan_roots::{path_has_fixtures, quality_scan_trees};
 pub use source::{SourceFile, SourceLoadView, SourceLoader};
 
@@ -19,14 +21,28 @@ pub trait LoadView: Send + Sync {
 }
 
 /// Target workspace member to analyze.
-#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
+#[derive(Debug, Clone, derive_new::new, derive_getters::Getters, derive_setters::Setters)]
+#[setters(prefix = "with_")]
 pub struct CrateTarget {
     /// Cargo package name.
     #[new(into)]
+    #[setters(skip)]
     crate_name: String,
     /// Filesystem path of the crate root.
     #[new(into)]
+    #[setters(skip)]
     crate_root: PathBuf,
+    /// Cargo target kinds; empty when no Cargo metadata was available.
+    #[new(default)]
+    kinds: Vec<CrateKind>,
+}
+
+impl CrateTarget {
+    /// Whether Cargo builds this package as a proc-macro library.
+    #[instrument(level = "trace", skip(self))]
+    pub fn is_proc_macro(&self) -> bool {
+        self.kinds.contains(&CrateKind::ProcMacro)
+    }
 }
 
 /// Map a file under `src/` to its module path segments.

@@ -342,10 +342,10 @@ pub use hooks::{
     RenderView, Reporter, WorkspaceAssessView, WorkspaceAssessor,
 };
 pub use ir::{
-    ATTR_IR_ORIGIN, ATTR_SYN_DOC_PEER, AttrKey, AttrValue, BasicQuery, CrateIr, CrateIrSnapshot,
-    CrateView, CrateViewMut, EdgeKind, EdgeWeight, IrIndexes, IrMut, IrView, ItemKind, NodeId,
-    NodeKind, NodeView, NodeWeight, ORIGIN_RUSTDOC, ORIGIN_SOURCE, PanicSitesQuery, QualifiedPath,
-    Query, QueryBuilder, WorkspaceIr,
+    ATTR_CRATE_KINDS, ATTR_IR_ORIGIN, ATTR_SYN_DOC_PEER, AttrKey, AttrValue, BasicQuery, CrateIr,
+    CrateIrSnapshot, CrateKind, CrateView, CrateViewMut, EdgeKind, EdgeWeight, IrIndexes, IrMut,
+    IrView, ItemKind, NodeId, NodeKind, NodeView, NodeWeight, ORIGIN_RUSTDOC, ORIGIN_SOURCE,
+    PanicSitesQuery, QualifiedPath, Query, QueryBuilder, WorkspaceIr,
 };
 #[cfg(feature = "impl_coverage")]
 pub use ir::{
