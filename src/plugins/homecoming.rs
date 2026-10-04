@@ -1,6 +1,7 @@
 //! Homecoming std coverage profile: `Code` trait over merged std inventory.
 
 use crate::error::CordialResult;
+
 use crate::etiquette::Etiquette;
 use crate::etiquettes::framework_std::HOMECOMING_STD_ETIQUETTE;
 use crate::framework_std::{FRAMEWORK_STD_SOURCES, HOMECOMING_TRAIT};
@@ -71,8 +72,8 @@ impl Plugin for HomecomingStdCoverage {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn etiquettes(&self) -> &[&'static dyn Etiquette] {
-        &HOMECOMING_ETIQUETTES
+    fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
+        HOMECOMING_ETIQUETTES.to_vec()
     }
 
     #[instrument(level = "trace", skip(self))]

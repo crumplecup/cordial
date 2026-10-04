@@ -211,7 +211,8 @@ fn a_scoped_exception_only_excepts_its_named_verifier() -> miette::Result<()> {
 #[test]
 fn amenable_ext_plugin_is_registered() -> miette::Result<()> {
     cordial::init_tracing();
-    use cordial::{PluginCategory, coverage_plugins};
+    use cordial::{PluginCategory, SessionBuilder, coverage_plugins};
+    let session = SessionBuilder::new(".").build();
     let plugins = coverage_plugins();
     let plugin = plugins
         .iter()
@@ -220,7 +221,7 @@ fn amenable_ext_plugin_is_registered() -> miette::Result<()> {
     assert_eq!(plugin.category(), PluginCategory::Coverage);
     assert!(
         plugin
-            .etiquettes()
+            .etiquettes(&session)
             .iter()
             .any(|etiquette| etiquette.id() == "amenable-ext-jiff")
     );

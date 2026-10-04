@@ -3,6 +3,7 @@
 
 use crate::AMENABLE_EXT_JIFF_ETIQUETTE;
 use crate::error::CordialResult;
+
 use crate::etiquette::Etiquette;
 use crate::framework_std::AMENABLE_EXT_JIFF_UPSTREAM_CRATE;
 use crate::plugin::{
@@ -78,8 +79,8 @@ impl Plugin for AmenableExtCoverage {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn etiquettes(&self) -> &[&'static dyn Etiquette] {
-        &AMENABLE_EXT_ETIQUETTES
+    fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
+        AMENABLE_EXT_ETIQUETTES.to_vec()
     }
 
     #[instrument(level = "trace", skip(self))]

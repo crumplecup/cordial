@@ -359,7 +359,11 @@ impl Commands {
             Self::Export { command } => command.act(&ctx),
             #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
             Self::Build { command } => command.act(&ctx),
-            Self::Explain { id } => super::run::execute_explain(id.as_deref()),
+            Self::Explain { id } => super::run::execute_explain(
+                &ctx.project_root,
+                ctx.store_home.clone(),
+                id.as_deref(),
+            ),
         }
     }
 }

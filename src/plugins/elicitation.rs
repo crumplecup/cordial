@@ -33,8 +33,8 @@ impl Plugin for ElicitationCoverage {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn etiquettes(&self) -> &[&'static dyn Etiquette] {
-        &ELICITATION_ETIQUETTES
+    fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
+        ELICITATION_ETIQUETTES.to_vec()
     }
 
     #[instrument(level = "trace", skip(self))]

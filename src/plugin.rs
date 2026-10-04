@@ -4,6 +4,7 @@
 //! contributes one or more etiquettes. See [coverage-as-plugin.md](https://github.com/crumplecup/cordial/blob/main/docs/planning/coverage-as-plugin.md).
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use tracing::instrument;
 #[cfg(feature = "rustdoc")]
@@ -42,7 +43,8 @@ pub use error_handling::{
 #[cfg(any(feature = "homecoming_std", feature = "impl_coverage"))]
 pub use workspace_hub::{WorkspaceHub, detect_workspace_hub, discover_workspace_hub};
 
-use crate::etiquette::Etiquette;
+use crate::etiquette::{Etiquette, IntoEtiquette};
+use crate::session::SessionView;
 
 /// Policy object that chooses behavior for a target using an indicator.
 ///
@@ -71,19 +73,33 @@ pub trait Plugin: Send + Sync {
     /// Human-readable display name for reports and diagnostics.
     fn name(&self) -> &str;
 
+    /// Etiquettes for plugins whose set never depends on `cordial.toml`.
+    ///
+    /// Override this, not [`Plugin::etiquettes`], when the set is fixed
+    /// regardless of session config. Default: none.
+    fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
+        Vec::new()
+    }
+
     /// Hook bundles this plugin contributes.
     ///
-    /// Return a stable slice. The session deduplicates etiquettes by
-    /// [`Etiquette::id`] after all selected plugins have been flattened.
-    fn etiquettes(&self) -> &[&'static dyn Etiquette];
+    /// Default: wraps [`Plugin::static_etiquettes`]. Override directly only
+    /// when the etiquette set depends on `cordial.toml`, read through
+    /// `session` (see [`crate::load_session_config`]). The session
+    /// deduplicates by [`Etiquette::id`] after all selected plugins have
+    /// been flattened.
+    fn etiquettes(&self, _session: &dyn SessionView) -> Vec<Arc<dyn Etiquette>> {
+        self.static_etiquettes()
+            .into_iter()
+            .map(IntoEtiquette::into_etiquette)
+            .collect()
+    }
 
     /// Product category used by quality and coverage command routing.
     fn category(&self) -> PluginCategory {
         PluginCategory::Quality
     }
 }
-
-static EMPTY_ETIQUETTES: &[&'static dyn Etiquette] = &[];
 
 /// Whether a plugin participates in coverage analysis or source-quality scans.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,8 +135,8 @@ impl Plugin for EtiquettePlugin {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn etiquettes(&self) -> &[&'static dyn Etiquette] {
-        std::slice::from_ref(&self.0)
+    fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
+        vec![self.0]
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -191,8 +207,8 @@ impl Plugin for StaticPlugin {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn etiquettes(&self) -> &[&'static dyn Etiquette] {
-        self.etiquettes
+    fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
+        self.etiquettes.to_vec()
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -317,13 +333,13 @@ where
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn etiquettes(&self) -> &[&'static dyn Etiquette] {
+    fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
         self.portfolios
             .as_ref()
             .iter()
             .find(|portfolio| self.accepts(portfolio))
-            .map(|portfolio| portfolio.etiquettes)
-            .unwrap_or(EMPTY_ETIQUETTES)
+            .map(|portfolio| portfolio.etiquettes.to_vec())
+            .unwrap_or_default()
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -333,14 +349,16 @@ where
 }
 
 /// Flatten plugins into a deduplicated etiquette list (stable registration order).
-#[instrument(level = "debug", skip(plugins))]
-pub fn etiquettes_from_plugins(plugins: &[&'static dyn Plugin]) -> Vec<&'static dyn Etiquette> {
-    let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::new();
+#[instrument(level = "debug", skip(plugins, session))]
+pub fn etiquettes_from_plugins(
+    plugins: &[&'static dyn Plugin],
+    session: &dyn SessionView,
+) -> Vec<Arc<dyn Etiquette>> {
+    let mut out: Vec<Arc<dyn Etiquette>> = Vec::new();
     for plugin in plugins {
-        for etiquette in plugin.etiquettes() {
-            if seen.insert(etiquette.id()) {
-                out.push(*etiquette);
+        for etiquette in plugin.etiquettes(session) {
+            if !out.iter().any(|existing| existing.id() == etiquette.id()) {
+                out.push(etiquette);
             }
         }
     }

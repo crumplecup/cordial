@@ -1,6 +1,7 @@
 //! Deduplicate etiquette hooks and resolve the active etiquette set.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use crate::enricher::{PathIndexEnricher, SynDocLinkEnricher};
 use crate::error::{CordialError, CordialResult};
@@ -12,55 +13,56 @@ use crate::plugin::{Plugin, etiquettes_from_plugins, selected_plugins};
 use crate::{RustdocLoader, enricher::RustdocStructureEnricher};
 use tracing::instrument;
 
-use super::RunFilter;
+use super::{RunFilter, SessionView};
 
 trait Hook {
     fn hook_id(&self) -> &str;
 }
 
-impl Hook for dyn Loader {
+impl Hook for dyn Loader + '_ {
     fn hook_id(&self) -> &str {
         self.id()
     }
 }
 
-impl Hook for dyn IrEnricher {
+impl Hook for dyn IrEnricher + '_ {
     fn hook_id(&self) -> &str {
         self.id()
     }
 }
 
-impl Hook for dyn Probe {
+impl Hook for dyn Probe + '_ {
     fn hook_id(&self) -> &str {
         self.id()
     }
 }
 
-impl Hook for dyn Assessor {
+impl Hook for dyn Assessor + '_ {
     fn hook_id(&self) -> &str {
         self.id()
     }
 }
 
-impl Hook for dyn WorkspaceAssessor {
+impl Hook for dyn WorkspaceAssessor + '_ {
     fn hook_id(&self) -> &str {
         self.id()
     }
 }
 
-impl Hook for dyn Reporter {
+impl Hook for dyn Reporter + '_ {
     #[instrument(level = "trace", skip(self))]
     fn hook_id(&self) -> &str {
         self.id()
     }
 }
 
-#[instrument(level = "debug", skip(plugins, direct_etiquettes, filter))]
+#[instrument(level = "debug", skip(plugins, direct_etiquettes, filter, session))]
 pub(super) fn resolved_etiquettes(
     plugins: &[&'static dyn Plugin],
-    direct_etiquettes: &[&'static dyn Etiquette],
+    direct_etiquettes: &[Arc<dyn Etiquette>],
     filter: &dyn RunFilter,
-) -> Vec<&'static dyn Etiquette> {
+    session: &dyn SessionView,
+) -> Vec<Arc<dyn Etiquette>> {
     let plugin_slice: Vec<&'static dyn Plugin> = if plugins.is_empty() {
         Vec::new()
     } else {
@@ -70,7 +72,7 @@ pub(super) fn resolved_etiquettes(
     let mut merged = if plugin_slice.is_empty() {
         direct_etiquettes.to_vec()
     } else {
-        etiquettes_from_plugins(&plugin_slice)
+        etiquettes_from_plugins(&plugin_slice, session)
     };
 
     for etiquette in direct_etiquettes {
@@ -78,7 +80,7 @@ pub(super) fn resolved_etiquettes(
             .iter()
             .any(|existing| existing.id() == etiquette.id())
         {
-            merged.push(*etiquette);
+            merged.push(Arc::clone(etiquette));
         }
     }
 
@@ -92,7 +94,7 @@ pub(super) fn resolved_etiquettes(
 }
 
 #[instrument(level = "debug", skip(etiquettes))]
-pub(super) fn dedupe_loaders(etiquettes: &[&'static dyn Etiquette]) -> Vec<&'static dyn Loader> {
+pub(super) fn dedupe_loaders(etiquettes: &[Arc<dyn Etiquette>]) -> Vec<&dyn Loader> {
     dedupe_hooks(
         etiquettes
             .iter()
@@ -101,10 +103,10 @@ pub(super) fn dedupe_loaders(etiquettes: &[&'static dyn Etiquette]) -> Vec<&'sta
 }
 
 #[instrument(level = "debug", skip(etiquettes, loaders))]
-pub(super) fn dedupe_enrichers(
-    etiquettes: &[&'static dyn Etiquette],
-    loaders: &[&'static dyn Loader],
-) -> Vec<&'static dyn IrEnricher> {
+pub(super) fn dedupe_enrichers<'a>(
+    etiquettes: &'a [Arc<dyn Etiquette>],
+    loaders: &[&dyn Loader],
+) -> Vec<&'a dyn IrEnricher> {
     static PATH_INDEX: PathIndexEnricher = PathIndexEnricher;
     static SYN_DOC_LINK: SynDocLinkEnricher = SynDocLinkEnricher;
     let mut out = dedupe_hooks(
@@ -146,7 +148,7 @@ pub(super) fn dedupe_enrichers(
 }
 
 #[instrument(level = "debug", skip(loaders))]
-fn loaders_include_source_and_rustdoc(loaders: &[&'static dyn Loader]) -> bool {
+fn loaders_include_source_and_rustdoc(loaders: &[&dyn Loader]) -> bool {
     #[cfg(feature = "rustdoc")]
     {
         let mut has_source = false;
@@ -194,7 +196,7 @@ pub(super) fn select_load_view<'a>(
 }
 
 #[instrument(level = "debug", skip(etiquettes))]
-pub(super) fn dedupe_probes(etiquettes: &[&'static dyn Etiquette]) -> Vec<&'static dyn Probe> {
+pub(super) fn dedupe_probes(etiquettes: &[Arc<dyn Etiquette>]) -> Vec<&dyn Probe> {
     dedupe_hooks(
         etiquettes
             .iter()
@@ -203,9 +205,7 @@ pub(super) fn dedupe_probes(etiquettes: &[&'static dyn Etiquette]) -> Vec<&'stat
 }
 
 #[instrument(level = "debug", skip(etiquettes))]
-pub(super) fn dedupe_assessors(
-    etiquettes: &[&'static dyn Etiquette],
-) -> Vec<&'static dyn Assessor> {
+pub(super) fn dedupe_assessors(etiquettes: &[Arc<dyn Etiquette>]) -> Vec<&dyn Assessor> {
     dedupe_hooks(
         etiquettes
             .iter()
@@ -215,8 +215,8 @@ pub(super) fn dedupe_assessors(
 
 #[instrument(level = "debug", skip(etiquettes))]
 pub(super) fn dedupe_workspace_assessors(
-    etiquettes: &[&'static dyn Etiquette],
-) -> Vec<&'static dyn WorkspaceAssessor> {
+    etiquettes: &[Arc<dyn Etiquette>],
+) -> Vec<&dyn WorkspaceAssessor> {
     dedupe_hooks(
         etiquettes
             .iter()
@@ -225,9 +225,7 @@ pub(super) fn dedupe_workspace_assessors(
 }
 
 #[instrument(level = "debug", skip(etiquettes))]
-pub(super) fn dedupe_reporters(
-    etiquettes: &[&'static dyn Etiquette],
-) -> Vec<&'static dyn Reporter> {
+pub(super) fn dedupe_reporters(etiquettes: &[Arc<dyn Etiquette>]) -> Vec<&dyn Reporter> {
     dedupe_hooks(
         etiquettes
             .iter()

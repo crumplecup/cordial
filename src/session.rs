@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::error::CordialResult;
-use crate::etiquette::Etiquette;
+use crate::etiquette::{Etiquette, IntoEtiquette};
 use crate::objects::{Artifact, Finding};
 use crate::plugin::Plugin;
 use crate::progress::{ProgressSink, noop_progress, noop_progress_arc};
@@ -114,7 +114,7 @@ pub trait Session: Send + Sync {
     /// Register one directly available etiquette by id.
     ///
     /// Runtime sessions ignore duplicates with the same [`Etiquette::id`].
-    fn register(&mut self, etiquette: &'static dyn Etiquette);
+    fn register(&mut self, etiquette: Arc<dyn Etiquette>);
     /// Register one directly available plugin by id.
     ///
     /// Runtime sessions ignore duplicates with the same [`Plugin::id`].
@@ -191,8 +191,10 @@ impl SessionBuilder {
 
     /// Add one directly available etiquette before building the runtime session.
     #[instrument(level = "trace", skip(self, etiquette))]
-    pub fn register(mut self, etiquette: &'static dyn Etiquette) -> Self {
-        self.etiquettes.get_or_insert_with(Vec::new).push(etiquette);
+    pub fn register(mut self, etiquette: impl IntoEtiquette) -> Self {
+        self.etiquettes
+            .get_or_insert_with(Vec::new)
+            .push(etiquette.into_etiquette());
         self
     }
 
@@ -249,7 +251,7 @@ pub struct RuntimeSession {
     plugins: Vec<&'static dyn Plugin>,
     /// Directly registered etiquettes available to this session.
     #[builder(default)]
-    etiquettes: Vec<&'static dyn Etiquette>,
+    etiquettes: Vec<Arc<dyn Etiquette>>,
     /// User-facing progress reporter for this session.
     #[builder(default = "noop_progress_arc()")]
     progress: Arc<dyn ProgressSink>,
@@ -262,7 +264,7 @@ impl RuntimeSession {
     }
 
     #[instrument(level = "trace", skip(self))]
-    pub(super) fn registered_etiquettes(&self) -> &[&'static dyn Etiquette] {
+    pub(super) fn registered_etiquettes(&self) -> &[Arc<dyn Etiquette>] {
         &self.etiquettes
     }
 }
@@ -291,8 +293,8 @@ impl SessionView for RuntimeSession {
 
 impl Session for RuntimeSession {
     #[instrument(level = "trace", skip(self, etiquette))]
-    fn register(&mut self, etiquette: &'static dyn Etiquette) {
-        let id = etiquette.id();
+    fn register(&mut self, etiquette: Arc<dyn Etiquette>) {
+        let id = etiquette.id().to_string();
         if !self.etiquettes.iter().any(|existing| existing.id() == id) {
             self.etiquettes.push(etiquette);
         }

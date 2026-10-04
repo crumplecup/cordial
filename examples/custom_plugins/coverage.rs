@@ -46,8 +46,8 @@ impl Plugin for AcmeApiCoverage {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn etiquettes(&self) -> &[&'static dyn Etiquette] {
-        ACME_COVERAGE_ETIQUETTES
+    fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
+        ACME_COVERAGE_ETIQUETTES.to_vec()
     }
 
     #[instrument(level = "trace", skip(self))]

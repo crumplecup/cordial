@@ -1,6 +1,7 @@
 //! Amenable std coverage profile: registry evidence + verifier witnesses over std inventory.
 
 use crate::error::CordialResult;
+
 use crate::etiquette::Etiquette;
 use crate::etiquettes::framework_std::AMENABLE_STD_ETIQUETTE;
 use crate::framework_std::FRAMEWORK_STD_SOURCES;
@@ -71,8 +72,8 @@ impl Plugin for AmenableStdCoverage {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn etiquettes(&self) -> &[&'static dyn Etiquette] {
-        &AMENABLE_ETIQUETTES
+    fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
+        AMENABLE_ETIQUETTES.to_vec()
     }
 
     #[instrument(level = "trace", skip(self))]

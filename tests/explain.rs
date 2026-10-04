@@ -1,7 +1,14 @@
+use std::sync::Arc;
+
 use cordial::{
-    Etiquette, all_plugins, etiquettes_from_plugins, lookup_etiquette, quality_etiquettes,
-    render_explain_list, render_explain_page,
+    Etiquette, SessionBuilder, all_plugins, etiquettes_from_plugins, lookup_etiquette,
+    quality_etiquettes, render_explain_list, render_explain_page,
 };
+
+/// Every etiquette the compiled plugins contribute under default config.
+fn compiled_etiquettes() -> Vec<Arc<dyn Etiquette>> {
+    etiquettes_from_plugins(&all_plugins(), &SessionBuilder::new(".").build())
+}
 
 fn assert_explain_filled(etiquette: &dyn Etiquette) {
     let explain = etiquette.explain();
@@ -54,7 +61,8 @@ fn render_list_and_page() -> miette::Result<()> {
     assert!(page.contains("[visibility] enabled = false"));
     assert!(page.contains("cordial.toml"));
 
-    let coverage = etiquettes_from_plugins(&all_plugins());
+    let owned = compiled_etiquettes();
+    let coverage: Vec<&dyn Etiquette> = owned.iter().map(|etiquette| etiquette.as_ref()).collect();
     let impl_coverage = render_explain_page(
         lookup_etiquette(&coverage, "impl-coverage")
             .ok_or_else(|| miette::miette!("impl-coverage"))?,
@@ -235,7 +243,7 @@ fn render_list_and_page() -> miette::Result<()> {
 #[test]
 fn compiled_opt_out_points_at_cordial_toml() {
     cordial::init_tracing();
-    for etiquette in etiquettes_from_plugins(&all_plugins()) {
+    for etiquette in compiled_etiquettes() {
         let opt_out = etiquette.explain().opt_out();
         assert!(
             opt_out.contains("cordial.toml"),
@@ -258,10 +266,10 @@ fn compiled_opt_out_points_at_cordial_toml() {
 #[test]
 fn compiled_plugins_have_unique_explain_ids() {
     cordial::init_tracing();
-    let etiquettes = etiquettes_from_plugins(&all_plugins());
+    let etiquettes = compiled_etiquettes();
     let mut seen = std::collections::BTreeSet::new();
     for etiquette in &etiquettes {
-        assert_explain_filled(*etiquette);
+        assert_explain_filled(etiquette.as_ref());
         assert!(
             seen.insert(etiquette.id()),
             "duplicate etiquette id {}",

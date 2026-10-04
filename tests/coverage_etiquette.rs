@@ -127,5 +127,6 @@ fn elicitation_coverage_plugin_wires_three_etiquettes() {
     cordial::init_tracing();
     let plugin = &cordial::ELICITATION_COVERAGE;
     assert_eq!(plugin.id(), "elicitation-coverage");
-    assert_eq!(plugin.etiquettes().len(), 3);
+    let session = SessionBuilder::new(".").build();
+    assert_eq!(plugin.etiquettes(&session).len(), 3);
 }

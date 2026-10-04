@@ -30,7 +30,8 @@ fn standard_error_handling_registers_full_stack() {
         "panicking APIs belong on the error-handling plugin"
     );
 
-    let plugin_etiquettes = STANDARD_ERROR_HANDLING.etiquettes();
+    let plugin_etiquettes =
+        STANDARD_ERROR_HANDLING.etiquettes(&cordial::SessionBuilder::new(".").build());
     assert_eq!(plugin_etiquettes.len(), etiquettes.len());
 }
 

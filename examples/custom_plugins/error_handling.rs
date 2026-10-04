@@ -41,8 +41,8 @@ impl Plugin for AcmeErrorHandling {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn etiquettes(&self) -> &[&'static dyn Etiquette] {
-        ACME_ERROR_ETIQUETTES
+    fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
+        ACME_ERROR_ETIQUETTES.to_vec()
     }
 
     #[instrument(level = "trace", skip(self))]

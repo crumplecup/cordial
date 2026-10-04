@@ -30,6 +30,12 @@ pub use coverage_summary::{
     CoveragePluginSummary, CoverageSummary, build_coverage_summary,
     render_coverage_summary_markdown,
 };
+#[cfg(any(
+    feature = "homecoming_std",
+    feature = "amenable_std",
+    feature = "elicitation"
+))]
+pub(crate) use coverage_summary::{CoverageSummaryPass, attach_coverage_summary_artifacts};
 #[cfg(feature = "quality")]
 pub use quality_report::{
     QualityAreaSummary, QualityReport, QualityReportReporter, build_quality_report,

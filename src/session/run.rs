@@ -1,6 +1,7 @@
 //! Session pipeline: load, probe, assess, render.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use tracing::instrument;
 
@@ -32,7 +33,7 @@ use super::{RunFilter, RunOutcome, RuntimeSession, SessionView};
 fn run_includes_coverage(
     plugins: &[&'static dyn Plugin],
     filter: &dyn RunFilter,
-    etiquettes: &[&'static dyn Etiquette],
+    etiquettes: &[Arc<dyn Etiquette>],
 ) -> bool {
     !plugins_in_category(
         &selected_plugins(plugins, filter.plugins()),
@@ -47,7 +48,7 @@ fn run_includes_coverage(
 fn run_includes_quality(
     plugins: &[&'static dyn Plugin],
     filter: &dyn RunFilter,
-    etiquettes: &[&'static dyn Etiquette],
+    etiquettes: &[Arc<dyn Etiquette>],
 ) -> bool {
     let active = selected_plugins(plugins, filter.plugins());
     !plugins_in_category(&active, PluginCategory::Quality).is_empty()
@@ -106,9 +107,10 @@ pub(super) fn run_session(
         session.registered_plugins(),
         session.registered_etiquettes(),
         filter,
+        session,
     );
     let config = crate::load_session_config(session);
-    let etiquettes: Vec<&'static dyn Etiquette> = etiquettes
+    let etiquettes: Vec<Arc<dyn Etiquette>> = etiquettes
         .into_iter()
         .filter(|etiquette| config.etiquette_enabled(etiquette.id()))
         .collect();
@@ -226,9 +228,9 @@ fn load_and_probe(
     filter: &dyn RunFilter,
     store: &StoreLayout,
     targets: &[CrateTarget],
-    loaders: &[&'static dyn Loader],
-    enrichers: &[&'static dyn IrEnricher],
-    probes: &[&'static dyn Probe],
+    loaders: &[&dyn Loader],
+    enrichers: &[&dyn IrEnricher],
+    probes: &[&dyn Probe],
 ) -> CordialResult<LoadedWorkspace> {
     let mut workspace = WorkspaceIr::default();
     let mut load_views: HashMap<String, Box<dyn LoadView>> = HashMap::new();
@@ -336,7 +338,7 @@ fn assess_targets(
     targets: &[CrateTarget],
     workspace: &WorkspaceIr,
     markers_by_crate: &HashMap<String, Vec<Box<dyn Marker>>>,
-    assessors: &[&'static dyn Assessor],
+    assessors: &[&dyn Assessor],
     etiquette_ids: &[&str],
 ) -> CordialResult<Vec<Box<dyn Finding>>> {
     let mut all_findings: Vec<Box<dyn Finding>> = Vec::new();
@@ -392,9 +394,9 @@ struct RenderPass<'a> {
     store: &'a StoreLayout,
     targets: &'a [CrateTarget],
     workspace: &'a WorkspaceIr,
-    etiquettes: &'a [&'static dyn Etiquette],
+    etiquettes: &'a [Arc<dyn Etiquette>],
     etiquette_ids: &'a [&'a str],
-    reporters: &'a [&'static dyn Reporter],
+    reporters: &'a [&'a dyn Reporter],
     findings: &'a [Box<dyn Finding>],
 }
 
@@ -456,26 +458,18 @@ fn render_and_write(
         feature = "elicitation"
     ))]
     if run_includes_coverage(session.registered_plugins(), filter, etiquettes) {
-        let summary = crate::reporter::build_coverage_summary(
-            session.registered_plugins(),
-            etiquette_ids,
+        crate::reporter::attach_coverage_summary_artifacts(
+            crate::reporter::CoverageSummaryPass::new(
+                session.registered_plugins(),
+                etiquette_ids,
+                &finding_refs,
+                workspace,
+                includes_quality,
+            ),
             filter,
             session,
-            &finding_refs,
-            workspace,
+            &mut all_artifacts,
         )?;
-        let body = crate::reporter::render_coverage_summary_markdown(&summary)?;
-        let summary_name = if includes_quality {
-            "coverage-summary.md"
-        } else {
-            "summary.md"
-        };
-        all_artifacts.push(Box::new(crate::objects::TextArtifact::new(
-            summary_name.to_string(),
-            "text/markdown".to_string(),
-            body,
-        )));
-        all_artifacts.extend(summary.into_extra_artifacts());
     }
     #[cfg(not(any(
         feature = "homecoming_std",

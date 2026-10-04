@@ -267,9 +267,9 @@ pub use enricher::{
 pub use error::{CordialError, CordialErrorKind, CordialResult, TokenStreamParseError};
 pub use etiquette::{
     After, BUILT_IN_ORDER, Before, BeforeMirror, DERIVE_RULE_IDS, Etiquette, EtiquetteExplain,
-    EtiquetteHooks, EtiquetteRuleExplain, LintConstraint, LintOrder, OrderExplain, QualityAreaSpec,
-    QualityEtiquette, QualityReportArea, StaticEtiquette, StaticQualityEtiquette, lookup_etiquette,
-    render_explain_list, render_explain_page,
+    EtiquetteHooks, EtiquetteRuleExplain, IntoEtiquette, LintConstraint, LintOrder, OrderExplain,
+    QualityAreaSpec, QualityEtiquette, QualityReportArea, StaticEtiquette, StaticQualityEtiquette,
+    lookup_etiquette, render_explain_list, render_explain_page,
 };
 #[cfg(feature = "shadow")]
 pub use etiquettes::SHADOW_ETIQUETTE;

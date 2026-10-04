@@ -1,7 +1,5 @@
 //! Unified error-handling plugin for any workspace.
 
-use std::sync::OnceLock;
-
 use crate::etiquette::Etiquette;
 use crate::plugin::{
     ErrorHandling, ErrorHandlingPolicy, ErrorScopeProvider, Plugin, PluginCategory,
@@ -43,15 +41,6 @@ fn collect_error_handling_etiquettes() -> Vec<&'static dyn Etiquette> {
     items.into_iter().flatten().collect()
 }
 
-#[instrument(level = "debug")]
-fn leaked_error_handling_etiquette_slice() -> &'static [&'static dyn Etiquette] {
-    static SLICE: OnceLock<&'static [&'static dyn Etiquette]> = OnceLock::new();
-    SLICE.get_or_init(|| {
-        let etiquettes = collect_error_handling_etiquettes();
-        Box::leak(etiquettes.into_boxed_slice())
-    })
-}
-
 /// Standard error-handling profile: panics plus the Result/chain stack
 /// (feature-gated) on all workspace members.
 #[derive(Debug, Default, Clone, Copy)]
@@ -69,8 +58,8 @@ impl Plugin for StandardErrorHandling {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn etiquettes(&self) -> &[&'static dyn Etiquette] {
-        leaked_error_handling_etiquette_slice()
+    fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
+        collect_error_handling_etiquettes()
     }
 
     #[instrument(level = "trace", skip(self))]

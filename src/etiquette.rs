@@ -7,6 +7,7 @@
 //! [`Etiquette::explain`] for every bundle compiled into the binary.
 
 mod explain;
+mod handle;
 mod hooks;
 mod order;
 mod order_table;
@@ -18,6 +19,7 @@ pub use explain::{
     EtiquetteExplain, EtiquetteRuleExplain, lookup_etiquette, render_explain_list,
     render_explain_page,
 };
+pub use handle::IntoEtiquette;
 pub use hooks::EtiquetteHooks;
 pub(crate) use order::sort_quality_etiquettes;
 pub use order::{

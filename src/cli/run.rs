@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::{
-    CordialError, CordialResult, CrateIr, Disposition, Finding, NamedRunFilter, Plugin,
+    CordialError, CordialResult, CrateIr, Disposition, Etiquette, Finding, NamedRunFilter, Plugin,
     ProgressSink, RunAll, RunFilter, RunOutcome, Session, SessionBuilder, StoreLayout,
     SurrealGraphExport, all_plugins, default_store_home, etiquettes_from_plugins, lookup_etiquette,
     render_explain_list, render_explain_page, run_tracing_instrument_apply,
@@ -83,10 +83,21 @@ pub(super) fn execute_build_sysroot(
     Ok(())
 }
 
+/// `cordial explain`: lists etiquettes for the selected project, so
+/// etiquettes derived from its `cordial.toml` appear alongside built-ins.
 #[instrument(level = "debug", err(level = "warn"))]
-pub(super) fn execute_explain(id: Option<&str>) -> CordialResult<()> {
+pub(super) fn execute_explain(
+    project_root: &Path,
+    store_home: Option<PathBuf>,
+    id: Option<&str>,
+) -> CordialResult<()> {
+    let session = SessionBuilder::new(project_root)
+        .with_store_home(store_home.unwrap_or_else(default_store_home))
+        .build();
     let plugins = all_plugins();
-    let etiquettes = etiquettes_from_plugins(&plugins);
+    let owned = etiquettes_from_plugins(&plugins, &session);
+    let etiquettes: Vec<&dyn Etiquette> =
+        owned.iter().map(|etiquette| etiquette.as_ref()).collect();
     match id {
         None => {
             write!(io::stdout(), "{}", render_explain_list(&etiquettes))?;

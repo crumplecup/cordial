@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 
 use crate::error::CordialResult;
 use crate::ir::WorkspaceIr;
-use crate::objects::{Artifact, Finding};
+use crate::objects::{Artifact, Finding, TextArtifact};
 use crate::plugin::{Plugin, PluginCategory, plugins_in_category, selected_plugins};
 use crate::session::{RunFilter, SessionView};
 
@@ -59,7 +59,7 @@ pub fn build_coverage_summary(
     findings: &[&dyn Finding],
     workspace: &WorkspaceIr,
 ) -> CordialResult<CoverageSummary> {
-    let coverage_plugins = coverage_plugins_for_run(registered_plugins, filter);
+    let coverage_plugins = coverage_plugins_for_run(registered_plugins, filter, session);
     let mut plugins = Vec::new();
     let mut extra_artifacts = Vec::new();
     if !coverage_plugins.is_empty() {
@@ -195,10 +195,68 @@ pub fn render_coverage_summary_markdown(summary: &CoverageSummary) -> CordialRes
     Ok(out)
 }
 
-#[instrument(level = "debug", skip(registered_plugins, filter))]
+/// Run-scoped inputs for [`attach_coverage_summary_artifacts`], bundled so
+/// the function stays under clippy's argument-count ceiling.
+#[derive(derive_new::new)]
+pub(crate) struct CoverageSummaryPass<'a> {
+    registered_plugins: &'a [&'static dyn Plugin],
+    etiquette_ids: &'a [&'a str],
+    findings: &'a [&'a dyn Finding],
+    workspace: &'a WorkspaceIr,
+    /// Picks the summary's file name: standalone coverage runs get
+    /// `summary.md`, runs that also wrote a quality report get
+    /// `coverage-summary.md` so the two don't collide.
+    includes_quality: bool,
+}
+
+/// Build the coverage rollup for this run and append it (plus any extra
+/// per-plugin artifacts) to `all_artifacts`.
+#[instrument(
+    level = "debug",
+    skip(pass, filter, session, all_artifacts),
+    err(level = "warn")
+)]
+pub(crate) fn attach_coverage_summary_artifacts(
+    pass: CoverageSummaryPass<'_>,
+    filter: &dyn RunFilter,
+    session: &dyn SessionView,
+    all_artifacts: &mut Vec<Box<dyn Artifact>>,
+) -> CordialResult<()> {
+    let CoverageSummaryPass {
+        registered_plugins,
+        etiquette_ids,
+        findings,
+        workspace,
+        includes_quality,
+    } = pass;
+    let summary = build_coverage_summary(
+        registered_plugins,
+        etiquette_ids,
+        filter,
+        session,
+        findings,
+        workspace,
+    )?;
+    let body = render_coverage_summary_markdown(&summary)?;
+    let summary_name = if includes_quality {
+        "coverage-summary.md"
+    } else {
+        "summary.md"
+    };
+    all_artifacts.push(Box::new(TextArtifact::new(
+        summary_name.to_string(),
+        "text/markdown".to_string(),
+        body,
+    )));
+    all_artifacts.extend(summary.into_extra_artifacts());
+    Ok(())
+}
+
+#[instrument(level = "debug", skip(registered_plugins, filter, session))]
 pub fn coverage_plugins_for_run(
     registered_plugins: &[&'static dyn Plugin],
     filter: &dyn RunFilter,
+    session: &dyn SessionView,
 ) -> Vec<&'static dyn Plugin> {
     if registered_plugins.is_empty() {
         return Vec::new();
@@ -208,7 +266,7 @@ pub fn coverage_plugins_for_run(
     if let Some(ids) = filter.etiquettes() {
         coverage.retain(|plugin| {
             plugin
-                .etiquettes()
+                .etiquettes(session)
                 .iter()
                 .any(|etiquette| ids.iter().any(|id| id == etiquette.id()))
         });

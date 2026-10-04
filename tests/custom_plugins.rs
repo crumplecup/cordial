@@ -45,9 +45,10 @@ fn strategic_plugin_selects_portfolio_by_indicator() {
         ACME_PORTFOLIOS,
     );
 
-    assert_eq!(todos.etiquettes().len(), 1);
-    assert_eq!(todos.etiquettes()[0].id(), "acme-todo");
-    assert!(empty.etiquettes().is_empty());
+    let session = SessionBuilder::new(".").build();
+    assert_eq!(todos.etiquettes(&session).len(), 1);
+    assert_eq!(todos.etiquettes(&session)[0].id(), "acme-todo");
+    assert!(empty.etiquettes(&session).is_empty());
 }
 
 #[test]
