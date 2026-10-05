@@ -349,6 +349,22 @@ tempfile = "3"
 rustdoc-types = "0.61"
 miette = { version = "7", features = ["fancy"] }
 
+# 75 files under `tests/` each link their own standalone binary against
+# the full `cordial` rlib (syn `full`+`extra-traits`, verus_syn,
+# proc-macro2 -- all debug-info-heavy). Full DWARF (`debug = true`, the
+# default) makes each one ~220MB and the linker's peak RSS while
+# resolving that much debug info scales well past the binary's final
+# size; default 8-way build parallelism can run that many linker jobs at
+# once (`cargo build`/`cargo run`'s single `cordial` dev binary hits the
+# same ~220MB, just without the 75x multiplier). Line tables keep panic
+# backtraces and `#[track_caller]` locations working -- just not
+# per-variable debug info, which nothing here debugs interactively.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.test]
+debug = "line-tables-only"
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(kani)',
