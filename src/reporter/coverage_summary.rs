@@ -326,10 +326,10 @@ mod amenable_ext_section {
 
     #[instrument(level = "debug", skip(findings), err(level = "warn"))]
     pub(super) fn amenable_ext_jiff_section(findings: &[&dyn Finding]) -> CordialResult<String> {
-        use crate::etiquettes::amenable_ext_jiff_report_from_findings;
+        use crate::etiquettes::ext_report_from_findings;
         use crate::framework_std::render_amenable_ext_summary_md;
 
-        let Some(report) = amenable_ext_jiff_report_from_findings(findings, false)? else {
+        let Some(report) = ext_report_from_findings(findings, "amenable-ext-jiff", false)? else {
             return Ok("_No amenable ext (jiff) findings._\n".to_string());
         };
         Ok(render_amenable_ext_summary_md(

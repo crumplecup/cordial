@@ -13,7 +13,6 @@ use crate::session::{RunFilter, SessionView};
 use crate::targets::discover_crate_targets;
 
 use tracing::instrument;
-static AMENABLE_EXT_ETIQUETTES: [&'static dyn Etiquette; 1] = [&AMENABLE_EXT_JIFF_ETIQUETTE];
 
 /// Registry-backed ext coverage has no single composite trait
 /// requirement — same reasoning as `amenable::RegistryRequirement`.
@@ -80,7 +79,7 @@ impl Plugin for AmenableExtCoverage {
 
     #[instrument(level = "trace", skip(self))]
     fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
-        AMENABLE_EXT_ETIQUETTES.to_vec()
+        vec![&*AMENABLE_EXT_JIFF_ETIQUETTE]
     }
 
     #[instrument(level = "trace", skip(self))]

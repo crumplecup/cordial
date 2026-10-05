@@ -279,7 +279,7 @@ pub use etiquettes::coverage_etiquettes;
 pub use etiquettes::framework_std::{AMENABLE_STD_ETIQUETTE, AmenableStdReporter};
 pub use etiquettes::quality_etiquettes;
 #[cfg(feature = "amenable_ext")]
-pub use etiquettes::{AMENABLE_EXT_JIFF_ETIQUETTE, AmenableExtJiffReporter};
+pub use etiquettes::{AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter};
 #[cfg(all(feature = "rustdoc", feature = "impl_coverage"))]
 pub use plugin::classify_elicit_complete_gap;
 #[cfg(feature = "elicitation")]

@@ -1,6 +1,7 @@
-//! Finding/Rule for amenable ext (jiff) registry coverage — the
-//! `amenable_ext` counterpart of `etiquettes::framework_std::amenable`,
-//! which does the identical round trip for `amenable_std`.
+//! Finding/Rule for amenable ext (third-party crate) registry coverage —
+//! one generic implementation shared by every `amenable-ext-{target}`
+//! etiquette instance (jiff today; chrono and others register by calling
+//! [`super::build_ext_etiquette`] with their own target name).
 
 use crate::error::CordialResult;
 use crate::framework_std::{
@@ -8,33 +9,72 @@ use crate::framework_std::{
 };
 use crate::objects::{Disposition, Finding, FindingSink, IrAnchor, NodeAnchor, Rule};
 
-use super::AMENABLE_EXT_JIFF_CATEGORY;
-
 use tracing::instrument;
-#[derive(Debug, Clone, Copy)]
-pub struct AmenableExtJiffRule;
 
-impl Rule for AmenableExtJiffRule {
+/// Etiquette id / finding category for `target` (`"jiff"` ->
+/// `"amenable-ext-jiff"`). Shared by the etiquette, the rule, and every
+/// report/gap filter so they agree on one string.
+#[instrument(level = "trace")]
+pub fn ext_etiquette_id(target: &str) -> String {
+    format!("amenable-ext-{target}")
+}
+
+#[instrument(level = "trace")]
+fn capitalize(target: &str) -> String {
+    let mut chars = target.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+    }
+}
+
+/// Rule for one amenable-ext target's inventory rows. Holds the target's
+/// derived id/category/description as owned strings so a target name read
+/// from `cordial.toml` at runtime can mint one without a `'static` literal.
+#[derive(Debug, Clone)]
+pub struct ExtRowRule {
+    id: String,
+    category: String,
+    description: String,
+}
+
+impl ExtRowRule {
+    /// Build the row rule for `target` (e.g. `"jiff"`), deriving
+    /// id/category/description the same way every amenable-ext target does.
+    #[instrument(level = "debug")]
+    pub fn new(target: &str) -> Self {
+        Self {
+            id: format!("AMENABLE-EXT-{}-ROW", target.to_uppercase()),
+            category: ext_etiquette_id(target),
+            description: format!(
+                "{} inventory row assessed for amenable_ext registry coverage",
+                capitalize(target)
+            ),
+        }
+    }
+}
+
+impl Rule for ExtRowRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
-        "AMENABLE-EXT-JIFF-ROW"
+        &self.id
     }
 
     #[instrument(level = "trace", skip(self))]
     fn category(&self) -> &str {
-        AMENABLE_EXT_JIFF_CATEGORY
+        &self.category
     }
 
     #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
-        "Jiff inventory row assessed for amenable_ext registry coverage"
+        &self.description
     }
 }
 
 #[derive(Debug, Clone, derive_builder::Builder)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
-pub struct AmenableExtJiffRowFinding {
-    rule: AmenableExtJiffRule,
+pub struct ExtRowFinding {
+    rule: ExtRowRule,
     disposition: Disposition,
     anchor: NodeAnchor,
     source_crate: String,
@@ -57,15 +97,15 @@ pub struct AmenableExtJiffRowFinding {
     action: String,
 }
 
-impl AmenableExtJiffRowFinding {
+impl ExtRowFinding {
     /// Start a builder for this finding.
     #[instrument(level = "debug")]
-    pub fn builder() -> AmenableExtJiffRowFindingBuilder {
-        AmenableExtJiffRowFindingBuilder::default()
+    pub fn builder() -> ExtRowFindingBuilder {
+        ExtRowFindingBuilder::default()
     }
 }
 
-impl Finding for AmenableExtJiffRowFinding {
+impl Finding for ExtRowFinding {
     #[instrument(level = "trace", skip(self))]
     fn rule(&self) -> &dyn Rule {
         &self.rule
@@ -159,7 +199,7 @@ impl Finding for AmenableExtJiffRowFinding {
 }
 
 #[instrument(level = "debug", skip(status))]
-pub fn amenable_ext_jiff_row_disposition(status: AmenableStdStatus) -> Disposition {
+pub fn ext_row_disposition(status: AmenableStdStatus) -> Disposition {
     match status {
         AmenableStdStatus::Missing | AmenableStdStatus::Partial => Disposition::Open,
         AmenableStdStatus::Skipped => Disposition::Suppressed,
@@ -168,13 +208,14 @@ pub fn amenable_ext_jiff_row_disposition(status: AmenableStdStatus) -> Dispositi
 }
 
 #[instrument(level = "debug", skip(findings))]
-pub fn amenable_ext_jiff_report_from_findings(
+pub fn ext_report_from_findings(
     findings: &[&dyn Finding],
+    category: &str,
     include_nightly: bool,
 ) -> CordialResult<Option<AmenableStdReport>> {
     let rows: Vec<_> = findings
         .iter()
-        .filter(|finding| finding.rule().category() == AMENABLE_EXT_JIFF_CATEGORY)
+        .filter(|finding| finding.rule().category() == category)
         .collect();
     if rows.is_empty() {
         return Ok(None);
@@ -261,12 +302,14 @@ pub fn amenable_ext_jiff_report_from_findings(
 }
 
 #[instrument(level = "debug", skip(findings))]
-pub fn amenable_ext_jiff_gaps_from_findings(findings: &[&dyn Finding]) -> Vec<AmenableStdGapEntry> {
+pub fn ext_gaps_from_findings(
+    findings: &[&dyn Finding],
+    category: &str,
+) -> Vec<AmenableStdGapEntry> {
     findings
         .iter()
         .filter(|finding| {
-            finding.rule().category() == AMENABLE_EXT_JIFF_CATEGORY
-                && finding.disposition() == Disposition::Open
+            finding.rule().category() == category && finding.disposition() == Disposition::Open
         })
         .map(|finding| {
             let mut sink = crate::objects::MapFindingSink::default();

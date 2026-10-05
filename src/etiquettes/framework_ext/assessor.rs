@@ -1,40 +1,53 @@
-//! Assessor for amenable ext (jiff) registry coverage — the
-//! `amenable_ext` counterpart of
-//! `etiquettes::framework_std::assessor::AmenableStdAssessor`, which
-//! does the identical job for `amenable_std`.
+//! Assessor for amenable ext (third-party crate) registry coverage — one
+//! generic implementation shared by every `amenable-ext-{target}`
+//! etiquette instance, parameterized by the upstream crate name.
 
 use crate::error::CordialResult;
 use crate::framework_std::{
-    AMENABLE_EXT_IMPL_CRATE, AMENABLE_EXT_JIFF_PATCH_SET, AMENABLE_EXT_JIFF_UPSTREAM_CRATE,
-    AmenableExtOptions, ClassifyRowArgs, amenable_ext_gap_fields, classify_amenable_ext_row,
-    collect_proof_chain_subjects, ensure_registry_dump_for_assessor,
+    AMENABLE_EXT_IMPL_CRATE, AmenableExtOptions, ClassifyRowArgs, amenable_ext_gap_fields,
+    classify_amenable_ext_row, collect_proof_chain_subjects, ensure_registry_dump_for_assessor,
     load_ext_inventory_from_shadow_dep, load_verifier_skip_map,
 };
 use crate::hooks::{AssessView, Assessor};
 use crate::objects::{Finding, NodeAnchor};
 use crate::store::StoreLayout;
 
-use super::jiff::{
-    AmenableExtJiffRowFinding, AmenableExtJiffRule, amenable_ext_jiff_row_disposition,
-};
+use super::row::{ExtRowFinding, ExtRowRule, ext_row_disposition};
 use tracing::instrument;
 
-#[derive(Debug, Default, Clone, Copy)]
-pub struct AmenableExtJiffAssessor;
-
-impl AmenableExtJiffAssessor {
-    pub const ID: &'static str = "amenable-ext-jiff-assessor";
+/// Assessor for one amenable-ext target crate's inventory rows.
+#[derive(Debug, Clone)]
+pub struct ExtAssessor {
+    id: String,
+    probe_id: String,
+    upstream_crate: String,
+    patch_set: String,
+    rule: ExtRowRule,
 }
 
-impl Assessor for AmenableExtJiffAssessor {
+impl ExtAssessor {
+    /// Build the assessor for `target` (e.g. `"jiff"`).
+    #[instrument(level = "debug")]
+    pub fn new(target: &str) -> Self {
+        Self {
+            id: format!("amenable-ext-{target}-assessor"),
+            probe_id: format!("amenable-ext-{target}-scope"),
+            upstream_crate: target.to_string(),
+            patch_set: format!("amenable_ext_{target}"),
+            rule: ExtRowRule::new(target),
+        }
+    }
+}
+
+impl Assessor for ExtAssessor {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
-        Self::ID
+        &self.id
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &[super::probe::AmenableExtJiffScopeProbe::ID]
+    fn consumes(&self) -> Vec<&str> {
+        vec![self.probe_id.as_str()]
     }
 
     #[instrument(level = "trace", skip(self, view))]
@@ -55,13 +68,13 @@ impl Assessor for AmenableExtJiffAssessor {
             session.project_root(),
             &store,
             AMENABLE_EXT_IMPL_CRATE,
-            AMENABLE_EXT_JIFF_UPSTREAM_CRATE,
+            &self.upstream_crate,
             options.force_rustdoc(),
         )?;
         let registry_options = crate::framework_std::AmenableStdOptions::default();
         let registry =
             ensure_registry_dump_for_assessor(&store, session.project_root(), &registry_options)?;
-        let skip_map = load_verifier_skip_map(&store, AMENABLE_EXT_JIFF_PATCH_SET);
+        let skip_map = load_verifier_skip_map(&store, &self.patch_set);
         let proof_chain_subjects = collect_proof_chain_subjects(session.project_root())?;
         let anchor = NodeAnchor::new(ir.root()?);
 
@@ -85,11 +98,11 @@ impl Assessor for AmenableExtJiffAssessor {
             )?;
             let (missing_layers, action) = amenable_ext_gap_fields(&entry, AMENABLE_EXT_IMPL_CRATE);
             findings.push(Box::new(
-                AmenableExtJiffRowFinding::builder()
-                    .rule(AmenableExtJiffRule)
-                    .disposition(amenable_ext_jiff_row_disposition(entry.status()))
+                ExtRowFinding::builder()
+                    .rule(self.rule.clone())
+                    .disposition(ext_row_disposition(entry.status()))
                     .anchor(anchor)
-                    .source_crate(AMENABLE_EXT_JIFF_UPSTREAM_CRATE.to_string())
+                    .source_crate(self.upstream_crate.clone())
                     .impl_crate(AMENABLE_EXT_IMPL_CRATE.to_string())
                     .type_path(entry.type_path().clone())
                     .type_kind(entry.type_kind().clone())

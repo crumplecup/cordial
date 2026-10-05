@@ -1,32 +1,43 @@
-//! Reporter for amenable ext (jiff) registry coverage — the
-//! `amenable_ext` counterpart of
-//! `etiquettes::framework_std::amenable_reporter::AmenableStdReporter`.
+//! Reporter for amenable ext (third-party crate) registry coverage — one
+//! generic implementation shared by every `amenable-ext-{target}`
+//! etiquette instance, parameterized by the upstream crate name.
 
 use crate::error::{CordialError, CordialResult};
 use crate::framework_std::{
-    AMENABLE_EXT_JIFF_PATCH_SET, load_verifier_skip_map, render_amenable_ext_checklist_md,
-    render_amenable_std_coverage_csv, render_amenable_std_gaps_csv,
+    load_verifier_skip_map, render_amenable_ext_checklist_md, render_amenable_std_coverage_csv,
+    render_amenable_std_gaps_csv,
 };
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, TextArtifact};
 use crate::store::StoreLayout;
 
-use super::jiff::{amenable_ext_jiff_gaps_from_findings, amenable_ext_jiff_report_from_findings};
-
+use super::row::{ext_gaps_from_findings, ext_report_from_findings};
 use tracing::instrument;
-/// Reporter for amenable-ext-jiff coverage.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct AmenableExtJiffReporter;
 
-impl AmenableExtJiffReporter {
-    /// Stable identifier for `AmenableExtJiffReporter`.
-    pub const ID: &'static str = "amenable-ext-jiff-reporter";
+/// Reporter for one amenable-ext target crate's registry coverage.
+#[derive(Debug, Clone)]
+pub struct ExtReporter {
+    id: String,
+    category: String,
+    patch_set: String,
 }
 
-impl Reporter for AmenableExtJiffReporter {
+impl ExtReporter {
+    /// Build the reporter for `target` (e.g. `"jiff"`).
+    #[instrument(level = "debug")]
+    pub fn new(target: &str) -> Self {
+        Self {
+            id: format!("amenable-ext-{target}-reporter"),
+            category: super::row::ext_etiquette_id(target),
+            patch_set: format!("amenable_ext_{target}"),
+        }
+    }
+}
+
+impl Reporter for ExtReporter {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
-        Self::ID
+        &self.id
     }
 
     #[instrument(level = "trace", skip(self, view))]
@@ -34,29 +45,30 @@ impl Reporter for AmenableExtJiffReporter {
         let findings = view.findings();
         let session = view.session();
 
-        let report = amenable_ext_jiff_report_from_findings(findings, false)?.ok_or_else(|| {
-            CordialError::invariant("amenable ext jiff reporter requires assessor findings")
-        })?;
-        let gaps = amenable_ext_jiff_gaps_from_findings(findings);
+        let report =
+            ext_report_from_findings(findings, &self.category, false)?.ok_or_else(|| {
+                CordialError::invariant("amenable ext reporter requires assessor findings")
+            })?;
+        let gaps = ext_gaps_from_findings(findings, &self.category);
         let store = StoreLayout::from_root(
             session.store_root(),
             crate::store::project_slug_from_path(session.project_root()),
         );
-        let skip_map = load_verifier_skip_map(&store, AMENABLE_EXT_JIFF_PATCH_SET);
+        let skip_map = load_verifier_skip_map(&store, &self.patch_set);
 
         Ok(vec![
             artifact(
-                "amenable-ext-jiff.csv",
+                &format!("{}.csv", self.category),
                 "text/csv",
                 render_amenable_std_coverage_csv(&report)?,
             ),
             artifact(
-                "amenable-ext-jiff.checklist.md",
+                &format!("{}.checklist.md", self.category),
                 "text/markdown",
-                render_amenable_ext_checklist_md(&report, &skip_map, AMENABLE_EXT_JIFF_PATCH_SET)?,
+                render_amenable_ext_checklist_md(&report, &skip_map, &self.patch_set)?,
             ),
             artifact(
-                "gaps-amenable-ext-jiff.csv",
+                &format!("gaps-{}.csv", self.category),
                 "text/csv",
                 render_amenable_std_gaps_csv(&gaps)?,
             ),

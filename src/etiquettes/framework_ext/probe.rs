@@ -1,13 +1,11 @@
-//! Scope probe for amenable ext (jiff) registry coverage — the
-//! `amenable_ext` counterpart of `etiquettes::framework_std::probe`'s
-//! `AmenableStdScopeProbe`, which does the identical job for
-//! `amenable_std` against the shared sysroot inventory instead of a
-//! shadow-dep-built one.
+//! Scope probe for amenable ext (third-party crate) registry coverage —
+//! one generic implementation shared by every `amenable-ext-{target}`
+//! etiquette instance, parameterized by the upstream crate name.
 
 use crate::error::CordialResult;
 use crate::framework_std::{
-    AMENABLE_EXT_IMPL_CRATE, AMENABLE_EXT_JIFF_UPSTREAM_CRATE, AmenableExtOptions,
-    framework_std_type_items, load_ext_inventory_from_shadow_dep,
+    AMENABLE_EXT_IMPL_CRATE, AmenableExtOptions, framework_std_type_items,
+    load_ext_inventory_from_shadow_dep,
 };
 use crate::hooks::{Probe, ProbeView};
 use crate::ir::{BasicQuery, Query};
@@ -17,9 +15,9 @@ use crate::store::StoreLayout;
 
 use tracing::instrument;
 
-/// One jiff inventory row in scope for amenable_ext registry coverage.
+/// One inventory row in scope for amenable_ext registry coverage.
 #[derive(Debug, Clone, derive_new::new)]
-pub struct AmenableExtJiffScopeMarker {
+pub struct ExtScopeMarker {
     anchor: NodeAnchor,
     probe_id: String,
     type_path: String,
@@ -27,7 +25,7 @@ pub struct AmenableExtJiffScopeMarker {
     is_generic: bool,
 }
 
-impl Marker for AmenableExtJiffScopeMarker {
+impl Marker for ExtScopeMarker {
     #[instrument(level = "trace", skip(self))]
     fn probe(&self) -> &str {
         &self.probe_id
@@ -59,17 +57,28 @@ impl Marker for AmenableExtJiffScopeMarker {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-pub struct AmenableExtJiffScopeProbe;
-
-impl AmenableExtJiffScopeProbe {
-    pub const ID: &'static str = "amenable-ext-jiff-scope";
+/// Scope probe for one amenable-ext target crate's inventory.
+#[derive(Debug, Clone)]
+pub struct ExtScopeProbe {
+    id: String,
+    upstream_crate: String,
 }
 
-impl Probe for AmenableExtJiffScopeProbe {
+impl ExtScopeProbe {
+    /// Build the scope probe for `target` (e.g. `"jiff"`).
+    #[instrument(level = "debug")]
+    pub fn new(target: &str) -> Self {
+        Self {
+            id: format!("amenable-ext-{target}-scope"),
+            upstream_crate: target.to_string(),
+        }
+    }
+}
+
+impl Probe for ExtScopeProbe {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
-        Self::ID
+        &self.id
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -96,15 +105,15 @@ impl Probe for AmenableExtJiffScopeProbe {
             session.project_root(),
             &store,
             AMENABLE_EXT_IMPL_CRATE,
-            AMENABLE_EXT_JIFF_UPSTREAM_CRATE,
+            &self.upstream_crate,
             options.force_rustdoc(),
         )?;
         let anchor = NodeAnchor::new(ir.root()?);
-        let probe_id = Self::ID.to_string();
+        let probe_id = self.id.clone();
 
         let markers = framework_std_type_items(&items, options.include_nightly())
             .map(|item| {
-                Box::new(AmenableExtJiffScopeMarker::new(
+                Box::new(ExtScopeMarker::new(
                     anchor,
                     probe_id.clone(),
                     item.path().clone(),

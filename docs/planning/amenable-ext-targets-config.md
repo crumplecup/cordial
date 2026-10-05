@@ -142,6 +142,18 @@ etiquettes, keyed by target name.
 1. **Pure refactor.** Generic finding / report / disposition types over an
    owned target name; keep the static jiff etiquette. Acceptance: jiff output
    (findings, CSV, checklist, summary) is byte-identical to before.
+   Landed as the generic `row`/`probe`/`assessor`/`reporter` types in
+   `etiquettes/framework_ext` plus `build_ext_etiquette(target)`, with
+   `tests/amenable_ext_jiff_metadata.rs` checking the built etiquette's
+   id/name/explain/rule text against the pre-refactor hardcoded constants
+   (it caught one real regression: the explain page's rule summary had
+   lost `ExtRowRule`'s capitalization of `target`, now fixed by deriving
+   it from the real `ExtRowRule` instead of re-deriving the string).
+   That test is metadata-only, not full output — no fixture workspace
+   with a real `amenable_core::ExtStandard<T>` impl exists yet to drive
+   the probe/assessor/reporter end-to-end, so the full "byte-identical
+   findings/CSV/checklist" acceptance bar is still open; folded into
+   step 2, which needs a multi-target fixture anyway.
 2. **Config and registration.** `[[amenable_ext.target]]`, `KNOWN_TARGETS`
    default, owned per-target etiquettes, `coverage_summary` loop, `cordial explain`. Chrono
    lands as two lines of config in the consumer repo, with no new Rust files.
@@ -150,6 +162,8 @@ etiquettes, keyed by target name.
 
 - [ ] Verify open items
 - [x] Step 0: `Arc<dyn Etiquette>` ownership change
-- [ ] Step 1: generic types, jiff output unchanged
+- [x] Step 1: generic types; metadata-level regression test in place. Full
+      byte-identical output verification needs a fixture workspace with a
+      real `ExtStandard<T>` impl — deferred into step 2
 - [ ] Step 2: config-driven targets and registration
 - [ ] Update `amenable-ext-coverage-etiquette.md` to point here
