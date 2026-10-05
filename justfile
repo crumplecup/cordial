@@ -63,8 +63,17 @@ check-all:
 # sized (~80 `cargo check`s, not C(30, 2)). `--no-dev-deps` temporarily
 # edits Cargo.toml (restored on exit). Needs cargo-hack.
 # CI runs this as `check-features (ubuntu-latest)`.
+#
+# CARGO_INCREMENTAL=0: every one of these ~80 checks uses a different
+# feature set, and incremental's cache key includes the active features,
+# so every single check is a cold cache anyway -- incremental buys no
+# reuse here, only pays its memory/bookkeeping overhead ~80 times over
+# and leaves an orphaned incremental dir per combo if a run gets killed
+# before cleanup (confirmed: with it on, a kill left ~250 stale
+# incremental dirs totaling several GB; with it off, the full sweep ran
+# clean with host memory never dropping below 19GB free).
 check-features:
-    {{cargo}} hack check \
+    CARGO_INCREMENTAL=0 {{cargo}} hack check \
         --feature-powerset \
         --depth 2 \
         --no-dev-deps \
