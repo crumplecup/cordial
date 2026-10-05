@@ -84,7 +84,7 @@ fn cfg_hygiene_etiquette_flags_undeclared_but_not_builtin() -> miette::Result<()
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&CFG_HYGIENE_ETIQUETTE)
+        .register(&*CFG_HYGIENE_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -158,7 +158,7 @@ fn gated() {}
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&CFG_HYGIENE_ETIQUETTE)
+        .register(&*CFG_HYGIENE_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -221,7 +221,7 @@ fn wrong_verifier() {}
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&CFG_HYGIENE_ETIQUETTE)
+        .register(&*CFG_HYGIENE_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -281,7 +281,7 @@ fn cfg_hygiene_etiquette_summary_and_checklist_group_by_each_finding_own_crate()
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&CFG_HYGIENE_ETIQUETTE)
+        .register(&*CFG_HYGIENE_ETIQUETTE)
         .build();
     session
         .run(&RunAll)

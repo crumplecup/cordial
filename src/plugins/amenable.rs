@@ -12,7 +12,6 @@ use crate::session::{RunFilter, SessionView};
 use crate::targets::discover_crate_targets;
 
 use tracing::instrument;
-static AMENABLE_ETIQUETTES: [&'static dyn Etiquette; 1] = [&AMENABLE_STD_ETIQUETTE];
 
 /// Registry-backed std coverage has no single composite trait requirement.
 #[derive(Debug, Default, Clone, Copy)]
@@ -73,7 +72,7 @@ impl Plugin for AmenableStdCoverage {
 
     #[instrument(level = "trace", skip(self))]
     fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
-        AMENABLE_ETIQUETTES.to_vec()
+        vec![&*AMENABLE_STD_ETIQUETTE]
     }
 
     #[instrument(level = "trace", skip(self))]

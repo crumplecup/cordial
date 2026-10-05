@@ -60,7 +60,7 @@ fn modularity_etiquette_detects_large_functions() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -373,7 +373,7 @@ fn modularity_etiquette_session_reads_types_per_file_config() -> miette::Result<
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let findings: Vec<_> = outcome.findings().collect();
@@ -432,7 +432,7 @@ fn generated_files_are_exempt_from_file_and_module_size_but_not_types_per_file()
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let findings: Vec<_> = outcome.findings().collect();
@@ -618,7 +618,7 @@ fn module_size_session_reports_two_sigma_outlier_without_checklisting_it() -> mi
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let findings: Vec<_> = outcome.findings().collect();
@@ -681,7 +681,7 @@ fn checklist_lists_over_limit_files_by_descending_size() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let checklist = fs::read_to_string(store.path().join("findings/modularity.checklist.md"))
@@ -736,7 +736,7 @@ fn module_size_upper_tail_below_file_floor_is_not_checklist() -> miette::Result<
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let flagged = outcome.findings().any(|finding| {
@@ -789,7 +789,7 @@ fn module_size_lower_tail_stays_diagnostic_when_not_ignored() -> miette::Result<
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let flagged = outcome.findings().any(|finding| {
@@ -841,7 +841,7 @@ fn module_size_lower_tail_can_be_ignored() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let flagged = outcome.findings().any(|finding| {
@@ -880,7 +880,7 @@ fn module_size_session_does_not_flag_even_sizes() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let flagged = outcome.findings().any(|finding| {
@@ -925,7 +925,7 @@ fn min_module_lines_drops_tiny_modules_from_sigma_sample() -> miette::Result<()>
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let flagged = outcome.findings().any(|finding| {
@@ -1140,7 +1140,7 @@ fn top_heavy_parent_is_a_peel_checklist_item() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     assert!(
@@ -1187,7 +1187,7 @@ fn lopsided_sibling_is_a_split_checklist_item() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     assert!(
@@ -1252,7 +1252,7 @@ fn unary_nest_is_a_collapse_checklist_item() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     assert!(
@@ -1305,7 +1305,7 @@ fn unary_leaf_is_not_a_collapse_checklist_item() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     assert!(
@@ -1348,7 +1348,7 @@ fn checklist_names_longest_methods_on_too_long_files() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let checklist = fs::read_to_string(store.path().join("findings/modularity.checklist.md"))
@@ -1406,7 +1406,7 @@ fn checklist_extract_helpers_on_too_long_files_without_long_bodies() -> miette::
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let checklist = fs::read_to_string(store.path().join("findings/modularity.checklist.md"))
@@ -1458,7 +1458,7 @@ fn checklist_names_helpers_below_inventory_on_too_long_files() -> miette::Result
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let checklist = fs::read_to_string(store.path().join("findings/modularity.checklist.md"))
@@ -1560,7 +1560,7 @@ fn module_hierarchy_session_writes_branch_ranking() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let summary = fs::read_to_string(store.path().join("findings/modularity-summary.md"))
@@ -1630,7 +1630,7 @@ fn types_per_file_csv_row_quotes_the_comma_joined_context() -> miette::Result<()
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&MODULARITY_ETIQUETTE)
+        .register(&*MODULARITY_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic().wrap_err("run")?;
 

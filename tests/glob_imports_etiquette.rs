@@ -81,7 +81,7 @@ fn glob_imports_etiquette_writes_checklist() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&GLOB_IMPORTS_ETIQUETTE)
+        .register(&*GLOB_IMPORTS_ETIQUETTE)
         .build();
 
     let outcome = session

@@ -36,7 +36,7 @@ fn impl_coverage_etiquette_finds_missing_traits() -> miette::Result<()> {
     let crate_root = write_fixture(fixture.path(), store.path(), demo_impl_coverage_crate())?;
     let session = SessionBuilder::new(&crate_root)
         .with_store_root(store.path())
-        .register(&IMPL_COVERAGE_ETIQUETTE)
+        .register(&*IMPL_COVERAGE_ETIQUETTE)
         .build();
 
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
@@ -63,7 +63,7 @@ fn trenchcoat_etiquette_finds_unwrapped_foreign_type() -> miette::Result<()> {
     let crate_root = write_fixture(fixture.path(), store.path(), demo_trenchcoat_crate())?;
     let session = SessionBuilder::new(&crate_root)
         .with_store_root(store.path())
-        .register(&TRENCHCOAT_ETIQUETTE)
+        .register(&*TRENCHCOAT_ETIQUETTE)
         .build();
 
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
@@ -89,7 +89,7 @@ fn shadow_etiquette_links_mapped_items() -> miette::Result<()> {
     let crate_root = write_fixture(fixture.path(), store.path(), demo_shadow_crate())?;
     let session = SessionBuilder::new(&crate_root)
         .with_store_root(store.path())
-        .register(&SHADOW_ETIQUETTE)
+        .register(&*SHADOW_ETIQUETTE)
         .build();
 
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;

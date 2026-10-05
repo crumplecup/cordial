@@ -53,8 +53,8 @@ fn elicitation_summary_includes_shadow_section_for_minimal_workspace() -> miette
 
     let session = SessionBuilder::new(&workspace)
         .with_store_root(store.path())
-        .register(&SHADOW_ETIQUETTE)
-        .register(&IMPL_COVERAGE_ETIQUETTE)
+        .register(&*SHADOW_ETIQUETTE)
+        .register(&*IMPL_COVERAGE_ETIQUETTE)
         .build();
     let filter =
         NamedRunFilter::etiquettes(["shadow", "impl-coverage"]).with_crate("url".to_string());

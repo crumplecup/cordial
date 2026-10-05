@@ -252,7 +252,7 @@ fn session_writes_checklist_from_injected_creusot() -> miette::Result<()> {
     let outcome = {
         let session = SessionBuilder::new(&crate_root)
             .with_store_root(store.path())
-            .register(&CREUSOT_DIAGNOSTICS_ETIQUETTE)
+            .register(&*CREUSOT_DIAGNOSTICS_ETIQUETTE)
             .build();
         session.run(&RunAll)
     };

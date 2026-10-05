@@ -220,7 +220,7 @@ fn session_writes_boundary_checklist_not_instrument_rows() -> miette::Result<()>
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)

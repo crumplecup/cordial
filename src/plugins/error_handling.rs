@@ -14,27 +14,27 @@ static STANDARD_POLICY: StandardErrorHandlingPolicy = StandardErrorHandlingPolic
 fn collect_error_handling_etiquettes() -> Vec<&'static dyn Etiquette> {
     let items: [Option<&'static dyn Etiquette>; 6] = [
         #[cfg(feature = "panics")]
-        Some(&crate::etiquettes::panics::PANICS_ETIQUETTE),
+        Some(&*crate::etiquettes::panics::PANICS_ETIQUETTE),
         #[cfg(not(feature = "panics"))]
         None,
         #[cfg(feature = "error_sites")]
-        Some(&crate::etiquettes::error_sites::ERROR_SITES_ETIQUETTE),
+        Some(&*crate::etiquettes::error_sites::ERROR_SITES_ETIQUETTE),
         #[cfg(not(feature = "error_sites"))]
         None,
         #[cfg(feature = "error_chain")]
-        Some(&crate::etiquettes::error_chain::ERROR_CHAIN_ETIQUETTE),
+        Some(&*crate::etiquettes::error_chain::ERROR_CHAIN_ETIQUETTE),
         #[cfg(not(feature = "error_chain"))]
         None,
         #[cfg(feature = "internal_error_chain")]
-        Some(&crate::etiquettes::internal_error_chain::INTERNAL_ERROR_CHAIN_ETIQUETTE),
+        Some(&*crate::etiquettes::internal_error_chain::INTERNAL_ERROR_CHAIN_ETIQUETTE),
         #[cfg(not(feature = "internal_error_chain"))]
         None,
         #[cfg(feature = "foreign_error_types")]
-        Some(&crate::etiquettes::foreign_error_types::FOREIGN_ERROR_TYPES_ETIQUETTE),
+        Some(&*crate::etiquettes::foreign_error_types::FOREIGN_ERROR_TYPES_ETIQUETTE),
         #[cfg(not(feature = "foreign_error_types"))]
         None,
         #[cfg(feature = "foreign_error_attenuation")]
-        Some(&crate::etiquettes::foreign_error_attenuation::FOREIGN_ERROR_ATTENUATION_ETIQUETTE),
+        Some(&*crate::etiquettes::foreign_error_attenuation::FOREIGN_ERROR_ATTENUATION_ETIQUETTE),
         #[cfg(not(feature = "foreign_error_attenuation"))]
         None,
     ];

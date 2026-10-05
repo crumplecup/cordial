@@ -37,6 +37,8 @@ pub use reporter::{DocWarningChecklistReporter, DocWarningCsvReporter, DocWarnin
 pub use scan::{parse_doc_compiler_output, scan_crate_doc_warnings};
 pub use types::{DocWarningRecord, DocWarningRuleId};
 
+use std::sync::LazyLock;
+
 use crate::etiquette::{
     EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_category,
@@ -68,30 +70,32 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in rustdoc-warning etiquette bundle.
-pub static DOC_WARNINGS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
-    StaticEtiquette::new(
-        "doc_warnings",
-        "rustdoc warnings",
-        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-        false,
-        EtiquetteExplain::new(
-            "Does cargo doc emit rustdoc::* diagnostics rustc never sees?",
-            "cargo check never runs rustdoc. Broken intra-doc links and the rest of the rustdoc::* group only show up under cargo doc, which is easy to skip locally until CI sets RUSTDOCFLAGS=-D warnings.",
-            "Invokes cargo doc --no-deps and records each rustdoc::* diagnostic. rustc lints that fire while rustdoc compiles (missing_docs, unused, …) are dropped — check and clippy already see those. The same span is kept once. Skipped when cargo is missing from PATH or the package is in [doc_warnings] skip_crates.",
-            "`[doc_warnings] enabled = false` in cordial.toml.",
-            &[EtiquetteRuleExplain::new(
-                "DOC-WARNING-001",
-                "A rustdoc::* diagnostic from cargo doc",
-            )],
+pub static DOC_WARNINGS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|| {
+    StaticQualityEtiquette::new(
+        StaticEtiquette::new(
+            "doc_warnings",
+            "rustdoc warnings",
+            EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+            false,
+            EtiquetteExplain::new(
+                "Does cargo doc emit rustdoc::* diagnostics rustc never sees?",
+                "cargo check never runs rustdoc. Broken intra-doc links and the rest of the rustdoc::* group only show up under cargo doc, which is easy to skip locally until CI sets RUSTDOCFLAGS=-D warnings.",
+                "Invokes cargo doc --no-deps and records each rustdoc::* diagnostic. rustc lints that fire while rustdoc compiles (missing_docs, unused, …) are dropped — check and clippy already see those. The same span is kept once. Skipped when cargo is missing from PATH or the package is in [doc_warnings] skip_crates.",
+                "`[doc_warnings] enabled = false` in cordial.toml.",
+                vec![EtiquetteRuleExplain::new(
+                    "DOC-WARNING-001",
+                    "A rustdoc::* diagnostic from cargo doc",
+                )],
+            ),
         ),
-    ),
-    Some(QualityAreaSpec::new(
-        "rustdoc warnings",
-        "doc-warnings.checklist.md",
-        "doc-warnings-summary.md",
-        quality_area_compute,
-    )),
-);
+        Some(QualityAreaSpec::new(
+            "rustdoc warnings",
+            "doc-warnings.checklist.md",
+            "doc-warnings-summary.md",
+            quality_area_compute,
+        )),
+    )
+});
 
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {

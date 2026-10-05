@@ -576,7 +576,7 @@ fn antipatterns_etiquette_emits_reports() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(&workspace)
         .with_store_root(store.path())
-        .register(&ANTIPATTERNS_ETIQUETTE)
+        .register(&*ANTIPATTERNS_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -684,7 +684,7 @@ edition = { workspace = true }
 
     let session = SessionBuilder::new(workspace.path())
         .with_store_root(store.path())
-        .register(&ANTIPATTERNS_ETIQUETTE)
+        .register(&*ANTIPATTERNS_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)

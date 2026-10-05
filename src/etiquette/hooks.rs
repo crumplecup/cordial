@@ -5,9 +5,6 @@ use crate::hooks::{Assessor, IrEnricher, Loader, Probe, Reporter, WorkspaceAsses
 /// The hook slices an etiquette contributes, grouped so
 /// [`crate::etiquette::StaticEtiquette`] binds them as one argument instead of
 /// six.
-///
-/// `const` statics cannot call `derive_builder::build`, so this is a
-/// hand-written `const fn new`.
 pub struct EtiquetteHooks {
     loaders: &'static [&'static dyn Loader],
     enrichers: &'static [&'static dyn IrEnricher],

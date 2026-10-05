@@ -54,6 +54,8 @@ pub use version_reporter::{
     VersionInMemberChecklistReporter, VersionInMemberCsvReporter, VersionInMemberSummaryReporter,
 };
 
+use std::sync::LazyLock;
+
 use crate::etiquette::{
     EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_rule,
@@ -92,52 +94,54 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in antipatterns etiquette bundle.
-pub static ANTIPATTERNS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
-    StaticEtiquette::new(
-        "antipatterns",
-        "Antipatterns",
-        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-        false,
-        EtiquetteExplain::new(
-            "Untyped error carriers and related source smells?",
-            "These are quality problems adjacent to error handling that are not site/chain/foreign layers: they erase types, hide unused work, or fight workspace versioning.",
-            "Flags Box<dyn Error>, Result<_, String>, unused _arg (except on impls of foreign traits), struct &'static fields where an owned type or configured static-ref strategy would do, unnamed contract bounds (Kani/Creusot/Verus), and workspace members that pin a version. Some Box<dyn Error> / unused-arg rows feed the Error handling quality-report area.",
-            "`[antipatterns] enabled = false` in cordial.toml. `[antipatterns.static_refs] strategy = \"string\" | \"cow\" | \"const\"` changes the static-ref remediation guidance; `const` falls back to `Cow<'static, str>` for runtime string fields.",
-            &[
-                EtiquetteRuleExplain::new(
-                    "ANTIPATTERN-BOX-DYN-ERROR-001",
-                    "`Box<dyn Error>` carrier",
-                ),
-                EtiquetteRuleExplain::new(
-                    "ANTIPATTERN-STRING-ERROR-001",
-                    "`Result<_, String>` carrier",
-                ),
-                EtiquetteRuleExplain::new(
-                    "ANTIPATTERN-UNUSED-UNDERSCORE-ARG-001",
-                    "Unused `_arg` parameter",
-                ),
-                EtiquetteRuleExplain::new(
-                    "ANTIPATTERN-STRUCT-STATIC-REF-001",
-                    "`&'static` field that should be owned",
-                ),
-                EtiquetteRuleExplain::new(
-                    "ANTIPATTERN-UNNAMED-CONTRACT-BOUND-001",
-                    "Unnamed verifier contract bound",
-                ),
-                EtiquetteRuleExplain::new(
-                    "ANTIPATTERN-VERSION-IN-MEMBER-001",
-                    "Version pin on a workspace member",
-                ),
-            ],
+pub static ANTIPATTERNS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|| {
+    StaticQualityEtiquette::new(
+        StaticEtiquette::new(
+            "antipatterns",
+            "Antipatterns",
+            EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+            false,
+            EtiquetteExplain::new(
+                "Untyped error carriers and related source smells?",
+                "These are quality problems adjacent to error handling that are not site/chain/foreign layers: they erase types, hide unused work, or fight workspace versioning.",
+                "Flags Box<dyn Error>, Result<_, String>, unused _arg (except on impls of foreign traits), struct &'static fields where an owned type or configured static-ref strategy would do, unnamed contract bounds (Kani/Creusot/Verus), and workspace members that pin a version. Some Box<dyn Error> / unused-arg rows feed the Error handling quality-report area.",
+                "`[antipatterns] enabled = false` in cordial.toml. `[antipatterns.static_refs] strategy = \"string\" | \"cow\" | \"const\"` changes the static-ref remediation guidance; `const` falls back to `Cow<'static, str>` for runtime string fields.",
+                vec![
+                    EtiquetteRuleExplain::new(
+                        "ANTIPATTERN-BOX-DYN-ERROR-001",
+                        "`Box<dyn Error>` carrier",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ANTIPATTERN-STRING-ERROR-001",
+                        "`Result<_, String>` carrier",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ANTIPATTERN-UNUSED-UNDERSCORE-ARG-001",
+                        "Unused `_arg` parameter",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ANTIPATTERN-STRUCT-STATIC-REF-001",
+                        "`&'static` field that should be owned",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ANTIPATTERN-UNNAMED-CONTRACT-BOUND-001",
+                        "Unnamed verifier contract bound",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ANTIPATTERN-VERSION-IN-MEMBER-001",
+                        "Version pin on a workspace member",
+                    ),
+                ],
+            ),
         ),
-    ),
-    Some(QualityAreaSpec::new(
-        "Antipatterns",
-        "antipatterns.checklist.md",
-        "antipatterns-summary.md",
-        quality_area_compute,
-    )),
-);
+        Some(QualityAreaSpec::new(
+            "Antipatterns",
+            "antipatterns.checklist.md",
+            "antipatterns-summary.md",
+            quality_area_compute,
+        )),
+    )
+});
 
 /// `Box<dyn Error>`/`Result<_, String>` (`ANTIPATTERN-BOX-DYN-ERROR-001`/
 /// `ANTIPATTERN-STRING-ERROR-001`) are deliberately excluded here -- they

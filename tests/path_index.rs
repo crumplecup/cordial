@@ -20,7 +20,7 @@ fn path_index_resolves_type_nodes_after_rustdoc_load() -> miette::Result<()> {
 
     let session = SessionBuilder::new(&workspace)
         .with_store_root(store.path())
-        .register(&IMPL_COVERAGE_ETIQUETTE)
+        .register(&*IMPL_COVERAGE_ETIQUETTE)
         .build();
     let filter = NamedRunFilter::etiquettes(["impl-coverage"]).with_crate("url".to_string());
     session.run(&filter).into_diagnostic().wrap_err("run")?;

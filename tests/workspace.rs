@@ -33,7 +33,7 @@ resolver = "2"
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
 
     let outcome = session

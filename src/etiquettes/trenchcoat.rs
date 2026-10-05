@@ -28,6 +28,8 @@ pub use assessor::TrenchcoatAssessor;
 pub use probe::UnwrappedForeignProbe;
 pub use reporter::TrenchcoatCsvReporter;
 
+use std::sync::LazyLock;
+
 use crate::etiquette::{EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, StaticEtiquette};
 use crate::{RustdocLoader, TrenchcoatEnricher};
 
@@ -44,19 +46,21 @@ static ASSESSORS: &[&'static dyn crate::Assessor] = &[&TRENCHCOAT_ASSESSOR];
 static REPORTERS: &[&'static dyn crate::Reporter] = &[&TRENCHCOAT_CSV];
 
 /// Built-in trenchcoat wrapper coverage etiquette bundle.
-pub static TRENCHCOAT_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
-    "trenchcoat",
-    "Trenchcoat wrappers",
-    EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-    true,
-    EtiquetteExplain::new(
-        "Are foreign types wrapped before they reach our traits?",
-        "Binding a foreign type directly to an elicitation trait couples our surface to upstream layout and orphan-rule limits. Wrappers are the seam that impl-coverage and shadow then measure.",
-        "From rustdoc JSON, finds types that implement (or should implement) our traits while still exposing an unwrapped foreign type. Rebuilds workspace rustdoc JSON when the cache is missing or stale.",
-        "`[trenchcoat] enabled = false` in cordial.toml.",
-        &[EtiquetteRuleExplain::new(
-            "TRENCHCOAT-MISSING-WRAP",
-            "Foreign type lacks a trenchcoat wrapper",
-        )],
-    ),
-);
+pub static TRENCHCOAT_ETIQUETTE: LazyLock<StaticEtiquette> = LazyLock::new(|| {
+    StaticEtiquette::new(
+        "trenchcoat",
+        "Trenchcoat wrappers",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        true,
+        EtiquetteExplain::new(
+            "Are foreign types wrapped before they reach our traits?",
+            "Binding a foreign type directly to an elicitation trait couples our surface to upstream layout and orphan-rule limits. Wrappers are the seam that impl-coverage and shadow then measure.",
+            "From rustdoc JSON, finds types that implement (or should implement) our traits while still exposing an unwrapped foreign type. Rebuilds workspace rustdoc JSON when the cache is missing or stale.",
+            "`[trenchcoat] enabled = false` in cordial.toml.",
+            vec![EtiquetteRuleExplain::new(
+                "TRENCHCOAT-MISSING-WRAP",
+                "Foreign type lacks a trenchcoat wrapper",
+            )],
+        ),
+    )
+});

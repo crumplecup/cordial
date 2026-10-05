@@ -244,7 +244,8 @@ fn render_list_and_page() -> miette::Result<()> {
 fn compiled_opt_out_points_at_cordial_toml() {
     cordial::init_tracing();
     for etiquette in compiled_etiquettes() {
-        let opt_out = etiquette.explain().opt_out();
+        let explain = etiquette.explain();
+        let opt_out = explain.opt_out();
         assert!(
             opt_out.contains("cordial.toml"),
             "{} opt_out should name cordial.toml, got {opt_out}",

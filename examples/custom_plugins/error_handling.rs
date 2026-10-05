@@ -12,8 +12,6 @@ use tracing::instrument;
 static WORKSPACE_SCOPES: WorkspaceMembersErrorScopeProvider = WorkspaceMembersErrorScopeProvider;
 static ACME_POLICY: AcmeErrorPolicy = AcmeErrorPolicy;
 
-static ACME_ERROR_ETIQUETTES: &[&dyn Etiquette] = &[&ERROR_SITES_ETIQUETTE, &ERROR_CHAIN_ETIQUETTE];
-
 /// Sites and chain preservation only — no internal / foreign / attenuation.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AcmeErrorPolicy;
@@ -42,7 +40,7 @@ impl Plugin for AcmeErrorHandling {
 
     #[instrument(level = "trace", skip(self))]
     fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
-        ACME_ERROR_ETIQUETTES.to_vec()
+        vec![&*ERROR_SITES_ETIQUETTE, &*ERROR_CHAIN_ETIQUETTE]
     }
 
     #[instrument(level = "trace", skip(self))]

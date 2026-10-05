@@ -8,11 +8,6 @@ use crate::plugin::{
 };
 
 use tracing::instrument;
-static ELICITATION_ETIQUETTES: [&'static dyn Etiquette; 3] = [
-    &IMPL_COVERAGE_ETIQUETTE,
-    &TRENCHCOAT_ETIQUETTE,
-    &SHADOW_ETIQUETTE,
-];
 
 static WORKSPACE_TARGETS: ElicitationTargetProvider = ElicitationTargetProvider;
 static ELICIT_COMPLETE: ElicitCompleteRequirement = ElicitCompleteRequirement;
@@ -34,7 +29,11 @@ impl Plugin for ElicitationCoverage {
 
     #[instrument(level = "trace", skip(self))]
     fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
-        ELICITATION_ETIQUETTES.to_vec()
+        vec![
+            &*IMPL_COVERAGE_ETIQUETTE,
+            &*TRENCHCOAT_ETIQUETTE,
+            &*SHADOW_ETIQUETTE,
+        ]
     }
 
     #[instrument(level = "trace", skip(self))]

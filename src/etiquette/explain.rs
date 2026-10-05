@@ -8,86 +8,69 @@ use super::traits::Etiquette;
 
 /// One rule id this etiquette can emit, so `cordial explain RULE-ID`
 /// resolves to the etiquette page.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Owned `String` fields, built through one plain constructor. Built-ins
+/// pass `&'static str` literals (free `Into<String>` conversion); etiquettes
+/// derived from `cordial.toml` at runtime pass owned strings. Either way the
+/// text is fixed once built, which is what actually keeps exceptions and
+/// reports matching across runs — that guarantee never came from `const`,
+/// just from nothing mutating these fields after construction.
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
 pub struct EtiquetteRuleExplain {
-    id: &'static str,
-    summary: &'static str,
-}
-
-impl EtiquetteRuleExplain {
-    /// Bind a stable rule id to its one-line note.
-    pub const fn new(id: &'static str, summary: &'static str) -> Self {
-        Self { id, summary }
-    }
-
     /// Stable rule identifier (`DOC-WARNING-001`).
-    pub const fn id(&self) -> &'static str {
-        self.id
-    }
-
+    #[new(into)]
+    id: String,
     /// One-line decision note for that rule.
-    pub const fn summary(&self) -> &'static str {
-        self.summary
-    }
+    #[new(into)]
+    summary: String,
 }
 
 /// Why this etiquette exists and how to opt out.
 ///
 /// Mandatory on [`crate::etiquette::StaticEtiquette`] (no [`Default`]): a
 /// constructor call missing an argument is a compile error.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Deliberately a plain constructor, not `derive_builder`, despite 5
+/// fields — same reasoning as [`crate::etiquette::StaticEtiquette`]: every
+/// field is always required with no real validation, and every call site
+/// builds inside a `LazyLock::new(|| ...)` closure that can't propagate a
+/// builder's `Result`, so the only alternative is `.expect()`/`.unwrap()`
+/// panics in library code for a guarantee the type signature already
+/// gives for free.
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
 pub struct EtiquetteExplain {
-    summary: &'static str,
-    why: &'static str,
-    logic: &'static str,
-    opt_out: &'static str,
-    rules: &'static [EtiquetteRuleExplain],
+    /// One line for `cordial explain` with no argument.
+    summary: String,
+    /// Why the check exists.
+    why: String,
+    /// What is flagged, what is ignored, how the scan works.
+    logic: String,
+    /// `[panics] enabled = false` in cordial.toml; not rustc lint levels.
+    opt_out: String,
+    /// Rule ids that alias this page.
+    rules: Vec<EtiquetteRuleExplain>,
 }
 
 impl EtiquetteExplain {
-    /// Bind the explain page for a static etiquette table.
+    /// Bind the explain page for an etiquette table.
     ///
     /// This text is user-facing through `cordial explain`, so keep it specific
     /// enough to explain the standard without requiring source-code context.
-    pub const fn new(
-        summary: &'static str,
-        why: &'static str,
-        logic: &'static str,
-        opt_out: &'static str,
-        rules: &'static [EtiquetteRuleExplain],
+    #[instrument(level = "debug", skip(summary, why, logic, opt_out, rules))]
+    pub fn new(
+        summary: impl Into<String>,
+        why: impl Into<String>,
+        logic: impl Into<String>,
+        opt_out: impl Into<String>,
+        rules: Vec<EtiquetteRuleExplain>,
     ) -> Self {
         Self {
-            summary,
-            why,
-            logic,
-            opt_out,
+            summary: summary.into(),
+            why: why.into(),
+            logic: logic.into(),
+            opt_out: opt_out.into(),
             rules,
         }
-    }
-
-    /// One line for `cordial explain` with no argument.
-    pub const fn summary(&self) -> &'static str {
-        self.summary
-    }
-
-    /// Why the check exists.
-    pub const fn why(&self) -> &'static str {
-        self.why
-    }
-
-    /// What is flagged, what is ignored, how the scan works.
-    pub const fn logic(&self) -> &'static str {
-        self.logic
-    }
-
-    /// `[panics] enabled = false` in cordial.toml; not rustc lint levels.
-    pub const fn opt_out(&self) -> &'static str {
-        self.opt_out
-    }
-
-    /// Rule ids that alias this page.
-    pub const fn rules(&self) -> &'static [EtiquetteRuleExplain] {
-        self.rules
     }
 }
 
@@ -103,11 +86,8 @@ pub fn lookup_etiquette<'a>(
         .find(|etiquette| etiquette.id() == query)
         .or_else(|| {
             etiquettes.iter().copied().find(|etiquette| {
-                etiquette
-                    .explain()
-                    .rules()
-                    .iter()
-                    .any(|rule| rule.id() == query)
+                let explain = etiquette.explain();
+                explain.rules().iter().any(|rule| rule.id() == query)
             })
         })
 }
@@ -115,9 +95,9 @@ pub fn lookup_etiquette<'a>(
 /// One line per etiquette: id, then the one-line summary, sorted by id.
 #[instrument(level = "debug", skip(etiquettes))]
 pub fn render_explain_list(etiquettes: &[&dyn Etiquette]) -> String {
-    let mut rows: Vec<(&str, &str)> = etiquettes
+    let mut rows: Vec<(&str, String)> = etiquettes
         .iter()
-        .map(|etiquette| (etiquette.id(), etiquette.explain().summary()))
+        .map(|etiquette| (etiquette.id(), etiquette.explain().summary().to_string()))
         .collect();
     rows.sort_by(|left, right| left.0.cmp(right.0));
     let width = rows.iter().map(|(id, _)| id.len()).max().unwrap_or(0);
@@ -153,11 +133,11 @@ pub fn render_explain_page(etiquette: &dyn Etiquette) -> String {
 
 #[instrument(level = "debug", skip(body, etiquette))]
 fn append_resolution_order(body: &mut String, etiquette: &dyn Etiquette) {
-    let rule_ids: Vec<&str> = etiquette
-        .explain()
+    let explain = etiquette.explain();
+    let rule_ids: Vec<&str> = explain
         .rules()
         .iter()
-        .map(EtiquetteRuleExplain::id)
+        .map(|rule| rule.id().as_str())
         .collect();
     let order = &super::order::BUILT_IN_ORDER;
     let after_rows = order.constraints_for(&rule_ids);

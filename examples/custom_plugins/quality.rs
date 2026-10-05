@@ -10,6 +10,8 @@ use cordial::{
     PluginCategory, Probe, ProbeView, Query, RenderView, Reporter, Rule, ScopeEnricher,
     SourceLoadView, SourceLoader, SourceSpan, StaticEtiquette, StaticPlugin, TextArtifact,
 };
+use std::sync::LazyLock;
+
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 
@@ -29,34 +31,40 @@ static ASSESSORS: &[&dyn Assessor] = &[&TODO_ASSESSOR];
 static REPORTERS: &[&dyn Reporter] = &[&TODO_CSV];
 
 /// Flags leftover `todo!()` macros in source.
-static TODO_RULES: &[EtiquetteRuleExplain] = &[EtiquetteRuleExplain::new(
-    "ACME-TODO-001",
-    "Leftover `todo!()` macro",
-)];
-
-pub static TODO_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
-    "acme-todo",
-    "Acme leftover todos",
-    EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-    false,
-    EtiquetteExplain::new(
-        "Leftover todo!() macros in source",
-        "Unfinished todo!() sites should not merge. This example shows a quality-family plugin wrapping one etiquette.",
-        "Walks syn for todo!() macros and emits ACME-TODO-001. Not a built-in; copy examples/custom_plugins.",
-        "Do not register ACME_STYLE. This is an example plugin, not compiled into the cordial binary.",
-        TODO_RULES,
-    ),
-);
-
-static ACME_STYLE_ETIQUETTES: &[&dyn Etiquette] = &[&TODO_ETIQUETTE];
+pub static TODO_ETIQUETTE: LazyLock<StaticEtiquette> = LazyLock::new(|| {
+    StaticEtiquette::new(
+        "acme-todo",
+        "Acme leftover todos",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        false,
+        EtiquetteExplain::new(
+            "Leftover todo!() macros in source",
+            "Unfinished todo!() sites should not merge. This example shows a quality-family plugin wrapping one etiquette.",
+            "Walks syn for todo!() macros and emits ACME-TODO-001. Not a built-in; copy examples/custom_plugins.",
+            "Do not register ACME_STYLE. This is an example plugin, not compiled into the cordial binary.",
+            vec![EtiquetteRuleExplain::new(
+                "ACME-TODO-001",
+                "Leftover `todo!()` macro",
+            )],
+        ),
+    )
+});
 
 /// Acme style family — Plugin only, no Coverage / ErrorHandling supertrait.
-pub static ACME_STYLE: StaticPlugin = StaticPlugin::new(
-    "acme-style",
-    "Acme style",
-    PluginCategory::Quality,
-    ACME_STYLE_ETIQUETTES,
-);
+///
+/// `StaticPlugin::new` still needs a `&'static [&'static dyn Etiquette]` —
+/// a crate-local trait-object table, the same accepted shape
+/// `EtiquetteHooks` uses — so this leaks that one small slice once.
+pub static ACME_STYLE: LazyLock<StaticPlugin> = LazyLock::new(|| {
+    let etiquettes: &'static [&'static dyn Etiquette] =
+        Box::leak(Box::new([&*TODO_ETIQUETTE as &dyn Etiquette]));
+    StaticPlugin::new(
+        "acme-style",
+        "Acme style",
+        PluginCategory::Quality,
+        etiquettes,
+    )
+});
 
 const TODO_ATTR: &str = "acme_todo";
 const TODO_LABEL: &str = "acme-todo-site";
@@ -321,8 +329,8 @@ impl Assessor for TodoAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &[TODO_LABEL]
+    fn consumes(&self) -> Vec<&str> {
+        vec![TODO_LABEL]
     }
 
     #[instrument(level = "trace", skip(self, view))]

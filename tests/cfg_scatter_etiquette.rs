@@ -91,7 +91,7 @@ fn cfg_scatter_etiquette_detects_scattered_predicate() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&CFG_SCATTER_ETIQUETTE)
+        .register(&*CFG_SCATTER_ETIQUETTE)
         .build();
 
     let outcome = session

@@ -22,8 +22,8 @@ fn multiple_etiquettes_share_loader_and_emit_both_reports() -> miette::Result<()
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
-        .register(&TRACING_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
 
     let outcome = session

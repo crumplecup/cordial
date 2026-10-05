@@ -38,7 +38,7 @@ fn error_flow_enricher_partitions_sites_and_links_origins() -> miette::Result<()
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&ERROR_SITES_ETIQUETTE)
+        .register(&*ERROR_SITES_ETIQUETTE)
         .build();
 
     session

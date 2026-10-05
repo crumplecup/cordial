@@ -25,7 +25,7 @@ fn panics_etiquette_detects_panic_expect_and_unreachable() -> miette::Result<()>
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -92,7 +92,7 @@ fn panics_disabled_in_cordial_toml_skips_the_etiquette() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -353,7 +353,7 @@ fn panics_in_tests_ask_for_miette() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic()?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic()?;
     let checklist =
@@ -387,7 +387,7 @@ fn panics_in_binaries_ask_for_miette() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let checklist = fs::read_to_string(store.path().join("findings/panics.checklist.md"))
@@ -423,7 +423,7 @@ fn test_expect_asks_for_miette() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic()?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic()?;
 
@@ -457,7 +457,7 @@ fn test_unwrap_asks_for_miette() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic()?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic()?;
 
@@ -489,7 +489,7 @@ fn cfg_test_module_in_src_asks_for_miette() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic()?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic()?;
 
@@ -528,7 +528,7 @@ fn library_writeln_expect_is_checklist() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic().wrap_err("run")?;
 
@@ -570,7 +570,7 @@ fn library_tokenstream_parse_expect_is_checklist() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic().wrap_err("run")?;
 
@@ -821,7 +821,7 @@ fn nested_parity_workspace_is_skipped_when_scanning_parent() -> miette::Result<(
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic().wrap_err("run")?;
 

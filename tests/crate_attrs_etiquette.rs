@@ -371,7 +371,7 @@ fn session_flags_bare_lib() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&CRATE_ATTRS_ETIQUETTE)
+        .register(&*CRATE_ATTRS_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)
@@ -434,7 +434,7 @@ fn checklist_groups_by_each_crate() -> miette::Result<()> {
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&CRATE_ATTRS_ETIQUETTE)
+        .register(&*CRATE_ATTRS_ETIQUETTE)
         .build();
     session
         .run(&RunAll)
@@ -489,7 +489,7 @@ fn dogfood_cordial_library_root() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(root)
         .with_store_root(store.path())
-        .register(&CRATE_ATTRS_ETIQUETTE)
+        .register(&*CRATE_ATTRS_ETIQUETTE)
         .build();
     session
         .run(&RunAll)

@@ -45,6 +45,8 @@ pub use types::{
     ErrorOriginClass, ErrorSiteKind, ErrorSiteRecord, ErrorSiteScanRow, ForeignErrorRecordKind,
 };
 
+use std::sync::LazyLock;
+
 use crate::SourceLoader;
 use crate::enricher::ERROR_IR_ENRICHERS;
 use crate::etiquette::{
@@ -75,26 +77,28 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in error sites etiquette bundle.
-pub static ERROR_SITES_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
-    StaticEtiquette::new(
-        "error_sites",
-        "Error sites",
-        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-        false,
-        EtiquetteExplain::new(
-            "Where are ?, map_err, and related error sites?",
-            "You cannot judge chain preservation or foreign attenuation until every error site is named. This is the census layer; later layers consume the same IR.",
-            "Records ?, map_err, return Err, if let Err, match on Err, and ok_or. Downstream etiquettes partition those rows by origin (internal vs foreign). Reference-only inventory: no dedicated quality-report area.",
-            "`[error_sites] enabled = false` in cordial.toml.",
-            &[
-                EtiquetteRuleExplain::new("ERROR-SITE-QUESTION-MARK", "`?` site"),
-                EtiquetteRuleExplain::new("ERROR-SITE-MAP-ERR", "`map_err` site"),
-                EtiquetteRuleExplain::new("ERROR-SITE-RETURN-ERR", "`return Err` site"),
-                EtiquetteRuleExplain::new("ERROR-SITE-IF-LET-ERR", "`if let Err` site"),
-                EtiquetteRuleExplain::new("ERROR-SITE-MATCH-ERR", "`match` on Err"),
-                EtiquetteRuleExplain::new("ERROR-SITE-OK-OR", "`ok_or` site"),
-            ],
+pub static ERROR_SITES_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|| {
+    StaticQualityEtiquette::new(
+        StaticEtiquette::new(
+            "error_sites",
+            "Error sites",
+            EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+            false,
+            EtiquetteExplain::new(
+                "Where are ?, map_err, and related error sites?",
+                "You cannot judge chain preservation or foreign attenuation until every error site is named. This is the census layer; later layers consume the same IR.",
+                "Records ?, map_err, return Err, if let Err, match on Err, and ok_or. Downstream etiquettes partition those rows by origin (internal vs foreign). Reference-only inventory: no dedicated quality-report area.",
+                "`[error_sites] enabled = false` in cordial.toml.",
+                vec![
+                    EtiquetteRuleExplain::new("ERROR-SITE-QUESTION-MARK", "`?` site"),
+                    EtiquetteRuleExplain::new("ERROR-SITE-MAP-ERR", "`map_err` site"),
+                    EtiquetteRuleExplain::new("ERROR-SITE-RETURN-ERR", "`return Err` site"),
+                    EtiquetteRuleExplain::new("ERROR-SITE-IF-LET-ERR", "`if let Err` site"),
+                    EtiquetteRuleExplain::new("ERROR-SITE-MATCH-ERR", "`match` on Err"),
+                    EtiquetteRuleExplain::new("ERROR-SITE-OK-OR", "`ok_or` site"),
+                ],
+            ),
         ),
-    ),
-    None,
-);
+        None,
+    )
+});

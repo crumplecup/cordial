@@ -12,7 +12,6 @@ use crate::session::{RunFilter, SessionView};
 use crate::targets::discover_crate_targets;
 
 use tracing::instrument;
-static HOMECOMING_ETIQUETTES: [&'static dyn Etiquette; 1] = [&HOMECOMING_STD_ETIQUETTE];
 
 /// Single-trait requirement for homecoming std coverage.
 #[derive(Debug, Default, Clone, Copy)]
@@ -73,7 +72,7 @@ impl Plugin for HomecomingStdCoverage {
 
     #[instrument(level = "trace", skip(self))]
     fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
-        HOMECOMING_ETIQUETTES.to_vec()
+        vec![&*HOMECOMING_STD_ETIQUETTE]
     }
 
     #[instrument(level = "trace", skip(self))]

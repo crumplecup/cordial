@@ -57,7 +57,7 @@ fn allows_etiquette_detects_allow_attributes() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&ALLOWS_ETIQUETTE)
+        .register(&*ALLOWS_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -236,7 +236,7 @@ fn allows_etiquette_emits_verus_reason_finding() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&ALLOWS_ETIQUETTE)
+        .register(&*ALLOWS_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)

@@ -195,7 +195,7 @@ min_module_names = 10
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&VISIBILITY_ETIQUETTE)
+        .register(&*VISIBILITY_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     let findings: Vec<_> = outcome.findings().collect();
@@ -236,7 +236,7 @@ fn mod_thin_skip_config_exempts_only_the_named_module() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&VISIBILITY_ETIQUETTE)
+        .register(&*VISIBILITY_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic().wrap_err("run")?;
 

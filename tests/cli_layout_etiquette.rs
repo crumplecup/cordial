@@ -647,7 +647,7 @@ pub struct Cli {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&CLI_LAYOUT_ETIQUETTE)
+        .register(&*CLI_LAYOUT_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
     assert!(

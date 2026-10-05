@@ -34,6 +34,8 @@ pub use reporter::{AllowChecklistReporter, AllowCsvReporter, AllowSummaryReporte
 pub use scan::{scan_crate_allows, scan_rust_source};
 pub use types::{AllowRuleId, AllowSiteRecord};
 
+use std::sync::LazyLock;
+
 use crate::etiquette::{
     EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_category,
@@ -61,36 +63,38 @@ static ASSESSORS: &[&'static dyn crate::Assessor] = &[&ALLOW_ASSESSOR];
 static REPORTERS: &[&'static dyn crate::Reporter] = &[&ALLOW_CSV, &ALLOW_CHECKLIST, &ALLOW_SUMMARY];
 
 /// Built-in allows etiquette bundle.
-pub static ALLOWS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
-    StaticEtiquette::new(
-        "allows",
-        "Allow attributes",
-        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-        false,
-        EtiquetteExplain::new(
-            "Which #[allow] attributes are in force?",
-            "Allows hide compiler and Clippy signal. A regeneratable catalog makes each suppression reviewable instead of disappearing into the source.",
-            "Records every #[allow(...)] and inner #![allow(...)]. Verus is the one judged case: an allow on a vstd / verus_builtin import must carry rustc's reason = \"...\". A reasoned Verus allow is not an action item.",
-            "`[allows] enabled = false` in cordial.toml.",
-            &[
-                EtiquetteRuleExplain::new(
-                    "ALLOW-ATTR-001",
-                    "An #[allow] / #![allow] attribute in source",
-                ),
-                EtiquetteRuleExplain::new(
-                    "ALLOW-VERUS-REASON-001",
-                    "Verus prelude allow missing reason = \"...\"",
-                ),
-            ],
+pub static ALLOWS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|| {
+    StaticQualityEtiquette::new(
+        StaticEtiquette::new(
+            "allows",
+            "Allow attributes",
+            EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+            false,
+            EtiquetteExplain::new(
+                "Which #[allow] attributes are in force?",
+                "Allows hide compiler and Clippy signal. A regeneratable catalog makes each suppression reviewable instead of disappearing into the source.",
+                "Records every #[allow(...)] and inner #![allow(...)]. Verus is the one judged case: an allow on a vstd / verus_builtin import must carry rustc's reason = \"...\". A reasoned Verus allow is not an action item.",
+                "`[allows] enabled = false` in cordial.toml.",
+                vec![
+                    EtiquetteRuleExplain::new(
+                        "ALLOW-ATTR-001",
+                        "An #[allow] / #![allow] attribute in source",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ALLOW-VERUS-REASON-001",
+                        "Verus prelude allow missing reason = \"...\"",
+                    ),
+                ],
+            ),
         ),
-    ),
-    Some(QualityAreaSpec::new(
-        "Allow attributes",
-        "allows.checklist.md",
-        "allows-summary.md",
-        quality_area_compute,
-    )),
-);
+        Some(QualityAreaSpec::new(
+            "Allow attributes",
+            "allows.checklist.md",
+            "allows-summary.md",
+            quality_area_compute,
+        )),
+    )
+});
 
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {

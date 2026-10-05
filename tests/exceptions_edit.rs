@@ -272,7 +272,7 @@ fn stale_exceptions_reports_rows_that_match_no_finding() -> miette::Result<()> {
 
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store_root.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
     let outcome = session.run(&RunAll).into_diagnostic()?;
     let findings: Vec<_> = outcome.findings().collect();

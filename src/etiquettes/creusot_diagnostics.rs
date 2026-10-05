@@ -42,6 +42,8 @@ pub use scan::{
 };
 pub use types::{CreusotDiagnosticRecord, CreusotDiagnosticRuleId};
 
+use std::sync::LazyLock;
+
 use crate::etiquette::{
     EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_category,
@@ -79,36 +81,38 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in Creusot diagnostic etiquette bundle.
-pub static CREUSOT_DIAGNOSTICS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
-    StaticEtiquette::new(
-        "creusot_diagnostics",
-        "Creusot diagnostics",
-        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-        false,
-        EtiquetteExplain::new(
-            "Does `cargo creusot prove` emit warnings or verification failures?",
-            "Creusot proof obligations run outside cargo check and clippy, so their diagnostics need their own feedback loop.",
-            "Invokes `cargo creusot prove -- -p <crate>` for crates ending `_creusot` or depending on creusot-std / creusot_contracts. `CORDIAL_CREUSOT` can supply a custom runner. Records each warning/error diagnostic; nonzero output with no parseable error becomes a crate-level failure. Skips when no cargo-creusot/CORDIAL_CREUSOT runner exists or `[creusot_diagnostics] skip_crates` names the package.",
-            "`[creusot_diagnostics] enabled = false` in cordial.toml.",
-            &[
-                EtiquetteRuleExplain::new(
-                    "CREUSOT-DIAGNOSTIC-001",
-                    "A `warning:` diagnostic from `cargo creusot prove`",
-                ),
-                EtiquetteRuleExplain::new(
-                    "CREUSOT-DIAGNOSTIC-002",
-                    "An `error:` diagnostic or failed `cargo creusot prove` run",
-                ),
-            ],
+pub static CREUSOT_DIAGNOSTICS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|| {
+    StaticQualityEtiquette::new(
+        StaticEtiquette::new(
+            "creusot_diagnostics",
+            "Creusot diagnostics",
+            EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+            false,
+            EtiquetteExplain::new(
+                "Does `cargo creusot prove` emit warnings or verification failures?",
+                "Creusot proof obligations run outside cargo check and clippy, so their diagnostics need their own feedback loop.",
+                "Invokes `cargo creusot prove -- -p <crate>` for crates ending `_creusot` or depending on creusot-std / creusot_contracts. `CORDIAL_CREUSOT` can supply a custom runner. Records each warning/error diagnostic; nonzero output with no parseable error becomes a crate-level failure. Skips when no cargo-creusot/CORDIAL_CREUSOT runner exists or `[creusot_diagnostics] skip_crates` names the package.",
+                "`[creusot_diagnostics] enabled = false` in cordial.toml.",
+                vec![
+                    EtiquetteRuleExplain::new(
+                        "CREUSOT-DIAGNOSTIC-001",
+                        "A `warning:` diagnostic from `cargo creusot prove`",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "CREUSOT-DIAGNOSTIC-002",
+                        "An `error:` diagnostic or failed `cargo creusot prove` run",
+                    ),
+                ],
+            ),
         ),
-    ),
-    Some(QualityAreaSpec::new(
-        "Creusot diagnostics",
-        "creusot-diagnostics.checklist.md",
-        "creusot-diagnostics-summary.md",
-        quality_area_compute,
-    )),
-);
+        Some(QualityAreaSpec::new(
+            "Creusot diagnostics",
+            "creusot-diagnostics.checklist.md",
+            "creusot-diagnostics-summary.md",
+            quality_area_compute,
+        )),
+    )
+});
 
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {

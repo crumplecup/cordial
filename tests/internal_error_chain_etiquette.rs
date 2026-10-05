@@ -399,7 +399,7 @@ fn session_produces_all_four_artifacts() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&INTERNAL_ERROR_CHAIN_ETIQUETTE)
+        .register(&*INTERNAL_ERROR_CHAIN_ETIQUETTE)
         .build();
 
     let outcome = session

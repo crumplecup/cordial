@@ -144,7 +144,7 @@ fn error_sites_etiquette_session_produces_csv() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&ERROR_SITES_ETIQUETTE)
+        .register(&*ERROR_SITES_ETIQUETTE)
         .build();
 
     let outcome = session

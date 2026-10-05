@@ -20,29 +20,29 @@ enum AcmeStrategy {
     Empty,
 }
 
-static TODO_ETIQUETTES: &[&dyn Etiquette] = &[&quality::TODO_ETIQUETTE];
-static EMPTY_ETIQUETTES: &[&dyn Etiquette] = &[];
-static ACME_PORTFOLIOS: &[StrategicPortfolio<AcmeStrategy>] = &[
-    StrategicPortfolio::new(AcmeStrategy::Todos, TODO_ETIQUETTES),
-    StrategicPortfolio::new(AcmeStrategy::Empty, EMPTY_ETIQUETTES),
-];
-
 #[test]
 fn strategic_plugin_selects_portfolio_by_indicator() {
     cordial::init_tracing();
+    let todo_etiquettes: &'static [&'static dyn Etiquette] =
+        Box::leak(Box::new([&*quality::TODO_ETIQUETTE as &dyn Etiquette]));
+    let empty_etiquettes: &'static [&'static dyn Etiquette] = &[];
+    let acme_portfolios: &'static [StrategicPortfolio<AcmeStrategy>] = Box::leak(Box::new([
+        StrategicPortfolio::new(AcmeStrategy::Todos, todo_etiquettes),
+        StrategicPortfolio::new(AcmeStrategy::Empty, empty_etiquettes),
+    ]));
     let todos = StrategicPlugin::new(
         "acme-strategic",
         "Acme strategic",
         PluginCategory::Quality,
         AcmeStrategy::Todos,
-        ACME_PORTFOLIOS,
+        acme_portfolios,
     );
     let empty = StrategicPlugin::new(
         "acme-strategic",
         "Acme strategic",
         PluginCategory::Quality,
         AcmeStrategy::Empty,
-        ACME_PORTFOLIOS,
+        acme_portfolios,
     );
 
     let session = SessionBuilder::new(".").build();
@@ -54,7 +54,7 @@ fn strategic_plugin_selects_portfolio_by_indicator() {
 #[test]
 fn three_plugin_kinds_register_and_quality_finds_todo() -> miette::Result<()> {
     cordial::init_tracing();
-    let plugins: Vec<&dyn Plugin> = vec![&ACME_STYLE, &ACME_API_COVERAGE, &ACME_ERROR_HANDLING];
+    let plugins: Vec<&dyn Plugin> = vec![&*ACME_STYLE, &ACME_API_COVERAGE, &ACME_ERROR_HANDLING];
 
     let quality = plugins_in_category(&plugins, PluginCategory::Quality);
     assert_eq!(quality.len(), 1);
@@ -82,7 +82,7 @@ fn three_plugin_kinds_register_and_quality_finds_todo() -> miette::Result<()> {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register_plugin(&ACME_STYLE)
+        .register_plugin(&*ACME_STYLE)
         .register_plugin(&ACME_API_COVERAGE)
         .register_plugin(&ACME_ERROR_HANDLING)
         .build();

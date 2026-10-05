@@ -233,7 +233,7 @@ fn session_writes_print_checklist_not_instrument_rows() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)
@@ -284,7 +284,7 @@ fn session_honors_stdio_toml_knobs() -> miette::Result<()> {
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)

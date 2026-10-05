@@ -34,6 +34,8 @@ pub use reporter::{GlobImportChecklistReporter, GlobImportCsvReporter, GlobImpor
 pub use scan::{scan_crate_glob_imports, scan_rust_source};
 pub use types::GlobImportRuleId;
 
+use std::sync::LazyLock;
+
 use crate::etiquette::{
     EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_category,
@@ -65,30 +67,32 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in glob-imports etiquette bundle.
-pub static GLOB_IMPORTS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
-    StaticEtiquette::new(
-        "glob_imports",
-        "Glob imports",
-        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-        false,
-        EtiquetteExplain::new(
-            "Are there glob use trees (foo::*)?",
-            "Glob imports hide which names a file depends on and break completion. Explicit lists stay reviewable when code moves.",
-            "Flags every * in a use item, including pub use, use super::*, and nested use foo::{bar, *}.",
-            "`[glob_imports] enabled = false` in cordial.toml.",
-            &[EtiquetteRuleExplain::new(
-                "GLOB-IMPORT-001",
-                "A glob `use` tree",
-            )],
+pub static GLOB_IMPORTS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|| {
+    StaticQualityEtiquette::new(
+        StaticEtiquette::new(
+            "glob_imports",
+            "Glob imports",
+            EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+            false,
+            EtiquetteExplain::new(
+                "Are there glob use trees (foo::*)?",
+                "Glob imports hide which names a file depends on and break completion. Explicit lists stay reviewable when code moves.",
+                "Flags every * in a use item, including pub use, use super::*, and nested use foo::{bar, *}.",
+                "`[glob_imports] enabled = false` in cordial.toml.",
+                vec![EtiquetteRuleExplain::new(
+                    "GLOB-IMPORT-001",
+                    "A glob `use` tree",
+                )],
+            ),
         ),
-    ),
-    Some(QualityAreaSpec::new(
-        "Glob imports",
-        "glob-imports.checklist.md",
-        "glob-imports-summary.md",
-        quality_area_compute,
-    )),
-);
+        Some(QualityAreaSpec::new(
+            "Glob imports",
+            "glob-imports.checklist.md",
+            "glob-imports-summary.md",
+            quality_area_compute,
+        )),
+    )
+});
 
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {

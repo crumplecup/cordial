@@ -133,7 +133,7 @@ fn inline_tests_etiquette_writes_checklist() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&INLINE_TESTS_ETIQUETTE)
+        .register(&*INLINE_TESTS_ETIQUETTE)
         .build();
 
     let outcome = session

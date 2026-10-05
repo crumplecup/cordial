@@ -1207,7 +1207,7 @@ amenable_derive::harness! {
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(workspace.path())
         .with_store_root(store.path())
-        .register(&ANTIPATTERNS_ETIQUETTE)
+        .register(&*ANTIPATTERNS_ETIQUETTE)
         .build();
     session
         .run(&RunAll)

@@ -53,7 +53,7 @@ fn private_fn() {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -148,7 +148,7 @@ pub fn run_apply_patches() {}
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     session
         .run(&RunAll)
@@ -231,7 +231,7 @@ pub fn ok() {}
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     session
         .run(&RunAll)
@@ -307,7 +307,7 @@ pub fn run(crate_name: &str) {}
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     session
         .run(&RunAll)
@@ -377,8 +377,8 @@ pub fn scan_source_tree() {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&TRACING_ETIQUETTE)
-        .register(&cordial::ERROR_SITES_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
+        .register(&*cordial::ERROR_SITES_ETIQUETTE)
         .build();
     session
         .run(&RunAll)
@@ -420,7 +420,7 @@ pub fn lookup_first() -> Option<u8> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     session
         .run(&RunAll)
@@ -469,7 +469,7 @@ fn private_helper() {}
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     session
         .run(&RunAll)
@@ -511,7 +511,7 @@ fn tracing_extra_skip_from_config() -> miette::Result<()> {
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     session
         .run(&RunAll)
@@ -563,7 +563,7 @@ pub fn traced_ordinary_fn() {}
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)
@@ -634,7 +634,7 @@ pub fn returns_displayable_err() -> Result<(), DisplayableError> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     session
         .run(&RunAll)
@@ -700,7 +700,7 @@ impl<T: PartialEq> Check<T> for Checker<T> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     session
         .run(&RunAll)
@@ -760,7 +760,7 @@ pub fn traced_ordinary_fn() {}
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)
@@ -842,7 +842,7 @@ pub fn traced_ordinary_fn() {}
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)
@@ -928,7 +928,7 @@ pub fn validate(value: u32) -> bool {
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)
@@ -980,7 +980,7 @@ pub fn scan_tree() {}
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)
@@ -1035,7 +1035,7 @@ fn tracing_checklist_recipe_shows_the_gated_wrap_for_a_gate_crate() -> miette::R
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     session
         .run(&RunAll)
@@ -1114,7 +1114,7 @@ pub fn traced_ordinary_fn() {}
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)
@@ -1183,7 +1183,7 @@ mod proofs {
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)
@@ -1229,7 +1229,7 @@ pub fn scan_tree() {}
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)
@@ -1277,7 +1277,7 @@ pub fn other_fn() {}
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)
@@ -1320,7 +1320,7 @@ fn tracing_skip_crate_uninstrumented_is_silent() -> miette::Result<()> {
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .with_store_home(store.path())
-        .register(&TRACING_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
     let outcome = session
         .run(&RunAll)

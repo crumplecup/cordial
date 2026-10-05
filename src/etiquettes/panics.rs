@@ -44,6 +44,8 @@ pub use reporter::{PanicChecklistReporter, PanicCsvReporter, PanicSummaryReporte
 pub use scan::{scan_crate_panics, scan_rust_source, scan_source_tree};
 pub use types::PanicKind;
 
+use std::sync::LazyLock;
+
 use crate::etiquette::{
     EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, StaticEtiquette, StaticQualityEtiquette,
 };
@@ -67,28 +69,33 @@ static ASSESSORS: &[&'static dyn crate::Assessor] = &[&PANIC_ASSESSOR];
 static REPORTERS: &[&'static dyn crate::Reporter] = &[&PANIC_CSV, &PANIC_CHECKLIST, &PANIC_SUMMARY];
 
 /// Built-in panics etiquette bundle.
-pub static PANICS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
-    StaticEtiquette::new(
-        "panics",
-        "Panic sources",
-        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-        false,
-        EtiquetteExplain::new(
-            "Where does this crate abort?",
-            "Abort sites are the first error-handling layer. Library code should return the crate's internal error type (preserving source()); binaries and tests should surface through miette.",
-            "Inventories panic!, unwrap, expect, unreachable!, and compile_error!. String literals that parse as Rust and contain those APIs are scanned as embedded fixture programs; keep samples under tests/fixtures or tests/parity (path skip). Test unwrap/expect (including #[cfg(test)] modules under src/) stay on the checklist rather than becoming CSV-only inventory.",
-            "`[panics] enabled = false` in cordial.toml.",
-            &[
-                EtiquetteRuleExplain::new("PANIC-SOURCE-PANIC", "`panic!` in source"),
-                EtiquetteRuleExplain::new("PANIC-SOURCE-UNREACHABLE", "`unreachable!` in source"),
-                EtiquetteRuleExplain::new("PANIC-SOURCE-EXPECT", "`.expect(...)` in source"),
-                EtiquetteRuleExplain::new("PANIC-SOURCE-UNWRAP", "`.unwrap()` in source"),
-                EtiquetteRuleExplain::new(
-                    "PANIC-SOURCE-COMPILE-ERROR",
-                    "`compile_error!` in source",
-                ),
-            ],
+pub static PANICS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|| {
+    StaticQualityEtiquette::new(
+        StaticEtiquette::new(
+            "panics",
+            "Panic sources",
+            EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+            false,
+            EtiquetteExplain::new(
+                "Where does this crate abort?",
+                "Abort sites are the first error-handling layer. Library code should return the crate's internal error type (preserving source()); binaries and tests should surface through miette.",
+                "Inventories panic!, unwrap, expect, unreachable!, and compile_error!. String literals that parse as Rust and contain those APIs are scanned as embedded fixture programs; keep samples under tests/fixtures or tests/parity (path skip). Test unwrap/expect (including #[cfg(test)] modules under src/) stay on the checklist rather than becoming CSV-only inventory.",
+                "`[panics] enabled = false` in cordial.toml.",
+                vec![
+                    EtiquetteRuleExplain::new("PANIC-SOURCE-PANIC", "`panic!` in source"),
+                    EtiquetteRuleExplain::new(
+                        "PANIC-SOURCE-UNREACHABLE",
+                        "`unreachable!` in source",
+                    ),
+                    EtiquetteRuleExplain::new("PANIC-SOURCE-EXPECT", "`.expect(...)` in source"),
+                    EtiquetteRuleExplain::new("PANIC-SOURCE-UNWRAP", "`.unwrap()` in source"),
+                    EtiquetteRuleExplain::new(
+                        "PANIC-SOURCE-COMPILE-ERROR",
+                        "`compile_error!` in source",
+                    ),
+                ],
+            ),
         ),
-    ),
-    None,
-);
+        None,
+    )
+});

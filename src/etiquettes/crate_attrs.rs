@@ -38,6 +38,8 @@ pub use reporter::{CrateAttrsChecklistReporter, CrateAttrsCsvReporter, CrateAttr
 pub use scan::{library_root_rs, scan_crate_attrs};
 pub use types::{CrateAttrsRuleId, CrateAttrsSiteRecord};
 
+use std::sync::LazyLock;
+
 use crate::etiquette::{
     EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_rule,
@@ -70,36 +72,38 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 
 /// Built-in crate-attributes etiquette: forbid unsafe and warn missing docs
 /// on each library root.
-pub static CRATE_ATTRS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
-    StaticEtiquette::new(
-        "crate_attrs",
-        "Crate attributes",
-        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-        false,
-        EtiquetteExplain::new(
-            "Does each library root forbid(unsafe_code) and warn(missing_docs)?",
-            "Sibling CLAUDE.md files require both attributes on lib.rs so the whole library is locked down.",
-            "Flags library crates whose root file is missing those inner attributes. deny(unsafe_code) is not enough; warn/deny/forbid(missing_docs) all satisfy the docs lint. [lib] path is honored; bin-only packages are skipped. [crate_attrs] allow_unsafe lists members that may use unsafe. cordial quality --apply writes the missing inner attributes.",
-            "`[crate_attrs] enabled = false` in cordial.toml.",
-            &[
-                EtiquetteRuleExplain::new(
-                    "CRATE-FORBID-UNSAFE-001",
-                    "Library root missing #![forbid(unsafe_code)]",
-                ),
-                EtiquetteRuleExplain::new(
-                    "CRATE-MISSING-DOCS-001",
-                    "Library root missing #![warn(missing_docs)]",
-                ),
-            ],
+pub static CRATE_ATTRS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|| {
+    StaticQualityEtiquette::new(
+        StaticEtiquette::new(
+            "crate_attrs",
+            "Crate attributes",
+            EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+            false,
+            EtiquetteExplain::new(
+                "Does each library root forbid(unsafe_code) and warn(missing_docs)?",
+                "Sibling CLAUDE.md files require both attributes on lib.rs so the whole library is locked down.",
+                "Flags library crates whose root file is missing those inner attributes. deny(unsafe_code) is not enough; warn/deny/forbid(missing_docs) all satisfy the docs lint. [lib] path is honored; bin-only packages are skipped. [crate_attrs] allow_unsafe lists members that may use unsafe. cordial quality --apply writes the missing inner attributes.",
+                "`[crate_attrs] enabled = false` in cordial.toml.",
+                vec![
+                    EtiquetteRuleExplain::new(
+                        "CRATE-FORBID-UNSAFE-001",
+                        "Library root missing #![forbid(unsafe_code)]",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "CRATE-MISSING-DOCS-001",
+                        "Library root missing #![warn(missing_docs)]",
+                    ),
+                ],
+            ),
         ),
-    ),
-    Some(QualityAreaSpec::new(
-        "Crate attributes",
-        "crate-attrs.checklist.md",
-        "crate-attrs-summary.md",
-        quality_area_compute,
-    )),
-);
+        Some(QualityAreaSpec::new(
+            "Crate attributes",
+            "crate-attrs.checklist.md",
+            "crate-attrs-summary.md",
+            quality_area_compute,
+        )),
+    )
+});
 
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {

@@ -43,6 +43,8 @@ pub use reporter::{PageantryChecklistReporter, PageantryCsvReporter, PageantrySu
 pub use scan::{scan_crate_pageantry, scan_rust_source};
 pub use types::PageantryRuleId;
 
+use std::sync::LazyLock;
+
 use crate::etiquette::{
     EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_rule,
@@ -71,40 +73,42 @@ static REPORTERS: &[&'static dyn crate::Reporter] =
     &[&PAGEANTRY_CSV, &PAGEANTRY_CHECKLIST, &PAGEANTRY_SUMMARY];
 
 /// Built-in pageantry etiquette bundle.
-pub static PAGEANTRY_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
-    StaticEtiquette::new(
-        "pageantry",
-        "Pageantry",
-        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-        false,
-        EtiquetteExplain::new(
-            "Are traits at the top of the file, and are lib.rs / mod.rs only modules and re-exports?",
-            "Contracts belong at the top of the file. A crate or directory index is a table of contents: visibility and re-exports, not types or functions.",
-            "Walks each file and inline mod item list in source order. use / extern crate / mod are header. A run of traits at the front is fine. After any other item (struct, enum, impl, fn, …), every later trait is PAGEANTRY-TRAIT-001. Files named lib.rs or mod.rs may contain only those header items; any other item is PAGEANTRY-BARREL-001. #[cfg(test)] items are skipped, and so are #[proc_macro], #[proc_macro_derive], and #[proc_macro_attribute] functions are exempt from BARREL-001 because rustc requires them at a proc-macro crate root, but their bodies must stay shims: more than max_shim_lines lines between the braces is PAGEANTRY-BARREL-SHIM-001 (move the logic to a named file and delegate).",
-            "`[pageantry] enabled = false` in cordial.toml turns the etiquette off. `trait_block`, `barrel`, and `barrel_shim` (all default true) turn single rules off; `max_shim_lines` (default 8) sets the shim size limit.",
-            &[
-                EtiquetteRuleExplain::new(
-                    "PAGEANTRY-TRAIT-001",
-                    "A trait defined after the leading trait block has ended",
-                ),
-                EtiquetteRuleExplain::new(
-                    "PAGEANTRY-BARREL-001",
-                    "A type or function declaration in lib.rs or mod.rs",
-                ),
-                EtiquetteRuleExplain::new(
-                    "PAGEANTRY-BARREL-SHIM-001",
-                    "A proc-macro entry point in lib.rs or mod.rs whose body is longer than max_shim_lines",
-                ),
-            ],
+pub static PAGEANTRY_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|| {
+    StaticQualityEtiquette::new(
+        StaticEtiquette::new(
+            "pageantry",
+            "Pageantry",
+            EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+            false,
+            EtiquetteExplain::new(
+                "Are traits at the top of the file, and are lib.rs / mod.rs only modules and re-exports?",
+                "Contracts belong at the top of the file. A crate or directory index is a table of contents: visibility and re-exports, not types or functions.",
+                "Walks each file and inline mod item list in source order. use / extern crate / mod are header. A run of traits at the front is fine. After any other item (struct, enum, impl, fn, …), every later trait is PAGEANTRY-TRAIT-001. Files named lib.rs or mod.rs may contain only those header items; any other item is PAGEANTRY-BARREL-001. #[cfg(test)] items are skipped, and so are #[proc_macro], #[proc_macro_derive], and #[proc_macro_attribute] functions are exempt from BARREL-001 because rustc requires them at a proc-macro crate root, but their bodies must stay shims: more than max_shim_lines lines between the braces is PAGEANTRY-BARREL-SHIM-001 (move the logic to a named file and delegate).",
+                "`[pageantry] enabled = false` in cordial.toml turns the etiquette off. `trait_block`, `barrel`, and `barrel_shim` (all default true) turn single rules off; `max_shim_lines` (default 8) sets the shim size limit.",
+                vec![
+                    EtiquetteRuleExplain::new(
+                        "PAGEANTRY-TRAIT-001",
+                        "A trait defined after the leading trait block has ended",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "PAGEANTRY-BARREL-001",
+                        "A type or function declaration in lib.rs or mod.rs",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "PAGEANTRY-BARREL-SHIM-001",
+                        "A proc-macro entry point in lib.rs or mod.rs whose body is longer than max_shim_lines",
+                    ),
+                ],
+            ),
         ),
-    ),
-    Some(QualityAreaSpec::new(
-        "Pageantry",
-        "pageantry.checklist.md",
-        "pageantry-summary.md",
-        quality_area_compute,
-    )),
-);
+        Some(QualityAreaSpec::new(
+            "Pageantry",
+            "pageantry.checklist.md",
+            "pageantry-summary.md",
+            quality_area_compute,
+        )),
+    )
+});
 
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {

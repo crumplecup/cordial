@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use cordial::{
     EtiquetteExplain, EtiquetteHooks, RunAll, ScopeEnricher, Session, SessionBuilder, SourceLoader,
     StaticEtiquette, project_slug_from_path,
@@ -10,19 +12,21 @@ static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
 static LOADERS: &[&'static dyn cordial::Loader] = &[&SOURCE_LOADER];
 static ENRICHERS: &[&'static dyn cordial::IrEnricher] = &[&SCOPE_ENRICHER];
 
-static SOURCE_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
-    "source",
-    "Source inventory",
-    EtiquetteHooks::new(LOADERS, ENRICHERS, &[], &[], None, &[]),
-    false,
-    EtiquetteExplain::new(
-        "Test inventory (not a product lint)",
-        "Session fixture used by cordial's own tests.",
-        "Loads source (and optionally rustdoc) into IR; emits no findings.",
-        "Not registered in the cordial binary.",
-        &[],
-    ),
-);
+static SOURCE_ETIQUETTE: LazyLock<StaticEtiquette> = LazyLock::new(|| {
+    StaticEtiquette::new(
+        "source",
+        "Source inventory",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, &[], &[], None, &[]),
+        false,
+        EtiquetteExplain::new(
+            "Test inventory (not a product lint)",
+            "Session fixture used by cordial's own tests.",
+            "Loads source (and optionally rustdoc) into IR; emits no findings.",
+            "Not registered in the cordial binary.",
+            vec![],
+        ),
+    )
+});
 
 #[test]
 fn source_loader_builds_ir_and_cache() -> miette::Result<()> {
@@ -43,7 +47,7 @@ fn source_loader_builds_ir_and_cache() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&SOURCE_ETIQUETTE)
+        .register(&*SOURCE_ETIQUETTE)
         .build();
 
     let outcome = session

@@ -271,7 +271,7 @@ fn foreign_error_attenuation_session_produces_csv() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&FOREIGN_ERROR_ATTENUATION_ETIQUETTE)
+        .register(&*FOREIGN_ERROR_ATTENUATION_ETIQUETTE)
         .build();
 
     let outcome = session

@@ -2,6 +2,7 @@
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use cordial::{
     ATTR_IR_ORIGIN, BasicQuery, CordialError, CrateTarget, EtiquetteExplain, EtiquetteHooks,
@@ -15,19 +16,21 @@ static RUSTDOC_LOADER: RustdocLoader = RustdocLoader;
 
 static LOADERS: &[&'static dyn cordial::Loader] = &[&SOURCE_LOADER, &RUSTDOC_LOADER];
 
-static DUAL_INVENTORY_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
-    "dual-inventory",
-    "Dual inventory",
-    EtiquetteHooks::new(LOADERS, &[], &[], &[], None, &[]),
-    false,
-    EtiquetteExplain::new(
-        "Test inventory (not a product lint)",
-        "Session fixture used by cordial's own tests.",
-        "Loads source (and optionally rustdoc) into IR; emits no findings.",
-        "Not registered in the cordial binary.",
-        &[],
-    ),
-);
+static DUAL_INVENTORY_ETIQUETTE: LazyLock<StaticEtiquette> = LazyLock::new(|| {
+    StaticEtiquette::new(
+        "dual-inventory",
+        "Dual inventory",
+        EtiquetteHooks::new(LOADERS, &[], &[], &[], None, &[]),
+        false,
+        EtiquetteExplain::new(
+            "Test inventory (not a product lint)",
+            "Session fixture used by cordial's own tests.",
+            "Loads source (and optionally rustdoc) into IR; emits no findings.",
+            "Not registered in the cordial binary.",
+            vec![],
+        ),
+    )
+});
 
 #[test]
 fn syn_doc_link_connects_widget_source_and_rustdoc_nodes() -> miette::Result<()> {
@@ -36,7 +39,7 @@ fn syn_doc_link_connects_widget_source_and_rustdoc_nodes() -> miette::Result<()>
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(&fixture)
         .with_store_root(store.path())
-        .register(&DUAL_INVENTORY_ETIQUETTE)
+        .register(&*DUAL_INVENTORY_ETIQUETTE)
         .build();
     session.run(&RunAll).into_diagnostic().wrap_err("run")?;
 
@@ -138,7 +141,7 @@ path = "src/lib.rs"
     let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&DUAL_INVENTORY_ETIQUETTE)
+        .register(&*DUAL_INVENTORY_ETIQUETTE)
         .build();
 
     session

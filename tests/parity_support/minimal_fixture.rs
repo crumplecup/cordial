@@ -137,7 +137,7 @@ pub fn run_cordial_impl_coverage(
 
     let session = SessionBuilder::new(workspace)
         .with_store_root(store_root)
-        .register(&IMPL_COVERAGE_ETIQUETTE)
+        .register(&*IMPL_COVERAGE_ETIQUETTE)
         .build();
 
     let filter = match crate_name {

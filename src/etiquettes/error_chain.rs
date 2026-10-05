@@ -32,6 +32,8 @@ pub use reporter::{ErrorChainChecklistReporter, ErrorChainCsvReporter, ErrorChai
 pub use scan::{scan_crate_error_chain, scan_rust_source};
 pub use types::{ErrorChainProbeId, ErrorChainRecord, probe_counts};
 
+use std::sync::LazyLock;
+
 use crate::SourceLoader;
 use crate::enricher::ERROR_IR_ENRICHERS;
 use crate::etiquette::{
@@ -56,40 +58,42 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in error chain preservation etiquette bundle.
-pub static ERROR_CHAIN_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
-    StaticEtiquette::new(
-        "error_chain",
-        "Error chain preservation",
-        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-        false,
-        EtiquetteExplain::new(
-            "Which converters drop source() instead of wrapping the original error?",
-            "A typed crate error is useless in the field if the foreign cause was stringified away. Chain preservation is the difference between “something failed” and a diagnosable source() walk.",
-            "Among inventoried error sites, flags converters (especially map_err) that drop the original error instead of wrapping it. Sites that already preserve the chain are the contrast set, not the checklist. Reference-only / contrast inventory: no dedicated quality-report area of its own.",
-            "`[error_chain] enabled = false` in cordial.toml.",
-            &[
-                EtiquetteRuleExplain::new(
-                    "ERROR-CHAIN-WRAPPER-SOURCE-001",
-                    "Wrapper should keep a source field",
-                ),
-                EtiquetteRuleExplain::new(
-                    "ERROR-CHAIN-KIND-WRAPPER-PAYLOAD-001",
-                    "Kind wrapper payload shape",
-                ),
-                EtiquetteRuleExplain::new(
-                    "ERROR-CHAIN-FROM-BRIDGE-001",
-                    "From bridge drops the cause",
-                ),
-                EtiquetteRuleExplain::new(
-                    "ERROR-CHAIN-PRESERVED-QUESTION-MARK-001",
-                    "Contrast: ? already preserves the chain",
-                ),
-                EtiquetteRuleExplain::new(
-                    "ERROR-CHAIN-PRESERVED-MAP-ERR-001",
-                    "Contrast: map_err already preserves the chain",
-                ),
-            ],
+pub static ERROR_CHAIN_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|| {
+    StaticQualityEtiquette::new(
+        StaticEtiquette::new(
+            "error_chain",
+            "Error chain preservation",
+            EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+            false,
+            EtiquetteExplain::new(
+                "Which converters drop source() instead of wrapping the original error?",
+                "A typed crate error is useless in the field if the foreign cause was stringified away. Chain preservation is the difference between “something failed” and a diagnosable source() walk.",
+                "Among inventoried error sites, flags converters (especially map_err) that drop the original error instead of wrapping it. Sites that already preserve the chain are the contrast set, not the checklist. Reference-only / contrast inventory: no dedicated quality-report area of its own.",
+                "`[error_chain] enabled = false` in cordial.toml.",
+                vec![
+                    EtiquetteRuleExplain::new(
+                        "ERROR-CHAIN-WRAPPER-SOURCE-001",
+                        "Wrapper should keep a source field",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ERROR-CHAIN-KIND-WRAPPER-PAYLOAD-001",
+                        "Kind wrapper payload shape",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ERROR-CHAIN-FROM-BRIDGE-001",
+                        "From bridge drops the cause",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ERROR-CHAIN-PRESERVED-QUESTION-MARK-001",
+                        "Contrast: ? already preserves the chain",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ERROR-CHAIN-PRESERVED-MAP-ERR-001",
+                        "Contrast: map_err already preserves the chain",
+                    ),
+                ],
+            ),
         ),
-    ),
-    None,
-);
+        None,
+    )
+});

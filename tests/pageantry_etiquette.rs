@@ -219,7 +219,7 @@ pub struct Gamma;
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PAGEANTRY_ETIQUETTE)
+        .register(&*PAGEANTRY_ETIQUETTE)
         .build();
 
     let outcome = session

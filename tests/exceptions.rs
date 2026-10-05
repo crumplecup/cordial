@@ -45,7 +45,7 @@ fn exception_patch_suppresses_matching_panic_finding() -> miette::Result<()> {
 
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -124,7 +124,7 @@ fn exception_patch_with_context_suppresses_matching_visibility_finding() -> miet
 
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&VISIBILITY_ETIQUETTE)
+        .register(&*VISIBILITY_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -183,7 +183,7 @@ fn quality_patches_alias_suppresses_matching_finding() -> miette::Result<()> {
 
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
 
     let outcome = session

@@ -129,7 +129,7 @@ fn run_syn_parse_fixture(manifest: Option<&str>) -> miette::Result<String> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&FOREIGN_ERROR_TYPES_ETIQUETTE)
+        .register(&*FOREIGN_ERROR_TYPES_ETIQUETTE)
         .build();
     session
         .run(&RunAll)
@@ -181,7 +181,7 @@ fn foreign_error_types_session_produces_artifacts() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&FOREIGN_ERROR_TYPES_ETIQUETTE)
+        .register(&*FOREIGN_ERROR_TYPES_ETIQUETTE)
         .build();
 
     let outcome = session

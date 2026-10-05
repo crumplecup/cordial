@@ -23,7 +23,7 @@ use error_handling::ACME_ERROR_HANDLING;
 use quality::ACME_STYLE;
 
 fn main() {
-    let plugins: [&dyn Plugin; 3] = [&ACME_STYLE, &ACME_API_COVERAGE, &ACME_ERROR_HANDLING];
+    let plugins: [&dyn Plugin; 3] = [&*ACME_STYLE, &ACME_API_COVERAGE, &ACME_ERROR_HANDLING];
     for plugin in plugins {
         println!(
             "{} ({:?}): {}",

@@ -12,8 +12,6 @@ use tracing::instrument;
 static WORKSPACE_TARGETS: WorkspaceMembersTargetProvider = WorkspaceMembersTargetProvider;
 static DISPLAY_REQUIREMENT: DisplayRequirement = DisplayRequirement;
 
-static ACME_COVERAGE_ETIQUETTES: &[&dyn Etiquette] = &[&IMPL_COVERAGE_ETIQUETTE];
-
 /// One-trait requirement: types that impl `Display` count as covered.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct DisplayRequirement;
@@ -47,7 +45,7 @@ impl Plugin for AcmeApiCoverage {
 
     #[instrument(level = "trace", skip(self))]
     fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
-        ACME_COVERAGE_ETIQUETTES.to_vec()
+        vec![&*IMPL_COVERAGE_ETIQUETTE]
     }
 
     #[instrument(level = "trace", skip(self))]

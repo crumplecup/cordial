@@ -133,7 +133,7 @@ fn session_writes_checklist_from_real_fixture() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PROOF_PATTERNS_ETIQUETTE)
+        .register(&*PROOF_PATTERNS_ETIQUETTE)
         .build();
 
     let outcome = session

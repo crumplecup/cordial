@@ -126,9 +126,9 @@ pub use cfg_scatter::{
 #[cfg(feature = "dependency_freshness")]
 pub use dependency_freshness::DEPENDENCY_FRESHNESS_ETIQUETTE;
 #[cfg(feature = "amenable_ext")]
-pub(crate) use framework_ext::amenable_ext_jiff_report_from_findings;
+pub(crate) use framework_ext::ext_report_from_findings;
 #[cfg(feature = "amenable_ext")]
-pub use framework_ext::{AMENABLE_EXT_JIFF_ETIQUETTE, AmenableExtJiffReporter};
+pub use framework_ext::{AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter};
 #[cfg(feature = "impl_coverage")]
 pub use impl_coverage::{IMPL_COVERAGE_ETIQUETTE, ImplGapAssessment, ImplGapKind, assess_impl_gap};
 #[cfg(feature = "proof_patterns")]
@@ -152,114 +152,114 @@ pub use trenchcoat::TRENCHCOAT_ETIQUETTE;
 pub(crate) fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::QualityEtiquette> {
     let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 24] = [
         #[cfg(feature = "panics")]
-        Some(&panics::PANICS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*panics::PANICS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "panics"))]
         None,
         #[cfg(feature = "tracing")]
-        Some(&tracing::TRACING_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*tracing::TRACING_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "tracing"))]
         None,
         #[cfg(feature = "allows")]
-        Some(&allows::ALLOWS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*allows::ALLOWS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "allows"))]
         None,
         #[cfg(feature = "modularity")]
-        Some(&modularity::MODULARITY_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*modularity::MODULARITY_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "modularity"))]
         None,
         #[cfg(feature = "derives")]
-        Some(&derives::DERIVES_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*derives::DERIVES_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "derives"))]
         None,
         #[cfg(feature = "error_sites")]
-        Some(&error_sites::ERROR_SITES_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*error_sites::ERROR_SITES_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "error_sites"))]
         None,
         #[cfg(feature = "error_chain")]
-        Some(&error_chain::ERROR_CHAIN_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*error_chain::ERROR_CHAIN_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "error_chain"))]
         None,
         #[cfg(feature = "internal_error_chain")]
         Some(
-            &internal_error_chain::INTERNAL_ERROR_CHAIN_ETIQUETTE
+            &*internal_error_chain::INTERNAL_ERROR_CHAIN_ETIQUETTE
                 as &dyn crate::etiquette::QualityEtiquette,
         ),
         #[cfg(not(feature = "internal_error_chain"))]
         None,
         #[cfg(feature = "foreign_error_types")]
         Some(
-            &foreign_error_types::FOREIGN_ERROR_TYPES_ETIQUETTE
+            &*foreign_error_types::FOREIGN_ERROR_TYPES_ETIQUETTE
                 as &dyn crate::etiquette::QualityEtiquette,
         ),
         #[cfg(not(feature = "foreign_error_types"))]
         None,
         #[cfg(feature = "foreign_error_attenuation")]
         Some(
-            &foreign_error_attenuation::FOREIGN_ERROR_ATTENUATION_ETIQUETTE
+            &*foreign_error_attenuation::FOREIGN_ERROR_ATTENUATION_ETIQUETTE
                 as &dyn crate::etiquette::QualityEtiquette,
         ),
         #[cfg(not(feature = "foreign_error_attenuation"))]
         None,
         #[cfg(feature = "antipatterns")]
-        Some(&antipatterns::ANTIPATTERNS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*antipatterns::ANTIPATTERNS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "antipatterns"))]
         None,
         #[cfg(feature = "cfg_scatter")]
-        Some(&cfg_scatter::CFG_SCATTER_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*cfg_scatter::CFG_SCATTER_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "cfg_scatter"))]
         None,
         #[cfg(feature = "cfg_hygiene")]
-        Some(&cfg_hygiene::CFG_HYGIENE_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*cfg_hygiene::CFG_HYGIENE_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "cfg_hygiene"))]
         None,
         #[cfg(feature = "visibility")]
-        Some(&visibility::VISIBILITY_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*visibility::VISIBILITY_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "visibility"))]
         None,
         #[cfg(feature = "cli_layout")]
-        Some(&cli_layout::CLI_LAYOUT_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*cli_layout::CLI_LAYOUT_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "cli_layout"))]
         None,
         #[cfg(feature = "crate_attrs")]
-        Some(&crate_attrs::CRATE_ATTRS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*crate_attrs::CRATE_ATTRS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "crate_attrs"))]
         None,
         #[cfg(feature = "doc_warnings")]
-        Some(&doc_warnings::DOC_WARNINGS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*doc_warnings::DOC_WARNINGS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "doc_warnings"))]
         None,
         #[cfg(feature = "glob_imports")]
-        Some(&glob_imports::GLOB_IMPORTS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*glob_imports::GLOB_IMPORTS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "glob_imports"))]
         None,
         #[cfg(feature = "inline_tests")]
-        Some(&inline_tests::INLINE_TESTS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*inline_tests::INLINE_TESTS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "inline_tests"))]
         None,
         #[cfg(feature = "verus_warnings")]
-        Some(&verus_warnings::VERUS_WARNINGS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*verus_warnings::VERUS_WARNINGS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "verus_warnings"))]
         None,
         #[cfg(feature = "creusot_diagnostics")]
         Some(
-            &creusot_diagnostics::CREUSOT_DIAGNOSTICS_ETIQUETTE
+            &*creusot_diagnostics::CREUSOT_DIAGNOSTICS_ETIQUETTE
                 as &dyn crate::etiquette::QualityEtiquette,
         ),
         #[cfg(not(feature = "creusot_diagnostics"))]
         None,
         #[cfg(feature = "dependency_freshness")]
         Some(
-            &dependency_freshness::DEPENDENCY_FRESHNESS_ETIQUETTE
+            &*dependency_freshness::DEPENDENCY_FRESHNESS_ETIQUETTE
                 as &dyn crate::etiquette::QualityEtiquette,
         ),
         #[cfg(not(feature = "dependency_freshness"))]
         None,
         #[cfg(feature = "proof_patterns")]
-        Some(&proof_patterns::PROOF_PATTERNS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*proof_patterns::PROOF_PATTERNS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "proof_patterns"))]
         None,
         #[cfg(feature = "pageantry")]
-        Some(&pageantry::PAGEANTRY_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        Some(&*pageantry::PAGEANTRY_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "pageantry"))]
         None,
     ];
@@ -281,15 +281,15 @@ pub fn quality_etiquettes() -> Vec<&'static dyn crate::Etiquette> {
 pub fn coverage_etiquettes() -> Vec<&'static dyn crate::Etiquette> {
     let items: [Option<&'static dyn crate::Etiquette>; 3] = [
         #[cfg(feature = "impl_coverage")]
-        Some(&impl_coverage::IMPL_COVERAGE_ETIQUETTE as &dyn crate::Etiquette),
+        Some(&*impl_coverage::IMPL_COVERAGE_ETIQUETTE as &dyn crate::Etiquette),
         #[cfg(not(feature = "impl_coverage"))]
         None,
         #[cfg(feature = "trenchcoat")]
-        Some(&trenchcoat::TRENCHCOAT_ETIQUETTE as &dyn crate::Etiquette),
+        Some(&*trenchcoat::TRENCHCOAT_ETIQUETTE as &dyn crate::Etiquette),
         #[cfg(not(feature = "trenchcoat"))]
         None,
         #[cfg(feature = "shadow")]
-        Some(&shadow::SHADOW_ETIQUETTE as &dyn crate::Etiquette),
+        Some(&*shadow::SHADOW_ETIQUETTE as &dyn crate::Etiquette),
         #[cfg(not(feature = "shadow"))]
         None,
     ];

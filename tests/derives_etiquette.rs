@@ -38,7 +38,7 @@ fn derives_etiquette_detects_trivial_getters() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&DERIVES_ETIQUETTE)
+        .register(&*DERIVES_ETIQUETTE)
         .build();
 
     let outcome = session

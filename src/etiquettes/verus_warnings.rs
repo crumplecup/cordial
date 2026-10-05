@@ -38,6 +38,8 @@ pub use reporter::{
 pub use scan::{crate_is_verus_target, parse_verus_compiler_output, scan_crate_verus_warnings};
 pub use types::{VerusWarningRecord, VerusWarningRuleId};
 
+use std::sync::LazyLock;
+
 use crate::etiquette::{
     EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
     StaticQualityEtiquette, count_open_category,
@@ -72,30 +74,32 @@ static REPORTERS: &[&'static dyn crate::Reporter] = &[
 ];
 
 /// Built-in Verus compiler-warning etiquette bundle.
-pub static VERUS_WARNINGS_ETIQUETTE: StaticQualityEtiquette = StaticQualityEtiquette::new(
-    StaticEtiquette::new(
-        "verus_warnings",
-        "Verus compiler warnings",
-        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-        false,
-        EtiquetteExplain::new(
-            "Does the Verus rustc fork emit warnings this crate's rustc never sees?",
-            "Verus is a different compiler. It fires diagnostics rustc and clippy never see, and it has no deny-warnings flag.",
-            "Invokes verus on crates that are Verus compilation units (*_verus or a vstd / verus_builtin dependency) and records each warning: diagnostic. Summary lines are dropped; the same span is kept once. Skipped when the crate is not a Verus target or verus is not on PATH.",
-            "`[verus_warnings] enabled = false` in cordial.toml.",
-            &[EtiquetteRuleExplain::new(
-                "VERUS-WARNING-001",
-                "A warning: line from the Verus rustc fork",
-            )],
+pub static VERUS_WARNINGS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|| {
+    StaticQualityEtiquette::new(
+        StaticEtiquette::new(
+            "verus_warnings",
+            "Verus compiler warnings",
+            EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+            false,
+            EtiquetteExplain::new(
+                "Does the Verus rustc fork emit warnings this crate's rustc never sees?",
+                "Verus is a different compiler. It fires diagnostics rustc and clippy never see, and it has no deny-warnings flag.",
+                "Invokes verus on crates that are Verus compilation units (*_verus or a vstd / verus_builtin dependency) and records each warning: diagnostic. Summary lines are dropped; the same span is kept once. Skipped when the crate is not a Verus target or verus is not on PATH.",
+                "`[verus_warnings] enabled = false` in cordial.toml.",
+                vec![EtiquetteRuleExplain::new(
+                    "VERUS-WARNING-001",
+                    "A warning: line from the Verus rustc fork",
+                )],
+            ),
         ),
-    ),
-    Some(QualityAreaSpec::new(
-        "Verus compiler warnings",
-        "verus-warnings.checklist.md",
-        "verus-warnings-summary.md",
-        quality_area_compute,
-    )),
-);
+        Some(QualityAreaSpec::new(
+            "Verus compiler warnings",
+            "verus-warnings.checklist.md",
+            "verus-warnings-summary.md",
+            quality_area_compute,
+        )),
+    )
+});
 
 #[instrument(level = "debug", skip(findings))]
 fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {

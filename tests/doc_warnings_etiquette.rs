@@ -206,7 +206,7 @@ fn session_writes_checklist_from_injected_cargo() -> miette::Result<()> {
     let outcome = {
         let session = SessionBuilder::new(&crate_root)
             .with_store_root(store.path())
-            .register(&DOC_WARNINGS_ETIQUETTE)
+            .register(&*DOC_WARNINGS_ETIQUETTE)
             .build();
         session.run(&RunAll)
     };

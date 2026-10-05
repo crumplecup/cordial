@@ -12,32 +12,53 @@ use super::traits::Etiquette;
 /// Static etiquette declaration backed by slices of trait object references.
 ///
 /// Does not implement [`Default`]: `explain` (and the rest) must be written out
-/// so a new bundle cannot ship without an explanation. `derive_builder` is not
-/// `const`, so this table uses [`Self::new`].
+/// so a new bundle cannot ship without an explanation.
+///
+/// Deliberately a plain constructor, not `derive_builder`, despite 5 fields:
+/// every field is always required, with no real validation, so a
+/// builder's `.build()` would need `.expect()`/`.unwrap()` at every call
+/// site to resolve its `Result` — all ~30 of which build inside
+/// `LazyLock::new(|| ...)` closures that must return the value directly
+/// and structurally cannot propagate an error. That trades a type-enforced
+/// guarantee (every field supplied, checked by the compiler) for a
+/// runtime-checked one (same guarantee, but panics in library code if
+/// ever violated) for zero actual benefit — confirmed by `cordial`'s own
+/// panics etiquette, which flagged the resulting 60+ new `.expect()` abort
+/// sites once this was tried.
+///
+/// `id`/`name` are owned `String`, not `&'static str`: built-ins bind
+/// literals (`String: From<&str>`) and etiquettes derived from
+/// `cordial.toml` at runtime bind owned strings through the exact same
+/// constructor. `id` is fixed once built either way, which is what
+/// actually keeps exceptions and reports matching across runs — that
+/// guarantee never came from `const`, just from nothing mutating these
+/// fields after construction. Built-ins register through a `LazyLock`
+/// (see e.g. `etiquettes::panics::PANICS_ETIQUETTE`) instead of a bare
+/// `static`, since building one is no longer a `const` operation.
 pub struct StaticEtiquette {
-    id: &'static str,
-    name: &'static str,
+    id: String,
+    name: String,
     hooks: EtiquetteHooks,
     is_coverage: bool,
     explain: EtiquetteExplain,
 }
 
 impl StaticEtiquette {
-    /// Bind a static hook table.
+    /// Bind a hook table to its id, name, and explain page.
     ///
-    /// Not a builder: `const` statics cannot call `derive_builder::build`.
     /// Keep `id`, rule ids, marker labels, and artifact names stable after
     /// users have generated reports or exceptions.
-    pub const fn new(
-        id: &'static str,
-        name: &'static str,
+    #[instrument(level = "debug", skip(id, name, hooks, explain))]
+    pub fn new(
+        id: impl Into<String>,
+        name: impl Into<String>,
         hooks: EtiquetteHooks,
         is_coverage: bool,
         explain: EtiquetteExplain,
     ) -> Self {
         Self {
-            id,
-            name,
+            id: id.into(),
+            name: name.into(),
             hooks,
             is_coverage,
             explain,
@@ -48,17 +69,17 @@ impl StaticEtiquette {
 impl Etiquette for StaticEtiquette {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
-        self.id
+        &self.id
     }
 
     #[instrument(level = "trace", skip(self))]
     fn name(&self) -> &str {
-        self.name
+        &self.name
     }
 
     #[instrument(level = "trace", skip(self))]
     fn explain(&self) -> EtiquetteExplain {
-        self.explain
+        self.explain.clone()
     }
 
     #[instrument(level = "trace", skip(self))]

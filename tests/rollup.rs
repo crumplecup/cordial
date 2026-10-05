@@ -22,8 +22,8 @@ fn quality_cli_filter_runs_both_etiquettes() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
-        .register(&TRACING_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
+        .register(&*TRACING_ETIQUETTE)
         .build();
 
     let filter = NamedRunFilter::etiquettes(["panics", "tracing"]);
@@ -60,7 +60,7 @@ fn rollup_summary_lists_open_findings_by_etiquette() -> miette::Result<()> {
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&PANICS_ETIQUETTE)
+        .register(&*PANICS_ETIQUETTE)
         .build();
 
     session

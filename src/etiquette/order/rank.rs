@@ -6,7 +6,6 @@ use tracing::instrument;
 
 use super::{LintConstraint, LintOrder};
 use crate::error::{CordialError, CordialResult};
-use crate::etiquette::explain::EtiquetteRuleExplain;
 use crate::etiquette::order_table::ERROR_HANDLING_RULE_IDS;
 use crate::etiquette::quality::QualityEtiquette;
 
@@ -191,14 +190,20 @@ pub(crate) fn sort_quality_etiquettes<'a>(
     order: &LintOrder,
 ) -> Vec<&'a dyn QualityEtiquette> {
     let n = etiquettes.len();
-    let rule_sets: Vec<Vec<&str>> = etiquettes
+    // Kept alive for the whole function: `rule_sets` borrows rule ids from
+    // these, and `EtiquetteRuleExplain::id` no longer returns `&'static
+    // str` now that the type owns its text.
+    let explains: Vec<_> = etiquettes
         .iter()
-        .map(|etiquette| {
-            etiquette
-                .explain()
+        .map(|etiquette| etiquette.explain())
+        .collect();
+    let rule_sets: Vec<Vec<&str>> = explains
+        .iter()
+        .map(|explain| {
+            explain
                 .rules()
                 .iter()
-                .map(EtiquetteRuleExplain::id)
+                .map(|rule| rule.id().as_str())
                 .collect()
         })
         .collect();
@@ -262,7 +267,7 @@ fn lift_error_handling_cluster<'a>(
             .explain()
             .rules()
             .iter()
-            .any(|rule| lead.contains(rule.id()))
+            .any(|rule| lead.contains(rule.id().as_str()))
     });
     cluster.into_iter().chain(rest).collect()
 }

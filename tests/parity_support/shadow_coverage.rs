@@ -36,7 +36,7 @@ pub fn run_cordial_shadow_coverage(
 
     let session = SessionBuilder::new(workspace)
         .with_store_root(store_root)
-        .register(&SHADOW_ETIQUETTE)
+        .register(&*SHADOW_ETIQUETTE)
         .build();
 
     let filter = match upstream_crate {

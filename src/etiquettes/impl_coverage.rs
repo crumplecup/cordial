@@ -34,6 +34,8 @@ pub use probe::MissingPrereqProbe;
 pub use reporter::{ImplChecklistReporter, ImplCoverageCsvReporter, ImplGapsCsvReporter};
 pub use types::ImplGapKind;
 
+use std::sync::LazyLock;
+
 use crate::RustdocLoader;
 use crate::enricher::{
     FeatureProbeEnricher, ProofHarnessEnricher, TraitImplEnricher, WrapperCoverageEnricher,
@@ -63,19 +65,21 @@ static ASSESSORS: &[&'static dyn crate::Assessor] = &[&IMPL_ASSESSOR];
 static REPORTERS: &[&'static dyn crate::Reporter] = &[&IMPL_CSV, &IMPL_GAPS_CSV, &IMPL_CHECKLIST];
 
 /// Built-in trait impl coverage etiquette bundle.
-pub static IMPL_COVERAGE_ETIQUETTE: StaticEtiquette = StaticEtiquette::new(
-    "impl-coverage",
-    "Impl coverage",
-    EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
-    true,
-    EtiquetteExplain::new(
-        "Do types implement the required elicitation traits?",
-        "Elicitation coverage is a completeness inventory, not a source lint. Types that wrap foreign values or sit on a tracked target need the trait stack before they are done.",
-        "From rustdoc JSON, finds types that should implement ElicitComplete (and prerequisites) and classifies gaps: missing our traits, ready for ElicitComplete, feature-gated external, or externally blocked. Rebuilds workspace rustdoc JSON when the cache is missing or stale.",
-        "`[impl-coverage] enabled = false` in cordial.toml.",
-        &[EtiquetteRuleExplain::new(
-            "IMPL-COVERAGE-GAP",
-            "Type is missing required elicitation traits",
-        )],
-    ),
-);
+pub static IMPL_COVERAGE_ETIQUETTE: LazyLock<StaticEtiquette> = LazyLock::new(|| {
+    StaticEtiquette::new(
+        "impl-coverage",
+        "Impl coverage",
+        EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
+        true,
+        EtiquetteExplain::new(
+            "Do types implement the required elicitation traits?",
+            "Elicitation coverage is a completeness inventory, not a source lint. Types that wrap foreign values or sit on a tracked target need the trait stack before they are done.",
+            "From rustdoc JSON, finds types that should implement ElicitComplete (and prerequisites) and classifies gaps: missing our traits, ready for ElicitComplete, feature-gated external, or externally blocked. Rebuilds workspace rustdoc JSON when the cache is missing or stale.",
+            "`[impl-coverage] enabled = false` in cordial.toml.",
+            vec![EtiquetteRuleExplain::new(
+                "IMPL-COVERAGE-GAP",
+                "Type is missing required elicitation traits",
+            )],
+        ),
+    )
+});

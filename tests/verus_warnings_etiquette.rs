@@ -228,7 +228,7 @@ fn session_writes_checklist_from_injected_verus() -> miette::Result<()> {
     let outcome = {
         let session = SessionBuilder::new(&crate_root)
             .with_store_root(store.path())
-            .register(&VERUS_WARNINGS_ETIQUETTE)
+            .register(&*VERUS_WARNINGS_ETIQUETTE)
             .build();
         session.run(&RunAll)
     };

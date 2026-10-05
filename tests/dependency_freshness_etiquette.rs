@@ -88,7 +88,7 @@ version = "2.3.4"
     write_dependency_freshness_cache(store.path(), "")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&DEPENDENCY_FRESHNESS_ETIQUETTE)
+        .register(&*DEPENDENCY_FRESHNESS_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -183,7 +183,7 @@ version = "1.0.0"
     write_dependency_freshness_cache(store.path(), "")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&DEPENDENCY_FRESHNESS_ETIQUETTE)
+        .register(&*DEPENDENCY_FRESHNESS_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -267,7 +267,7 @@ version = "0.1.0"
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&DEPENDENCY_FRESHNESS_ETIQUETTE)
+        .register(&*DEPENDENCY_FRESHNESS_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -393,7 +393,7 @@ available_version = "3.0.5"
 
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&DEPENDENCY_FRESHNESS_ETIQUETTE)
+        .register(&*DEPENDENCY_FRESHNESS_ETIQUETTE)
         .build();
 
     let outcome = session
@@ -495,7 +495,7 @@ local_dep = { path = "../local_dep" }
         .wrap_err("store tempdir")?;
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
-        .register(&DEPENDENCY_FRESHNESS_ETIQUETTE)
+        .register(&*DEPENDENCY_FRESHNESS_ETIQUETTE)
         .build();
 
     let outcome = session
