@@ -22,8 +22,8 @@ impl Assessor for InlineTestAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["inline-test-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["inline-test-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

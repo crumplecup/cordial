@@ -22,8 +22,8 @@ impl Assessor for CreusotDiagnosticAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["creusot-diagnostic-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["creusot-diagnostic-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

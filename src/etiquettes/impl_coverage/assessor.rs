@@ -28,8 +28,8 @@ impl Assessor for ImplGapAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["impl-coverage-gap"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["impl-coverage-gap"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

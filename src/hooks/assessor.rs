@@ -14,7 +14,10 @@ pub trait Assessor: Send + Sync {
     /// Probe ids whose markers this assessor reads.
     ///
     /// The session passes markers from matching producers to this assessor.
-    fn consumes(&self) -> &[&str];
+    /// Owned `Vec`, not `&[&str]`: an assessor whose probe id is runtime
+    /// data (not a `'static` literal) can borrow it straight from `&self`
+    /// this way, with no self-referential storage needed.
+    fn consumes(&self) -> Vec<&str>;
     /// Judge markers and emit findings.
     fn assess(&self, view: AssessView<'_>) -> CordialResult<Vec<Box<dyn Finding>>>;
 }

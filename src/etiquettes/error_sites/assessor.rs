@@ -21,8 +21,8 @@ impl Assessor for ErrorSiteAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["error-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["error-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

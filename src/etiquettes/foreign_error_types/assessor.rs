@@ -21,8 +21,8 @@ impl Assessor for ForeignErrorTypeAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["foreign-error-type"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["foreign-error-type"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

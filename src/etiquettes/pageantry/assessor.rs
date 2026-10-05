@@ -22,8 +22,8 @@ impl Assessor for PageantryAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["pageantry-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["pageantry-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

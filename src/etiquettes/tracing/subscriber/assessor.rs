@@ -22,8 +22,8 @@ impl Assessor for SubscriberAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &[SUBSCRIBER_SITE_LABEL]
+    fn consumes(&self) -> Vec<&str> {
+        vec![SUBSCRIBER_SITE_LABEL]
     }
 
     #[instrument(level = "trace", skip(self, view))]

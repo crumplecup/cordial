@@ -22,8 +22,8 @@ impl Assessor for VerusWarningAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["verus-warning-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["verus-warning-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

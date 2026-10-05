@@ -24,8 +24,8 @@ impl Assessor for ForeignErrorAttenuationAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["foreign-error-attenuation"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["foreign-error-attenuation"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

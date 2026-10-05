@@ -21,8 +21,8 @@ impl Assessor for AntipatternAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["antipattern-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["antipattern-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

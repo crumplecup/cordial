@@ -21,8 +21,8 @@ impl Assessor for AllowAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["allow-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["allow-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

@@ -24,8 +24,8 @@ impl Assessor for InternalErrorChainAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["internal-error-chain"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["internal-error-chain"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

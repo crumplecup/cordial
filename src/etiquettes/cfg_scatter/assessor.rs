@@ -21,8 +21,8 @@ impl Assessor for CfgScatterAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["cfg-scatter-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["cfg-scatter-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

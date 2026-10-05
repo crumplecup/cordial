@@ -38,8 +38,8 @@ impl Assessor for ModularityAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["modularity-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["modularity-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

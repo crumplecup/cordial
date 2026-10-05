@@ -24,8 +24,8 @@ impl Assessor for DependencyFreshnessAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["dependency-freshness-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["dependency-freshness-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

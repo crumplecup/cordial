@@ -23,8 +23,8 @@ impl Assessor for DocWarningAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["doc-warning-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["doc-warning-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

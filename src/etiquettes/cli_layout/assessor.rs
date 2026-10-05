@@ -21,8 +21,8 @@ impl Assessor for CliLayoutAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["cli-layout-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["cli-layout-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

@@ -19,8 +19,8 @@ impl Assessor for ShadowAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["missing-shadow-mirror"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["missing-shadow-mirror"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

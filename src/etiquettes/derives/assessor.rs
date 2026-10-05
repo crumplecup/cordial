@@ -21,8 +21,8 @@ impl Assessor for DeriveAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["derive-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["derive-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

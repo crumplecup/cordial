@@ -19,8 +19,8 @@ impl Assessor for TrenchcoatAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["unwrapped-foreign"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["unwrapped-foreign"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

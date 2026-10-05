@@ -22,8 +22,8 @@ impl Assessor for PrintAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &[PRINT_SITE_LABEL]
+    fn consumes(&self) -> Vec<&str> {
+        vec![PRINT_SITE_LABEL]
     }
 
     #[instrument(level = "trace", skip(self, view))]

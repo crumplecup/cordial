@@ -20,8 +20,8 @@ impl Assessor for VisibilityAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["visibility-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["visibility-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

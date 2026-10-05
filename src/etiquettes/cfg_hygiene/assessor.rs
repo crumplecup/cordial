@@ -21,8 +21,8 @@ impl Assessor for CfgHygieneAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["cfg-hygiene-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["cfg-hygiene-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

@@ -30,8 +30,8 @@ impl Assessor for TracingAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &[
+    fn consumes(&self) -> Vec<&str> {
+        vec![
             MISSING_INSTRUMENT_LABEL,
             RECIPE_DELTA_LABEL,
             FORBIDDEN_INSTRUMENT_LABEL,

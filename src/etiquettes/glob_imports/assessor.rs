@@ -22,8 +22,8 @@ impl Assessor for GlobImportAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["glob-import-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["glob-import-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

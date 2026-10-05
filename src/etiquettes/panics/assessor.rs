@@ -22,8 +22,8 @@ impl Assessor for PanicAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["panic-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["panic-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

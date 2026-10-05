@@ -22,8 +22,8 @@ impl Assessor for ProofPatternAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["proof-pattern-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["proof-pattern-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

@@ -22,8 +22,8 @@ impl Assessor for CrateAttrsAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &["crate-attrs-site"]
+    fn consumes(&self) -> Vec<&str> {
+        vec!["crate-attrs-site"]
     }
 
     #[instrument(level = "trace", skip(self, view))]

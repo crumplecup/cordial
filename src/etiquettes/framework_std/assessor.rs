@@ -25,8 +25,8 @@ impl Assessor for HomecomingStdAssessor {
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn consumes(&self) -> &[&str] {
-        &[super::probe::HomecomingStdScopeProbe::ID]
+    fn consumes(&self) -> Vec<&str> {
+        vec![super::probe::HomecomingStdScopeProbe::ID]
     }
 
     #[instrument(level = "trace", skip(self, view))]
@@ -105,8 +105,8 @@ mod amenable {
         }
 
         #[instrument(level = "trace", skip(self))]
-        fn consumes(&self) -> &[&str] {
-            &[super::super::probe::AmenableStdScopeProbe::ID]
+        fn consumes(&self) -> Vec<&str> {
+            vec![super::super::probe::AmenableStdScopeProbe::ID]
         }
 
         #[instrument(level = "trace", skip(self, view))]
