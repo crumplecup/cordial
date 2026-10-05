@@ -1,11 +1,14 @@
 //! Amenable ext coverage profile: registry evidence + verifier witnesses
-//! over a third-party target crate's inventory (jiff, so far).
+//! over third-party target crates' inventories, as configured by
+//! `[[amenable_ext.target]]` (`docs/planning/amenable-ext-targets-config.md`).
 
-use crate::AMENABLE_EXT_JIFF_ETIQUETTE;
+use std::sync::Arc;
+
+use crate::config::load_session_config;
 use crate::error::CordialResult;
 
 use crate::etiquette::Etiquette;
-use crate::framework_std::AMENABLE_EXT_JIFF_UPSTREAM_CRATE;
+use crate::etiquettes::{KNOWN_TARGETS, build_ext_etiquette};
 use crate::plugin::{
     Coverage, CoverageTarget, Plugin, PluginCategory, TargetProvider, TraitRequirement,
 };
@@ -13,6 +16,28 @@ use crate::session::{RunFilter, SessionView};
 use crate::targets::discover_crate_targets;
 
 use tracing::instrument;
+
+/// Resolve the configured (or default) target names for this session, in
+/// declaration order. No `[[amenable_ext.target]]` entries at all falls
+/// back to [`KNOWN_TARGETS`]; any entries listed *replace* that default
+/// (see `AmenableExtConfig`'s own docs).
+#[instrument(level = "trace", skip(session))]
+fn resolved_target_names(session: &dyn SessionView) -> Vec<String> {
+    let config = load_session_config(session);
+    let amenable_ext = config.amenable_ext();
+    if amenable_ext.has_configured_targets() {
+        amenable_ext
+            .enabled_target_names()
+            .into_iter()
+            .map(str::to_string)
+            .collect()
+    } else {
+        KNOWN_TARGETS
+            .iter()
+            .map(|target| target.to_string())
+            .collect()
+    }
+}
 
 /// Registry-backed ext coverage has no single composite trait
 /// requirement — same reasoning as `amenable::RegistryRequirement`.
@@ -49,9 +74,10 @@ impl TargetProvider for AmenableExtTargetProvider {
         session: &dyn SessionView,
         filter: &dyn RunFilter,
     ) -> CordialResult<Vec<CoverageTarget>> {
-        let mut targets = vec![CoverageTarget::upstream_dep(
-            AMENABLE_EXT_JIFF_UPSTREAM_CRATE,
-        )];
+        let mut targets: Vec<CoverageTarget> = resolved_target_names(session)
+            .into_iter()
+            .map(CoverageTarget::upstream_dep)
+            .collect();
         for member in discover_crate_targets(session.project_root(), filter)? {
             targets.push(CoverageTarget::workspace_member(member.crate_name()));
         }
@@ -77,9 +103,12 @@ impl Plugin for AmenableExtCoverage {
         "Amenable ext coverage"
     }
 
-    #[instrument(level = "trace", skip(self))]
-    fn static_etiquettes(&self) -> Vec<&'static dyn Etiquette> {
-        vec![&*AMENABLE_EXT_JIFF_ETIQUETTE]
+    #[instrument(level = "trace", skip(self, session))]
+    fn etiquettes(&self, session: &dyn SessionView) -> Vec<Arc<dyn Etiquette>> {
+        resolved_target_names(session)
+            .into_iter()
+            .map(|target| Arc::new(build_ext_etiquette(&target)) as Arc<dyn Etiquette>)
+            .collect()
     }
 
     #[instrument(level = "trace", skip(self))]

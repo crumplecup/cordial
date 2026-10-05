@@ -103,3 +103,9 @@ pub fn build_ext_etiquette(target: &str) -> StaticEtiquette {
 /// no longer `const`-eligible.
 pub static AMENABLE_EXT_JIFF_ETIQUETTE: LazyLock<StaticEtiquette> =
     LazyLock::new(|| build_ext_etiquette("jiff"));
+
+/// Compiled-in target list used when `cordial.toml` has no
+/// `[[amenable_ext.target]]` entries at all. A project that configures the
+/// section replaces this list rather than adding to it (see
+/// `AmenableExtConfig`'s own docs).
+pub const KNOWN_TARGETS: &[&str] = &["jiff"];

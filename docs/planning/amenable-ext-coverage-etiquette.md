@@ -1,5 +1,15 @@
 # `amenable-ext-jiff` coverage etiquette
 
+Config-driven multi-target registration (`[[amenable_ext.target]]`,
+generic `ExtRowRule`/`build_ext_etiquette(target)`, owned `Arc<dyn
+Etiquette>`) landed per
+[amenable-ext targets in cordial.toml](amenable-ext-targets-config.md);
+that doc is now the current reference for how targets are generalized and
+registered. This doc stays the architecture reference for the
+plugin/probe/assessor/reporter shape itself (still accurate — the shape
+didn't change, only how many targets instantiate it and where the target
+name comes from).
+
 The `amenable_ext` (third-party target crate) counterpart of
 `amenable-std`: registry evidence + verifier witnesses over jiff's
 registered carriers, via a shadow-dep rustdoc build instead of the shared

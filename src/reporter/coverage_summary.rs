@@ -65,7 +65,7 @@ pub fn build_coverage_summary(
     if !coverage_plugins.is_empty() {
         for plugin in coverage_plugins {
             let section = section_for_plugin(plugin, session, filter, findings, workspace)?;
-            plugins.push(section.summary);
+            plugins.extend(section.summaries);
             extra_artifacts.extend(section.extra_artifacts);
         }
     } else {
@@ -85,10 +85,10 @@ pub fn build_coverage_summary(
                     amenable_section::amenable_std_section(findings)?,
                 )),
                 #[cfg(feature = "amenable_ext")]
-                "amenable-ext-jiff" => plugins.push(CoveragePluginSummary::new(
-                    "amenable-ext-jiff".to_string(),
-                    "Amenable ext (jiff) coverage".to_string(),
-                    amenable_ext_section::amenable_ext_jiff_section(findings)?,
+                id if id.starts_with("amenable-ext-") => plugins.push(CoveragePluginSummary::new(
+                    id.to_string(),
+                    format!("Amenable ext ({}) coverage", &id["amenable-ext-".len()..]),
+                    amenable_ext_section::amenable_ext_target_section(findings, id)?,
                 )),
                 #[cfg(feature = "elicitation")]
                 "impl-coverage" | "trenchcoat" | "shadow" if !saw_elicitation => {
@@ -96,7 +96,7 @@ pub fn build_coverage_summary(
                     let rollup = elicitation_section_impl::elicitation_section(
                         session, filter, findings, workspace,
                     )?;
-                    plugins.push(rollup.summary);
+                    plugins.extend(rollup.summaries);
                     extra_artifacts.extend(rollup.extra_artifacts);
                 }
                 _ => {}
@@ -107,7 +107,9 @@ pub fn build_coverage_summary(
 }
 
 struct CoverageSection {
-    summary: CoveragePluginSummary,
+    /// Usually one summary per plugin; `amenable-ext-coverage` contributes
+    /// one per configured target instead of a single fixed section.
+    summaries: Vec<CoveragePluginSummary>,
     extra_artifacts: Vec<Box<dyn Artifact>>,
 }
 
@@ -126,41 +128,49 @@ fn section_for_plugin(
     match plugin.id() {
         #[cfg(feature = "homecoming_std")]
         "homecoming-std-coverage" => Ok(CoverageSection {
-            summary: CoveragePluginSummary::new(
+            summaries: vec![CoveragePluginSummary::new(
                 plugin.id().to_string(),
                 plugin.name().to_string(),
                 homecoming_section::homecoming_std_section(findings)?,
-            ),
+            )],
             extra_artifacts: Vec::new(),
         }),
         #[cfg(feature = "amenable_std")]
         "amenable-std-coverage" => Ok(CoverageSection {
-            summary: CoveragePluginSummary::new(
+            summaries: vec![CoveragePluginSummary::new(
                 plugin.id().to_string(),
                 plugin.name().to_string(),
                 amenable_section::amenable_std_section(findings)?,
-            ),
+            )],
             extra_artifacts: Vec::new(),
         }),
         #[cfg(feature = "amenable_ext")]
-        "amenable-ext-coverage" => Ok(CoverageSection {
-            summary: CoveragePluginSummary::new(
-                plugin.id().to_string(),
-                plugin.name().to_string(),
-                amenable_ext_section::amenable_ext_jiff_section(findings)?,
-            ),
-            extra_artifacts: Vec::new(),
-        }),
+        "amenable-ext-coverage" => {
+            let mut summaries = Vec::new();
+            for etiquette in plugin.etiquettes(session) {
+                let category = etiquette.id().to_string();
+                let body = amenable_ext_section::amenable_ext_target_section(findings, &category)?;
+                summaries.push(CoveragePluginSummary::new(
+                    category,
+                    etiquette.name().to_string(),
+                    body,
+                ));
+            }
+            Ok(CoverageSection {
+                summaries,
+                extra_artifacts: Vec::new(),
+            })
+        }
         #[cfg(feature = "elicitation")]
         "elicitation-coverage" => {
             elicitation_section_impl::elicitation_section(session, filter, findings, workspace)
         }
         other => Ok(CoverageSection {
-            summary: CoveragePluginSummary::new(
+            summaries: vec![CoveragePluginSummary::new(
                 plugin.id().to_string(),
                 plugin.name().to_string(),
                 format!("Coverage plugin `{other}` has no summary section yet.\n"),
-            ),
+            )],
             extra_artifacts: Vec::new(),
         }),
     }
@@ -324,17 +334,22 @@ mod amenable_ext_section {
     use crate::objects::Finding;
     use tracing::instrument;
 
+    /// `category`/checklist filename are the etiquette id (`amenable-ext-{target}`),
+    /// same derivation `build_ext_etiquette` uses.
     #[instrument(level = "debug", skip(findings), err(level = "warn"))]
-    pub(super) fn amenable_ext_jiff_section(findings: &[&dyn Finding]) -> CordialResult<String> {
+    pub(super) fn amenable_ext_target_section(
+        findings: &[&dyn Finding],
+        category: &str,
+    ) -> CordialResult<String> {
         use crate::etiquettes::ext_report_from_findings;
         use crate::framework_std::render_amenable_ext_summary_md;
 
-        let Some(report) = ext_report_from_findings(findings, "amenable-ext-jiff", false)? else {
-            return Ok("_No amenable ext (jiff) findings._\n".to_string());
+        let Some(report) = ext_report_from_findings(findings, category, false)? else {
+            return Ok(format!("_No {category} findings._\n"));
         };
         Ok(render_amenable_ext_summary_md(
             &report,
-            "amenable-ext-jiff.checklist.md",
+            &format!("{category}.checklist.md"),
         ))
     }
 }
@@ -365,11 +380,11 @@ mod elicitation_section_impl {
         )?;
         let (body, extra_artifacts) = rollup.into_parts();
         Ok(CoverageSection {
-            summary: CoveragePluginSummary::new(
+            summaries: vec![CoveragePluginSummary::new(
                 "elicitation-coverage".to_string(),
                 "Elicitation coverage".to_string(),
                 body,
-            ),
+            )],
             extra_artifacts,
         })
     }

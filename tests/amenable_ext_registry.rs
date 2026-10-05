@@ -227,3 +227,161 @@ fn amenable_ext_plugin_is_registered() -> miette::Result<()> {
     );
     Ok(())
 }
+
+/// Step 2 (`docs/planning/amenable-ext-targets-config.md`): with
+/// `[[amenable_ext.target]]` entries configured, the plugin must build an
+/// etiquette per *enabled* target and skip disabled ones -- not just the
+/// single compiled-in `jiff` default `amenable_ext_plugin_is_registered`
+/// above exercises. Two real targets plus one disabled target, so the
+/// generalization is proven on more than one name.
+fn write_amenable_ext_config(workspace: &std::path::Path, body: &str) -> miette::Result<()> {
+    use miette::WrapErr;
+    std::fs::write(workspace.join("cordial.toml"), body)
+        .into_diagnostic()
+        .wrap_err("write cordial.toml")
+}
+
+#[test]
+fn configured_targets_replace_the_default_and_skip_disabled_entries() -> miette::Result<()> {
+    use cordial::{AMENABLE_EXT_COVERAGE, Plugin, SessionBuilder};
+    use miette::WrapErr;
+
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    write_amenable_ext_config(
+        workspace.path(),
+        r#"
+[[amenable_ext.target]]
+name = "jiff"
+
+[[amenable_ext.target]]
+name = "chrono"
+
+[[amenable_ext.target]]
+name = "elm"
+enabled = false
+"#,
+    )?;
+    let session = SessionBuilder::new(workspace.path())
+        .with_store_home(store.path())
+        .build();
+
+    let mut ids: Vec<String> = AMENABLE_EXT_COVERAGE
+        .etiquettes(&session)
+        .iter()
+        .map(|etiquette| etiquette.id().to_string())
+        .collect();
+    ids.sort();
+    assert_eq!(ids, vec!["amenable-ext-chrono", "amenable-ext-jiff"]);
+    Ok(())
+}
+
+#[test]
+fn configured_targets_drive_upstream_dep_coverage_targets_too() -> miette::Result<()> {
+    use cordial::{
+        AMENABLE_EXT_COVERAGE, Coverage, CoverageTargetKind, NamedRunFilter, SessionBuilder,
+    };
+    use miette::WrapErr;
+
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    write_amenable_ext_config(
+        workspace.path(),
+        r#"
+[[amenable_ext.target]]
+name = "jiff"
+
+[[amenable_ext.target]]
+name = "chrono"
+
+[[amenable_ext.target]]
+name = "elm"
+enabled = false
+"#,
+    )?;
+    let session = SessionBuilder::new(workspace.path())
+        .with_store_home(store.path())
+        .build();
+    let filter = NamedRunFilter::all_etiquettes();
+
+    let targets = AMENABLE_EXT_COVERAGE
+        .target_provider()
+        .coverage_targets(&session, &filter)
+        .into_diagnostic()
+        .wrap_err("coverage_targets")?;
+    let mut upstream: Vec<&str> = targets
+        .iter()
+        .filter(|target| target.kind() == CoverageTargetKind::UpstreamDep)
+        .map(|target| target.crate_name().as_str())
+        .collect();
+    upstream.sort();
+    assert_eq!(upstream, vec!["chrono", "jiff"]);
+    Ok(())
+}
+
+#[test]
+fn coverage_summary_renders_one_section_per_configured_target() -> miette::Result<()> {
+    use cordial::{
+        AMENABLE_EXT_COVERAGE, NamedRunFilter, SessionBuilder, WorkspaceIr, build_coverage_summary,
+    };
+    use miette::WrapErr;
+
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("workspace")?;
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    write_amenable_ext_config(
+        workspace.path(),
+        r#"
+[[amenable_ext.target]]
+name = "jiff"
+
+[[amenable_ext.target]]
+name = "chrono"
+"#,
+    )?;
+    let session = SessionBuilder::new(workspace.path())
+        .with_store_home(store.path())
+        .build();
+    let filter = NamedRunFilter::all_etiquettes();
+    let registered: Vec<&'static dyn cordial::Plugin> = vec![&AMENABLE_EXT_COVERAGE];
+
+    let summary = build_coverage_summary(
+        &registered,
+        &[],
+        &filter,
+        &session,
+        &[],
+        &WorkspaceIr::default(),
+    )
+    .into_diagnostic()
+    .wrap_err("build_coverage_summary")?;
+
+    let mut ids: Vec<&str> = summary
+        .plugins()
+        .iter()
+        .map(|plugin| plugin.plugin_id().as_str())
+        .collect();
+    ids.sort();
+    assert_eq!(ids, vec!["amenable-ext-chrono", "amenable-ext-jiff"]);
+    assert!(
+        summary
+            .plugins()
+            .iter()
+            .any(|plugin| plugin.body().contains("No amenable-ext-chrono findings"))
+    );
+    assert!(
+        summary
+            .plugins()
+            .iter()
+            .any(|plugin| plugin.body().contains("No amenable-ext-jiff findings"))
+    );
+    Ok(())
+}

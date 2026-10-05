@@ -5,6 +5,7 @@
 //! 2. `{store_home}/cordial.toml` (`~/.cordial` by default)
 //! 3. `{workspace}/cordial.toml`
 
+mod amenable_ext;
 mod antipatterns;
 mod cfg;
 mod checks;
@@ -20,6 +21,7 @@ use ::tracing::instrument;
 use config::{Config, File, FileFormat};
 use serde::{Deserialize, Serialize};
 
+pub use self::amenable_ext::AmenableExtConfig;
 pub use self::antipatterns::{AntipatternsConfig, StaticRefPolicy, StaticRefStrategy};
 pub use self::cfg::{CfgHygieneThresholds, CfgScatterThresholds};
 pub use self::checks::{
@@ -97,6 +99,8 @@ pub struct CordialConfig {
     homecoming_std: EtiquetteGate,
     #[serde(rename = "amenable-std", default)]
     amenable_std: EtiquetteGate,
+    #[serde(default)]
+    amenable_ext: AmenableExtConfig,
 }
 
 impl CordialConfig {

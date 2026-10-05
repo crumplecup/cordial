@@ -29,8 +29,8 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 | Document | Status | Summary |
 | --- | --- | --- |
 | [Coverage as plugin](docs/planning/coverage-as-plugin.md) | **Reference** | Plugin / Coverage supertrait model; elicitation, homecoming, amenable profiles |
-| [amenable-ext-jiff coverage etiquette](docs/planning/amenable-ext-coverage-etiquette.md) | **Active** | Third-party target crate (jiff) registry coverage via shadow-dep rustdoc; mirrors amenable-std |
-| [amenable-ext targets in cordial.toml](docs/planning/amenable-ext-targets-config.md) | **Active** | Supersedes the doc above; config-driven `[[amenable_ext.target]]` list, owned `Arc<dyn Etiquette>` registration. Steps 0-1 landed; step 2 (config-driven registration) remaining |
+| [amenable-ext-jiff coverage etiquette](docs/planning/amenable-ext-coverage-etiquette.md) | **Reference** | Plugin/probe/assessor/reporter architecture for third-party target crate registry coverage via shadow-dep rustdoc; mirrors amenable-std |
+| [amenable-ext targets in cordial.toml](docs/planning/amenable-ext-targets-config.md) | **Complete** | Config-driven `[[amenable_ext.target]]` list, owned `Arc<dyn Etiquette>` registration. Steps 0-2 landed |
 | [Error handling as plugin](docs/planning/error-handling-as-plugin.md) | **Reference** | Unified `ErrorHandling` plugin; parent / Kind / native-source architecture lints |
 | [One crate, CLI in the library](docs/planning/one-crate-cli-layout.md) | **Reference** | One `CordialError`; `cli_layout` etiquette; clap dispatch in the library |
 

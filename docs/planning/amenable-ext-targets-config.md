@@ -1,6 +1,6 @@
 # Amenable ext coverage targets declared in `cordial.toml`
 
-Status: **Proposed**
+Status: **Complete**
 
 Supersedes the "second target gets its own sibling files" stance in
 [amenable-ext-coverage-etiquette.md](amenable-ext-coverage-etiquette.md).
@@ -157,13 +157,43 @@ etiquettes, keyed by target name.
 2. **Config and registration.** `[[amenable_ext.target]]`, `KNOWN_TARGETS`
    default, owned per-target etiquettes, `coverage_summary` loop, `cordial explain`. Chrono
    lands as two lines of config in the consumer repo, with no new Rust files.
+   Landed: `AmenableExtConfig`/`AmenableExtTargetConfig` (`src/config/amenable_ext.rs`,
+   `[[amenable_ext.target]]` with per-target `enabled`, "replace the default"
+   semantics confirmed with the user), `KNOWN_TARGETS = ["jiff"]`
+   (`etiquettes::framework_ext`), `AmenableExtCoverage::etiquettes()` and
+   `AmenableExtTargetProvider::coverage_targets()` both resolving target
+   names from config, and `coverage_summary::section_for_plugin`'s
+   `amenable-ext-coverage` arm looping over the plugin's own etiquettes
+   (`CoverageSection.summaries: Vec<_>`, not a single fixed section).
+   `cordial explain` needed no separate change — it already resolves
+   etiquettes through `Plugin::etiquettes(session)`.
+
+   Re: step 1's deferred full-pipeline acceptance bar — on inspection, no
+   coverage etiquette in this codebase (not `amenable-std`/`homecoming-std`
+   either) has a test that drives the real probe/assessor/reporter chain
+   against actual shadow-dep rustdoc JSON; every one is tested at the
+   report/gap-building function layer with synthetic fixture data
+   (`tests/framework_std.rs`, `tests/amenable_ext_registry.rs`'s existing
+   tests). A literal "fixture workspace with a real `amenable_core::
+   ExtStandard<T>` impl" would also need `amenable_core` as a dev-dependency,
+   which `cordial` deliberately doesn't carry. So the acceptance bar that's
+   actually consistent with this codebase's own convention, and genuinely
+   specific to the step-2 generalization (not shared with amenable-std), is:
+   prove config resolution and registration handle more than one target
+   correctly. Added to `tests/amenable_ext_registry.rs`:
+   `configured_targets_replace_the_default_and_skip_disabled_entries`,
+   `configured_targets_drive_upstream_dep_coverage_targets_too`,
+   `coverage_summary_renders_one_section_per_configured_target` — two
+   configured targets plus one disabled one, verified through
+   `Plugin::etiquettes`, `TargetProvider::coverage_targets`, and
+   `build_coverage_summary` end to end at the Rust level.
 
 ## Status
 
-- [ ] Verify open items
+- [x] Verify open items — all three were non-issues or already solved by
+      step 0's design (see step 1/2 notes above)
 - [x] Step 0: `Arc<dyn Etiquette>` ownership change
-- [x] Step 1: generic types; metadata-level regression test in place. Full
-      byte-identical output verification needs a fixture workspace with a
-      real `ExtStandard<T>` impl — deferred into step 2
-- [ ] Step 2: config-driven targets and registration
-- [ ] Update `amenable-ext-coverage-etiquette.md` to point here
+- [x] Step 1: generic types; metadata-level regression test in place
+- [x] Step 2: config-driven targets and registration; multi-target
+      regression coverage in place (see above)
+- [x] Update `amenable-ext-coverage-etiquette.md` to point here
