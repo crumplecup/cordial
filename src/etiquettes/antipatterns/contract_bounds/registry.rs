@@ -1,10 +1,9 @@
 //! Load `amenable dump-registry` contract records for the unnamed-bound rule.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Mutex;
 
-use crate::amenable_dump_registry::AMENABLE_DUMP_REGISTRY_FEATURES;
+use crate::amenable_dump_registry::{registry_dump_path, run_amenable_dump_registry};
 use crate::error::{CordialError, CordialResult};
 use crate::store::StoreLayout;
 
@@ -30,7 +29,7 @@ pub fn fetch_contract_records(workspace_root: &Path, store_root: &Path) -> Vec<C
 
     let slug = crate::store::project_slug_from_path(workspace_root);
     let store = StoreLayout::from_root(store_root, slug);
-    let dump_path = store.cache_dir().join("amenable-registry.dump.json");
+    let dump_path = registry_dump_path(&store);
 
     // Always regenerate, never trust a pre-existing dump on disk: this
     // rule exists to catch drift between real proof-site clauses and
@@ -85,40 +84,4 @@ fn workspace_has_amenable(workspace_root: &Path) -> bool {
                 .iter()
                 .any(|package| package.name == "amenable")
         })
-}
-
-#[instrument(level = "info", skip(workspace), err(level = "warn"))]
-fn run_amenable_dump_registry(workspace: &Path, out_path: &Path) -> CordialResult<()> {
-    if let Some(parent) = out_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-
-    let status = Command::new("cargo")
-        .current_dir(workspace)
-        .arg("run")
-        .arg("-p")
-        .arg("amenable")
-        .arg("--features")
-        .arg(AMENABLE_DUMP_REGISTRY_FEATURES)
-        .arg("--")
-        .arg("dump-registry")
-        .arg("--out")
-        .arg(out_path)
-        .status()
-        .map_err(|err| {
-            CordialError::invariant(format!("failed to run amenable dump-registry: {err}"))
-        })?;
-
-    if !status.success() {
-        return Err(CordialError::invariant(format!(
-            "amenable dump-registry exited with {status}"
-        )));
-    }
-    if !out_path.is_file() {
-        return Err(CordialError::invariant(format!(
-            "amenable dump-registry did not write {}",
-            out_path.display()
-        )));
-    }
-    Ok(())
 }

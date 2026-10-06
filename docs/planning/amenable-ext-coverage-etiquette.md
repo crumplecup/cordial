@@ -163,7 +163,7 @@ prior shadow-dep consumer, which depends on its upstream unconditionally):
   / `non_optional_dep_has_no_activating_member_feature`, against a new
   minimal fixture workspace (`tests/parity/workspaces/optional-dep-workspace`).
 - `std` and `amenable-ext-jiff` coverage share one cached registry dump
-  (`registry_dump_path`), built by `cargo run -p amenable --features
+  (`amenable_dump_registry::registry_dump_path`, refreshed when older than the workspace sources or built with a different feature set), built by `cargo run -p amenable --features
   {AMENABLE_DUMP_REGISTRY_FEATURES} -- dump-registry` — the dump binary
   never linked in `amenable_ext` at all (its facade feature is `jiff`, not
   `creusot`/`verus`), so every `ExtStandard<T>` row showed as missing

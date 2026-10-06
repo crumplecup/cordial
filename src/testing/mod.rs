@@ -54,6 +54,8 @@ pub use crate::framework_std::{
     type_has_trait_impl,
 };
 
+pub use crate::amenable_dump_registry::{AMENABLE_DUMP_REGISTRY_FEATURES, registry_dump_is_fresh};
+
 #[cfg(feature = "amenable_std")]
 pub use crate::framework_std::{
     AmenableStdOptions, AmenableStdReport, AmenableStdStatus, EvidenceLinkDump, ProofRecordDump,

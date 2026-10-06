@@ -2,13 +2,11 @@
 
 use std::collections::HashSet;
 use std::path::Path;
-use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::amenable_dump_registry::AMENABLE_DUMP_REGISTRY_FEATURES;
-use crate::error::{CordialError, CordialResult};
+use crate::error::CordialResult;
 use crate::framework_std::match_impl::{type_has_trait_impl, type_path_without_generics};
 
 const RUST_STD_STANDARD_PREFIX: &str = "amenable_std::rust_std::RustStdStandard<";
@@ -95,41 +93,6 @@ pub struct ContractRecordDump {
     verifier: String,
     kind: String,
     fragment: String,
-}
-
-/// Run `cargo run -p amenable -- dump-registry` in the workspace.
-#[instrument(level = "info", skip(workspace), err(level = "warn"))]
-pub fn run_amenable_dump_registry(workspace: &Path, out_path: &Path) -> CordialResult<()> {
-    if let Some(parent) = out_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-
-    let status = Command::new("cargo")
-        .current_dir(workspace)
-        .arg("run")
-        .arg("-p")
-        .arg("amenable")
-        .arg("--features")
-        .arg(AMENABLE_DUMP_REGISTRY_FEATURES)
-        .arg("--")
-        .arg("dump-registry")
-        .arg("--out")
-        .arg(out_path)
-        .status()
-        .map_err(CordialError::from)?;
-
-    if !status.success() {
-        return Err(CordialError::invariant(format!(
-            "amenable dump-registry exited with {status}"
-        )));
-    }
-    if !out_path.is_file() {
-        return Err(CordialError::invariant(format!(
-            "registry dump not found at {}",
-            out_path.display()
-        )));
-    }
-    Ok(())
 }
 
 /// Load a registry dump from disk.

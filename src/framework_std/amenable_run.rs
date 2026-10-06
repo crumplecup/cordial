@@ -4,13 +4,14 @@ use std::path::Path;
 
 use tracing::instrument;
 
+use crate::amenable_dump_registry::{
+    registry_dump_is_fresh, registry_dump_path, run_amenable_dump_registry,
+};
 use crate::error::CordialResult;
 use crate::framework_std::amenable::{AmenableStdReport, build_amenable_std_report};
 use crate::framework_std::inventory::load_merged_std_inventory;
 use crate::framework_std::proof_harness::collect_proof_chain_subjects;
-use crate::framework_std::registry::{
-    RegistryDump, load_registry_dump, run_amenable_dump_registry,
-};
+use crate::framework_std::registry::{RegistryDump, load_registry_dump};
 use crate::framework_std::verifier_skip::load_verifier_skip_map;
 use crate::session::SessionView;
 use crate::store::{StoreLayout, SysrootCache};
@@ -25,14 +26,9 @@ pub struct AmenableStdOptions {
     /// Whether nightly-only items are in scope.
     #[getter(copy)]
     include_nightly: bool,
-    /// Re-run `amenable dump-registry` even when a cached dump exists.
+    /// Re-run `amenable dump-registry` even when the cached dump is fresh.
     #[getter(copy)]
     refresh_registry: bool,
-}
-
-#[instrument(level = "debug", skip(store))]
-fn registry_dump_path(store: &StoreLayout) -> std::path::PathBuf {
-    store.cache_dir().join("extracts/amenable-registry.json")
 }
 
 #[instrument(level = "debug", skip(store, options), err(level = "warn"))]
@@ -42,7 +38,7 @@ fn ensure_registry_dump(
     options: &AmenableStdOptions,
 ) -> CordialResult<RegistryDump> {
     let path = registry_dump_path(store);
-    if !options.refresh_registry() && path.is_file() {
+    if !options.refresh_registry() && registry_dump_is_fresh(project_root, &path) {
         return load_registry_dump(&path);
     }
     run_amenable_dump_registry(project_root, &path)?;
