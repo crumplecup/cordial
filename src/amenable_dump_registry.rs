@@ -16,10 +16,10 @@
 //! superset of every active coverage plugin's needs, not just the one
 //! that happens to run first -- `jiff` links `amenable_ext`'s
 //! `ExtStandard<T>` registrations into the dump binary alongside
-//! `creusot`/`verus`'s own `RustStdStandard<T>` witnesses. A future ext
-//! target (e.g. chrono) adds its own activating feature name here too.
+//! `creusot`/`verus`'s own `RustStdStandard<T>` witnesses. Each ext
+//! target (jiff, chrono, chrono-tz) adds its own activating feature name here.
 /// Cargo features `amenable dump-registry` is built with.
-pub const AMENABLE_DUMP_REGISTRY_FEATURES: &str = "creusot,verus,jiff";
+pub const AMENABLE_DUMP_REGISTRY_FEATURES: &str = "creusot,verus,jiff,chrono,chrono-tz";
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

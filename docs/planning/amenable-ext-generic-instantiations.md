@@ -3,7 +3,9 @@
 Status: **Active**
 
 Origin: downstream amenable report "Report generic type instantiations as
-separate coverage rows". Builds on
+separate coverage rows". **The amenable repo owns the plan**
+(`amenable/docs/CHRONO_SUPPORT_PLAN.md`, "Cordial requests"); this document
+tracks cordial's side and adapts to it where they differ. Builds on
 [amenable-ext-targets-config.md](amenable-ext-targets-config.md) and
 [amenable-ext-coverage-etiquette.md](amenable-ext-coverage-etiquette.md).
 
@@ -50,12 +52,13 @@ resolve_crates = ["chrono", "chrono_tz"]
 
 [amenable_ext.target.instantiations]
 "chrono::DateTime" = [["chrono::Utc"], ["chrono::FixedOffset"], ["chrono::Local"], ["chrono_tz::Tz"]]
+"chrono::Date"     = [["chrono::Utc"], ["chrono::FixedOffset"], ["chrono::Local"], ["chrono_tz::Tz"]]
 ```
 
 Rejected: hardcoding in cordial (per-crate knowledge; cordial stays
 target-agnostic) and annotations in the amenable registry (couples the
-checklist to another repo). Deprecated types such as `chrono::Date<Tz>` are
-not listed; they are a case for cordial's exceptions mechanism. The list is optional: with none, a generic keeps
+checklist to another repo). `chrono::Date<Tz>` is listed too: amenable keeps it in scope as public API
+despite the deprecation, so it gets the same four rows. The list is optional: with none, a generic keeps
 its single row plus any instantiations discovered from registry evidence.
 Registry-discovered instantiations not in the list are still shown, flagged
 "unexpected", so the list can't hide coverage.
@@ -106,20 +109,23 @@ Replace string matching for ext targets with structured identity.
 - Blast radius: `match_impl.rs` is shared with the std path. Introduce the
   resolver beside it, use it for ext targets only, migrate std separately.
 
-### 3. Parent/child rows
+### 3. Parent/child rows (amenable's model)
 
-- Generic type = **parent** row; each instantiation = **child** row (a
-  synthetic node with an `Instantiates` edge to the parent in the IR).
-- Parent holds generic claims; children hold concrete witnesses.
-- Many-to-one: a generic claim covers many children. Each child carries
-  `direct` status (own witnesses) and `inherited` status (generic claims whose
-  bounds it satisfies). Displayed status derives from both: Complete (direct),
-  Complete (via generic), Missing, Unknown.
-- Bound satisfaction (`Utc: TimeZone`) comes from rustdoc impl generics. When
-  a bound can't be resolved the child is **Unknown**, not covered.
-- Parent roll-up: Complete if a generic claim covers it, or all expected
-  children Complete; otherwise **Partial** (n of m). The parent's note lists
-  which instantiations each generic claim covers (computed from the edges).
+- Generic type = **aggregate parent** row; each instantiation = **child** row
+  (a synthetic node with an `Instantiates` edge to the parent in the IR).
+- The parent is Complete exactly when all its instantiation rows are Complete;
+  otherwise Partial (n of m). Amenable's count: 67 checklist rows = 59 types +
+  8 instantiation rows (`DateTime` and `Date`, four zone types each).
+- A **generic claim** (`ExtGeneric<…>`, with `bounds` and `premises`) is proven
+  once over the bound and covers any type satisfying it, including
+  user-defined types. It does not make the parent Complete by itself and it is
+  not a child row. It is shown on the parent with a note of the bound,
+  premises, and which listed instantiations satisfy the bound.
+- Kani has per-instantiation witness types only, so witnesses attribute to
+  children directly.
+- Bound satisfaction (`Utc: TimeZone`) comes from the claim's `bounds` string
+  resolved through the canonical resolver; unresolved means "not shown as
+  covered", never covered.
 - Depth capped at one level (`DateTime<Tz>`); nested generics deferred.
 
 ### 4. Reporting
@@ -129,19 +135,32 @@ and `kind` (`generic` | `instantiation` | `plain`) columns so consumers can
 regroup. `Partial` is a new status value and touches every consumer of
 `AmenableStdStatus`; audit them in phase C.
 
+## Cordial requests from amenable
+
+| # | Request | Needed by | Status |
+| --- | --- | --- | --- |
+| 2 | Read `bounds` and `premises` from the registry dump | amenable Phase 1 (landed) | **Done** |
+| 3 | Shared dump's feature set includes `chrono` and `chrono-tz` | amenable Phase 1 | **Done** (`AMENABLE_DUMP_REGISTRY_FEATURES`) |
+| 5 | Normalize whitespace in evidence names before matching | amenable Phase 1 | **Done** (`normalize_type_text`) |
+| 1 | Eight instantiation rows, aggregates derived from them | end of amenable Phase 3 | Not started (phases A-C below) |
+| 4 | Per-size rkyv results so a Complete names its size | amenable Phase 9 | Not started; separate plan when needed |
+
 ## Phases
 
 | Phase | Work | Status |
 | --- | --- | --- |
+| 0 | Registry schema read side: `bounds`/`premises` on `EvidenceLinkDump`, `ExtGeneric<` recognized and kept distinct from `ExtStandard<`, whitespace normalization, chrono features in the dump | **Done** |
 | A | `TypeKey`, alias set from rustdoc, structured evidence parsing, `Unresolved` status; ext targets only | Not started |
-| B | Parent/child nodes, direct vs inherited status, bound checking | Not started |
+| B | Parent/child nodes, aggregate roll-up, generic-claim notes, bound checking | Not started |
 | C | `instantiations` config key, Missing children, `Partial`, reporter/CSV changes | Not started |
-| D | Chrono checklist verification (4 `DateTime<Tz>` instantiation rows) | Not started |
+| D | Chrono checklist verification (8 instantiation rows, 67 total) | Not started |
 
 ## Open questions
 
-- Confirm with the amenable side that evidence names will keep carrying
-  generic arguments in the registry dump.
+- Evidence names are `stringify!` of the type as written in amenable source,
+  so paths may be bare or re-exported; confirmed format in amenable commit
+  `ff915c64`. Whether amenable will treat the spelling as a stable contract is
+  unconfirmed; phase A's resolver is the defence.
 - Cross-crate alias resolution: which rustdoc JSONs the `resolve_crates`
   allowlist needs (shadow-dep rustdoc already exists per target) and
   whether the default caps hold up against a scan of chrono, chrono_tz and

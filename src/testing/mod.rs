@@ -58,11 +58,11 @@ pub use crate::amenable_dump_registry::{AMENABLE_DUMP_REGISTRY_FEATURES, registr
 
 #[cfg(feature = "amenable_std")]
 pub use crate::framework_std::{
-    AmenableStdOptions, AmenableStdReport, AmenableStdStatus, EvidenceLinkDump, ProofRecordDump,
-    RegistryDump, VerifierSkipEntry, VerifierSkipMap, assess_amenable_std_coverage,
-    build_amenable_std_gaps, build_amenable_std_report, evidence_for_std_type,
-    load_verifier_skip_map, parse_rust_std_standard_inner, resolve_alias_chain,
-    witness_verifiers_for_std_type,
+    AmenableStdOptions, AmenableStdReport, AmenableStdStatus, EvidenceLinkDump, PremiseDump,
+    ProofRecordDump, RegistryDump, VerifierSkipEntry, VerifierSkipMap,
+    assess_amenable_std_coverage, build_amenable_std_gaps, build_amenable_std_report,
+    evidence_for_std_type, load_verifier_skip_map, parse_rust_std_standard_inner,
+    resolve_alias_chain, witness_verifiers_for_std_type,
 };
 
 #[cfg(feature = "amenable_ext")]
@@ -70,8 +70,9 @@ pub use crate::framework_std::{
     AMENABLE_EXT_IMPL_CRATE, AMENABLE_EXT_JIFF_PATCH_SET, AMENABLE_EXT_JIFF_UPSTREAM_CRATE,
     AmenableExtOptions, assess_amenable_ext_coverage, build_amenable_ext_gaps,
     build_amenable_ext_report, collect_proof_chain_subjects, evidence_for_ext_type,
-    load_ext_inventory_from_shadow_dep, parse_ext_standard_inner, render_amenable_ext_checklist_md,
-    render_amenable_ext_summary_md, witness_verifiers_for_ext_type,
+    generic_claims_for_ext_type, load_ext_inventory_from_shadow_dep, parse_ext_generic_inner,
+    parse_ext_standard_inner, render_amenable_ext_checklist_md, render_amenable_ext_summary_md,
+    witness_verifiers_for_ext_type,
 };
 
 #[cfg(feature = "rustdoc")]

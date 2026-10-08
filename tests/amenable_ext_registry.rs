@@ -5,9 +5,10 @@ use std::collections::HashSet;
 use miette::IntoDiagnostic;
 
 use cordial::testing::{
-    AmenableExtOptions, AmenableStdStatus, EvidenceLinkDump, InventoryItemKind, ProofRecordDump,
-    RegistryDump, StdInventoryItem, VerifierSkipEntry, VerifierSkipMap, build_amenable_ext_gaps,
-    build_amenable_ext_report, evidence_for_ext_type, parse_ext_standard_inner,
+    AmenableExtOptions, AmenableStdStatus, EvidenceLinkDump, InventoryItemKind, PremiseDump,
+    ProofRecordDump, RegistryDump, StdInventoryItem, VerifierSkipEntry, VerifierSkipMap,
+    build_amenable_ext_gaps, build_amenable_ext_report, evidence_for_ext_type,
+    generic_claims_for_ext_type, parse_ext_generic_inner, parse_ext_standard_inner,
     witness_verifiers_for_ext_type,
 };
 
@@ -384,4 +385,83 @@ name = "chrono"
             .any(|plugin| plugin.body().contains("No amenable-ext-jiff findings"))
     );
     Ok(())
+}
+
+#[test]
+fn parse_ext_standard_inner_normalizes_stringify_spacing() {
+    cordial::init_tracing();
+    assert_eq!(
+        parse_ext_standard_inner("amenable_ext::ExtStandard<chrono :: DateTime < chrono :: Utc >>"),
+        Some("chrono::DateTime".to_string())
+    );
+}
+
+#[test]
+fn parse_ext_generic_inner_reads_generic_wrapper_only() {
+    cordial::init_tracing();
+    assert_eq!(
+        parse_ext_generic_inner("amenable_ext::ExtGeneric<chrono::DateTime<Tz>>"),
+        Some("chrono::DateTime".to_string())
+    );
+    assert_eq!(
+        parse_ext_generic_inner("amenable_ext::ExtStandard<chrono::DateTime<chrono::Utc>>"),
+        None
+    );
+    // A generic name is never mistaken for a concrete claim.
+    assert_eq!(
+        parse_ext_standard_inner("amenable_ext::ExtGeneric<chrono::DateTime<Tz>>"),
+        None
+    );
+}
+
+#[test]
+fn generic_link_round_trips_bounds_and_premises_and_old_dumps_still_load() -> miette::Result<()> {
+    cordial::init_tracing();
+    let json = r#"{
+        "evidence_links": [
+            {"name": "amenable_ext::ExtStandard<chrono::Utc>", "basis": "", "index": 0},
+            {"name": "amenable_ext::ExtGeneric<chrono::DateTime<Tz>>", "basis": "", "index": 0,
+             "bounds": ["chrono::offset::TimeZone"],
+             "premises": [{"id": "offset-round-trip", "statement": "s"}]}
+        ],
+        "proof_records": [], "kani_proofs": []
+    }"#;
+    let registry: RegistryDump = serde_json::from_str(json).into_diagnostic()?;
+    let [concrete, generic] = registry.evidence_links().as_slice() else {
+        miette::bail!("expected two links");
+    };
+    assert!(!concrete.is_generic());
+    assert!(concrete.bounds().is_empty());
+    assert!(generic.is_generic());
+    assert_eq!(generic.bounds(), &["chrono::offset::TimeZone".to_string()]);
+    assert_eq!(generic.premises()[0].id(), "offset-round-trip");
+    Ok(())
+}
+
+#[test]
+fn generic_claims_for_ext_type_finds_claim_by_inventory_path() {
+    cordial::init_tracing();
+    let registry = RegistryDump::new(
+        vec![
+            EvidenceLinkDump::new(
+                "amenable_ext::ExtStandard<chrono::DateTime<chrono::Utc>>".to_string(),
+                String::new(),
+                0,
+            ),
+            EvidenceLinkDump::generic(
+                "amenable_ext::ExtGeneric<chrono::DateTime<Tz>>".to_string(),
+                String::new(),
+                0,
+                vec!["chrono::offset::TimeZone".to_string()],
+                vec![PremiseDump::new("p".to_string(), "s".to_string())],
+            ),
+        ],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    );
+    let claims = generic_claims_for_ext_type(&registry, "chrono::DateTime");
+    assert_eq!(claims.len(), 1);
+    assert!(claims[0].is_generic());
+    assert!(generic_claims_for_ext_type(&registry, "chrono::Utc").is_empty());
 }

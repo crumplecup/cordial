@@ -31,7 +31,7 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 | [Coverage as plugin](docs/planning/coverage-as-plugin.md) | **Reference** | Plugin / Coverage supertrait model; elicitation, homecoming, amenable profiles |
 | [amenable-ext-jiff coverage etiquette](docs/planning/amenable-ext-coverage-etiquette.md) | **Reference** | Plugin/probe/assessor/reporter architecture for third-party target crate registry coverage via shadow-dep rustdoc; mirrors amenable-std |
 | [amenable-ext targets in cordial.toml](docs/planning/amenable-ext-targets-config.md) | **Complete** | Config-driven `[[amenable_ext.target]]` list, owned `Arc<dyn Etiquette>` registration. Steps 0-2 landed |
-| [amenable-ext generic instantiations](docs/planning/amenable-ext-generic-instantiations.md) | **Active** | Per-instantiation coverage rows for generic types (chrono `DateTime<Tz>`); canonical type identity with alias sets; parent/child rows with direct/inherited status |
+| [amenable-ext generic instantiations](docs/planning/amenable-ext-generic-instantiations.md) | **Active** | Per-instantiation coverage rows for generic types (chrono `DateTime`/`Date`), adapting to amenable's CHRONO_SUPPORT_PLAN; canonical type identity; aggregate parent rows. Phase 0 (registry read side) done |
 | [Error handling as plugin](docs/planning/error-handling-as-plugin.md) | **Reference** | Unified `ErrorHandling` plugin; parent / Kind / native-source architecture lints |
 | [One crate, CLI in the library](docs/planning/one-crate-cli-layout.md) | **Reference** | One `CordialError`; `cli_layout` etiquette; clap dispatch in the library |
 
