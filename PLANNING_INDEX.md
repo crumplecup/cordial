@@ -46,6 +46,7 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 | [Dependency freshness](docs/planning/dependency-freshness-etiquette.md) | **Active** | Survey `Cargo.toml` intent and `Cargo.lock` resolutions before manifest-policy, workspace-policy, and patch/minor/major freshness lints |
 | [Derive patterns etiquette](docs/planning/derives-etiquette.md) | **Reference** | `derive_*` vs hand-rolled accessors; constructor arity to builder |
 | [Doc warnings](docs/planning/doc-warnings-etiquette.md) | **Reference** | Post-process `cargo doc`; rustc/clippy never see `rustdoc::*` diagnostics |
+| [Feature warnings](docs/planning/feature-warnings-etiquette.md) | **Active** | Run the feature powerset; warnings that fire only under some combinations become checklist items with a suggested `cfg` gate |
 | [Glob imports](docs/planning/glob-imports-etiquette.md) | **Reference** | Flag `use ...::*`; replace with explicit names |
 | [Inline tests](docs/planning/inline-tests-etiquette.md) | **Reference** | `#[cfg(test)]` / `#[test]` under `src/` belong in `tests/` |
 | [Modularity etiquette](docs/planning/modularity-etiquette.md) | **Reference** | Size, packing, hierarchy, file inventory, and extraction signals |
