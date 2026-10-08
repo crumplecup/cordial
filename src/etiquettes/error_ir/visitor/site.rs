@@ -11,7 +11,9 @@ use tracing::instrument;
 pub struct SiteCtx {
     context: String,
     rel_file: PathBuf,
+    #[cfg(feature = "internal_error_chain")]
     file: PathBuf,
+    #[cfg(feature = "internal_error_chain")]
     crate_name: String,
 }
 

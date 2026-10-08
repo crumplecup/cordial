@@ -28,6 +28,7 @@ impl ForeignErrorRecordKind {
         }
     }
 
+    #[cfg(any(feature = "foreign_error_types", feature = "foreign_error_attenuation"))]
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {

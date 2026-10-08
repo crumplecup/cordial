@@ -1,7 +1,7 @@
 //! Built-in plugin registrations.
 
+#[cfg(feature = "_etiquette_plugins")]
 use std::sync::LazyLock;
-
 use tracing::instrument;
 #[cfg(feature = "elicitation")]
 mod elicitation;
@@ -74,9 +74,18 @@ pub fn quality_plugins() -> Vec<&'static dyn Plugin> {
         .into_iter()
         .map(|plugin| plugin as &dyn Plugin)
         .collect();
-    #[cfg(any(feature = "error_sites", feature = "panics"))]
-    out.extend(error_handling_plugins());
+    out.extend(handling_plugins());
     out
+}
+
+#[cfg(any(feature = "error_sites", feature = "panics"))]
+fn handling_plugins() -> Vec<&'static dyn Plugin> {
+    error_handling_plugins()
+}
+
+#[cfg(not(any(feature = "error_sites", feature = "panics")))]
+fn handling_plugins() -> Vec<&'static dyn Plugin> {
+    Vec::new()
 }
 
 /// Built-in coverage plugins.
@@ -203,6 +212,7 @@ fn quality_etiquette_plugins() -> Vec<&'static EtiquettePlugin> {
     items.into_iter().flatten().collect()
 }
 
+#[cfg(feature = "_etiquette_plugins")]
 macro_rules! etiquette_plugin_fn {
     ($fn_name:ident, $etiquette:expr) => {
         fn $fn_name() -> &'static EtiquettePlugin {

@@ -1,22 +1,105 @@
 //! Built-in After rows. Validated in `const`.
 
-use super::explains::{
-    ALLOW_AFTER_CLI_LAYOUT, ANTIPATTERNS_AFTER_FOREIGN_ERROR_TYPES, CFG_HYGIENE_AFTER_CFG_SCATTER,
-    CFG_SCATTER_AFTER_MODULARITY, CLI_LAYOUT_AFTER_ANTIPATTERNS, CRATE_ATTRS_AFTER_ALLOWS,
-    CREUSOT_AFTER_DOC_WARNINGS, DEPENDENCY_FRESHNESS_AFTER_PAGEANTRY, DERIVES_AFTER_CRATE_ATTRS,
-    DOC_WARNINGS_AFTER_DEPENDENCY_FRESHNESS, FOREIGN_ERROR_AFTER_ERROR_HANDLING,
-    GLOB_IMPORTS_AFTER_VISIBILITY, INLINE_TESTS_AFTER_TRACING, MODULARITY_AFTER_INLINE_TESTS,
-    PAGEANTRY_AFTER_GLOB_IMPORTS, PROOF_PATTERNS_AFTER_VERUS, TRACING_AFTER_DERIVES,
-    VERUS_AFTER_CREUSOT, VISIBILITY_AFTER_CFG_HYGIENE,
-};
-use super::ids::{
-    ALLOW_RULE_IDS, ANTIPATTERN_RULE_IDS, CFG_HYGIENE_RULE_IDS, CFG_SCATTER_RULE_IDS,
-    CLI_LAYOUT_RULE_IDS, CRATE_ATTR_RULE_IDS, CREUSOT_RULE_IDS, DEPENDENCY_FRESHNESS_RULE_IDS,
-    DOC_WARNING_RULE_IDS, FOREIGN_ERROR_TYPE_RULE_IDS, GLOB_IMPORT_RULE_IDS, INLINE_TEST_RULE_IDS,
-    KNOWN_IDS, MODULARITY_RULE_IDS, PAGEANTRY_RULE_IDS, TRACING_RULE_IDS, VERUS_WARNING_RULE_IDS,
-    VISIBILITY_RULE_IDS,
-};
-use super::{DERIVE_RULE_IDS, ERROR_HANDLING_RULE_IDS};
+#[cfg(all(feature = "tracing", feature = "derives"))]
+use super::DERIVE_RULE_IDS;
+#[cfg(all(feature = "allows", feature = "cli_layout"))]
+use super::explains::ALLOW_AFTER_CLI_LAYOUT;
+#[cfg(all(feature = "antipatterns", feature = "foreign_error_types"))]
+use super::explains::ANTIPATTERNS_AFTER_FOREIGN_ERROR_TYPES;
+#[cfg(all(feature = "cfg_hygiene", feature = "cfg_scatter"))]
+use super::explains::CFG_HYGIENE_AFTER_CFG_SCATTER;
+#[cfg(all(feature = "cfg_scatter", feature = "modularity"))]
+use super::explains::CFG_SCATTER_AFTER_MODULARITY;
+#[cfg(all(feature = "cli_layout", feature = "antipatterns"))]
+use super::explains::CLI_LAYOUT_AFTER_ANTIPATTERNS;
+#[cfg(all(feature = "crate_attrs", feature = "allows"))]
+use super::explains::CRATE_ATTRS_AFTER_ALLOWS;
+#[cfg(all(feature = "creusot_diagnostics", feature = "doc_warnings"))]
+use super::explains::CREUSOT_AFTER_DOC_WARNINGS;
+#[cfg(all(feature = "dependency_freshness", feature = "pageantry"))]
+use super::explains::DEPENDENCY_FRESHNESS_AFTER_PAGEANTRY;
+#[cfg(all(feature = "derives", feature = "crate_attrs"))]
+use super::explains::DERIVES_AFTER_CRATE_ATTRS;
+#[cfg(all(feature = "doc_warnings", feature = "dependency_freshness"))]
+use super::explains::DOC_WARNINGS_AFTER_DEPENDENCY_FRESHNESS;
+#[cfg(all(feature = "doc_warnings", feature = "feature_warnings"))]
+use super::explains::DOC_WARNINGS_AFTER_FEATURE_WARNINGS;
+#[cfg(all(feature = "feature_warnings", feature = "dependency_freshness"))]
+use super::explains::FEATURE_WARNINGS_AFTER_DEPENDENCY_FRESHNESS;
+#[cfg(all(
+    feature = "foreign_error_types",
+    any(
+        feature = "panics",
+        feature = "foreign_error_attenuation",
+        feature = "internal_error_chain",
+    )
+))]
+use super::explains::FOREIGN_ERROR_AFTER_ERROR_HANDLING;
+#[cfg(all(feature = "glob_imports", feature = "visibility"))]
+use super::explains::GLOB_IMPORTS_AFTER_VISIBILITY;
+#[cfg(all(feature = "inline_tests", feature = "tracing"))]
+use super::explains::INLINE_TESTS_AFTER_TRACING;
+#[cfg(all(feature = "modularity", feature = "inline_tests"))]
+use super::explains::MODULARITY_AFTER_INLINE_TESTS;
+#[cfg(all(feature = "pageantry", feature = "glob_imports"))]
+use super::explains::PAGEANTRY_AFTER_GLOB_IMPORTS;
+#[cfg(all(feature = "proof_patterns", feature = "verus_warnings"))]
+use super::explains::PROOF_PATTERNS_AFTER_VERUS;
+#[cfg(all(feature = "tracing", feature = "derives"))]
+use super::explains::TRACING_AFTER_DERIVES;
+#[cfg(all(feature = "verus_warnings", feature = "creusot_diagnostics"))]
+use super::explains::VERUS_AFTER_CREUSOT;
+#[cfg(all(feature = "visibility", feature = "cfg_hygiene"))]
+use super::explains::VISIBILITY_AFTER_CFG_HYGIENE;
+#[cfg(all(feature = "crate_attrs", feature = "allows"))]
+use super::ids::ALLOW_RULE_IDS;
+#[cfg(all(feature = "cli_layout", feature = "antipatterns"))]
+use super::ids::ANTIPATTERN_RULE_IDS;
+#[cfg(all(feature = "visibility", feature = "cfg_hygiene"))]
+use super::ids::CFG_HYGIENE_RULE_IDS;
+#[cfg(all(feature = "cfg_hygiene", feature = "cfg_scatter"))]
+use super::ids::CFG_SCATTER_RULE_IDS;
+#[cfg(all(feature = "allows", feature = "cli_layout"))]
+use super::ids::CLI_LAYOUT_RULE_IDS;
+#[cfg(all(feature = "derives", feature = "crate_attrs"))]
+use super::ids::CRATE_ATTR_RULE_IDS;
+#[cfg(all(feature = "verus_warnings", feature = "creusot_diagnostics"))]
+use super::ids::CREUSOT_RULE_IDS;
+#[cfg(any(
+    all(feature = "doc_warnings", feature = "dependency_freshness"),
+    all(feature = "feature_warnings", feature = "dependency_freshness")
+))]
+use super::ids::DEPENDENCY_FRESHNESS_RULE_IDS;
+#[cfg(all(feature = "creusot_diagnostics", feature = "doc_warnings"))]
+use super::ids::DOC_WARNING_RULE_IDS;
+#[cfg(all(
+    feature = "foreign_error_types",
+    any(
+        feature = "panics",
+        feature = "foreign_error_attenuation",
+        feature = "internal_error_chain",
+    )
+))]
+use super::ids::ERROR_HANDLING_RULE_IDS;
+#[cfg(all(feature = "doc_warnings", feature = "feature_warnings"))]
+use super::ids::FEATURE_WARNING_RULE_IDS;
+#[cfg(all(feature = "antipatterns", feature = "foreign_error_types"))]
+use super::ids::FOREIGN_ERROR_TYPE_RULE_IDS;
+#[cfg(all(feature = "pageantry", feature = "glob_imports"))]
+use super::ids::GLOB_IMPORT_RULE_IDS;
+#[cfg(all(feature = "modularity", feature = "inline_tests"))]
+use super::ids::INLINE_TEST_RULE_IDS;
+use super::ids::KNOWN_IDS;
+#[cfg(all(feature = "cfg_scatter", feature = "modularity"))]
+use super::ids::MODULARITY_RULE_IDS;
+#[cfg(all(feature = "dependency_freshness", feature = "pageantry"))]
+use super::ids::PAGEANTRY_RULE_IDS;
+#[cfg(all(feature = "inline_tests", feature = "tracing"))]
+use super::ids::TRACING_RULE_IDS;
+#[cfg(all(feature = "proof_patterns", feature = "verus_warnings"))]
+use super::ids::VERUS_WARNING_RULE_IDS;
+#[cfg(all(feature = "glob_imports", feature = "visibility"))]
+use super::ids::VISIBILITY_RULE_IDS;
 use crate::etiquette::order::{LintConstraint, table_is_valid};
 
 pub(super) const CONSTRAINTS: &[LintConstraint] = &[
@@ -440,6 +523,24 @@ pub(super) const CONSTRAINTS: &[LintConstraint] = &[
         "DOC-WARNING-001",
         DEPENDENCY_FRESHNESS_RULE_IDS,
         DOC_WARNINGS_AFTER_DEPENDENCY_FRESHNESS,
+    ),
+    #[cfg(all(feature = "feature_warnings", feature = "dependency_freshness"))]
+    LintConstraint::new(
+        "FEATURE-WARNING-001",
+        DEPENDENCY_FRESHNESS_RULE_IDS,
+        FEATURE_WARNINGS_AFTER_DEPENDENCY_FRESHNESS,
+    ),
+    #[cfg(all(feature = "feature_warnings", feature = "dependency_freshness"))]
+    LintConstraint::new(
+        "FEATURE-WARNING-002",
+        DEPENDENCY_FRESHNESS_RULE_IDS,
+        FEATURE_WARNINGS_AFTER_DEPENDENCY_FRESHNESS,
+    ),
+    #[cfg(all(feature = "doc_warnings", feature = "feature_warnings"))]
+    LintConstraint::new(
+        "DOC-WARNING-001",
+        FEATURE_WARNING_RULE_IDS,
+        DOC_WARNINGS_AFTER_FEATURE_WARNINGS,
     ),
     #[cfg(all(feature = "creusot_diagnostics", feature = "doc_warnings"))]
     LintConstraint::new(

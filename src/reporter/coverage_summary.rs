@@ -59,16 +59,29 @@ pub fn build_coverage_summary(
     findings: &[&dyn Finding],
     workspace: &WorkspaceIr,
 ) -> CordialResult<CoverageSummary> {
+    // Only the elicitation profile reads the workspace IR; the parameter stays
+    // so the signature is the same under every feature set.
+    #[cfg(not(feature = "elicitation"))]
+    let _ = workspace;
     let coverage_plugins = coverage_plugins_for_run(registered_plugins, filter, session);
     let mut plugins = Vec::new();
     let mut extra_artifacts = Vec::new();
     if !coverage_plugins.is_empty() {
         for plugin in coverage_plugins {
-            let section = section_for_plugin(plugin, session, filter, findings, workspace)?;
+            let section = section_for_plugin(
+                plugin,
+                session,
+                #[cfg(feature = "elicitation")]
+                filter,
+                findings,
+                #[cfg(feature = "elicitation")]
+                workspace,
+            )?;
             plugins.extend(section.summaries);
             extra_artifacts.extend(section.extra_artifacts);
         }
     } else {
+        #[cfg(feature = "elicitation")]
         let mut saw_elicitation = false;
         for etiquette_id in resolved_etiquette_ids {
             match *etiquette_id {
@@ -121,9 +134,9 @@ struct CoverageSection {
 fn section_for_plugin(
     plugin: &dyn Plugin,
     session: &dyn SessionView,
-    filter: &dyn RunFilter,
+    #[cfg(feature = "elicitation")] filter: &dyn RunFilter,
     findings: &[&dyn Finding],
-    workspace: &WorkspaceIr,
+    #[cfg(feature = "elicitation")] workspace: &WorkspaceIr,
 ) -> CordialResult<CoverageSection> {
     match plugin.id() {
         #[cfg(feature = "homecoming_std")]

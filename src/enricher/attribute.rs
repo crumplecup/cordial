@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -242,47 +242,6 @@ impl<'ast> Visit<'ast> for AttributeVisitor<'_> {
     }
 }
 
-#[instrument(level = "debug", skip(ir), err(level = "warn"))]
-pub(crate) fn resolve_parent(ir: &dyn IrMut, context: &str) -> CordialResult<crate::ir::NodeId> {
-    if context == "<crate>" {
-        return ir.root();
-    }
-
-    if let Some(node) = ir.node_by_path(context) {
-        return Ok(node);
-    }
-
-    if let Some((module, _rest)) = context.rsplit_once("::")
-        && let Some(node) = ir.node_by_path(module)
-    {
-        return Ok(node);
-    }
-
-    ir.root()
-}
-
-/// Crate root directory for a source-loaded member, given its `src/` root.
-#[instrument(level = "debug", skip(source, session))]
-pub(crate) fn member_crate_root(source: &SourceLoadView, session: &dyn SessionView) -> PathBuf {
-    source
-        .src_root()
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| session.project_root().to_path_buf())
-}
-
-/// Resolves a scan-recorded (possibly relative) source path against the
-/// project root, for findings whose scan step ran outside session context.
-#[instrument(level = "debug", skip(session, path))]
-pub(crate) fn resolve_source_path(session: &dyn SessionView, path: &str) -> PathBuf {
-    let path = Path::new(path);
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        session.project_root().join(path)
-    }
-}
-
 #[instrument(level = "debug", skip(attr))]
 fn attr_path_label(attr: &Attribute) -> String {
     match &attr.meta {
@@ -307,7 +266,7 @@ fn attr_meta_string(attr: &Attribute) -> String {
 /// run has to treat that as already instrumented or every gated
 /// function stays an open missing-instrument finding forever.
 #[instrument(level = "trace", skip(attr))]
-pub(crate) fn is_instrument_attr(attr: &Attribute) -> bool {
+pub fn is_instrument_attr(attr: &Attribute) -> bool {
     match &attr.meta {
         Meta::Path(path) => path_is_instrument(path),
         Meta::List(list) => path_is_instrument(&list.path) || cfg_attr_inner_is_instrument(list),
@@ -319,7 +278,7 @@ pub(crate) fn is_instrument_attr(attr: &Attribute) -> bool {
 /// — the gated form apply writes for verifier crates. Bare `#[instrument]`
 /// is not gated: a Kani (etc.) build will still expand it.
 #[instrument(level = "trace", skip(attr), ret)]
-pub(crate) fn is_gated_instrument_attr(attr: &Attribute) -> bool {
+pub fn is_gated_instrument_attr(attr: &Attribute) -> bool {
     match &attr.meta {
         Meta::List(list) => cfg_attr_inner_is_instrument(list),
         _ => false,
@@ -369,8 +328,9 @@ fn cfg_attr_inner_path(tokens: &proc_macro2::TokenStream) -> Option<SynPath> {
     syn::parse2(path_tokens).ok()
 }
 
+/// `true` when `attrs` carry `#[cfg(test)]`, so a scan can skip test-only code.
 #[instrument(level = "trace", skip(attrs))]
-pub(crate) fn is_cfg_test(attrs: &[Attribute]) -> bool {
+pub fn is_cfg_test(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| {
         let Meta::List(list) = &attr.meta else {
             return false;

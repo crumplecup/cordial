@@ -39,6 +39,7 @@ pub use types::{
     VerusPanicSite, VerusPublish,
 };
 
+#[cfg(feature = "visibility")]
 pub(crate) use parse::count_verus_item_names;
 
 use std::path::Path;

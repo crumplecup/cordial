@@ -21,12 +21,13 @@ pub use explain::{
 };
 pub use handle::IntoEtiquette;
 pub use hooks::EtiquetteHooks;
+#[cfg(feature = "quality")]
 pub(crate) use order::sort_quality_etiquettes;
 pub use order::{
     After, BUILT_IN_ORDER, Before, BeforeMirror, DERIVE_RULE_IDS, LintConstraint, LintOrder,
     OrderExplain,
 };
 pub use quality::{QualityAreaSpec, QualityEtiquette, QualityReportArea};
-pub(crate) use quality::{count_open_category, count_open_rule, finding_field, open_findings};
+pub use quality::{count_open_category, count_open_rule, finding_field, open_findings};
 pub use static_table::{StaticEtiquette, StaticQualityEtiquette};
 pub use traits::Etiquette;

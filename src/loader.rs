@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 
 use crate::ir::CrateKind;
 
-pub use scan_roots::{path_has_fixtures, quality_scan_trees};
+#[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
+pub use scan_roots::path_has_fixtures;
+pub use scan_roots::quality_scan_trees;
 pub use source::{SourceFile, SourceLoadView, SourceLoader};
 
 /// Opaque bundle produced by a loader.

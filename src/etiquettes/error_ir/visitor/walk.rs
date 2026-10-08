@@ -24,6 +24,7 @@ use super::expr::{
 };
 pub(super) struct ErrorIrUnifiedVisitor {
     layers: ErrorIrScanLayers,
+    #[cfg(feature = "internal_error_chain")]
     crate_name: String,
     file: PathBuf,
     crate_root: PathBuf,
@@ -49,6 +50,7 @@ impl ErrorIrUnifiedVisitor {
     ) -> Self {
         Self {
             layers,
+            #[cfg(feature = "internal_error_chain")]
             crate_name,
             file,
             crate_root,
@@ -108,12 +110,15 @@ impl ErrorIrUnifiedVisitor {
     #[instrument(level = "trace", skip(self))]
     #[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
     fn site_ctx(&self) -> CordialResult<super::site::SiteCtx> {
-        super::site::SiteCtx::builder()
+        let mut builder = super::site::SiteCtx::builder();
+        builder
             .context(self.site_context())
-            .rel_file(self.rel_file())
+            .rel_file(self.rel_file());
+        #[cfg(feature = "internal_error_chain")]
+        builder
             .file(self.file.clone())
-            .crate_name(self.crate_name.clone())
-            .build()
+            .crate_name(self.crate_name.clone());
+        builder.build()
     }
 
     #[instrument(level = "trace", skip(self))]

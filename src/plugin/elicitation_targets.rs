@@ -5,13 +5,16 @@ use std::collections::HashSet;
 use tracing::instrument;
 
 use crate::error::CordialResult;
+#[cfg(feature = "elicitation")]
 use crate::plugin::coverage::{CoverageTarget, TargetProvider};
-use crate::session::{RunAll, RunFilter, SessionView};
+#[cfg(feature = "elicitation")]
+use crate::session::SessionView;
+use crate::session::{RunAll, RunFilter};
 use crate::targets::discover_crate_targets;
 
-use super::elicitation_tracked_targets::{
-    ELICITATION_INTERFACE_SHADOW_CRATES, ELICITATION_TRACKED_TARGETS, ElicitationTrackedTarget,
-};
+#[cfg(feature = "elicitation")]
+use super::elicitation_tracked_targets::ELICITATION_INTERFACE_SHADOW_CRATES;
+use super::elicitation_tracked_targets::{ELICITATION_TRACKED_TARGETS, ElicitationTrackedTarget};
 
 /// One upstream ↔ shadow mirror pair active in the current workspace.
 #[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
@@ -22,6 +25,7 @@ pub struct ShadowPair {
     shadow: String,
 }
 
+#[cfg(feature = "elicitation")]
 /// Workspace `elicit_*` mirror members with no entry in the tracked roster.
 #[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
 pub struct TrackedTargetRosterGap {
@@ -29,10 +33,12 @@ pub struct TrackedTargetRosterGap {
     members_without_tracked_target: Vec<String>,
 }
 
+#[cfg(feature = "elicitation")]
 /// Target provider for the elicitation coverage profile.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ElicitationTargetProvider;
 
+#[cfg(feature = "elicitation")]
 impl TargetProvider for ElicitationTargetProvider {
     #[instrument(level = "trace", skip(self, session, filter))]
     fn coverage_targets(
@@ -124,6 +130,7 @@ fn filter_shadow_pairs(pairs: Vec<ShadowPair>, filter: &dyn RunFilter) -> Vec<Sh
     pairs
 }
 
+#[cfg(feature = "elicitation")]
 /// Look up a tracked target by upstream crate name.
 #[instrument(level = "debug")]
 pub fn tracked_target_for_upstream(upstream: &str) -> Option<&'static ElicitationTrackedTarget> {
@@ -140,12 +147,14 @@ pub fn tracked_target_for_shadow(shadow: &str) -> Option<&'static ElicitationTra
         .find(|target| target.shadow() == shadow)
 }
 
+#[cfg(feature = "elicitation")]
 /// Returns `true` when `crate_name` is an interface crate rather than an upstream mirror.
 #[instrument(level = "trace", ret)]
 pub fn is_interface_shadow_crate(crate_name: &str) -> bool {
     ELICITATION_INTERFACE_SHADOW_CRATES.contains(&crate_name)
 }
 
+#[cfg(feature = "elicitation")]
 /// Compare workspace members against the single tracked-target list.
 #[instrument(level = "debug")]
 pub fn compare_tracked_target_roster(workspace_members: &[String]) -> TrackedTargetRosterGap {
@@ -167,6 +176,7 @@ pub fn compare_tracked_target_roster(workspace_members: &[String]) -> TrackedTar
     }
 }
 
+#[cfg(feature = "elicitation")]
 #[instrument(level = "debug", skip(targets, filter))]
 fn apply_coverage_filter(
     targets: Vec<CoverageTarget>,

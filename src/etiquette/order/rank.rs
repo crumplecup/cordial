@@ -1,12 +1,17 @@
 //! Kahn validation and quality-area ranking.
 
+#[cfg(feature = "quality")]
 use std::collections::BTreeSet;
 
 use tracing::instrument;
 
-use super::{LintConstraint, LintOrder};
+use super::LintConstraint;
+#[cfg(feature = "quality")]
+use super::LintOrder;
 use crate::error::{CordialError, CordialResult};
+#[cfg(feature = "quality")]
 use crate::etiquette::order_table::ERROR_HANDLING_RULE_IDS;
+#[cfg(feature = "quality")]
 use crate::etiquette::quality::QualityEtiquette;
 
 pub(super) const MAX_NODES: usize = 256;
@@ -184,6 +189,7 @@ const fn index_of(ids: &[&str], id: &str) -> Option<usize> {
 }
 
 /// Stable topological sort of quality etiquettes: `After` edges become area edges.
+#[cfg(feature = "quality")]
 #[instrument(level = "debug", skip(etiquettes, order))]
 pub(crate) fn sort_quality_etiquettes<'a>(
     etiquettes: &[&'a dyn QualityEtiquette],
@@ -253,6 +259,7 @@ pub(crate) fn sort_quality_etiquettes<'a>(
 
 /// Areas reachable from Error handling sit immediately after that
 /// hardcoded first row: foreign error types through proof patterns.
+#[cfg(feature = "quality")]
 #[instrument(level = "debug", skip(ordered, order))]
 fn lift_error_handling_cluster<'a>(
     ordered: Vec<&'a dyn QualityEtiquette>,
@@ -272,6 +279,7 @@ fn lift_error_handling_cluster<'a>(
     cluster.into_iter().chain(rest).collect()
 }
 
+#[cfg(feature = "quality")]
 #[instrument(level = "debug", skip(order, seeds))]
 fn reachable_successors(order: &LintOrder, seeds: &[&str]) -> BTreeSet<&'static str> {
     let mut seen = BTreeSet::new();
@@ -284,6 +292,7 @@ fn reachable_successors(order: &LintOrder, seeds: &[&str]) -> BTreeSet<&'static 
     seen
 }
 
+#[cfg(feature = "quality")]
 #[instrument(level = "debug", skip(order, earlier, later))]
 fn area_precedes(order: &LintOrder, earlier: &[&str], later: &[&str]) -> bool {
     earlier.iter().any(|id| {

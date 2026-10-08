@@ -195,6 +195,7 @@ fn is_cfg_test(attrs: &[syn::Attribute]) -> bool {
     })
 }
 
+#[cfg(feature = "visibility")]
 /// Count real, externally-visible names among the items inside one
 /// `verus! { .. }` invocation's own token stream: `pub` items count
 /// toward a crate's externally reachable API surface, `pub(crate)`/
@@ -239,6 +240,7 @@ pub(crate) fn count_verus_item_names(tokens: proc_macro2::TokenStream) -> (usize
     (leaf_pub, leaf_crate)
 }
 
+#[cfg(feature = "visibility")]
 /// Mirrors `crate::etiquettes::visibility::scan::vis::item_vis`/
 /// `leaf_name_count`, ported to `verus_syn`'s own (structurally
 /// identical, but type-incompatible) `Item`/`Visibility` -- the same
@@ -265,6 +267,7 @@ fn verus_item_vis_and_name_count(
     }
 }
 
+#[cfg(feature = "visibility")]
 #[instrument(level = "debug", skip(tree))]
 fn verus_use_name_count(tree: &verus_syn::UseTree) -> usize {
     match tree {

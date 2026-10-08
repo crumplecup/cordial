@@ -5,6 +5,7 @@ mod explains;
 mod ids;
 
 pub use ids::DERIVE_RULE_IDS;
+#[cfg(feature = "quality")]
 pub(crate) use ids::ERROR_HANDLING_RULE_IDS;
 
 use crate::etiquette::order::LintOrder;

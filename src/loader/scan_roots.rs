@@ -18,6 +18,7 @@ pub fn quality_scan_trees(crate_root: &Path) -> Vec<PathBuf> {
 /// The check is relative to `crate_root`. An absolute `tests/parity` segment
 /// anywhere in the path would skip a parity fixture when that fixture *is*
 /// the project being scanned.
+#[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 #[instrument(level = "debug", skip(path))]
 pub fn path_has_fixtures(path: &Path, crate_root: &Path) -> bool {
     let relative = path.strip_prefix(crate_root).unwrap_or(path);

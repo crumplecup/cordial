@@ -27,6 +27,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+#[cfg(any(feature = "amenable_std", feature = "antipatterns"))]
 mod amenable_dump_registry;
 mod cache_digest;
 #[cfg(feature = "rustdoc")]
@@ -34,6 +35,13 @@ mod cargo_rustdoc;
 #[cfg(feature = "cli")]
 mod cli;
 mod config;
+#[cfg(any(
+    feature = "_quality_support",
+    feature = "impl_coverage",
+    feature = "shadow",
+    feature = "trenchcoat",
+    feature = "homecoming_std"
+))]
 mod csv_row;
 #[cfg(feature = "elicitation")]
 mod digest;
@@ -225,36 +233,16 @@ pub use digest::{
     TrackedTargetRosterDigest, build_shadow_core_support_digest,
     render_shadow_core_support_summary_section, render_tracked_target_roster_markdown,
 };
-#[cfg(any(
-    feature = "panics",
-    feature = "tracing",
-    feature = "allows",
-    feature = "modularity",
-    feature = "derives",
-    feature = "error_sites",
-    feature = "error_chain",
-    feature = "internal_error_chain",
-    feature = "foreign_error_types",
-    feature = "foreign_error_attenuation",
-    feature = "antipatterns",
-    feature = "cfg_scatter",
-    feature = "visibility",
-    feature = "cli_layout",
-    feature = "crate_attrs",
-    feature = "doc_warnings",
-    feature = "feature_warnings",
-    feature = "glob_imports",
-    feature = "inline_tests",
-    feature = "verus_warnings",
-    feature = "creusot_diagnostics",
-    feature = "proof_patterns",
-    feature = "pageantry",
-    feature = "cfg_hygiene"
-))]
-pub use enricher::AttributeEnricher;
 pub use enricher::ScopeEnricher;
 #[cfg(feature = "trenchcoat")]
 pub use enricher::TrenchcoatEnricher;
+#[cfg(feature = "_quality_support")]
+pub use enricher::resolve_source_path;
+#[cfg(feature = "_attribute_scan")]
+pub use enricher::{
+    AttributeEnricher, is_cfg_test, is_gated_instrument_attr, is_instrument_attr,
+    member_crate_root, resolve_parent,
+};
 #[cfg(feature = "error_sites")]
 pub use enricher::{
     ERROR_IR_ENRICHERS, ErrorFlowEnricher, ErrorIrScanEnricher, ErrorIrScanReport,
@@ -275,7 +263,8 @@ pub use etiquette::{
     After, BUILT_IN_ORDER, Before, BeforeMirror, DERIVE_RULE_IDS, Etiquette, EtiquetteExplain,
     EtiquetteHooks, EtiquetteRuleExplain, IntoEtiquette, LintConstraint, LintOrder, OrderExplain,
     QualityAreaSpec, QualityEtiquette, QualityReportArea, StaticEtiquette, StaticQualityEtiquette,
-    lookup_etiquette, render_explain_list, render_explain_page,
+    count_open_category, count_open_rule, finding_field, lookup_etiquette, open_findings,
+    render_explain_list, render_explain_page,
 };
 #[cfg(feature = "shadow")]
 pub use etiquettes::SHADOW_ETIQUETTE;
@@ -358,6 +347,8 @@ pub use ir::{
 pub use ir::{
     build_wrapper_coverage_from_hub_ir, collect_trenchcoat_pairs_from_ir, wrapper_maps_equivalent,
 };
+#[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
+pub use loader::path_has_fixtures;
 pub use loader::{
     CrateTarget, LoadView, SourceFile, SourceLoadView, SourceLoader, module_path_from_src_file,
     quality_scan_trees,

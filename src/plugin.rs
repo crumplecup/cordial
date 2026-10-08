@@ -26,13 +26,14 @@ pub use coverage::{
     Coverage, CoverageTarget, CoverageTargetKind, ElicitCompleteRequirement, GapContext,
     TargetProvider, TraitRequirement, WorkspaceMembersTargetProvider,
 };
-#[cfg(any(feature = "elicitation", feature = "shadow"))]
+#[cfg(feature = "elicitation")]
 pub use elicitation_targets::{
     ElicitationTargetProvider, ShadowPair, TrackedTargetRosterGap, active_tracked_targets,
-    compare_tracked_target_roster, discover_active_shadow_pairs, is_interface_shadow_crate,
-    tracked_target_for_shadow, tracked_target_for_upstream,
+    compare_tracked_target_roster, is_interface_shadow_crate, tracked_target_for_upstream,
 };
 #[cfg(any(feature = "elicitation", feature = "shadow"))]
+pub use elicitation_targets::{discover_active_shadow_pairs, tracked_target_for_shadow};
+#[cfg(feature = "elicitation")]
 pub use elicitation_tracked_targets::{
     ELICITATION_INTERFACE_SHADOW_CRATES, ELICITATION_TRACKED_TARGETS, ElicitationTrackedTarget,
 };

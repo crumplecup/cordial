@@ -1,31 +1,5 @@
 use tracing::instrument;
-#[cfg(any(
-    feature = "panics",
-    feature = "tracing",
-    feature = "allows",
-    feature = "modularity",
-    feature = "derives",
-    feature = "error_sites",
-    feature = "error_chain",
-    feature = "internal_error_chain",
-    feature = "foreign_error_types",
-    feature = "foreign_error_attenuation",
-    feature = "antipatterns",
-    feature = "cfg_scatter",
-    feature = "visibility",
-    feature = "cli_layout",
-    feature = "crate_attrs",
-    feature = "doc_warnings",
-    feature = "feature_warnings",
-    feature = "glob_imports",
-    feature = "inline_tests",
-    feature = "verus_warnings",
-    feature = "creusot_diagnostics",
-    feature = "dependency_freshness",
-    feature = "proof_patterns",
-    feature = "pageantry",
-    feature = "cfg_hygiene"
-))]
+#[cfg(feature = "_attribute_scan")]
 mod attribute;
 #[cfg(feature = "error_sites")]
 mod error;
@@ -33,6 +7,8 @@ mod error;
 mod error_flow;
 #[cfg(feature = "impl_coverage")]
 mod feature_probe;
+#[cfg(feature = "_quality_support")]
+mod ir_paths;
 mod path_index;
 #[cfg(feature = "impl_coverage")]
 mod proof_harness;
@@ -48,65 +24,9 @@ mod trenchcoat;
 #[cfg(feature = "impl_coverage")]
 mod wrapper_coverage;
 
-#[cfg(any(
-    feature = "panics",
-    feature = "tracing",
-    feature = "allows",
-    feature = "modularity",
-    feature = "derives",
-    feature = "error_sites",
-    feature = "error_chain",
-    feature = "internal_error_chain",
-    feature = "foreign_error_types",
-    feature = "foreign_error_attenuation",
-    feature = "antipatterns",
-    feature = "cfg_scatter",
-    feature = "visibility",
-    feature = "cli_layout",
-    feature = "crate_attrs",
-    feature = "doc_warnings",
-    feature = "feature_warnings",
-    feature = "glob_imports",
-    feature = "inline_tests",
-    feature = "verus_warnings",
-    feature = "creusot_diagnostics",
-    feature = "dependency_freshness",
-    feature = "proof_patterns",
-    feature = "pageantry",
-    feature = "cfg_hygiene"
-))]
-pub use attribute::AttributeEnricher;
-#[cfg(any(
-    feature = "panics",
-    feature = "tracing",
-    feature = "allows",
-    feature = "modularity",
-    feature = "derives",
-    feature = "error_sites",
-    feature = "error_chain",
-    feature = "internal_error_chain",
-    feature = "foreign_error_types",
-    feature = "foreign_error_attenuation",
-    feature = "antipatterns",
-    feature = "cfg_scatter",
-    feature = "visibility",
-    feature = "cli_layout",
-    feature = "crate_attrs",
-    feature = "doc_warnings",
-    feature = "feature_warnings",
-    feature = "glob_imports",
-    feature = "inline_tests",
-    feature = "verus_warnings",
-    feature = "creusot_diagnostics",
-    feature = "dependency_freshness",
-    feature = "proof_patterns",
-    feature = "pageantry",
-    feature = "cfg_hygiene"
-))]
-pub(crate) use attribute::{
-    is_cfg_test, is_gated_instrument_attr, is_instrument_attr, member_crate_root, resolve_parent,
-    resolve_source_path,
-};
+#[cfg(feature = "_attribute_scan")]
+pub use attribute::{AttributeEnricher, is_cfg_test, is_gated_instrument_attr, is_instrument_attr};
+#[cfg(feature = "_attribute_scan")]
 #[cfg(feature = "error_sites")]
 pub use error::{
     ERROR_IR_ENRICHERS, ErrorIrScanEnricher, ErrorIrScanReport, error_ir_enricher_ids,
@@ -116,6 +36,11 @@ pub use error::{
 pub use error_flow::ErrorFlowEnricher;
 #[cfg(feature = "impl_coverage")]
 pub use feature_probe::FeatureProbeEnricher;
+#[cfg(feature = "_quality_support")]
+pub use ir_paths::resolve_source_path;
+#[cfg(feature = "_quality_support")]
+#[cfg(feature = "_attribute_scan")]
+pub use ir_paths::{member_crate_root, resolve_parent};
 pub use path_index::PathIndexEnricher;
 #[cfg(feature = "impl_coverage")]
 pub use proof_harness::ProofHarnessEnricher;

@@ -29,6 +29,7 @@ fn quality_report_lists_resolution_order() -> miette::Result<()> {
             "Glob imports",
             "Pageantry",
             "Dependency freshness",
+            "feature warnings",
             "rustdoc warnings",
             "Creusot diagnostics",
             "Verus compiler warnings",
@@ -50,6 +51,7 @@ fn quality_report_lists_resolution_order() -> miette::Result<()> {
     assert!(body.contains("doc-warnings.checklist.md"));
     assert!(body.contains("creusot-diagnostics.checklist.md"));
     assert!(body.contains("dependency-freshness.checklist.md"));
+    assert!(body.contains("feature-warnings.checklist.md"));
 
     let summary = cordial::render_quality_workspace_summary_markdown(&report).into_diagnostic()?;
     assert!(summary.contains("# Quality workspace summary"));

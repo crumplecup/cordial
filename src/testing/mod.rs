@@ -54,6 +54,7 @@ pub use crate::framework_std::{
     type_has_trait_impl,
 };
 
+#[cfg(any(feature = "amenable_std", feature = "antipatterns"))]
 pub use crate::amenable_dump_registry::{AMENABLE_DUMP_REGISTRY_FEATURES, registry_dump_is_fresh};
 
 #[cfg(feature = "amenable_std")]

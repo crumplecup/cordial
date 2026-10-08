@@ -1,5 +1,6 @@
 //! Canonical elicitation upstream ↔ shadow roster (ported from elicit_doc).
 
+#[cfg(feature = "elicitation")]
 /// Workspace members that compose domain APIs rather than mirroring one upstream dependency.
 ///
 /// These are excluded when comparing workspace `elicit_*` members to configured targets.

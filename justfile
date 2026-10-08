@@ -78,7 +78,7 @@ check-features:
         --depth 2 \
         --no-dev-deps \
         --keep-going \
-        --exclude-features slow_tests,full,quality,elicitation \
+        --exclude-features slow_tests,full,quality,elicitation,_quality_support,_attribute_scan,_etiquette_plugins \
         --group-features allows,modularity,derives,cfg_scatter,visibility,cli_layout,doc_warnings,feature_warnings,glob_imports,inline_tests,pageantry,verus_warnings,creusot_diagnostics \
         --group-features error_sites,error_chain,internal_error_chain,foreign_error_types,foreign_error_attenuation \
         --group-features rustdoc,impl_coverage,trenchcoat,shadow,homecoming_std,amenable_std,amenable_ext

@@ -14,6 +14,12 @@ use crate::hooks::{
 use crate::ir::{CrateIr, CrateView, CrateViewMut, WorkspaceIr};
 use crate::loader::{CrateTarget, LoadView, SourceLoadView, SourceLoader};
 use crate::objects::{Artifact, Finding, Marker};
+#[cfg(any(
+    feature = "quality",
+    feature = "homecoming_std",
+    feature = "amenable_std",
+    feature = "elicitation"
+))]
 use crate::plugin::{Plugin, PluginCategory, plugins_in_category, selected_plugins};
 use crate::reporter::RollupReporter;
 use crate::store::StoreLayout;
@@ -441,7 +447,14 @@ fn render_and_write(
 
     #[cfg(feature = "quality")]
     let includes_quality = run_includes_quality(session.registered_plugins(), filter, etiquettes);
-    #[cfg(not(feature = "quality"))]
+    #[cfg(all(
+        not(feature = "quality"),
+        any(
+            feature = "homecoming_std",
+            feature = "amenable_std",
+            feature = "elicitation"
+        )
+    ))]
     let includes_quality = false;
 
     #[cfg(feature = "quality")]

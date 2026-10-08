@@ -21,20 +21,22 @@ pub use cargo::{nightly_available, run_cargo_rustdoc};
 pub use dep_features::{
     DepBuildConfig, collect_dep_serde_features, collect_member_dep_build_config,
 };
+#[cfg(all(feature = "cli", feature = "elicitation"))]
+pub(crate) use shadow_dep::build_all_active_shadow_deps_with_progress;
+#[cfg(feature = "shadow")]
+pub(crate) use shadow_dep::build_shadow_dep_rustdoc_with_progress;
 #[cfg(feature = "shadow")]
 pub use shadow_dep::{
     build_active_shadow_deps, build_all_active_shadow_deps, build_shadow_dep_rustdoc,
     resolve_shadow_dep_build_config,
 };
-#[cfg(feature = "shadow")]
-pub(crate) use shadow_dep::{
-    build_all_active_shadow_deps_with_progress, build_shadow_dep_rustdoc_with_progress,
-};
+#[cfg(all(
+    feature = "cli",
+    any(feature = "elicitation", feature = "homecoming_std")
+))]
+pub use sysroot::build_sysroot_libraries_with_progress;
 #[cfg(feature = "homecoming_std")]
-pub use sysroot::{
-    build_sysroot_libraries, build_sysroot_libraries_with_progress, is_std_family_crate,
-    resolve_sysroot_library_manifest,
-};
+pub use sysroot::{build_sysroot_libraries, is_std_family_crate, resolve_sysroot_library_manifest};
 
 use crate::error::CordialResult;
 use crate::progress::{ProgressSink, noop_progress};

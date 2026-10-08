@@ -219,6 +219,7 @@ pub fn build_all_active_shadow_deps(
     build_active_shadow_deps(project_root, store, &RunAll, force)
 }
 
+#[cfg(all(feature = "cli", feature = "elicitation"))]
 #[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
 pub(crate) fn build_all_active_shadow_deps_with_progress(
     project_root: &Path,

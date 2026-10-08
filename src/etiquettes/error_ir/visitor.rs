@@ -24,7 +24,10 @@ mod expr;
 mod site;
 mod walk;
 
-pub(super) use expr::{pat_is_err, raw_expr_snippet, truncate_snippet};
+#[cfg(feature = "internal_error_chain")]
+pub(super) use expr::pat_is_err;
+#[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
+pub(super) use expr::{raw_expr_snippet, truncate_snippet};
 #[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
 pub(super) use site::SiteCtx;
 use walk::ErrorIrUnifiedVisitor;
@@ -53,6 +56,7 @@ impl ErrorIrScanLayers {
         type_graph: false,
     };
 
+    #[cfg(feature = "error_chain")]
     pub const CHAIN_ONLY: Self = Self {
         sites: false,
         chain: true,
@@ -60,6 +64,7 @@ impl ErrorIrScanLayers {
         type_graph: false,
     };
 
+    #[cfg(feature = "internal_error_chain")]
     pub const COMPLIANCE_ONLY: Self = Self {
         sites: false,
         chain: false,
