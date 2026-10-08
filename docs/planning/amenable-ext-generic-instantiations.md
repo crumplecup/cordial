@@ -99,7 +99,12 @@ Replace string matching for ext targets with structured identity.
     max_type_nodes = 64  # max nodes in one expanded TypeKey
     ```
 
-    The values are unmeasured guesses until the alias-chain scan in phase A.
+    Measured on 2026-10-08 against the cached rustdoc JSON for chrono,
+    chrono_tz and jiff: 4 type aliases in all (all in chrono; chrono_tz and
+    jiff have none), longest alias chain 1, largest expanded alias 3 type
+    nodes, longest re-export chain 1 in all three. The defaults leave wide
+    headroom for other crates and are kept; the measurements are the floor,
+    not the target.
   - Parse each allowlisted crate's rustdoc JSON once per run and index it
     lazily.
 - Ambiguity (a name mapping to several canonical ids) and failure to resolve
@@ -162,8 +167,6 @@ regroup. `Partial` is a new status value and touches every consumer of
   `ff915c64`. Whether amenable will treat the spelling as a stable contract is
   unconfirmed; phase A's resolver is the defence.
 - Cross-crate alias resolution: which rustdoc JSONs the `resolve_crates`
-  allowlist needs (shadow-dep rustdoc already exists per target) and
-  whether the default caps hold up against a scan of chrono, chrono_tz and
-  jiff.
+  allowlist needs (shadow-dep rustdoc already exists per target).
 - Multi-parameter generics: tuple syntax above assumed; no current target
   exercises it.
