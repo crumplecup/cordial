@@ -26,7 +26,7 @@ pub use self::antipatterns::{AntipatternsConfig, StaticRefPolicy, StaticRefStrat
 pub use self::cfg::{CfgHygieneThresholds, CfgScatterThresholds};
 pub use self::checks::{
     CrateAttrsThresholds, CreusotDiagnosticsThresholds, DependencyFreshnessThresholds,
-    DerivesThresholds, DocWarningsThresholds,
+    DerivesThresholds, DocWarningsThresholds, FeatureWarningsThresholds,
 };
 pub use self::gates::EtiquetteGate;
 pub use self::modularity::ModularityThresholds;
@@ -53,6 +53,8 @@ pub struct CordialConfig {
     crate_attrs: CrateAttrsThresholds,
     #[serde(default)]
     doc_warnings: DocWarningsThresholds,
+    #[serde(default)]
+    feature_warnings: FeatureWarningsThresholds,
     #[serde(default)]
     creusot_diagnostics: CreusotDiagnosticsThresholds,
     #[serde(default)]
@@ -117,6 +119,7 @@ impl CordialConfig {
             "cfg_hygiene" => self.cfg_hygiene.enabled(),
             "crate_attrs" => self.crate_attrs.enabled(),
             "doc_warnings" => self.doc_warnings.enabled(),
+            "feature_warnings" => self.feature_warnings.enabled(),
             "creusot_diagnostics" => self.creusot_diagnostics.enabled(),
             "dependency_freshness" => self.dependency_freshness.enabled(),
             "tracing" => self.tracing.enabled(),

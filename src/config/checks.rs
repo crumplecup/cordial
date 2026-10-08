@@ -97,6 +97,71 @@ impl DocWarningsThresholds {
     }
 }
 
+/// `cargo hack` feature-powerset warning etiquette knobs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub struct FeatureWarningsThresholds {
+    /// Powerset depth (`cargo hack --depth`).
+    #[serde(default = "default_feature_depth")]
+    #[getter(copy)]
+    depth: usize,
+    /// Features left out of the powerset (`--exclude-features`).
+    #[serde(default)]
+    exclude_features: Vec<String>,
+    /// Features always toggled together (`--group-features`).
+    #[serde(default)]
+    group_features: Vec<Vec<String>>,
+    /// Also report warnings that fire in every combination (clippy sees these).
+    #[serde(default)]
+    #[getter(copy)]
+    include_universal: bool,
+    /// A gate naming more features than this is too wide to read: the advice
+    /// becomes "introduce a private (`_`-prefixed) feature" instead.
+    #[serde(default = "default_private_feature_threshold")]
+    #[getter(copy)]
+    private_feature_threshold: usize,
+    /// Package names that skip the powerset run.
+    #[serde(default)]
+    skip_crates: Vec<String>,
+    /// Run this etiquette (`true`) or skip it (`false`). Off by default: the
+    /// powerset is many cold `cargo check`s.
+    #[serde(default)]
+    #[getter(copy)]
+    enabled: bool,
+}
+
+#[instrument(level = "trace")]
+fn default_feature_depth() -> usize {
+    2
+}
+
+#[instrument(level = "trace")]
+fn default_private_feature_threshold() -> usize {
+    6
+}
+
+impl Default for FeatureWarningsThresholds {
+    #[instrument(level = "debug", ret)]
+    fn default() -> Self {
+        Self {
+            depth: default_feature_depth(),
+            exclude_features: Vec::new(),
+            group_features: Vec::new(),
+            include_universal: false,
+            private_feature_threshold: default_private_feature_threshold(),
+            skip_crates: Vec::new(),
+            enabled: false,
+        }
+    }
+}
+
+impl FeatureWarningsThresholds {
+    /// Whether this package should not run the powerset.
+    #[instrument(level = "trace", skip(self))]
+    pub fn skip(&self, crate_name: &str) -> bool {
+        self.skip_crates.iter().any(|name| name == crate_name)
+    }
+}
+
 /// `cargo creusot prove` diagnostic etiquette knobs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct CreusotDiagnosticsThresholds {

@@ -63,6 +63,15 @@ min_occurrences = 5
 # all_features = false
 # skip_crates = []
 
+[feature_warnings]
+# enabled = false         # off by default: many cold cargo checks
+# depth = 2
+# exclude_features = []
+# group_features = []
+# private_feature_threshold = 6
+# include_universal = false
+# skip_crates = []
+
 [dependency_freshness]
 # enabled = true
 # patch = true

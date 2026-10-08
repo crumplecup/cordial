@@ -16,7 +16,7 @@
 //!
 //! Built-in plugins are feature-gated:
 //!
-//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `crate_attrs`, `doc_warnings`, `glob_imports`, `inline_tests`, `verus_warnings`, `creusot_diagnostics`, `dependency_freshness`, `proof_patterns`, `pageantry` — source-quality scanners
+//! - `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `crate_attrs`, `doc_warnings`, `feature_warnings`, `glob_imports`, `inline_tests`, `verus_warnings`, `creusot_diagnostics`, `dependency_freshness`, `proof_patterns`, `pageantry` — source-quality scanners
 //!   (the `quality` umbrella)
 //! - `cli` — clap binary (`cordial`)
 //! - `impl_coverage`, `trenchcoat`, `shadow` — rustdoc coverage scanners
@@ -135,6 +135,11 @@ pub use etiquettes::error_sites::{
     partition_error_site_records, partition_error_site_row, scan_crate_error_sites,
     scan_rust_source as scan_error_sites_rust_source,
 };
+#[cfg(feature = "feature_warnings")]
+pub use etiquettes::feature_warnings::{
+    FEATURE_WARNINGS_ETIQUETTE, FeatureSet, FeatureWarningRecord, FeatureWarningRuleId, Gate,
+    HackRun, parse_cargo_hack_output, records_from_run, scan_crate_feature_warnings, suggest_gate,
+};
 #[cfg(feature = "foreign_error_attenuation")]
 pub use etiquettes::foreign_error_attenuation::{
     FOREIGN_ERROR_ATTENUATION_ETIQUETTE, ForeignErrorAttenuationReport, ForeignErrorHandlingClass,
@@ -237,6 +242,7 @@ pub use digest::{
     feature = "cli_layout",
     feature = "crate_attrs",
     feature = "doc_warnings",
+    feature = "feature_warnings",
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "verus_warnings",
@@ -323,10 +329,11 @@ pub use cargo_rustdoc::{
 pub use config::{
     AntipatternsConfig, CfgHygieneThresholds, CfgScatterThresholds, CordialConfig,
     CrateAttrsThresholds, CreusotDiagnosticsThresholds, DependencyFreshnessThresholds,
-    DerivesThresholds, DocWarningsThresholds, EtiquetteGate, ModularityThresholds,
-    PageantryThresholds, StaticRefPolicy, StaticRefStrategy, TracingBoundaryPolicy,
-    TracingStdioPolicy, TracingSubscriberPolicy, TracingThresholds, VisibilityThresholds,
-    load_cordial_config, load_derives_thresholds, load_session_config, load_visibility_thresholds,
+    DerivesThresholds, DocWarningsThresholds, EtiquetteGate, FeatureWarningsThresholds,
+    ModularityThresholds, PageantryThresholds, StaticRefPolicy, StaticRefStrategy,
+    TracingBoundaryPolicy, TracingStdioPolicy, TracingSubscriberPolicy, TracingThresholds,
+    VisibilityThresholds, load_cordial_config, load_derives_thresholds, load_session_config,
+    load_visibility_thresholds,
 };
 pub use exceptions::{
     AddExceptionOutcome, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,

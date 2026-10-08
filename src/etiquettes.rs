@@ -35,6 +35,7 @@
 //! | `cli_layout` | `cli_layout` | Do clap types dispatch in the library with `act`? |
 //! | `crate_attrs` | `crate_attrs` | Does each library root `forbid(unsafe_code)` and `warn(missing_docs)`? |
 //! | `doc_warnings` | `doc_warnings` | Does `cargo doc` emit `rustdoc::*` diagnostics rustc never sees? |
+//! | `feature_warnings` | `feature_warnings` | Does a warning fire under feature combinations a normal build never compiles? |
 //! | `glob_imports` | `glob_imports` | Are there glob `use` trees (`foo::*`, including `super::*`)? |
 //! | `inline_tests` | `inline_tests` | Are tests mixed into `src/` instead of `tests/`? |
 //! | `verus_warnings` | `verus_warnings` | Does the Verus rustc fork emit warnings this crate's rustc never sees? |
@@ -78,6 +79,8 @@ pub(crate) mod derives;
 pub(crate) mod doc_warnings;
 #[cfg(feature = "error_sites")]
 mod error_ir;
+#[cfg(feature = "feature_warnings")]
+pub(crate) mod feature_warnings;
 #[cfg(feature = "glob_imports")]
 pub(crate) mod glob_imports;
 #[cfg(feature = "inline_tests")]
@@ -150,7 +153,7 @@ pub use trenchcoat::TRENCHCOAT_ETIQUETTE;
 /// `docs/planning/quality-report-feeder-trait.md`).
 #[::tracing::instrument(level = "debug")]
 pub(crate) fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::QualityEtiquette> {
-    let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 24] = [
+    let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 25] = [
         #[cfg(feature = "panics")]
         Some(&*panics::PANICS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "panics"))]
@@ -227,6 +230,13 @@ pub(crate) fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::
         #[cfg(feature = "doc_warnings")]
         Some(&*doc_warnings::DOC_WARNINGS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "doc_warnings"))]
+        None,
+        #[cfg(feature = "feature_warnings")]
+        Some(
+            &*feature_warnings::FEATURE_WARNINGS_ETIQUETTE
+                as &dyn crate::etiquette::QualityEtiquette,
+        ),
+        #[cfg(not(feature = "feature_warnings"))]
         None,
         #[cfg(feature = "glob_imports")]
         Some(&*glob_imports::GLOB_IMPORTS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),

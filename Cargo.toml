@@ -73,6 +73,7 @@ visibility = []
 cli_layout = []
 crate_attrs = ["dep:toml"]
 doc_warnings = []
+feature_warnings = []
 glob_imports = []
 inline_tests = []
 verus_warnings = []
@@ -89,7 +90,7 @@ verus_ir = ["dep:verus_syn", "dep:quote"]
 # built for.
 proof_patterns = ["verus_ir"]
 pageantry = []
-quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "crate_attrs", "doc_warnings", "glob_imports", "inline_tests", "verus_warnings", "creusot_diagnostics", "dependency_freshness", "proof_patterns", "pageantry"]
+quality = ["panics", "tracing", "derives", "allows", "modularity", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "crate_attrs", "doc_warnings", "feature_warnings", "glob_imports", "inline_tests", "verus_warnings", "creusot_diagnostics", "dependency_freshness", "proof_patterns", "pageantry"]
 # Shared rustdoc JSON support for coverage plugins.
 rustdoc = ["dep:rustdoc-types", "dep:nom"]
 # Elicitation coverage plugins (each requires rustdoc).
@@ -207,6 +208,10 @@ required-features = ["crate_attrs"]
 [[test]]
 name = "doc_warnings_etiquette"
 required-features = ["doc_warnings"]
+
+[[test]]
+name = "feature_warnings_etiquette"
+required-features = ["feature_warnings"]
 
 [[test]]
 name = "glob_imports_etiquette"
@@ -371,7 +376,7 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(creusot)',
   'cfg(prusti)',
   'cfg(verus)',
-  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "crate_attrs", "doc_warnings", "glob_imports", "inline_tests", "verus_warnings", "creusot_diagnostics", "dependency_freshness", "verus_ir", "proof_patterns", "pageantry", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
+  'cfg(feature, values("panics", "tracing", "cli", "allows", "modularity", "derives", "error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation", "antipatterns", "cfg_scatter", "cfg_hygiene", "visibility", "cli_layout", "crate_attrs", "doc_warnings", "feature_warnings", "glob_imports", "inline_tests", "verus_warnings", "creusot_diagnostics", "dependency_freshness", "verus_ir", "proof_patterns", "pageantry", "quality", "rustdoc", "impl_coverage", "trenchcoat", "shadow", "elicitation", "homecoming_std", "amenable_std", "full"))',
 ] }
 
 [lints.clippy]

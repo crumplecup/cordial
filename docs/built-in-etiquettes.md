@@ -54,6 +54,7 @@ seriousness as code.
 | `tracing` | Functions follow the tracing recipe for their role, proof-only/skip-policy code is attenuated, subscribers are initialized deliberately, fallible boundaries report errors, and stdio macros are removed. | `TRACING-MISSING-INSTRUMENT`, `TRACING-LEVEL-MISMATCH`, `TRACING-SKIP-MISSING`, `TRACING-ERR-MISSING`, `TRACING-ERROR-PATH-SILENT`, `TRACING-FIELDS-MISSING`, `TRACING-PROOF-INSTRUMENT`, `TRACING-UNGATED-INSTRUMENT`, `TRACING-SKIP-INSTRUMENT`, `TRACING-SUBSCRIBER-*`, `TRACING-BOUNDARY-MAIN-SILENT`, `TRACING-STD-*` |
 | `allows` | `#[allow(...)]` and `#![allow(...)]` suppressions are inventoried; Verus prelude allows need `reason = "..."`. | `ALLOW-ATTR-001`, `ALLOW-VERUS-REASON-001` |
 | `doc_warnings` | `cargo doc` diagnostics are captured even when rustc and Clippy do not see them. | `DOC-WARNING-001` |
+| `feature_warnings` | Warnings that fire only under some feature combinations (found with `cargo hack`) become checklist items with the `cfg` gate that fixes them. Off unless `[feature_warnings] enabled = true`. | `FEATURE-WARNING-001`, `FEATURE-WARNING-002` |
 | `crate_attrs` | Library roots state the unsafe-code and missing-docs policy explicitly. | `CRATE-FORBID-UNSAFE-001`, `CRATE-MISSING-DOCS-001` |
 
 The tracing etiquette is intentionally stricter than a public-API-only census:

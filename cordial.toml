@@ -32,3 +32,18 @@ min_occurrences = 5
 
 [antipatterns.static_refs]
 strategy = "cow"
+
+# Warnings that fire only under some feature combinations. Mirrors the
+# `check-features` recipe in the justfile (keep the two in step).
+[feature_warnings]
+enabled = true
+depth = 2
+# A gate naming more features than this is too wide to read; the checklist
+# then advises a private (`_`-prefixed) feature that each of them enables.
+private_feature_threshold = 6
+exclude_features = ["slow_tests", "full", "quality", "elicitation"]
+group_features = [
+    ["allows", "modularity", "derives", "cfg_scatter", "visibility", "cli_layout", "doc_warnings", "feature_warnings", "glob_imports", "inline_tests", "pageantry", "verus_warnings", "creusot_diagnostics"],
+    ["error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation"],
+    ["rustdoc", "impl_coverage", "trenchcoat", "shadow", "homecoming_std", "amenable_std", "amenable_ext"],
+]

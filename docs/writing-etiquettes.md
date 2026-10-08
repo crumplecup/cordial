@@ -138,7 +138,7 @@ The built-in etiquettes are easiest to understand by standard:
 | Standard | Etiquettes |
 | --- | --- |
 | Error handling | `panics`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation` |
-| Observability | `tracing`, `allows`, `doc_warnings`, `crate_attrs` |
+| Observability | `tracing`, `allows`, `doc_warnings`, `feature_warnings`, `crate_attrs` |
 | API shape | `visibility`, `derives`, `pageantry`, `glob_imports` |
 | Structure | `modularity`, `inline_tests`, `cli_layout` |
 | Conditional code | `cfg_scatter`, `cfg_hygiene` |

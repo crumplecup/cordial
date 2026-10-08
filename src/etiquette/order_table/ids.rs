@@ -239,6 +239,13 @@ pub(super) const DOC_WARNING_RULE_IDS: &[&str] = &[
     "DOC-WARNING-001",
 ];
 
+pub(super) const FEATURE_WARNING_RULE_IDS: &[&str] = &[
+    #[cfg(feature = "feature_warnings")]
+    "FEATURE-WARNING-001",
+    #[cfg(feature = "feature_warnings")]
+    "FEATURE-WARNING-002",
+];
+
 pub(super) const CREUSOT_RULE_IDS: &[&str] = &[
     #[cfg(feature = "creusot_diagnostics")]
     "CREUSOT-DIAGNOSTIC-001",
@@ -284,6 +291,7 @@ pub(super) const KNOWN_IDS: &[&str] = &{
         + PAGEANTRY_RULE_IDS.len()
         + DEPENDENCY_FRESHNESS_RULE_IDS.len()
         + DOC_WARNING_RULE_IDS.len()
+        + FEATURE_WARNING_RULE_IDS.len()
         + CREUSOT_RULE_IDS.len()
         + VERUS_WARNING_RULE_IDS.len()
         + PROOF_PATTERN_RULE_IDS.len()];
@@ -305,6 +313,7 @@ pub(super) const KNOWN_IDS: &[&str] = &{
     index = append_ids(&mut ids, index, PAGEANTRY_RULE_IDS);
     index = append_ids(&mut ids, index, DEPENDENCY_FRESHNESS_RULE_IDS);
     index = append_ids(&mut ids, index, DOC_WARNING_RULE_IDS);
+    index = append_ids(&mut ids, index, FEATURE_WARNING_RULE_IDS);
     index = append_ids(&mut ids, index, CREUSOT_RULE_IDS);
     index = append_ids(&mut ids, index, VERUS_WARNING_RULE_IDS);
     append_ids(&mut ids, index, PROOF_PATTERN_RULE_IDS);

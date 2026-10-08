@@ -91,7 +91,30 @@ whole cluster. Per-lint wording:
 
 Project preference (from the cleanup that motivated this): move a helper
 next to its single consumer when there is one, and reach for a shared
-internal feature only when several etiquettes use it.
+private feature only when several etiquettes use it.
+
+### Private features
+
+A feature whose name starts with `_` is **private**: only other features
+enable it, a user never does. When a gate would name more than
+`private_feature_threshold` features (default 6), listing them is not a
+readable fix. The advice is to add a private feature (`_<area>_support`)
+that each of them enables, and gate the item on it. The checklist shows such
+items under "Needs a private feature" with the count and the first few
+names; the CSV keeps the full predicate. After the fix lands, a rerun sees
+the single private feature as the gate and the warnings are gone.
+
+The powerset excludes `_` features as units automatically (read from
+`cargo metadata`), so they neither multiply the combinations nor need hand
+maintained `exclude_features` entries. They still appear in the resolved
+feature sets, so gate advice can name them.
+
+Gate advice also (a) removes `default` and the configured
+`exclude_features` umbrellas before computing, because a `cfg` should not
+name `full` or `quality`; and (b) counts a silent combination as evidence
+only when the item is compiled there, approximated as "the combination
+contains every feature common to the triggering ones". Without (b), an item
+that is gated out of most combinations reads as widely used.
 
 ---
 
@@ -103,6 +126,7 @@ internal feature only when several etiquettes use it.
 # depth = 2                    # powerset depth
 # exclude_features = ["slow_tests", "full", "quality", "elicitation"]
 # group_features = [["allows", "modularity"], ["rustdoc", "shadow"]]
+# private_feature_threshold = 6   # wider gates advise a private feature
 # include_universal = false
 # skip_crates = []
 ```
@@ -128,8 +152,8 @@ does not invalidate that cache; rerun with `--no-cache`.
 
 | Phase | Work | Status |
 | --- | --- | --- |
-| 1 | Parse cargo-hack JSON, attribute to combinations, compute gate advice (pure functions, tested on synthetic output) | Not started |
-| 2 | Etiquette bundle: config, enricher, probe, assessor, reporters, registration, explain | Not started |
+| 1 | Parse cargo-hack JSON, attribute to combinations, compute gate advice (pure functions, tested on synthetic output) | **Done** |
+| 2 | Etiquette bundle: config, enricher, probe, assessor, reporters, registration, explain | **Done** |
 | 3 | Dogfood on cordial; fix the warnings it reports | Not started |
 | 4 | `check-features` reads `[feature_warnings]`; drop the duplicated flag lists | Not started |
 
