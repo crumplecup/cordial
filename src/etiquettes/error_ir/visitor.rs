@@ -19,15 +19,11 @@ use crate::etiquettes::error_sites::ErrorSiteRecord;
 use crate::loader::module_path_from_src_file;
 use tracing::instrument;
 
-mod expr;
+pub(super) mod expr;
 #[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
 mod site;
 mod walk;
 
-#[cfg(feature = "internal_error_chain")]
-pub(super) use expr::pat_is_err;
-#[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
-pub(super) use expr::{raw_expr_snippet, truncate_snippet};
 #[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
 pub(super) use site::SiteCtx;
 use walk::ErrorIrUnifiedVisitor;
@@ -35,8 +31,10 @@ use walk::ErrorIrUnifiedVisitor;
 /// Which error IR layers to collect during a unified file scan. Plain
 /// `bool`s carry no feature-gated type, so they stay unconditional even
 /// though only some are meaningful when a layer's feature is disabled.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
-#[builder(build_fn(error = "crate::error::CordialError"))]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters,
+)]
+#[builder(default, build_fn(error = "crate::error::CordialError"))]
 pub struct ErrorIrScanLayers {
     #[getter(copy)]
     sites: bool,
@@ -53,22 +51,6 @@ impl ErrorIrScanLayers {
         sites: true,
         chain: false,
         compliance: false,
-        type_graph: false,
-    };
-
-    #[cfg(feature = "error_chain")]
-    pub const CHAIN_ONLY: Self = Self {
-        sites: false,
-        chain: true,
-        compliance: false,
-        type_graph: false,
-    };
-
-    #[cfg(feature = "internal_error_chain")]
-    pub const COMPLIANCE_ONLY: Self = Self {
-        sites: false,
-        chain: false,
-        compliance: true,
         type_graph: false,
     };
 

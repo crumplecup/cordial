@@ -1,6 +1,8 @@
 use tracing::instrument;
 #[cfg(feature = "_attribute_scan")]
 mod attribute;
+#[cfg(feature = "_attribute_scan")]
+mod attribute_paths;
 #[cfg(feature = "error_sites")]
 mod error;
 #[cfg(feature = "error_sites")]
@@ -26,6 +28,9 @@ mod wrapper_coverage;
 
 #[cfg(feature = "_attribute_scan")]
 pub use attribute::{AttributeEnricher, is_cfg_test, is_gated_instrument_attr, is_instrument_attr};
+#[cfg(feature = "_quality_support")]
+#[cfg(feature = "_attribute_scan")]
+pub use attribute_paths::{member_crate_root, resolve_parent};
 #[cfg(feature = "_attribute_scan")]
 #[cfg(feature = "error_sites")]
 pub use error::{
@@ -38,9 +43,6 @@ pub use error_flow::ErrorFlowEnricher;
 pub use feature_probe::FeatureProbeEnricher;
 #[cfg(feature = "_quality_support")]
 pub use ir_paths::resolve_source_path;
-#[cfg(feature = "_quality_support")]
-#[cfg(feature = "_attribute_scan")]
-pub use ir_paths::{member_crate_root, resolve_parent};
 pub use path_index::PathIndexEnricher;
 #[cfg(feature = "impl_coverage")]
 pub use proof_harness::ProofHarnessEnricher;

@@ -1,6 +1,8 @@
 //! Lint resolution order: `After` is written, `Before` is the free inverse.
 
 mod rank;
+#[cfg(feature = "quality")]
+mod sort;
 
 use std::borrow::Cow;
 
@@ -9,9 +11,9 @@ use tracing::instrument;
 use crate::error::CordialResult;
 
 pub use crate::etiquette::order_table::{BUILT_IN_ORDER, DERIVE_RULE_IDS};
-#[cfg(feature = "quality")]
-pub(crate) use rank::sort_quality_etiquettes;
 pub(crate) use rank::table_is_valid;
+#[cfg(feature = "quality")]
+pub(crate) use sort::sort_quality_etiquettes;
 
 /// Written side of the pair: this lint runs after the returned ids.
 pub trait After {

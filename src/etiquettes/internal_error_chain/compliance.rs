@@ -82,7 +82,7 @@ pub fn scan_compliance_rust_syntax(
         src_root,
         src_root.parent().unwrap_or(src_root),
         crate_name,
-        crate::etiquettes::ErrorIrScanLayers::COMPLIANCE_ONLY,
+        crate::etiquettes::ErrorIrScanLayers::compliance_only()?,
     )?
     .compliance()
     .clone())

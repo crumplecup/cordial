@@ -5,7 +5,7 @@ use syn::{
     ReturnType, Type, TypePath,
 };
 
-use super::super::visitor::{raw_expr_snippet, truncate_snippet};
+use super::super::visitor::expr::{raw_expr_snippet, truncate_snippet};
 use crate::etiquettes::error_sites::infer_foreign_error_type;
 
 use tracing::instrument;

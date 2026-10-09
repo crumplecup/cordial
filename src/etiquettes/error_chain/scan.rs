@@ -66,7 +66,7 @@ pub(crate) fn scan_rust_syntax(
         src_root,
         crate_root,
         "",
-        crate::etiquettes::ErrorIrScanLayers::CHAIN_ONLY,
+        crate::etiquettes::ErrorIrScanLayers::chain_only()?,
     )?
     .chain()
     .clone())

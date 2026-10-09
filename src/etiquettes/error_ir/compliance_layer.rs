@@ -8,7 +8,8 @@
 use syn::spanned::Spanned;
 use syn::{Expr, ExprCall, ExprIf, ExprMatch, ExprPath, Stmt};
 
-use super::visitor::{SiteCtx, pat_is_err, raw_expr_snippet, truncate_snippet};
+use super::visitor::expr::{pat_is_err, raw_expr_snippet, truncate_snippet};
+use super::visitor::{ErrorIrScanLayers, ErrorIrScanLayersBuilder, SiteCtx};
 use crate::error::CordialResult;
 use crate::etiquettes::error_sites::infer_foreign_error_type;
 use crate::etiquettes::internal_error_chain::{
@@ -391,4 +392,12 @@ fn path_is_err(path: &ExprPath) -> bool {
         .segments
         .last()
         .is_some_and(|segment| segment.ident == "Err")
+}
+
+impl ErrorIrScanLayers {
+    /// Scan only the internal error-chain compliance layer.
+    #[instrument(level = "debug", err(level = "warn"))]
+    pub fn compliance_only() -> CordialResult<Self> {
+        ErrorIrScanLayersBuilder::default().compliance(true).build()
+    }
 }

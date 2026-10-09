@@ -41,13 +41,14 @@ pub fn registry_dump_path(store: &StoreLayout) -> PathBuf {
 }
 
 /// Sidecar recording the feature set a dump was built with.
+#[instrument(level = "debug")]
 fn features_sidecar(dump_path: &Path) -> PathBuf {
     dump_path.with_extension("features")
 }
 
 /// Newest mtime among the workspace's Rust sources and manifests,
 /// skipping `target/` and hidden directories.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(workspace))]
 fn newest_source_mtime(workspace: &Path) -> Option<SystemTime> {
     WalkDir::new(workspace)
         .into_iter()
@@ -70,7 +71,7 @@ fn newest_source_mtime(workspace: &Path) -> Option<SystemTime> {
 
 /// Whether the dump at `dump_path` exists, was built with the current
 /// feature set, and is newer than every source file in `workspace`.
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(workspace))]
 pub fn registry_dump_is_fresh(workspace: &Path, dump_path: &Path) -> bool {
     let Ok(dump_mtime) = std::fs::metadata(dump_path).and_then(|meta| meta.modified()) else {
         return false;

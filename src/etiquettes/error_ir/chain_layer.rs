@@ -10,7 +10,7 @@ mod preds;
 use syn::spanned::Spanned;
 use syn::{ExprMethodCall, ExprTry, Fields, ItemEnum, ItemImpl, ItemStruct, ReturnType};
 
-use super::visitor::SiteCtx;
+use super::visitor::{ErrorIrScanLayers, ErrorIrScanLayersBuilder, SiteCtx};
 use crate::error::CordialResult;
 use crate::etiquettes::error_chain::{ErrorChainProbeId, ErrorChainRecord};
 
@@ -202,5 +202,13 @@ impl ChainLayer {
             return Err(error);
         }
         Ok(self.chain)
+    }
+}
+
+impl ErrorIrScanLayers {
+    /// Scan only the error-chain layer.
+    #[instrument(level = "debug", err(level = "warn"))]
+    pub fn chain_only() -> CordialResult<Self> {
+        ErrorIrScanLayersBuilder::default().chain(true).build()
     }
 }

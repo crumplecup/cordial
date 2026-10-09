@@ -70,22 +70,13 @@ pub use coverage_targets::ir_crate_names_for_coverage_plugins;
 /// family so panicking APIs and Result-chain analysis run together.
 #[instrument(level = "debug")]
 pub fn quality_plugins() -> Vec<&'static dyn Plugin> {
-    let mut out: Vec<&'static dyn Plugin> = quality_etiquette_plugins()
+    let out: Vec<&'static dyn Plugin> = quality_etiquette_plugins()
         .into_iter()
         .map(|plugin| plugin as &dyn Plugin)
         .collect();
-    out.extend(handling_plugins());
+    #[cfg(any(feature = "error_sites", feature = "panics"))]
+    let out = [out, error_handling_plugins()].concat();
     out
-}
-
-#[cfg(any(feature = "error_sites", feature = "panics"))]
-fn handling_plugins() -> Vec<&'static dyn Plugin> {
-    error_handling_plugins()
-}
-
-#[cfg(not(any(feature = "error_sites", feature = "panics")))]
-fn handling_plugins() -> Vec<&'static dyn Plugin> {
-    Vec::new()
 }
 
 /// Built-in coverage plugins.
