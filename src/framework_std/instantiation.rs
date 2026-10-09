@@ -9,11 +9,15 @@
 //! parent, read from rustdoc. Design:
 //! `docs/planning/amenable-ext-generic-instantiations.md`.
 
+mod amenable_registry;
+mod evidence;
 mod expected;
-mod facts;
 mod note;
 mod plan;
 
+pub use amenable_registry::{
+    AmenableRegistryEvidence, EvidenceKey, ProofKey, resolve_ext_evidence,
+};
+pub use evidence::InstantiationEvidence;
 pub use expected::ExpectedInstantiations;
-pub use facts::RegistryFacts;
 pub use plan::{InstantiationContext, expand_report};

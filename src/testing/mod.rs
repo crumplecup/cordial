@@ -59,14 +59,15 @@ pub use crate::amenable_dump_registry::{AMENABLE_DUMP_REGISTRY_FEATURES, registr
 
 #[cfg(feature = "amenable_std")]
 pub use crate::framework_std::{
-    AmenableStdEntry, AmenableStdOptions, AmenableStdReport, AmenableStdStatus, CrateIndex,
-    DeclaredBound, EvidenceKey, EvidenceLinkDump, ExpectedInstantiations, Implements,
-    InstantiationContext, Lookup, ProofKey, ProofRecordDump, RawBound, RegistryDump, RegistryFacts,
-    ResolveCaps, RustdocTypeResolver, TypeKey, TypeResolver, TypeText, Unresolved,
-    VerifierSkipEntry, VerifierSkipMap, assess_amenable_std_coverage, build_amenable_std_gaps,
-    build_amenable_std_report, evidence_for_std_type, expand_report, load_verifier_skip_map,
-    normalize_type_text, parse_rust_std_standard_inner, parse_type_text, resolve_alias_chain,
-    resolve_ext_evidence, witness_verifiers_for_std_type,
+    AmenableRegistryEvidence, AmenableStdEntry, AmenableStdOptions, AmenableStdReport,
+    AmenableStdStatus, CrateIndex, DeclaredBound, EvidenceKey, EvidenceLinkDump,
+    ExpectedInstantiations, Implements, InstantiationContext, InstantiationEvidence, Lookup,
+    ProofKey, ProofRecordDump, RawBound, RegistryDump, ResolveCaps, RustdocTypeResolver, TypeKey,
+    TypeResolver, TypeText, Unresolved, VerifierSkipEntry, VerifierSkipMap,
+    assess_amenable_std_coverage, build_amenable_std_gaps, build_amenable_std_report,
+    evidence_for_std_type, expand_report, load_verifier_skip_map, normalize_type_text,
+    parse_rust_std_standard_inner, parse_type_text, resolve_alias_chain, resolve_ext_evidence,
+    witness_verifiers_for_std_type,
 };
 
 #[cfg(feature = "amenable_ext")]

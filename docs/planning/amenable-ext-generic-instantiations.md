@@ -165,7 +165,7 @@ regroup. `Partial` is a new status value and touches every consumer of
 | --- | --- | --- |
 | 0 | Registry read side: whitespace normalization, chrono features in the dump. (The `bounds`/`premises`/`ExtGeneric` handling first built here was removed with amenable's markup.) | **Done** |
 | A | `TypeKey`, rustdoc name lookup (re-exports, globs, aliases), structured evidence parsing, `Unresolved` status; ext targets only | **Done.** `framework_std::type_identity` (`TypeKey`, `CrateIndex`, `RustdocTypeResolver` behind the `TypeResolver` trait, `resolve_ext_evidence`); 18 tests including one against the real chrono / chrono_tz rustdoc JSON. Not yet wired into `evidence_for_ext_type`; that is phase B/C |
-| B | Parent/child rows, aggregate roll-up, declared-bounds note | **Done (library layer).** `framework_std::instantiation` (`expand_report`, `RegistryFacts`, `ExpectedInstantiations`); `TypeResolver::{implements, declared_bounds}`; 15 tests including one on the real chrono / chrono_tz JSON. Not yet wired into the assessor or the reporters; that is phase C |
+| B | Parent/child rows, aggregate roll-up, declared-bounds note | **Done (library layer).** `framework_std::instantiation` (`expand_report`, `InstantiationEvidence`, `AmenableRegistryEvidence`, `ExpectedInstantiations`); `TypeResolver::{implements, declared_bounds}`; 15 tests including one on the real chrono / chrono_tz JSON. Not yet wired into the assessor or the reporters; that is phase C |
 | C | `instantiations` config key, Missing children, `Partial`, reporter/CSV changes | Not started |
 | D | Chrono checklist verification (8 instantiation rows, 67 total) | Not started |
 
@@ -195,9 +195,22 @@ one child row per instantiation, recounting the report. Children are the
 expected instantiations (configured order, phase C supplies the list) followed
 by any registered instantiation that was not expected, noted as such. A child
 is classified by the same function as an inventory row (`entry_from_facts`,
-now shared), against facts resolved once into `TypeKey`s (`RegistryFacts`), so
+now shared), against an `InstantiationEvidence` source (see below), so
 a witness is attributed to exactly the instantiation it proves. An expected
 type that cannot be identified is a `Missing` child carrying the reason.
+
+**The evidence source is a trait.** The expansion depends only on
+`InstantiationEvidence`: which instantiations a source knows about, the
+evidence record for one, the verifiers with a witness for it, and whether a
+proof test names it, all asked in terms of `TypeKey`. Amenable's names
+(`ExtStandard<T>`, proof records, proof-chain tests) live in exactly one place,
+`AmenableRegistryEvidence`, the concrete implementation, which resolves the
+registry once so a lookup compares identities. Nothing else in type identity,
+rustdoc reading or the expansion mentions amenable, and a test drives the whole
+expansion from a fixed-coverage source with no registry in it. One residue is
+stated rather than hidden: the rows it produces are still the existing report
+type, whose witness columns are `kani`, `creusot` and `verus`; a
+library-neutral row model is separate, larger work.
 
 Parent roll-up: Complete when every non-excepted child is Complete, Missing
 when none has any coverage, Partial otherwise, Skipped when all are excepted;

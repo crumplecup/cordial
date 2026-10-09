@@ -1,12 +1,20 @@
-//! Resolve registry evidence names to structured type identities.
+//! Amenable's registry as an [`InstantiationEvidence`] source.
+//!
+//! The one place that knows amenable's naming: evidence is registered as
+//! `ExtStandard<T>` (qualified or bare), proof records and proof-chain tests
+//! name the same wrapper. Everything here resolves those names to
+//! [`TypeKey`]s once, so a lookup compares identities, not strings.
 
 use std::collections::HashSet;
 
 use tracing::instrument;
 
 use crate::framework_std::registry::{EvidenceLinkDump, RegistryDump};
+use crate::framework_std::type_identity::{
+    TypeKey, TypeResolver, Unresolved, normalize_type_text, parse_type_text,
+};
 
-use super::{TypeKey, TypeResolver, Unresolved, normalize_type_text, parse_type_text};
+use super::InstantiationEvidence;
 
 const EXT_STANDARD: &[&str] = &["amenable_ext::ExtStandard", "ExtStandard"];
 
@@ -26,6 +34,64 @@ pub struct ProofKey {
     key: Result<TypeKey, Unresolved>,
     /// Which verifier produced it (`kani`, `creusot`, `verus`).
     verifier: String,
+}
+
+/// Everything amenable's registry says about ext types, resolved once.
+#[derive(Debug, Clone)]
+pub struct AmenableRegistryEvidence {
+    evidence: Vec<EvidenceKey>,
+    proofs: Vec<ProofKey>,
+    subjects: Vec<TypeKey>,
+}
+
+impl AmenableRegistryEvidence {
+    /// Resolve `registry` and the proof-chain test `subjects` with `resolver`.
+    #[instrument(level = "debug", skip(registry, subjects, resolver))]
+    pub fn resolve(
+        registry: &RegistryDump,
+        subjects: &HashSet<String>,
+        resolver: &dyn TypeResolver,
+    ) -> Self {
+        Self {
+            evidence: resolve_ext_evidence(registry, resolver),
+            proofs: resolve_ext_proofs(registry, resolver),
+            subjects: resolve_proof_subjects(subjects, resolver),
+        }
+    }
+}
+
+impl InstantiationEvidence for AmenableRegistryEvidence {
+    #[instrument(level = "trace", skip(self))]
+    fn instantiations_of(&self, head: &str) -> Vec<TypeKey> {
+        self.evidence
+            .iter()
+            .filter_map(|entry| entry.key().as_ref().ok())
+            .filter(|key| key.head() == head && !key.args().is_empty())
+            .cloned()
+            .collect()
+    }
+
+    #[instrument(level = "trace", skip(self, key))]
+    fn evidence_name_for(&self, key: &TypeKey) -> Option<String> {
+        self.evidence
+            .iter()
+            .find(|entry| entry.key().as_ref().is_ok_and(|found| found == key))
+            .map(|entry| entry.name().clone())
+    }
+
+    #[instrument(level = "trace", skip(self, key))]
+    fn verifiers_for(&self, key: &TypeKey) -> HashSet<String> {
+        self.proofs
+            .iter()
+            .filter(|proof| proof.key().as_ref().is_ok_and(|found| found == key))
+            .map(|proof| proof.verifier().clone())
+            .collect()
+    }
+
+    #[instrument(level = "trace", skip(self, key))]
+    fn has_proof_test(&self, key: &TypeKey) -> bool {
+        self.subjects.iter().any(|subject| subject == key)
+    }
 }
 
 /// Resolve every `ExtStandard<…>` link in `registry`.

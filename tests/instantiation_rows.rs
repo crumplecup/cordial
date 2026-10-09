@@ -9,9 +9,9 @@ use miette::IntoDiagnostic;
 use serde_json::{Value, json};
 
 use cordial::testing::{
-    AmenableStdEntry, AmenableStdReport, AmenableStdStatus, CrateIndex, ExpectedInstantiations,
-    InstantiationContext, RegistryDump, RegistryFacts, ResolveCaps, RustdocTypeResolver,
-    VerifierSkipEntry, VerifierSkipMap, expand_report,
+    AmenableRegistryEvidence, AmenableStdEntry, AmenableStdReport, AmenableStdStatus, CrateIndex,
+    ExpectedInstantiations, InstantiationContext, InstantiationEvidence, RegistryDump, ResolveCaps,
+    RustdocTypeResolver, TypeKey, TypeResolver, VerifierSkipEntry, VerifierSkipMap, expand_report,
 };
 
 // ---- a tiny rustdoc crate builder ----------------------------------------
@@ -344,7 +344,7 @@ fn expand(
 ) -> miette::Result<AmenableStdReport> {
     let resolver = resolver()?;
     let dump = registry(claims)?;
-    let facts = RegistryFacts::resolve(&dump, proof_subjects, &resolver);
+    let facts = AmenableRegistryEvidence::resolve(&dump, proof_subjects, &resolver);
     let ctx = InstantiationContext::new(&resolver, &facts, skip_map, expected);
     expand_report(&report(vec![parent_entry("chrono::DateTime")?])?, &ctx).into_diagnostic()
 }
@@ -622,7 +622,7 @@ fn expand_map(
         "evidence_links": links, "proof_records": [], "kani_proofs": [],
     }))
     .into_diagnostic()?;
-    let facts = RegistryFacts::resolve(&dump, &HashSet::new(), resolver);
+    let facts = AmenableRegistryEvidence::resolve(&dump, &HashSet::new(), resolver);
     let skip: VerifierSkipMap = HashMap::new();
     let wanted = ExpectedInstantiations::default();
     let ctx = InstantiationContext::new(resolver, &facts, &skip, &wanted);
@@ -687,7 +687,7 @@ fn rows_that_are_not_generic_pass_through_and_the_report_is_recounted() -> miett
     cordial::init_tracing();
     let resolver = resolver()?;
     let dump = registry(&all_four())?;
-    let facts = RegistryFacts::resolve(&dump, &HashSet::new(), &resolver);
+    let facts = AmenableRegistryEvidence::resolve(&dump, &HashSet::new(), &resolver);
     let skip: VerifierSkipMap = HashMap::new();
     let wanted = four_zones();
     let ctx = InstantiationContext::new(&resolver, &facts, &skip, &wanted);
@@ -722,7 +722,7 @@ fn the_bound_check_finds_a_type_defined_in_a_private_module() -> miette::Result<
     k.impl_of(20, 5, "TimeZone", 2, "Utc");
     let resolver = RustdocTypeResolver::new(vec![k.build()?], ResolveCaps::default());
     let dump = registry(&[("chrono::DateTime<chrono::Utc>", &WITNESSED)])?;
-    let facts = RegistryFacts::resolve(&dump, &HashSet::new(), &resolver);
+    let facts = AmenableRegistryEvidence::resolve(&dump, &HashSet::new(), &resolver);
     let skip: VerifierSkipMap = HashMap::new();
     let wanted = expected(&["chrono::Utc"]);
     let ctx = InstantiationContext::new(&resolver, &facts, &skip, &wanted);
@@ -731,6 +731,106 @@ fn the_bound_check_finds_a_type_defined_in_a_private_module() -> miette::Result<
     let text = note(find(&out, "chrono::DateTime")?);
     // The canonical head is the defining path, `chrono::utc::Utc`.
     assert!(text.contains("satisfied by Utc"), "{text}");
+    Ok(())
+}
+
+// ---- a coverage source that is not amenable --------------------------------
+
+/// Coverage as some other tool defines it: a fixed set of instantiations it
+/// has verified, with nothing in common with amenable's registry. It names no
+/// wrapper type, no dump and no proof record.
+struct FixedCoverage {
+    covered: Vec<TypeKey>,
+    /// The instantiations that also have a test exercising them.
+    tested: Vec<TypeKey>,
+}
+
+impl InstantiationEvidence for FixedCoverage {
+    fn instantiations_of(&self, head: &str) -> Vec<TypeKey> {
+        self.covered
+            .iter()
+            .filter(|key| key.head() == head)
+            .cloned()
+            .collect()
+    }
+
+    fn evidence_name_for(&self, key: &TypeKey) -> Option<String> {
+        self.covered
+            .contains(key)
+            .then(|| format!("verified({key})"))
+    }
+
+    fn verifiers_for(&self, key: &TypeKey) -> HashSet<String> {
+        if self.covered.contains(key) {
+            WITNESSED.iter().map(|v| (*v).to_string()).collect()
+        } else {
+            HashSet::new()
+        }
+    }
+
+    fn has_proof_test(&self, key: &TypeKey) -> bool {
+        self.tested.contains(key)
+    }
+}
+
+#[test]
+fn any_coverage_source_can_drive_the_expansion() -> miette::Result<()> {
+    cordial::init_tracing();
+    let resolver = resolver()?;
+    let resolve = |text: &str| {
+        resolver
+            .resolve(text)
+            .map_err(|reason| miette::miette!("`{text}`: {reason}"))
+    };
+    let source = FixedCoverage {
+        covered: vec![
+            resolve("chrono::DateTime<chrono::Utc>")?,
+            resolve("chrono::DateTime<chrono::FixedOffset>")?,
+            resolve("chrono::DateTime<chrono::Bare>")?,
+        ],
+        tested: vec![resolve("chrono::DateTime<chrono::Utc>")?],
+    };
+    let skip: VerifierSkipMap = HashMap::new();
+    let wanted = four_zones();
+    let ctx = InstantiationContext::new(&resolver, &source, &skip, &wanted);
+    let out =
+        expand_report(&report(vec![parent_entry("chrono::DateTime")?])?, &ctx).into_diagnostic()?;
+
+    // Covered by the source: Complete. Expected but not covered: Missing.
+    for (label, status) in [
+        ("chrono::DateTime<chrono::Utc>", AmenableStdStatus::Complete),
+        (
+            "chrono::DateTime<chrono::FixedOffset>",
+            AmenableStdStatus::Complete,
+        ),
+        (
+            "chrono::DateTime<chrono::Local>",
+            AmenableStdStatus::Missing,
+        ),
+        (
+            "chrono::DateTime<chrono_tz::Tz>",
+            AmenableStdStatus::Missing,
+        ),
+    ] {
+        assert_eq!(find(&out, label)?.status(), status, "{label}");
+    }
+    assert_eq!(
+        find(&out, "chrono::DateTime")?.status(),
+        AmenableStdStatus::Partial
+    );
+    // The source reported one the config did not expect; it is still shown.
+    let extra = find(&out, "chrono::DateTime<chrono::Bare>")?;
+    assert!(note(extra).contains("not in the expected list"));
+    // The source's proof-test knowledge is per instantiation too.
+    assert!(find(&out, "chrono::DateTime<chrono::Utc>")?.proof_test());
+    assert!(!find(&out, "chrono::DateTime<chrono::FixedOffset>")?.proof_test());
+    // The declared bounds come from rustdoc, whatever the source.
+    let text = note(find(&out, "chrono::DateTime")?);
+    assert!(text.contains("declared bounds `Tz: TimeZone`"), "{text}");
+    assert!(
+        text.contains("satisfied by Utc, FixedOffset, Local, Tz"),
+        "{text}"
+    );
     Ok(())
 }
 
@@ -770,7 +870,7 @@ fn real_chrono_zones_satisfy_the_timezone_bound_across_crates() -> miette::Resul
         "evidence_links": links, "proof_records": [], "kani_proofs": [],
     }))
     .into_diagnostic()?;
-    let facts = RegistryFacts::resolve(&dump, &HashSet::new(), &resolver);
+    let facts = AmenableRegistryEvidence::resolve(&dump, &HashSet::new(), &resolver);
     let skip: VerifierSkipMap = HashMap::new();
     let wanted = four_zones();
     let ctx = InstantiationContext::new(&resolver, &facts, &skip, &wanted);

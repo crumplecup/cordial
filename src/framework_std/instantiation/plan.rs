@@ -8,15 +8,15 @@ use crate::framework_std::type_identity::{TypeKey, TypeResolver, Unresolved};
 use crate::framework_std::verifier_skip::VerifierSkipMap;
 use crate::framework_std::{AmenableStdEntry, AmenableStdReport, AmenableStdStatus};
 
+use super::evidence::InstantiationEvidence;
 use super::expected::ExpectedInstantiations;
-use super::facts::RegistryFacts;
 use super::note::{ChildView, declared_bounds_note, rollup_summary, short_label};
 
 /// What expanding a report needs besides the report.
 #[derive(derive_new::new)]
 pub struct InstantiationContext<'a> {
     resolver: &'a dyn TypeResolver,
-    facts: &'a RegistryFacts,
+    evidence: &'a dyn InstantiationEvidence,
     skip_map: &'a VerifierSkipMap,
     expected: &'a ExpectedInstantiations,
 }
@@ -116,21 +116,21 @@ fn seeds_for(parent: &AmenableStdEntry, head: &str, ctx: &InstantiationContext<'
             }
         })
         .collect();
-    let mut extras: Vec<&TypeKey> = ctx
-        .facts
+    let mut extras: Vec<TypeKey> = ctx
+        .evidence
         .instantiations_of(head)
         .into_iter()
         .filter(|found| {
             !seeds
                 .iter()
-                .any(|seed| seed.key.as_ref().is_ok_and(|key| key == *found))
+                .any(|seed| seed.key.as_ref().is_ok_and(|key| key == found))
         })
         .collect();
     extras.sort_by_key(|key| key.to_string());
     extras.dedup();
     seeds.extend(extras.into_iter().map(|key| Seed {
         label: key.to_string(),
-        key: Ok(key.clone()),
+        key: Ok(key),
         expected: false,
     }));
     seeds
@@ -146,7 +146,7 @@ fn child_entry(
         (!seed.expected).then(|| "registered but not in the expected list".to_string());
     match &seed.key {
         Ok(key) => {
-            let verifiers = ctx.facts.verifiers_for(key);
+            let verifiers = ctx.evidence.verifiers_for(key);
             let exception = ctx
                 .skip_map
                 .get(&seed.label)
@@ -155,9 +155,9 @@ fn child_entry(
                 &seed.label,
                 parent.type_kind(),
                 false,
-                ctx.facts.evidence_name_for(key),
+                ctx.evidence.evidence_name_for(key),
                 &verifiers,
-                ctx.facts.has_proof_test(key),
+                ctx.evidence.has_proof_test(key),
                 exception,
             ))?;
             Ok(entry.into_instantiation(parent.type_path(), origin_note))

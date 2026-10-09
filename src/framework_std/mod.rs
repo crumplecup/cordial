@@ -60,16 +60,18 @@ pub use self::{
         AMENABLE_IMPL_CRATE, AMENABLE_PATCH_SET, AmenableStdOptions, assess_amenable_std_coverage,
         ensure_registry_dump_for_assessor,
     },
-    instantiation::{ExpectedInstantiations, InstantiationContext, RegistryFacts, expand_report},
+    instantiation::{
+        AmenableRegistryEvidence, EvidenceKey, ExpectedInstantiations, InstantiationContext,
+        InstantiationEvidence, ProofKey, expand_report, resolve_ext_evidence,
+    },
     proof_harness::collect_proof_chain_subjects,
     registry::{
         EvidenceLinkDump, ProofRecordDump, RegistryDump, evidence_for_std_type,
         parse_rust_std_standard_inner, witness_verifiers_for_std_type,
     },
     type_identity::{
-        CrateIndex, DeclaredBound, EvidenceKey, Implements, Lookup, ProofKey, RawBound,
-        ResolveCaps, RustdocTypeResolver, TypeKey, TypeResolver, TypeText, Unresolved,
-        normalize_type_text, parse_type_text, resolve_ext_evidence,
+        CrateIndex, DeclaredBound, Implements, Lookup, RawBound, ResolveCaps, RustdocTypeResolver,
+        TypeKey, TypeResolver, TypeText, Unresolved, normalize_type_text, parse_type_text,
     },
     verifier_skip::{VerifierSkipEntry, VerifierSkipMap, load_verifier_skip_map},
 };

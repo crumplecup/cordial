@@ -7,15 +7,11 @@
 //! See `docs/planning/amenable-ext-generic-instantiations.md`, phase A.
 
 mod crate_index;
-mod evidence;
 mod key;
 mod resolver;
 mod text;
 
 pub use crate_index::{CrateIndex, Lookup, RawBound};
-pub use evidence::{
-    EvidenceKey, ProofKey, resolve_ext_evidence, resolve_ext_proofs, resolve_proof_subjects,
-};
 pub use key::TypeKey;
 pub use resolver::{
     DeclaredBound, Implements, ResolveCaps, RustdocTypeResolver, TypeResolver, Unresolved,
