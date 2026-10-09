@@ -10,6 +10,7 @@ use cordial::{
 use miette::{IntoDiagnostic, WrapErr};
 
 const CANARY: &str = include_str!("fixtures/quality/feature_warnings/canary.jsonl");
+const CANARY_STDERR: &str = include_str!("fixtures/quality/feature_warnings/canary.stderr");
 
 /// Serializes tests that set the process-wide `CORDIAL_CARGO` env var.
 static CARGO_ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -17,6 +18,11 @@ static CARGO_ENV_LOCK: Mutex<()> = Mutex::new(());
 fn canary_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/quality/feature_warnings/canary.jsonl")
+}
+
+fn canary_stderr_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/quality/feature_warnings/canary.stderr")
 }
 
 fn combo(features: &[&str]) -> FeatureSet {
@@ -80,6 +86,7 @@ fn parse_attributes_messages_to_the_next_artifacts_features() {
     cordial::init_tracing();
     let run = parse_cargo_hack_output(CANARY, "canary");
     assert_eq!(run.combination_count(), 4);
+    assert_eq!(run.failed_combination_count(), 1);
 }
 
 #[test]
@@ -89,7 +96,7 @@ fn records_keep_only_feature_dependent_sites() -> miette::Result<()> {
     let records = records_from_run(&run, Path::new("/workspace"), false, &BTreeSet::new(), 6)
         .into_diagnostic()?;
     let lines: Vec<u32> = records.iter().map(|record| record.line()).collect();
-    assert_eq!(lines, vec![3, 7, 20], "{records:?}");
+    assert_eq!(lines, vec![3, 7, 20, 30], "{records:?}");
 
     let import = &records[0];
     assert_eq!(import.rule_id(), FeatureWarningRuleId::Unused001);
@@ -123,7 +130,7 @@ fn universal_warnings_are_ordinary_and_only_reported_on_request() -> miette::Res
     let run = parse_cargo_hack_output(CANARY, "canary");
     let records = records_from_run(&run, Path::new("/workspace"), true, &BTreeSet::new(), 6)
         .into_diagnostic()?;
-    assert_eq!(records.len(), 4);
+    assert_eq!(records.len(), 5);
     let universal = records
         .iter()
         .find(|record| record.line() == 12)
@@ -164,7 +171,8 @@ fn session_writes_checklist_grouped_by_gate_from_injected_cargo() -> miette::Res
 
     let fake = fixture.path().join("fake-cargo");
     let script = format!(
-        "#!/bin/sh\nif [ \"$2\" = \"--version\" ]; then echo cargo-hack 0.6; exit 0; fi\ncat \"{}\"\n",
+        "#!/bin/sh\nif [ \"$2\" = \"--version\" ]; then echo cargo-hack 0.6; exit 0; fi\ncat \"{}\" >&2\ncat \"{}\"\nexit 1\n",
+        canary_stderr_path().display(),
         canary_path().display()
     );
     fs::write(&fake, script).into_diagnostic()?;
@@ -195,16 +203,26 @@ fn session_writes_checklist_grouped_by_gate_from_injected_cargo() -> miette::Res
     }
     drop(guard);
     let outcome = outcome.into_diagnostic().wrap_err("session run")?;
-    assert_eq!(outcome.findings().count(), 3);
+    assert_eq!(outcome.findings().count(), 4);
 
     let findings_dir = store.path().join("findings");
     let csv = fs::read_to_string(findings_dir.join("feature-warnings.csv")).into_diagnostic()?;
     assert!(csv.contains("FEATURE-WARNING-001"));
     assert!(csv.contains("FEATURE-WARNING-002"));
+    assert!(csv.contains("FEATURE-WARNING-003"));
 
     let checklist =
         fs::read_to_string(findings_dir.join("feature-warnings.checklist.md")).into_diagnostic()?;
-    assert!(checklist.contains("**Open items:** 3"));
+    assert!(checklist.contains("**Open items:** 4"));
+    assert!(checklist.contains("### Does not compile: `E0432` (1)"));
+    assert!(checklist.contains("unresolved import `crate::missing`"));
+    assert!(
+        checklist
+            .find("Does not compile")
+            .zip(checklist.find("#[cfg(feature = \"tracing\")]"))
+            .is_some_and(|(failure, gate)| failure < gate),
+        "failures must lead the checklist"
+    );
     assert!(checklist.contains("### `#[cfg(feature = \"tracing\")]` (2)"));
     assert!(
         checklist.contains("### `#[cfg(all(feature = \"panics\", feature = \"tracing\"))]` (1)")
@@ -213,7 +231,7 @@ fn session_writes_checklist_grouped_by_gate_from_injected_cargo() -> miette::Res
 
     let summary =
         fs::read_to_string(findings_dir.join("feature-warnings-summary.md")).into_diagnostic()?;
-    assert!(summary.contains("**3** feature-dependent"));
+    assert!(summary.contains("**4** feature-dependent"));
     Ok(())
 }
 
@@ -349,5 +367,102 @@ fn private_feature_threshold_decides_when_a_gate_is_wide() -> miette::Result<()>
     assert!(!narrow[0].wide());
     assert!(wide[0].wide());
     assert!(wide[0].advice().contains("private feature"));
+    Ok(())
+}
+
+#[test]
+fn a_failed_build_is_named_from_the_matching_stderr_line() -> miette::Result<()> {
+    cordial::init_tracing();
+    let run = cordial::parse_cargo_hack_run(CANARY, CANARY_STDERR, "canary");
+    let records = records_from_run(&run, Path::new("/workspace"), false, &BTreeSet::new(), 6)
+        .into_diagnostic()?;
+    let failure = records
+        .iter()
+        .find(|record| record.rule_id() == FeatureWarningRuleId::Failure003)
+        .ok_or_else(|| miette::miette!("no failure record"))?;
+    assert_eq!(failure.lint(), "E0432");
+    assert_eq!(failure.line(), 30);
+    assert_eq!(failure.message(), "unresolved import `crate::missing`");
+    assert_eq!(
+        failure.triggering(),
+        "fails in 1 of 5 combinations, e.g. `--no-default-features --features broken`"
+    );
+    assert!(
+        failure.advice().contains("gated out"),
+        "{}",
+        failure.advice()
+    );
+    assert_eq!(failure.gate(), "");
+    // The warning the failed build printed before dying is not a finding.
+    assert!(records.iter().all(|record| record.line() != 40));
+    Ok(())
+}
+
+#[test]
+fn without_stderr_a_failed_build_is_reported_as_an_unknown_combination() -> miette::Result<()> {
+    cordial::init_tracing();
+    let run = parse_cargo_hack_output(CANARY, "canary");
+    let records = records_from_run(&run, Path::new("/workspace"), false, &BTreeSet::new(), 6)
+        .into_diagnostic()?;
+    let failure = records
+        .iter()
+        .find(|record| record.rule_id() == FeatureWarningRuleId::Failure003)
+        .ok_or_else(|| miette::miette!("no failure record"))?;
+    assert!(failure.triggering().contains("(unknown combination)"));
+    Ok(())
+}
+
+#[test]
+fn warnings_buffered_before_a_failed_build_do_not_leak_into_the_next_combination()
+-> miette::Result<()> {
+    cordial::init_tracing();
+    let output = [
+        hack_line(
+            "message",
+            &[],
+            Some(("dead_code", "function `lost` is never used", 8)),
+        ),
+        r#"{"reason":"build-finished","success":false}"#.to_string(),
+        hack_line("artifact", &["a"], None),
+        r#"{"reason":"build-finished","success":true}"#.to_string(),
+    ]
+    .join("\n");
+    let run = parse_cargo_hack_output(&output, "p");
+    let records =
+        records_from_run(&run, Path::new("/w"), true, &BTreeSet::new(), 6).into_diagnostic()?;
+    assert!(
+        records.iter().all(|record| record.line() != 8),
+        "a warning from the failed build was attributed to the next one: {records:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_cargo_hack_failure_with_no_build_error_still_produces_a_finding() -> miette::Result<()> {
+    cordial::init_tracing();
+    let stderr = "error: failed to select a version for the requirement `x = \"^9\"`\n";
+    let run = parse_cargo_hack_output("", "p").with_hack_failure(stderr);
+    let records =
+        records_from_run(&run, Path::new("/w"), false, &BTreeSet::new(), 6).into_diagnostic()?;
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].rule_id(), FeatureWarningRuleId::Failure003);
+    assert_eq!(records[0].file(), Path::new("/w/Cargo.toml"));
+    assert!(records[0].message().contains("failed to select a version"));
+    assert_eq!(records[0].triggering(), "the whole run");
+    Ok(())
+}
+
+#[test]
+fn a_build_error_explains_a_failed_run_so_no_extra_hack_finding_is_added() -> miette::Result<()> {
+    cordial::init_tracing();
+    let run = cordial::parse_cargo_hack_run(CANARY, CANARY_STDERR, "canary")
+        .with_hack_failure("error: process didn't exit successfully");
+    let records = records_from_run(&run, Path::new("/workspace"), false, &BTreeSet::new(), 6)
+        .into_diagnostic()?;
+    let failures = records
+        .iter()
+        .filter(|record| record.rule_id() == FeatureWarningRuleId::Failure003)
+        .count();
+    assert_eq!(failures, 1);
     Ok(())
 }

@@ -18,6 +18,8 @@ pub enum FeatureWarningRuleId {
     Unused001,
     /// A `dead_code` warning under some combinations.
     DeadCode002,
+    /// A feature combination that does not compile.
+    Failure003,
 }
 
 impl FeatureWarningRuleId {
@@ -27,6 +29,7 @@ impl FeatureWarningRuleId {
         match self {
             Self::Unused001 => "FEATURE-WARNING-001",
             Self::DeadCode002 => "FEATURE-WARNING-002",
+            Self::Failure003 => "FEATURE-WARNING-003",
         }
     }
 
@@ -36,6 +39,7 @@ impl FeatureWarningRuleId {
         match value {
             "FEATURE-WARNING-001" => Some(Self::Unused001),
             "FEATURE-WARNING-002" => Some(Self::DeadCode002),
+            "FEATURE-WARNING-003" => Some(Self::Failure003),
             _ => None,
         }
     }
@@ -81,6 +85,7 @@ impl Rule for FeatureWarningRule {
                 "unused import or binding under some feature combinations"
             }
             FeatureWarningRuleId::DeadCode002 => "dead code under some feature combinations",
+            FeatureWarningRuleId::Failure003 => "feature combination does not compile",
         }
     }
 }

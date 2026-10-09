@@ -5,15 +5,23 @@
 {"reason": "compiler-message", "package_id": "path+file:///workspace/canary#0.1.0", "message": {"level": "warning", "message": "`canary` (lib) generated 4 warnings", "code": null, "spans": []}}
 {"reason": "compiler-message", "package_id": "path+file:///workspace/other#0.2.0", "message": {"level": "warning", "message": "function `elsewhere` is never used", "code": {"code": "dead_code", "explanation": null}, "spans": [{"file_name": "src/lib.rs", "line_start": 99, "is_primary": true}]}}
 {"reason": "compiler-artifact", "package_id": "path+file:///workspace/canary#0.1.0", "features": [], "target": {"kind": ["lib"], "name": "canary"}}
+{"reason": "build-finished", "success": true}
 {"reason": "compiler-message", "package_id": "path+file:///workspace/canary#0.1.0", "message": {"level": "warning", "message": "struct `Both` is never constructed", "code": {"code": "dead_code", "explanation": null}, "spans": [{"file_name": "src/lib.rs", "line_start": 20, "is_primary": true}]}}
 {"reason": "compiler-message", "package_id": "path+file:///workspace/canary#0.1.0", "message": {"level": "warning", "message": "unused variable: `x`", "code": {"code": "unused_variables", "explanation": null}, "spans": [{"file_name": "src/lib.rs", "line_start": 12, "is_primary": true}]}}
 {"reason": "compiler-artifact", "package_id": "path+file:///workspace/canary#0.1.0", "features": ["tracing"], "target": {"kind": ["lib"], "name": "canary"}}
 {"reason": "compiler-artifact", "package_id": "path+file:///workspace/canary#0.1.0", "features": ["tracing"], "target": {"kind": ["bin"], "name": "canary"}}
+{"reason": "build-finished", "success": true}
 {"reason": "compiler-message", "package_id": "path+file:///workspace/canary#0.1.0", "message": {"level": "warning", "message": "unused import: `std::fmt::Write`", "code": {"code": "unused_imports", "explanation": null}, "spans": [{"file_name": "src/lib.rs", "line_start": 3, "is_primary": true}]}}
 {"reason": "compiler-message", "package_id": "path+file:///workspace/canary#0.1.0", "message": {"level": "warning", "message": "function `helper` is never used", "code": {"code": "dead_code", "explanation": null}, "spans": [{"file_name": "src/lib.rs", "line_start": 7, "is_primary": true}]}}
 {"reason": "compiler-message", "package_id": "path+file:///workspace/canary#0.1.0", "message": {"level": "warning", "message": "struct `Both` is never constructed", "code": {"code": "dead_code", "explanation": null}, "spans": [{"file_name": "src/lib.rs", "line_start": 20, "is_primary": true}]}}
 {"reason": "compiler-message", "package_id": "path+file:///workspace/canary#0.1.0", "message": {"level": "warning", "message": "unused variable: `x`", "code": {"code": "unused_variables", "explanation": null}, "spans": [{"file_name": "src/lib.rs", "line_start": 12, "is_primary": true}]}}
 {"reason": "compiler-artifact", "package_id": "path+file:///workspace/canary#0.1.0", "features": ["panics"], "target": {"kind": ["lib"], "name": "canary"}}
+{"reason": "build-finished", "success": true}
 {"reason": "compiler-message", "package_id": "path+file:///workspace/canary#0.1.0", "message": {"level": "warning", "message": "unused variable: `x`", "code": {"code": "unused_variables", "explanation": null}, "spans": [{"file_name": "src/lib.rs", "line_start": 12, "is_primary": true}]}}
 {"reason": "compiler-message", "package_id": "path+file:///workspace/canary#0.1.0", "message": {"level": "error", "message": "a hard error follows", "code": {"code": "unused_variables", "explanation": null}, "spans": [{"file_name": "src/lib.rs", "line_start": 1, "is_primary": true}]}}
 {"reason": "compiler-artifact", "package_id": "path+file:///workspace/canary#0.1.0", "features": ["panics", "tracing"], "target": {"kind": ["lib"], "name": "canary"}}
+{"reason": "build-finished", "success": true}
+{"reason": "compiler-message", "package_id": "path+file:///workspace/canary#0.1.0", "message": {"level": "warning", "message": "function `lost` is never used", "code": {"code": "dead_code", "explanation": null}, "spans": [{"file_name": "src/lib.rs", "line_start": 40, "is_primary": true}]}}
+{"reason": "compiler-message", "package_id": "path+file:///workspace/canary#0.1.0", "message": {"level": "error", "message": "unresolved import `crate::missing`", "code": {"code": "E0432", "explanation": null}, "spans": [{"file_name": "src/lib.rs", "line_start": 30, "is_primary": true}]}}
+{"reason": "compiler-message", "package_id": "path+file:///workspace/canary#0.1.0", "message": {"level": "error", "message": "could not compile `canary` (lib) due to 1 previous error", "code": null, "spans": []}}
+{"reason": "build-finished", "success": false}

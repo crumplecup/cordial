@@ -173,11 +173,11 @@ impl Reporter for FeatureWarningChecklistReporter {
         body.push_str("# feature warnings checklist\n\n");
         body.push_str(&format!("**Open items:** {}\n\n", open.len()));
         body.push_str(
-            "`cargo check` and clippy compile one feature set. These warnings \
-             fire only under some feature combinations of `cargo hack check \
+            "`cargo check` and clippy compile one feature set. These problems \
+             appear only under some feature combinations of `cargo hack check \
              --feature-powerset`, so they stay hidden until another feature \
-             set is built. Items are grouped by the `cfg` gate that would \
-             silence them.\n\n",
+             set is built. Combinations that do not compile come first; the \
+             warnings are grouped by the `cfg` gate that would silence them.\n\n",
         );
 
         for crate_name in crate_names(&open) {
@@ -188,8 +188,35 @@ impl Reporter for FeatureWarningChecklistReporter {
                 .collect();
             body.push_str(&format!("## `{crate_name}`\n\n"));
 
+            let (failures, warnings): (Vec<&FeatureWarningRow>, Vec<&FeatureWarningRow>) =
+                crate_open
+                    .iter()
+                    .copied()
+                    .partition(|row| row.rule_id == "FEATURE-WARNING-003");
+
+            // Failures lead: a combination that does not compile cannot have
+            // its warnings assessed, so it is the more serious problem.
+            let mut by_code: BTreeMap<String, Vec<&FeatureWarningRow>> = BTreeMap::new();
+            for row in &failures {
+                by_code.entry(row.lint.clone()).or_default().push(row);
+            }
+            for (code, entries) in by_code {
+                body.push_str(&format!(
+                    "### Does not compile: `{code}` ({})\n\n{}\n\n",
+                    entries.len(),
+                    entries[0].advice
+                ));
+                for entry in entries {
+                    body.push_str(&format!(
+                        "- [ ] `{}:{}` — {} ({})\n",
+                        entry.file, entry.line, entry.message, entry.triggering
+                    ));
+                }
+                body.push('\n');
+            }
+
             let mut by_gate: BTreeMap<String, Vec<&FeatureWarningRow>> = BTreeMap::new();
-            for row in &crate_open {
+            for row in &warnings {
                 by_gate.entry(row.gate.clone()).or_default().push(row);
             }
 

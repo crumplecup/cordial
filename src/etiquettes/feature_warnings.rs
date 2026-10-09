@@ -9,13 +9,14 @@
 //! gated off, warns under the other combinations and nobody sees it.
 //! `cargo hack` only fails on errors, so its warnings scroll past.
 //!
-//! **Flags.** `FEATURE-WARNING-001` for `unused_*` lints and
-//! `FEATURE-WARNING-002` for `dead_code`; one finding per `(file, line,
-//! lint)`, grouped in the checklist by suggested gate.
+//! **Flags.** `FEATURE-WARNING-001` for `unused_*` lints,
+//! `FEATURE-WARNING-002` for `dead_code`, and `FEATURE-WARNING-003` for a
+//! feature combination that does not compile (or a `cargo hack` run that
+//! failed outright); one finding per `(file, line, lint)`, grouped in the
+//! checklist by suggested gate, failures first.
 //!
 //! **Ignores.** Warnings that fire in every combination (an ordinary warning
-//! clippy already sees), unless `include_universal` is set. Combinations that
-//! fail to compile. Crates in `[feature_warnings] skip_crates`. Skipped when
+//! clippy already sees), unless `include_universal` is set. Crates in `[feature_warnings] skip_crates`. Skipped when
 //! `cargo-hack` is not installed.
 //!
 //! **Outputs.** `{store}/findings/feature-warnings.checklist.md`,
@@ -42,7 +43,10 @@ pub use probe::FeatureWarningSiteProbe;
 pub use reporter::{
     FeatureWarningChecklistReporter, FeatureWarningCsvReporter, FeatureWarningSummaryReporter,
 };
-pub use scan::{HackRun, parse_cargo_hack_output, records_from_run, scan_crate_feature_warnings};
+pub use scan::{
+    HackRun, failure_advice, parse_cargo_hack_output, parse_cargo_hack_run, records_from_run,
+    scan_crate_feature_warnings,
+};
 pub use types::{FeatureWarningRecord, FeatureWarningRuleId};
 
 use std::sync::LazyLock;
@@ -91,7 +95,7 @@ pub static FEATURE_WARNINGS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLo
             EtiquetteExplain::new(
                 "Does a warning fire under some feature combinations that a normal build never compiles?",
                 "cargo check and clippy compile one feature set. An import used only by code behind a feature, or a helper whose single consumer is gated off, warns under the other combinations and nobody sees it. cargo hack only fails on errors, so its warnings scroll past.",
-                "Runs cargo hack check --feature-powerset and records each warning that fires in some combinations and not others, with the cfg gate that would silence it (an any(...) over the features that use the item, an all(...) when it needs several, or a note that no single gate fits). Warnings that fire everywhere are ordinary warnings and are left to cargo check. Skipped when cargo-hack is missing, and off unless [feature_warnings] enabled = true.",
+                "Runs cargo hack check --feature-powerset and records each warning that fires in some combinations and not others, with the cfg gate that would silence it (an any(...) over the features that use the item, an all(...) when it needs several, or a note that no single gate fits). A combination that fails to compile is reported too, as the most serious case, since its warnings cannot be assessed at all. Warnings that fire everywhere are ordinary warnings and are left to cargo check. Skipped when cargo-hack is missing, and off unless [feature_warnings] enabled = true.",
                 "`[feature_warnings] enabled = false` in cordial.toml (the default).",
                 vec![
                     EtiquetteRuleExplain::new(
@@ -101,6 +105,10 @@ pub static FEATURE_WARNINGS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLo
                     EtiquetteRuleExplain::new(
                         "FEATURE-WARNING-002",
                         "Dead code under some feature combinations",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "FEATURE-WARNING-003",
+                        "A feature combination that does not compile (or a cargo hack run that failed outright)",
                     ),
                 ],
             ),

@@ -146,7 +146,8 @@ pub use etiquettes::error_sites::{
 #[cfg(feature = "feature_warnings")]
 pub use etiquettes::feature_warnings::{
     FEATURE_WARNINGS_ETIQUETTE, FeatureSet, FeatureWarningRecord, FeatureWarningRuleId, Gate,
-    HackRun, parse_cargo_hack_output, records_from_run, scan_crate_feature_warnings, suggest_gate,
+    HackRun, failure_advice, parse_cargo_hack_output, parse_cargo_hack_run, records_from_run,
+    scan_crate_feature_warnings, suggest_gate,
 };
 #[cfg(feature = "foreign_error_attenuation")]
 pub use etiquettes::foreign_error_attenuation::{

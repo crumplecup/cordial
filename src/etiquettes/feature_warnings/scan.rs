@@ -24,11 +24,24 @@ struct SiteHits {
     message: String,
 }
 
+/// What the powerset run saw at one compile-error site.
+#[derive(Debug, Default, Clone)]
+struct FailureHits {
+    /// Descriptions of the failed combinations (`--no-default-features ...`).
+    combos: BTreeSet<String>,
+    message: String,
+}
+
 /// Parsed output of one `cargo hack check --message-format=json` run.
 #[derive(Debug, Default, Clone)]
 pub struct HackRun {
     combos: BTreeSet<FeatureSet>,
     sites: BTreeMap<SiteKey, SiteHits>,
+    /// One description per invocation whose build failed.
+    failed_combos: Vec<String>,
+    failures: BTreeMap<SiteKey, FailureHits>,
+    /// `cargo hack` itself failed without any build error to point at.
+    hack_failure: Option<String>,
 }
 
 impl HackRun {
@@ -37,6 +50,40 @@ impl HackRun {
     pub fn combination_count(&self) -> usize {
         self.combos.len()
     }
+
+    /// Number of invocations whose build failed.
+    #[instrument(level = "trace", skip(self))]
+    pub fn failed_combination_count(&self) -> usize {
+        self.failed_combos.len()
+    }
+
+    /// Record that `cargo hack` exited unsuccessfully. Only meaningful when
+    /// no failed build explains it (a dependency or manifest problem); the
+    /// `error` lines of `stderr` become the finding's message.
+    #[instrument(level = "debug", skip(self, stderr))]
+    pub fn with_hack_failure(mut self, stderr: &str) -> Self {
+        if self.failures.is_empty() {
+            let lines: Vec<&str> = stderr
+                .lines()
+                .filter(|line| line.starts_with("error"))
+                .collect();
+            let message = if lines.is_empty() {
+                "cargo hack exited unsuccessfully".to_string()
+            } else {
+                lines.join(" | ")
+            };
+            self.hack_failure = Some(message);
+        }
+        self
+    }
+}
+
+/// Raw output of one `cargo hack` invocation.
+#[derive(Debug)]
+struct HackOutput {
+    stdout: String,
+    stderr: String,
+    success: bool,
 }
 
 /// Scan a crate: run the powerset unless this package is skipped or
@@ -60,7 +107,10 @@ pub fn scan_crate_feature_warnings(
         return Ok(Vec::new());
     }
     let output = run_cargo_hack(crate_root, crate_name, policy)?;
-    let run = parse_cargo_hack_output(&output, crate_name);
+    let mut run = parse_cargo_hack_run(&output.stdout, &output.stderr, crate_name);
+    if !output.success {
+        run = run.with_hack_failure(&output.stderr);
+    }
     let mut ignore: BTreeSet<String> = policy.exclude_features().iter().cloned().collect();
     ignore.insert("default".to_string());
     records_from_run(
@@ -72,36 +122,77 @@ pub fn scan_crate_feature_warnings(
     )
 }
 
-/// Parse `cargo hack check --message-format=json` output for `package`.
-///
-/// Compiler messages carry no feature set, but each package's
-/// `compiler-artifact` record does. Messages are buffered until that
-/// package's next artifact and tagged with its features, so a combination
-/// that failed to compile (no artifact) contributes nothing.
+/// Parse `cargo hack check --message-format=json` stdout for `package`,
+/// without stderr: a failed build cannot be named, so it is reported as an
+/// unknown combination.
 #[instrument(level = "debug", skip(output))]
 pub fn parse_cargo_hack_output(output: &str, package: &str) -> HackRun {
+    parse_cargo_hack_run(output, "", package)
+}
+
+/// Parse a `cargo hack check --message-format=json` run for `package`.
+///
+/// Compiler messages carry no feature set, but each package's
+/// `compiler-artifact` record does. Warnings are buffered until that
+/// package's next artifact and tagged with its features.
+///
+/// A build that fails produces no artifact, so it is found by its
+/// `build-finished` record with `success: false`. Its feature set is not in
+/// the JSON; `cargo hack` prints `info: running` lines on stderr once per
+/// invocation, in the same order as the `build-finished` records, so the Nth
+/// finished build takes the Nth description.
+#[instrument(level = "debug", skip(stdout, stderr))]
+pub fn parse_cargo_hack_run(stdout: &str, stderr: &str, package: &str) -> HackRun {
+    let invocations = invocation_descriptions(stderr);
     let mut run = HackRun::default();
-    let mut pending: Vec<(SiteKey, String)> = Vec::new();
-    for line in output.lines() {
+    let mut warnings: Vec<(SiteKey, String)> = Vec::new();
+    let mut errors: Vec<(SiteKey, String)> = Vec::new();
+    let mut finished = 0usize;
+    for line in stdout.lines() {
         let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
         };
+        let reason = value.get("reason").and_then(serde_json::Value::as_str);
+        if reason == Some("build-finished") {
+            if value.get("success").and_then(serde_json::Value::as_bool) == Some(false) {
+                let label = invocations
+                    .get(finished)
+                    .cloned()
+                    .unwrap_or_else(|| "(unknown combination)".to_string());
+                run.failed_combos.push(label.clone());
+                for (key, message) in errors.drain(..) {
+                    let hits = run.failures.entry(key).or_default();
+                    hits.combos.insert(label.clone());
+                    if hits.message.is_empty() {
+                        hits.message = message;
+                    }
+                }
+            }
+            // Whatever this build buffered is settled; never let it leak
+            // into the next combination's artifact.
+            warnings.clear();
+            errors.clear();
+            finished += 1;
+            continue;
+        }
         let Some(id) = value.get("package_id").and_then(serde_json::Value::as_str) else {
             continue;
         };
         if package_name(id) != package {
             continue;
         }
-        match value.get("reason").and_then(serde_json::Value::as_str) {
+        match reason {
             Some("compiler-message") => {
-                if let Some(site) = warning_site(&value) {
-                    pending.push(site);
+                if let Some(site) = diagnostic_site(&value, "warning") {
+                    warnings.push(site);
+                } else if let Some(site) = diagnostic_site(&value, "error") {
+                    errors.push(site);
                 }
             }
             Some("compiler-artifact") => {
                 let combo = artifact_features(&value);
                 run.combos.insert(combo.clone());
-                for (key, message) in pending.drain(..) {
+                for (key, message) in warnings.drain(..) {
                     let hits = run.sites.entry(key).or_default();
                     hits.combos.insert(combo.clone());
                     hits.names.extend(backticked(&message));
@@ -114,6 +205,27 @@ pub fn parse_cargo_hack_output(output: &str, package: &str) -> HackRun {
         }
     }
     run
+}
+
+/// The `cargo check ...` arguments of each `info: running` line, in order.
+#[instrument(level = "trace", skip(stderr))]
+fn invocation_descriptions(stderr: &str) -> Vec<String> {
+    stderr
+        .lines()
+        .filter_map(|line| {
+            let rest = line.strip_prefix("info: running `cargo ")?;
+            let command = rest.split('`').next()?;
+            // cargo-hack appends pass-through arguments (`--message-format`,
+            // `--target-dir <path>`) before the feature flags; keep only the
+            // part that says which features were on.
+            let start = ["--no-default-features", "--all-features", "--features"]
+                .iter()
+                .filter_map(|flag| command.find(flag))
+                .min()
+                .unwrap_or(0);
+            Some(command[start..].trim().to_string())
+        })
+        .collect()
 }
 
 /// Turn a parsed run into one record per feature-dependent site.
@@ -151,6 +263,52 @@ pub fn records_from_run(
                 .build()?,
         );
     }
+    let attempted = total + run.failed_combos.len();
+    for ((file, line, code), hits) in &run.failures {
+        let example = hits
+            .combos
+            .iter()
+            .min_by_key(|combo| combo.len())
+            .map(|combo| format!(", e.g. `{combo}`"))
+            .unwrap_or_default();
+        records.push(
+            FeatureWarningRecord::builder()
+                .rule_id(FeatureWarningRuleId::Failure003)
+                .lint(code.clone())
+                .file(resolve_root.join(file))
+                .line(*line)
+                .message(hits.message.clone())
+                .gate(String::new())
+                .wide(false)
+                .advice(failure_advice(code))
+                .triggering(format!(
+                    "fails in {} of {attempted} combinations{example}",
+                    hits.combos.len()
+                ))
+                .build()?,
+        );
+    }
+    if let Some(message) = &run.hack_failure {
+        records.push(
+            FeatureWarningRecord::builder()
+                .rule_id(FeatureWarningRuleId::Failure003)
+                .lint("cargo-hack".to_string())
+                .file(resolve_root.join("Cargo.toml"))
+                .line(1)
+                .message(message.clone())
+                .gate(String::new())
+                .wide(false)
+                .advice(
+                    "`cargo hack` failed before or outside any build, so no feature \
+                     combination could be checked. Run `cargo hack check \
+                     --feature-powerset` by hand to see the full error; a manifest or \
+                     dependency problem is the usual cause."
+                        .to_string(),
+                )
+                .triggering("the whole run".to_string())
+                .build()?,
+        );
+    }
     records.sort_by(|left, right| {
         left.file()
             .cmp(right.file())
@@ -158,6 +316,24 @@ pub fn records_from_run(
             .then(left.lint().cmp(right.lint()))
     });
     Ok(records)
+}
+
+/// What to do about a combination that does not compile.
+#[instrument(level = "debug")]
+pub fn failure_advice(code: &str) -> String {
+    let cause = match code {
+        "E0432" | "E0433" | "E0412" | "E0425" | "E0405" | "E0599" | "E0603" => {
+            "A name used here is gated out in these combinations: the definition sits \
+             behind a feature that these combinations do not enable."
+        }
+        _ => "The compiler rejects this code in these combinations.",
+    };
+    format!(
+        "{cause} Fix it before anything else: warnings in a combination that does \
+         not compile cannot be assessed. Either make the feature that gates the \
+         definition imply the one that gates this use (in `Cargo.toml`), or give this \
+         use the same `cfg` as the definition."
+    )
 }
 
 /// `combos` with `ignored` features removed. Umbrella features (`default`,
@@ -225,15 +401,25 @@ fn artifact_features(value: &serde_json::Value) -> FeatureSet {
         .unwrap_or_default()
 }
 
-/// The `(site, message)` of a coded warning; `None` for errors, notes, and
-/// the uncoded "N warnings emitted" summary.
+/// The `(site, message)` of a diagnostic at `level` with a source span;
+/// `None` for other levels and for the span-less "N warnings emitted" and
+/// "could not compile" summaries. Warnings must carry a lint code; errors
+/// without one (a syntax error) are keyed as `error`.
 #[instrument(level = "trace", skip(value))]
-fn warning_site(value: &serde_json::Value) -> Option<(SiteKey, String)> {
+fn diagnostic_site(value: &serde_json::Value, level: &str) -> Option<(SiteKey, String)> {
     let message = value.get("message")?;
-    if message.get("level")?.as_str()? != "warning" {
+    if message.get("level")?.as_str()? != level {
         return None;
     }
-    let lint = message.get("code")?.get("code")?.as_str()?.to_string();
+    let code = message
+        .get("code")
+        .and_then(|code| code.get("code"))
+        .and_then(serde_json::Value::as_str);
+    let lint = match (level, code) {
+        (_, Some(code)) => code.to_string(),
+        ("error", None) => "error".to_string(),
+        _ => return None,
+    };
     let text = message.get("message")?.as_str()?.trim().to_string();
     let spans = message.get("spans")?.as_array()?;
     let primary = spans
@@ -366,7 +552,7 @@ fn run_cargo_hack(
     crate_root: &Path,
     crate_name: &str,
     policy: &FeatureWarningsThresholds,
-) -> CordialResult<String> {
+) -> CordialResult<HackOutput> {
     let target_dir = crate_root.join("target").join("feature-warnings");
     let mut command = cargo_command();
     command
@@ -390,5 +576,9 @@ fn run_cargo_hack(
         command.arg("--group-features").arg(group.join(","));
     }
     let output = command.output()?;
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    Ok(HackOutput {
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        success: output.status.success(),
+    })
 }

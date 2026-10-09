@@ -1,0 +1,6 @@
+info: running `cargo check --message-format=json --target-dir /w/target/feature-warnings --no-default-features` on canary (1/5)
+info: running `cargo check --message-format=json --target-dir /w/target/feature-warnings --no-default-features --features tracing` on canary (2/5)
+info: running `cargo check --message-format=json --target-dir /w/target/feature-warnings --no-default-features --features panics` on canary (3/5)
+info: running `cargo check --message-format=json --target-dir /w/target/feature-warnings --no-default-features --features panics,tracing` on canary (4/5)
+info: running `cargo check --message-format=json --target-dir /w/target/feature-warnings --no-default-features --features broken` on canary (5/5)
+error: process didn't exit successfully: `cargo check`

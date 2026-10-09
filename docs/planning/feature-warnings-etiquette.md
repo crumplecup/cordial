@@ -27,7 +27,8 @@ Agents must close open items before merging to `main`
 | --- | --- |
 | A rustc warning that fires in some feature combinations and is absent in others | yes, one finding per `(file, line, lint)` |
 | A warning that fires in **every** combination | no: an ordinary warning; `cargo check` and clippy already see it (`include_universal = true` flips this) |
-| Combinations that fail to compile | no: errors belong to `cargo check` |
+| A combination that fails to compile | **yes**, `FEATURE-WARNING-003`, listed first: the most serious case, because its warnings cannot be assessed at all |
+| `cargo hack` exits non-zero with no build error to point at (manifest or dependency problem) | yes, one `FEATURE-WARNING-003` finding at `Cargo.toml` carrying the stderr `error` lines |
 | `cargo-hack` or `cargo` missing from `PATH` | skip the crate; quality must still run |
 | package in `[feature_warnings] skip_crates` | no |
 
@@ -37,6 +38,7 @@ Rules:
 | --- | --- | --- |
 | `FEATURE-WARNING-001` | `unused_*` (imports, variables, mut, macros, ...) | Something is imported or bound but unused under some combinations |
 | `FEATURE-WARNING-002` | `dead_code` | A function, constant, struct, or method is never used under some combinations |
+| `FEATURE-WARNING-003` | compile error | A feature combination does not compile, or `cargo hack` failed outright |
 
 ---
 
@@ -65,6 +67,25 @@ the rest.
 Dedup key is `(file, line, lint code)`. Unused-import messages list
 different names per combination, so the message shown is the union of the
 backticked names.
+
+## Combinations that do not compile
+
+A build that fails produces no `compiler-artifact`, so it would silently drop
+out of the combinations list. It is found instead by its `build-finished`
+record (`success: false`). Its feature set is not in the JSON; `cargo hack`
+prints one `info: running \`cargo check ... --features X\`` line per
+invocation on stderr, in the same order as the `build-finished` records, so
+the Nth finished build takes the Nth line. Pass-through arguments
+(`--message-format`, `--target-dir`) are trimmed from the description.
+Verified against real `cargo hack` output, not only the fixtures.
+
+Errors are keyed by `(file, line, error code)` like warnings, so seven
+combinations failing at one `use` are one finding that says how many of the
+attempted combinations fail and names the smallest. Warnings printed by a
+build that then failed are discarded, never attributed to the next
+combination. Advice for unresolved-name errors (`E0425`, `E0432`, ...) is
+that the definition is gated out here: make its feature imply the use's
+feature in `Cargo.toml`, or give the use the same `cfg`.
 
 ## Actionable advice
 

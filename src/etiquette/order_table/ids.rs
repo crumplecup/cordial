@@ -244,6 +244,8 @@ pub(super) const FEATURE_WARNING_RULE_IDS: &[&str] = &[
     "FEATURE-WARNING-001",
     #[cfg(feature = "feature_warnings")]
     "FEATURE-WARNING-002",
+    #[cfg(feature = "feature_warnings")]
+    "FEATURE-WARNING-003",
 ];
 
 pub(super) const CREUSOT_RULE_IDS: &[&str] = &[
