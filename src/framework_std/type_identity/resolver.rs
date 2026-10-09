@@ -20,6 +20,21 @@ pub trait TypeResolver {
     /// Whether `ty` has a direct impl of the trait `bound`.
     fn implements(&self, ty: &TypeKey, bound: &TypeKey) -> Implements;
 
+    /// The names of the type's parameters, in order; empty when the type is
+    /// not generic or its crate cannot be read.
+    fn parameters(&self, ty: &TypeKey) -> Vec<String>;
+
+    /// The concrete types with a direct impl of the trait `bound`, in the
+    /// crates the resolver can read. Blanket impls and impls for types with
+    /// arguments name no one concrete type and are not included.
+    fn implementors(&self, bound: &TypeKey) -> Vec<TypeKey>;
+
+    /// `ty` as a reader would write it: the shortest public path, not the
+    /// defining path. Defaults to the canonical form.
+    fn display(&self, ty: &TypeKey) -> String {
+        ty.to_string()
+    }
+
     /// The bounds the type with the head of `ty` declares on its own
     /// parameters, read from its definition. Empty when it declares none, or
     /// when its crate is not one the resolver can read.
@@ -134,6 +149,51 @@ impl TypeResolver for RustdocTypeResolver {
     #[instrument(level = "trace", skip(self, ty))]
     fn declared_bounds(&self, ty: &TypeKey) -> Vec<DeclaredBound> {
         self.read_declared_bounds(ty)
+    }
+
+    #[instrument(level = "trace", skip(self, ty))]
+    fn parameters(&self, ty: &TypeKey) -> Vec<String> {
+        let owner = ty.head().split("::").next().unwrap_or_default();
+        self.crate_named(owner)
+            .and_then(|index| Some((index, index.item_defined_at(ty.head())?)))
+            .map(|(index, id)| index.parameters(&id))
+            .unwrap_or_default()
+    }
+
+    #[instrument(level = "trace", skip(self, bound))]
+    fn implementors(&self, bound: &TypeKey) -> Vec<TypeKey> {
+        let mut found: Vec<TypeKey> = Vec::new();
+        for index in &self.crates {
+            for (trait_id, type_id) in index.trait_impl_pairs() {
+                let Ok(trait_key) = self.key_for_item(index, trait_id, Vec::new(), 0) else {
+                    continue;
+                };
+                if trait_key.head() != bound.head() {
+                    continue;
+                }
+                if let Ok(key) = self.key_for_item(index, type_id, Vec::new(), 0)
+                    && !found.contains(&key)
+                {
+                    found.push(key);
+                }
+            }
+        }
+        found.sort_by_key(ToString::to_string);
+        found
+    }
+
+    #[instrument(level = "trace", skip(self, ty))]
+    fn display(&self, ty: &TypeKey) -> String {
+        let owner = ty.head().split("::").next().unwrap_or_default();
+        let head = self
+            .crate_named(owner)
+            .and_then(|index| index.public_path(&index.item_defined_at(ty.head())?))
+            .unwrap_or(ty.head());
+        if ty.args().is_empty() {
+            return head.to_string();
+        }
+        let args: Vec<String> = ty.args().iter().map(|arg| self.display(arg)).collect();
+        format!("{head}<{}>", args.join(", "))
     }
 }
 

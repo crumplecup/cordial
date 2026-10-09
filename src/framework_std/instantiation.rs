@@ -10,6 +10,7 @@
 //! `docs/planning/amenable-ext-generic-instantiations.md`.
 
 mod amenable_registry;
+mod derive;
 mod evidence;
 mod expected;
 mod note;

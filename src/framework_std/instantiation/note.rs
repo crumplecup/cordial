@@ -70,7 +70,7 @@ pub(super) fn declared_bounds_note(
     if bounds.is_empty() {
         return "the type declares no bounds on its parameters".to_string();
     }
-    let mut text = format!("declared bounds {}", describe(&bounds));
+    let mut text = format!("declared bounds {}", describe_bounds(&bounds));
     let mut satisfied = Vec::new();
     let mut missing = Vec::new();
     let mut unknown = Vec::new();
@@ -100,9 +100,9 @@ pub(super) fn declared_bounds_note(
     text
 }
 
-/// `Tz: TimeZone` or `K: Hash + Eq, V: Clone`.
+/// `Tz: TimeZone` or `K: Hash + Eq, V: Clone`, each in backticks.
 #[instrument(level = "trace", skip(bounds))]
-fn describe(bounds: &[DeclaredBound]) -> String {
+pub(super) fn describe_bounds(bounds: &[DeclaredBound]) -> String {
     let mut params: Vec<(&str, Vec<String>)> = Vec::new();
     for bound in bounds {
         let name = match bound.bound() {

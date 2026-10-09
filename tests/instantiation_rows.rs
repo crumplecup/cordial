@@ -499,9 +499,11 @@ fn a_registered_instantiation_outside_the_expected_list_is_still_shown() -> miet
 }
 
 #[test]
-fn without_an_expected_list_the_registered_instantiations_still_become_rows() -> miette::Result<()>
-{
+fn with_no_configured_list_the_instantiations_are_derived_from_rustdoc() -> miette::Result<()> {
     cordial::init_tracing();
+    // Only Utc and Local are registered. Nothing is configured, so the rest
+    // come from rustdoc: every type in the readable crates that implements the
+    // declared bound `Tz: TimeZone`, and `Bare`, which does not, is left out.
     let claims: Vec<(&str, &[&str])> = vec![
         ("chrono::DateTime<chrono::Utc>", &WITNESSED),
         ("chrono::DateTime<chrono::Local>", &WITNESSED),
@@ -512,8 +514,156 @@ fn without_an_expected_list_the_registered_instantiations_still_become_rows() ->
         &HashMap::new(),
         &HashSet::new(),
     )?;
-    assert_eq!(out.entries().len(), 3, "{:?}", out.entries());
-    assert!(out.entries().iter().skip(1).all(|e| e.parent().is_some()));
+    assert_eq!(out.entries().len(), 5, "{:?}", out.entries());
+    for (label, status) in [
+        ("chrono::DateTime<chrono::Utc>", AmenableStdStatus::Complete),
+        (
+            "chrono::DateTime<chrono::Local>",
+            AmenableStdStatus::Complete,
+        ),
+        (
+            "chrono::DateTime<chrono::FixedOffset>",
+            AmenableStdStatus::Missing,
+        ),
+        (
+            "chrono::DateTime<chrono_tz::Tz>",
+            AmenableStdStatus::Missing,
+        ),
+    ] {
+        assert_eq!(find(&out, label)?.status(), status, "{label}");
+    }
+    assert!(find(&out, "chrono::DateTime<chrono::Bare>").is_err());
+    let text = note(find(&out, "chrono::DateTime")?);
+    assert!(
+        text.contains("derived from the implementors of `Tz: TimeZone`"),
+        "{text}"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_configured_list_replaces_the_derivation_and_an_empty_one_turns_it_off() -> miette::Result<()> {
+    cordial::init_tracing();
+    let one = expand(
+        &all_four(),
+        &expected(&["chrono::Utc"]),
+        &HashMap::new(),
+        &HashSet::new(),
+    )?;
+    // The list names only Utc; the other three registered ones still show as
+    // unexpected extras, but nothing is derived on top.
+    assert!(
+        note(find(&one, "chrono::DateTime")?).starts_with("1 of 4 instantiations Complete")
+            || note(find(&one, "chrono::DateTime")?).contains("Complete")
+    );
+    assert!(!note(find(&one, "chrono::DateTime")?).contains("derived from"));
+
+    let none = expand(
+        &[],
+        &ExpectedInstantiations::new(BTreeMap::from([(
+            "chrono::DateTime".to_string(),
+            Vec::new(),
+        )])),
+        &HashMap::new(),
+        &HashSet::new(),
+    )?;
+    assert_eq!(none.entries().len(), 1, "an empty entry means no rows");
+    Ok(())
+}
+
+/// `Map<K: Hash + Eq, V: Clone>` with `keys` hashable keys and `vals` clonable
+/// values, plus one key that is only `Hash`.
+fn map_resolver_sized(keys: u32, vals: u32) -> miette::Result<RustdocTypeResolver> {
+    let mut k = Krate::new("lib");
+    k.trait_item(5, "Hash");
+    k.trait_item(6, "Eq");
+    k.trait_item(7, "Clone");
+    k.strukt(10, "Map", &["K", "V"], &[]);
+    k.declare_bound(10, "K", 5, "Hash", false);
+    k.declare_bound(10, "K", 6, "Eq", false);
+    k.declare_bound(10, "V", 7, "Clone", true);
+    let mut next_impl = 100;
+    for key in 0..keys {
+        let id = 20 + key;
+        k.strukt(id, &format!("Key{key}"), &[], &[next_impl, next_impl + 1]);
+        k.impl_of(next_impl, 5, "Hash", id, "Key");
+        k.impl_of(next_impl + 1, 6, "Eq", id, "Key");
+        next_impl += 2;
+    }
+    k.strukt(40, "OnlyHash", &[], &[next_impl]);
+    k.impl_of(next_impl, 5, "Hash", 40, "OnlyHash");
+    next_impl += 1;
+    for val in 0..vals {
+        let id = 50 + val;
+        k.strukt(id, &format!("Val{val}"), &[], &[next_impl]);
+        k.impl_of(next_impl, 7, "Clone", id, "Val");
+        next_impl += 1;
+    }
+    Ok(RustdocTypeResolver::new(
+        vec![k.build()?],
+        ResolveCaps::default(),
+    ))
+}
+
+fn expand_map_derived(
+    resolver: &RustdocTypeResolver,
+    cap: usize,
+) -> miette::Result<AmenableStdReport> {
+    let dump: RegistryDump = serde_json::from_value(json!({
+        "evidence_links": [], "proof_records": [], "kani_proofs": [],
+    }))
+    .into_diagnostic()?;
+    let facts = AmenableRegistryEvidence::resolve(&dump, &HashSet::new(), resolver);
+    let skip: VerifierSkipMap = HashMap::new();
+    let wanted = ExpectedInstantiations::default().with_derive_cap(cap);
+    let ctx = InstantiationContext::new(resolver, &facts, &skip, &wanted);
+    expand_report(&report(vec![parent_entry("lib::Map")?])?, &ctx).into_diagnostic()
+}
+
+#[test]
+fn multi_parameter_candidates_are_the_product_of_each_parameters_implementors() -> miette::Result<()>
+{
+    cordial::init_tracing();
+    // Two keys that are Hash + Eq (a third is only Hash, so it is not a
+    // candidate) times two clonable values: four instantiations.
+    let resolver = map_resolver_sized(2, 2)?;
+    let out = expand_map_derived(&resolver, 16)?;
+    assert_eq!(out.entries().len(), 5, "{:?}", out.entries());
+    assert!(find(&out, "lib::Map<lib::Key0, lib::Val1>").is_ok());
+    assert!(
+        out.entries()
+            .iter()
+            .all(|entry| !entry.type_path().contains("OnlyHash"))
+    );
+    Ok(())
+}
+
+#[test]
+fn too_many_combinations_ask_for_a_list_instead_of_generating_rows() -> miette::Result<()> {
+    cordial::init_tracing();
+    let resolver = map_resolver_sized(2, 2)?;
+    let out = expand_map_derived(&resolver, 3)?;
+    assert_eq!(out.entries().len(), 1, "no rows are generated over the cap");
+    let text = note(find(&out, "lib::Map")?);
+    assert!(text.contains("exceed the cap of 3"), "{text}");
+    assert!(text.contains("list the instantiations to track"), "{text}");
+    Ok(())
+}
+
+#[test]
+fn a_parameter_with_no_declared_bound_cannot_be_derived() -> miette::Result<()> {
+    cordial::init_tracing();
+    let mut k = Krate::new("lib");
+    k.trait_item(5, "Hash");
+    k.strukt(10, "Map", &["K", "V"], &[]);
+    k.declare_bound(10, "K", 5, "Hash", false);
+    // `K` has a candidate; `V` declares nothing, so there is nothing to pick.
+    k.strukt(2, "Key0", &[], &[20]);
+    k.impl_of(20, 5, "Hash", 2, "Key0");
+    let resolver = RustdocTypeResolver::new(vec![k.build()?], ResolveCaps::default());
+    let out = expand_map_derived(&resolver, 16)?;
+    let text = note(find(&out, "lib::Map")?);
+    assert!(text.contains("parameter `V` declares no bounds"), "{text}");
     Ok(())
 }
 
@@ -885,5 +1035,50 @@ fn real_chrono_zones_satisfy_the_timezone_bound_across_crates() -> miette::Resul
     );
     assert!(!text.contains("no direct impl"), "{text}");
     assert!(!text.contains("unknown"), "{text}");
+    Ok(())
+}
+
+#[test]
+fn real_chrono_instantiations_are_derived_with_no_configuration() -> miette::Result<()> {
+    cordial::init_tracing();
+    let (Some(chrono), Some(chrono_tz)) = (cached("chrono"), cached("chrono_tz")) else {
+        tracing::info!("skipped: no cached chrono / chrono_tz rustdoc JSON");
+        return Ok(());
+    };
+    let resolver = RustdocTypeResolver::new(vec![chrono, chrono_tz], ResolveCaps::default());
+    // No configured list and no coverage source at all: only rustdoc.
+    let dump: RegistryDump = serde_json::from_value(json!({
+        "evidence_links": [], "proof_records": [], "kani_proofs": [],
+    }))
+    .into_diagnostic()?;
+    let facts = AmenableRegistryEvidence::resolve(&dump, &HashSet::new(), &resolver);
+    let skip: VerifierSkipMap = HashMap::new();
+    let wanted = ExpectedInstantiations::default();
+    let ctx = InstantiationContext::new(&resolver, &facts, &skip, &wanted);
+    let out =
+        expand_report(&report(vec![parent_entry("chrono::DateTime")?])?, &ctx).into_diagnostic()?;
+
+    let mut children: Vec<&str> = out
+        .entries()
+        .iter()
+        .filter(|entry| entry.parent().is_some())
+        .map(|entry| entry.type_path().as_str())
+        .collect();
+    children.sort_unstable();
+    assert_eq!(
+        children,
+        vec![
+            "chrono::DateTime<chrono::FixedOffset>",
+            "chrono::DateTime<chrono::Local>",
+            "chrono::DateTime<chrono::Utc>",
+            "chrono::DateTime<chrono_tz::Tz>",
+        ],
+        "the implementors of chrono's TimeZone across chrono and chrono_tz, labelled by public path"
+    );
+    let text = note(find(&out, "chrono::DateTime")?);
+    assert!(
+        text.contains("derived from the implementors of `Tz: TimeZone`"),
+        "{text}"
+    );
     Ok(())
 }

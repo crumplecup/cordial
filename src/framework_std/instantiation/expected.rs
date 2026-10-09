@@ -1,31 +1,53 @@
-//! The instantiations a target expects each generic type to cover.
+//! The instantiations a target asks to track for each generic type.
 
 use std::collections::BTreeMap;
 
 use tracing::instrument;
 
-/// Expected instantiations by generic type, as spelled in the inventory
+/// How many derived combinations are allowed before a person must list the
+/// ones to track.
+const DEFAULT_DERIVE_CAP: usize = 16;
+
+/// Instantiations configured per generic type, as spelled in the inventory
 /// (`chrono::DateTime`): each entry is one tuple of type-argument texts
-/// (`["chrono::Utc"]`). Cordial cannot discover a missing instantiation from
-/// rustdoc, so the list comes from the target's configuration.
-#[derive(Debug, Clone, Default, PartialEq, Eq, derive_new::new)]
+/// (`["chrono::Utc"]`).
+///
+/// Configuration is an override, not a requirement. A generic type with no
+/// entry gets its instantiations derived from rustdoc (the implementors of
+/// each parameter's declared bounds). An entry replaces the derivation, and an
+/// empty entry turns it off for that type.
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_setters::Setters)]
+#[setters(prefix = "with_")]
 pub struct ExpectedInstantiations {
+    #[getter(skip)]
+    #[setters(skip)]
     by_generic: BTreeMap<String, Vec<Vec<String>>>,
+    /// The most combinations a derivation may produce for one type.
+    #[getter(copy)]
+    derive_cap: usize,
+}
+
+impl Default for ExpectedInstantiations {
+    #[instrument(level = "debug")]
+    fn default() -> Self {
+        Self::new(BTreeMap::new())
+    }
 }
 
 impl ExpectedInstantiations {
-    /// The argument tuples expected for `generic_path`; empty when none.
-    #[instrument(level = "trace", skip(self))]
-    pub fn tuples_for(&self, generic_path: &str) -> &[Vec<String>] {
-        self.by_generic
-            .get(generic_path)
-            .map(Vec::as_slice)
-            .unwrap_or_default()
+    /// Configured tuples by generic type, with the default derivation cap.
+    #[instrument(level = "trace", skip(by_generic))]
+    pub fn new(by_generic: BTreeMap<String, Vec<Vec<String>>>) -> Self {
+        Self {
+            by_generic,
+            derive_cap: DEFAULT_DERIVE_CAP,
+        }
     }
 
-    /// Whether no generic type has an expected list.
+    /// The tuples configured for `generic_path`; `None` when the type has no
+    /// entry, which means "derive them".
     #[instrument(level = "trace", skip(self))]
-    pub fn is_empty(&self) -> bool {
-        self.by_generic.is_empty()
+    pub fn configured(&self, generic_path: &str) -> Option<&[Vec<String>]> {
+        self.by_generic.get(generic_path).map(Vec::as_slice)
     }
 }

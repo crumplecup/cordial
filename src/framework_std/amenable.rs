@@ -107,6 +107,13 @@ impl AmenableStdEntry {
         self
     }
 
+    /// Attach a note to this row.
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn with_note(mut self, note: Option<String>) -> Self {
+        self.note = note;
+        self
+    }
+
     /// Turn this generic row into the aggregate of its instantiation rows.
     ///
     /// Complete when every instantiation that is not excepted is Complete,

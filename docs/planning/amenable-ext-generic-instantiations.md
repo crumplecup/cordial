@@ -39,39 +39,61 @@ loads and the markup is ignored.
   (`ExtStandard<chrono::DateTime<chrono::Utc>>`). **Covered** instantiations
   are discoverable from the registry with no config; cordial just discards the
   arguments today.
-- **Missing** instantiations are not discoverable: no registry entry exists to
-  derive a row from, and rustdoc shows `DateTime<Tz>`, not its uses. They need
-  an expected list.
+- **Missing** instantiations are not found in the registry (no entry exists to
+  derive a row from), but rustdoc can supply them. A generic type declares
+  what its parameters must satisfy (`struct DateTime<Tz: TimeZone>`), and
+  rustdoc lists which types implement a trait. The types that implement the
+  declared bounds, in the crates cordial is allowed to read, are the
+  instantiations to expect. On the real data, `TimeZone` is implemented by
+  exactly `Utc`, `Local`, `FixedOffset` (chrono) and `Tz` (chrono_tz). An
+  earlier draft of this document said they were not discoverable; that was
+  wrong.
 - Path matching is currently heuristic (`type_has_trait_impl` falls back to
   bare-tail comparison). That is unsafe once a false match turns a Missing row
   Complete.
 
 ## Decisions
 
-### 1. Expected instantiations live in `cordial.toml`
+### 1. Expected instantiations are derived from rustdoc; `cordial.toml` overrides
 
-Per-target, per-generic, full argument tuples (not per-parameter option lists,
-to avoid a combinatorial product for multi-parameter types):
+So that generic support works on any library without anyone writing a list,
+the default is derivation (`derive.rs`):
+
+1. For each parameter, the candidates are the concrete types with a direct
+   impl of **every** trait the type declares on that parameter, intersected,
+   within the allowlisted crates (`resolve_crates`).
+2. The instantiations are the product of one candidate per parameter, capped
+   (default 16) so `K: Hash + Eq` across a whole std cannot generate thousands
+   of rows. Over the cap, or with a parameter that declares no bounds, or with
+   no implementor found, nothing is generated and the parent's note says why
+   and asks for a list. It never guesses.
+3. Rows are labelled by shortest public path (`chrono::DateTime<chrono::Utc>`),
+   not the defining path through a private module.
+4. The parent's note records the provenance: "Instantiations derived from the
+   implementors of `Tz: TimeZone`".
+
+Configuration is an override, per generic type, as full argument tuples:
 
 ```toml
 [[amenable_ext.target]]
 name = "chrono"
-# ...existing keys...
-# Crates cordial may follow when resolving paths; anything else is opaque.
+# Crates cordial may follow when resolving paths and looking for implementors;
+# anything else is opaque.
 resolve_crates = ["chrono", "chrono_tz"]
 
 [amenable_ext.target.instantiations]
-"chrono::DateTime" = [["chrono::Utc"], ["chrono::FixedOffset"], ["chrono::Local"], ["chrono_tz::Tz"]]
-"chrono::Date"     = [["chrono::Utc"], ["chrono::FixedOffset"], ["chrono::Local"], ["chrono_tz::Tz"]]
+# An entry replaces the derivation for that type.
+"chrono::Date" = [["chrono::Utc"], ["chrono::FixedOffset"]]
+# An empty entry turns it off: no instantiation rows for this type.
+"chrono::SomeOther" = []
 ```
 
-Rejected: hardcoding in cordial (per-crate knowledge; cordial stays
-target-agnostic) and annotations in the amenable registry (couples the
-checklist to another repo). `chrono::Date<Tz>` is listed too: amenable keeps it in scope as public API
-despite the deprecation, so it gets the same four rows. The list is optional: with none, a generic keeps
-its single row plus any instantiations discovered from registry evidence.
-Registry-discovered instantiations not in the list are still shown, flagged
-"unexpected", so the list can't hide coverage.
+Registered instantiations that were not derived or listed are still shown,
+flagged "unexpected", so neither source can hide coverage. Rejected:
+annotations in the amenable registry (the markup was removed as a mistake) and
+hardcoding per-crate knowledge in cordial. `chrono::Date<Tz>` is in scope
+because amenable keeps it as public API despite the deprecation; deriving
+gives it the same four rows with no entry at all.
 
 ### 2. Canonical type identity (prerequisite phase)
 
@@ -165,7 +187,7 @@ regroup. `Partial` is a new status value and touches every consumer of
 | --- | --- | --- |
 | 0 | Registry read side: whitespace normalization, chrono features in the dump. (The `bounds`/`premises`/`ExtGeneric` handling first built here was removed with amenable's markup.) | **Done** |
 | A | `TypeKey`, rustdoc name lookup (re-exports, globs, aliases), structured evidence parsing, `Unresolved` status; ext targets only | **Done.** `framework_std::type_identity` (`TypeKey`, `CrateIndex`, `RustdocTypeResolver` behind the `TypeResolver` trait, `resolve_ext_evidence`); 18 tests including one against the real chrono / chrono_tz rustdoc JSON. Not yet wired into `evidence_for_ext_type`; that is phase B/C |
-| B | Parent/child rows, aggregate roll-up, declared-bounds note | **Done (library layer).** `framework_std::instantiation` (`expand_report`, `InstantiationEvidence`, `AmenableRegistryEvidence`, `ExpectedInstantiations`); `TypeResolver::{implements, declared_bounds}`; 15 tests including one on the real chrono / chrono_tz JSON. Not yet wired into the assessor or the reporters; that is phase C |
+| B | Parent/child rows, aggregate roll-up, declared-bounds note, instantiations derived from rustdoc | **Done (library layer).** `framework_std::instantiation` (`expand_report`, `InstantiationEvidence`, `AmenableRegistryEvidence`, `ExpectedInstantiations`); `TypeResolver::{implements, declared_bounds, parameters, implementors, display}`; 21 tests including two on the real chrono / chrono_tz JSON (one with no configuration and an empty registry). Not yet wired into the assessor or the reporters; that is phase C |
 | C | `instantiations` config key, Missing children, `Partial`, reporter/CSV changes | Not started |
 | D | Chrono checklist verification (8 instantiation rows, 67 total) | Not started |
 

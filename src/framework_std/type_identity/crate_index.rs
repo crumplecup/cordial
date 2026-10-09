@@ -26,6 +26,13 @@ pub struct CrateIndex {
     /// Defining path (`chrono::offset::utc::Utc`) to item, built on first use.
     #[getter(skip)]
     defining_paths: OnceLock<HashMap<String, Id>>,
+    /// Item to its shortest public path (`chrono::Utc`), built on first use.
+    #[getter(skip)]
+    public_paths: OnceLock<HashMap<Id, String>>,
+    /// `(trait, type)` for every direct impl on a concrete type, built on
+    /// first use.
+    #[getter(skip)]
+    trait_impls: OnceLock<Vec<(Id, Id)>>,
 }
 
 /// One trait bound a type declares on one of its parameters, exactly as the
@@ -61,6 +68,8 @@ impl CrateIndex {
             name: name.to_string(),
             krate,
             defining_paths: OnceLock::new(),
+            public_paths: OnceLock::new(),
+            trait_impls: OnceLock::new(),
         }
     }
 
@@ -123,6 +132,119 @@ impl CrateIndex {
             _ => return Vec::new(),
         };
         raw_bounds(generics)
+    }
+
+    /// The names of the type and const parameters of the struct, enum or
+    /// union `id`, in order (lifetimes do not appear in an argument list).
+    #[instrument(level = "trace", skip(self, id))]
+    pub fn parameters(&self, id: &Id) -> Vec<String> {
+        let generics = match self.item(id).map(|item| &item.inner) {
+            Some(ItemEnum::Struct(found)) => &found.generics,
+            Some(ItemEnum::Enum(found)) => &found.generics,
+            Some(ItemEnum::Union(found)) => &found.generics,
+            _ => return Vec::new(),
+        };
+        generics
+            .params
+            .iter()
+            .filter(|param| match &param.kind {
+                GenericParamDefKind::Type { is_synthetic, .. } => !is_synthetic,
+                GenericParamDefKind::Const { .. } => true,
+                GenericParamDefKind::Lifetime { .. } => false,
+            })
+            .map(|param| param.name.clone())
+            .collect()
+    }
+
+    /// Every direct trait impl on a concrete type, as `(trait, type)` ids.
+    ///
+    /// Impls that are blanket, negative, synthetic (auto traits), or for a
+    /// type with arguments (`impl<T> Trait for Foo<T>`) are left out: they do
+    /// not name one concrete type. Built once, on first use.
+    #[instrument(level = "trace", skip(self))]
+    pub fn trait_impl_pairs(&self) -> &[(Id, Id)] {
+        self.trait_impls.get_or_init(|| {
+            self.krate
+                .index
+                .values()
+                .filter_map(|item| match &item.inner {
+                    ItemEnum::Impl(found)
+                        if !found.is_negative
+                            && !found.is_synthetic
+                            && found.blanket_impl.is_none() =>
+                    {
+                        let trait_id = found.trait_.as_ref()?.id;
+                        match &found.for_ {
+                            Type::ResolvedPath(path) if path.args.is_none() => {
+                                Some((trait_id, path.id))
+                            }
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                })
+                .collect()
+        })
+    }
+
+    /// The shortest public path of `id` (`chrono::Utc`, not the defining path
+    /// `chrono::offset::utc::Utc`), when the item is reachable from the root.
+    #[instrument(level = "trace", skip(self, id))]
+    pub fn public_path(&self, id: &Id) -> Option<&str> {
+        self.public_paths
+            .get_or_init(|| self.build_public_paths())
+            .get(id)
+            .map(String::as_str)
+    }
+
+    /// Breadth-first from the root, so the first path recorded for an item is
+    /// a shortest one. Re-exports and glob re-exports are followed.
+    #[instrument(level = "debug", skip(self))]
+    fn build_public_paths(&self) -> HashMap<Id, String> {
+        let mut best: HashMap<Id, String> = HashMap::new();
+        let mut seen: HashSet<Id> = HashSet::from([self.krate.root]);
+        let mut queue = std::collections::VecDeque::from([(self.krate.root, self.name.clone())]);
+        while let Some((module, prefix)) = queue.pop_front() {
+            let Some(ItemEnum::Module(found)) = self.item(&module).map(|item| &item.inner) else {
+                continue;
+            };
+            for child_id in &found.items {
+                let Some(child) = self.item(child_id) else {
+                    continue;
+                };
+                match &child.inner {
+                    ItemEnum::Use(import) if import.is_glob => {
+                        if let Some(target) = import.id
+                            && seen.insert(target)
+                        {
+                            queue.push_back((target, prefix.clone()));
+                        }
+                    }
+                    ItemEnum::Use(import) => {
+                        let Some(target) = import.id else { continue };
+                        let path = format!("{prefix}::{}", import.name);
+                        best.entry(target).or_insert_with(|| path.clone());
+                        if seen.insert(target) {
+                            queue.push_back((target, path));
+                        }
+                    }
+                    ItemEnum::Module(_) => {
+                        let Some(name) = &child.name else { continue };
+                        let path = format!("{prefix}::{name}");
+                        if seen.insert(*child_id) {
+                            queue.push_back((*child_id, path));
+                        }
+                    }
+                    _ => {
+                        if let Some(name) = &child.name {
+                            best.entry(*child_id)
+                                .or_insert_with(|| format!("{prefix}::{name}"));
+                        }
+                    }
+                }
+            }
+        }
+        best
     }
 
     /// Ids of the traits implemented directly on the struct, enum or union

@@ -8,6 +8,7 @@ use crate::framework_std::type_identity::{TypeKey, TypeResolver, Unresolved};
 use crate::framework_std::verifier_skip::VerifierSkipMap;
 use crate::framework_std::{AmenableStdEntry, AmenableStdReport, AmenableStdStatus};
 
+use super::derive::{Derived, derive};
 use super::evidence::InstantiationEvidence;
 use super::expected::ExpectedInstantiations;
 use super::note::{ChildView, declared_bounds_note, rollup_summary, short_label};
@@ -58,6 +59,22 @@ pub fn expand_report(
         .build()
 }
 
+/// Where the instantiations to report came from, for the parent's note.
+enum Source {
+    /// A configured list.
+    Configured,
+    /// Derived from rustdoc, with what they were derived from.
+    Derived(String),
+    /// Nothing could be derived, with why.
+    Unavailable(String),
+}
+
+/// The instantiations to report for one generic row, and where they came from.
+struct Seeds {
+    seeds: Vec<Seed>,
+    source: Source,
+}
+
 /// `[parent, children..]` for a generic row, or just `[entry]`.
 #[instrument(level = "debug", skip(parent, ctx), err(level = "warn"))]
 fn expand_entry(
@@ -70,9 +87,16 @@ fn expand_entry(
     let Ok(head) = ctx.resolver.resolve_head(parent.type_path()) else {
         return Ok(vec![parent.clone()]);
     };
-    let seeds = seeds_for(parent, head.head(), ctx);
+    let Seeds { seeds, source } = seeds_for(parent, &head, ctx);
     if seeds.is_empty() {
-        return Ok(vec![parent.clone()]);
+        let note = match &source {
+            Source::Unavailable(reason) => Some(format!(
+                "no instantiation rows: {reason}; list the instantiations to track in the \
+                 configuration"
+            )),
+            Source::Configured | Source::Derived(_) => None,
+        };
+        return Ok(vec![parent.clone().with_note(note)]);
     }
 
     let mut children = Vec::with_capacity(seeds.len());
@@ -94,31 +118,61 @@ fn expand_entry(
     let mut note = rollup_summary(&children);
     note.push_str(". ");
     note.push_str(&declared_bounds_note(&head, &views, ctx.resolver));
+    match &source {
+        Source::Configured => {}
+        Source::Derived(basis) => note.push_str(&format!(". Instantiations derived from {basis}")),
+        Source::Unavailable(reason) => {
+            note.push_str(&format!(
+                ". Expected instantiations not derivable: {reason}"
+            ));
+        }
+    }
     let mut rows = vec![parent.clone().rolled_up(&children, Some(note))];
     rows.extend(children);
     Ok(rows)
 }
 
-/// The expected instantiations first (in configured order), then any
-/// registered instantiation that was not expected.
-#[instrument(level = "debug", skip(parent, ctx))]
-fn seeds_for(parent: &AmenableStdEntry, head: &str, ctx: &InstantiationContext<'_>) -> Vec<Seed> {
-    let mut seeds: Vec<Seed> = ctx
-        .expected
-        .tuples_for(parent.type_path())
-        .iter()
-        .map(|tuple| {
-            let label = format!("{}<{}>", parent.type_path(), tuple.join(", "));
-            Seed {
-                key: ctx.resolver.resolve(&label),
-                label,
-                expected: true,
-            }
-        })
-        .collect();
+/// The instantiations to report: the configured list if there is one,
+/// otherwise the ones derived from rustdoc, then any registered instantiation
+/// that was not among them.
+#[instrument(level = "debug", skip(parent, head, ctx))]
+fn seeds_for(parent: &AmenableStdEntry, head: &TypeKey, ctx: &InstantiationContext<'_>) -> Seeds {
+    let (mut seeds, source) = match ctx.expected.configured(parent.type_path()) {
+        Some(tuples) => (
+            tuples
+                .iter()
+                .map(|tuple| {
+                    let label = format!("{}<{}>", parent.type_path(), tuple.join(", "));
+                    Seed {
+                        key: ctx.resolver.resolve(&label),
+                        label,
+                        expected: true,
+                    }
+                })
+                .collect::<Vec<_>>(),
+            Source::Configured,
+        ),
+        None => match derive(head, ctx.resolver, ctx.expected.derive_cap()) {
+            Derived::Tuples { tuples, basis } => (
+                tuples
+                    .into_iter()
+                    .map(|args| {
+                        let key = TypeKey::new(head.head().clone(), args);
+                        Seed {
+                            label: ctx.resolver.display(&key),
+                            key: Ok(key),
+                            expected: true,
+                        }
+                    })
+                    .collect(),
+                Source::Derived(basis),
+            ),
+            Derived::Unavailable(reason) => (Vec::new(), Source::Unavailable(reason)),
+        },
+    };
     let mut extras: Vec<TypeKey> = ctx
         .evidence
-        .instantiations_of(head)
+        .instantiations_of(head.head())
         .into_iter()
         .filter(|found| {
             !seeds
@@ -129,11 +183,11 @@ fn seeds_for(parent: &AmenableStdEntry, head: &str, ctx: &InstantiationContext<'
     extras.sort_by_key(|key| key.to_string());
     extras.dedup();
     seeds.extend(extras.into_iter().map(|key| Seed {
-        label: key.to_string(),
+        label: ctx.resolver.display(&key),
         key: Ok(key),
         expected: false,
     }));
-    seeds
+    Seeds { seeds, source }
 }
 
 #[instrument(level = "debug", skip(parent, seed, ctx), err(level = "warn"))]
