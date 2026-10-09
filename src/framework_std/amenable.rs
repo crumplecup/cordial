@@ -10,6 +10,7 @@ pub use classify::{
     ClassifyRowArgs, build_amenable_ext_report, build_amenable_std_report,
     classify_amenable_ext_row, classify_amenable_std_row, resolve_alias_chain,
 };
+pub(crate) use classify::{RowFacts, entry_from_facts};
 pub use gaps::{
     amenable_ext_gap_fields, amenable_gap_fields, build_amenable_ext_gaps, build_amenable_std_gaps,
 };
@@ -79,6 +80,15 @@ pub struct AmenableStdEntry {
     #[serde(default)]
     #[getter(copy)]
     verus_excepted: bool,
+    /// For an instantiation row (`DateTime<Utc>`): the generic row it belongs to.
+    #[serde(default)]
+    #[builder(default)]
+    parent: Option<String>,
+    /// Free-text note: a parent's roll-up and generic claims, or why a child
+    /// row is not an ordinary registered instantiation.
+    #[serde(default)]
+    #[builder(default)]
+    note: Option<String>,
 }
 
 impl AmenableStdEntry {
@@ -86,6 +96,64 @@ impl AmenableStdEntry {
     #[instrument(level = "debug")]
     pub fn builder() -> AmenableStdEntryBuilder {
         AmenableStdEntryBuilder::default()
+    }
+
+    /// Make this the row for one instantiation of the generic row
+    /// `parent`, with an optional explanatory `note`.
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn into_instantiation(mut self, parent: &str, note: Option<String>) -> Self {
+        self.parent = Some(parent.to_string());
+        self.note = note;
+        self
+    }
+
+    /// Attach a note to this row.
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn with_note(mut self, note: Option<String>) -> Self {
+        self.note = note;
+        self
+    }
+
+    /// Turn this generic row into the aggregate of its instantiation rows.
+    ///
+    /// Complete when every instantiation that is not excepted is Complete,
+    /// Missing when none has any coverage, Partial otherwise; Skipped when
+    /// every instantiation is excepted. A witness or evidence column is set
+    /// only when it is set for every instantiation that counts.
+    #[instrument(level = "trace", skip(self, children))]
+    pub(crate) fn rolled_up(mut self, children: &[AmenableStdEntry], note: Option<String>) -> Self {
+        let counted: Vec<&AmenableStdEntry> = children
+            .iter()
+            .filter(|child| child.status != AmenableStdStatus::Skipped)
+            .collect();
+        let all = |pick: fn(&AmenableStdEntry) -> bool| counted.iter().all(|child| pick(child));
+        self.status = if counted.is_empty() {
+            AmenableStdStatus::Skipped
+        } else if counted
+            .iter()
+            .all(|child| child.status == AmenableStdStatus::Complete)
+        {
+            AmenableStdStatus::Complete
+        } else if counted
+            .iter()
+            .all(|child| child.status == AmenableStdStatus::Missing)
+        {
+            AmenableStdStatus::Missing
+        } else {
+            AmenableStdStatus::Partial
+        };
+        if !counted.is_empty() {
+            self.evidence_link = all(|child| child.evidence_link);
+            self.kani_witness = all(|child| child.kani_witness);
+            self.creusot_witness = all(|child| child.creusot_witness);
+            self.verus_witness = all(|child| child.verus_witness);
+            self.proof_test = all(|child| child.proof_test);
+        }
+        self.kani_excepted = children.iter().all(|child| child.kani_excepted);
+        self.creusot_excepted = children.iter().all(|child| child.creusot_excepted);
+        self.verus_excepted = children.iter().all(|child| child.verus_excepted);
+        self.note = note;
+        self
     }
 }
 

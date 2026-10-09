@@ -18,6 +18,8 @@ mod ext_inventory;
 #[cfg(feature = "amenable_ext")]
 mod ext_run;
 #[cfg(feature = "amenable_std")]
+mod instantiation;
+#[cfg(feature = "amenable_std")]
 mod proof_harness;
 #[cfg(feature = "amenable_std")]
 mod registry;
@@ -58,15 +60,16 @@ pub use self::{
         AMENABLE_IMPL_CRATE, AMENABLE_PATCH_SET, AmenableStdOptions, assess_amenable_std_coverage,
         ensure_registry_dump_for_assessor,
     },
+    instantiation::{ExpectedInstantiations, InstantiationContext, RegistryFacts, expand_report},
     proof_harness::collect_proof_chain_subjects,
     registry::{
         EvidenceLinkDump, PremiseDump, ProofRecordDump, RegistryDump, evidence_for_std_type,
         parse_rust_std_standard_inner, witness_verifiers_for_std_type,
     },
     type_identity::{
-        CrateIndex, EvidenceKey, EvidenceKind, Lookup, ResolveCaps, RustdocTypeResolver, TypeKey,
-        TypeResolver, TypeText, Unresolved, normalize_type_text, parse_type_text,
-        resolve_ext_evidence,
+        CrateIndex, EvidenceKey, EvidenceKind, Implements, Lookup, ProofKey, ResolveCaps,
+        RustdocTypeResolver, TypeKey, TypeResolver, TypeText, Unresolved, normalize_type_text,
+        parse_type_text, resolve_ext_evidence,
     },
     verifier_skip::{VerifierSkipEntry, VerifierSkipMap, load_verifier_skip_map},
 };

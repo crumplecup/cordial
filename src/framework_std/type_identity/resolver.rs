@@ -16,6 +16,24 @@ pub trait TypeResolver {
     /// Resolve only the head, ignoring arguments. For generic claims whose
     /// arguments are type parameters (`ExtGeneric<DateTime<Tz>>`).
     fn resolve_head(&self, text: &str) -> Result<TypeKey, Unresolved>;
+
+    /// Whether `ty` has a direct impl of the trait named by `bound`.
+    fn implements(&self, ty: &TypeKey, bound: &str) -> Implements;
+}
+
+/// Whether a type is known to satisfy a trait bound.
+#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
+pub enum Implements {
+    /// A direct `impl Trait for Type` exists.
+    #[display("yes")]
+    Yes,
+    /// The type was found and has no direct impl of the trait. A blanket
+    /// impl would not be seen, so this is "not found", not "does not".
+    #[display("no direct impl found")]
+    NoDirectImpl,
+    /// The check could not be made, with the reason.
+    #[display("unknown: {_0}")]
+    Unknown(String),
 }
 
 /// Why a type could not be given an identity. Never a silent match or miss.
@@ -89,9 +107,37 @@ impl TypeResolver for RustdocTypeResolver {
     fn resolve_head(&self, text: &str) -> Result<TypeKey, Unresolved> {
         self.resolve_normalized(text, true)
     }
+
+    #[instrument(level = "trace", skip(self, ty))]
+    fn implements(&self, ty: &TypeKey, bound: &str) -> Implements {
+        self.check_implements(ty, bound)
+    }
 }
 
 impl RustdocTypeResolver {
+    #[instrument(level = "debug", skip(self, ty))]
+    fn check_implements(&self, ty: &TypeKey, bound: &str) -> Implements {
+        let bound_key = match self.resolve_head(bound) {
+            Ok(key) => key,
+            Err(reason) => return Implements::Unknown(format!("bound `{bound}`: {reason}")),
+        };
+        let owner = ty.head().split("::").next().unwrap_or_default();
+        let Some(index) = self.crate_named(owner) else {
+            return Implements::Unknown(format!("`{ty}` is outside the allowlisted crates"));
+        };
+        let Some(id) = index.item_defined_at(ty.head()) else {
+            return Implements::Unknown(format!("`{ty}` was not found in `{owner}`"));
+        };
+        for trait_id in index.implemented_trait_ids(&id) {
+            if let Ok(found) = self.key_for_item(index, &trait_id, Vec::new(), 0)
+                && found.head() == bound_key.head()
+            {
+                return Implements::Yes;
+            }
+        }
+        Implements::NoDirectImpl
+    }
+
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
     fn resolve_normalized(&self, text: &str, head_only: bool) -> Result<TypeKey, Unresolved> {
         let parsed = parse_type_text(&normalize_type_text(text))

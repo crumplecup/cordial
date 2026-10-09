@@ -9,7 +9,7 @@ use crate::framework_std::registry::{
     std_type_has_proof_test, witness_verifiers_for_ext_type, witness_verifiers_for_std_type,
 };
 use crate::framework_std::types::framework_std_type_items;
-use crate::framework_std::verifier_skip::VerifierSkipMap;
+use crate::framework_std::verifier_skip::{VerifierSkipEntry, VerifierSkipMap};
 
 use super::{AmenableStdEntry, AmenableStdReport, AmenableStdStatus};
 
@@ -170,6 +170,56 @@ fn classify_wrapped_row(
     } = args;
     let exception = skip_map.get(type_path);
 
+    let mut evidence_name = evidence_for_type(registry, type_path);
+    let mut verifiers = witness_verifiers_for_type(registry, type_path);
+    let mut proof_test = type_has_proof_test(proof_chain_subjects, type_path);
+    if evidence_name.is_none()
+        && let Some(target) = alias_target
+    {
+        let resolved_target = resolve_alias_chain(items, target, 5);
+        evidence_name = evidence_for_type(registry, &resolved_target);
+        verifiers = witness_verifiers_for_type(registry, &resolved_target);
+        proof_test = type_has_proof_test(proof_chain_subjects, &resolved_target);
+    }
+    entry_from_facts(RowFacts::new(
+        type_path,
+        type_kind,
+        is_generic,
+        evidence_name,
+        &verifiers,
+        proof_test,
+        exception,
+    ))
+}
+
+/// What the registry says about one row, ready to become an entry.
+#[derive(derive_new::new)]
+pub(crate) struct RowFacts<'a> {
+    type_path: &'a str,
+    type_kind: &'a str,
+    is_generic: bool,
+    evidence_name: Option<String>,
+    verifiers: &'a HashSet<String>,
+    proof_test: bool,
+    exception: Option<&'a VerifierSkipEntry>,
+}
+
+/// Turn the registry facts for one row into its entry: the status is
+/// `Missing` without evidence, `Complete` when every applicable verifier has
+/// a witness, and `Partial` otherwise. Shared by inventory rows and by the
+/// per-instantiation rows built from them.
+#[instrument(level = "debug", skip(facts))]
+pub(crate) fn entry_from_facts(facts: RowFacts<'_>) -> CordialResult<AmenableStdEntry> {
+    let RowFacts {
+        type_path,
+        type_kind,
+        is_generic,
+        evidence_name,
+        verifiers,
+        proof_test,
+        exception,
+    } = facts;
+
     if let Some(exception) = exception
         && exception.verifiers().is_none()
     {
@@ -191,17 +241,6 @@ fn classify_wrapped_row(
             .build();
     }
 
-    let mut evidence_name = evidence_for_type(registry, type_path);
-    let mut verifiers = witness_verifiers_for_type(registry, type_path);
-    let mut proof_test = type_has_proof_test(proof_chain_subjects, type_path);
-    if evidence_name.is_none()
-        && let Some(target) = alias_target
-    {
-        let resolved_target = resolve_alias_chain(items, target, 5);
-        evidence_name = evidence_for_type(registry, &resolved_target);
-        verifiers = witness_verifiers_for_type(registry, &resolved_target);
-        proof_test = type_has_proof_test(proof_chain_subjects, &resolved_target);
-    }
     let evidence_link = evidence_name.is_some();
     let kani_witness = verifiers.contains("kani");
     let creusot_witness = verifiers.contains("creusot");

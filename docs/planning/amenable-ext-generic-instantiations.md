@@ -156,7 +156,7 @@ regroup. `Partial` is a new status value and touches every consumer of
 | --- | --- | --- |
 | 0 | Registry schema read side: `bounds`/`premises` on `EvidenceLinkDump`, `ExtGeneric<` recognized and kept distinct from `ExtStandard<`, whitespace normalization, chrono features in the dump | **Done** |
 | A | `TypeKey`, rustdoc name lookup (re-exports, globs, aliases), structured evidence parsing, `Unresolved` status; ext targets only | **Done.** `framework_std::type_identity` (`TypeKey`, `CrateIndex`, `RustdocTypeResolver` behind the `TypeResolver` trait, `resolve_ext_evidence`); 18 tests including one against the real chrono / chrono_tz rustdoc JSON. Not yet wired into `evidence_for_ext_type`; that is phase B/C |
-| B | Parent/child nodes, aggregate roll-up, generic-claim notes, bound checking | Not started |
+| B | Parent/child rows, aggregate roll-up, generic-claim notes, bound checking | **Done (library layer).** `framework_std::instantiation` (`expand_report`, `RegistryFacts`, `ExpectedInstantiations`); `TypeResolver::implements`; 13 tests including one on the real chrono / chrono_tz JSON. Not yet wired into the assessor or the reporters; that is phase C |
 | C | `instantiations` config key, Missing children, `Partial`, reporter/CSV changes | Not started |
 | D | Chrono checklist verification (8 instantiation rows, 67 total) | Not started |
 
@@ -178,6 +178,34 @@ instantiations resolve to four distinct keys with one shared head, and
 into an `EvidenceKey` (concrete: full key; generic: head only, with its
 bounds). A link whose type cannot be identified is returned with its reason,
 never dropped (a test caught the first draft dropping malformed names).
+
+### Phase B as built
+
+`expand_report` replaces each generic row with an aggregate parent followed by
+one child row per instantiation, recounting the report. Children are the
+expected instantiations (configured order, phase C supplies the list) followed
+by any registered instantiation that was not expected, noted as such. A child
+is classified by the same function as an inventory row (`entry_from_facts`,
+now shared), against facts resolved once into `TypeKey`s (`RegistryFacts`), so
+a witness is attributed to exactly the instantiation it proves. An expected
+type that cannot be identified is a `Missing` child carrying the reason.
+
+Parent roll-up: Complete when every non-excepted child is Complete, Missing
+when none has any coverage, Partial otherwise, Skipped when all are excepted;
+a witness column is set only if every counted child has it. The parent's note
+reads "3 of 4 instantiations Complete (1 excepted)" and then describes each
+generic claim: its bounds, its premises, and which instantiations satisfy the
+bounds. The claim is a note, never a row.
+
+`TypeResolver::implements` checks a bound against a type's direct trait
+impls in rustdoc. Three limits are deliberate and stated in the answer:
+blanket impls are not attached to a type in rustdoc JSON, so absence is "no
+direct impl found", not "does not implement"; bounds carry no parameter names,
+so each is applied to every type argument (exact for single-parameter
+generics); and an item is found from its canonical head by rustdoc's own
+defining-path table, because the defining path often runs through a private
+module that rustdoc strips from the tree. The last one was found by the real
+chrono data, not the synthetic fixture, and now has its own regression test.
 
 ## Open questions
 

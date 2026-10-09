@@ -1,8 +1,8 @@
 //! Name lookup inside one rustdoc crate, the way rustc resolves a path.
 
-use std::collections::HashSet;
-
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::OnceLock;
 
 use rustdoc_types::{Crate, Id, Item, ItemEnum};
 use tracing::instrument;
@@ -20,6 +20,9 @@ pub struct CrateIndex {
     name: String,
     #[getter(skip)]
     krate: Crate,
+    /// Defining path (`chrono::offset::utc::Utc`) to item, built on first use.
+    #[getter(skip)]
+    defining_paths: OnceLock<HashMap<String, Id>>,
 }
 
 /// Outcome of looking a path up in one crate.
@@ -40,6 +43,7 @@ impl CrateIndex {
         Self {
             name: name.to_string(),
             krate,
+            defining_paths: OnceLock::new(),
         }
     }
 
@@ -62,6 +66,49 @@ impl CrateIndex {
     pub fn path_of(&self, id: &Id) -> Option<(u32, &[String])> {
         let summary = self.krate.paths.get(id)?;
         Some((summary.crate_id, summary.path.as_slice()))
+    }
+
+    /// The item defined at `path` (`chrono::offset::utc::Utc`), by rustdoc's
+    /// own record of where each item is defined.
+    ///
+    /// This is how a canonical head is turned back into an item: the defining
+    /// path often runs through a private module, and rustdoc strips private
+    /// modules from the tree, so walking the tree by that path cannot find it.
+    #[instrument(level = "trace", skip(self, path))]
+    pub fn item_defined_at(&self, path: &str) -> Option<Id> {
+        self.defining_paths
+            .get_or_init(|| {
+                self.krate
+                    .paths
+                    .iter()
+                    .filter(|(_, summary)| summary.crate_id == 0)
+                    .map(|(id, summary)| (summary.path.join("::"), *id))
+                    .collect()
+            })
+            .get(path)
+            .copied()
+    }
+
+    /// Ids of the traits implemented directly on the struct, enum or union
+    /// `id`. Inherent impls are skipped. Blanket impls (`impl<T> Trait for T`)
+    /// are not attached to the type in rustdoc JSON, so they are not seen.
+    #[instrument(level = "trace", skip(self, id))]
+    pub fn implemented_trait_ids(&self, id: &Id) -> Vec<Id> {
+        let impls = match self.item(id).map(|item| &item.inner) {
+            Some(ItemEnum::Struct(found)) => &found.impls,
+            Some(ItemEnum::Enum(found)) => &found.impls,
+            Some(ItemEnum::Union(found)) => &found.impls,
+            _ => return Vec::new(),
+        };
+        impls
+            .iter()
+            .filter_map(|impl_id| match self.item(impl_id).map(|item| &item.inner) {
+                Some(ItemEnum::Impl(found)) if !found.is_negative => {
+                    found.trait_.as_ref().map(|path| path.id)
+                }
+                _ => None,
+            })
+            .collect()
     }
 
     /// Resolve `segments` (without the leading crate name) from the crate
