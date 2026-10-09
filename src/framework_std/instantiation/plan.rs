@@ -37,10 +37,7 @@ pub fn expand_report(
     report: &AmenableStdReport,
     ctx: &InstantiationContext<'_>,
 ) -> CordialResult<AmenableStdReport> {
-    let mut entries = Vec::new();
-    for entry in report.entries() {
-        entries.extend(expand_entry(entry, ctx)?);
-    }
+    let entries = expand_entries(report.entries(), ctx)?;
     let count = |status: AmenableStdStatus| {
         entries
             .iter()
@@ -57,6 +54,20 @@ pub fn expand_report(
         .skipped_count(count(AmenableStdStatus::Skipped))
         .entries(entries)
         .build()
+}
+
+/// The same expansion over bare rows, for callers that classify rows one at a
+/// time and have no report yet.
+#[instrument(level = "debug", skip(entries, ctx), err(level = "warn"))]
+pub fn expand_entries(
+    entries: &[AmenableStdEntry],
+    ctx: &InstantiationContext<'_>,
+) -> CordialResult<Vec<AmenableStdEntry>> {
+    let mut expanded = Vec::with_capacity(entries.len());
+    for entry in entries {
+        expanded.extend(expand_entry(entry, ctx)?);
+    }
+    Ok(expanded)
 }
 
 /// Where the instantiations to report came from, for the parent's note.

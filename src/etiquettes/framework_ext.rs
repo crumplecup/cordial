@@ -39,7 +39,10 @@ use tracing::instrument;
 pub use assessor::ExtAssessor;
 pub use probe::ExtScopeProbe;
 pub use reporter::ExtReporter;
-pub use row::{ext_etiquette_id, ext_report_from_findings};
+pub use row::{
+    ExtRowFinding, ExtRowRule, ext_etiquette_id, ext_gaps_from_findings, ext_report_from_findings,
+    ext_row_disposition,
+};
 
 use crate::etiquette::{EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, StaticEtiquette};
 use crate::hooks::{Assessor, Probe, Reporter};

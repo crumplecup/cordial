@@ -129,9 +129,12 @@ pub use cfg_scatter::{
 #[cfg(feature = "dependency_freshness")]
 pub use dependency_freshness::DEPENDENCY_FRESHNESS_ETIQUETTE;
 #[cfg(feature = "amenable_ext")]
-pub use framework_ext::{AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter};
+pub use framework_ext::{
+    AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter, ExtRowFinding, ExtRowRule, ext_gaps_from_findings,
+    ext_report_from_findings, ext_row_disposition,
+};
 #[cfg(feature = "amenable_ext")]
-pub(crate) use framework_ext::{KNOWN_TARGETS, build_ext_etiquette, ext_report_from_findings};
+pub(crate) use framework_ext::{KNOWN_TARGETS, build_ext_etiquette};
 #[cfg(feature = "impl_coverage")]
 pub use impl_coverage::{IMPL_COVERAGE_ETIQUETTE, ImplGapAssessment, ImplGapKind, assess_impl_gap};
 #[cfg(feature = "proof_patterns")]

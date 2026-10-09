@@ -73,10 +73,17 @@ pub use crate::framework_std::{
 #[cfg(feature = "amenable_ext")]
 pub use crate::framework_std::{
     AMENABLE_EXT_IMPL_CRATE, AMENABLE_EXT_JIFF_PATCH_SET, AMENABLE_EXT_JIFF_UPSTREAM_CRATE,
-    AmenableExtOptions, assess_amenable_ext_coverage, build_amenable_ext_gaps,
+    AmenableExtOptions, ExtExpansionInputs, assess_amenable_ext_coverage, build_amenable_ext_gaps,
     build_amenable_ext_report, collect_proof_chain_subjects, evidence_for_ext_type,
-    load_ext_inventory_from_shadow_dep, parse_ext_standard_inner, render_amenable_ext_checklist_md,
-    render_amenable_ext_summary_md, witness_verifiers_for_ext_type,
+    expand_ext_entries, expand_ext_report, load_ext_inventory_from_shadow_dep,
+    parse_ext_standard_inner, render_amenable_ext_checklist_md, render_amenable_ext_summary_md,
+    resolver_crates, witness_verifiers_for_ext_type,
+};
+
+#[cfg(feature = "amenable_ext")]
+pub use crate::etiquettes::{
+    ExtRowFinding, ExtRowRule, ext_gaps_from_findings, ext_report_from_findings,
+    ext_row_disposition,
 };
 
 #[cfg(feature = "rustdoc")]

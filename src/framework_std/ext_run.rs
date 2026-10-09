@@ -14,6 +14,9 @@ use tracing::instrument;
 use crate::error::CordialResult;
 use crate::framework_std::amenable::{AmenableStdReport, build_amenable_ext_report};
 use crate::framework_std::amenable_run::{AmenableStdOptions, ensure_registry_dump_for_assessor};
+use crate::framework_std::ext_expand::{
+    ExtExpansionInputs, expand_ext_report, load_ext_resolver, resolver_crates,
+};
 use crate::framework_std::ext_inventory::load_ext_inventory_from_shadow_dep;
 use crate::framework_std::proof_harness::collect_proof_chain_subjects;
 use crate::framework_std::verifier_skip::load_verifier_skip_map;
@@ -66,7 +69,6 @@ pub fn assess_amenable_ext_coverage(
     patch_set: &str,
     options: &AmenableExtOptions,
 ) -> CordialResult<AmenableStdReport> {
-    let _ = session;
     let items = load_ext_inventory_from_shadow_dep(
         project_root,
         store,
@@ -79,7 +81,7 @@ pub fn assess_amenable_ext_coverage(
     let registry = ensure_registry_dump_for_assessor(store, project_root, &registry_options)?;
     let skip_map = load_verifier_skip_map(store, patch_set);
     let proof_chain_subjects = collect_proof_chain_subjects(project_root)?;
-    build_amenable_ext_report(
+    let report = build_amenable_ext_report(
         upstream_crate,
         &items,
         shadow_crate,
@@ -87,5 +89,27 @@ pub fn assess_amenable_ext_coverage(
         &skip_map,
         &proof_chain_subjects,
         options.include_nightly(),
+    )?;
+    // Generic rows become an aggregate plus one row per instantiation.
+    let config = crate::config::load_session_config(session);
+    let target = config.amenable_ext().target(upstream_crate);
+    let resolver = load_ext_resolver(
+        project_root,
+        store,
+        shadow_crate,
+        &resolver_crates(upstream_crate, target),
+        config.amenable_ext(),
+        options.force_rustdoc(),
+    )?;
+    expand_ext_report(
+        &report,
+        &ExtExpansionInputs::new(
+            &resolver,
+            &registry,
+            &proof_chain_subjects,
+            &skip_map,
+            config.amenable_ext(),
+            target,
+        ),
     )
 }

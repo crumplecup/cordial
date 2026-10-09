@@ -14,6 +14,8 @@ mod amenable_render;
 #[cfg(feature = "amenable_std")]
 mod amenable_run;
 #[cfg(feature = "amenable_ext")]
+mod ext_expand;
+#[cfg(feature = "amenable_ext")]
 mod ext_inventory;
 #[cfg(feature = "amenable_ext")]
 mod ext_run;
@@ -88,6 +90,10 @@ pub use self::{
         classify_amenable_ext_row,
     },
     amenable_render::{render_amenable_ext_checklist_md, render_amenable_ext_summary_md},
+    ext_expand::{
+        ExtExpansionInputs, expand_ext_entries, expand_ext_report, load_ext_resolver,
+        resolver_crates,
+    },
     ext_inventory::load_ext_inventory_from_shadow_dep,
     ext_run::{
         AMENABLE_EXT_IMPL_CRATE, AMENABLE_EXT_JIFF_PATCH_SET, AMENABLE_EXT_JIFF_UPSTREAM_CRATE,

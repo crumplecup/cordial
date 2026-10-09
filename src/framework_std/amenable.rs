@@ -84,6 +84,11 @@ pub struct AmenableStdEntry {
     #[serde(default)]
     #[builder(default)]
     parent: Option<String>,
+    /// How many instantiation rows follow this generic row; 0 for any other.
+    #[serde(default)]
+    #[builder(default)]
+    #[getter(copy)]
+    instantiations: usize,
     /// Free-text note: a parent's roll-up and declared bounds, or why a child
     /// row is not an ordinary registered instantiation.
     #[serde(default)]
@@ -96,6 +101,19 @@ impl AmenableStdEntry {
     #[instrument(level = "debug")]
     pub fn builder() -> AmenableStdEntryBuilder {
         AmenableStdEntryBuilder::default()
+    }
+
+    /// What kind of row this is: `instantiation` of a generic row,
+    /// `aggregate` (a generic row that has instantiation rows), or `plain`.
+    #[instrument(level = "trace", skip(self))]
+    pub fn kind(&self) -> &'static str {
+        if self.parent.is_some() {
+            "instantiation"
+        } else if self.instantiations > 0 {
+            "aggregate"
+        } else {
+            "plain"
+        }
     }
 
     /// Make this the row for one instantiation of the generic row
@@ -152,6 +170,7 @@ impl AmenableStdEntry {
         self.kani_excepted = children.iter().all(|child| child.kani_excepted);
         self.creusot_excepted = children.iter().all(|child| child.creusot_excepted);
         self.verus_excepted = children.iter().all(|child| child.verus_excepted);
+        self.instantiations = children.len();
         self.note = note;
         self
     }

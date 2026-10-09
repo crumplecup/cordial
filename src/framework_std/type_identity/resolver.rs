@@ -239,14 +239,14 @@ impl RustdocTypeResolver {
             .collect()
     }
 
-    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[instrument(level = "debug", skip(self), err(level = "debug"))]
     fn resolve_normalized(&self, text: &str, head_only: bool) -> Result<TypeKey, Unresolved> {
         let parsed = parse_type_text(&normalize_type_text(text))
             .ok_or_else(|| Unresolved::Malformed(text.to_string()))?;
         self.resolve_text(&parsed, head_only)
     }
 
-    #[instrument(level = "debug", skip(self, text), err(level = "warn"))]
+    #[instrument(level = "debug", skip(self, text), err(level = "debug"))]
     fn resolve_text(&self, text: &TypeText, head_only: bool) -> Result<TypeKey, Unresolved> {
         let args = if head_only {
             Vec::new()
@@ -265,7 +265,7 @@ impl RustdocTypeResolver {
         self.crates.iter().find(|index| index.name() == name)
     }
 
-    #[instrument(level = "debug", skip(self, key), err(level = "warn"))]
+    #[instrument(level = "debug", skip(self, key), err(level = "debug"))]
     fn check_size(&self, key: TypeKey) -> Result<TypeKey, Unresolved> {
         if key.node_count() > self.caps.max_type_nodes() {
             return Err(Unresolved::TypeTooLarge(key.head().clone()));
@@ -273,7 +273,7 @@ impl RustdocTypeResolver {
         Ok(key)
     }
 
-    #[instrument(level = "debug", skip(self, path, args), err(level = "warn"))]
+    #[instrument(level = "debug", skip(self, path, args), err(level = "debug"))]
     fn resolve_path(&self, path: &str, args: Vec<TypeKey>) -> Result<TypeKey, Unresolved> {
         if !path
             .chars()
@@ -319,7 +319,7 @@ impl RustdocTypeResolver {
 
     /// Identity of the item `id` seen from crate `index`, applied to `args`.
     /// Type aliases expand; everything else keeps its canonical head.
-    #[instrument(level = "debug", skip(self, index, id, args), err(level = "warn"))]
+    #[instrument(level = "debug", skip(self, index, id, args), err(level = "debug"))]
     fn key_for_item(
         &self,
         index: &CrateIndex,
@@ -352,7 +352,7 @@ impl RustdocTypeResolver {
 
     /// An id this crate's index does not hold: re-resolve it in the
     /// allowlisted crate that owns it, else keep it opaque.
-    #[instrument(level = "debug", skip(self, index, id, args), err(level = "warn"))]
+    #[instrument(level = "debug", skip(self, index, id, args), err(level = "debug"))]
     fn key_for_external(
         &self,
         index: &CrateIndex,
@@ -376,7 +376,7 @@ impl RustdocTypeResolver {
         Ok(TypeKey::new(segments.join("::"), args))
     }
 
-    #[instrument(level = "debug", skip(self, index, alias, args), err(level = "warn"))]
+    #[instrument(level = "debug", skip(self, index, alias, args), err(level = "debug"))]
     fn expand_alias(
         &self,
         index: &CrateIndex,
@@ -401,7 +401,7 @@ impl RustdocTypeResolver {
     #[instrument(
         level = "debug",
         skip(self, index, ty, substitutions),
-        err(level = "warn")
+        err(level = "debug")
     )]
     fn type_to_key(
         &self,
@@ -451,7 +451,7 @@ fn collect_hits<'a>(hits: &mut Vec<(&'a CrateIndex, Id)>, index: &'a CrateIndex,
 }
 
 /// Canonical head for a local item: its defining path from rustdoc.
-#[instrument(level = "debug", skip(index, id), err(level = "warn"))]
+#[instrument(level = "debug", skip(index, id), err(level = "debug"))]
 fn canonical_head(index: &CrateIndex, id: &Id) -> Result<String, Unresolved> {
     index
         .path_of(id)

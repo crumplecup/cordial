@@ -71,6 +71,8 @@ impl Rule for ExtRowRule {
     }
 }
 
+/// One row of an amenable-ext target's coverage: a plain inventory row, a
+/// generic row that aggregates its instantiations, or one instantiation.
 #[derive(Debug, Clone, derive_builder::Builder)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct ExtRowFinding {
@@ -95,6 +97,15 @@ pub struct ExtRowFinding {
     verus_excepted: bool,
     missing_layers: String,
     action: String,
+    /// For an instantiation row: the generic row it belongs to.
+    #[builder(default)]
+    parent: Option<String>,
+    /// A parent's roll-up and declared bounds, or why a child is unusual.
+    #[builder(default)]
+    note: Option<String>,
+    /// How many instantiation rows follow this generic row; 0 for any other.
+    #[builder(default)]
+    instantiations: usize,
 }
 
 impl ExtRowFinding {
@@ -195,9 +206,24 @@ impl Finding for ExtRowFinding {
         );
         sink.field("missing_layers", &self.missing_layers);
         sink.field("action", &self.action);
+        sink.field("parent", &self.parent.as_deref().unwrap_or(""));
+        sink.field("note", &self.note.as_deref().unwrap_or(""));
+        sink.field("instantiations", &self.instantiations.to_string());
+        sink.field(
+            "kind",
+            &if self.parent.is_some() {
+                "instantiation"
+            } else if self.instantiations > 0 {
+                "aggregate"
+            } else {
+                "plain"
+            },
+        );
     }
 }
 
+/// How a row's status maps to a finding disposition: Missing and Partial are
+/// open, Skipped is suppressed, Complete is an exemplar.
 #[instrument(level = "debug", skip(status))]
 pub fn ext_row_disposition(status: AmenableStdStatus) -> Disposition {
     match status {
@@ -207,6 +233,15 @@ pub fn ext_row_disposition(status: AmenableStdStatus) -> Disposition {
     }
 }
 
+/// `None` for an empty field, else the text.
+#[instrument(level = "trace")]
+fn non_empty(text: String) -> Option<String> {
+    (!text.is_empty()).then_some(text)
+}
+
+/// Rebuild the coverage report for `category` from the findings the assessor
+/// emitted, with instantiation rows and notes intact. `None` when there are
+/// no findings in that category.
 #[instrument(level = "debug", skip(findings))]
 pub fn ext_report_from_findings(
     findings: &[&dyn Finding],
@@ -283,6 +318,9 @@ pub fn ext_report_from_findings(
                 .kani_excepted(field("kani_excepted") == "true")
                 .creusot_excepted(field("creusot_excepted") == "true")
                 .verus_excepted(field("verus_excepted") == "true")
+                .parent(non_empty(field("parent")))
+                .note(non_empty(field("note")))
+                .instantiations(field("instantiations").parse().unwrap_or(0))
                 .build()?,
         );
     }
@@ -301,6 +339,8 @@ pub fn ext_report_from_findings(
     ))
 }
 
+/// The open rows of `category` as gap entries. An aggregate generic row is
+/// left out: it is open only because its instantiation rows are.
 #[instrument(level = "debug", skip(findings))]
 pub fn ext_gaps_from_findings(
     findings: &[&dyn Finding],
@@ -311,7 +351,7 @@ pub fn ext_gaps_from_findings(
         .filter(|finding| {
             finding.rule().category() == category && finding.disposition() == Disposition::Open
         })
-        .map(|finding| {
+        .filter_map(|finding| {
             let mut sink = crate::objects::MapFindingSink::default();
             finding.emit(&mut sink);
             let field = |name: &str| {
@@ -321,20 +361,25 @@ pub fn ext_gaps_from_findings(
                     .map(|(_, value)| value.clone())
                     .unwrap_or_default()
             };
+            // An aggregate is open only because its instantiation rows are;
+            // those rows are the gaps.
+            if field("kind") == "aggregate" {
+                return None;
+            }
             let status = match field("status").as_str() {
                 "Partial" => AmenableStdStatus::Partial,
                 "Skipped" => AmenableStdStatus::Skipped,
                 "Complete" => AmenableStdStatus::Complete,
                 _ => AmenableStdStatus::Missing,
             };
-            AmenableStdGapEntry::new(
+            Some(AmenableStdGapEntry::new(
                 field("source_crate"),
                 field("type_path"),
                 field("type_kind"),
                 status,
                 field("missing_layers"),
                 field("action"),
-            )
+            ))
         })
         .collect()
 }

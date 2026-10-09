@@ -11,14 +11,14 @@ use tracing::instrument;
 #[instrument(level = "debug", skip(report), err(level = "warn"))]
 pub fn render_amenable_std_coverage_csv(report: &AmenableStdReport) -> CordialResult<String> {
     let mut body = String::from(
-        "type_path,type_kind,is_generic,status,evidence_link,evidence_name,kani_witness,creusot_witness,verus_witness,proof_test,skip_reason\n",
+        "type_path,type_kind,is_generic,status,evidence_link,evidence_name,kani_witness,creusot_witness,verus_witness,proof_test,skip_reason,kind,parent,note\n",
     );
     let mut rows: Vec<_> = report.entries().iter().collect();
     rows.sort_by(|left, right| left.type_path().cmp(right.type_path()));
     for entry in rows {
         writeln!(
             body,
-            "{},{},{},{},{},{},{},{},{},{},{}",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
             csv_escape(entry.type_path()),
             entry.type_kind(),
             entry.is_generic(),
@@ -29,7 +29,10 @@ pub fn render_amenable_std_coverage_csv(report: &AmenableStdReport) -> CordialRe
             entry.creusot_witness(),
             entry.verus_witness(),
             entry.proof_test(),
-            csv_escape(entry.skip_reason().as_deref().unwrap_or(""))
+            csv_escape(entry.skip_reason().as_deref().unwrap_or("")),
+            entry.kind(),
+            csv_escape(entry.parent().as_deref().unwrap_or("")),
+            csv_escape(entry.note().as_deref().unwrap_or(""))
         )?;
     }
     Ok(body)
@@ -100,15 +103,22 @@ fn render_wrapped_checklist_md(
     wrapper_type: &str,
     patch_set: &str,
 ) -> CordialResult<String> {
-    let missing: Vec<_> = report
+    // A generic row with instantiation rows is open only because they are;
+    // the instantiation rows carry the action, so the aggregate is left out
+    // of the two action lists and shown in its own section.
+    let actionable = |status: AmenableStdStatus| -> Vec<_> {
+        report
+            .entries()
+            .iter()
+            .filter(|entry| entry.status() == status && entry.kind() != "aggregate")
+            .collect()
+    };
+    let missing = actionable(AmenableStdStatus::Missing);
+    let partial = actionable(AmenableStdStatus::Partial);
+    let aggregates: Vec<_> = report
         .entries()
         .iter()
-        .filter(|entry| entry.status() == AmenableStdStatus::Missing)
-        .collect();
-    let partial: Vec<_> = report
-        .entries()
-        .iter()
-        .filter(|entry| entry.status() == AmenableStdStatus::Partial)
+        .filter(|entry| entry.kind() == "aggregate")
         .collect();
     let documented: Vec<_> = report
         .entries()
@@ -155,9 +165,10 @@ fn render_wrapped_checklist_md(
         for entry in missing {
             writeln!(
                 out,
-                "- [ ] `{}` ({}) — register in `{}`",
+                "- [ ] `{}` ({}){} — register in `{}`",
                 entry.type_path(),
                 entry.type_kind(),
+                instantiation_suffix(entry),
                 report.impl_crate()
             )?;
         }
@@ -188,10 +199,38 @@ fn render_wrapped_checklist_md(
             }
             writeln!(
                 out,
-                "- [ ] `{}` — missing: {}",
+                "- [ ] `{}`{} — missing: {}",
                 entry.type_path(),
+                instantiation_suffix(entry),
                 gaps.join(", ")
             )?;
+        }
+        writeln!(out)?;
+    }
+
+    if !aggregates.is_empty() {
+        writeln!(
+            out,
+            "## Generic types and their instantiations ({})",
+            aggregates.len()
+        )?;
+        for aggregate in aggregates {
+            writeln!(
+                out,
+                "\n### `{}` — {}\n",
+                aggregate.type_path(),
+                aggregate.status()
+            )?;
+            if let Some(note) = aggregate.note() {
+                writeln!(out, "{note}.\n")?;
+            }
+            for child in report
+                .entries()
+                .iter()
+                .filter(|entry| entry.parent().as_deref() == Some(aggregate.type_path().as_str()))
+            {
+                writeln!(out, "- `{}` — {}", child.type_path(), child.status())?;
+            }
         }
         writeln!(out)?;
     }
@@ -226,6 +265,16 @@ fn render_wrapped_checklist_md(
     }
 
     Ok(out)
+}
+
+/// " (instantiation of `parent`)" for an instantiation row, else nothing.
+#[instrument(level = "trace", skip(entry))]
+fn instantiation_suffix(entry: &crate::framework_std::amenable::AmenableStdEntry) -> String {
+    entry
+        .parent()
+        .as_deref()
+        .map(|parent| format!(" (instantiation of `{parent}`)"))
+        .unwrap_or_default()
 }
 
 /// Amenable std registry coverage summary.

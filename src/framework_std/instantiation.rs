@@ -21,4 +21,4 @@ pub use amenable_registry::{
 };
 pub use evidence::InstantiationEvidence;
 pub use expected::ExpectedInstantiations;
-pub use plan::{InstantiationContext, expand_report};
+pub use plan::{InstantiationContext, expand_entries, expand_report};

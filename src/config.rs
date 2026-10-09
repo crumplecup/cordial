@@ -22,6 +22,8 @@ use config::{Config, File, FileFormat};
 use serde::{Deserialize, Serialize};
 
 pub use self::amenable_ext::AmenableExtConfig;
+#[cfg(feature = "amenable_ext")]
+pub use self::amenable_ext::AmenableExtTargetConfig;
 pub use self::antipatterns::{AntipatternsConfig, StaticRefPolicy, StaticRefStrategy};
 pub use self::cfg::{CfgHygieneThresholds, CfgScatterThresholds};
 pub use self::checks::{

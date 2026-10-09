@@ -4,9 +4,10 @@
 
 use crate::error::CordialResult;
 use crate::framework_std::{
-    AMENABLE_EXT_IMPL_CRATE, AmenableExtOptions, ClassifyRowArgs, amenable_ext_gap_fields,
-    classify_amenable_ext_row, collect_proof_chain_subjects, ensure_registry_dump_for_assessor,
-    load_ext_inventory_from_shadow_dep, load_verifier_skip_map,
+    AMENABLE_EXT_IMPL_CRATE, AmenableExtOptions, ClassifyRowArgs, ExtExpansionInputs,
+    amenable_ext_gap_fields, classify_amenable_ext_row, collect_proof_chain_subjects,
+    ensure_registry_dump_for_assessor, expand_ext_entries, load_ext_inventory_from_shadow_dep,
+    load_ext_resolver, load_verifier_skip_map, resolver_crates,
 };
 use crate::hooks::{AssessView, Assessor};
 use crate::objects::{Finding, NodeAnchor};
@@ -78,13 +79,13 @@ impl Assessor for ExtAssessor {
         let proof_chain_subjects = collect_proof_chain_subjects(session.project_root())?;
         let anchor = NodeAnchor::new(ir.root()?);
 
-        let mut findings = Vec::new();
+        let mut classified = Vec::new();
         for marker in markers {
             let Some(type_path) = marker.field("type_path") else {
                 continue;
             };
             let item = items.iter().find(|item| item.path() == type_path);
-            let entry = classify_amenable_ext_row(
+            classified.push(classify_amenable_ext_row(
                 type_path,
                 ClassifyRowArgs::new(
                     marker.field("type_kind").unwrap_or(""),
@@ -95,8 +96,40 @@ impl Assessor for ExtAssessor {
                     &skip_map,
                     &proof_chain_subjects,
                 ),
-            )?;
-            let (missing_layers, action) = amenable_ext_gap_fields(&entry, AMENABLE_EXT_IMPL_CRATE);
+            )?);
+        }
+
+        // Generic rows become an aggregate plus one row per instantiation,
+        // read from rustdoc (the target crate and the configured others).
+        let config = crate::config::load_session_config(session);
+        let target = config.amenable_ext().target(&self.upstream_crate);
+        let resolver = load_ext_resolver(
+            session.project_root(),
+            &store,
+            AMENABLE_EXT_IMPL_CRATE,
+            &resolver_crates(&self.upstream_crate, target),
+            config.amenable_ext(),
+            options.force_rustdoc(),
+        )?;
+        let entries = expand_ext_entries(
+            &classified,
+            &ExtExpansionInputs::new(
+                &resolver,
+                &registry,
+                &proof_chain_subjects,
+                &skip_map,
+                config.amenable_ext(),
+                target,
+            ),
+        )?;
+
+        let mut findings = Vec::new();
+        for entry in entries {
+            let (missing_layers, action) = if entry.kind() == "aggregate" {
+                (String::new(), "see the instantiation rows".to_string())
+            } else {
+                amenable_ext_gap_fields(&entry, AMENABLE_EXT_IMPL_CRATE)
+            };
             findings.push(Box::new(
                 ExtRowFinding::builder()
                     .rule(self.rule.clone())
@@ -120,6 +153,9 @@ impl Assessor for ExtAssessor {
                     .verus_excepted(entry.verus_excepted())
                     .missing_layers(missing_layers)
                     .action(action)
+                    .parent(entry.parent().clone())
+                    .note(entry.note().clone())
+                    .instantiations(entry.instantiations())
                     .build()?,
             ) as Box<dyn Finding>);
         }

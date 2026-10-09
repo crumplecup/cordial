@@ -43,7 +43,7 @@ fn build_wrapped_gaps(report: &AmenableStdReport, wrapper_name: &str) -> Vec<Ame
             matches!(
                 entry.status(),
                 AmenableStdStatus::Missing | AmenableStdStatus::Partial
-            )
+            ) && entry.kind() != "aggregate"
         })
         .map(|entry| {
             let (missing_layers, action) =

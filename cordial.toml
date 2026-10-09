@@ -33,6 +33,15 @@ min_occurrences = 5
 [antipatterns.static_refs]
 strategy = "cow"
 
+# Third-party coverage targets. `derive_cap` bounds the instantiation rows
+# derived from rustdoc for one generic type; `alias_depth` and
+# `max_type_nodes` bound type resolution. Per target: `resolve_crates`,
+# `instantiations` (see docs/planning/amenable-ext-generic-instantiations.md).
+[amenable_ext]
+derive_cap = 16
+alias_depth = 8
+max_type_nodes = 64
+
 # Warnings that fire only under some feature combinations. Mirrors the
 # `check-features` recipe in the justfile (keep the two in step).
 [feature_warnings]
