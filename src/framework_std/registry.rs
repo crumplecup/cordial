@@ -28,14 +28,6 @@ const EXT_STANDARD_PREFIX: &str = "amenable_ext::ExtStandard<";
 const PROOF_CHAIN_EXT_STANDARD_PREFIX: &str = "ExtStandard<";
 const EXT_STANDARD_PREFIXES: &[&str] = &[EXT_STANDARD_PREFIX, PROOF_CHAIN_EXT_STANDARD_PREFIX];
 
-/// `amenable_ext::ExtGeneric<T>` — a claim generic over trait bounds
-/// (`register_ext_generic_evidence!`). The wrapper differs from
-/// `ExtStandard<T>` on purpose, so a generic name never equals a concrete
-/// one. Same qualified/bare prefix pair as the other wrappers.
-const EXT_GENERIC_PREFIX: &str = "amenable_ext::ExtGeneric<";
-const PROOF_CHAIN_EXT_GENERIC_PREFIX: &str = "ExtGeneric<";
-const EXT_GENERIC_PREFIXES: &[&str] = &[EXT_GENERIC_PREFIX, PROOF_CHAIN_EXT_GENERIC_PREFIX];
-
 /// Serializable dump of a std-family coverage registry.
 #[derive(
     Debug,
@@ -72,55 +64,6 @@ pub struct EvidenceLinkDump {
     /// Ordinal of this record in its list.
     #[getter(copy)]
     index: usize,
-    /// Trait bounds a generic claim is generic over; empty for a concrete
-    /// link. Absent in dumps older than amenable's generic evidence links.
-    #[serde(default)]
-    #[new(default)]
-    bounds: Vec<String>,
-    /// Premises a generic claim relies on beyond its bounds; empty for a
-    /// concrete link.
-    #[serde(default)]
-    #[new(default)]
-    premises: Vec<PremiseDump>,
-}
-
-impl EvidenceLinkDump {
-    /// A generic link: `name` is generic over `bounds` and relies on
-    /// `premises`.
-    #[instrument(level = "debug", skip(premises))]
-    pub fn generic(
-        name: String,
-        basis: String,
-        index: usize,
-        bounds: Vec<String>,
-        premises: Vec<PremiseDump>,
-    ) -> Self {
-        Self {
-            name,
-            basis,
-            index,
-            bounds,
-            premises,
-        }
-    }
-
-    /// Whether this link is a generic claim, as opposed to a concrete one.
-    /// Recognized by the `ExtGeneric<…>` wrapper or by carrying bounds.
-    #[instrument(level = "trace", skip(self))]
-    pub fn is_generic(&self) -> bool {
-        !self.bounds.is_empty() || parse_ext_generic_inner(&self.name).is_some()
-    }
-}
-
-/// Serializable premise of a generic evidence claim.
-#[derive(
-    Debug, Clone, Serialize, Deserialize, PartialEq, Eq, derive_new::new, derive_getters::Getters,
-)]
-pub struct PremiseDump {
-    /// Stable premise identifier.
-    id: String,
-    /// What the premise assumes, in plain words.
-    statement: String,
 }
 
 /// Serializable proof record inside a registry dump.
@@ -205,28 +148,6 @@ fn evidence_for_wrapped_type(
         }
     }
     None
-}
-
-/// Extract the inventory-matching base type from an `ExtGeneric<…>` evidence name.
-#[instrument(level = "debug")]
-pub fn parse_ext_generic_inner(evidence: &str) -> Option<String> {
-    parse_wrapped_standard_inner(evidence, EXT_GENERIC_PREFIXES)
-}
-
-/// Generic claims (`ExtGeneric<…>` links) whose type matches `type_path`.
-#[instrument(level = "debug", skip(registry))]
-pub fn generic_claims_for_ext_type<'a>(
-    registry: &'a RegistryDump,
-    type_path: &str,
-) -> Vec<&'a EvidenceLinkDump> {
-    registry
-        .evidence_links()
-        .iter()
-        .filter(|link| {
-            parse_ext_generic_inner(link.name())
-                .is_some_and(|inner| type_has_trait_impl(&HashSet::from([inner]), type_path))
-        })
-        .collect()
 }
 
 /// Evidence for std type.

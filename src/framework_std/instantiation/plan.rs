@@ -10,7 +10,7 @@ use crate::framework_std::{AmenableStdEntry, AmenableStdReport, AmenableStdStatu
 
 use super::expected::ExpectedInstantiations;
 use super::facts::RegistryFacts;
-use super::note::{ChildView, claims_note, rollup_summary, short_label};
+use super::note::{ChildView, declared_bounds_note, rollup_summary, short_label};
 
 /// What expanding a report needs besides the report.
 #[derive(derive_new::new)]
@@ -70,11 +70,9 @@ fn expand_entry(
     let Ok(head) = ctx.resolver.resolve_head(parent.type_path()) else {
         return Ok(vec![parent.clone()]);
     };
-    let claims = ctx.facts.generic_claims_for(head.head());
     let seeds = seeds_for(parent, head.head(), ctx);
     if seeds.is_empty() {
-        let note = claims_note(&claims, &[], ctx.resolver);
-        return Ok(vec![parent.clone().with_note(note)]);
+        return Ok(vec![parent.clone()]);
     }
 
     let mut children = Vec::with_capacity(seeds.len());
@@ -94,10 +92,8 @@ fn expand_entry(
         })
         .collect();
     let mut note = rollup_summary(&children);
-    if let Some(claims) = claims_note(&claims, &views, ctx.resolver) {
-        note.push_str(". ");
-        note.push_str(&claims);
-    }
+    note.push_str(". ");
+    note.push_str(&declared_bounds_note(&head, &views, ctx.resolver));
     let mut rows = vec![parent.clone().rolled_up(&children, Some(note))];
     rows.extend(children);
     Ok(rows)

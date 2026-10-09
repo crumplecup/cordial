@@ -6,8 +6,8 @@ use tracing::instrument;
 
 use crate::framework_std::registry::RegistryDump;
 use crate::framework_std::type_identity::{
-    EvidenceKey, EvidenceKind, ProofKey, TypeKey, TypeResolver, resolve_ext_evidence,
-    resolve_ext_proofs, resolve_proof_subjects,
+    EvidenceKey, ProofKey, TypeKey, TypeResolver, resolve_ext_evidence, resolve_ext_proofs,
+    resolve_proof_subjects,
 };
 
 /// Everything the registry says about ext types, resolved to [`TypeKey`]s so
@@ -40,7 +40,6 @@ impl RegistryFacts {
     pub fn instantiations_of(&self, head: &str) -> Vec<&TypeKey> {
         self.evidence
             .iter()
-            .filter(|entry| entry.kind() == EvidenceKind::Concrete)
             .filter_map(|entry| entry.key().as_ref().ok())
             .filter(|key| key.head() == head && !key.args().is_empty())
             .collect()
@@ -51,7 +50,6 @@ impl RegistryFacts {
     pub fn evidence_name_for(&self, key: &TypeKey) -> Option<String> {
         self.evidence
             .iter()
-            .filter(|entry| entry.kind() == EvidenceKind::Concrete)
             .find(|entry| entry.key().as_ref().is_ok_and(|found| found == key))
             .map(|entry| entry.name().clone())
     }
@@ -70,15 +68,5 @@ impl RegistryFacts {
     #[instrument(level = "trace", skip(self, key))]
     pub fn has_proof_test(&self, key: &TypeKey) -> bool {
         self.subjects.iter().any(|subject| subject == key)
-    }
-
-    /// Generic claims (`ExtGeneric<..>`) whose type has the head `head`.
-    #[instrument(level = "trace", skip(self))]
-    pub fn generic_claims_for(&self, head: &str) -> Vec<&EvidenceKey> {
-        self.evidence
-            .iter()
-            .filter(|entry| entry.kind() == EvidenceKind::Generic)
-            .filter(|entry| entry.key().as_ref().is_ok_and(|key| key.head() == head))
-            .collect()
     }
 }

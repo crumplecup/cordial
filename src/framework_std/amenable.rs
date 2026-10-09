@@ -84,7 +84,7 @@ pub struct AmenableStdEntry {
     #[serde(default)]
     #[builder(default)]
     parent: Option<String>,
-    /// Free-text note: a parent's roll-up and generic claims, or why a child
+    /// Free-text note: a parent's roll-up and declared bounds, or why a child
     /// row is not an ordinary registered instantiation.
     #[serde(default)]
     #[builder(default)]
@@ -103,13 +103,6 @@ impl AmenableStdEntry {
     #[instrument(level = "trace", skip(self))]
     pub(crate) fn into_instantiation(mut self, parent: &str, note: Option<String>) -> Self {
         self.parent = Some(parent.to_string());
-        self.note = note;
-        self
-    }
-
-    /// Attach a note to this row.
-    #[instrument(level = "trace", skip(self))]
-    pub(crate) fn with_note(mut self, note: Option<String>) -> Self {
         self.note = note;
         self
     }

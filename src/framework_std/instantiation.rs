@@ -5,7 +5,8 @@
 //! instantiation has its own witnesses. This module turns a generic
 //! inventory row into an aggregate parent plus one child row per
 //! instantiation, each with its own status. Generic claims over a trait
-//! bound (`ExtGeneric<..>`) stay on the parent as a note. Design:
+//! what the type itself declares about its parameters is a note on the
+//! parent, read from rustdoc. Design:
 //! `docs/planning/amenable-ext-generic-instantiations.md`.
 
 mod expected;

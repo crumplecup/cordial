@@ -13,12 +13,30 @@ pub trait TypeResolver {
     /// Resolve `text` fully: head and every argument.
     fn resolve(&self, text: &str) -> Result<TypeKey, Unresolved>;
 
-    /// Resolve only the head, ignoring arguments. For generic claims whose
-    /// arguments are type parameters (`ExtGeneric<DateTime<Tz>>`).
+    /// Resolve only the head, ignoring arguments: the generic type itself
+    /// (`chrono::DateTime`), not one instantiation of it.
     fn resolve_head(&self, text: &str) -> Result<TypeKey, Unresolved>;
 
-    /// Whether `ty` has a direct impl of the trait named by `bound`.
-    fn implements(&self, ty: &TypeKey, bound: &str) -> Implements;
+    /// Whether `ty` has a direct impl of the trait `bound`.
+    fn implements(&self, ty: &TypeKey, bound: &TypeKey) -> Implements;
+
+    /// The bounds the type with the head of `ty` declares on its own
+    /// parameters, read from its definition. Empty when it declares none, or
+    /// when its crate is not one the resolver can read.
+    fn declared_bounds(&self, ty: &TypeKey) -> Vec<DeclaredBound>;
+}
+
+/// A bound a type declares on one of its parameters, with the bounding trait
+/// resolved to a canonical identity (or the reason it could not be).
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
+pub struct DeclaredBound {
+    /// The parameter's name.
+    param: String,
+    /// The parameter's position among the type's type and const parameters.
+    #[getter(copy)]
+    index: usize,
+    /// The bounding trait.
+    bound: Result<TypeKey, Unresolved>,
 }
 
 /// Whether a type is known to satisfy a trait bound.
@@ -108,19 +126,20 @@ impl TypeResolver for RustdocTypeResolver {
         self.resolve_normalized(text, true)
     }
 
-    #[instrument(level = "trace", skip(self, ty))]
-    fn implements(&self, ty: &TypeKey, bound: &str) -> Implements {
+    #[instrument(level = "trace", skip(self, ty, bound))]
+    fn implements(&self, ty: &TypeKey, bound: &TypeKey) -> Implements {
         self.check_implements(ty, bound)
+    }
+
+    #[instrument(level = "trace", skip(self, ty))]
+    fn declared_bounds(&self, ty: &TypeKey) -> Vec<DeclaredBound> {
+        self.read_declared_bounds(ty)
     }
 }
 
 impl RustdocTypeResolver {
-    #[instrument(level = "debug", skip(self, ty))]
-    fn check_implements(&self, ty: &TypeKey, bound: &str) -> Implements {
-        let bound_key = match self.resolve_head(bound) {
-            Ok(key) => key,
-            Err(reason) => return Implements::Unknown(format!("bound `{bound}`: {reason}")),
-        };
+    #[instrument(level = "debug", skip(self, ty, bound))]
+    fn check_implements(&self, ty: &TypeKey, bound: &TypeKey) -> Implements {
         let owner = ty.head().split("::").next().unwrap_or_default();
         let Some(index) = self.crate_named(owner) else {
             return Implements::Unknown(format!("`{ty}` is outside the allowlisted crates"));
@@ -130,12 +149,34 @@ impl RustdocTypeResolver {
         };
         for trait_id in index.implemented_trait_ids(&id) {
             if let Ok(found) = self.key_for_item(index, &trait_id, Vec::new(), 0)
-                && found.head() == bound_key.head()
+                && found.head() == bound.head()
             {
                 return Implements::Yes;
             }
         }
         Implements::NoDirectImpl
+    }
+
+    #[instrument(level = "debug", skip(self, ty))]
+    fn read_declared_bounds(&self, ty: &TypeKey) -> Vec<DeclaredBound> {
+        let owner = ty.head().split("::").next().unwrap_or_default();
+        let Some(index) = self.crate_named(owner) else {
+            return Vec::new();
+        };
+        let Some(id) = index.item_defined_at(ty.head()) else {
+            return Vec::new();
+        };
+        index
+            .declared_bounds(&id)
+            .into_iter()
+            .map(|raw| {
+                DeclaredBound::new(
+                    raw.param().clone(),
+                    raw.index(),
+                    self.key_for_item(index, &raw.trait_id(), Vec::new(), 0),
+                )
+            })
+            .collect()
     }
 
     #[instrument(level = "debug", skip(self), err(level = "warn"))]

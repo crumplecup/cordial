@@ -103,6 +103,42 @@ impl Krate {
         self.root_items.push(id + 1000);
     }
 
+    /// Declare `param: trait_name` on the struct `id`, inline
+    /// (`struct S<P: Trait>`) or, if `in_where`, in a `where` clause.
+    fn declare_bound(
+        &mut self,
+        id: u32,
+        param: &str,
+        trait_id: u32,
+        trait_name: &str,
+        in_where: bool,
+    ) {
+        let bound = json!({"trait_bound": {
+            "trait": {"path": trait_name, "id": trait_id, "args": null},
+            "generic_params": [], "modifier": "none",
+        }});
+        let Some(generics) = self
+            .index
+            .get_mut(&id.to_string())
+            .and_then(|item| item.pointer_mut("/inner/struct/generics"))
+        else {
+            return;
+        };
+        if in_where {
+            if let Some(Value::Array(predicates)) = generics.get_mut("where_predicates") {
+                predicates.push(json!({"bound_predicate": {
+                    "type": {"generic": param}, "bounds": [bound], "generic_params": [],
+                }}));
+            }
+        } else if let Some(Value::Array(params)) = generics.get_mut("params") {
+            for found in params.iter_mut().filter(|p| p["name"] == param) {
+                if let Some(Value::Array(bounds)) = found.pointer_mut("/kind/type/bounds") {
+                    bounds.push(bound.clone());
+                }
+            }
+        }
+    }
+
     fn enumeration(&mut self, id: u32, name: &str, impls: &[u32]) {
         self.item(
             id,
@@ -178,6 +214,7 @@ fn chrono() -> miette::Result<CrateIndex> {
     k.strukt(4, "Local", &[], &[22]);
     k.strukt(6, "Bare", &[], &[]);
     k.strukt(10, "DateTime", &["Tz"], &[]);
+    k.declare_bound(10, "Tz", 5, "TimeZone", false);
     k.impl_of(20, 5, "TimeZone", 2, "Utc");
     k.impl_of(21, 5, "TimeZone", 3, "FixedOffset");
     k.impl_of(22, 5, "TimeZone", 4, "Local");
@@ -208,17 +245,12 @@ fn resolver() -> miette::Result<RustdocTypeResolver> {
 /// A registry dump with these concrete claims (each with the verifiers that
 /// have a witness for it) plus the generic `DateTime<Tz>` claim.
 fn registry(claims: &[(&str, &[&str])]) -> miette::Result<RegistryDump> {
-    let mut links: Vec<Value> = claims
+    let links: Vec<Value> = claims
         .iter()
         .map(|(ty, _)| {
             json!({"name": format!("amenable_ext::ExtStandard<{ty}>"), "basis": "", "index": 0})
         })
         .collect();
-    links.push(json!({
-        "name": "amenable_ext::ExtGeneric<chrono::DateTime<Tz>>", "basis": "", "index": 0,
-        "bounds": ["chrono::TimeZone"],
-        "premises": [{"id": "offset-round-trip", "statement": "s"}],
-    }));
     let proofs: Vec<Value> = claims
         .iter()
         .flat_map(|(ty, verifiers)| {
@@ -530,31 +562,112 @@ fn an_excepted_instantiation_does_not_block_the_parent() -> miette::Result<()> {
 }
 
 #[test]
-fn the_generic_claim_is_a_note_on_the_parent_listing_who_satisfies_its_bound() -> miette::Result<()>
-{
+fn the_parent_note_lists_who_meets_the_types_declared_bounds() -> miette::Result<()> {
     cordial::init_tracing();
     let mut claims = all_four();
     claims.push(("chrono::DateTime<chrono::Bare>", &WITNESSED));
     let out = expand(&claims, &four_zones(), &HashMap::new(), &HashSet::new())?;
     let text = note(find(&out, "chrono::DateTime")?);
-    assert!(
-        text.contains("generic claim `amenable_ext::ExtGeneric<chrono::DateTime<Tz>>`"),
-        "{text}"
-    );
-    assert!(text.contains("over `chrono::TimeZone`"), "{text}");
-    assert!(text.contains("premises: offset-round-trip"), "{text}");
+    // Read from chrono's own definition, `struct DateTime<Tz: TimeZone>`:
+    // nothing about the bound comes from the registry.
+    assert!(text.contains("declared bounds `Tz: TimeZone`"), "{text}");
     // Utc, FixedOffset and Local implement it in chrono; Tz in chrono_tz,
     // through an external trait id.
     assert!(
         text.contains("satisfied by Utc, FixedOffset, Local, Tz"),
         "{text}"
     );
-    assert!(text.contains("no direct impl found for Bare"), "{text}");
-    // It is a note, not a row: no child is named for the generic claim.
     assert!(
-        out.entries()
-            .iter()
-            .all(|e| !e.type_path().contains("ExtGeneric"))
+        text.contains("no direct impl found for Bare (Tz: TimeZone)"),
+        "{text}"
+    );
+    Ok(())
+}
+
+/// `Map<K, V>` with different bounds per parameter: `K: Hash + Eq` inline and
+/// `V: Clone` in a `where` clause, as a library writes them.
+fn map_resolver() -> miette::Result<RustdocTypeResolver> {
+    let mut k = Krate::new("lib");
+    k.trait_item(5, "Hash");
+    k.trait_item(6, "Eq");
+    k.trait_item(7, "Clone");
+    k.strukt(2, "Key1", &[], &[20, 21]);
+    k.strukt(3, "Key2", &[], &[22]);
+    k.strukt(4, "Val1", &[], &[23]);
+    k.strukt(8, "Val2", &[], &[]);
+    k.strukt(10, "Map", &["K", "V"], &[]);
+    k.declare_bound(10, "K", 5, "Hash", false);
+    k.declare_bound(10, "K", 6, "Eq", false);
+    k.declare_bound(10, "V", 7, "Clone", true);
+    k.impl_of(20, 5, "Hash", 2, "Key1");
+    k.impl_of(21, 6, "Eq", 2, "Key1");
+    k.impl_of(22, 5, "Hash", 3, "Key2");
+    k.impl_of(23, 7, "Clone", 4, "Val1");
+    Ok(RustdocTypeResolver::new(
+        vec![k.build()?],
+        ResolveCaps::default(),
+    ))
+}
+
+/// Expand a one-parent report for the `lib::Map` generic.
+fn expand_map(
+    resolver: &RustdocTypeResolver,
+    claims: &[&str],
+) -> miette::Result<AmenableStdReport> {
+    let links: Vec<Value> = claims
+        .iter()
+        .map(|ty| json!({"name": format!("amenable_ext::ExtStandard<{ty}>"), "basis": "", "index": 0}))
+        .collect();
+    let dump: RegistryDump = serde_json::from_value(json!({
+        "evidence_links": links, "proof_records": [], "kani_proofs": [],
+    }))
+    .into_diagnostic()?;
+    let facts = RegistryFacts::resolve(&dump, &HashSet::new(), resolver);
+    let skip: VerifierSkipMap = HashMap::new();
+    let wanted = ExpectedInstantiations::default();
+    let ctx = InstantiationContext::new(resolver, &facts, &skip, &wanted);
+    expand_report(&report(vec![parent_entry("lib::Map")?])?, &ctx).into_diagnostic()
+}
+
+#[test]
+fn each_parameters_bounds_are_checked_against_its_own_argument() -> miette::Result<()> {
+    cordial::init_tracing();
+    let resolver = map_resolver()?;
+    let out = expand_map(
+        &resolver,
+        &[
+            "lib::Map<lib::Key1, lib::Val1>",
+            "lib::Map<lib::Key2, lib::Val1>",
+            "lib::Map<lib::Key1, lib::Val2>",
+        ],
+    )?;
+    let text = note(find(&out, "lib::Map")?);
+    assert!(
+        text.contains("declared bounds `K: Hash + Eq`, `V: Clone`"),
+        "{text}"
+    );
+    assert!(text.contains("satisfied by Key1, Val1"), "{text}");
+    // Key2 has Hash but not Eq: the failure names the parameter and bound.
+    assert!(text.contains("Key2, Val1 (K: Eq)"), "{text}");
+    // Val2 has no Clone: a different parameter, a different bound.
+    assert!(text.contains("Key1, Val2 (V: Clone)"), "{text}");
+    Ok(())
+}
+
+#[test]
+fn a_type_that_declares_no_bounds_says_so_instead_of_guessing() -> miette::Result<()> {
+    cordial::init_tracing();
+    // A generic with no declared bounds is the `HashMap` case: its bounds sit
+    // on impl blocks, not on the type.
+    let mut k = Krate::new("lib");
+    k.strukt(2, "Key1", &[], &[]);
+    k.strukt(10, "Map", &["K", "V"], &[]);
+    let resolver = RustdocTypeResolver::new(vec![k.build()?], ResolveCaps::default());
+    let out = expand_map(&resolver, &["lib::Map<lib::Key1, lib::Key1>"])?;
+    let text = note(find(&out, "lib::Map")?);
+    assert!(
+        text.contains("declares no bounds on its parameters"),
+        "{text}"
     );
     Ok(())
 }
@@ -605,6 +718,7 @@ fn the_bound_check_finds_a_type_defined_in_a_private_module() -> miette::Result<
     k.trait_item(5, "TimeZone");
     k.reexported_struct(2, "Utc", "utc", &[20]);
     k.strukt(10, "DateTime", &["Tz"], &[]);
+    k.declare_bound(10, "Tz", 5, "TimeZone", false);
     k.impl_of(20, 5, "TimeZone", 2, "Utc");
     let resolver = RustdocTypeResolver::new(vec![k.build()?], ResolveCaps::default());
     let dump = registry(&[("chrono::DateTime<chrono::Utc>", &WITNESSED)])?;
@@ -651,11 +765,6 @@ fn real_chrono_zones_satisfy_the_timezone_bound_across_crates() -> miette::Resul
     let links: Vec<Value> = zones
         .iter()
         .map(|ty| json!({"name": format!("amenable_ext::ExtStandard<{ty}>"), "basis": "", "index": 0}))
-        .chain([json!({
-            "name": "amenable_ext::ExtGeneric<chrono::DateTime<Tz>>", "basis": "", "index": 0,
-            "bounds": ["chrono::offset::TimeZone"],
-            "premises": [{"id": "offset-round-trip", "statement": "s"}],
-        })])
         .collect();
     let dump: RegistryDump = serde_json::from_value(json!({
         "evidence_links": links, "proof_records": [], "kani_proofs": [],
@@ -671,8 +780,8 @@ fn real_chrono_zones_satisfy_the_timezone_bound_across_crates() -> miette::Resul
     assert_eq!(out.entries().len(), 5, "{:?}", out.entries());
     let text = note(find(&out, "chrono::DateTime")?);
     assert!(
-        text.contains("satisfied by Utc, FixedOffset, Local, Tz"),
-        "every zone should satisfy chrono::offset::TimeZone: {text}"
+        text.contains("declared bounds `Tz: TimeZone`: satisfied by Utc, FixedOffset, Local, Tz"),
+        "every zone should satisfy chrono's own declared bound: {text}"
     );
     assert!(!text.contains("no direct impl"), "{text}");
     assert!(!text.contains("unknown"), "{text}");

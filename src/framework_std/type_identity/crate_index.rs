@@ -4,7 +4,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::OnceLock;
 
-use rustdoc_types::{Crate, Id, Item, ItemEnum};
+use rustdoc_types::{
+    Crate, GenericBound, GenericParamDefKind, Generics, Id, Item, ItemEnum, TraitBoundModifier,
+    Type, WherePredicate,
+};
 use tracing::instrument;
 
 use crate::error::CordialResult;
@@ -23,6 +26,20 @@ pub struct CrateIndex {
     /// Defining path (`chrono::offset::utc::Utc`) to item, built on first use.
     #[getter(skip)]
     defining_paths: OnceLock<HashMap<String, Id>>,
+}
+
+/// One trait bound a type declares on one of its parameters, exactly as the
+/// type's own definition writes it (`struct DateTime<Tz: TimeZone>`).
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
+pub struct RawBound {
+    /// The parameter's name (`Tz`, `K`).
+    param: String,
+    /// The parameter's position among the type's type and const parameters.
+    #[getter(copy)]
+    index: usize,
+    /// The bounding trait, in the crate that declares the type.
+    #[getter(copy)]
+    trait_id: Id,
 }
 
 /// Outcome of looking a path up in one crate.
@@ -87,6 +104,25 @@ impl CrateIndex {
             })
             .get(path)
             .copied()
+    }
+
+    /// The bounds the struct, enum or union `id` declares on its own type
+    /// parameters, from inline bounds (`<K: Hash>`) and `where` clauses alike.
+    ///
+    /// These come from the type's definition, so any third-party generic
+    /// carries them without help from the registry. Bounds that sit on impl
+    /// blocks rather than on the type (as `HashMap`'s do) are not here: the
+    /// type itself does not declare them. `?Sized` relaxations and lifetime
+    /// bounds are skipped.
+    #[instrument(level = "trace", skip(self, id))]
+    pub fn declared_bounds(&self, id: &Id) -> Vec<RawBound> {
+        let generics = match self.item(id).map(|item| &item.inner) {
+            Some(ItemEnum::Struct(found)) => &found.generics,
+            Some(ItemEnum::Enum(found)) => &found.generics,
+            Some(ItemEnum::Union(found)) => &found.generics,
+            _ => return Vec::new(),
+        };
+        raw_bounds(generics)
     }
 
     /// Ids of the traits implemented directly on the struct, enum or union
@@ -174,4 +210,54 @@ impl CrateIndex {
         }
         found
     }
+}
+
+/// The declared bounds in one set of generics, positioned among the type and
+/// const parameters (lifetimes do not appear in a type's argument list).
+#[instrument(level = "trace", skip(generics))]
+fn raw_bounds(generics: &Generics) -> Vec<RawBound> {
+    let params: Vec<(&str, &[GenericBound])> = generics
+        .params
+        .iter()
+        .filter_map(|param| match &param.kind {
+            GenericParamDefKind::Type {
+                bounds,
+                is_synthetic: false,
+                ..
+            } => Some((param.name.as_str(), bounds.as_slice())),
+            GenericParamDefKind::Const { .. } => Some((param.name.as_str(), &[][..])),
+            _ => None,
+        })
+        .collect();
+    let mut found = Vec::new();
+    for (index, (name, bounds)) in params.iter().enumerate() {
+        found.extend(trait_ids(bounds).map(|id| RawBound::new(name.to_string(), index, id)));
+    }
+    for predicate in &generics.where_predicates {
+        let WherePredicate::BoundPredicate {
+            type_: Type::Generic(name),
+            bounds,
+            ..
+        } = predicate
+        else {
+            continue;
+        };
+        if let Some(index) = params.iter().position(|(param, _)| param == name) {
+            found.extend(trait_ids(bounds).map(|id| RawBound::new(name.clone(), index, id)));
+        }
+    }
+    found
+}
+
+/// The trait ids among `bounds`, without `?Trait` relaxations and lifetimes.
+#[instrument(level = "debug", skip(bounds))]
+fn trait_ids(bounds: &[GenericBound]) -> impl Iterator<Item = Id> + '_ {
+    bounds.iter().filter_map(|bound| match bound {
+        GenericBound::TraitBound {
+            trait_,
+            modifier: TraitBoundModifier::None,
+            ..
+        } => Some(trait_.id),
+        _ => None,
+    })
 }

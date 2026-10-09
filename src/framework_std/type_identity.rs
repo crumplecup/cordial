@@ -12,11 +12,12 @@ mod key;
 mod resolver;
 mod text;
 
-pub use crate_index::{CrateIndex, Lookup};
+pub use crate_index::{CrateIndex, Lookup, RawBound};
 pub use evidence::{
-    EvidenceKey, EvidenceKind, ProofKey, resolve_ext_evidence, resolve_ext_proofs,
-    resolve_proof_subjects,
+    EvidenceKey, ProofKey, resolve_ext_evidence, resolve_ext_proofs, resolve_proof_subjects,
 };
 pub use key::TypeKey;
-pub use resolver::{Implements, ResolveCaps, RustdocTypeResolver, TypeResolver, Unresolved};
+pub use resolver::{
+    DeclaredBound, Implements, ResolveCaps, RustdocTypeResolver, TypeResolver, Unresolved,
+};
 pub use text::{TypeText, normalize_type_text, parse_type_text};

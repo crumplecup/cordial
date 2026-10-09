@@ -19,9 +19,19 @@ read Complete, because every registry lookup runs
 `type_path_without_generics` (`framework_std/match_impl.rs`,
 `framework_std/registry.rs`) and collapses all instantiations to one key.
 
-Wanted: one row per concrete instantiation, each with its own status, plus a
-generic row that carries generic claims (`impl<Tz: TimeZone>`) and notes which
-instantiations they cover.
+Wanted: one row per concrete instantiation, each with its own status, plus an
+aggregate generic row that notes what the type itself requires of its
+parameters and which instantiations meet it.
+
+**Principle: rustdoc, not markup.** Everything cordial knows about a
+third-party type comes from rustdoc and the type's own definition. Amenable's
+registry is trusted for exactly two things: evidence names
+(`ExtStandard<T>`, which carry the full type with its arguments) and the
+witnesses recorded against them. Generic-claim markup (`ExtGeneric<..>`,
+`bounds`, `premises`) was tried and removed from amenable as a mistake: it
+cannot be written for every third-party generic, and it cannot express
+per-parameter bounds (`HashMap<K, V>`). An older dump that still carries it
+loads and the markup is ignored.
 
 ## Findings that shape the design
 
@@ -121,16 +131,15 @@ Replace string matching for ext targets with structured identity.
 - The parent is Complete exactly when all its instantiation rows are Complete;
   otherwise Partial (n of m). Amenable's count: 67 checklist rows = 59 types +
   8 instantiation rows (`DateTime` and `Date`, four zone types each).
-- A **generic claim** (`ExtGeneric<…>`, with `bounds` and `premises`) is proven
-  once over the bound and covers any type satisfying it, including
-  user-defined types. It does not make the parent Complete by itself and it is
-  not a child row. It is shown on the parent with a note of the bound,
-  premises, and which listed instantiations satisfy the bound.
+- The parent's note says what the type **declares** about its parameters
+  (`struct DateTime<Tz: TimeZone>`, read from rustdoc's generics and `where`
+  clauses, per parameter) and which instantiations meet it. A type that
+  declares none says so. It is a note, never a child row.
 - Kani has per-instantiation witness types only, so witnesses attribute to
   children directly.
-- Bound satisfaction (`Utc: TimeZone`) comes from the claim's `bounds` string
-  resolved through the canonical resolver; unresolved means "not shown as
-  covered", never covered.
+- Bound satisfaction (`Utc: TimeZone`) is a direct-impl lookup in rustdoc,
+  against the argument at the parameter's own position; unresolved or
+  unchecked means "unknown", never covered.
 - Depth capped at one level (`DateTime<Tz>`); nested generics deferred.
 
 ### 4. Reporting
@@ -144,7 +153,7 @@ regroup. `Partial` is a new status value and touches every consumer of
 
 | # | Request | Needed by | Status |
 | --- | --- | --- | --- |
-| 2 | Read `bounds` and `premises` from the registry dump | amenable Phase 1 (landed) | **Done** |
+| 2 | ~~Read `bounds` and `premises` from the registry dump~~ | withdrawn | Amenable removed the markup; cordial reads bounds from rustdoc instead |
 | 3 | Shared dump's feature set includes `chrono` and `chrono-tz` | amenable Phase 1 | **Done** (`AMENABLE_DUMP_REGISTRY_FEATURES`) |
 | 5 | Normalize whitespace in evidence names before matching | amenable Phase 1 | **Done** (`normalize_type_text`) |
 | 1 | Eight instantiation rows, aggregates derived from them | end of amenable Phase 3 | Not started (phases A-C below) |
@@ -154,9 +163,9 @@ regroup. `Partial` is a new status value and touches every consumer of
 
 | Phase | Work | Status |
 | --- | --- | --- |
-| 0 | Registry schema read side: `bounds`/`premises` on `EvidenceLinkDump`, `ExtGeneric<` recognized and kept distinct from `ExtStandard<`, whitespace normalization, chrono features in the dump | **Done** |
+| 0 | Registry read side: whitespace normalization, chrono features in the dump. (The `bounds`/`premises`/`ExtGeneric` handling first built here was removed with amenable's markup.) | **Done** |
 | A | `TypeKey`, rustdoc name lookup (re-exports, globs, aliases), structured evidence parsing, `Unresolved` status; ext targets only | **Done.** `framework_std::type_identity` (`TypeKey`, `CrateIndex`, `RustdocTypeResolver` behind the `TypeResolver` trait, `resolve_ext_evidence`); 18 tests including one against the real chrono / chrono_tz rustdoc JSON. Not yet wired into `evidence_for_ext_type`; that is phase B/C |
-| B | Parent/child rows, aggregate roll-up, generic-claim notes, bound checking | **Done (library layer).** `framework_std::instantiation` (`expand_report`, `RegistryFacts`, `ExpectedInstantiations`); `TypeResolver::implements`; 13 tests including one on the real chrono / chrono_tz JSON. Not yet wired into the assessor or the reporters; that is phase C |
+| B | Parent/child rows, aggregate roll-up, declared-bounds note | **Done (library layer).** `framework_std::instantiation` (`expand_report`, `RegistryFacts`, `ExpectedInstantiations`); `TypeResolver::{implements, declared_bounds}`; 15 tests including one on the real chrono / chrono_tz JSON. Not yet wired into the assessor or the reporters; that is phase C |
 | C | `instantiations` config key, Missing children, `Partial`, reporter/CSV changes | Not started |
 | D | Chrono checklist verification (8 instantiation rows, 67 total) | Not started |
 
@@ -174,10 +183,10 @@ instantiations resolve to four distinct keys with one shared head, and
 `chrono::Duration` resolves through chrono's alias to the same key as
 `chrono::TimeDelta`.
 
-`resolve_ext_evidence` turns each `ExtStandard<..>` / `ExtGeneric<..>` link
-into an `EvidenceKey` (concrete: full key; generic: head only, with its
-bounds). A link whose type cannot be identified is returned with its reason,
-never dropped (a test caught the first draft dropping malformed names).
+`resolve_ext_evidence` turns each `ExtStandard<..>` link into an
+`EvidenceKey`. A link whose type cannot be identified is returned with its
+reason, never dropped (a test caught the first draft dropping malformed
+names).
 
 ### Phase B as built
 
@@ -193,19 +202,27 @@ type that cannot be identified is a `Missing` child carrying the reason.
 Parent roll-up: Complete when every non-excepted child is Complete, Missing
 when none has any coverage, Partial otherwise, Skipped when all are excepted;
 a witness column is set only if every counted child has it. The parent's note
-reads "3 of 4 instantiations Complete (1 excepted)" and then describes each
-generic claim: its bounds, its premises, and which instantiations satisfy the
-bounds. The claim is a note, never a row.
+reads "3 of 4 instantiations Complete (1 excepted)" and then, from rustdoc
+alone, what the type declares: "declared bounds `Tz: TimeZone`: satisfied by
+Utc, FixedOffset, Local, Tz; no direct impl found for Bare (Tz: TimeZone)".
 
-`TypeResolver::implements` checks a bound against a type's direct trait
-impls in rustdoc. Three limits are deliberate and stated in the answer:
-blanket impls are not attached to a type in rustdoc JSON, so absence is "no
-direct impl found", not "does not implement"; bounds carry no parameter names,
-so each is applied to every type argument (exact for single-parameter
-generics); and an item is found from its canonical head by rustdoc's own
-defining-path table, because the defining path often runs through a private
-module that rustdoc strips from the tree. The last one was found by the real
-chrono data, not the synthetic fixture, and now has its own regression test.
+`CrateIndex::declared_bounds` reads the bounds a struct, enum or union puts on
+its own parameters, from inline bounds and `where` clauses, and positions each
+by the parameter's index so it is checked against that instantiation
+argument. `Map<K, V>` with `K: Hash + Eq` and `V: Clone` is checked per
+parameter and a failure names which: "(K: Eq)". `TypeResolver::implements`
+checks one bound against a type's direct trait impls. Limits, stated in the
+answer rather than hidden:
+
+- Bounds a type does not itself declare (`HashMap` keeps `K: Eq + Hash` on its
+  impl blocks) are not known. The note says the type declares none; it never
+  guesses.
+- Blanket impls are not attached to a type in rustdoc JSON, so absence is "no
+  direct impl found", not "does not implement".
+- An item is found from its canonical head by rustdoc's own defining-path
+  table, because the defining path often runs through a private module that
+  rustdoc strips from the tree. The real chrono data showed this, not the
+  synthetic fixture, and it has its own regression test.
 
 ## Open questions
 

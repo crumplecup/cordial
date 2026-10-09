@@ -63,13 +63,13 @@ pub use self::{
     instantiation::{ExpectedInstantiations, InstantiationContext, RegistryFacts, expand_report},
     proof_harness::collect_proof_chain_subjects,
     registry::{
-        EvidenceLinkDump, PremiseDump, ProofRecordDump, RegistryDump, evidence_for_std_type,
+        EvidenceLinkDump, ProofRecordDump, RegistryDump, evidence_for_std_type,
         parse_rust_std_standard_inner, witness_verifiers_for_std_type,
     },
     type_identity::{
-        CrateIndex, EvidenceKey, EvidenceKind, Implements, Lookup, ProofKey, ResolveCaps,
-        RustdocTypeResolver, TypeKey, TypeResolver, TypeText, Unresolved, normalize_type_text,
-        parse_type_text, resolve_ext_evidence,
+        CrateIndex, DeclaredBound, EvidenceKey, Implements, Lookup, ProofKey, RawBound,
+        ResolveCaps, RustdocTypeResolver, TypeKey, TypeResolver, TypeText, Unresolved,
+        normalize_type_text, parse_type_text, resolve_ext_evidence,
     },
     verifier_skip::{VerifierSkipEntry, VerifierSkipMap, load_verifier_skip_map},
 };
@@ -91,8 +91,5 @@ pub use self::{
         AMENABLE_EXT_IMPL_CRATE, AMENABLE_EXT_JIFF_PATCH_SET, AMENABLE_EXT_JIFF_UPSTREAM_CRATE,
         AmenableExtOptions, assess_amenable_ext_coverage,
     },
-    registry::{
-        evidence_for_ext_type, generic_claims_for_ext_type, parse_ext_generic_inner,
-        parse_ext_standard_inner, witness_verifiers_for_ext_type,
-    },
+    registry::{evidence_for_ext_type, parse_ext_standard_inner, witness_verifiers_for_ext_type},
 };

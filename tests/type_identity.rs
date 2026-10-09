@@ -7,8 +7,8 @@ use miette::IntoDiagnostic;
 use serde_json::{Value, json};
 
 use cordial::testing::{
-    CrateIndex, EvidenceKey, EvidenceKind, Lookup, RegistryDump, ResolveCaps, RustdocTypeResolver,
-    TypeKey, TypeResolver, Unresolved, normalize_type_text, parse_type_text, resolve_ext_evidence,
+    CrateIndex, EvidenceKey, Lookup, RegistryDump, ResolveCaps, RustdocTypeResolver, TypeKey,
+    TypeResolver, Unresolved, normalize_type_text, parse_type_text, resolve_ext_evidence,
 };
 
 // ---- a tiny rustdoc crate builder --------------------------------------
@@ -325,7 +325,7 @@ fn a_type_alias_expands_with_its_arguments_substituted() -> miette::Result<()> {
 fn head_only_resolution_ignores_unresolvable_type_parameters() -> miette::Result<()> {
     cordial::init_tracing();
     let r = resolver(vec![chrono()?], ResolveCaps::default());
-    // `Tz` is a type parameter in `ExtGeneric<DateTime<Tz>>`, not a type.
+    // `Tz` is a type parameter, not a type.
     assert!(matches!(
         r.resolve("chrono::DateTime<Tz>"),
         Err(Unresolved::UnknownName(name)) if name == "Tz"
@@ -496,36 +496,22 @@ fn evidence_names_resolve_to_structured_keys_per_instantiation() -> miette::Resu
             &[],
         ),
         ("amenable_ext::ExtStandard<chrono::offset::Utc>", &[]),
-        (
-            "amenable_ext::ExtGeneric<chrono::DateTime<Tz>>",
-            &["chrono::offset::TimeZone"],
-        ),
+        // Markup from older amenable dumps: not an ext claim, ignored.
+        ("amenable_ext::ExtGeneric<chrono::DateTime<Tz>>", &[]),
         ("amenable_std::rust_std::RustStdStandard<String>", &[]),
     ])?;
     let resolved = resolve_ext_evidence(&dump, &r);
-    // The std-family link is not an ext claim.
-    assert_eq!(resolved.len(), 4, "{resolved:?}");
+    // The std-family link and the generic-wrapper link are not ext claims.
+    assert_eq!(resolved.len(), 3, "{resolved:?}");
 
     let utc = resolved_key(&resolved[0])?;
     let tz = resolved_key(&resolved[1])?;
-    assert_eq!(resolved[0].kind(), EvidenceKind::Concrete);
     assert_ne!(utc, tz, "two instantiations are two claims");
     assert_eq!(utc.head(), tz.head());
     assert_eq!(
         resolved_key(&resolved[2])?,
         &TypeKey::plain("chrono::offset::Utc")
     );
-
-    let generic = &resolved[3];
-    assert_eq!(generic.kind(), EvidenceKind::Generic);
-    assert_eq!(generic.bounds(), &["chrono::offset::TimeZone".to_string()]);
-    let head = resolved_key(generic)?;
-    assert_eq!(
-        head.head(),
-        utc.head(),
-        "the generic claim is about the same head"
-    );
-    assert!(head.args().is_empty());
     Ok(())
 }
 
