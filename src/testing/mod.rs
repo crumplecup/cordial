@@ -29,6 +29,7 @@ pub use {
     self::wrapper_oracle::load_workspace_wrapper_coverage,
     crate::cargo_rustdoc::{
         DepBuildConfig, collect_dep_serde_features, collect_member_dep_build_config,
+        member_dependency_package_name,
     },
     crate::etiquettes::{ImplGapAssessment, ImplGapKind, assess_impl_gap},
     crate::feature_probe::{

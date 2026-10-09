@@ -20,6 +20,7 @@ pub use cargo::{nightly_available, run_cargo_rustdoc};
 #[cfg(any(feature = "impl_coverage", feature = "shadow"))]
 pub use dep_features::{
     DepBuildConfig, collect_dep_serde_features, collect_member_dep_build_config,
+    member_dependency_package_name,
 };
 #[cfg(all(feature = "cli", feature = "elicitation"))]
 pub(crate) use shadow_dep::build_all_active_shadow_deps_with_progress;

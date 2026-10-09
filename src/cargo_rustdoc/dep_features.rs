@@ -38,6 +38,41 @@ fn find_optional_activating_feature(
     })
 }
 
+/// The package name `member_crate_name` depends on for `crate_name`, which
+/// may be spelled as the crate (`chrono_tz`) or the package (`chrono-tz`);
+/// cargo accepts only the package spelling.
+#[instrument(level = "debug", err(level = "warn"))]
+pub fn member_dependency_package_name(
+    reference_workspace: &std::path::Path,
+    member_crate_name: &str,
+    crate_name: &str,
+) -> CordialResult<String> {
+    let meta = cargo_metadata::MetadataCommand::new()
+        .manifest_path(reference_workspace.join("Cargo.toml"))
+        .exec()
+        .map_err(CordialError::cargo_metadata)?;
+    let member_pkg = meta
+        .packages
+        .iter()
+        .find(|pkg| pkg.name == member_crate_name)
+        .ok_or_else(|| {
+            CordialError::invariant(format!(
+                "workspace package `{member_crate_name}` not found in cargo metadata"
+            ))
+        })?;
+    let normalized = crate_name.replace('-', "_");
+    member_pkg
+        .dependencies
+        .iter()
+        .find(|dep| dep.name.replace('-', "_") == normalized)
+        .map(|dep| dep.name.clone())
+        .ok_or_else(|| {
+            CordialError::invariant(format!(
+                "dependency '{crate_name}' not found in `{member_crate_name}` package metadata"
+            ))
+        })
+}
+
 /// Resolve dependency features from a workspace member's `Cargo.toml`.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn collect_member_dep_build_config(

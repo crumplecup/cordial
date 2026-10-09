@@ -325,3 +325,18 @@ instantiations = { "chrono::Date" = [["chrono::Utc"]], "chrono::NaiveDate" = [] 
     );
     Ok(())
 }
+
+#[test]
+fn a_crate_name_resolves_to_the_package_cargo_knows() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    for spelling in ["tracing_subscriber", "tracing-subscriber"] {
+        let package = cordial::testing::member_dependency_package_name(root, "cordial", spelling)
+            .into_diagnostic()?;
+        assert_eq!(package, "tracing-subscriber", "{spelling}");
+    }
+    assert!(
+        cordial::testing::member_dependency_package_name(root, "cordial", "no_such_crate").is_err()
+    );
+    Ok(())
+}

@@ -10,7 +10,7 @@ use std::path::Path;
 
 use tracing::instrument;
 
-use crate::cargo_rustdoc::build_shadow_dep_rustdoc;
+use crate::cargo_rustdoc::{build_shadow_dep_rustdoc, member_dependency_package_name};
 use crate::config::{AmenableExtConfig, AmenableExtTargetConfig};
 use crate::error::CordialResult;
 use crate::framework_std::instantiation::{
@@ -55,9 +55,12 @@ pub fn load_ext_resolver(
 ) -> CordialResult<RustdocTypeResolver> {
     let mut indexes = Vec::with_capacity(crates.len());
     for krate in crates {
-        build_shadow_dep_rustdoc(project_root, store, shadow_crate, krate, force)?;
-        let json = store.shadow_dep_rustdoc_cache_path(shadow_crate, krate);
-        indexes.push(CrateIndex::load(krate, &json)?);
+        // Cargo knows the package name (`chrono-tz`); rustdoc paths use the
+        // crate name (`chrono_tz`). Configuration may spell either.
+        let package = member_dependency_package_name(project_root, shadow_crate, krate)?;
+        build_shadow_dep_rustdoc(project_root, store, shadow_crate, &package, force)?;
+        let json = store.shadow_dep_rustdoc_cache_path(shadow_crate, &package);
+        indexes.push(CrateIndex::load(&krate.replace('-', "_"), &json)?);
     }
     Ok(RustdocTypeResolver::new(
         indexes,
