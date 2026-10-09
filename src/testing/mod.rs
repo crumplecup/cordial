@@ -59,11 +59,13 @@ pub use crate::amenable_dump_registry::{AMENABLE_DUMP_REGISTRY_FEATURES, registr
 
 #[cfg(feature = "amenable_std")]
 pub use crate::framework_std::{
-    AmenableStdOptions, AmenableStdReport, AmenableStdStatus, EvidenceLinkDump, PremiseDump,
-    ProofRecordDump, RegistryDump, VerifierSkipEntry, VerifierSkipMap,
-    assess_amenable_std_coverage, build_amenable_std_gaps, build_amenable_std_report,
-    evidence_for_std_type, load_verifier_skip_map, parse_rust_std_standard_inner,
-    resolve_alias_chain, witness_verifiers_for_std_type,
+    AmenableStdOptions, AmenableStdReport, AmenableStdStatus, CrateIndex, EvidenceKey,
+    EvidenceKind, EvidenceLinkDump, Lookup, PremiseDump, ProofRecordDump, RegistryDump,
+    ResolveCaps, RustdocTypeResolver, TypeKey, TypeResolver, TypeText, Unresolved,
+    VerifierSkipEntry, VerifierSkipMap, assess_amenable_std_coverage, build_amenable_std_gaps,
+    build_amenable_std_report, evidence_for_std_type, load_verifier_skip_map, normalize_type_text,
+    parse_rust_std_standard_inner, parse_type_text, resolve_alias_chain, resolve_ext_evidence,
+    witness_verifiers_for_std_type,
 };
 
 #[cfg(feature = "amenable_ext")]

@@ -8,6 +8,7 @@ use tracing::instrument;
 
 use crate::error::CordialResult;
 use crate::framework_std::match_impl::{type_has_trait_impl, type_path_without_generics};
+use crate::framework_std::type_identity::normalize_type_text;
 
 const RUST_STD_STANDARD_PREFIX: &str = "amenable_std::rust_std::RustStdStandard<";
 const PROOF_CHAIN_RUST_STD_PREFIX: &str = "RustStdStandard<";
@@ -86,7 +87,7 @@ pub struct EvidenceLinkDump {
 impl EvidenceLinkDump {
     /// A generic link: `name` is generic over `bounds` and relies on
     /// `premises`.
-    #[instrument(level = "trace")]
+    #[instrument(level = "debug", skip(premises))]
     pub fn generic(
         name: String,
         basis: String,
@@ -226,34 +227,6 @@ pub fn generic_claims_for_ext_type<'a>(
                 .is_some_and(|inner| type_has_trait_impl(&HashSet::from([inner]), type_path))
         })
         .collect()
-}
-
-/// Canonical spelling of a type as written in an evidence name. Macros
-/// render types with `stringify!`, so the same type can arrive with
-/// different spacing (`A < B >` vs `A<B>`). Whitespace next to punctuation
-/// is dropped and any other run collapses to one space, which keeps
-/// `dyn Trait` and `&mut T` intact.
-#[instrument(level = "trace")]
-fn normalize_type_text(text: &str) -> String {
-    const PUNCT: &str = ":<>,()[];&*";
-    let mut out = String::with_capacity(text.len());
-    let mut pending_space = false;
-    for ch in text.chars() {
-        if ch.is_whitespace() {
-            pending_space = !out.is_empty();
-            continue;
-        }
-        let after_punct = out
-            .chars()
-            .next_back()
-            .is_some_and(|prev| PUNCT.contains(prev));
-        if pending_space && !after_punct && !PUNCT.contains(ch) {
-            out.push(' ');
-        }
-        pending_space = false;
-        out.push(ch);
-    }
-    out
 }
 
 /// Evidence for std type.

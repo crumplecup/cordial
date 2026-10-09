@@ -22,6 +22,8 @@ mod proof_harness;
 #[cfg(feature = "amenable_std")]
 mod registry;
 #[cfg(feature = "amenable_std")]
+mod type_identity;
+#[cfg(feature = "amenable_std")]
 mod verifier_skip;
 
 pub use inventory::{FRAMEWORK_STD_SOURCES, load_merged_std_inventory};
@@ -60,6 +62,11 @@ pub use self::{
     registry::{
         EvidenceLinkDump, PremiseDump, ProofRecordDump, RegistryDump, evidence_for_std_type,
         parse_rust_std_standard_inner, witness_verifiers_for_std_type,
+    },
+    type_identity::{
+        CrateIndex, EvidenceKey, EvidenceKind, Lookup, ResolveCaps, RustdocTypeResolver, TypeKey,
+        TypeResolver, TypeText, Unresolved, normalize_type_text, parse_type_text,
+        resolve_ext_evidence,
     },
     verifier_skip::{VerifierSkipEntry, VerifierSkipMap, load_verifier_skip_map},
 };

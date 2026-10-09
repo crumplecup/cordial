@@ -155,10 +155,29 @@ regroup. `Partial` is a new status value and touches every consumer of
 | Phase | Work | Status |
 | --- | --- | --- |
 | 0 | Registry schema read side: `bounds`/`premises` on `EvidenceLinkDump`, `ExtGeneric<` recognized and kept distinct from `ExtStandard<`, whitespace normalization, chrono features in the dump | **Done** |
-| A | `TypeKey`, alias set from rustdoc, structured evidence parsing, `Unresolved` status; ext targets only | Not started |
+| A | `TypeKey`, rustdoc name lookup (re-exports, globs, aliases), structured evidence parsing, `Unresolved` status; ext targets only | **Done.** `framework_std::type_identity` (`TypeKey`, `CrateIndex`, `RustdocTypeResolver` behind the `TypeResolver` trait, `resolve_ext_evidence`); 18 tests including one against the real chrono / chrono_tz rustdoc JSON. Not yet wired into `evidence_for_ext_type`; that is phase B/C |
 | B | Parent/child nodes, aggregate roll-up, generic-claim notes, bound checking | Not started |
 | C | `instantiations` config key, Missing children, `Partial`, reporter/CSV changes | Not started |
 | D | Chrono checklist verification (8 instantiation rows, 67 total) | Not started |
+
+### Phase A as built
+
+Resolution is a name lookup, not an alias map: `CrateIndex::lookup` walks the
+segments of one path through modules, `pub use` and glob re-exports with a
+visited set, so the work is proportional to the names asked about and glob
+cycles terminate. Alias expansion substitutes type arguments and is bounded by
+`alias_depth` and `max_type_nodes`. A path under a crate outside the allowlist
+is opaque (kept as spelled, args still resolved). A bare name is searched in
+every allowlisted crate and is `Ambiguous` when several distinct types answer.
+Measured on the real chrono / chrono_tz JSON: the four `DateTime<..>`
+instantiations resolve to four distinct keys with one shared head, and
+`chrono::Duration` resolves through chrono's alias to the same key as
+`chrono::TimeDelta`.
+
+`resolve_ext_evidence` turns each `ExtStandard<..>` / `ExtGeneric<..>` link
+into an `EvidenceKey` (concrete: full key; generic: head only, with its
+bounds). A link whose type cannot be identified is returned with its reason,
+never dropped (a test caught the first draft dropping malformed names).
 
 ## Open questions
 
