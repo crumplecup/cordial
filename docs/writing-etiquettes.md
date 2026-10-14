@@ -1,150 +1,163 @@
-# Writing etiquettes
+# Your First Etiquette: A `todo!()` Lint From Scratch
 
-An etiquette is a named standard implemented as a bundle of hooks. A plugin is
-the product you register with a session; it contributes one or more etiquettes.
+*Part 1 of 7. Next: [Finding the sites](writing-etiquettes-2-finding-sites.md).*
 
-Use an etiquette when you need to load code, add facts to the IR, mark
-interesting sites, judge those markers, and render artifacts. Use a plugin when
-you want to ship one or more etiquettes under a single product id.
+A `todo!()` is a promise to come back. Most of the time you do. Now and then
+one slips through review, ships, and turns up two days later as a panic that
+says "not yet implemented" in a place nobody remembers writing.
 
-## The pipeline
+Catching that is a small job, which makes it a good first lint to write. This
+series writes one for [cordial](../README.md), a plugin framework that checks
+whether a Rust codebase follows the standards you care about and writes reports
+for people and agents to work through. Each standard is called an *etiquette*,
+and you can add your own without forking the tool. Clippy already has a lint for
+`todo!()` (`clippy::todo`), so the problem is easy to state, and the only new
+thing to learn is cordial's plugin machinery.
 
-```text
-Loader -> IrEnricher -> Probe -> Assessor -> Reporter
-                      \-> WorkspaceAssessor
+This series is for you if you can read Rust and have the cordial repository
+checked out. You don't need to know `syn` or `petgraph`. The posts introduce
+what they use.
+
+## What done looks like
+
+Pointed at a crate, the lint should report every `todo!()` as a *finding*, which
+is cordial's word for one reported problem. Each finding carries a rule id
+(`ACME-TODO-001`), the file and line, and the name of the function the macro
+sits in. For a crate whose `src/lib.rs` has a `todo!()` on line 2 of a function
+named `leftover`, that is one finding: `src/lib.rs`, line 2, function
+`leftover`.
+
+That is enough to design from. We need to find the macro calls, say where they
+are, judge each one, and hand the result to whoever is reading.
+
+## How the series works
+
+Each post covers one stretch of the way from an empty file to that finding, and
+ends with a short checkpoint of what exists so far.
+
+1. **The plan and the rule** (this post): the five jobs a check is split into,
+   and the rule's name.
+2. [**Finding the sites**](writing-etiquettes-2-finding-sites.md): walk the
+   syntax tree and put every `todo!()` into the crate's graph.
+3. [**Noticing and judging**](writing-etiquettes-3-noticing-and-judging.md):
+   turn graph nodes into markers, and markers into findings.
+4. [**Writing it down and bundling it up**](writing-etiquettes-4-writing-and-bundling.md):
+   the reporter, the etiquette, and the plugin.
+5. [**Taking it for a run**](writing-etiquettes-5-running.md): a test, then the
+   real output.
+6. [**When order matters**](writing-etiquettes-6-order.md): telling cordial
+   which lints come first. Optional.
+7. [**Make it yours**](writing-etiquettes-7-make-it-yours.md): variations, and a
+   row in the quality report.
+
+A [reference page](writing-etiquettes-reference.md) covers the pieces the series
+doesn't need.
+
+Longer code blocks carry short numbered comments (`// 1.`, `// 2.`, and so on),
+and the notes after each block explain the same numbers. Read the two side by
+side. The finished lint follows `examples/custom_plugins/quality.rs` in the
+cordial repository, which compiles with the crate and is exercised by
+`tests/custom_plugins.rs`, so keep that file open if you want the whole thing in
+one piece.
+
+One more thing to expect: a plugin you write runs through a `Session`, the
+object that drives a cordial run, rather than through the `cordial` command,
+which runs the built-in etiquettes. A test is the natural place to build one, so
+that is where the first run happens in Part 5.
+
+## Five questions, five hooks
+
+Cordial splits a check into five jobs, and each job has a *hook*: a piece of
+code you hand to cordial that answers one question.
+
+```mermaid
+flowchart LR
+  L["Loader<br/>which files?"] --> E["Enricher<br/>what is in them?"]
+  E --> P["Probe<br/>which spots<br/>are interesting?"]
+  P --> A["Assessor<br/>is that a problem?"]
+  A --> R["Reporter<br/>how do we say so?"]
 ```
 
-The session deduplicates registered hooks by id, builds the IR once per active
-crate, runs probes, routes markers to assessors, then writes reporter artifacts
-under the project store.
+The enricher is where cordial's design shows. Cordial builds a graph of each
+crate's code, nodes and edges, and every check reads from it, so a file is
+parsed once however many checks care about it. Enrichers add facts to that graph
+and probes read facts back out.
 
-| Hook | Job | Emits |
+Cordial ships a loader for Rust source, so this lint writes the other four:
+
+| Hook | Our answer | Part |
 | --- | --- | --- |
-| `Loader` | read raw material for one crate | `LoadView` |
-| `IrEnricher` | add graph nodes, edges, and attributes | IR facts |
-| `Probe` | find observations in the IR | `Marker` |
-| `Assessor` | turn markers into judged issues | `Finding` |
-| `WorkspaceAssessor` | judge cross-crate workspace facts | `Finding` |
-| `Reporter` | render findings | `Artifact` |
+| `Loader` | the crate's Rust source (cordial ships this one) | none |
+| `IrEnricher` | walk each file, and record every `todo!()` in the graph | 2 |
+| `Probe` | ask the graph for those records | 3 |
+| `Assessor` | every one is a violation | 3 |
+| `Reporter` | write them to a CSV | 4 |
 
-Markers are not findings. A probe should say "this site exists." An assessor
-should say "this site violates rule X" or "this site is suppressed." A reporter
-should only format already-judged findings.
+Three words come up all through the series. A *marker* says "this site exists."
+A *finding* says "this site breaks rule X." A *reporter* only formats findings
+that have already been judged. Keeping the first two apart is what lets a probe
+find spots without knowing what counts as a violation.
 
-For graph access patterns, read [IR and queries](ir-and-queries.md). That guide
-covers `IrView`, `IrMut`, `QueryBuilder`, custom `Query` implementations, and
-attribute conventions.
+For a check clippy can do in one line, five hooks is a lot of structure, and the
+honest case for it is what comes with it. Once a rule has an id and a place in
+the pipeline, cordial gives it an explain page, a way to silence it on purpose,
+a row in the quality report, and a position relative to other rules. The series
+shows each of those in turn.
 
-## Start with a static etiquette
+We will build the hooks in order. First, the rule they all report against.
 
-Most source-quality checks can use `StaticEtiquette` or
-`StaticQualityEtiquette`. Static declarations make the product shape visible at
-the call site and keep missing documentation noisy.
+## Naming the rule
 
-```rust,ignore
-use cordial::{
-    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec,
-    StaticEtiquette, StaticQualityEtiquette,
-};
+Every finding points at a rule, and a rule is three strings.
 
-pub static ACME_STYLE: StaticQualityEtiquette = StaticQualityEtiquette::new(
-    StaticEtiquette::new(
-        "acme-style",
-        "ACME style",
-        EtiquetteHooks::new(
-            &[&SOURCE_LOADER],
-            &[&ACME_ENRICHER],
-            &[&ACME_PROBE],
-            &[&ACME_ASSESSOR],
-            None,
-            &[&ACME_REPORTER],
-        ),
-        false,
-        EtiquetteExplain::new(
-            "ACME-specific source checks.",
-            "The project has local conventions that rustc and Clippy do not know.",
-            "Scans source IR for ACME markers and emits findings for open violations.",
-            "`[acme-style] enabled = false` in `cordial.toml`.",
-            &[EtiquetteRuleExplain::new("ACME-STYLE-001", "Example ACME rule.")],
-        ),
-    ),
-    Some(QualityAreaSpec::new(
-        "ACME style",
-        "acme-style.checklist.md",
-        "acme-style-summary.md",
-        count_open_findings,
-    )),
-);
+```rust
+// A rule carries no data, so it is a unit struct.
+#[derive(Debug, Clone, Copy)]
+struct TodoRule;
+
+impl Rule for TodoRule {
+    // The id is permanent.
+    fn id(&self) -> &str {
+        "ACME-TODO-001"
+    }
+
+    // The category groups related rules.
+    fn category(&self) -> &str {
+        "acme_style"
+    }
+
+    // One line, shown beside every finding for this rule.
+    fn description(&self) -> &str {
+        "Leftover `todo!()` macro — finish or delete before merge"
+    }
+}
 ```
 
-For coverage etiquettes, use `StaticEtiquette` directly and set `is_coverage`
-to `true`. Coverage reports do not feed `quality-report.md`.
+The id deserves some thought. It shows up in reports, in `cordial explain`, and
+in the exceptions that silence a finding, so treat it as permanent as soon as
+anyone has used it. Cordial gives each kind of problem its own id, so a project
+can silence or track one without touching the others. The category is what a
+report can later count, as in [Part 7](writing-etiquettes-7-make-it-yours.md).
 
-## Choose the plugin shape
+## What we have so far
 
-There are four supported product shapes:
+A rule with an id, a category, and a description. It does nothing yet, but every
+finding the lint ever produces will point at it, and the id will appear in
+everything downstream.
 
-| Shape | Use when | Copy from |
-| --- | --- | --- |
-| `StaticPlugin` | a quality product contributes one or more ordinary etiquettes | `examples/custom_plugins/quality.rs` |
-| `StrategicPlugin` | a product exposes alternate etiquette portfolios selected by a strategy enum | `tests/custom_plugins.rs` |
-| `Coverage` | a product asks trait-implementation coverage questions over targets | `examples/custom_plugins/coverage.rs` |
-| `ErrorHandling` | a product configures the error-flow analysis family | `examples/custom_plugins/error_handling.rs` |
+Next comes the interesting part: teaching the lint to find a `todo!()` in a
+file, and putting what it finds somewhere the rest of cordial can see.
 
-Use `Strategy<T>` and `StrategicPlugin` when a plugin family has legitimate
-policy variants. The strategy indicator is usually a small enum parsed from
-`cordial.toml`; each selected portfolio returns the etiquette slice that should
-run for that variant. Keep ordinary plugins on `StaticPlugin` until they
-actually need this selection seam.
+**Next: [Part 2, Finding the sites](writing-etiquettes-2-finding-sites.md).**
 
-Register plugins, not individual hooks:
+---
 
-```rust,ignore
-use cordial::{RunAll, Session, SessionBuilder};
-
-let session = SessionBuilder::new(project_root)
-    .register_plugin(&ACME_STYLE_PLUGIN)
-    .build();
-
-let outcome = session.run(&RunAll)?;
-```
-
-Direct `SessionBuilder::register(&ETIQUETTE)` is still useful for tests and
-small one-off integrations. Prefer `register_plugin` for anything users should
-think of as a product.
-
-## Interface obligations
-
-Keep identifiers stable. `Plugin::id`, `Etiquette::id`, hook ids, marker
-labels, rule ids, and artifact filenames are part of the replay surface for
-reports, exceptions, and command-line filters.
-
-Return empty slices when a phase is not needed. A source-only lint may not need
-a workspace assessor. A reporter-only summary may not need probes of its own.
-The absence should be explicit in the static hook table.
-
-Make `EtiquetteExplain` useful. It is the source for `cordial explain`, so it
-should describe why the check exists, what it flags, how the scan behaves, and
-how a project opts out.
-
-For quality etiquettes, decide the rollup behavior. `Some(QualityAreaSpec)`
-adds a row to `quality-report.md`; `None` is valid only when the etiquette is a
-reference inventory or its findings are intentionally folded into another area.
-
-## Built-in standards
-
-The built-in etiquettes are easiest to understand by standard:
-
-| Standard | Etiquettes |
-| --- | --- |
-| Error handling | `panics`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation` |
-| Observability | `tracing`, `allows`, `doc_warnings`, `feature_warnings`, `crate_attrs` |
-| API shape | `visibility`, `derives`, `pageantry`, `glob_imports` |
-| Structure | `modularity`, `inline_tests`, `cli_layout` |
-| Conditional code | `cfg_scatter`, `cfg_hygiene` |
-| Proof hygiene | `verus_warnings`, `creusot_diagnostics`, `proof_patterns`, contract-bound rules in `antipatterns` |
-| Coverage | `impl-coverage`, `trenchcoat`, `shadow`, `homecoming-std`, `amenable-std` |
-
-Read [Built-in etiquettes](built-in-etiquettes.md) for the tour. Each etiquette
-module under `src/etiquettes/` documents its local What, Why, and How to use.
-`cordial explain` prints the compiled-in explanation for the current binary.
+**The series: Your First Etiquette.**
+**1. The plan and the rule** ·
+[2. Finding the sites](writing-etiquettes-2-finding-sites.md) ·
+[3. Noticing and judging](writing-etiquettes-3-noticing-and-judging.md) ·
+[4. Writing it down and bundling it up](writing-etiquettes-4-writing-and-bundling.md) ·
+[5. Taking it for a run](writing-etiquettes-5-running.md) ·
+[6. When order matters](writing-etiquettes-6-order.md) ·
+[7. Make it yours](writing-etiquettes-7-make-it-yours.md) ·
+[Reference](writing-etiquettes-reference.md)
