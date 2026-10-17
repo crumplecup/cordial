@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use crate::{CordialResult, QualityAreaSummary, StoreLayout};
 
@@ -16,6 +17,7 @@ pub trait ItemSource {
 #[derive(Debug, Clone)]
 pub struct ChecklistSource {
     findings_dir: PathBuf,
+    fresh_since: Option<SystemTime>,
 }
 
 impl ChecklistSource {
@@ -24,6 +26,7 @@ impl ChecklistSource {
     pub fn new(store: &StoreLayout) -> Self {
         Self {
             findings_dir: store.findings_dir(),
+            fresh_since: None,
         }
     }
 
@@ -32,7 +35,15 @@ impl ChecklistSource {
     pub fn from_findings_dir(path: impl Into<PathBuf>) -> Self {
         Self {
             findings_dir: path.into(),
+            fresh_since: None,
         }
+    }
+
+    /// Read only checklists written by the current gate run.
+    #[instrument(level = "trace", skip(self, started))]
+    pub fn fresh_since(mut self, started: SystemTime) -> Self {
+        self.fresh_since = Some(started);
+        self
     }
 }
 
@@ -42,6 +53,13 @@ impl ItemSource for ChecklistSource {
         let mut items = Vec::new();
         for checklist in area.checklists() {
             let path = self.findings_dir.join(checklist.name());
+            if self.fresh_since.is_some_and(|started| {
+                fs::metadata(&path)
+                    .and_then(|metadata| metadata.modified())
+                    .is_ok_and(|modified| modified < started)
+            }) {
+                continue;
+            }
             let body = match fs::read_to_string(&path) {
                 Ok(body) => body,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,

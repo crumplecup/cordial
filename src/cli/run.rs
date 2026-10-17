@@ -4,6 +4,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use crate::{
     CordialError, CordialResult, CrateIr, Disposition, Etiquette, Finding, NamedRunFilter, Plugin,
@@ -209,8 +210,34 @@ pub(super) fn execute_run_plugins(
     let _worklist_lock =
         crate::worklist::WorklistLock::exclusive(store, command, progress.as_ref())?;
     #[cfg(not(feature = "quality"))]
-    let _ = (write_worklist, command);
+    let _ = command;
 
+    execute_run_plugins_locked(
+        project_root,
+        store,
+        crate_name,
+        store_home,
+        progress,
+        plugins,
+        deny_open,
+        write_worklist,
+    )
+}
+
+/// Run after the caller has acquired the worklist lock.
+#[instrument(level = "debug", skip(store, progress, plugins), err(level = "warn"))]
+pub(super) fn execute_run_plugins_locked(
+    project_root: &Path,
+    store: &StoreLayout,
+    crate_name: Option<&str>,
+    store_home: Option<PathBuf>,
+    progress: Arc<dyn ProgressSink>,
+    plugins: Vec<&'static dyn Plugin>,
+    deny_open: bool,
+    write_worklist: bool,
+) -> CordialResult<()> {
+    #[cfg(not(feature = "quality"))]
+    let _ = write_worklist;
     let effective_store_home = store_home.unwrap_or_else(default_store_home);
     let mut builder = SessionBuilder::new(project_root)
         .with_store_root(store.root().clone())
@@ -222,6 +249,7 @@ pub(super) fn execute_run_plugins(
 
     let session = builder.build();
     let filter = run_filter(crate_name);
+    let run_started = SystemTime::now();
     let outcome = session.run(filter.as_ref())?;
     let summary = print_run_summary(outcome.as_ref())?;
     #[cfg(feature = "quality")]
@@ -229,7 +257,7 @@ pub(super) fn execute_run_plugins(
         let findings = outcome.findings().collect::<Vec<_>>();
         let report = crate::build_quality_report(&findings)?;
         let config = crate::load_cordial_config(project_root, &effective_store_home);
-        let source = crate::ChecklistSource::new(store);
+        let source = crate::ChecklistSource::new(store).fresh_since(run_started);
         let list = crate::Worklist::build(&report, store, &source, &config)?;
         list.write(store)?;
     }

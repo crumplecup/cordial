@@ -4,7 +4,7 @@ use miette::IntoDiagnostic;
 
 use cordial::{
     ChecklistSource, CordialConfig, ItemSource, QualityAreaSummary, QualityChecklist,
-    QualityReport, StoreLayout, Validity, Worklist,
+    QualityReport, StoreLayout, Validity, Worklist, render_open, render_stats,
 };
 
 fn area(checklists: Vec<QualityChecklist>) -> QualityAreaSummary {
@@ -152,7 +152,7 @@ fn worklist_build_checks_counts_and_writes_generations() -> miette::Result<()> {
     let report = QualityReport::new(vec![selected.clone()], 2);
     let source = ChecklistSource::new(&store);
     let config = CordialConfig::default();
-    let first = Worklist::build(&report, &store, &source, &config).into_diagnostic()?;
+    let mut first = Worklist::build(&report, &store, &source, &config).into_diagnostic()?;
     assert_eq!(*first.record().generation(), 1);
     assert_eq!(first.open_count(), 2);
     assert!(first.current().is_none());
@@ -161,6 +161,10 @@ fn worklist_build_checks_counts_and_writes_generations() -> miette::Result<()> {
         Validity::Current
     );
     assert!(first.items()[1].id().as_str().ends_with("-2"));
+    assert!(first.activate());
+    assert!(!first.activate());
+    assert!(render_open(&first).contains(first.current().expect("current").id().as_str()));
+    assert!(render_stats(&first, true, Some("Error handling"), false).contains("[>]"));
     first.write(&store).into_diagnostic()?;
     assert_eq!(
         Worklist::read(&store).into_diagnostic()?,
@@ -184,5 +188,48 @@ fn worklist_build_checks_counts_and_writes_generations() -> miette::Result<()> {
         1,
     );
     assert!(Worklist::build(&bad, &store, &source, &config).is_err());
+    Ok(())
+}
+
+#[test]
+fn verbose_stats_caps_items_unless_all_is_set() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = tempfile::tempdir().into_diagnostic()?;
+    let store = StoreLayout::from_root(root.path(), "fixture");
+    std::fs::create_dir_all(store.findings_dir()).into_diagnostic()?;
+    let mut checklist = String::from("## crate\n\n");
+    for index in 0..26 {
+        checklist.push_str(&format!("- [ ] item {index} — `src/lib.rs:{index}`\n"));
+    }
+    std::fs::write(store.findings_dir().join("panics.checklist.md"), checklist)
+        .into_diagnostic()?;
+    let report = QualityReport::new(
+        vec![QualityAreaSummary::new(
+            1,
+            "Error handling".to_string(),
+            26,
+            "panics.checklist.md".to_string(),
+            vec![QualityChecklist::new(
+                "panics.checklist.md".to_string(),
+                vec![],
+            )],
+            "summary.md".to_string(),
+            String::new(),
+        )],
+        26,
+    );
+    let list = Worklist::build(
+        &report,
+        &store,
+        &ChecklistSource::new(&store),
+        &CordialConfig::default(),
+    )
+    .into_diagnostic()?;
+    let capped = render_stats(&list, true, None, false);
+    assert!(capped.contains("Showing 25 of 26 items."));
+    assert!(!capped.contains("item 25"));
+    let all = render_stats(&list, true, None, true);
+    assert!(all.contains("item 25"));
+    assert!(!all.contains("Showing 25"));
     Ok(())
 }

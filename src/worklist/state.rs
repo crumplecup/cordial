@@ -168,6 +168,19 @@ impl Worklist {
     pub fn current(&self) -> Option<&WorklistItem> {
         self.cursor.and_then(|index| self.items.get(index))
     }
+
+    /// Place a fresh list's cursor on its first available item.
+    #[instrument(level = "trace", skip(self))]
+    pub fn activate(&mut self) -> bool {
+        if self.cursor.is_some() {
+            return false;
+        }
+        self.cursor = self
+            .items
+            .iter()
+            .position(|item| *item.state() == ItemState::Open);
+        self.cursor.is_some()
+    }
 }
 
 #[instrument(level = "debug", skip(config))]

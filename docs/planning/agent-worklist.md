@@ -958,7 +958,7 @@ Release 1:
 - [x] Phase 1: progress without a terminal
 - [x] Phase 2: areas know their checklists; counts equal checklists
 - [x] Phase 3: model, ids, parser, build record, gate-side write
-- [ ] Phase 4: `stats`, `open`
+- [x] Phase 4: `stats`, `open`
 - [ ] Phase 5: `done`, `skip`, `peek`, hidden `next`
 - [ ] Phase 6: `submit`, scoring
 - [ ] Phase 7: `instructions`

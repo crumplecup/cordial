@@ -14,8 +14,11 @@ use crate::{
 
 mod commands;
 mod exceptions;
+mod export;
 mod progress;
 mod run;
+#[cfg(feature = "quality")]
+mod worklist;
 
 use commands::ActCtx;
 pub use commands::Commands;

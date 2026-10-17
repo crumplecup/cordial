@@ -10,7 +10,7 @@ use super::exceptions::{
     execute_edit_exception, execute_load_exceptions, execute_remove_exception, list_exceptions,
     show_exceptions,
 };
-use super::run::{execute_quality_apply, execute_run_plugins, export_surreal, view_store_file};
+use super::run::{execute_quality_apply, execute_run_plugins, view_store_file};
 use crate::{
     CordialError, CordialResult, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,
     ExceptionSelector, ExceptionUpdate, ProgressSink, StoreLayout, all_plugins, quality_plugins,
@@ -20,6 +20,22 @@ use tracing::instrument;
 /// Top-level `cordial` subcommands.
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Show the current worklist item, building a list when needed.
+    #[cfg(feature = "quality")]
+    Open,
+    /// Show worklist counts or individual items.
+    #[cfg(feature = "quality")]
+    Stats {
+        /// Show items and their checked state.
+        #[arg(long)]
+        verbose: bool,
+        /// Restrict the verbose view to one area title.
+        #[arg(long, requires = "verbose")]
+        area: Option<String>,
+        /// Show every item instead of the first 25.
+        #[arg(long, requires = "verbose")]
+        all: bool,
+    },
     /// Run all built-in etiquettes (quality + coverage).
     Run {
         /// Exit with failure when unresolved open findings remain.
@@ -276,7 +292,7 @@ pub enum BuildCommands {
     },
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, derive_getters::Getters)]
 pub(super) struct ActCtx {
     project_root: PathBuf,
     store: StoreLayout,
@@ -289,6 +305,12 @@ impl Commands {
     #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
     pub(super) fn act(self, ctx: ActCtx) -> CordialResult<()> {
         match self {
+            #[cfg(feature = "quality")]
+            Self::Open => super::worklist::execute_open(&ctx),
+            #[cfg(feature = "quality")]
+            Self::Stats { verbose, area, all } => {
+                super::worklist::execute_stats(&ctx, verbose, area.as_deref(), all)
+            }
             Self::Run { deny_open } => execute_run_plugins(
                 &ctx.project_root,
                 &ctx.store,
@@ -447,21 +469,6 @@ impl ExceptionCommands {
                 &target.crate_name(ctx),
                 &target.selector(),
                 &new.update(),
-            ),
-        }
-    }
-}
-
-impl ExportCommands {
-    #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
-    fn act(self, ctx: &ActCtx) -> CordialResult<()> {
-        match self {
-            Self::Surreal { output, statements } => export_surreal(
-                &ctx.store,
-                &ctx.project_root,
-                ctx.crate_name.as_deref(),
-                output.as_deref(),
-                statements,
             ),
         }
     }
