@@ -134,12 +134,20 @@ pub static ANTIPATTERNS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::
                 ],
             ),
         ),
-        Some(QualityAreaSpec::new(
-            "Antipatterns",
-            "antipatterns.checklist.md",
-            "antipatterns-summary.md",
-            quality_area_compute,
-        )),
+        Some(
+            QualityAreaSpec::new(
+                "Antipatterns",
+                "antipatterns.checklist.md",
+                "antipatterns-summary.md",
+                quality_area_compute,
+            )
+            .with_checklist_rules(&[
+                "ANTIPATTERN-UNUSED-UNDERSCORE-ARG-001",
+                "ANTIPATTERN-STRUCT-STATIC-REF-001",
+                "ANTIPATTERN-UNNAMED-CONTRACT-BOUND-001",
+                "ANTIPATTERN-VERSION-IN-MEMBER-001",
+            ]),
+        ),
     )
 });
 

@@ -1,0 +1,188 @@
+#![cfg(feature = "quality")]
+
+use miette::IntoDiagnostic;
+
+use cordial::{
+    ChecklistSource, CordialConfig, ItemSource, QualityAreaSummary, QualityChecklist,
+    QualityReport, StoreLayout, Validity, Worklist,
+};
+
+fn area(checklists: Vec<QualityChecklist>) -> QualityAreaSummary {
+    QualityAreaSummary::new(
+        1,
+        "Error handling".to_string(),
+        3,
+        checklists[0].name().clone(),
+        checklists,
+        "summary.md".to_string(),
+        String::new(),
+    )
+}
+
+#[test]
+fn checklist_source_keeps_guidance_details_and_filters_rules() -> miette::Result<()> {
+    cordial::init_tracing();
+    let findings = tempfile::tempdir().into_diagnostic()?;
+    std::fs::write(
+        findings.path().join("panics.checklist.md"),
+        "# Panic sources checklist\n\n## `crate`\n\n### Library\n\n_Fix library aborts._\n\n#### unwrap\n\n- [ ] `read_all` — `src/store.rs:52` — `unwrap`\n  - source: io::Error\n\n- [x] documented exception\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
+        findings.path().join("antipatterns.checklist.md"),
+        "# Antipatterns\n\n## `crate`\n\n### ANTIPATTERN-BOX-DYN-ERROR-001\n\n- [ ] `boxed` — `src/lib.rs:10`\n\n### ANTIPATTERN-UNUSED-UNDERSCORE-ARG-001\n\n- [ ] `unused` — `src/lib.rs:20`\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
+        findings
+            .path()
+            .join("foreign-error-attenuation.checklist.md"),
+        "## `crate`\n\n### Chain break (bad code → migrate)\n\n- [ ] `lost_source` — `src/error.rs:4`\n\n### Neutral (manual review)\n\n- [ ] `review_only` — `src/error.rs:8`\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
+        findings.path().join("cfg-scatter.checklist.md"),
+        "# Scattered cfg\n\n## `crate`\n\n- [ ] `src/lib.rs` — `cfg(test)`\n  - sample: gated method\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
+        findings.path().join("modularity.checklist.md"),
+        "# Modularity\n\n## `crate`\n\n### Hotspots\n\n- [ ] `src/large.rs` — **310 lines**\n  - [ ] `method_a` — split this body\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
+        findings.path().join("visibility.checklist.md"),
+        "# Visibility\n\n## `crate`\n\n- [ ] `VISIBILITY-PUB-001` — `src/lib.rs:5` — narrow this item\n",
+    )
+    .into_diagnostic()?;
+    let source = ChecklistSource::from_findings_dir(findings.path());
+    let area = area(vec![
+        QualityChecklist::new("panics.checklist.md".to_string(), vec![]),
+        QualityChecklist::new(
+            "antipatterns.checklist.md".to_string(),
+            vec!["ANTIPATTERN-BOX-DYN-ERROR-001".to_string()],
+        ),
+        QualityChecklist::new(
+            "foreign-error-attenuation.checklist.md".to_string(),
+            vec!["Chain break (bad code → migrate)".to_string()],
+        ),
+        QualityChecklist::new("cfg-scatter.checklist.md".to_string(), vec![]),
+        QualityChecklist::new("modularity.checklist.md".to_string(), vec![]),
+        QualityChecklist::new("visibility.checklist.md".to_string(), vec![]),
+    ]);
+    let items = source.items(&area).into_diagnostic()?;
+    assert_eq!(items.len(), 6);
+    assert_eq!(
+        items[0].heading_trail(),
+        &vec!["`crate`", "Library", "unwrap"]
+    );
+    assert_eq!(items[0].guidance().as_deref(), Some("Fix library aborts."));
+    assert_eq!(items[0].detail_lines(), &["  - source: io::Error"]);
+    assert_eq!(items[0].file().as_deref(), Some("src/store.rs"));
+    assert!(items[1].item_line().contains("boxed"));
+    assert!(items[2].item_line().contains("lost_source"));
+    assert_eq!(items[3].file().as_deref(), Some("src/lib.rs"));
+    assert_eq!(items[3].detail_lines(), &["  - sample: gated method"]);
+    assert_eq!(items[4].file().as_deref(), Some("src/large.rs"));
+    assert_eq!(
+        items[4].detail_lines(),
+        &["  - [ ] `method_a` — split this body"]
+    );
+    assert_eq!(items[5].file().as_deref(), Some("src/lib.rs"));
+    Ok(())
+}
+
+#[test]
+fn item_id_ignores_location_line_number() -> miette::Result<()> {
+    cordial::init_tracing();
+    let findings = tempfile::tempdir().into_diagnostic()?;
+    let path = findings.path().join("panics.checklist.md");
+    let source = ChecklistSource::from_findings_dir(findings.path());
+    let area = area(vec![QualityChecklist::new(
+        "panics.checklist.md".to_string(),
+        vec![],
+    )]);
+    std::fs::write(&path, "## crate\n\n- [ ] `read_all` — `src/store.rs:52`\n")
+        .into_diagnostic()?;
+    let first = source.items(&area).into_diagnostic()?;
+    std::fs::write(&path, "## crate\n\n- [ ] `read_all` — `src/store.rs:89`\n")
+        .into_diagnostic()?;
+    let second = source.items(&area).into_diagnostic()?;
+    assert_eq!(first[0].id(), second[0].id());
+    assert_eq!(first[0].scoring_key(), second[0].scoring_key());
+    std::fs::write(
+        &path,
+        "## crate\n\n- [ ] `read_all` — `src/store.rs:89` — timeout:30\n",
+    )
+    .into_diagnostic()?;
+    let third = source.items(&area).into_diagnostic()?;
+    std::fs::write(
+        &path,
+        "## crate\n\n- [ ] `read_all` — `src/store.rs:89` — timeout:31\n",
+    )
+    .into_diagnostic()?;
+    let fourth = source.items(&area).into_diagnostic()?;
+    assert_ne!(third[0].id(), fourth[0].id());
+    Ok(())
+}
+
+#[test]
+fn worklist_build_checks_counts_and_writes_generations() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = tempfile::tempdir().into_diagnostic()?;
+    let store = StoreLayout::from_root(root.path(), "fixture");
+    std::fs::create_dir_all(store.findings_dir()).into_diagnostic()?;
+    std::fs::write(
+        store.findings_dir().join("panics.checklist.md"),
+        "## crate\n\n- [ ] `read_all` — `src/store.rs:52`\n- [ ] `read_all` — `src/store.rs:89`\n",
+    )
+    .into_diagnostic()?;
+    let selected = QualityAreaSummary::new(
+        1,
+        "Error handling".to_string(),
+        2,
+        "panics.checklist.md".to_string(),
+        vec![QualityChecklist::new(
+            "panics.checklist.md".to_string(),
+            vec![],
+        )],
+        "summary.md".to_string(),
+        String::new(),
+    );
+    let report = QualityReport::new(vec![selected.clone()], 2);
+    let source = ChecklistSource::new(&store);
+    let config = CordialConfig::default();
+    let first = Worklist::build(&report, &store, &source, &config).into_diagnostic()?;
+    assert_eq!(*first.record().generation(), 1);
+    assert_eq!(first.open_count(), 2);
+    assert!(first.current().is_none());
+    assert_eq!(
+        first.validity(&config).into_diagnostic()?,
+        Validity::Current
+    );
+    assert!(first.items()[1].id().as_str().ends_with("-2"));
+    first.write(&store).into_diagnostic()?;
+    assert_eq!(
+        Worklist::read(&store).into_diagnostic()?,
+        Some(first.clone())
+    );
+    let second = Worklist::build(&report, &store, &source, &config).into_diagnostic()?;
+    assert_eq!(*second.record().generation(), 2);
+    let bad = QualityReport::new(
+        vec![QualityAreaSummary::new(
+            1,
+            "Error handling".to_string(),
+            1,
+            "panics.checklist.md".to_string(),
+            vec![QualityChecklist::new(
+                "panics.checklist.md".to_string(),
+                vec![],
+            )],
+            "summary.md".to_string(),
+            String::new(),
+        )],
+        1,
+    );
+    assert!(Worklist::build(&bad, &store, &source, &config).is_err());
+    Ok(())
+}

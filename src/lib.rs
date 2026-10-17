@@ -79,6 +79,8 @@ pub mod testing;
 mod tracing_init;
 #[cfg(feature = "verus_ir")]
 mod verus_ir;
+#[cfg(feature = "quality")]
+mod worklist;
 
 #[cfg(feature = "dependency_freshness")]
 pub use etiquettes::DEPENDENCY_FRESHNESS_ETIQUETTE;
@@ -263,9 +265,9 @@ pub use error::{CordialError, CordialErrorKind, CordialResult, TokenStreamParseE
 pub use etiquette::{
     After, BUILT_IN_ORDER, Before, BeforeMirror, DERIVE_RULE_IDS, Etiquette, EtiquetteExplain,
     EtiquetteHooks, EtiquetteRuleExplain, IntoEtiquette, LintConstraint, LintOrder, OrderExplain,
-    QualityAreaSpec, QualityEtiquette, QualityReportArea, StaticEtiquette, StaticQualityEtiquette,
-    count_open_category, count_open_rule, finding_field, lookup_etiquette, open_findings,
-    render_explain_list, render_explain_page,
+    QualityAreaSpec, QualityChecklistSpec, QualityEtiquette, QualityReportArea, StaticEtiquette,
+    StaticQualityEtiquette, count_open_category, count_open_rule, finding_field, lookup_etiquette,
+    open_findings, render_explain_list, render_explain_page,
 };
 #[cfg(feature = "shadow")]
 pub use etiquettes::SHADOW_ETIQUETTE;
@@ -358,7 +360,7 @@ pub use objects::{
     Artifact, Disposition, FileSpan, Finding, FindingSink, IrAnchor, MapFindingSink, Marker,
     NodeAnchor, Rule, SourceSpan, TextArtifact,
 };
-pub use progress::{ProgressSink, ProgressTask, noop_progress};
+pub use progress::{LineProgress, ProgressSink, ProgressTask, noop_progress};
 pub use reporter::RollupReporter;
 #[cfg(any(
     feature = "homecoming_std",
@@ -371,13 +373,19 @@ pub use reporter::{
 };
 #[cfg(feature = "quality")]
 pub use reporter::{
-    QualityAreaSummary, QualityReport, QualityReportReporter, build_quality_report,
-    render_quality_report_markdown, render_quality_workspace_summary_markdown,
+    QualityAreaSummary, QualityChecklist, QualityReport, QualityReportReporter,
+    build_quality_report, render_quality_report_markdown,
+    render_quality_workspace_summary_markdown,
 };
 pub use session::{
     RunAll, RunFilter, RunOutcome, RuntimeSession, Session, SessionBuilder, SessionView,
 };
 pub use store::{StoreLayout, SysrootCache, default_store_home, project_slug_from_path};
+#[cfg(feature = "quality")]
+pub use worklist::{
+    BuildRecord, ChecklistSource, ItemId, ItemSource, ItemState, Validity, Worklist, WorklistItem,
+    WorklistLock,
+};
 #[cfg(feature = "homecoming_std")]
 pub use {
     cargo_rustdoc::{

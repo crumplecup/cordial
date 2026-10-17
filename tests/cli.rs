@@ -58,12 +58,22 @@ fn cli_quality_writes_reports_and_rollup() -> miette::Result<()> {
         "stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Starting: "), "stderr: {stderr}");
+    assert!(stderr.contains("Finished: "), "stderr: {stderr}");
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("Starting: "));
     let slug = cordial::project_slug_from_path(fixture.path());
     let project_store = store.path().join(&slug);
     assert!(project_store.join("findings/panics.csv").is_file());
     assert!(project_store.join("findings/rollup-summary.md").is_file());
     assert!(project_store.join("findings/quality-report.md").is_file());
     assert!(project_store.join("findings/summary.md").is_file());
+    let layout = cordial::StoreLayout::from_root(&project_store, slug);
+    let list = cordial::Worklist::read(&layout)
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("quality did not write a worklist"))?;
+    assert!(list.open_count() > 0);
+    assert_eq!(*list.record().generation(), 1);
     Ok(())
 }
 
@@ -80,6 +90,7 @@ fn cli_quality_deny_open_fails_after_writing_reports() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("store tempdir")?;
     let output = cordial_command()
+        .env("CORDIAL_NO_PROGRESS", "1")
         .args([
             "--project",
             utf8_path(fixture.path())?,
@@ -98,6 +109,7 @@ fn cli_quality_deny_open_fails_after_writing_reports() -> miette::Result<()> {
         stderr.contains("open action items denied"),
         "stderr: {stderr}"
     );
+    assert!(!stderr.contains("Starting: "), "stderr: {stderr}");
     let slug = cordial::project_slug_from_path(fixture.path());
     let project_store = store.path().join(&slug);
     assert!(project_store.join("findings/quality-report.md").is_file());

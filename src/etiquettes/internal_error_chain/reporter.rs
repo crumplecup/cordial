@@ -1,7 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use crate::csv_row::csv_field;
 use crate::error::CordialResult;
+use crate::etiquette::{finding_field, open_findings};
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
 
@@ -24,7 +25,7 @@ struct InternalErrorChainRow {
     file: String,
     line: String,
     snippet: String,
-    _disposition: String,
+    disposition: String,
 }
 
 impl InternalErrorChainRow {
@@ -54,7 +55,7 @@ impl InternalErrorChainRow {
             file: field("file"),
             line: field("line"),
             snippet: field("snippet"),
-            _disposition: finding.disposition().to_string(),
+            disposition: finding.disposition().to_string(),
         }
     }
 }
@@ -76,8 +77,9 @@ fn type_graph_rows(rows: &[InternalErrorChainRow]) -> impl Iterator<Item = &Inte
 
 #[instrument(level = "debug", skip(rows))]
 fn compliance_rows(rows: &[InternalErrorChainRow]) -> impl Iterator<Item = &InternalErrorChainRow> {
-    rows.iter()
-        .filter(|row| row.record_kind == InternalErrorRecordKind::Compliance.as_str())
+    rows.iter().filter(|row| {
+        row.record_kind == InternalErrorRecordKind::Compliance.as_str() && row.disposition == "open"
+    })
 }
 
 /// Distinct crate names present in `rows`, sorted -- `view.ir().crate_name()`
@@ -244,6 +246,21 @@ impl Reporter for InternalErrorChainChecklistReporter {
         let rows = internal_error_chain_rows(findings);
         let type_nodes: Vec<_> = type_graph_rows(&rows).collect();
         let compliance: Vec<_> = compliance_rows(&rows).collect();
+        let attenuation_sites: HashSet<_> = open_findings(findings)
+            .filter(|finding| finding.rule().category() == "foreign_error_attenuation")
+            .filter(|finding| {
+                matches!(
+                    finding_field(*finding, "handling_class").as_deref(),
+                    Some("ERROR-HANDLING-CHAIN-BREAK" | "ERROR-HANDLING-PENDING-INFRA")
+                )
+            })
+            .map(|finding| {
+                (
+                    finding_field(finding, "file").unwrap_or_default(),
+                    finding_field(finding, "line").unwrap_or_default(),
+                )
+            })
+            .collect();
 
         let mut body = String::new();
         body.push_str("# Internal error chain checklist\n\n");
@@ -321,6 +338,9 @@ impl Reporter for InternalErrorChainChecklistReporter {
                 for (rule_id, entries) in by_rule {
                     body.push_str(&format!("#### {rule_id}\n\n"));
                     for entry in entries {
+                        let already_listed =
+                            attenuation_sites.contains(&(entry.file.clone(), entry.line.clone()));
+                        let item_prefix = if already_listed { "- " } else { "- [ ] " };
                         let foreign = if entry.foreign_error_type.is_empty() {
                             "—"
                         } else {
@@ -332,8 +352,12 @@ impl Reporter for InternalErrorChainChecklistReporter {
                             &entry.internal_constructor
                         };
                         body.push_str(&format!(
-                            "- [ ] `{}` — `{}:{}` — foreign `{foreign}` — constructor `{constructor}` — `{}`\n",
-                            entry.context, entry.file, entry.line, entry.snippet
+                            "{item_prefix}`{}` — `{}:{}` — foreign `{foreign}` — constructor `{constructor}` — `{}`{}\n",
+                            entry.context,
+                            entry.file,
+                            entry.line,
+                            entry.snippet,
+                            if already_listed { " — also in foreign-error-attenuation.checklist.md" } else { "" }
                         ));
                     }
                     body.push('\n');

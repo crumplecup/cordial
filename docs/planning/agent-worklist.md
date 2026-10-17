@@ -284,15 +284,17 @@ The same message follows a `skip` that leaves nothing open.
 
 ```text
 $ cordial submit
-Gate: 2 open items remain (12 at the last run).
-Of 10 items checked off: 8 cleared, 2 still open.
+Gate: 3 open items remain (5 at the last run).
+Of 3 items checked off: 2 cleared, 1 still open.
+Cleared claims: 7c1e90, b04d1a.
+Reopened claims: 3a77d2.
 Cleared without being checked off: 1.
-Skipped: 2, carried to the new list.
+Skipped: 1, carried to the new list.
 New since the last run: 1.
 
  Priority  Area             Was  Now
-        1  Error handling     6    1
-        2  Antipatterns       4    1
+        1  Error handling     3    1
+        2  Antipatterns       2    2
 
 Needs the user (on 3 lists): 1 item, 5d20ab. See `cordial stats --verbose`.
 
@@ -304,6 +306,11 @@ items remain, because that is the normal path and a harness may treat any other
 status as a failure to retry. It exits non-zero only when it failed to run.
 `submit --deny-open` adds the CI behavior and exits non-zero while open items
 remain, the same as `cordial quality --deny-open`.
+The cleared and reopened claim lines name the checked-off ids, so an agent can
+see which claims held without a separate `stats` call. Empty lines are omitted.
+When identical scoring keys prevent attribution, `submit` names the affected ids
+as an ambiguous group with its cleared and still-present counts instead of
+claiming that a particular id cleared.
 
 ### Cursor rules
 
@@ -576,18 +583,26 @@ contribute to the quality rollup and the worklist does not read them.
 
 ### Areas can span several checklists
 
-`QualityAreaSummary` names one checklist, but the Error handling area
-aggregates counts from six (`panics`, `error_sites`, `error_chain`,
-`internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`). The
-worklist needs the full list, so the area gains an explicit set of checklist
-files:
+`QualityAreaSummary` names one primary checklist, but some areas count items in
+several artifacts. Error handling counts open panic sites, foreign error
+attenuation sites, distinct internal error chain violations, and two error
+antipattern rules. The `error-sites` and `error-chain-preserved` artifacts add
+context for some of those sites; `foreign-error-types` belongs to its own area.
+The worklist needs the exact actionable sources, so the area gains an explicit
+set of checklist files and, where needed, rule sections:
 
-- `QualityAreaSummary::checklists()` returns every checklist file for the area.
-  It defaults to the single `checklist()` name.
+- `QualityAreaSummary::checklists()` returns each actionable checklist source
+  for the area, with optional rule-section filters. It defaults to the single
+  `checklist()` name.
 - `QualityAreaSpec` gets an additive builder, `with_extra_checklists`, for areas
   that span more than one. `QualityAreaSpec::new` is unchanged, so existing
   plugins compile as they are.
-- Error handling lists its six checklists.
+- Error handling lists `panics`, `internal-error-chain`,
+  `foreign-error-attenuation`, and the Box/String error sections of
+  `antipatterns`. The Antipatterns area selects its own sections from that
+  shared file. When an internal violation is already an attenuation item at the
+  same site, its internal checklist entry is a cross-reference, not a second
+  unchecked item.
 
 ### Counts and checklists must agree
 
@@ -597,9 +612,9 @@ unchecked checklist lines. If those differ, an agent is told one thing by `stats
 and another by the gate.
 
 The rule: for every area, open items from the report equal unchecked lines in its
-checklists. A test over the fixture projects enforces it. Where they differ today,
-the area's checklist or its count is the bug, and the fix belongs there and not in
-the worklist.
+selected checklist sections. A test over fixture projects enforces it. Where they
+differ, the area's checklist selection, checklist rendering, or count is the bug;
+the fix belongs there and not in the worklist.
 
 ### A seam for later
 
@@ -680,8 +695,8 @@ written as `:{line}` or `(line {n})`. Keys are matched as a multiset, so repeate
 identical items count correctly. The key is also what the item id hashes, so a
 matched item keeps its id from one list to the next.
 
-Each item of the old list gets one outcome, and each item only in the new list is
-**New**:
+For items whose outcome can be attributed to an id, each old item gets one of
+these outcomes, and each item only in the new list is **New**:
 
 | Outcome | Meaning |
 | --- | --- |
@@ -690,8 +705,13 @@ Each item of the old list gets one outcome, and each item only in the new list i
 | **Skipped** | Skipped in the old list, still present in the new one |
 | **Remaining** | Never touched, still present |
 
-The summary reports cleared items in two counts: those the agent checked off, and
-those cleared without being checked off, as a side effect of other fixes.
+If an identical-key group partly survives, the scorecard records its old ids and
+the group's cleared and still-present counts. It does not assign a particular
+old id to either side. The summary reports cleared items checked off and cleared
+without being checked off when those counts are determinable; otherwise it
+reports definite outcomes and the ambiguous group separately. This also avoids
+claiming an exact checked-off split when the group mixes checked and untouched
+items. The cleared-without-check-off count shows side effects of other fixes.
 
 Reopened items are marked as such in the new list and sort ahead of others in
 their area, so a claim that did not hold gets looked at first. An item whose key
@@ -733,7 +753,7 @@ module level, with no new feature flag.
 | `state.rs` | `Worklist`: read, atomic write, cursor moves, counts |
 | `lock.rs` | the store lock, its holder record, and the wait with progress |
 | `validity.rs` | the build record, `Validity`, and the soft-stale report |
-| `score.rs` | `Scorecard`, `score(previous, current)`, pass-count carry-over |
+| `score.rs` | `Scorecard` with per-claim outcomes and ambiguous groups, `score(previous, current)`, pass-count carry-over |
 | `render.rs` | text rendering for each command, including the `NEXT:` and `STOP:` lines |
 | `instructions.rs` | the instructions text and the per-command help lines |
 
@@ -745,6 +765,10 @@ The public surface is small: `Worklist::build`, `Worklist::read`,
 `skip` take a slice of ids, which is empty for "the current item", and `skip`
 takes an optional reason. The CLI is the first caller, and nothing in the library
 prints.
+Command logic returns typed results, including the `Scorecard` from `submit`;
+`render.rs` turns those results into text. Renderers never recover claim ids or
+outcomes by parsing another command's output. The optional JSON output in phase
+13 can consume the same results.
 
 The gate-side hook is in `execute_run_plugins` in `src/cli/run.rs`, which builds
 the quality report in order to count open items. It returns the report as well as
@@ -801,7 +825,8 @@ Nothing in the second blocks the first.
 5. **The cursor.** `done`, `skip`, and `peek`, with ids, idempotency, the
    fresh-list and list-complete rules, the echo of what `done` checked off, the
    `Also in` line, and the hidden `next`.
-6. **`submit`.** The scorecard, the reopened-first ordering, the exit status, and
+6. **`submit`.** The scorecard, per-claim cleared and reopened ids, ambiguous
+   identical-key groups, the reopened-first ordering, the exit status, and
    `--deny-open`.
 7. **`instructions`.** The text, `--help` lines, `NEXT:` lines, and the test that
    ties them to the real subcommands.
@@ -854,7 +879,9 @@ Tests for release 2 items land with their phases.
 - Cursor tests: `open` on a fresh list, bare `done` and `skip` with no current
   item, a command that names ids placing the cursor when none was set, and
   skipped items not being handed out again.
-- Scoring tests: each outcome, and the cleared-without-check-off count.
+- Scoring tests: each outcome, per-claim cleared and reopened ids in `submit`,
+  the cleared-without-check-off count, and partial survival of identical keys
+  with mixed checked and untouched items reported without false attribution.
 - Pass count tests (release 2): carried across `submit`, unchanged for untouched
   items, and the label and `STOP:` line at the limit.
 - Id tests: ids are stable across a rebuild for a matched item, `done <id>` twice
@@ -918,8 +945,9 @@ Tests for release 2 items land with their phases.
   streamed or logged. The instructions tell the agent how to run the slow first
   `open` in that case.
 - **Scoring keys can collide.** Two distinct items that differ only by line
-  number match as a multiset, which is correct for counting, but means the
-  scorecard cannot say which of the two cleared.
+  number match as a multiset, which is correct for counting. If only some
+  survive, the scorecard reports group counts and affected ids without claiming
+  which specific item cleared.
 - **Reports and lists can drift apart over time.** The agreement test is the
   guard. It needs to stay in the gate.
 
@@ -927,9 +955,9 @@ Tests for release 2 items land with their phases.
 
 Release 1:
 
-- [ ] Phase 1: progress without a terminal
-- [ ] Phase 2: areas know their checklists; counts equal checklists
-- [ ] Phase 3: model, ids, parser, build record, gate-side write
+- [x] Phase 1: progress without a terminal
+- [x] Phase 2: areas know their checklists; counts equal checklists
+- [x] Phase 3: model, ids, parser, build record, gate-side write
 - [ ] Phase 4: `stats`, `open`
 - [ ] Phase 5: `done`, `skip`, `peek`, hidden `next`
 - [ ] Phase 6: `submit`, scoring

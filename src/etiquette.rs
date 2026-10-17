@@ -27,7 +27,7 @@ pub use order::{
     After, BUILT_IN_ORDER, Before, BeforeMirror, DERIVE_RULE_IDS, LintConstraint, LintOrder,
     OrderExplain,
 };
-pub use quality::{QualityAreaSpec, QualityEtiquette, QualityReportArea};
+pub use quality::{QualityAreaSpec, QualityChecklistSpec, QualityEtiquette, QualityReportArea};
 pub use quality::{count_open_category, count_open_rule, finding_field, open_findings};
 pub use static_table::{StaticEtiquette, StaticQualityEtiquette};
 pub use traits::Etiquette;

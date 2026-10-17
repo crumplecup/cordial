@@ -202,10 +202,19 @@ pub(super) fn execute_run_plugins(
     progress: Arc<dyn ProgressSink>,
     plugins: Vec<&'static dyn Plugin>,
     deny_open: bool,
+    write_worklist: bool,
+    command: &'static str,
 ) -> CordialResult<()> {
+    #[cfg(feature = "quality")]
+    let _worklist_lock =
+        crate::worklist::WorklistLock::exclusive(store, command, progress.as_ref())?;
+    #[cfg(not(feature = "quality"))]
+    let _ = (write_worklist, command);
+
+    let effective_store_home = store_home.unwrap_or_else(default_store_home);
     let mut builder = SessionBuilder::new(project_root)
         .with_store_root(store.root().clone())
-        .with_store_home(store_home.unwrap_or_else(default_store_home))
+        .with_store_home(effective_store_home.clone())
         .with_progress_sink(progress.clone());
     for plugin in plugins {
         builder = builder.register_plugin(plugin);
@@ -215,6 +224,15 @@ pub(super) fn execute_run_plugins(
     let filter = run_filter(crate_name);
     let outcome = session.run(filter.as_ref())?;
     let summary = print_run_summary(outcome.as_ref())?;
+    #[cfg(feature = "quality")]
+    if write_worklist {
+        let findings = outcome.findings().collect::<Vec<_>>();
+        let report = crate::build_quality_report(&findings)?;
+        let config = crate::load_cordial_config(project_root, &effective_store_home);
+        let source = crate::ChecklistSource::new(store);
+        let list = crate::Worklist::build(&report, store, &source, &config)?;
+        list.write(store)?;
+    }
     progress.notice(format!(
         "Reports available under {}",
         store.findings_dir().display()

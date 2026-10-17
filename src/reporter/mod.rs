@@ -38,7 +38,8 @@ pub use coverage_summary::{
 pub(crate) use coverage_summary::{CoverageSummaryPass, attach_coverage_summary_artifacts};
 #[cfg(feature = "quality")]
 pub use quality_report::{
-    QualityAreaSummary, QualityReport, QualityReportReporter, build_quality_report,
-    render_quality_report_markdown, render_quality_workspace_summary_markdown,
+    QualityAreaSummary, QualityChecklist, QualityReport, QualityReportReporter,
+    build_quality_report, render_quality_report_markdown,
+    render_quality_workspace_summary_markdown,
 };
 pub use rollup::RollupReporter;

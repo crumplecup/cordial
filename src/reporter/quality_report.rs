@@ -4,7 +4,7 @@ mod render;
 use std::fmt::Write as _;
 
 use crate::error::CordialResult;
-use crate::etiquette::count_open_rule;
+use crate::etiquette::{QualityChecklistSpec, count_open_rule};
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, TextArtifact};
 
@@ -27,10 +27,29 @@ pub struct QualityAreaSummary {
     open_items: usize,
     /// Checklist artifact filename.
     checklist: String,
+    /// Checklist artifacts and their owned rule sections in worklist order.
+    checklists: Vec<QualityChecklist>,
     /// Summary artifact filename.
     summary: String,
     /// One-line breakdown shown in the rollup table.
     detail: String,
+}
+
+/// A checklist file, optionally restricted to specific rule headings.
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new, derive_getters::Getters)]
+pub struct QualityChecklist {
+    /// Artifact filename under `findings/`.
+    name: String,
+    /// Rule headings included from the artifact; empty means all open items.
+    rules: Vec<String>,
+}
+
+impl QualityChecklist {
+    /// Whether an item under `rule` belongs to this area.
+    #[instrument(level = "trace", skip(self))]
+    pub fn includes_rule(&self, rule: &str) -> bool {
+        self.rules.is_empty() || self.rules.iter().any(|included| included == rule)
+    }
 }
 
 /// Workspace code quality report in resolution order.
@@ -81,6 +100,18 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
         "Error handling",
         error_open,
         "panics.checklist.md",
+        &[],
+        &[
+            QualityChecklistSpec::new("internal-error-chain.checklist.md"),
+            QualityChecklistSpec::new("foreign-error-attenuation.checklist.md").with_rules(&[
+                "Chain break (bad code → migrate)",
+                "Pending infrastructure (good code after `From` wiring)",
+            ]),
+            QualityChecklistSpec::new("antipatterns.checklist.md").with_rules(&[
+                "ANTIPATTERN-BOX-DYN-ERROR-001",
+                "ANTIPATTERN-STRING-ERROR-001",
+            ]),
+        ],
         "foreign-error-attenuation-summary.md",
         error_detail,
     )];
@@ -104,6 +135,8 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
             spec.title(),
             open_items,
             spec.checklist(),
+            spec.checklist_rules(),
+            spec.extra_checklists(),
             spec.summary(),
             detail,
         ));
@@ -115,20 +148,40 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
     Ok(QualityReport::new(areas, total_open_items))
 }
 
-#[instrument(level = "trace", skip(detail))]
+#[instrument(level = "debug", skip(extra_checklists))]
 fn quality_area(
     priority: u8,
     title: &str,
     open_items: usize,
     checklist: &str,
+    checklist_rules: &[&str],
+    extra_checklists: &[QualityChecklistSpec],
     summary: &str,
     detail: String,
 ) -> QualityAreaSummary {
+    let mut checklists = vec![QualityChecklist::new(
+        checklist.to_string(),
+        checklist_rules
+            .iter()
+            .map(|rule| (*rule).to_string())
+            .collect(),
+    )];
+    checklists.extend(extra_checklists.iter().map(|source| {
+        QualityChecklist::new(
+            source.name().to_string(),
+            source
+                .rules()
+                .iter()
+                .map(|rule| (*rule).to_string())
+                .collect(),
+        )
+    }));
     QualityAreaSummary::new(
         priority,
         title.to_string(),
         open_items,
         checklist.to_string(),
+        checklists,
         summary.to_string(),
         detail,
     )

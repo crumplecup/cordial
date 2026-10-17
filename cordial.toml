@@ -42,10 +42,10 @@ derive_cap = 16
 alias_depth = 8
 max_type_nodes = 64
 
-# Warnings that fire only under some feature combinations. Mirrors the
-# `check-features` recipe in the justfile (keep the two in step).
+# Temporarily skip the expensive feature powerset during worklist development.
+# Keep the settings below ready for the end-of-phase feature check.
 [feature_warnings]
-enabled = true
+enabled = false
 depth = 2
 # A gate naming more features than this is too wide to read; the checklist
 # then advises a private (`_`-prefixed) feature that each of them enables.

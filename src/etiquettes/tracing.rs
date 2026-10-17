@@ -67,8 +67,8 @@ pub use subscriber::{SubscriberRuleId, SubscriberSiteRecord, scan_crate_tracing_
 use std::sync::LazyLock;
 
 use crate::etiquette::{
-    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, StaticEtiquette,
-    StaticQualityEtiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, QualityAreaSpec, QualityChecklistSpec,
+    StaticEtiquette, StaticQualityEtiquette,
 };
 use crate::{AttributeEnricher, ScopeEnricher, SourceLoader};
 
@@ -106,6 +106,11 @@ static BOUNDARY_SUMMARY: boundary::BoundarySummaryReporter = boundary::BoundaryS
 static PRINT_CSV: print::PrintCsvReporter = print::PrintCsvReporter;
 static PRINT_CHECKLIST: print::PrintChecklistReporter = print::PrintChecklistReporter;
 static PRINT_SUMMARY: print::PrintSummaryReporter = print::PrintSummaryReporter;
+static EXTRA_QUALITY_CHECKLISTS: [QualityChecklistSpec; 3] = [
+    QualityChecklistSpec::new("tracing-subscriber.checklist.md"),
+    QualityChecklistSpec::new("tracing-boundary.checklist.md"),
+    QualityChecklistSpec::new("tracing-print.checklist.md"),
+];
 
 static LOADERS: &[&'static dyn crate::Loader] = &[&SOURCE_LOADER];
 static ENRICHERS: &[&'static dyn crate::IrEnricher] = &[
@@ -242,11 +247,14 @@ pub static TRACING_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|
                 ],
             ),
         ),
-        Some(QualityAreaSpec::new(
-            "Tracing instrumentation",
-            "tracing-instrument.checklist.md",
-            "tracing-summary.md",
-            quality_area::quality_area_compute,
-        )),
+        Some(
+            QualityAreaSpec::new(
+                "Tracing instrumentation",
+                "tracing-instrument.checklist.md",
+                "tracing-summary.md",
+                quality_area::quality_area_compute,
+            )
+            .with_extra_checklists(&EXTRA_QUALITY_CHECKLISTS),
+        ),
     )
 });

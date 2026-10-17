@@ -27,8 +27,40 @@ impl<T: Etiquette + QualityReportArea + ?Sized> QualityEtiquette for T {}
 pub struct QualityAreaSpec {
     title: &'static str,
     checklist: &'static str,
+    checklist_rules: &'static [&'static str],
+    extra_checklists: &'static [QualityChecklistSpec],
     summary: &'static str,
     compute: fn(&[&dyn Finding]) -> (usize, String),
+}
+
+/// One checklist artifact and, optionally, the rule sections owned by an area.
+#[derive(Debug, Clone, Copy)]
+pub struct QualityChecklistSpec {
+    name: &'static str,
+    rules: &'static [&'static str],
+}
+
+impl QualityChecklistSpec {
+    /// Read all open items from one checklist artifact.
+    pub const fn new(name: &'static str) -> Self {
+        Self { name, rules: &[] }
+    }
+
+    /// Read only items beneath these rule headings.
+    pub const fn with_rules(mut self, rules: &'static [&'static str]) -> Self {
+        self.rules = rules;
+        self
+    }
+
+    /// Checklist artifact filename.
+    pub const fn name(&self) -> &'static str {
+        self.name
+    }
+
+    /// Included rule headings; empty means every open item.
+    pub const fn rules(&self) -> &'static [&'static str] {
+        self.rules
+    }
 }
 
 impl QualityAreaSpec {
@@ -45,9 +77,26 @@ impl QualityAreaSpec {
         Self {
             title,
             checklist,
+            checklist_rules: &[],
+            extra_checklists: &[],
             summary,
             compute,
         }
+    }
+
+    /// Add checklist artifacts that contribute to this area's worklist.
+    pub const fn with_extra_checklists(
+        mut self,
+        checklists: &'static [QualityChecklistSpec],
+    ) -> Self {
+        self.extra_checklists = checklists;
+        self
+    }
+
+    /// Limit the primary checklist to these rule sections.
+    pub const fn with_checklist_rules(mut self, rules: &'static [&'static str]) -> Self {
+        self.checklist_rules = rules;
+        self
     }
 
     /// Display title for the resolution-order table ("Proof patterns").
@@ -58,6 +107,16 @@ impl QualityAreaSpec {
     /// Checklist artifact filename this etiquette's own reporter writes.
     pub const fn checklist(&self) -> &'static str {
         self.checklist
+    }
+
+    /// Additional checklist artifacts, in worklist order.
+    pub const fn extra_checklists(&self) -> &'static [QualityChecklistSpec] {
+        self.extra_checklists
+    }
+
+    /// Included rule headings in the primary checklist.
+    pub const fn checklist_rules(&self) -> &'static [&'static str] {
+        self.checklist_rules
     }
 
     /// Summary artifact filename this etiquette's own reporter writes.

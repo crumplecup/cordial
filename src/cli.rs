@@ -1,12 +1,16 @@
 //! Clap types and dispatch. `main` parses and calls [`Cli::act`].
 
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::Parser;
 use tracing::instrument;
 
-use crate::{CordialResult, ProgressSink, StoreLayout, default_store_home, project_slug_from_path};
+use crate::{
+    CordialResult, LineProgress, ProgressSink, StoreLayout, default_store_home,
+    project_slug_from_path,
+};
 
 mod commands;
 mod exceptions;
@@ -57,7 +61,13 @@ impl Cli {
             .unwrap_or_else(default_store_home)
             .join(&slug);
         let store = StoreLayout::from_root(store_root, slug);
-        let progress: Arc<dyn ProgressSink> = Arc::new(IndicatifProgress::new());
+        let progress: Arc<dyn ProgressSink> = if std::env::var_os("CORDIAL_NO_PROGRESS").is_some() {
+            Arc::new(IndicatifProgress::hidden())
+        } else if std::io::stderr().is_terminal() {
+            Arc::new(IndicatifProgress::new())
+        } else {
+            Arc::new(LineProgress::new())
+        };
         self.command.act(ActCtx::new(
             project_root,
             store,

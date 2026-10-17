@@ -52,6 +52,18 @@ impl StoreLayout {
         self.root.join("findings")
     }
 
+    /// Persistent agent worklist beside generated findings.
+    #[instrument(level = "trace", skip(self))]
+    pub fn worklist_path(&self) -> PathBuf {
+        self.root.join("worklist.json")
+    }
+
+    /// Advisory lock file for worklist reads and updates.
+    #[instrument(level = "trace", skip(self))]
+    pub fn worklist_lock_path(&self) -> PathBuf {
+        self.root.join("worklist.lock")
+    }
+
     /// Directory for JSON patch exception files.
     #[instrument(level = "trace", skip(self))]
     pub fn exceptions_dir(&self) -> PathBuf {

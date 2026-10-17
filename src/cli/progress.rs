@@ -1,6 +1,5 @@
 //! Indicatif-backed CLI progress presentation.
 
-use std::io::IsTerminal;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -17,15 +16,15 @@ pub(super) struct IndicatifProgress {
 impl IndicatifProgress {
     #[instrument(level = "debug")]
     pub(super) fn new() -> Self {
-        let draw_target = if std::env::var_os("CORDIAL_NO_PROGRESS").is_some()
-            || !std::io::stderr().is_terminal()
-        {
-            ProgressDrawTarget::hidden()
-        } else {
-            ProgressDrawTarget::stderr()
-        };
         Self {
-            multi: MultiProgress::with_draw_target(draw_target),
+            multi: MultiProgress::with_draw_target(ProgressDrawTarget::stderr()),
+        }
+    }
+
+    #[instrument(level = "debug")]
+    pub(super) fn hidden() -> Self {
+        Self {
+            multi: MultiProgress::with_draw_target(ProgressDrawTarget::hidden()),
         }
     }
 }

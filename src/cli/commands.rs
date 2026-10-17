@@ -297,6 +297,8 @@ impl Commands {
                 ctx.progress.clone(),
                 all_plugins(),
                 deny_open,
+                true,
+                "run",
             ),
             Self::Quality {
                 apply,
@@ -323,6 +325,8 @@ impl Commands {
                         ctx.progress.clone(),
                         quality_plugins(),
                         deny_open,
+                        true,
+                        "quality",
                     )
                 }
             }
@@ -339,6 +343,8 @@ impl Commands {
                         ctx.progress.clone(),
                         crate::coverage_plugins_for_hub(hub),
                         false,
+                        false,
+                        "coverage",
                     )
                 }
                 #[cfg(all(feature = "elicitation", not(feature = "homecoming_std")))]
@@ -351,6 +357,8 @@ impl Commands {
                         ctx.progress.clone(),
                         crate::coverage_plugins(),
                         false,
+                        false,
+                        "coverage",
                     )
                 }
             }
