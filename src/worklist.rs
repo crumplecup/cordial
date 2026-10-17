@@ -10,4 +10,4 @@ pub use item::{ItemId, ItemState, WorklistItem};
 pub use lock::WorklistLock;
 pub use render::{render_open, render_stats};
 pub use source::{ChecklistSource, ItemSource};
-pub use state::{BuildRecord, Validity, Worklist};
+pub use state::{BuildRecord, ClaimChange, Validity, Worklist};

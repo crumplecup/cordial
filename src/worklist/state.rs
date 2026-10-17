@@ -46,6 +46,15 @@ pub struct Worklist {
     cursor: Option<usize>,
 }
 
+/// The result of applying one claim to a worklist item.
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
+pub struct ClaimChange {
+    id: String,
+    item_line: String,
+    was: ItemState,
+    now: ItemState,
+}
+
 impl Worklist {
     /// Build a fresh list from a completed quality run's checklists.
     ///
@@ -180,6 +189,76 @@ impl Worklist {
             .iter()
             .position(|item| *item.state() == ItemState::Open);
         self.cursor.is_some()
+    }
+
+    /// Check off named items, or the current item when no ids are given.
+    #[instrument(level = "debug", skip(self, ids))]
+    pub fn done(&mut self, ids: &[String]) -> CordialResult<Vec<ClaimChange>> {
+        self.apply(ids, ItemState::Done)
+    }
+
+    /// Set named items aside until the next gate run.
+    #[instrument(level = "debug", skip(self, ids))]
+    pub fn skip(&mut self, ids: &[String]) -> CordialResult<Vec<ClaimChange>> {
+        self.apply(ids, ItemState::Skipped)
+    }
+
+    #[instrument(level = "debug", skip(self, ids, target))]
+    fn apply(&mut self, ids: &[String], target: ItemState) -> CordialResult<Vec<ClaimChange>> {
+        let selected = if ids.is_empty() {
+            vec![
+                self.cursor
+                    .ok_or_else(|| CordialError::invariant("No current item"))?,
+            ]
+        } else {
+            let mut selected = Vec::new();
+            for id in ids {
+                let index = self
+                    .items
+                    .iter()
+                    .position(|item| item.id().as_str() == id)
+                    .ok_or_else(|| CordialError::invariant(format!("No item {id} on this list")))?;
+                if !selected.contains(&index) {
+                    selected.push(index);
+                }
+            }
+            selected
+        };
+        if target == ItemState::Skipped {
+            for &index in &selected {
+                if *self.items[index].state() == ItemState::Done {
+                    return Err(CordialError::invariant(format!(
+                        "Item {} is already checked off and cannot be skipped",
+                        self.items[index].id().as_str()
+                    )));
+                }
+            }
+        }
+        let cursor_was_selected = self.cursor.is_some_and(|index| selected.contains(&index));
+        let mut changes = Vec::with_capacity(selected.len());
+        for index in selected {
+            let item = &mut self.items[index];
+            let was = item.replace_state(target);
+            changes.push(ClaimChange {
+                id: item.id().as_str().to_string(),
+                item_line: item.item_line().clone(),
+                was,
+                now: target,
+            });
+        }
+        if cursor_was_selected {
+            self.cursor = self.cursor.and_then(|index| {
+                self.items
+                    .iter()
+                    .enumerate()
+                    .skip(index + 1)
+                    .find(|(_, item)| *item.state() == ItemState::Open)
+                    .map(|(index, _)| index)
+            });
+        } else {
+            self.activate();
+        }
+        Ok(changes)
     }
 }
 

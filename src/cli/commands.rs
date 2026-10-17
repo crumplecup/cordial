@@ -13,7 +13,7 @@ use super::exceptions::{
 use super::run::{execute_quality_apply, execute_run_plugins, view_store_file};
 use crate::{
     CordialError, CordialResult, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,
-    ExceptionSelector, ExceptionUpdate, ProgressSink, StoreLayout, all_plugins, quality_plugins,
+    ProgressSink, StoreLayout, all_plugins, quality_plugins,
 };
 use tracing::instrument;
 
@@ -23,6 +23,25 @@ pub enum Commands {
     /// Show the current worklist item, building a list when needed.
     #[cfg(feature = "quality")]
     Open,
+    /// Show the current item without building a list.
+    #[cfg(feature = "quality")]
+    Peek,
+    /// Check off named items, or the current item.
+    #[cfg(feature = "quality")]
+    Done {
+        /// Stable item ids; omit to check off the current item.
+        ids: Vec<String>,
+    },
+    /// Set named items aside, or the current item.
+    #[cfg(feature = "quality")]
+    Skip {
+        /// Stable item ids; omit to set aside the current item.
+        ids: Vec<String>,
+    },
+    /// Suggest the commands that move through a worklist.
+    #[cfg(feature = "quality")]
+    #[command(hide = true)]
+    Next,
     /// Show worklist counts or individual items.
     #[cfg(feature = "quality")]
     Stats {
@@ -168,98 +187,7 @@ pub enum ExceptionCommands {
     },
 }
 
-/// Selects one quality exception row: etiquette, crate, and row fields.
-#[derive(clap::Args)]
-pub struct ExceptionTargetArgs {
-    /// Quality etiquette id (for example `panics`).
-    etiquette: String,
-    /// Crate name (default: `--crate-name` or the project directory).
-    #[arg(long)]
-    crate_name: Option<String>,
-    /// Select the row with this rule id.
-    #[arg(long)]
-    rule_id: Option<String>,
-    /// Select the row with this context / qualified name.
-    #[arg(long)]
-    context: Option<String>,
-    /// Select the row with this source file.
-    #[arg(long)]
-    file: Option<String>,
-    /// Select the row with this line.
-    #[arg(long)]
-    line: Option<u32>,
-}
-
-/// Replacement values for `exceptions edit`; unset fields keep their value.
-#[derive(clap::Args)]
-pub struct ExceptionNewArgs {
-    /// Replacement source file.
-    #[arg(long)]
-    new_file: Option<String>,
-    /// Replacement line.
-    #[arg(long)]
-    new_line: Option<u32>,
-    /// Replacement rule id (empty clears it).
-    #[arg(long)]
-    new_rule_id: Option<String>,
-    /// Replacement context / qualified name (empty clears it).
-    #[arg(long)]
-    new_context: Option<String>,
-    /// Replacement reason.
-    #[arg(long)]
-    new_reason: Option<String>,
-}
-
-impl ExceptionTargetArgs {
-    #[instrument(level = "trace", skip(self))]
-    fn selector(&self) -> ExceptionSelector {
-        let mut selector = ExceptionSelector::default();
-        if let Some(file) = &self.file {
-            selector = selector.with_file(file.clone());
-        }
-        if let Some(line) = self.line {
-            selector = selector.with_line(line);
-        }
-        if let Some(rule_id) = &self.rule_id {
-            selector = selector.with_rule_id(rule_id.clone());
-        }
-        if let Some(context) = &self.context {
-            selector = selector.with_context(context.clone());
-        }
-        selector
-    }
-
-    #[instrument(level = "trace", skip(self, ctx))]
-    fn crate_name(&self, ctx: &ActCtx) -> String {
-        self.crate_name
-            .clone()
-            .or_else(|| ctx.crate_name.clone())
-            .unwrap_or_else(|| ctx.store.project_slug().clone())
-    }
-}
-
-impl ExceptionNewArgs {
-    #[instrument(level = "trace", skip(self))]
-    fn update(self) -> ExceptionUpdate {
-        let mut update = ExceptionUpdate::default();
-        if let Some(file) = self.new_file {
-            update = update.with_file(file);
-        }
-        if let Some(line) = self.new_line {
-            update = update.with_line(line);
-        }
-        if let Some(rule_id) = self.new_rule_id {
-            update = update.with_rule_id(rule_id);
-        }
-        if let Some(context) = self.new_context {
-            update = update.with_context(context);
-        }
-        if let Some(reason) = self.new_reason {
-            update = update.with_reason(reason);
-        }
-        update
-    }
-}
+pub use super::exception_args::{ExceptionNewArgs, ExceptionTargetArgs};
 
 #[derive(Subcommand)]
 pub enum ExportCommands {
@@ -306,11 +234,12 @@ impl Commands {
     pub(super) fn act(self, ctx: ActCtx) -> CordialResult<()> {
         match self {
             #[cfg(feature = "quality")]
-            Self::Open => super::worklist::execute_open(&ctx),
-            #[cfg(feature = "quality")]
-            Self::Stats { verbose, area, all } => {
-                super::worklist::execute_stats(&ctx, verbose, area.as_deref(), all)
-            }
+            command @ (Self::Open
+            | Self::Peek
+            | Self::Done { .. }
+            | Self::Skip { .. }
+            | Self::Next
+            | Self::Stats { .. }) => command.act_worklist(&ctx),
             Self::Run { deny_open } => execute_run_plugins(
                 &ctx.project_root,
                 &ctx.store,

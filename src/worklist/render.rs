@@ -12,9 +12,18 @@ const VERBOSE_LIMIT: usize = 25;
 #[instrument(level = "trace", skip(list))]
 pub fn render_open(list: &Worklist) -> String {
     let Some(item) = list.current() else {
+        let skipped = list
+            .items()
+            .iter()
+            .filter(|item| *item.state() == ItemState::Skipped)
+            .count();
+        let skipped_line = if skipped == 0 {
+            String::new()
+        } else {
+            format!(" {skipped} item(s) were skipped.")
+        };
         return format!(
-            "List {} is complete.\n\nNEXT: cordial submit\n",
-            list.record().generation()
+            "The list is complete.{skipped_line}\n\nNEXT: run `cordial submit` to check your work and build a fresh list.\n"
         );
     };
     let mut output = String::new();
@@ -63,8 +72,8 @@ pub fn render_open(list: &Worklist) -> String {
     }
     let _ = write!(
         output,
-        "\nNEXT: fix it, then `cordial done {}`. New here? `cordial instructions`.\n",
-        item.id().as_str()
+        "\nNEXT: fix it, then `cordial done {0}`, or set it aside with `cordial skip {0}`. New here? `cordial instructions`.\n",
+        item.id().as_str(),
     );
     output
 }

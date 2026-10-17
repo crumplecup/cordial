@@ -90,6 +90,11 @@ impl WorklistItem {
     pub(super) fn push_detail(&mut self, line: &str) {
         self.detail_lines.push(line.to_string());
     }
+
+    #[instrument(level = "trace", skip(self, state))]
+    pub(super) fn replace_state(&mut self, state: ItemState) -> ItemState {
+        std::mem::replace(&mut self.state, state)
+    }
 }
 
 /// Remove location-only line numbers without changing other item text.
