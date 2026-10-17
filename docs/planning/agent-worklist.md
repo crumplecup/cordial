@@ -962,7 +962,7 @@ Release 1:
 - [x] Phase 5: `done`, `skip`, `peek`, hidden `next`
 - [x] Phase 6: `submit`, scoring
 - [x] Phase 7: `instructions`
-- [ ] Phase 8: agent docs, including the `AGENTS.md` rewrite
+- [x] Phase 8: agent docs, including the `AGENTS.md` rewrite
 
 Release 2:
 

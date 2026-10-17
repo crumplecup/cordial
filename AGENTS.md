@@ -2,37 +2,45 @@
 
 `cordial` is the authority for this repository's coding standards.
 
-Start with the smallest source that answers the task. Prefer the compiled
-explanations because they are the policy the tool actually runs.
+Start with the smallest source that answers the task. The compiled instructions
+and explanations are the policy the tool actually runs.
 
 ## Authority
 
-1. `cordial explain <id-or-rule-id>` is authoritative for etiquette behavior,
+1. `cordial instructions` is authoritative for the agent worklist workflow.
+   `cordial explain <id-or-rule-id>` is authoritative for etiquette behavior,
    finding meaning, and opt-out guidance.
-2. `cordial quality` and `cordial run` reports are authoritative for this
-   checkout's current findings.
-3. Project planning notes belong under `docs/`. Use the local planning docs
+2. `cordial open`, `cordial stats`, and `cordial submit` show the current
+   worklist and results. `cordial quality` and `cordial run` reports show the
+   findings behind it.
+3. Project planning notes belong under `docs/`. Use local planning docs
    for architecture, naming, and active work.
 4. Other repository docs explain usage and background.
 
 ## Quick Use
 
 ```sh
-cordial explain
-cordial quality -p .
-cordial view findings/quality-report.md
+cordial instructions
+cordial open
+cordial done <id>       # after fixing the item and running focused checks
+cordial submit
 ```
 
-1. Run `just cordial-gate` (or `cordial quality -p . --deny-open`) to produce
-   the local quality report and fail if open action items remain.
-2. Open `findings/quality-report.md` with `cordial view` and start from the
-   open action items.
-3. Follow the report links to the relevant checklist artifacts.
-4. For each finding, run `cordial explain <id>` or
-   `cordial explain <rule-id>` before changing code, suppressing an item, or
-   reinterpreting the rule.
-5. After edits, rerun the focused project checks and the cordial command that
-   produced the finding.
+1. Read `cordial instructions` once, then use `cordial open` for the next item.
+   The first build can take a few minutes; allow a long timeout.
+2. Run the item's suggested `cordial explain` command before changing code,
+   suppressing a finding, or reinterpreting a rule. Fix the item and run focused
+   project checks before `cordial done <id>`. Use `cordial skip <id>` when you
+   cannot act on it now.
+3. When the list is complete, run `cordial submit` and wait for it. Continue
+   until submit reports zero open items. `cordial stats --verbose` shows list
+   state. Use item ids when issuing several worklist commands concurrently.
+4. Before each commit, run `just cordial-gate` (or
+   `cordial quality -p . --deny-open`) and clear every open item, including
+   dependency freshness. This is also the promotion check for `dev` to `main`.
+
+Work from `open` and `stats`; raw checklists under `findings/` do not include
+progress on the current list. Use them for detail only when the item requires it.
 
 Use `cordial explain` with no argument to list the compiled etiquettes.
 
@@ -53,10 +61,11 @@ Useful routing ids:
 
 | Need | Start with |
 | --- | --- |
-| Run the standards | `just cordial-gate`, then `cordial view findings/quality-report.md` |
+| Work through findings | `cordial instructions`, then `cordial open` |
+| Commit or promotion gate | `just cordial-gate` (zero open items required) |
 | Promote `dev` to `main` | `just check-all`, `just check-features`, `just cordial-gate`, then a PR; CI must be green |
 | Understand a finding | `cordial explain <id-or-rule-id>` |
-| Find the next checklist | Links inside `findings/quality-report.md` |
+| Inspect list progress | `cordial stats --verbose` |
 | Review config knobs | `cordial.toml`, then any config docs under `docs/` |
 | Make structural changes | Planning docs under `docs/`, then relevant `cordial explain <id>` pages |
 | Track active project plans | Planning indexes and status docs under `docs/` |
@@ -70,5 +79,4 @@ Useful routing ids:
 - For Rust projects, put tests under `tests/` unless an existing local pattern
   requires otherwise.
 - Before finishing code changes, run the focused Cargo checks needed for the
-  touched area and rerun the relevant cordial command when the change addresses
-  a cordial finding.
+  touched area. Run the zero-open Cordial gate before every commit.

@@ -32,6 +32,9 @@ When implementing, match conventions from sibling repos (`homecoming`, `amenable
 
 ## Workflow
 
+Run `cordial instructions` for the compiled agent worklist loop, then use
+`cordial open` and `cordial submit` to work through findings.
+
 1. **Plan** — update or add a planning doc; list it in `PLANNING_INDEX.md`.
 2. **Implement** — minimal diff aligned with `CORDIAL_PLAN.md` phases.
 3. **Verify** — `just check-all` before commit; `just check-features` and

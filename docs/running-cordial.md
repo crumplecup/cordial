@@ -19,6 +19,13 @@ feature-gated on the `cordial` crate, including `panics`, `tracing`, `quality`,
 ## Common commands
 
 ```text
+cordial instructions                 # compiled agent worklist workflow
+cordial open                         # show the current item; build a list if needed
+cordial done <id>                    # claim a fix and show the next item
+cordial skip <id>                    # set an item aside until the next list
+cordial peek                         # show the current item again
+cordial stats --verbose              # counts and item states
+cordial submit                       # rerun the gate and score claims
 cordial quality -p <project>          # source-quality etiquettes
 cordial quality --deny-open           # fail after reports if open action items remain
 cordial quality --apply               # tracing recipes + crate-root lint attributes
@@ -37,12 +44,31 @@ cordial view findings/quality-report.md
 `-p` / `CORDIAL_PROJECT` selects the project root. `--crate-name` restricts a
 run to one crate. `--store-home` / `CORDIAL_HOME` overrides `~/.cordial`.
 
+## Agent worklist
+
+Run `cordial instructions` for the full loop. `open` gives the highest-priority
+item and builds a list if needed. After fixing it and running focused project
+checks, use `done <id>` to claim it; use `skip <id>` if you cannot act on it now.
+`submit` reruns the gate, reports which claims cleared or reopened, and writes
+the next list. Repeat until submit reports zero open items. The first `open`
+may take several minutes, so give it a long timeout.
+
+`peek` shows the current item again. `stats` summarizes counts by area;
+`stats --verbose` lists item states, with `--area <title>` to narrow the view.
+Name ids when sending several worklist commands at once. Run `submit` alone
+and wait for it; commands issued while it runs wait for its new list.
+
+The worklist is the agent-facing view of `quality-report.md`. Raw checklists
+do not show checkoffs or the current cursor. `cordial explain <rule-id>` remains
+the authority for what each finding means and how to document an exception.
+For CI, commits, and promotion, use `cordial quality --deny-open` or
+`just cordial-gate` and clear every open item.
+
 ## Progress and logs
 
-Interactive CLI runs write progress to stderr with short status messages,
-spinners, and counted bars for longer workspace operations. Progress is hidden
-automatically when stderr is not a terminal, and you can force it off with
-`CORDIAL_NO_PROGRESS=1`.
+Interactive CLI runs write progress to stderr with spinners and counted bars.
+When stderr is not a terminal, long commands write start, finish, and heartbeat
+lines instead. Set `CORDIAL_NO_PROGRESS=1` to silence progress.
 
 Diagnostics still use tracing. CLI commands default to warning-level logs; set
 `RUST_LOG=info` or `RUST_LOG=debug` when you want operational detail.
@@ -55,6 +81,7 @@ Reports write to `{store_home}/{project}/findings/`:
 - markdown checklists;
 - markdown summaries;
 - `findings/quality-report.md` for the quality rollup.
+- `worklist.json` for the current agent list, claims, and generation.
 
 Artifacts are local and regeneratable. They live under `~/.cordial/{project}/`
 by default and should not be committed to the target repository.

@@ -19,11 +19,16 @@ is missing or stale. Artifacts land under `~/.cordial/{project}/` (or
 
 ```sh
 cargo install --path .
-cordial quality -p <project>
+cordial instructions
+cordial open -p <project>
+cordial submit -p <project>
 cordial quality -p <project> --deny-open
 cordial explain
 ```
 
+Agents can follow `open`, `done` or `skip`, and `submit` to work through a
+persisted list. `submit` verifies claims and builds the next list. Use
+`cordial quality --deny-open` for the zero-open commit or CI gate.
 `cordial quality` runs source-quality etiquettes. `cordial coverage` runs
 rustdoc-backed inventory etiquettes and rebuilds workspace rustdoc cache inputs
 as needed. Artifacts land under `~/.cordial/{project}/findings/`.
@@ -35,6 +40,7 @@ report evidence and do not fail the gate.
 
 | Need | Read |
 | --- | --- |
+| Work through open items | `cordial instructions`, then [Running cordial](docs/running-cordial.md#agent-worklist) |
 | Run the tool | [Running cordial](docs/running-cordial.md) |
 | Understand built-in standards | [Built-in etiquettes](docs/built-in-etiquettes.md) |
 | Build an etiquette or plugin | [Writing etiquettes](docs/writing-etiquettes.md) |

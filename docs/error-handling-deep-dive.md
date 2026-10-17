@@ -24,6 +24,10 @@ Much code is now written by an agent working in a loop: it edits, runs a check,
 reads what the check says, and edits again until the check passes. Cordial is
 built to be that check.
 
+For the current command-by-command loop, run `cordial instructions` and see
+[Agent worklist](running-cordial.md#agent-worklist). The diagram below shows
+the report and rule explanation behind that workflow.
+
 ```mermaid
 flowchart LR
   A["agent edits code"] --> G["cordial quality<br/>--deny-open"]
