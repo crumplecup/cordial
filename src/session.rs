@@ -102,6 +102,10 @@ pub trait RunOutcome: Send + Sync {
     fn findings(&self) -> Box<dyn Iterator<Item = &dyn Finding> + '_>;
     /// Iterate over all artifacts rendered and written by reporters.
     fn artifacts(&self) -> Box<dyn Iterator<Item = &dyn Artifact> + '_>;
+    /// Time spent in each hook, aggregated across its calls in this run.
+    fn hook_timings(&self) -> &[crate::HookTiming] {
+        &[]
+    }
 }
 
 /// Orchestrates plugin and etiquette execution.

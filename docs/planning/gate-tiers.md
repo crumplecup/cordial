@@ -176,6 +176,10 @@ have to keep those two apart.
 - A small ledger, `{store}/ledger.json`, records for each etiquette its tier, the
   time of its last run, its open count, and its wall time. The report reads it for
   the "last run" line, and `cordial timings` reads it to compare against.
+  Until tier selection is implemented, the ledger records `unassigned`. Its
+  wall time sums the etiquette's measured hooks; a shared hook is attributed to
+  each etiquette that uses it. The isolated `timings` command will measure the
+  complete cost of one etiquette, including shared setup.
 - `--deny-open` judges only what ran, and prints a line naming any tier that was
   skipped. The promotion gate uses `--tier all`, so a skipped tier cannot reach
   `main` unnoticed.
@@ -263,7 +267,7 @@ The tier selection becomes part of the worklist snapshot, replacing the
 
 ## Status
 
-- [ ] Phase 1: per-hook timing and the ledger
+- [x] Phase 1: per-hook timing and the ledger
 - [ ] Phase 2: `cordial timings`
 - [ ] Phase 3: thresholds and the built-in table
 - [ ] Phase 4: selection, config, `--tier`

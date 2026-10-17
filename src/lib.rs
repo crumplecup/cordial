@@ -76,6 +76,7 @@ mod store;
 mod targets;
 #[doc(hidden)]
 pub mod testing;
+mod tier;
 mod tracing_init;
 #[cfg(feature = "verus_ir")]
 mod verus_ir;
@@ -381,6 +382,7 @@ pub use session::{
     RunAll, RunFilter, RunOutcome, RuntimeSession, Session, SessionBuilder, SessionView,
 };
 pub use store::{StoreLayout, SysrootCache, default_store_home, project_slug_from_path};
+pub use tier::{EtiquetteLedgerEntry, GateLedger, HookTiming, HookTimings};
 #[cfg(feature = "quality")]
 pub use worklist::{
     AmbiguousGroup, AreaScore, BuildRecord, ChecklistSource, ClaimChange, ItemId, ItemSource,

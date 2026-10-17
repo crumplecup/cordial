@@ -501,3 +501,24 @@ fn source_edits_are_informational_and_age_only_appears_in_old_open_lists() -> mi
     assert_eq!(*list(&store)?.record().generation(), generation);
     Ok(())
 }
+
+#[test]
+fn quality_records_last_run_counts_and_hook_costs_in_the_ledger() -> miette::Result<()> {
+    cordial::init_tracing();
+    let (project, home, store) = fixture()?;
+    let gate = run(project.path(), home.path(), &["quality"])?;
+    assert!(
+        gate.status.success(),
+        "{}",
+        String::from_utf8_lossy(&gate.stderr)
+    );
+    let ledger = cordial::GateLedger::read(&store).into_diagnostic()?;
+    let panics = ledger
+        .entries()
+        .get("panics")
+        .ok_or_else(|| miette::miette!("panics missing from ledger"))?;
+    assert!(*panics.last_run_unix_secs() > 0);
+    assert!(*panics.open_count() > 0);
+    assert!(*panics.wall_time_nanos() > 0);
+    Ok(())
+}

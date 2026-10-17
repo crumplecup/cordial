@@ -11,6 +11,7 @@ use crate::hooks::WorkspaceAssessView;
 use crate::objects::{Artifact, Finding};
 
 use crate::store::StoreLayout;
+use crate::{GateLedger, HookTiming, HookTimings};
 
 use super::resolve::{
     dedupe_assessors, dedupe_enrichers, dedupe_loaders, dedupe_probes, dedupe_reporters,
@@ -32,6 +33,7 @@ mod render;
 struct ConcreteRunOutcome {
     findings: Vec<Box<dyn Finding>>,
     artifacts: Vec<Box<dyn Artifact>>,
+    timings: Vec<HookTiming>,
 }
 
 impl RunOutcome for ConcreteRunOutcome {
@@ -52,6 +54,11 @@ impl RunOutcome for ConcreteRunOutcome {
                 .map(|artifact| artifact.as_ref() as &dyn Artifact),
         )
     }
+
+    #[instrument(level = "trace", skip(self))]
+    fn hook_timings(&self) -> &[HookTiming] {
+        &self.timings
+    }
 }
 
 #[instrument(level = "debug")]
@@ -59,6 +66,7 @@ fn empty_outcome() -> Box<dyn RunOutcome> {
     Box::new(ConcreteRunOutcome {
         findings: Vec::new(),
         artifacts: Vec::new(),
+        timings: Vec::new(),
     })
 }
 
@@ -115,8 +123,16 @@ pub(super) fn run_session(
         targets.len()
     ));
 
+    let mut timings = HookTimings::default();
     let loaded = load::load_and_probe(
-        session, filter, &store, &targets, &loaders, &enrichers, &probes,
+        session,
+        filter,
+        &store,
+        &targets,
+        &loaders,
+        &enrichers,
+        &probes,
+        &mut timings,
     )?;
     #[cfg(feature = "shadow")]
     let (mut workspace, markers_by_crate) = loaded.into_parts();
@@ -132,6 +148,7 @@ pub(super) fn run_session(
         &markers_by_crate,
         &assessors,
         &etiquette_ids,
+        &mut timings,
     )?;
 
     #[cfg(feature = "shadow")]
@@ -156,8 +173,9 @@ pub(super) fn run_session(
         );
         for assessor in &workspace_assessors {
             task.set_message(format!("Assessing workspace rule {}", assessor.id()));
-            all_findings
-                .extend(assessor.assess(WorkspaceAssessView::new(&workspace, session, filter))?);
+            all_findings.extend(timings.measure("workspace_assess", assessor.id(), || {
+                assessor.assess(WorkspaceAssessView::new(&workspace, session, filter))
+            })?);
             task.inc(1);
         }
         task.finish(format!(
@@ -178,10 +196,16 @@ pub(super) fn run_session(
             &reporters,
             &all_findings,
         ),
+        &mut timings,
     )?;
+
+    let mut ledger = GateLedger::read(&store)?;
+    ledger.record_run(&etiquettes, &all_findings, &timings)?;
+    ledger.write(&store)?;
 
     Ok(Box::new(ConcreteRunOutcome {
         findings: all_findings,
         artifacts: all_artifacts,
+        timings: timings.into_vec(),
     }))
 }

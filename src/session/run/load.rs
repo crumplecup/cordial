@@ -11,6 +11,7 @@ use crate::ir::{CrateIr, CrateView, CrateViewMut, WorkspaceIr};
 use crate::loader::{CrateTarget, LoadView, SourceLoadView, SourceLoader};
 use crate::objects::Marker;
 
+use crate::HookTimings;
 use crate::store::StoreLayout;
 
 use crate::session::resolve::select_load_view;
@@ -33,7 +34,7 @@ impl LoadedWorkspace {
 
 #[instrument(
     level = "info",
-    skip(session, filter, store, targets, loaders, enrichers, probes),
+    skip(session, filter, store, targets, loaders, enrichers, probes, timings),
     err(level = "warn")
 )]
 pub(super) fn load_and_probe(
@@ -44,6 +45,7 @@ pub(super) fn load_and_probe(
     loaders: &[&dyn Loader],
     enrichers: &[&dyn IrEnricher],
     probes: &[&dyn Probe],
+    timings: &mut HookTimings,
 ) -> CordialResult<LoadedWorkspace> {
     let mut workspace = WorkspaceIr::default();
     let mut load_views: HashMap<String, Box<dyn LoadView>> = HashMap::new();
@@ -84,7 +86,9 @@ pub(super) fn load_and_probe(
         let mut crate_ir = CrateIr::new(target.crate_name());
 
         for loader in loaders {
-            let view = loader.load(LoadContext::new(session, target))?;
+            let view = timings.measure("load", loader.id(), || {
+                loader.load(LoadContext::new(session, target))
+            })?;
             if view.loader_id() == SourceLoader::ID
                 && let Some(source) = view.as_any().downcast_ref::<SourceLoadView>()
             {
@@ -108,7 +112,9 @@ pub(super) fn load_and_probe(
         for enricher in enrichers {
             let load = select_load_view(*enricher, &load_views, target.crate_name())?;
             let mut view = CrateViewMut::new(&mut workspace, target.crate_name().clone());
-            enricher.enrich(EnrichView::new(&mut view, load, session))?;
+            timings.measure("enrich", enricher.id(), || {
+                enricher.enrich(EnrichView::new(&mut view, load, session))
+            })?;
         }
 
         let cached = workspace
@@ -124,7 +130,9 @@ pub(super) fn load_and_probe(
 
         let crate_view = CrateView::new(&workspace, target.crate_name().clone());
         for probe in probes {
-            let mut found = probe.probe(ProbeView::new(&crate_view, session))?;
+            let mut found = timings.measure("probe", probe.id(), || {
+                probe.probe(ProbeView::new(&crate_view, session))
+            })?;
             markers_by_crate
                 .entry(target.crate_name().clone())
                 .or_default()

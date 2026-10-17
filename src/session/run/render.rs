@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use tracing::instrument;
 
+use crate::HookTimings;
 use crate::error::{CordialError, CordialResult};
 use crate::etiquette::Etiquette;
 use crate::hooks::{RenderView, Reporter};
@@ -35,11 +36,12 @@ pub(super) struct RenderPass<'a> {
     findings: &'a [Box<dyn Finding>],
 }
 
-#[instrument(level = "debug", skip(session, filter, pass), err(level = "warn"))]
+#[instrument(level = "debug", skip(session, filter, pass, timings), err(level = "warn"))]
 pub(super) fn render_and_write(
     session: &RuntimeSession,
     filter: &dyn RunFilter,
     pass: RenderPass<'_>,
+    timings: &mut HookTimings,
 ) -> CordialResult<Vec<Box<dyn Artifact>>> {
     let RenderPass {
         store,
@@ -64,14 +66,16 @@ pub(super) fn render_and_write(
     let progress = session.progress().spinner("Writing reports".to_string());
     let mut all_artifacts: Vec<Box<dyn Artifact>> = Vec::new();
     for reporter in reporters {
-        let mut artifacts =
-            reporter.render(RenderView::new(&finding_refs, &crate_view, session))?;
+        let mut artifacts = timings.measure("report", reporter.id(), || {
+            reporter.render(RenderView::new(&finding_refs, &crate_view, session))
+        })?;
         all_artifacts.append(&mut artifacts);
     }
 
     let rollup = RollupReporter;
-    let mut rollup_artifacts =
-        rollup.render(RenderView::new(&finding_refs, &crate_view, session))?;
+    let mut rollup_artifacts = timings.measure("report", rollup.id(), || {
+        rollup.render(RenderView::new(&finding_refs, &crate_view, session))
+    })?;
     all_artifacts.append(&mut rollup_artifacts);
 
     #[cfg(feature = "quality")]
@@ -89,8 +93,9 @@ pub(super) fn render_and_write(
     #[cfg(feature = "quality")]
     if includes_quality {
         let quality_report = crate::reporter::QualityReportReporter;
-        let mut quality_artifacts =
-            quality_report.render(RenderView::new(&finding_refs, &crate_view, session))?;
+        let mut quality_artifacts = timings.measure("report", quality_report.id(), || {
+            quality_report.render(RenderView::new(&finding_refs, &crate_view, session))
+        })?;
         all_artifacts.append(&mut quality_artifacts);
     }
 

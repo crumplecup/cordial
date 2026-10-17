@@ -11,13 +11,14 @@ use crate::ir::{CrateView, WorkspaceIr};
 use crate::loader::CrateTarget;
 use crate::objects::{Finding, Marker};
 
+use crate::HookTimings;
 use crate::store::StoreLayout;
 
 use crate::session::{RuntimeSession, SessionView};
 
 #[instrument(
     level = "debug",
-    skip(session, store, targets, workspace, markers_by_crate, assessors),
+    skip(session, store, targets, workspace, markers_by_crate, assessors, timings),
     err(level = "warn")
 )]
 pub(super) fn assess_targets(
@@ -28,6 +29,7 @@ pub(super) fn assess_targets(
     markers_by_crate: &HashMap<String, Vec<Box<dyn Marker>>>,
     assessors: &[&dyn Assessor],
     etiquette_ids: &[&str],
+    timings: &mut HookTimings,
 ) -> CordialResult<Vec<Box<dyn Finding>>> {
     let mut all_findings: Vec<Box<dyn Finding>> = Vec::new();
 
@@ -58,7 +60,9 @@ pub(super) fn assess_targets(
                 .copied()
                 .filter(|marker| assessor.consumes().contains(&marker.label()))
                 .collect();
-            let mut findings = assessor.assess(AssessView::new(&relevant, &crate_view, session))?;
+            let mut findings = timings.measure("assess", assessor.id(), || {
+                assessor.assess(AssessView::new(&relevant, &crate_view, session))
+            })?;
             crate_findings.append(&mut findings);
         }
 
