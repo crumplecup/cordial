@@ -967,7 +967,7 @@ Release 1:
 Release 2:
 
 - [x] Phase 9: pass counts, skip reasons, `STOP:`
-- [ ] Phase 10: soft-stale line
+- [x] Phase 10: soft-stale line
 - [ ] Phase 11: tiers
 - [ ] Phase 12: rule ids and prefilled exceptions
 - [ ] Phase 13: `--json`

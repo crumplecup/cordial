@@ -464,3 +464,40 @@ fn skip_reason_and_pass_count_survive_submit_until_the_stop_limit() -> miette::R
     assert!(stdout(&stats).contains("STOP:"));
     Ok(())
 }
+
+#[test]
+fn source_edits_are_informational_and_age_only_appears_in_old_open_lists() -> miette::Result<()> {
+    cordial::init_tracing();
+    let (project, home, store) = fixture()?;
+    let opened = run(project.path(), home.path(), &["open"])?;
+    assert!(opened.status.success());
+    let generation = *list(&store)?.record().generation();
+
+    let path = store.worklist_path();
+    let mut json: serde_json::Value =
+        serde_json::from_slice(&fs::read(&path).into_diagnostic()?).into_diagnostic()?;
+    let built_at = json["record"]["built_at_unix_secs"]
+        .as_u64()
+        .ok_or_else(|| miette::miette!("missing build time"))?;
+    json["record"]["built_at_unix_secs"] = (built_at - 3_600).into();
+    fs::write(&path, serde_json::to_vec(&json).into_diagnostic()?).into_diagnostic()?;
+    fs::write(project.path().join("src/lib.rs"), "pub fn changed() {}\n").into_diagnostic()?;
+
+    let stats = run(project.path(), home.path(), &["stats"])?;
+    assert!(stats.status.success());
+    assert!(stdout(&stats).contains("List age:"));
+    assert!(stdout(&stats).contains("Rust sources or Cargo manifests changed since build"));
+    assert!(!stdout(&stats).contains("0 Rust sources or Cargo manifests changed since build"));
+    let young = run(project.path(), home.path(), &["open"])?;
+    assert!(young.status.success());
+    assert!(!stdout(&young).contains("List age:"));
+    assert_eq!(*list(&store)?.record().generation(), generation);
+
+    json["record"]["built_at_unix_secs"] = (built_at - 90_000).into();
+    fs::write(&path, serde_json::to_vec(&json).into_diagnostic()?).into_diagnostic()?;
+    let old = run(project.path(), home.path(), &["open"])?;
+    assert!(old.status.success());
+    assert!(stdout(&old).contains("List age:"));
+    assert_eq!(*list(&store)?.record().generation(), generation);
+    Ok(())
+}

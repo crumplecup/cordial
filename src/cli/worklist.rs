@@ -7,8 +7,9 @@ use tracing::instrument;
 use super::commands::{ActCtx, Commands};
 use super::run::execute_run_plugins_locked;
 use crate::{
-    CordialError, CordialResult, ItemState, Validity, WORKLIST_INSTRUCTIONS, Worklist,
-    WorklistLock, all_plugins, default_store_home, load_cordial_config, render_open, render_stats,
+    CordialError, CordialResult, ItemState, SoftStaleness, Validity, WORKLIST_INSTRUCTIONS,
+    Worklist, WorklistLock, all_plugins, default_store_home, load_cordial_config, render_open,
+    render_stats,
 };
 
 impl Commands {
@@ -77,7 +78,7 @@ pub(super) fn execute_open(ctx: &ActCtx) -> CordialResult<()> {
                         .iter()
                         .all(|item| *item.state() != ItemState::Open))
             {
-                return write!(io::stdout(), "{}", render_open(&list)).map_err(Into::into);
+                return write_open(ctx, &list);
             }
         }
     }
@@ -128,7 +129,7 @@ pub(super) fn execute_open(ctx: &ActCtx) -> CordialResult<()> {
     if list.activate() {
         list.write(ctx.store())?;
     }
-    write!(io::stdout(), "{}", render_open(&list))?;
+    write_open(ctx, &list)?;
     Ok(())
 }
 
@@ -265,7 +266,11 @@ pub(super) fn execute_stats(
     let home = ctx.store_home().clone().unwrap_or_else(default_store_home);
     let config = load_cordial_config(ctx.project_root(), &home);
     match list.validity(&config)? {
-        Validity::Current => write!(io::stdout(), "{}", render_stats(&list, verbose, area, all))?,
+        Validity::Current => {
+            let stale = list.staleness(ctx.project_root());
+            writeln!(io::stdout(), "{}", staleness_line(&stale))?;
+            write!(io::stdout(), "{}", render_stats(&list, verbose, area, all))?;
+        }
         reason => writeln!(
             io::stdout(),
             "List {} is out of date ({}).\n\nNEXT: cordial open",
@@ -274,6 +279,27 @@ pub(super) fn execute_stats(
         )?,
     }
     Ok(())
+}
+
+const OPEN_STALE_SECS: u64 = 24 * 60 * 60;
+
+#[instrument(level = "trace", skip(ctx, list), err(level = "warn"))]
+fn write_open(ctx: &ActCtx, list: &Worklist) -> CordialResult<()> {
+    let stale = list.staleness(ctx.project_root());
+    if *stale.age_secs() >= OPEN_STALE_SECS {
+        writeln!(io::stdout(), "{}", staleness_line(&stale))?;
+    }
+    write!(io::stdout(), "{}", render_open(list))?;
+    Ok(())
+}
+
+#[instrument(level = "trace", skip(stale))]
+fn staleness_line(stale: &SoftStaleness) -> String {
+    format!(
+        "List age: {}s; {} Rust sources or Cargo manifests changed since build.",
+        stale.age_secs(),
+        stale.changed_files()
+    )
 }
 
 #[instrument(level = "debug", skip(reason))]

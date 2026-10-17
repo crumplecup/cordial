@@ -58,6 +58,9 @@ may take several minutes, so give it a long timeout.
 
 `peek` shows the current item again. `stats` summarizes counts by area;
 `stats --verbose` lists item states, with `--area <title>` to narrow the view.
+`stats` also shows list age and how many Rust sources or Cargo manifests changed
+since it was built. `open` shows that hint once a list is at least a day old.
+The hint does not rebuild the list; `submit` checks it when you are ready.
 Name ids when sending several worklist commands at once. Run `submit` alone
 and wait for it; commands issued while it runs wait for its new list.
 

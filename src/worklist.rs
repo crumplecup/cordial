@@ -6,6 +6,7 @@ mod lock;
 mod render;
 mod score;
 mod source;
+mod staleness;
 mod state;
 
 pub use instructions::WORKLIST_INSTRUCTIONS;
@@ -17,4 +18,5 @@ pub use lock::WorklistLock;
 pub use render::{render_open, render_stats, render_submit};
 pub use score::{AmbiguousGroup, AreaScore, Scorecard, score};
 pub use source::{ChecklistSource, ItemSource};
+pub use staleness::SoftStaleness;
 pub use state::{BuildRecord, ClaimChange, Validity, Worklist};
