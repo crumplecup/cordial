@@ -25,6 +25,7 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 | [Exceptions remove / edit](docs/planning/exceptions-remove-edit.md) | **Active** | `cordial exceptions remove` / `edit` with unique selectors; stale-exception warnings on run |
 | [Agent worklist](docs/planning/agent-worklist.md) | **Active** | `cordial open` / `done` / `skip` / `submit`, with `peek` / `stats` / `instructions` beside them: a fixed worklist with a cursor the agent moves without re-running the gate; `submit` runs the gate and scores the batch |
 | [Gate tiers](docs/planning/gate-tiers.md) | **Active** | Named cost tiers (`quick`, `build`, `deep`, plus user-defined) for etiquettes, partitioned from measured cold/warm timings; `--tier` selection |
+| [Clean command](docs/planning/clean-command.md) | **Active** | `cordial clean` removes a project's regenerable store artifacts (cache, reports); `--all` covers every store and the shared sysroot cache; curated exceptions and config are never touched |
 
 ## Plugin families
 
