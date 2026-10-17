@@ -30,18 +30,20 @@ pub fn render_open(list: &Worklist) -> String {
     let position = list.cursor().map_or(0, |index| index + 1);
     let _ = writeln!(
         output,
-        "Item {position} of {} · {} · priority {} · {}{} · list {}",
+        "Item {position} of {} · {} · priority {} · {}{} · list {} · on its {} list",
         list.items().len(),
         item.id().as_str(),
         item.area_priority(),
         item.area(),
         if *item.reopened() { " · reopened" } else { "" },
         list.record().generation(),
+        ordinal(*item.pass_count()),
     );
     let _ = writeln!(output, "  {}", item.item_line());
     for detail in item.detail_lines() {
         let _ = writeln!(output, "{detail}");
     }
+    render_skip_reasons(&mut output, item);
     if let Some(guidance) = item.guidance() {
         let _ = writeln!(output, "Fix:   {guidance}");
     }
@@ -72,11 +74,20 @@ pub fn render_open(list: &Worklist) -> String {
             let _ = writeln!(output, "Also in {file}: {}", peers.join(", "));
         }
     }
-    let _ = write!(
-        output,
-        "\nNEXT: fix it, then `cordial done {0}`, or set it aside with `cordial skip {0}`. New here? `cordial instructions`.\n",
-        item.id().as_str(),
-    );
+    if item.needs_user(*list.max_passes()) {
+        let _ = writeln!(
+            output,
+            "\nSTOP: item {} is on its {} list. Tell the user what blocked it before trying again.",
+            item.id().as_str(),
+            ordinal(*item.pass_count())
+        );
+    } else {
+        let _ = write!(
+            output,
+            "\nNEXT: fix it, then `cordial done {0}`, or set it aside with `cordial skip {0} --reason \"why\"`. New here? `cordial instructions`.\n",
+            item.id().as_str(),
+        );
+    }
     output
 }
 
@@ -146,6 +157,20 @@ pub fn render_submit(previous: &Worklist, current: &Worklist, scorecard: &Scorec
         );
     }
     let _ = writeln!(output, "New since the last run: {}.", scorecard.new_items());
+    let needs_user: Vec<_> = current
+        .items()
+        .iter()
+        .filter(|item| item.needs_user(*current.max_passes()))
+        .collect();
+    if !needs_user.is_empty() {
+        let ids: Vec<_> = needs_user.iter().map(|item| item.id().as_str()).collect();
+        let _ = writeln!(
+            output,
+            "Needs the user: {} item(s), {}. See `cordial stats --verbose`.",
+            needs_user.len(),
+            ids.join(", ")
+        );
+    }
     output.push_str("\n Priority  Area                         Was  Now\n");
     for area in scorecard.per_area() {
         let _ = writeln!(
@@ -157,11 +182,15 @@ pub fn render_submit(previous: &Worklist, current: &Worklist, scorecard: &Scorec
             area.now()
         );
     }
-    let _ = write!(
-        output,
-        "\nNEXT: new list written (list {}), reopened items first. `cordial open` shows the first.\n",
-        current.record().generation()
-    );
+    if needs_user.is_empty() {
+        let _ = write!(
+            output,
+            "\nNEXT: new list written (list {}), reopened items first. `cordial open` shows the first.\n",
+            current.record().generation()
+        );
+    } else {
+        output.push_str("\nSTOP: tell the user about the items above before trying them again.\n");
+    }
     output
 }
 
@@ -218,6 +247,14 @@ pub fn render_stats(list: &Worklist, verbose: bool, area: Option<&str>, all: boo
         output.push_str("\nNEXT: cordial submit\n");
     } else {
         output.push_str("\nNEXT: cordial open\n");
+    }
+    if verbose
+        && selected
+            .iter()
+            .take(if all { selected.len() } else { VERBOSE_LIMIT })
+            .any(|item| item.needs_user(*list.max_passes()))
+    {
+        output.push_str("STOP: tell the user about the marked items before trying them again.\n");
     }
     output
 }
@@ -282,13 +319,40 @@ fn render_verbose(output: &mut String, items: &[&WorklistItem], list: &Worklist,
         };
         let _ = writeln!(
             output,
-            "  [{mark}] {}  {}",
+            "  [{mark}] {}  {} (on its {} list)",
             item.id().as_str(),
-            item.item_line()
+            item.item_line(),
+            ordinal(*item.pass_count())
         );
+        render_skip_reasons(output, item);
+        if item.needs_user(*list.max_passes()) {
+            output.push_str("    Needs the user.\n");
+        }
     }
     if shown < items.len() {
         let _ = writeln!(output, "Showing {shown} of {} items.", items.len());
         output.push_str("Use `cordial stats --area <title>` or `--all` for more.\n");
     }
+}
+
+#[instrument(level = "trace", skip(output, item))]
+fn render_skip_reasons(output: &mut String, item: &WorklistItem) {
+    for reason in item.skip_reasons() {
+        let _ = writeln!(output, "  Skipped before: {reason}");
+    }
+}
+
+#[instrument(level = "trace")]
+fn ordinal(number: u32) -> String {
+    let suffix = if (11..=13).contains(&(number % 100)) {
+        "th"
+    } else {
+        match number % 10 {
+            1 => "st",
+            2 => "nd",
+            3 => "rd",
+            _ => "th",
+        }
+    };
+    format!("{number}{suffix}")
 }

@@ -9,8 +9,8 @@ pub const WORKLIST_INSTRUCTIONS: &str = r#"How to work through cordial's open it
 2. Fix the item, run the project's own focused checks, then run
    `cordial done <id>` using the id on the item's header line. This checks it
    off and shows the next item.
-3. If you cannot act on an item now, run `cordial skip <id>`. It stays
-   unchecked and the cursor moves on.
+3. If you cannot act on an item now, run `cordial skip <id> --reason "why"`.
+   It stays unchecked, remembers your reason, and the cursor moves on.
 4. When cordial says the list is complete, run `cordial submit`. It reruns the
    gate, tells you which fixes held, and builds a fresh list.
 
@@ -34,13 +34,16 @@ to learn how to document an exception. Once documented, run done and let submit
 confirm that the finding disappeared.
 
 Use done and skip as you go. They are cheap; submit is a full gate, so run it
-once per batch and at the end. Skipped items return on the next list.
+once per batch and at the end. Skipped items return on the next list. If an
+item reaches the configured pass limit, a STOP: line tells you to bring its
+history and blocker to the user before trying it again.
 
 Item locations are hints. Line numbers shift as you edit, so search for the
 symbol named in an item. If your change removed the code, run done and let
 submit confirm. If the item no longer makes sense, skip it for now.
 
-A line starting with NEXT: names the next step.
+A line starting with NEXT: names the next step. A STOP: line asks you to tell
+the user about a repeatedly unresolved item.
 "#;
 
 pub(crate) const OPEN_HELP: &str =
@@ -49,7 +52,7 @@ pub(crate) const PEEK_HELP: &str = "Show the current item again without running 
 pub(crate) const DONE_HELP: &str =
     "Claim that named items, or the current item, are fixed. Submit later to verify.";
 pub(crate) const SKIP_HELP: &str =
-    "Set named items, or the current item, aside until the next list.";
+    "Set named items, or the current item, aside until the next list; --reason records why.";
 pub(crate) const SUBMIT_HELP: &str = "Rerun the gate, score claims, and build a fresh list.";
 pub(crate) const STATS_HELP: &str =
     "Show list counts by area; use --verbose to see individual items.";

@@ -371,3 +371,96 @@ fn submit_deny_open_scores_and_writes_before_failing() -> miette::Result<()> {
     assert_eq!(*list(&store)?.record().generation(), 2);
     Ok(())
 }
+
+#[test]
+fn skip_reason_and_pass_count_survive_submit_until_the_stop_limit() -> miette::Result<()> {
+    cordial::init_tracing();
+    let (project, home, store) = fixture()?;
+    fs::write(
+        project.path().join("cordial.toml"),
+        "[worklist]\nmax_passes = 2\n",
+    )
+    .into_diagnostic()?;
+    let opened = run(project.path(), home.path(), &["open"])?;
+    assert!(
+        opened.status.success(),
+        "{}",
+        String::from_utf8_lossy(&opened.stderr)
+    );
+    let before = list(&store)?;
+    let current = before
+        .current()
+        .ok_or_else(|| miette::miette!("no current item"))?;
+    let id = current.id().as_str().to_string();
+    assert_eq!(*current.pass_count(), 1);
+
+    let skipped = run(
+        project.path(),
+        home.path(),
+        &["skip", &id, "--reason", "waiting for API"],
+    )?;
+    assert!(
+        skipped.status.success(),
+        "{}",
+        String::from_utf8_lossy(&skipped.stderr)
+    );
+    let repeated = run(
+        project.path(),
+        home.path(),
+        &["skip", &id, "--reason", "duplicate"],
+    )?;
+    assert!(repeated.status.success());
+    let deferred = list(&store)?;
+    let item = deferred
+        .items()
+        .iter()
+        .find(|item| item.id().as_str() == id)
+        .ok_or_else(|| miette::miette!("skipped item missing"))?;
+    assert_eq!(item.skip_reasons(), &["waiting for API"]);
+
+    let submitted = run(project.path(), home.path(), &["submit"])?;
+    assert!(
+        submitted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&submitted.stderr)
+    );
+    assert!(
+        stdout(&submitted).contains("Needs the user:"),
+        "{}",
+        stdout(&submitted)
+    );
+    assert!(
+        stdout(&submitted).contains("STOP:"),
+        "{}",
+        stdout(&submitted)
+    );
+    let after = list(&store)?;
+    let carried = after
+        .items()
+        .iter()
+        .find(|item| item.id().as_str() == id)
+        .ok_or_else(|| miette::miette!("carried item missing"))?;
+    assert_eq!(*carried.pass_count(), 2);
+    assert_eq!(carried.skip_reasons(), &["waiting for API"]);
+    assert!(carried.needs_user(*after.max_passes()));
+    assert!(after.items().iter().any(|item| *item.pass_count() == 1));
+
+    let opened_again = run(project.path(), home.path(), &["open"])?;
+    assert!(opened_again.status.success());
+    assert!(
+        stdout(&opened_again).contains("on its 2nd list"),
+        "{}",
+        stdout(&opened_again)
+    );
+    assert!(stdout(&opened_again).contains("waiting for API"));
+    assert!(stdout(&opened_again).contains("STOP:"));
+    let stats = run(
+        project.path(),
+        home.path(),
+        &["stats", "--verbose", "--all"],
+    )?;
+    assert!(stats.status.success());
+    assert!(stdout(&stats).contains("waiting for API"));
+    assert!(stdout(&stats).contains("STOP:"));
+    Ok(())
+}

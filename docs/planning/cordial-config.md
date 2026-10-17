@@ -21,6 +21,9 @@ line `cordial explain` points at. Per-site suppressions stay on
 `cordial exceptions add`.
 
 ```toml
+[worklist]
+# max_passes = 3       # tell the user when an acted-on item reaches this list count
+
 [visibility]
 # enabled = true
 max_crate_names_for_flat = 50

@@ -14,6 +14,7 @@ mod modularity;
 mod pageantry;
 mod tracing;
 mod visibility;
+mod worklist;
 
 use std::path::Path;
 
@@ -37,12 +38,15 @@ pub use self::tracing::{
     TracingBoundaryPolicy, TracingStdioPolicy, TracingSubscriberPolicy, TracingThresholds,
 };
 pub use self::visibility::VisibilityThresholds;
+pub use self::worklist::WorklistSettings;
 
 use crate::session::SessionView;
 
 /// All etiquette knobs loaded from `cordial.toml`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct CordialConfig {
+    #[serde(default)]
+    worklist: WorklistSettings,
     #[serde(default)]
     visibility: VisibilityThresholds,
     #[serde(default)]

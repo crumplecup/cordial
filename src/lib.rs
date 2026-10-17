@@ -324,8 +324,8 @@ pub use config::{
     DerivesThresholds, DocWarningsThresholds, EtiquetteGate, FeatureWarningsThresholds,
     ModularityThresholds, PageantryThresholds, StaticRefPolicy, StaticRefStrategy,
     TracingBoundaryPolicy, TracingStdioPolicy, TracingSubscriberPolicy, TracingThresholds,
-    VisibilityThresholds, load_cordial_config, load_derives_thresholds, load_session_config,
-    load_visibility_thresholds,
+    VisibilityThresholds, WorklistSettings, load_cordial_config, load_derives_thresholds,
+    load_session_config, load_visibility_thresholds,
 };
 pub use exceptions::{
     AddExceptionOutcome, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,

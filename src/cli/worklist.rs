@@ -17,8 +17,8 @@ impl Commands {
         match self {
             Self::Open => execute_open(ctx),
             Self::Peek => execute_peek(ctx),
-            Self::Done { ids } => execute_claim(ctx, &ids, false),
-            Self::Skip { ids } => execute_claim(ctx, &ids, true),
+            Self::Done { ids } => execute_claim(ctx, &ids, false, None),
+            Self::Skip { ids, reason } => execute_claim(ctx, &ids, true, reason.as_deref()),
             Self::Submit { deny_open } => execute_submit(ctx, deny_open),
             Self::Stats { verbose, area, all } => execute_stats(ctx, verbose, area.as_deref(), all),
             Self::Instructions => {
@@ -179,8 +179,13 @@ pub(super) fn execute_peek(ctx: &ActCtx) -> CordialResult<()> {
     Ok(())
 }
 
-#[instrument(level = "debug", skip(ctx, ids), err(level = "warn"))]
-pub(super) fn execute_claim(ctx: &ActCtx, ids: &[String], skip: bool) -> CordialResult<()> {
+#[instrument(level = "debug", skip(ctx, ids, reason), err(level = "warn"))]
+pub(super) fn execute_claim(
+    ctx: &ActCtx,
+    ids: &[String],
+    skip: bool,
+    reason: Option<&str>,
+) -> CordialResult<()> {
     let command = if skip { "skip" } else { "done" };
     let _lock = WorklistLock::exclusive(ctx.store(), command, ctx.progress().as_ref())?;
     let Some(mut list) = Worklist::read(ctx.store())? else {
@@ -197,7 +202,11 @@ pub(super) fn execute_claim(ctx: &ActCtx, ids: &[String], skip: bool) -> Cordial
         )?;
         return Err(CordialError::invariant("Worklist is out of date"));
     }
-    let changes = if skip { list.skip(ids) } else { list.done(ids) };
+    let changes = if skip {
+        list.skip(ids, reason)
+    } else {
+        list.done(ids)
+    };
     let changes = match changes {
         Ok(changes) => changes,
         Err(error) => {

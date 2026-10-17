@@ -44,6 +44,8 @@ pub struct Worklist {
     record: BuildRecord,
     items: Vec<WorklistItem>,
     cursor: Option<usize>,
+    #[serde(default = "default_max_passes")]
+    max_passes: u32,
 }
 
 /// The result of applying one claim to a worklist item.
@@ -108,6 +110,7 @@ impl Worklist {
             record,
             items,
             cursor: None,
+            max_passes: config.worklist().max_passes().max(1),
         })
     }
 
@@ -200,17 +203,26 @@ impl Worklist {
     /// Check off named items, or the current item when no ids are given.
     #[instrument(level = "debug", skip(self, ids))]
     pub fn done(&mut self, ids: &[String]) -> CordialResult<Vec<ClaimChange>> {
-        self.apply(ids, ItemState::Done)
+        self.apply(ids, ItemState::Done, None)
     }
 
     /// Set named items aside until the next gate run.
     #[instrument(level = "debug", skip(self, ids))]
-    pub fn skip(&mut self, ids: &[String]) -> CordialResult<Vec<ClaimChange>> {
-        self.apply(ids, ItemState::Skipped)
+    pub fn skip(
+        &mut self,
+        ids: &[String],
+        reason: Option<&str>,
+    ) -> CordialResult<Vec<ClaimChange>> {
+        self.apply(ids, ItemState::Skipped, reason)
     }
 
     #[instrument(level = "debug", skip(self, ids, target))]
-    fn apply(&mut self, ids: &[String], target: ItemState) -> CordialResult<Vec<ClaimChange>> {
+    fn apply(
+        &mut self,
+        ids: &[String],
+        target: ItemState,
+        reason: Option<&str>,
+    ) -> CordialResult<Vec<ClaimChange>> {
         let selected = if ids.is_empty() {
             vec![
                 self.cursor
@@ -245,6 +257,11 @@ impl Worklist {
         for index in selected {
             let item = &mut self.items[index];
             let was = item.replace_state(target);
+            if was != ItemState::Skipped && target == ItemState::Skipped {
+                if let Some(reason) = reason.map(str::trim).filter(|reason| !reason.is_empty()) {
+                    item.add_skip_reason(reason);
+                }
+            }
             changes.push(ClaimChange {
                 id: item.id().as_str().to_string(),
                 item_line: item.item_line().clone(),
@@ -273,4 +290,9 @@ fn config_fingerprint(config: &CordialConfig) -> CordialResult<String> {
     let bytes = serde_json::to_vec(config)?;
     let digest = Sha256::digest(bytes);
     Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+#[instrument(level = "trace")]
+fn default_max_passes() -> u32 {
+    3
 }

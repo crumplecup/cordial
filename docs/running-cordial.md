@@ -48,7 +48,10 @@ run to one crate. `--store-home` / `CORDIAL_HOME` overrides `~/.cordial`.
 
 Run `cordial instructions` for the full loop. `open` gives the highest-priority
 item and builds a list if needed. After fixing it and running focused project
-checks, use `done <id>` to claim it; use `skip <id>` if you cannot act on it now.
+checks, use `done <id>` to claim it; use `skip <id> --reason "why"` if you
+cannot act on it now. Skip reasons and the number of lists an item has survived
+appear on later lists. A `STOP:` line asks you to tell the user when an item
+reaches the configured pass limit (`[worklist] max_passes`, default 3).
 `submit` reruns the gate, reports which claims cleared or reopened, and writes
 the next list. Repeat until submit reports zero open items. The first `open`
 may take several minutes, so give it a long timeout.

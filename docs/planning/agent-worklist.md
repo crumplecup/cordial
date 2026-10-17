@@ -966,7 +966,7 @@ Release 1:
 
 Release 2:
 
-- [ ] Phase 9: pass counts, skip reasons, `STOP:`
+- [x] Phase 9: pass counts, skip reasons, `STOP:`
 - [ ] Phase 10: soft-stale line
 - [ ] Phase 11: tiers
 - [ ] Phase 12: rule ids and prefilled exceptions

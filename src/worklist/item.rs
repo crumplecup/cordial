@@ -50,6 +50,10 @@ pub struct WorklistItem {
     file: Option<String>,
     state: ItemState,
     reopened: bool,
+    #[serde(default = "first_pass")]
+    pass_count: u32,
+    #[serde(default)]
+    skip_reasons: Vec<String>,
 }
 
 impl WorklistItem {
@@ -83,6 +87,8 @@ impl WorklistItem {
             file,
             state: ItemState::Open,
             reopened: false,
+            pass_count: first_pass(),
+            skip_reasons: Vec::new(),
         }
     }
 
@@ -100,7 +106,28 @@ impl WorklistItem {
     pub(super) fn inherit_identity(&mut self, old: &Self) {
         self.id = old.id.clone();
         self.reopened = *old.state() == ItemState::Done;
+        self.pass_count = old
+            .pass_count
+            .saturating_add(u32::from(*old.state() != ItemState::Open));
+        self.skip_reasons = old.skip_reasons.clone();
     }
+
+    /// Keep a reason for a newly skipped item on later lists.
+    #[instrument(level = "trace", skip(self, reason))]
+    pub(super) fn add_skip_reason(&mut self, reason: &str) {
+        self.skip_reasons.push(reason.to_string());
+    }
+
+    /// Whether this still-open item needs the user's guidance.
+    #[instrument(level = "trace", skip(self))]
+    pub fn needs_user(&self, max_passes: u32) -> bool {
+        self.state != ItemState::Done && self.pass_count >= max_passes
+    }
+}
+
+#[instrument(level = "trace")]
+fn first_pass() -> u32 {
+    1
 }
 
 /// Remove location-only line numbers without changing other item text.

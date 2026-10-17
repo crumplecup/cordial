@@ -41,6 +41,9 @@ pub enum Commands {
     Skip {
         /// Stable item ids; omit to set aside the current item.
         ids: Vec<String>,
+        /// Why this item cannot be acted on now; kept if it returns on later lists.
+        #[arg(long)]
+        reason: Option<String>,
     },
     /// Recheck the project and score claims against a fresh worklist.
     #[cfg(feature = "quality")]
