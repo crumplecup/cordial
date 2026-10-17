@@ -384,8 +384,8 @@ pub use store::{StoreLayout, SysrootCache, default_store_home, project_slug_from
 #[cfg(feature = "quality")]
 pub use worklist::{
     AmbiguousGroup, AreaScore, BuildRecord, ChecklistSource, ClaimChange, ItemId, ItemSource,
-    ItemState, Scorecard, Validity, Worklist, WorklistItem, WorklistLock, render_open,
-    render_stats, render_submit, score,
+    ItemState, Scorecard, Validity, WORKLIST_INSTRUCTIONS, Worklist, WorklistItem, WorklistLock,
+    render_open, render_stats, render_submit, score,
 };
 #[cfg(feature = "homecoming_std")]
 pub use {

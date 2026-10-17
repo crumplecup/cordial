@@ -961,7 +961,7 @@ Release 1:
 - [x] Phase 4: `stats`, `open`
 - [x] Phase 5: `done`, `skip`, `peek`, hidden `next`
 - [x] Phase 6: `submit`, scoring
-- [ ] Phase 7: `instructions`
+- [x] Phase 7: `instructions`
 - [ ] Phase 8: agent docs, including the `AGENTS.md` rewrite
 
 Release 2:

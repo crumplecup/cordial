@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
@@ -44,6 +45,38 @@ fn list(store: &cordial::StoreLayout) -> miette::Result<cordial::Worklist> {
     cordial::Worklist::read(store)
         .into_diagnostic()?
         .ok_or_else(|| miette::miette!("worklist missing"))
+}
+
+#[test]
+fn compiled_instructions_name_real_commands() -> miette::Result<()> {
+    cordial::init_tracing();
+    let (project, home, store) = fixture()?;
+    let output = run(project.path(), home.path(), &["instructions"])?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(stdout(&output), cordial::WORKLIST_INSTRUCTIONS);
+    assert!(!store.worklist_path().exists());
+
+    let commands: BTreeSet<&str> = cordial::WORKLIST_INSTRUCTIONS
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .filter_map(|quoted| quoted.strip_prefix("cordial "))
+        .filter_map(|invocation| invocation.split_whitespace().next())
+        .collect();
+    assert!(commands.len() >= 6);
+    for command in commands {
+        let help = run(project.path(), home.path(), &[command, "--help"])?;
+        assert!(
+            help.status.success(),
+            "{command}: {}",
+            String::from_utf8_lossy(&help.stderr)
+        );
+    }
+    Ok(())
 }
 
 #[test]

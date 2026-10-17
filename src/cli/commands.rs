@@ -22,24 +22,29 @@ use tracing::instrument;
 pub enum Commands {
     /// Show the current worklist item, building a list when needed.
     #[cfg(feature = "quality")]
+    #[command(about = crate::worklist::OPEN_HELP)]
     Open,
     /// Show the current item without building a list.
     #[cfg(feature = "quality")]
+    #[command(about = crate::worklist::PEEK_HELP)]
     Peek,
     /// Check off named items, or the current item.
     #[cfg(feature = "quality")]
+    #[command(about = crate::worklist::DONE_HELP)]
     Done {
         /// Stable item ids; omit to check off the current item.
         ids: Vec<String>,
     },
     /// Set named items aside, or the current item.
     #[cfg(feature = "quality")]
+    #[command(about = crate::worklist::SKIP_HELP)]
     Skip {
         /// Stable item ids; omit to set aside the current item.
         ids: Vec<String>,
     },
     /// Recheck the project and score claims against a fresh worklist.
     #[cfg(feature = "quality")]
+    #[command(about = crate::worklist::SUBMIT_HELP)]
     Submit {
         /// Fail if the new list still has open items.
         #[arg(long)]
@@ -51,6 +56,7 @@ pub enum Commands {
     Next,
     /// Show worklist counts or individual items.
     #[cfg(feature = "quality")]
+    #[command(about = crate::worklist::STATS_HELP)]
     Stats {
         /// Show items and their checked state.
         #[arg(long)]
@@ -62,6 +68,10 @@ pub enum Commands {
         #[arg(long, requires = "verbose")]
         all: bool,
     },
+    /// Print the agent worklist loop and verification rules.
+    #[cfg(feature = "quality")]
+    #[command(about = crate::worklist::INSTRUCTIONS_HELP)]
+    Instructions,
     /// Run all built-in etiquettes (quality + coverage).
     Run {
         /// Exit with failure when unresolved open findings remain.
@@ -247,7 +257,8 @@ impl Commands {
             | Self::Skip { .. }
             | Self::Submit { .. }
             | Self::Next
-            | Self::Stats { .. }) => command.act_worklist(&ctx),
+            | Self::Stats { .. }
+            | Self::Instructions) => command.act_worklist(&ctx),
             Self::Run { deny_open } => execute_run_plugins(
                 &ctx.project_root,
                 &ctx.store,

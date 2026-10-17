@@ -7,8 +7,8 @@ use tracing::instrument;
 use super::commands::{ActCtx, Commands};
 use super::run::execute_run_plugins_locked;
 use crate::{
-    CordialError, CordialResult, ItemState, Validity, Worklist, WorklistLock, all_plugins,
-    default_store_home, load_cordial_config, render_open, render_stats,
+    CordialError, CordialResult, ItemState, Validity, WORKLIST_INSTRUCTIONS, Worklist,
+    WorklistLock, all_plugins, default_store_home, load_cordial_config, render_open, render_stats,
 };
 
 impl Commands {
@@ -21,6 +21,9 @@ impl Commands {
             Self::Skip { ids } => execute_claim(ctx, &ids, true),
             Self::Submit { deny_open } => execute_submit(ctx, deny_open),
             Self::Stats { verbose, area, all } => execute_stats(ctx, verbose, area.as_deref(), all),
+            Self::Instructions => {
+                write!(io::stdout(), "{WORKLIST_INSTRUCTIONS}").map_err(Into::into)
+            }
             Self::Next => Err(CordialError::invariant(
                 "Did you mean `cordial done` or `cordial skip`?",
             )),
