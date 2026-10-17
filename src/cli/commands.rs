@@ -38,6 +38,13 @@ pub enum Commands {
         /// Stable item ids; omit to set aside the current item.
         ids: Vec<String>,
     },
+    /// Recheck the project and score claims against a fresh worklist.
+    #[cfg(feature = "quality")]
+    Submit {
+        /// Fail if the new list still has open items.
+        #[arg(long)]
+        deny_open: bool,
+    },
     /// Suggest the commands that move through a worklist.
     #[cfg(feature = "quality")]
     #[command(hide = true)]
@@ -238,6 +245,7 @@ impl Commands {
             | Self::Peek
             | Self::Done { .. }
             | Self::Skip { .. }
+            | Self::Submit { .. }
             | Self::Next
             | Self::Stats { .. }) => command.act_worklist(&ctx),
             Self::Run { deny_open } => execute_run_plugins(

@@ -257,3 +257,84 @@ fn skipping_the_last_open_item_completes_the_list_without_checking_it_off() -> m
     assert_eq!(*list(&store)?.items()[0].state(), cordial::ItemState::Done);
     Ok(())
 }
+
+#[test]
+fn submit_reopens_an_unfixed_claim_then_reports_its_clearance() -> miette::Result<()> {
+    cordial::init_tracing();
+    let (project, home, store) = fixture()?;
+    let open = run(project.path(), home.path(), &["open"])?;
+    assert!(
+        open.status.success(),
+        "{}",
+        String::from_utf8_lossy(&open.stderr)
+    );
+    let id = list(&store)?
+        .items()
+        .iter()
+        .find(|item| item.item_line().contains("panic"))
+        .ok_or_else(|| miette::miette!("fixture has no panic item"))?
+        .id()
+        .as_str()
+        .to_string();
+    let claimed = run(project.path(), home.path(), &["done", &id])?;
+    assert!(claimed.status.success());
+
+    let unchanged = run(project.path(), home.path(), &["submit"])?;
+    assert!(
+        unchanged.status.success(),
+        "{}",
+        String::from_utf8_lossy(&unchanged.stderr)
+    );
+    assert!(
+        stdout(&unchanged).contains(&format!("Reopened claims: {id}.")),
+        "{}",
+        stdout(&unchanged)
+    );
+    let second = list(&store)?;
+    assert_eq!(*second.record().generation(), 2);
+    assert!(
+        second
+            .items()
+            .iter()
+            .any(|item| item.id().as_str() == id && *item.reopened())
+    );
+
+    let claimed_again = run(project.path(), home.path(), &["done", &id])?;
+    assert!(claimed_again.status.success());
+    fs::write(
+        project.path().join("src/lib.rs"),
+        "pub fn boom() {}\n\npub fn quiet() {}\n",
+    )
+    .into_diagnostic()?;
+    let fixed = run(project.path(), home.path(), &["submit"])?;
+    assert!(
+        fixed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&fixed.stderr)
+    );
+    assert!(
+        stdout(&fixed).contains(&format!("Cleared claims: {id}.")),
+        "{}",
+        stdout(&fixed)
+    );
+    assert!(
+        !list(&store)?
+            .items()
+            .iter()
+            .any(|item| item.id().as_str() == id)
+    );
+    Ok(())
+}
+
+#[test]
+fn submit_deny_open_scores_and_writes_before_failing() -> miette::Result<()> {
+    cordial::init_tracing();
+    let (project, home, store) = fixture()?;
+    let open = run(project.path(), home.path(), &["open"])?;
+    assert!(open.status.success());
+    let denied = run(project.path(), home.path(), &["submit", "--deny-open"])?;
+    assert!(!denied.status.success());
+    assert!(stdout(&denied).contains("new list written (list 2)"));
+    assert_eq!(*list(&store)?.record().generation(), 2);
+    Ok(())
+}

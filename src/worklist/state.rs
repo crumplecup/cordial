@@ -56,6 +56,12 @@ pub struct ClaimChange {
 }
 
 impl Worklist {
+    /// Mutable items for reconciliation after a completed gate.
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn items_mut(&mut self) -> &mut [WorklistItem] {
+        &mut self.items
+    }
+
     /// Build a fresh list from a completed quality run's checklists.
     ///
     /// The count check prevents a gate from publishing a list that omits

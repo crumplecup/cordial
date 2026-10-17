@@ -1,0 +1,152 @@
+//! Reconcile a completed gate with the claims on the preceding list.
+
+use std::collections::BTreeMap;
+
+use tracing::instrument;
+
+use super::{ItemState, Worklist};
+
+/// A partial survival of identical scoring keys cannot be assigned to ids.
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
+pub struct AmbiguousGroup {
+    ids: Vec<String>,
+    cleared: usize,
+    still_present: usize,
+}
+
+/// Before and after item counts for one quality area.
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
+pub struct AreaScore {
+    priority: u8,
+    area: String,
+    was: usize,
+    now: usize,
+}
+
+/// Definite outcomes from comparing two generations of one worklist.
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
+pub struct Scorecard {
+    checked_off: usize,
+    checked_cleared: usize,
+    checked_reopened: usize,
+    cleared_claim_ids: Vec<String>,
+    reopened_claim_ids: Vec<String>,
+    cleared_without_claim: usize,
+    skipped_carried: usize,
+    new_items: usize,
+    remaining_untouched: usize,
+    ambiguous: Vec<AmbiguousGroup>,
+    per_area: Vec<AreaScore>,
+}
+
+/// Score old items as a multiset and annotate the new list with retained ids.
+#[instrument(level = "debug", skip(previous, current))]
+pub fn score(previous: &Worklist, current: &mut Worklist) -> Scorecard {
+    let mut result = Scorecard {
+        checked_off: previous
+            .items()
+            .iter()
+            .filter(|item| *item.state() == ItemState::Done)
+            .count(),
+        checked_cleared: 0,
+        checked_reopened: 0,
+        cleared_claim_ids: Vec::new(),
+        reopened_claim_ids: Vec::new(),
+        cleared_without_claim: 0,
+        skipped_carried: 0,
+        new_items: 0,
+        remaining_untouched: 0,
+        ambiguous: Vec::new(),
+        per_area: area_scores(previous, current),
+    };
+    let mut old_groups = BTreeMap::<String, Vec<usize>>::new();
+    let mut new_groups = BTreeMap::<String, Vec<usize>>::new();
+    for (index, item) in previous.items().iter().enumerate() {
+        old_groups
+            .entry(item.scoring_key().clone())
+            .or_default()
+            .push(index);
+    }
+    for (index, item) in current.items().iter().enumerate() {
+        new_groups
+            .entry(item.scoring_key().clone())
+            .or_default()
+            .push(index);
+    }
+    for (key, old_indices) in old_groups {
+        let new_indices = new_groups.remove(&key).unwrap_or_default();
+        let old_count = old_indices.len();
+        let new_count = new_indices.len();
+        if new_count == 0 {
+            for index in old_indices {
+                let old = &previous.items()[index];
+                if *old.state() == ItemState::Done {
+                    result.checked_cleared += 1;
+                    result.cleared_claim_ids.push(old.id().as_str().to_string());
+                } else {
+                    result.cleared_without_claim += 1;
+                }
+            }
+            continue;
+        }
+        if new_count < old_count {
+            result.ambiguous.push(AmbiguousGroup {
+                ids: old_indices
+                    .iter()
+                    .map(|&index| previous.items()[index].id().as_str().to_string())
+                    .collect(),
+                cleared: old_count - new_count,
+                still_present: new_count,
+            });
+        }
+        for (&old_index, &new_index) in old_indices.iter().zip(&new_indices) {
+            let old = &previous.items()[old_index];
+            if new_count < old_count {
+                continue;
+            }
+            current.items_mut()[new_index].inherit_identity(old);
+            match old.state() {
+                ItemState::Done => {
+                    result.checked_reopened += 1;
+                    result
+                        .reopened_claim_ids
+                        .push(old.id().as_str().to_string());
+                }
+                ItemState::Skipped => result.skipped_carried += 1,
+                ItemState::Open => result.remaining_untouched += 1,
+            }
+        }
+        result.new_items += new_count.saturating_sub(old_count);
+    }
+    result.new_items += new_groups.values().map(Vec::len).sum::<usize>();
+    current
+        .items_mut()
+        .sort_by_key(|item| (*item.area_priority(), !*item.reopened()));
+    result
+}
+
+#[instrument(level = "debug", skip(previous, current))]
+fn area_scores(previous: &Worklist, current: &Worklist) -> Vec<AreaScore> {
+    let mut scores = BTreeMap::<(u8, String), (usize, usize)>::new();
+    for item in previous.items() {
+        scores
+            .entry((*item.area_priority(), item.area().clone()))
+            .or_default()
+            .0 += 1;
+    }
+    for item in current.items() {
+        scores
+            .entry((*item.area_priority(), item.area().clone()))
+            .or_default()
+            .1 += 1;
+    }
+    scores
+        .into_iter()
+        .map(|((priority, area), (was, now))| AreaScore {
+            priority,
+            area,
+            was,
+            now,
+        })
+        .collect()
+}

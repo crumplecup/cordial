@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 
 use tracing::instrument;
 
-use super::{ItemState, Worklist, WorklistItem};
+use super::{ItemState, Scorecard, Worklist, WorklistItem};
 
 const VERBOSE_LIMIT: usize = 25;
 
@@ -30,11 +30,13 @@ pub fn render_open(list: &Worklist) -> String {
     let position = list.cursor().map_or(0, |index| index + 1);
     let _ = writeln!(
         output,
-        "Item {position} of {} · {} · priority {} · {}",
+        "Item {position} of {} · {} · priority {} · {}{} · list {}",
         list.items().len(),
         item.id().as_str(),
         item.area_priority(),
-        item.area()
+        item.area(),
+        if *item.reopened() { " · reopened" } else { "" },
+        list.record().generation(),
     );
     let _ = writeln!(output, "  {}", item.item_line());
     for detail in item.detail_lines() {
@@ -74,6 +76,91 @@ pub fn render_open(list: &Worklist) -> String {
         output,
         "\nNEXT: fix it, then `cordial done {0}`, or set it aside with `cordial skip {0}`. New here? `cordial instructions`.\n",
         item.id().as_str(),
+    );
+    output
+}
+
+/// Explain how claims on the previous list fared at the new gate.
+#[instrument(level = "trace", skip(previous, current, scorecard))]
+pub fn render_submit(previous: &Worklist, current: &Worklist, scorecard: &Scorecard) -> String {
+    let mut output = String::new();
+    let _ = writeln!(
+        output,
+        "Gate: {} open items remain ({} at the last run).",
+        current.items().len(),
+        previous.items().len()
+    );
+    let ambiguous_claims = scorecard
+        .checked_off()
+        .saturating_sub(*scorecard.checked_cleared() + *scorecard.checked_reopened());
+    let _ = writeln!(
+        output,
+        "Of {} items checked off: {} cleared, {} still open{}.",
+        scorecard.checked_off(),
+        scorecard.checked_cleared(),
+        scorecard.checked_reopened(),
+        if ambiguous_claims == 0 {
+            String::new()
+        } else {
+            format!(", {ambiguous_claims} in ambiguous groups")
+        }
+    );
+    if !scorecard.cleared_claim_ids().is_empty() {
+        let _ = writeln!(
+            output,
+            "Cleared claims: {}.",
+            scorecard.cleared_claim_ids().join(", ")
+        );
+    }
+    if !scorecard.reopened_claim_ids().is_empty() {
+        let _ = writeln!(
+            output,
+            "Reopened claims: {}.",
+            scorecard.reopened_claim_ids().join(", ")
+        );
+    }
+    for group in scorecard.ambiguous() {
+        let _ = writeln!(
+            output,
+            "Ambiguous identical items {}: {} cleared, {} still present; individual ids cannot be assigned.",
+            group.ids().join(", "),
+            group.cleared(),
+            group.still_present()
+        );
+    }
+    let _ = writeln!(
+        output,
+        "{}cleared without being checked off: {}.",
+        if scorecard.ambiguous().is_empty() {
+            "C"
+        } else {
+            "Definitely c"
+        },
+        scorecard.cleared_without_claim()
+    );
+    if *scorecard.skipped_carried() > 0 {
+        let _ = writeln!(
+            output,
+            "Skipped: {}, carried to the new list.",
+            scorecard.skipped_carried()
+        );
+    }
+    let _ = writeln!(output, "New since the last run: {}.", scorecard.new_items());
+    output.push_str("\n Priority  Area                         Was  Now\n");
+    for area in scorecard.per_area() {
+        let _ = writeln!(
+            output,
+            " {:>7}  {:<28} {:>3}  {:>3}",
+            area.priority(),
+            area.area(),
+            area.was(),
+            area.now()
+        );
+    }
+    let _ = write!(
+        output,
+        "\nNEXT: new list written (list {}), reopened items first. `cordial open` shows the first.\n",
+        current.record().generation()
     );
     output
 }

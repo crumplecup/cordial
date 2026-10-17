@@ -383,8 +383,9 @@ pub use session::{
 pub use store::{StoreLayout, SysrootCache, default_store_home, project_slug_from_path};
 #[cfg(feature = "quality")]
 pub use worklist::{
-    BuildRecord, ChecklistSource, ClaimChange, ItemId, ItemSource, ItemState, Validity, Worklist,
-    WorklistItem, WorklistLock, render_open, render_stats,
+    AmbiguousGroup, AreaScore, BuildRecord, ChecklistSource, ClaimChange, ItemId, ItemSource,
+    ItemState, Scorecard, Validity, Worklist, WorklistItem, WorklistLock, render_open,
+    render_stats, render_submit, score,
 };
 #[cfg(feature = "homecoming_std")]
 pub use {

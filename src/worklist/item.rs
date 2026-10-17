@@ -95,6 +95,12 @@ impl WorklistItem {
     pub(super) fn replace_state(&mut self, state: ItemState) -> ItemState {
         std::mem::replace(&mut self.state, state)
     }
+
+    #[instrument(level = "trace", skip(self, old))]
+    pub(super) fn inherit_identity(&mut self, old: &Self) {
+        self.id = old.id.clone();
+        self.reopened = *old.state() == ItemState::Done;
+    }
 }
 
 /// Remove location-only line numbers without changing other item text.

@@ -960,7 +960,7 @@ Release 1:
 - [x] Phase 3: model, ids, parser, build record, gate-side write
 - [x] Phase 4: `stats`, `open`
 - [x] Phase 5: `done`, `skip`, `peek`, hidden `next`
-- [ ] Phase 6: `submit`, scoring
+- [x] Phase 6: `submit`, scoring
 - [ ] Phase 7: `instructions`
 - [ ] Phase 8: agent docs, including the `AGENTS.md` rewrite
 

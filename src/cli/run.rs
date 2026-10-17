@@ -4,7 +4,6 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::SystemTime;
 
 use crate::{
     CordialError, CordialResult, CrateIr, Disposition, Etiquette, Finding, NamedRunFilter, Plugin,
@@ -221,6 +220,7 @@ pub(super) fn execute_run_plugins(
         plugins,
         deny_open,
         write_worklist,
+        false,
     )
 }
 
@@ -235,9 +235,10 @@ pub(super) fn execute_run_plugins_locked(
     plugins: Vec<&'static dyn Plugin>,
     deny_open: bool,
     write_worklist: bool,
+    score_worklist: bool,
 ) -> CordialResult<()> {
     #[cfg(not(feature = "quality"))]
-    let _ = write_worklist;
+    let _ = (write_worklist, score_worklist);
     let effective_store_home = store_home.unwrap_or_else(default_store_home);
     let mut builder = SessionBuilder::new(project_root)
         .with_store_root(store.root().clone())
@@ -249,17 +250,30 @@ pub(super) fn execute_run_plugins_locked(
 
     let session = builder.build();
     let filter = run_filter(crate_name);
-    let run_started = SystemTime::now();
+    #[cfg(feature = "quality")]
+    let run_started = std::time::SystemTime::now();
     let outcome = session.run(filter.as_ref())?;
     let summary = print_run_summary(outcome.as_ref())?;
     #[cfg(feature = "quality")]
     if write_worklist {
+        let previous = if score_worklist {
+            crate::Worklist::read(store)?
+        } else {
+            None
+        };
         let findings = outcome.findings().collect::<Vec<_>>();
         let report = crate::build_quality_report(&findings)?;
         let config = crate::load_cordial_config(project_root, &effective_store_home);
         let source = crate::ChecklistSource::new(store).fresh_since(run_started);
-        let list = crate::Worklist::build(&report, store, &source, &config)?;
+        let mut list = crate::Worklist::build(&report, store, &source, &config)?;
+        let scored = previous.map(|previous| {
+            let scorecard = crate::score(&previous, &mut list);
+            crate::render_submit(&previous, &list, &scorecard)
+        });
         list.write(store)?;
+        if let Some(summary) = scored {
+            write!(io::stdout(), "{summary}")?;
+        }
     }
     progress.notice(format!(
         "Reports available under {}",

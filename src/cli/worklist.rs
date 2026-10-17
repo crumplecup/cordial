@@ -19,6 +19,7 @@ impl Commands {
             Self::Peek => execute_peek(ctx),
             Self::Done { ids } => execute_claim(ctx, &ids, false),
             Self::Skip { ids } => execute_claim(ctx, &ids, true),
+            Self::Submit { deny_open } => execute_submit(ctx, deny_open),
             Self::Stats { verbose, area, all } => execute_stats(ctx, verbose, area.as_deref(), all),
             Self::Next => Err(CordialError::invariant(
                 "Did you mean `cordial done` or `cordial skip`?",
@@ -26,6 +27,37 @@ impl Commands {
             _ => Err(CordialError::invariant("not a worklist command")),
         }
     }
+}
+
+#[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+pub(super) fn execute_submit(ctx: &ActCtx, deny_open: bool) -> CordialResult<()> {
+    let _lock = WorklistLock::exclusive(ctx.store(), "submit", ctx.progress().as_ref())?;
+    let Some(previous) = Worklist::read(ctx.store())? else {
+        writeln!(io::stdout(), "No list yet.\n\nNEXT: cordial open")?;
+        return Err(CordialError::invariant("No current worklist"));
+    };
+    let home = ctx.store_home().clone().unwrap_or_else(default_store_home);
+    let config = load_cordial_config(ctx.project_root(), &home);
+    if previous.validity(&config)? != Validity::Current {
+        writeln!(
+            io::stdout(),
+            "List {} is out of date.\n\nNEXT: cordial open",
+            previous.record().generation()
+        )?;
+        return Err(CordialError::invariant("Worklist is out of date"));
+    }
+    execute_run_plugins_locked(
+        ctx.project_root(),
+        ctx.store(),
+        ctx.crate_name().as_deref(),
+        ctx.store_home().clone(),
+        ctx.progress().clone(),
+        all_plugins(),
+        deny_open,
+        true,
+        true,
+    )?;
+    Ok(())
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
@@ -85,6 +117,7 @@ pub(super) fn execute_open(ctx: &ActCtx) -> CordialResult<()> {
             all_plugins(),
             false,
             true,
+            false,
         )?;
     }
     let mut list = Worklist::read(ctx.store())?
