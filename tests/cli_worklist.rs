@@ -372,6 +372,40 @@ fn submit_deny_open_scores_and_writes_before_failing() -> miette::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "homecoming_std")]
+#[test]
+fn submit_all_uses_the_quality_plugin_set() -> miette::Result<()> {
+    cordial::init_tracing();
+    let (project, home, store) = fixture()?;
+    let opened = run(project.path(), home.path(), &["open"])?;
+    assert!(
+        opened.status.success(),
+        "{}",
+        String::from_utf8_lossy(&opened.stderr)
+    );
+
+    let submitted = run(
+        project.path(),
+        home.path(),
+        &["submit", "--tier", "all", "--json"],
+    )?;
+    assert!(
+        submitted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&submitted.stderr)
+    );
+    let response: serde_json::Value =
+        serde_json::from_slice(&submitted.stdout).into_diagnostic()?;
+    assert_eq!(response["command"], "submit");
+    assert!(
+        response["gate"]["tiers_run"]
+            .as_array()
+            .is_some_and(|tiers| tiers.iter().any(|tier| tier == "deep"))
+    );
+    assert_eq!(*list(&store)?.record().generation(), 2);
+    Ok(())
+}
+
 #[test]
 fn skip_reason_and_pass_count_survive_submit_until_the_stop_limit() -> miette::Result<()> {
     cordial::init_tracing();

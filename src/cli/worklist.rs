@@ -9,7 +9,7 @@ use super::run::execute_run_plugins_locked;
 use crate::worklist::{json_claim, json_error, json_open, json_stats, json_status};
 use crate::{
     CordialError, CordialResult, ItemState, SoftStaleness, Validity, WORKLIST_INSTRUCTIONS,
-    Worklist, WorklistLock, all_plugins, default_store_home, load_cordial_config, render_open,
+    Worklist, WorklistLock, default_store_home, load_cordial_config, quality_plugins, render_open,
     render_stats,
 };
 
@@ -103,7 +103,7 @@ pub(super) fn execute_submit(
         None,
         ctx.store_home().clone(),
         ctx.progress().clone(),
-        all_plugins(),
+        quality_plugins(),
         deny_open,
         true,
         true,
@@ -170,7 +170,7 @@ pub(super) fn execute_open(ctx: &ActCtx, json: bool) -> CordialResult<()> {
             None,
             ctx.store_home().clone(),
             ctx.progress().clone(),
-            all_plugins(),
+            quality_plugins(),
             false,
             true,
             false,

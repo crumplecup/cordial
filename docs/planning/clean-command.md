@@ -36,6 +36,11 @@ copies, and adds `config/`.
 Under `{store_home}/` itself, `sysroot/cache/` is regenerable and shared, and
 `cordial.toml` is curated.
 
+The shared sysroot directory has its own `.cordial-sysroot` marker. Older
+sysroot directories are recognized only when they have the expected
+`cache/rustdoc/` and `cache/builds/` layout. A separate `sysroot.lock` protects
+cache writes and cleaning across projects.
+
 So "wipe the whole cache" means every regenerable path in every project store plus
 the shared sysroot cache. It does not mean deleting `~/.cordial`. A user who wants
 the curated data gone can delete it by hand, which takes a deliberate act and not a
@@ -112,7 +117,7 @@ The command deletes files, so the rules are strict and each is tested.
 
 The store layout owns the classification, next to the paths it describes.
 `StoreLayout` gains `regenerable_paths()` and `curated_paths()`, and `SysrootCache`
-gains `regenerable_paths()`. A test lists the directories `ensure_dirs` creates and
+gains `regenerable_paths()` and its own marker. A test lists the directories `ensure_dirs` creates and
 fails if any is in neither set, so a new store directory has to be classified when
 it is added. Without that, a new directory would be quietly kept or quietly
 deleted by default.
@@ -138,7 +143,9 @@ store it cleans, so it never deletes `cache/` out from under a running gate. For
 project it waits for the lock like every other command, with a progress line naming
 the holder. With `--all` it does not wait: a store that is busy is skipped, listed
 in the output, and counts as a failure for the exit status, since the clean was
-incomplete.
+incomplete. The shared sysroot cache uses a separate lock held during sysroot
+builds; `clean --all` skips that cache and reports an incomplete clean when it
+is busy.
 
 If `clean` ships before that lock exists, it ships without it, and the command's
 help says not to run it during a gate.
@@ -212,17 +219,17 @@ Tests live in `tests/`, against temporary stores.
 
 ## Decisions to settle
 
-- **Reports with the cache.** `clean` removes `findings/` along with `cache/`.
-  Reports are small and are rebuilt by the next run, so removing them keeps the
-  store consistent. The alternative is to remove only `cache/` by default and offer
-  a second option for reports.
+- **Reports with the cache (decided).** `clean` removes `findings/` along with
+  `cache/`. Reports are rebuilt by the next run.
+- **Shared sysroot safety (decided).** Recognize the sysroot by its marker or
+  legacy layout, and hold a separate lock during sysroot builds and cleaning.
 - **Finer scopes.** A way to remove only the build output (`rustdoc-target`), the
   largest and slowest-to-rebuild part, would let a user reclaim space without
   losing the cheaper caches. It is left out until someone asks.
 
 ## Status
 
-- [ ] Phase 1: classify the layout, marker
+- [x] Phase 1: classify the layout, marker
 - [ ] Phase 2: `plan_clean`, `run_clean`
 - [ ] Phase 3: `cordial clean`, `--all`, `--dry-run`
 - [ ] Phase 4: store lock

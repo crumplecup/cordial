@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::{fs::OpenOptions, io::ErrorKind};
 
 use tracing::instrument;
 
@@ -37,7 +38,31 @@ impl StoreLayout {
         std::fs::create_dir_all(self.cache_dir())?;
         std::fs::create_dir_all(self.findings_dir())?;
         std::fs::create_dir_all(self.exceptions_dir())?;
+        write_marker(&self.marker_path())?;
         Ok(())
+    }
+
+    /// Marker identifying a project store, including after its cache is cleaned.
+    #[instrument(level = "trace", skip(self))]
+    pub fn marker_path(&self) -> PathBuf {
+        self.root.join(".cordial-store")
+    }
+
+    /// Paths that can be rebuilt by another Cordial run.
+    #[instrument(level = "trace", skip(self))]
+    pub fn regenerable_paths(&self) -> Vec<PathBuf> {
+        vec![self.cache_dir(), self.findings_dir(), self.worklist_path()]
+    }
+
+    /// Paths that contain user-maintained data and must survive cleaning.
+    #[instrument(level = "trace", skip(self))]
+    pub fn curated_paths(&self) -> Vec<PathBuf> {
+        vec![
+            self.exceptions_dir(),
+            self.quality_patches_dir(),
+            self.patches_dir(),
+            self.config_dir(),
+        ]
     }
 
     /// Directory for cached IR and rustdoc artifacts.
@@ -194,12 +219,31 @@ impl SysrootCache {
         Self { root: root.into() }
     }
 
-    /// Create cache, findings, and exceptions directories if missing.
+    /// Create the shared cache directories and identifying marker if missing.
     #[instrument(level = "info", skip(self), err(level = "warn"))]
     pub fn ensure_dirs(&self) -> CordialResult<()> {
         std::fs::create_dir_all(self.rustdoc_cache_dir())?;
         std::fs::create_dir_all(self.builds_dir())?;
+        write_marker(&self.marker_path())?;
         Ok(())
+    }
+
+    /// Marker identifying the shared sysroot cache.
+    #[instrument(level = "trace", skip(self))]
+    pub fn marker_path(&self) -> PathBuf {
+        self.root.join(".cordial-sysroot")
+    }
+
+    /// Shared artifacts that can be rebuilt for the installed toolchain.
+    #[instrument(level = "trace", skip(self))]
+    pub fn regenerable_paths(&self) -> Vec<PathBuf> {
+        vec![self.cache_dir()]
+    }
+
+    /// Advisory lock file for shared sysroot cache writes and cleaning.
+    #[instrument(level = "trace", skip(self))]
+    pub fn lock_path(&self) -> PathBuf {
+        self.root.join("sysroot.lock")
     }
 
     /// Directory for cached IR and rustdoc artifacts.
@@ -243,6 +287,21 @@ impl Default for SysrootCache {
     #[instrument(level = "debug", ret)]
     fn default() -> Self {
         Self::default_cache()
+    }
+}
+
+#[instrument(level = "info", skip(path), err(level = "warn"))]
+fn write_marker(path: &Path) -> CordialResult<()> {
+    match OpenOptions::new().write(true).create_new(true).open(path) {
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::AlreadyExists => {
+            if path.symlink_metadata()?.file_type().is_file() {
+                Ok(())
+            } else {
+                Err(error.into())
+            }
+        }
+        Err(error) => Err(error.into()),
     }
 }
 
