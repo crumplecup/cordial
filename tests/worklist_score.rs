@@ -1,5 +1,6 @@
 use miette::IntoDiagnostic;
 use serde_json::{Value, json};
+use std::collections::BTreeSet;
 
 fn item(id: &str, state: &str) -> Value {
     json!({
@@ -54,5 +55,41 @@ fn partial_identical_key_survival_stays_ambiguous() -> miette::Result<()> {
     assert_eq!(*result.ambiguous()[0].cleared(), 1);
     assert_eq!(*result.ambiguous()[0].still_present(), 2);
     assert!(current.items().iter().all(|item| !*item.reopened()));
+    Ok(())
+}
+
+#[test]
+fn skipped_tier_claim_is_carried_without_scoring_or_advancing() -> miette::Result<()> {
+    cordial::init_tracing();
+    let mut deep = item("deep-item", "done");
+    deep["checklist"] = json!("feature-warnings.checklist.md");
+    deep["scoring_key"] = json!("deep-key");
+    deep["pass_count"] = json!(2);
+    let mut quick = item("quick-item", "open");
+    quick["scoring_key"] = json!("quick-key");
+    let previous = worklist(vec![deep, quick.clone()])?;
+    let mut current = worklist(vec![quick])?;
+    let verified = BTreeSet::from(["panics.checklist.md".to_string()]);
+    let result = cordial::score_verified(&previous, &mut current, &verified);
+    assert_eq!(*result.checked_off(), 0);
+    assert_eq!(*result.checked_cleared(), 0);
+    assert!(result.cleared_claim_ids().is_empty());
+    assert_eq!(current.carry_unverified(&previous, &verified), 1);
+    let deep = current
+        .items()
+        .iter()
+        .find(|item| item.id().as_str() == "deep-item")
+        .ok_or_else(|| miette::miette!("missing carried item"))?;
+    assert!(*deep.unverified());
+    assert_eq!(*deep.state(), cordial::ItemState::Done);
+    assert_eq!(*deep.pass_count(), 2);
+    assert!(
+        cordial::render_stats(&current, false, None, false)
+            .contains("Unverified from tiers not run: 1 item(s).")
+    );
+    assert!(
+        cordial::render_stats(&current, true, None, true)
+            .contains("deep-item  same item (on its 2nd list; unverified: tier not run)")
+    );
     Ok(())
 }

@@ -259,12 +259,20 @@ pub(super) fn execute_run_plugins_locked(
         .with_store_root(store.root().clone())
         .with_store_home(effective_store_home.clone())
         .with_progress_sink(progress.clone());
-    for plugin in plugins {
-        builder = builder.register_plugin(plugin);
+    for plugin in &plugins {
+        builder = builder.register_plugin(*plugin);
     }
 
     let session = builder.build();
     let filter = run_filter(crate_name, tiers, etiquette);
+    #[cfg(feature = "quality")]
+    let config = crate::load_cordial_config(project_root, &effective_store_home);
+    #[cfg(feature = "quality")]
+    let tier_selection = crate::TierSelection::resolve(
+        &etiquettes_from_plugins(&plugins, &session),
+        &config,
+        tiers,
+    )?;
     #[cfg(feature = "quality")]
     let run_started = std::time::SystemTime::now();
     let outcome = session.run(filter.as_ref())?;
@@ -278,11 +286,17 @@ pub(super) fn execute_run_plugins_locked(
         };
         let findings = outcome.findings().collect::<Vec<_>>();
         let report = crate::build_quality_report(&findings)?;
-        let config = crate::load_cordial_config(project_root, &effective_store_home);
         let source = crate::ChecklistSource::new(store).fresh_since(run_started);
-        let mut list = crate::Worklist::build(&report, store, &source, &config)?;
+        let selected_tiers = tier_selection.names().iter().cloned().collect();
+        let mut list =
+            crate::Worklist::build_with_tiers(&report, store, &source, &config, selected_tiers)?;
+        let verified: std::collections::BTreeSet<String> = outcome
+            .artifacts()
+            .map(|artifact| artifact.name().to_string())
+            .collect();
         let scored = previous.map(|previous| {
-            let scorecard = crate::score(&previous, &mut list);
+            let scorecard = crate::worklist::score_verified(&previous, &mut list, &verified);
+            list.carry_unverified(&previous, &verified);
             crate::render_submit(&previous, &list, &scorecard)
         });
         list.write(store)?;

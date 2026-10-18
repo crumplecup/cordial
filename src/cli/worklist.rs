@@ -54,7 +54,11 @@ pub(super) fn execute_submit(ctx: &ActCtx, deny_open: bool, tiers: &[String]) ->
         ctx.project_root(),
         ctx.store(),
         ctx.crate_name().as_deref(),
-        (!tiers.is_empty()).then_some(tiers),
+        Some(if tiers.is_empty() {
+            previous.record().tiers()
+        } else {
+            tiers
+        }),
         None,
         ctx.store_home().clone(),
         ctx.progress().clone(),

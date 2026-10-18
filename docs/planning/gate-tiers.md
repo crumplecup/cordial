@@ -303,4 +303,4 @@ The tier selection becomes part of the worklist snapshot, replacing the
 - [x] Phase 4: selection, config, `--tier`
 - [x] Phase 5: report handling for tiers that did not run
 - [x] Phase 6: `cordial tiers` and explain output
-- [ ] Phase 7: worklist integration
+- [x] Phase 7: worklist integration

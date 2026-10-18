@@ -35,7 +35,13 @@ pub fn render_open(list: &Worklist) -> String {
         item.id().as_str(),
         item.area_priority(),
         item.area(),
-        if *item.reopened() { " · reopened" } else { "" },
+        if *item.unverified() {
+            " · unverified (tier not run)"
+        } else if *item.reopened() {
+            " · reopened"
+        } else {
+            ""
+        },
         list.record().generation(),
         ordinal(*item.pass_count()),
     );
@@ -130,6 +136,17 @@ pub fn render_submit(previous: &Worklist, current: &Worklist, scorecard: &Scorec
             scorecard.reopened_claim_ids().join(", ")
         );
     }
+    let unverified = current
+        .items()
+        .iter()
+        .filter(|item| *item.unverified())
+        .count();
+    if unverified > 0 {
+        let _ = writeln!(
+            output,
+            "Unverified from tiers not run: {unverified} item(s)."
+        );
+    }
     for group in scorecard.ambiguous() {
         let _ = writeln!(
             output,
@@ -214,6 +231,18 @@ pub fn render_stats(list: &Worklist, verbose: bool, area: Option<&str>, all: boo
         list.open_count(),
         list.record().generation()
     );
+    let _ = writeln!(output, "Tiers: {}.", list.record().tiers().join(", "));
+    let unverified = list
+        .items()
+        .iter()
+        .filter(|item| *item.unverified())
+        .count();
+    if unverified > 0 {
+        let _ = writeln!(
+            output,
+            "Unverified from tiers not run: {unverified} item(s)."
+        );
+    }
     let selected: Vec<&WorklistItem> = list
         .items()
         .iter()
@@ -319,10 +348,15 @@ fn render_verbose(output: &mut String, items: &[&WorklistItem], list: &Worklist,
         };
         let _ = writeln!(
             output,
-            "  [{mark}] {}  {} (on its {} list)",
+            "  [{mark}] {}  {} (on its {} list{})",
             item.id().as_str(),
             item.item_line(),
-            ordinal(*item.pass_count())
+            ordinal(*item.pass_count()),
+            if *item.unverified() {
+                "; unverified: tier not run"
+            } else {
+                ""
+            }
         );
         render_skip_reasons(output, item);
         if item.needs_user(*list.max_passes()) {

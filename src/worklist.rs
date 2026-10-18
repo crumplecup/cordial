@@ -16,7 +16,7 @@ pub(crate) use instructions::{
 pub use item::{ItemId, ItemState, WorklistItem};
 pub use lock::WorklistLock;
 pub use render::{render_open, render_stats, render_submit};
-pub use score::{AmbiguousGroup, AreaScore, Scorecard, score};
+pub use score::{AmbiguousGroup, AreaScore, Scorecard, score, score_verified};
 pub use source::{ChecklistSource, ItemSource};
 pub use staleness::SoftStaleness;
 pub use state::{BuildRecord, ClaimChange, Validity, Worklist};

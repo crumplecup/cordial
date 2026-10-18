@@ -663,6 +663,96 @@ fn cli_tiers_and_explain_use_project_assignment() -> miette::Result<()> {
 }
 
 #[test]
+fn cli_submit_carries_unverified_claim_and_repeats_tier() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("project")?;
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    write_minimal_crate(
+        fixture.path(),
+        include_str!("fixtures/panics/cli_quality.rs"),
+    )?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[tiers.assign]\nfuture_etiquette = \"empty\"\n",
+    )
+    .into_diagnostic()
+    .wrap_err("tier config")?;
+    let project = utf8_path(fixture.path())?;
+    let home = utf8_path(store.path())?;
+    let run = |args: &[&str]| -> miette::Result<String> {
+        let output = cordial_command()
+            .env("CORDIAL_NO_PROGRESS", "1")
+            .args(["--project", project, "--store-home", home])
+            .args(args)
+            .output()
+            .into_diagnostic()
+            .wrap_err("run cordial")?;
+        assert!(
+            output.status.success(),
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    };
+    run(&["quality", "--etiquette", "panics"])?;
+    let layout = cordial::StoreLayout::from_root(
+        store
+            .path()
+            .join(cordial::project_slug_from_path(fixture.path())),
+        cordial::project_slug_from_path(fixture.path()),
+    );
+    let first = cordial::Worklist::read(&layout)
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("missing list"))?;
+    let claim = first
+        .items()
+        .iter()
+        .find(|item| *item.state() == cordial::ItemState::Open)
+        .ok_or_else(|| miette::miette!("missing open item"))?
+        .id()
+        .as_str()
+        .to_string();
+    run(&["done", &claim])?;
+    let skipped = run(&["submit", "--tier", "empty"])?;
+    assert!(skipped.contains("Unverified from tiers not run:"));
+    assert!(!skipped.contains("Cleared claims:"));
+    let carried = cordial::Worklist::read(&layout)
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("missing carried list"))?;
+    assert_eq!(carried.record().tiers(), &["empty"]);
+    let item = carried
+        .items()
+        .iter()
+        .find(|item| item.id().as_str() == claim)
+        .ok_or_else(|| miette::miette!("claim disappeared"))?;
+    assert!(*item.unverified());
+    assert_eq!(*item.state(), cordial::ItemState::Done);
+    run(&["submit"])?;
+    let repeated = cordial::Worklist::read(&layout)
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("missing repeated list"))?;
+    assert_eq!(repeated.record().tiers(), &["empty"]);
+    assert!(
+        repeated
+            .items()
+            .iter()
+            .any(|item| item.id().as_str() == claim && *item.unverified())
+    );
+    let verified = run(&["submit", "--tier", "quick"])?;
+    assert!(verified.contains("Reopened claims:"));
+    let fresh = cordial::Worklist::read(&layout)
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("missing verified list"))?;
+    assert!(
+        fresh
+            .items()
+            .iter()
+            .any(|item| item.id().as_str() == claim && !*item.unverified())
+    );
+    Ok(())
+}
+
+#[test]
 fn cli_explain_rule_id_prints_page() -> miette::Result<()> {
     cordial::init_tracing();
     let output = cordial_command()

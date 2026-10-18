@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -22,6 +23,7 @@ pub struct BuildRecord {
     generation: u64,
     built_at_unix_secs: u64,
     project_slug: String,
+    #[serde(default = "legacy_tiers")]
     tiers: Vec<String>,
 }
 
@@ -76,6 +78,18 @@ impl Worklist {
         source: &dyn ItemSource,
         config: &CordialConfig,
     ) -> CordialResult<Self> {
+        Self::build_with_tiers(report, store, source, config, legacy_tiers())
+    }
+
+    /// Build a list that records the effective tier selection of this gate.
+    #[instrument(level = "debug", skip(report, store, source, config, tiers))]
+    pub fn build_with_tiers(
+        report: &QualityReport,
+        store: &StoreLayout,
+        source: &dyn ItemSource,
+        config: &CordialConfig,
+        tiers: Vec<String>,
+    ) -> CordialResult<Self> {
         let mut items = Vec::new();
         for area in report.areas() {
             let from_area = source.items(area)?;
@@ -104,7 +118,7 @@ impl Worklist {
             generation,
             built_at_unix_secs,
             project_slug: store.project_slug().clone(),
-            tiers: vec!["all".to_string()],
+            tiers,
         };
         Ok(Self {
             record,
@@ -112,6 +126,30 @@ impl Worklist {
             cursor: None,
             max_passes: config.worklist().max_passes().max(1),
         })
+    }
+
+    /// Preserve prior items whose checklist was not verified in this run.
+    #[instrument(level = "debug", skip(self, previous, verified_checklists))]
+    pub fn carry_unverified(
+        &mut self,
+        previous: &Self,
+        verified_checklists: &BTreeSet<String>,
+    ) -> usize {
+        let carried: Vec<_> = previous
+            .items()
+            .iter()
+            .filter(|item| !verified_checklists.contains(item.checklist()))
+            .map(|item| {
+                let mut item = item.clone();
+                item.mark_unverified();
+                item
+            })
+            .collect();
+        let count = carried.len();
+        self.items.extend(carried);
+        self.items
+            .sort_by_key(|item| (*item.area_priority(), !*item.reopened()));
+        count
     }
 
     /// Read the current list, if one exists.
@@ -283,6 +321,11 @@ impl Worklist {
         }
         Ok(changes)
     }
+}
+
+#[instrument(level = "trace")]
+fn legacy_tiers() -> Vec<String> {
+    vec!["all".to_string()]
 }
 
 #[instrument(level = "debug", skip(config))]

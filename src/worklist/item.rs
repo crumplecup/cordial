@@ -54,6 +54,8 @@ pub struct WorklistItem {
     pass_count: u32,
     #[serde(default)]
     skip_reasons: Vec<String>,
+    #[serde(default)]
+    unverified: bool,
 }
 
 impl WorklistItem {
@@ -89,6 +91,7 @@ impl WorklistItem {
             reopened: false,
             pass_count: first_pass(),
             skip_reasons: Vec::new(),
+            unverified: false,
         }
     }
 
@@ -116,6 +119,11 @@ impl WorklistItem {
     #[instrument(level = "trace", skip(self, reason))]
     pub(super) fn add_skip_reason(&mut self, reason: &str) {
         self.skip_reasons.push(reason.to_string());
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn mark_unverified(&mut self) {
+        self.unverified = true;
     }
 
     /// Whether this still-open item needs the user's guidance.
