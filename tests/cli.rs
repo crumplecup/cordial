@@ -659,7 +659,7 @@ fn cli_tiers_and_explain_use_project_assignment() -> miette::Result<()> {
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     };
     let tiers = run(&["tiers"])?;
-    assert!(tiers.contains("Default tiers: quick, build"));
+    assert!(tiers.contains("Default tiers: build"));
     assert!(tiers.contains("deep:\n"));
     assert!(tiers.contains("doc_warnings (config)"));
     let list = run(&["explain"])?;

@@ -44,7 +44,6 @@ max_type_nodes = 64
 
 # The expensive feature powerset runs in the deep tier.
 [feature_warnings]
-enabled = true
 depth = 2
 # A gate naming more features than this is too wide to read; the checklist
 # then advises a private (`_`-prefixed) feature that each of them enables.

@@ -33,7 +33,7 @@ impl TierSelection {
                 .map(|etiquette| etiquette.tier().as_str().to_string()),
         );
         let selected = requested.unwrap_or(config.tiers().default());
-        let names = if selected.iter().any(|tier| tier == "all") {
+        let mut names = if selected.iter().any(|tier| tier == "all") {
             if selected.len() != 1 {
                 return Err(CordialError::invariant(
                     "`all` must be the only tier requested",
@@ -51,6 +51,12 @@ impl TierSelection {
             }
             selected.iter().cloned().collect()
         };
+        if names.contains(Tier::DEEP) {
+            names.insert(Tier::BUILD.to_string());
+        }
+        if names.contains(Tier::BUILD) {
+            names.insert(Tier::QUICK.to_string());
+        }
         Ok(Self { names })
     }
 

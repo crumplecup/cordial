@@ -62,12 +62,38 @@ fn resolves_defaults_unions_and_project_assignments() -> miette::Result<()> {
         .iter()
         .find(|etiquette| etiquette.id() == "dependency_freshness")
         .ok_or_else(|| miette::miette!("dependency freshness unavailable"))?;
+    let panics = etiquettes
+        .iter()
+        .find(|etiquette| etiquette.id() == "panics")
+        .ok_or_else(|| miette::miette!("panics unavailable"))?;
+    assert_eq!(config.tiers().default(), &["build"]);
+    assert!(defaults.includes(panics.as_ref(), &config));
     assert!(defaults.includes(antipatterns.as_ref(), &config));
     assert!(!defaults.includes(freshness.as_ref(), &config));
 
+    let quick = ["quick".to_string()];
+    let selected = TierSelection::resolve(&etiquettes, &config, Some(&quick)).into_diagnostic()?;
+    assert!(selected.includes(panics.as_ref(), &config));
+    assert!(!selected.includes(antipatterns.as_ref(), &config));
+    assert!(!selected.includes(freshness.as_ref(), &config));
+
+    let build = ["build".to_string()];
+    let selected = TierSelection::resolve(&etiquettes, &config, Some(&build)).into_diagnostic()?;
+    assert_eq!(selected.names().len(), 2);
+    assert!(selected.includes(panics.as_ref(), &config));
+    assert!(selected.includes(antipatterns.as_ref(), &config));
+    assert!(!selected.includes(freshness.as_ref(), &config));
+
+    let deep = ["deep".to_string()];
+    let selected = TierSelection::resolve(&etiquettes, &config, Some(&deep)).into_diagnostic()?;
+    assert_eq!(selected.names().len(), 3);
+    assert!(selected.includes(panics.as_ref(), &config));
+    assert!(selected.includes(antipatterns.as_ref(), &config));
+    assert!(selected.includes(freshness.as_ref(), &config));
+
     let union = ["quick".to_string(), "deep".to_string()];
     let selected = TierSelection::resolve(&etiquettes, &config, Some(&union)).into_diagnostic()?;
-    assert!(!selected.includes(antipatterns.as_ref(), &config));
+    assert!(selected.includes(antipatterns.as_ref(), &config));
     assert!(selected.includes(freshness.as_ref(), &config));
 
     fs::write(
@@ -79,6 +105,7 @@ fn resolves_defaults_unions_and_project_assignments() -> miette::Result<()> {
     let selected = TierSelection::resolve(&etiquettes, &config, None).into_diagnostic()?;
     assert_eq!(assigned_tier(antipatterns.as_ref(), &config).as_str(), "ci");
     assert!(selected.includes(antipatterns.as_ref(), &config));
+    assert!(!selected.includes(panics.as_ref(), &config));
     assert!(!selected.includes(freshness.as_ref(), &config));
 
     let unknown = ["missing".to_string()];

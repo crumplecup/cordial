@@ -141,7 +141,7 @@ the current item and has just fixed it.
 ### Starting a list
 
 `open` is the entry point. When there is no list, it runs the gate with the
-project's default tiers (`quick` and `build` unless configured otherwise),
+project's default tier (`build`, which includes `quick`, unless configured otherwise),
 writes the list, and shows the first item, so the agent never has to be told to
 run another command first. When the list exists but is no longer
 valid (see [When a list is no longer valid](#when-a-list-is-no-longer-valid)),

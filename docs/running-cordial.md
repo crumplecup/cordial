@@ -185,8 +185,10 @@ condition it covered no longer exists.
 
 ## Quality
 
-`cordial quality` runs the configured default tiers (`quick` and `build` by
-default). Use `--tier all` to run every compiled source-quality etiquette.
+`cordial quality` runs the configured default tier (`build` by default, which
+includes `quick`). `--tier deep` also includes `build` and `quick`. Use
+`--tier all` to run every compiled source-quality etiquette, including any
+project-defined tiers.
 Reports show unselected areas as not run and label earlier checklists stale.
 Quality `--apply` rewrites source only for supported apply paths:
 

@@ -38,7 +38,10 @@ fn render_tiers(etiquettes: &[&dyn Etiquette], config: &CordialConfig) -> String
             .or_default()
             .push(*etiquette);
     }
-    let mut body = format!("Default tiers: {}\n", config.tiers().default().join(", "));
+    let mut body = format!(
+        "Default tiers: {}\nBuilt-in levels: quick < build < deep (cumulative)\n",
+        config.tiers().default().join(", ")
+    );
     let mut order: Vec<String> = [Tier::QUICK, Tier::BUILD, Tier::DEEP]
         .into_iter()
         .map(str::to_string)

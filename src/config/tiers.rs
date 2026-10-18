@@ -20,7 +20,7 @@ pub struct TierConfig {
 
 #[instrument(level = "debug")]
 fn default_tiers() -> Vec<String> {
-    vec![Tier::QUICK.to_string(), Tier::BUILD.to_string()]
+    vec![Tier::BUILD.to_string()]
 }
 
 impl Default for TierConfig {

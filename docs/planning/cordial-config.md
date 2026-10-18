@@ -22,7 +22,7 @@ line `cordial explain` points at. Per-site suppressions stay on
 
 ```toml
 [tiers]
-# default = ["quick", "build"]
+# default = ["build"]  # also runs quick checks
 # `--tier all` runs every known tier, including `deep`.
 
 [tiers.assign]

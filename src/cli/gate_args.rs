@@ -6,7 +6,7 @@ use tracing::instrument;
 /// Cost and etiquette selection shared by run, quality, and coverage.
 #[derive(Args, Default)]
 pub struct GateSelectionArgs {
-    /// Select one or more tiers; `all` includes every known tier.
+    /// Select a tier and lower built-in tiers; `all` includes every known tier.
     #[arg(long = "tier", value_delimiter = ',')]
     tiers: Vec<String>,
     /// Run one named etiquette, regardless of its tier.

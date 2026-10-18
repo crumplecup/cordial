@@ -43,9 +43,12 @@ user-defined tier is a new name and nothing more.
 | `build` | Expensive cold setup or build, cheap once caches are warm |
 | `deep` | Expensive even warm, or depends on the network or a toolchain that is slow to run |
 
-**Selecting tiers.** One run selects one or more tiers. With no flag, the run
-selects the project's default tiers (see Configuration). Three rules settle the
-interactions with the existing selectors:
+**Selecting tiers.** Built-in tiers are cumulative: `quick` runs quick checks,
+`build` runs quick and build checks, and `deep` runs quick, build, and deep
+checks. `all` also includes any project-defined tiers. Multiple requested names
+form a union; project-defined tiers have no implied order. With no flag, the
+run selects the project's default selection (see Configuration). Three rules settle
+the interactions with the existing selectors:
 
 - `enabled = false` always wins. A tier never turns on an etiquette the project
   switched off.
@@ -161,7 +164,7 @@ itself; a person reads `timings.md` and updates the table or the config.
 ```toml
 [tiers]
 # Tiers a run selects when no --tier flag is given.
-default = ["quick", "build"]
+default = ["build"]
 
 # Reassign an etiquette, or place it in a tier of your own.
 [tiers.assign]
@@ -172,7 +175,7 @@ panics = "pre-commit"
 ```
 
 - `default` names the tiers a bare `cordial run` or `cordial quality` selects.
-  Its default value is `quick` and `build`, which keeps `deep` opt-in.
+  Its default value is `build`, which includes `quick` and keeps `deep` opt-in.
 - `assign` maps an etiquette id to a tier. It overrides the built-in table and
   the etiquette's own declaration. An id not in the table keeps its tier.
 - Unknown tier names in `default` or on the command line are an error that lists
@@ -185,7 +188,7 @@ panics = "pre-commit"
 
 | Command | What it does |
 | --- | --- |
-| `--tier <name>[,<name>]` on `run`, `quality`, `coverage`, and `submit` | Select tiers for this run. `--tier all` selects every tier |
+| `--tier <name>[,<name>]` on `run`, `quality`, `coverage`, and `submit` | Select the named tier and lower built-in tiers. `--tier all` selects every tier |
 | `cordial tiers` | List tiers, their etiquettes, and where each assignment came from (built-in, plugin, config) |
 | `cordial timings` | Measure cold and warm cost per etiquette and write `timings.md` and `timings.json` |
 
@@ -273,7 +276,8 @@ The tier selection becomes part of the worklist snapshot, replacing the
 
 ## Verification
 
-- Tests under `tests/` for tier resolution: default tiers, `--tier` unions,
+- Tests under `tests/` for tier resolution: cumulative built-in tiers, the
+  default tier, `--tier` unions,
   `enabled = false` beating a tier, `--etiquette` beating a tier, unknown tier
   names, and config assignment overriding the built-in table.
 - A report test for an unselected area: it shows "not run" and its previous
@@ -285,9 +289,8 @@ The tier selection becomes part of the worklist snapshot, replacing the
 
 ## Decisions to settle
 
-- **Default tiers.** `quick` and `build` keeps today's behavior apart from
-  `feature_warnings`, and keeps `deep` opt-in. The alternative is `quick` alone,
-  which makes the default run much cheaper and moves more checks behind a flag.
+- **Default tier.** `build` includes `quick`, preserving today's default
+  coverage while keeping `deep` opt-in.
 - **Tier names.** `quick`, `build`, and `deep` describe cost. If the `build` name
   suggests the etiquette compiles the user's code, `cargo` is a closer fit.
 - **Where timings run.** `cordial timings` uses a temporary target directory so it
