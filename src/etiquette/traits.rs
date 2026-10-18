@@ -15,6 +15,11 @@ pub trait Etiquette: Send + Sync {
     /// Human-readable display name for reports and `cordial explain`.
     fn name(&self) -> &str;
 
+    /// Default tier for a plugin etiquette; project assignments can override it.
+    fn tier(&self) -> crate::Tier {
+        crate::Tier::default()
+    }
+
     /// Why this check exists, what it flags, and how to opt out.
     ///
     /// Required: a new etiquette that forgets this is a compile error, not a

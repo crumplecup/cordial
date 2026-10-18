@@ -11,7 +11,7 @@ use crate::hooks::WorkspaceAssessView;
 use crate::objects::{Artifact, Finding};
 
 use crate::store::StoreLayout;
-use crate::{GateLedger, HookTiming, HookTimings};
+use crate::{GateLedger, HookTiming, HookTimings, TierSelection};
 
 use super::resolve::{
     dedupe_assessors, dedupe_enrichers, dedupe_loaders, dedupe_probes, dedupe_reporters,
@@ -91,9 +91,14 @@ pub(super) fn run_session(
         session,
     );
     let config = crate::load_session_config(session);
+    let selection = TierSelection::resolve(&etiquettes, &config, filter.tiers())?;
+    let explicit = filter.etiquettes().is_some();
     let etiquettes: Vec<Arc<dyn Etiquette>> = etiquettes
         .into_iter()
-        .filter(|etiquette| config.etiquette_enabled(etiquette.id()))
+        .filter(|etiquette| {
+            config.etiquette_enabled(etiquette.id())
+                && (explicit || selection.includes(etiquette.as_ref(), &config))
+        })
         .collect();
     if etiquettes.is_empty() {
         setup.finish("No enabled etiquettes".to_string());
@@ -201,7 +206,7 @@ pub(super) fn run_session(
 
     if !session.measurement_mode() {
         let mut ledger = GateLedger::read(&store)?;
-        ledger.record_run(&etiquettes, &all_findings, &timings)?;
+        ledger.record_run(&etiquettes, &all_findings, &timings, &config)?;
         ledger.write(&store)?;
     }
 

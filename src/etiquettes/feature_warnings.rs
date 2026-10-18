@@ -22,8 +22,8 @@
 //! **Outputs.** `{store}/findings/feature-warnings.checklist.md`,
 //! `feature-warnings-summary.md`, and CSV.
 //!
-//! **Config.** `[feature_warnings]` owns `enabled` (off by default: the
-//! powerset is many cold checks), `depth`, `exclude_features`,
+//! **Config.** `[feature_warnings]` owns `enabled` (on by default in the
+//! `deep` tier), `depth`, `exclude_features`,
 //! `group_features`, `include_universal`, and `skip_crates`. Register
 //! [`FEATURE_WARNINGS_ETIQUETTE`]. Policy:
 //! `docs/planning/feature-warnings-etiquette.md`.

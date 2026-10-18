@@ -198,6 +198,8 @@ pub(super) fn execute_run_plugins(
     project_root: &Path,
     store: &StoreLayout,
     crate_name: Option<&str>,
+    tiers: Option<&[String]>,
+    etiquette: Option<&str>,
     store_home: Option<PathBuf>,
     progress: Arc<dyn ProgressSink>,
     plugins: Vec<&'static dyn Plugin>,
@@ -215,6 +217,8 @@ pub(super) fn execute_run_plugins(
         project_root,
         store,
         crate_name,
+        tiers,
+        etiquette,
         store_home,
         progress,
         plugins,
@@ -230,6 +234,8 @@ pub(super) fn execute_run_plugins_locked(
     project_root: &Path,
     store: &StoreLayout,
     crate_name: Option<&str>,
+    tiers: Option<&[String]>,
+    etiquette: Option<&str>,
     store_home: Option<PathBuf>,
     progress: Arc<dyn ProgressSink>,
     plugins: Vec<&'static dyn Plugin>,
@@ -249,7 +255,7 @@ pub(super) fn execute_run_plugins_locked(
     }
 
     let session = builder.build();
-    let filter = run_filter(crate_name);
+    let filter = run_filter(crate_name, tiers, etiquette);
     #[cfg(feature = "quality")]
     let run_started = std::time::SystemTime::now();
     let outcome = session.run(filter.as_ref())?;
@@ -286,13 +292,25 @@ pub(super) fn execute_run_plugins_locked(
 }
 
 #[instrument(level = "info", fields(crate_name = crate_name))]
-fn run_filter(crate_name: Option<&str>) -> RunFilterChoice {
-    match crate_name {
-        Some(crate_name) => {
-            RunFilterChoice::Named(NamedRunFilter::all_plugins().with_crate(crate_name.to_string()))
-        }
-        None => RunFilterChoice::All(RunAll),
+fn run_filter(
+    crate_name: Option<&str>,
+    tiers: Option<&[String]>,
+    etiquette: Option<&str>,
+) -> RunFilterChoice {
+    if crate_name.is_none() && tiers.is_none() && etiquette.is_none() {
+        return RunFilterChoice::All(RunAll);
     }
+    let mut filter = match etiquette {
+        Some(id) => NamedRunFilter::etiquettes([id]),
+        None => NamedRunFilter::all_plugins(),
+    };
+    if let Some(crate_name) = crate_name {
+        filter = filter.with_crate(crate_name);
+    }
+    if let Some(tiers) = tiers {
+        filter = filter.with_tiers(tiers);
+    }
+    RunFilterChoice::Named(filter)
 }
 
 enum RunFilterChoice {

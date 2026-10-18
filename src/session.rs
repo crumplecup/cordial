@@ -76,6 +76,10 @@ pub trait RunFilter: Send + Sync {
     /// etiquettes are merged with plugin-provided etiquettes before this filter
     /// is applied.
     fn etiquettes(&self) -> Option<&[String]>;
+    /// Cost tiers selected for this run; `None` uses the project default.
+    fn tiers(&self) -> Option<&[String]> {
+        None
+    }
     /// Workspace crate names to analyze.
     ///
     /// This is a multi-crate selector. If [`Self::crate_name`] returns

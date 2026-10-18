@@ -143,7 +143,7 @@ that is gated out of most combinations reads as widely used.
 
 ```toml
 [feature_warnings]
-# enabled = false              # off by default: minutes of cold checks
+# enabled = true               # selected by the deep tier
 # depth = 2                    # powerset depth
 # exclude_features = ["slow_tests", "full", "quality", "elicitation"]
 # group_features = [["allows", "modularity"], ["rustdoc", "shadow"]]
@@ -152,8 +152,8 @@ that is gated out of most combinations reads as widely used.
 # skip_crates = []
 ```
 
-Off by default because the powerset is slow; cordial's own `cordial.toml`
-turns it on so the merge gate covers it. `group_features` mirrors the
+On by default in the `deep` tier because the powerset is slow; select
+`--tier all` for the full gate. `group_features` mirrors the
 `justfile`'s `--group-features`. The two lists can drift; moving
 `check-features` to read this table is a follow-up.
 

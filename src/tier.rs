@@ -1,12 +1,16 @@
 //! Timing and persistence for cost-based gate tiers.
 
 mod ledger;
+mod name;
 mod partition;
+mod select;
 mod table;
 mod timing;
 
 pub use ledger::{EtiquetteLedgerEntry, GateLedger};
+pub use name::Tier;
 pub use partition::{COLD_THRESHOLD, WARM_THRESHOLD, tier_for_timing};
+pub use select::{TierSelection, assigned_tier};
 pub use table::{BUILTIN_TIER_ASSIGNMENTS, builtin_tier};
 #[cfg(feature = "rustdoc")]
 pub(crate) use timing::is_timing_process;

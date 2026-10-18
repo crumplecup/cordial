@@ -16,6 +16,7 @@ mod commands;
 mod exception_args;
 mod exceptions;
 mod export;
+mod gate_args;
 mod progress;
 mod run;
 mod timings;

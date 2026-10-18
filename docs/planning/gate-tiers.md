@@ -13,9 +13,9 @@ The only way to make a run cheaper today is to switch etiquettes off. That is a
 policy decision (`[feature_warnings] enabled = false`), and it is a bad fit for
 cost:
 
-- `feature_warnings` runs `cargo hack check --feature-powerset`. It is the most
-  expensive etiquette, so it ships off by default, and nothing but a config edit
-  turns it on for the one run where it matters.
+- `feature_warnings` runs `cargo hack check --feature-powerset`. Before tier
+  selection, it shipped off by default, and only a config edit could turn it
+  on for the one run where it mattered.
 - Other etiquettes spawn processes too: `doc_warnings` runs `cargo doc`,
   `dependency_freshness` runs `cargo update`, `creusot_diagnostics` and
   `verus_warnings` invoke their tools. Each one is on, so every run pays for it,
@@ -205,7 +205,7 @@ have to keep those two apart.
 - A small ledger, `{store}/ledger.json`, records for each etiquette its tier, the
   time of its last run, its open count, and its wall time. The report reads it for
   the "last run" line, and `cordial timings` reads it to compare against.
-  Until tier selection is implemented, the ledger records `unassigned`. Its
+  Before tier selection, the ledger recorded `unassigned`. Its
   wall time sums the etiquette's measured hooks; a shared hook is attributed to
   each etiquette that uses it. The isolated `timings` command will measure the
   complete cost of one etiquette, including shared setup.
@@ -300,7 +300,7 @@ The tier selection becomes part of the worklist snapshot, replacing the
 - [x] Phase 2: `cordial timings` (measured Cordial and Amenable on 2026-10-17;
   unavailable etiquette measurements are recorded in their store reports)
 - [x] Phase 3: thresholds and the built-in table
-- [ ] Phase 4: selection, config, `--tier`
+- [x] Phase 4: selection, config, `--tier`
 - [ ] Phase 5: report handling for tiers that did not run
 - [ ] Phase 6: `cordial tiers` and explain output
 - [ ] Phase 7: worklist integration

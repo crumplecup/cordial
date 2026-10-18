@@ -10,6 +10,7 @@ use super::exceptions::{
     execute_edit_exception, execute_load_exceptions, execute_remove_exception, list_exceptions,
     show_exceptions,
 };
+use super::gate_args::GateSelectionArgs;
 use super::run::{execute_quality_apply, execute_run_plugins, view_store_file};
 use crate::{
     CordialError, CordialResult, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,
@@ -52,6 +53,9 @@ pub enum Commands {
         /// Fail if the new list still has open items.
         #[arg(long)]
         deny_open: bool,
+        /// Select cost tiers for verification.
+        #[arg(long = "tier", value_delimiter = ',')]
+        tiers: Vec<String>,
     },
     /// Suggest the commands that move through a worklist.
     #[cfg(feature = "quality")]
@@ -95,6 +99,9 @@ pub enum Commands {
         /// Exit with failure when unresolved open findings remain.
         #[arg(long)]
         deny_open: bool,
+        /// Cost tiers and optional explicit etiquette.
+        #[command(flatten)]
+        selection: GateSelectionArgs,
     },
     /// Run source-quality etiquettes, or apply mechanical patches.
     Quality {
@@ -112,10 +119,17 @@ pub enum Commands {
         /// Exit with failure when unresolved open findings remain.
         #[arg(long, conflicts_with = "apply")]
         deny_open: bool,
+        /// Cost tiers and optional explicit etiquette.
+        #[command(flatten)]
+        selection: GateSelectionArgs,
     },
     /// Run rustdoc coverage etiquettes (impl coverage, trenchcoat, shadow).
     #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
-    Coverage,
+    Coverage {
+        /// Cost tiers and optional explicit etiquette.
+        #[command(flatten)]
+        selection: GateSelectionArgs,
+    },
     /// Print a file from the project store to stdout.
     View {
         /// Path relative to the project store root (for example `findings/rollup-summary.md`).
@@ -283,10 +297,15 @@ impl Commands {
             Self::TimingsPass { etiquette, output } => {
                 super::timings::execute_timings_pass(&ctx, &etiquette, &output)
             }
-            Self::Run { deny_open } => execute_run_plugins(
+            Self::Run {
+                deny_open,
+                selection,
+            } => execute_run_plugins(
                 &ctx.project_root,
                 &ctx.store,
                 ctx.crate_name.as_deref(),
+                selection.tiers(),
+                selection.etiquette(),
                 ctx.store_home.clone(),
                 ctx.progress.clone(),
                 all_plugins(),
@@ -299,6 +318,7 @@ impl Commands {
                 dry_run,
                 checklist,
                 deny_open,
+                selection,
             } => {
                 if apply {
                     execute_quality_apply(
@@ -315,6 +335,8 @@ impl Commands {
                         &ctx.project_root,
                         &ctx.store,
                         ctx.crate_name.as_deref(),
+                        selection.tiers(),
+                        selection.etiquette(),
                         ctx.store_home.clone(),
                         ctx.progress.clone(),
                         quality_plugins(),
@@ -325,7 +347,7 @@ impl Commands {
                 }
             }
             #[cfg(any(feature = "elicitation", feature = "homecoming_std"))]
-            Self::Coverage => {
+            Self::Coverage { selection } => {
                 #[cfg(feature = "homecoming_std")]
                 {
                     let hub = crate::discover_workspace_hub(&ctx.project_root, &crate::RunAll)?;
@@ -333,6 +355,8 @@ impl Commands {
                         &ctx.project_root,
                         &ctx.store,
                         ctx.crate_name.as_deref(),
+                        selection.tiers(),
+                        selection.etiquette(),
                         ctx.store_home.clone(),
                         ctx.progress.clone(),
                         crate::coverage_plugins_for_hub(hub),
@@ -347,6 +371,8 @@ impl Commands {
                         &ctx.project_root,
                         &ctx.store,
                         ctx.crate_name.as_deref(),
+                        selection.tiers(),
+                        selection.etiquette(),
                         ctx.store_home.clone(),
                         ctx.progress.clone(),
                         crate::coverage_plugins(),

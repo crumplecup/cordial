@@ -8,9 +8,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::{CordialError, CordialResult, Disposition, Etiquette, Finding, StoreLayout};
+use crate::{
+    CordialConfig, CordialError, CordialResult, Disposition, Etiquette, Finding, StoreLayout,
+};
 
-use super::HookTimings;
+use super::{HookTimings, assigned_tier};
 
 /// Last completed run of one etiquette.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
@@ -44,7 +46,7 @@ impl GateLedger {
     /// Update only etiquettes that ran, preserving entries for unselected ones.
     #[instrument(
         level = "debug",
-        skip(self, etiquettes, findings, timings),
+        skip(self, etiquettes, findings, timings, config),
         err(level = "warn")
     )]
     pub fn record_run(
@@ -52,6 +54,7 @@ impl GateLedger {
         etiquettes: &[std::sync::Arc<dyn Etiquette>],
         findings: &[Box<dyn Finding>],
         timings: &HookTimings,
+        config: &CordialConfig,
     ) -> CordialResult<()> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -103,7 +106,9 @@ impl GateLedger {
             self.entries.insert(
                 etiquette.id().to_string(),
                 EtiquetteLedgerEntry {
-                    tier: "unassigned".to_string(),
+                    tier: assigned_tier(etiquette.as_ref(), config)
+                        .as_str()
+                        .to_string(),
                     last_run_unix_secs: now,
                     open_count,
                     wall_time_nanos,

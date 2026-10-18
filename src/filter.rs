@@ -12,6 +12,7 @@ use tracing::instrument;
 pub struct NamedRunFilter {
     plugins: Vec<String>,
     etiquettes: Vec<String>,
+    tiers: Option<Vec<String>>,
     crate_name: Option<String>,
 }
 
@@ -34,6 +35,7 @@ impl NamedRunFilter {
         Self {
             plugins: ids.into_iter().map(|id| id.as_ref().to_string()).collect(),
             etiquettes: Vec::new(),
+            tiers: None,
             crate_name: None,
         }
     }
@@ -44,6 +46,7 @@ impl NamedRunFilter {
         Self {
             plugins: Vec::new(),
             etiquettes: ids.into_iter().map(|id| id.as_ref().to_string()).collect(),
+            tiers: None,
             crate_name: None,
         }
     }
@@ -52,6 +55,18 @@ impl NamedRunFilter {
     #[instrument(level = "trace", skip(self, crate_name))]
     pub fn with_crate(mut self, crate_name: impl Into<String>) -> Self {
         self.crate_name = Some(crate_name.into());
+        self
+    }
+
+    /// Select cost tiers for this run, replacing the project default.
+    #[instrument(level = "trace", skip(self, tiers))]
+    pub fn with_tiers(mut self, tiers: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
+        self.tiers = Some(
+            tiers
+                .into_iter()
+                .map(|tier| tier.as_ref().to_string())
+                .collect(),
+        );
         self
     }
 
@@ -79,6 +94,11 @@ impl RunFilter for NamedRunFilter {
         } else {
             Some(&self.etiquettes)
         }
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn tiers(&self) -> Option<&[String]> {
+        self.tiers.as_deref()
     }
 
     #[instrument(level = "trace", skip(self))]

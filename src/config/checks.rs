@@ -122,9 +122,8 @@ pub struct FeatureWarningsThresholds {
     /// Package names that skip the powerset run.
     #[serde(default)]
     skip_crates: Vec<String>,
-    /// Run this etiquette (`true`) or skip it (`false`). Off by default: the
-    /// powerset is many cold `cargo check`s.
-    #[serde(default)]
+    /// Run this etiquette (`true`) or skip it (`false`). The deep tier selects it.
+    #[serde(default = "super::default_true")]
     #[getter(copy)]
     enabled: bool,
 }
@@ -149,7 +148,7 @@ impl Default for FeatureWarningsThresholds {
             include_universal: false,
             private_feature_threshold: default_private_feature_threshold(),
             skip_crates: Vec::new(),
-            enabled: false,
+            enabled: true,
         }
     }
 }

@@ -12,6 +12,7 @@ mod checks;
 mod gates;
 mod modularity;
 mod pageantry;
+mod tiers;
 mod tracing;
 mod visibility;
 mod worklist;
@@ -34,6 +35,7 @@ pub use self::checks::{
 pub use self::gates::EtiquetteGate;
 pub use self::modularity::ModularityThresholds;
 pub use self::pageantry::PageantryThresholds;
+pub use self::tiers::TierConfig;
 pub use self::tracing::{
     TracingBoundaryPolicy, TracingStdioPolicy, TracingSubscriberPolicy, TracingThresholds,
 };
@@ -45,6 +47,8 @@ use crate::session::SessionView;
 /// All etiquette knobs loaded from `cordial.toml`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct CordialConfig {
+    #[serde(default)]
+    tiers: TierConfig,
     #[serde(default)]
     worklist: WorklistSettings,
     #[serde(default)]

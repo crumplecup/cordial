@@ -20,7 +20,7 @@ impl Commands {
             Self::Peek => execute_peek(ctx),
             Self::Done { ids } => execute_claim(ctx, &ids, false, None),
             Self::Skip { ids, reason } => execute_claim(ctx, &ids, true, reason.as_deref()),
-            Self::Submit { deny_open } => execute_submit(ctx, deny_open),
+            Self::Submit { deny_open, tiers } => execute_submit(ctx, deny_open, &tiers),
             Self::Stats { verbose, area, all } => execute_stats(ctx, verbose, area.as_deref(), all),
             Self::Instructions => {
                 write!(io::stdout(), "{WORKLIST_INSTRUCTIONS}").map_err(Into::into)
@@ -34,7 +34,7 @@ impl Commands {
 }
 
 #[instrument(level = "debug", skip(ctx), err(level = "warn"))]
-pub(super) fn execute_submit(ctx: &ActCtx, deny_open: bool) -> CordialResult<()> {
+pub(super) fn execute_submit(ctx: &ActCtx, deny_open: bool, tiers: &[String]) -> CordialResult<()> {
     let _lock = WorklistLock::exclusive(ctx.store(), "submit", ctx.progress().as_ref())?;
     let Some(previous) = Worklist::read(ctx.store())? else {
         writeln!(io::stdout(), "No list yet.\n\nNEXT: cordial open")?;
@@ -54,6 +54,8 @@ pub(super) fn execute_submit(ctx: &ActCtx, deny_open: bool) -> CordialResult<()>
         ctx.project_root(),
         ctx.store(),
         ctx.crate_name().as_deref(),
+        (!tiers.is_empty()).then_some(tiers),
+        None,
         ctx.store_home().clone(),
         ctx.progress().clone(),
         all_plugins(),
@@ -116,6 +118,8 @@ pub(super) fn execute_open(ctx: &ActCtx) -> CordialResult<()> {
             ctx.project_root(),
             ctx.store(),
             ctx.crate_name().as_deref(),
+            None,
+            None,
             ctx.store_home().clone(),
             ctx.progress().clone(),
             all_plugins(),

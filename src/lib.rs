@@ -323,7 +323,7 @@ pub use config::{
     AntipatternsConfig, CfgHygieneThresholds, CfgScatterThresholds, CordialConfig,
     CrateAttrsThresholds, CreusotDiagnosticsThresholds, DependencyFreshnessThresholds,
     DerivesThresholds, DocWarningsThresholds, EtiquetteGate, FeatureWarningsThresholds,
-    ModularityThresholds, PageantryThresholds, StaticRefPolicy, StaticRefStrategy,
+    ModularityThresholds, PageantryThresholds, StaticRefPolicy, StaticRefStrategy, TierConfig,
     TracingBoundaryPolicy, TracingStdioPolicy, TracingSubscriberPolicy, TracingThresholds,
     VisibilityThresholds, WorklistSettings, load_cordial_config, load_derives_thresholds,
     load_session_config, load_visibility_thresholds,
@@ -384,7 +384,7 @@ pub use session::{
 pub use store::{StoreLayout, SysrootCache, default_store_home, project_slug_from_path};
 pub use tier::{
     BUILTIN_TIER_ASSIGNMENTS, COLD_THRESHOLD, EtiquetteLedgerEntry, GateLedger, HookTiming,
-    HookTimings, WARM_THRESHOLD, builtin_tier, tier_for_timing,
+    HookTimings, Tier, TierSelection, WARM_THRESHOLD, assigned_tier, builtin_tier, tier_for_timing,
 };
 #[cfg(feature = "quality")]
 pub use worklist::{

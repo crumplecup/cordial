@@ -21,6 +21,13 @@ line `cordial explain` points at. Per-site suppressions stay on
 `cordial exceptions add`.
 
 ```toml
+[tiers]
+# default = ["quick", "build"]
+# `--tier all` runs every known tier, including `deep`.
+
+[tiers.assign]
+# dependency_freshness = "ci"  # project assignment overrides the built-in tier
+
 [worklist]
 # max_passes = 3       # tell the user when an acted-on item reaches this list count
 
@@ -67,7 +74,7 @@ min_occurrences = 5
 # skip_crates = []
 
 [feature_warnings]
-# enabled = false         # off by default: many cold cargo checks
+# enabled = true          # selected by the deep tier
 # depth = 2
 # exclude_features = []
 # group_features = []
