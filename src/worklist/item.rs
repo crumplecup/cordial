@@ -48,6 +48,12 @@ pub struct WorklistItem {
     detail_lines: Vec<String>,
     guidance: Option<String>,
     file: Option<String>,
+    #[serde(default)]
+    rule_id: Option<String>,
+    #[serde(default)]
+    crate_name: Option<String>,
+    #[serde(default)]
+    line: Option<u32>,
     state: ItemState,
     reopened: bool,
     #[serde(default = "first_pass")]
@@ -87,6 +93,9 @@ impl WorklistItem {
             detail_lines: Vec::new(),
             guidance,
             file,
+            rule_id: None,
+            crate_name: None,
+            line: None,
             state: ItemState::Open,
             reopened: false,
             pass_count: first_pass(),
@@ -98,6 +107,22 @@ impl WorklistItem {
     #[instrument(level = "debug", skip(self))]
     pub(super) fn push_detail(&mut self, line: &str) {
         self.detail_lines.push(line.to_string());
+    }
+
+    #[instrument(level = "trace", skip(self, rule_id, crate_name, file))]
+    pub(super) fn set_finding_source(
+        &mut self,
+        rule_id: &str,
+        crate_name: Option<&str>,
+        file: Option<&str>,
+        line: Option<u32>,
+    ) {
+        self.rule_id = Some(rule_id.to_string());
+        self.crate_name = crate_name.map(str::to_string);
+        if self.file.is_none() {
+            self.file = file.map(str::to_string);
+        }
+        self.line = line;
     }
 
     #[instrument(level = "trace", skip(self, state))]

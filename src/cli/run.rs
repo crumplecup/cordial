@@ -286,7 +286,10 @@ pub(super) fn execute_run_plugins_locked(
         };
         let findings = outcome.findings().collect::<Vec<_>>();
         let report = crate::build_quality_report(&findings)?;
-        let source = crate::ChecklistSource::new(store).fresh_since(run_started);
+        let source = crate::FindingSource::from_findings(
+            crate::ChecklistSource::new(store).fresh_since(run_started),
+            &findings,
+        );
         let selected_tiers = tier_selection.names().iter().cloned().collect();
         let mut list =
             crate::Worklist::build_with_tiers(&report, store, &source, &config, selected_tiers)?;

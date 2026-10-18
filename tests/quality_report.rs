@@ -1,5 +1,6 @@
 use cordial::{
-    QualityReport, RunAll, Session, SessionBuilder, build_quality_report, quality_etiquettes,
+    ChecklistSource, CordialConfig, FindingSource, QualityReport, RunAll, Session, SessionBuilder,
+    StoreLayout, Worklist, build_quality_report, quality_etiquettes,
 };
 use miette::{IntoDiagnostic, WrapErr};
 use std::path::Path;
@@ -40,6 +41,25 @@ fn assert_area_checklist_counts(report: &QualityReport, findings_dir: &Path) -> 
             area.detail()
         );
     }
+    Ok(())
+}
+
+fn assert_all_items_have_rule_ids(
+    report: &QualityReport,
+    findings: &[&dyn cordial::Finding],
+    store_root: &Path,
+) -> miette::Result<()> {
+    let layout = StoreLayout::from_root(store_root, "quality_fixture");
+    let source = FindingSource::from_findings(ChecklistSource::new(&layout), findings);
+    let list =
+        Worklist::build(report, &layout, &source, &CordialConfig::default()).into_diagnostic()?;
+    let missing: Vec<_> = list
+        .items()
+        .iter()
+        .filter(|item| item.rule_id().is_none())
+        .map(|item| (item.checklist(), item.item_line()))
+        .collect();
+    assert!(missing.is_empty(), "missing finding rules: {missing:?}");
     Ok(())
 }
 
@@ -154,6 +174,7 @@ edition = { workspace = true }
     let quality_report = build_quality_report(&findings).into_diagnostic()?;
     let findings_dir = store.path().join("findings");
     assert_area_checklist_counts(&quality_report, &findings_dir)?;
+    assert_all_items_have_rule_ids(&quality_report, &findings, store.path())?;
     assert_eq!(quality_report.areas()[0].open_items(), 2);
     assert_eq!(quality_report.areas()[2].open_items(), 1);
 
@@ -208,6 +229,7 @@ fn error_chain_fixture_agrees_with_checklists() -> miette::Result<()> {
     let report = build_quality_report(&findings).into_diagnostic()?;
     let findings_dir = store.path().join("findings");
     assert_area_checklist_counts(&report, &findings_dir)?;
+    assert_all_items_have_rule_ids(&report, &findings, store.path())?;
     assert_eq!(report.areas()[0].open_items(), 5);
     let internal = std::fs::read_to_string(findings_dir.join("internal-error-chain.checklist.md"))
         .into_diagnostic()?;

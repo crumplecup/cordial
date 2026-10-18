@@ -74,6 +74,16 @@ fn cli_quality_writes_reports_and_rollup() -> miette::Result<()> {
         .ok_or_else(|| miette::miette!("quality did not write a worklist"))?;
     assert!(list.open_count() > 0);
     assert_eq!(*list.record().generation(), 1);
+    let panic_items: Vec<_> = list
+        .items()
+        .iter()
+        .filter(|item| item.checklist() == "panics.checklist.md")
+        .collect();
+    assert!(!panic_items.is_empty());
+    assert!(
+        panic_items.iter().all(|item| item.rule_id().is_some()),
+        "panic checklist items should retain finding rule IDs"
+    );
     Ok(())
 }
 

@@ -388,9 +388,9 @@ pub use tier::{
 };
 #[cfg(feature = "quality")]
 pub use worklist::{
-    AmbiguousGroup, AreaScore, BuildRecord, ChecklistSource, ClaimChange, ItemId, ItemSource,
-    ItemState, Scorecard, SoftStaleness, Validity, WORKLIST_INSTRUCTIONS, Worklist, WorklistItem,
-    WorklistLock, render_open, render_stats, render_submit, score, score_verified,
+    AmbiguousGroup, AreaScore, BuildRecord, ChecklistSource, ClaimChange, FindingSource, ItemId,
+    ItemSource, ItemState, Scorecard, SoftStaleness, Validity, WORKLIST_INSTRUCTIONS, Worklist,
+    WorklistItem, WorklistLock, render_open, render_stats, render_submit, score, score_verified,
 };
 #[cfg(feature = "homecoming_std")]
 pub use {

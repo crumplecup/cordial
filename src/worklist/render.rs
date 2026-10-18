@@ -60,10 +60,30 @@ pub fn render_open(list: &Worklist) -> String {
         .replace('-', "_");
     let etiquette = if etiquette.starts_with("tracing_") {
         "tracing"
+    } else if etiquette == "version_in_member" {
+        "antipatterns"
     } else {
         etiquette.as_str()
     };
-    let _ = writeln!(output, "Why:   cordial explain {etiquette}");
+    let _ = writeln!(
+        output,
+        "Why:   cordial explain {}",
+        item.rule_id().as_deref().unwrap_or(etiquette)
+    );
+    if let (Some(rule_id), Some(file)) = (item.rule_id(), item.file()) {
+        let line = item
+            .line()
+            .map_or(String::new(), |line| format!(" --line {line}"));
+        let crate_name = item.crate_name().as_deref().map_or(String::new(), |name| {
+            format!(" --crate-name {}", shell_quote(name))
+        });
+        let _ = writeln!(
+            output,
+            "If intended: cordial exceptions add {etiquette} --file {}{line} --rule-id {}{crate_name} --reason 'why this is intended'",
+            shell_quote(file),
+            shell_quote(rule_id),
+        );
+    }
     if let Some(file) = item.file() {
         let peers: Vec<_> = list
             .items()
@@ -95,6 +115,11 @@ pub fn render_open(list: &Worklist) -> String {
         );
     }
     output
+}
+
+#[instrument(level = "trace")]
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 /// Explain how claims on the previous list fared at the new gate.

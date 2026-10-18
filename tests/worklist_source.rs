@@ -3,9 +3,104 @@
 use miette::IntoDiagnostic;
 
 use cordial::{
-    ChecklistSource, CordialConfig, ItemSource, QualityAreaSummary, QualityChecklist,
-    QualityReport, StoreLayout, Validity, Worklist, render_open, render_stats,
+    ChecklistSource, CordialConfig, Disposition, Finding, FindingSink, FindingSource, IrAnchor,
+    ItemSource, NodeAnchor, NodeId, QualityAreaSummary, QualityChecklist, QualityReport, Rule,
+    StoreLayout, Validity, Worklist, render_open, render_stats,
 };
+
+struct SampleRule(String);
+
+impl Rule for SampleRule {
+    fn id(&self) -> &str {
+        &self.0
+    }
+
+    fn category(&self) -> &str {
+        "panics"
+    }
+
+    fn description(&self) -> &str {
+        "sample"
+    }
+}
+
+struct SampleFinding {
+    rule: SampleRule,
+    anchor: NodeAnchor,
+    line: u32,
+}
+
+impl Finding for SampleFinding {
+    fn rule(&self) -> &dyn Rule {
+        &self.rule
+    }
+
+    fn disposition(&self) -> Disposition {
+        Disposition::Open
+    }
+
+    fn anchor(&self) -> &dyn IrAnchor {
+        &self.anchor
+    }
+
+    fn emit(&self, sink: &mut dyn FindingSink) {
+        sink.field("crate", &"sample");
+        sink.field("file", &"src/store.rs");
+        sink.field("line", &self.line);
+        sink.field("context", &"read_all");
+    }
+}
+
+#[test]
+fn finding_source_adds_exact_rule_and_exception_command() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = tempfile::tempdir().into_diagnostic()?;
+    let store = StoreLayout::from_root(root.path(), "fixture");
+    std::fs::create_dir_all(store.findings_dir()).into_diagnostic()?;
+    std::fs::write(
+        store.findings_dir().join("panics.checklist.md"),
+        "## `sample`\n\n- [ ] `read_all` — `src/store.rs:52` — `unwrap`\n",
+    )
+    .into_diagnostic()?;
+    let finding = SampleFinding {
+        rule: SampleRule("PANIC-SOURCE-UNWRAP".to_string()),
+        anchor: NodeAnchor::new(NodeId::new(1)),
+        line: 52,
+    };
+    let wrong_site = SampleFinding {
+        rule: SampleRule("PANIC-SOURCE-PANIC".to_string()),
+        anchor: NodeAnchor::new(NodeId::new(2)),
+        line: 53,
+    };
+    let source =
+        FindingSource::from_findings(ChecklistSource::new(&store), &[&finding, &wrong_site]);
+    let report = QualityReport::new(
+        vec![QualityAreaSummary::new(
+            1,
+            "Error handling".to_string(),
+            1,
+            "panics.checklist.md".to_string(),
+            vec![QualityChecklist::new(
+                "panics.checklist.md".to_string(),
+                vec![],
+            )],
+            "summary.md".to_string(),
+            String::new(),
+        )],
+        1,
+    );
+    let mut list =
+        Worklist::build(&report, &store, &source, &CordialConfig::default()).into_diagnostic()?;
+    assert_eq!(
+        list.items()[0].rule_id().as_deref(),
+        Some("PANIC-SOURCE-UNWRAP")
+    );
+    list.activate();
+    let rendered = render_open(&list);
+    assert!(rendered.contains("cordial explain PANIC-SOURCE-UNWRAP"));
+    assert!(rendered.contains("cordial exceptions add panics --file 'src/store.rs' --line 52 --rule-id 'PANIC-SOURCE-UNWRAP' --crate-name 'sample'"));
+    Ok(())
+}
 
 fn area(checklists: Vec<QualityChecklist>) -> QualityAreaSummary {
     QualityAreaSummary::new(

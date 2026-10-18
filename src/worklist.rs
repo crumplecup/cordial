@@ -1,5 +1,6 @@
 //! Persistent agent worklist built from quality checklist artifacts.
 
+mod finding_source;
 mod instructions;
 mod item;
 mod lock;
@@ -9,6 +10,7 @@ mod source;
 mod staleness;
 mod state;
 
+pub use finding_source::FindingSource;
 pub use instructions::WORKLIST_INSTRUCTIONS;
 pub(crate) use instructions::{
     DONE_HELP, INSTRUCTIONS_HELP, OPEN_HELP, PEEK_HELP, SKIP_HELP, STATS_HELP, SUBMIT_HELP,

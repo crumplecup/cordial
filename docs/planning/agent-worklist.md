@@ -630,11 +630,12 @@ pub trait ItemSource {
 }
 ```
 
-The first implementation reads checklists. A later one can read structured
-findings and add the rule id for every item, and with it a prefilled
-`cordial exceptions add` line for items that are intended. That is an
-improvement and not a dependency: the commands, the guidance, and the
-instructions all work from the checklists.
+The gate now wraps `ChecklistSource` in `FindingSource`, using the structured
+open findings from the same run to add rule ids, crate names, and source lines.
+It matches by etiquette, source location, and visible rule or context. When
+several findings remain possible, it only uses fields they agree on; it does
+not print an exception command if the rule is ambiguous. The commands, the
+guidance, and the instructions still work from the checklists alone.
 
 ## State
 
@@ -750,6 +751,7 @@ module level, with no new feature flag.
 | --- | --- |
 | `item.rs` | `WorklistItem`, `ItemId`, `ItemState` |
 | `source.rs` | `ItemSource`, `ChecklistSource` (parses checklist markdown) |
+| `finding_source.rs` | `FindingSource` (joins checklist items to structured findings) |
 | `state.rs` | `Worklist`: read, atomic write, cursor moves, counts |
 | `lock.rs` | the store lock, its holder record, and the wait with progress |
 | `validity.rs` | the build record, `Validity`, and the soft-stale report |
@@ -969,5 +971,5 @@ Release 2:
 - [x] Phase 9: pass counts, skip reasons, `STOP:`
 - [x] Phase 10: soft-stale line
 - [x] Phase 11: tiers
-- [ ] Phase 12: rule ids and prefilled exceptions
+- [x] Phase 12: rule ids and prefilled exceptions
 - [ ] Phase 13: `--json`
