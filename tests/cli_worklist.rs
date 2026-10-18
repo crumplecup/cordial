@@ -522,3 +522,49 @@ fn quality_records_last_run_counts_and_hook_costs_in_the_ledger() -> miette::Res
     assert!(*panics.wall_time_nanos() > 0);
     Ok(())
 }
+
+#[test]
+fn timings_measure_two_passes_without_replacing_quality_outputs() -> miette::Result<()> {
+    cordial::init_tracing();
+    let (project, home, store) = fixture()?;
+    let gate = run(project.path(), home.path(), &["quality"])?;
+    assert!(gate.status.success());
+    let report_path = store.findings_dir().join("quality-report.md");
+    let previous_report = fs::read(&report_path).into_diagnostic()?;
+    let previous_ledger = cordial::GateLedger::read(&store).into_diagnostic()?;
+
+    let measured = run(
+        project.path(),
+        home.path(),
+        &["timings", "--etiquette", "panics"],
+    )?;
+    assert!(
+        measured.status.success(),
+        "{}",
+        String::from_utf8_lossy(&measured.stderr)
+    );
+    let json: serde_json::Value =
+        serde_json::from_slice(&fs::read(store.root().join("timings.json")).into_diagnostic()?)
+            .into_diagnostic()?;
+    assert_eq!(json["version"], 1);
+    assert_eq!(json["entries"][0]["id"], "panics");
+    assert!(
+        json["entries"][0]["cold"]["wall_time_nanos"]
+            .as_u64()
+            .unwrap_or(0)
+            > 0
+    );
+    assert!(
+        json["entries"][0]["warm"]["wall_time_nanos"]
+            .as_u64()
+            .unwrap_or(0)
+            > 0
+    );
+    assert!(store.root().join("timings.md").is_file());
+    assert_eq!(fs::read(report_path).into_diagnostic()?, previous_report);
+    assert_eq!(
+        cordial::GateLedger::read(&store).into_diagnostic()?,
+        previous_ledger
+    );
+    Ok(())
+}

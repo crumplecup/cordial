@@ -54,7 +54,8 @@ pub(super) fn run_cargo_hack(
     crate_name: &str,
     policy: &FeatureWarningsThresholds,
 ) -> CordialResult<HackOutput> {
-    let target_dir = crate_root.join("target").join("feature-warnings");
+    let target_dir =
+        crate::tier::timing_target_dir(crate_root.join("target").join("feature-warnings"));
     let mut command = cargo_command();
     command
         .current_dir(crate_root)

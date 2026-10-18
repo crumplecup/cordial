@@ -141,6 +141,7 @@ impl std::fmt::Debug for SessionBuilder {
             .field("plugins", &self.plugins.as_ref().map(Vec::len))
             .field("etiquettes", &self.etiquettes.as_ref().map(Vec::len))
             .field("progress", &"<progress-sink>")
+            .field("measurement_mode", &self.measurement_mode)
             .finish()
     }
 }
@@ -163,6 +164,7 @@ impl SessionBuilder {
             plugins: Some(Vec::new()),
             etiquettes: Some(Vec::new()),
             progress: Some(noop_progress_arc()),
+            measurement_mode: Some(false),
         }
     }
 
@@ -190,6 +192,13 @@ impl SessionBuilder {
     #[instrument(level = "trace", skip(self, progress))]
     pub fn with_progress_sink(mut self, progress: Arc<dyn ProgressSink>) -> Self {
         self.progress = Some(progress);
+        self
+    }
+
+    /// Render a timing pass without replacing reports or the last-run ledger.
+    #[instrument(level = "trace", skip(self))]
+    pub fn with_measurement_mode(mut self) -> Self {
+        self.measurement_mode = Some(true);
         self
     }
 
@@ -229,6 +238,7 @@ impl SessionBuilder {
             plugins: self.plugins.unwrap_or_default(),
             etiquettes: self.etiquettes.unwrap_or_default(),
             progress: self.progress.unwrap_or_else(noop_progress_arc),
+            measurement_mode: self.measurement_mode.unwrap_or(false),
         }
     }
 }
@@ -259,9 +269,16 @@ pub struct RuntimeSession {
     /// User-facing progress reporter for this session.
     #[builder(default = "noop_progress_arc()")]
     progress: Arc<dyn ProgressSink>,
+    /// Isolated measurement run that must not replace reports or ledger history.
+    #[builder(default)]
+    measurement_mode: bool,
 }
 
 impl RuntimeSession {
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn measurement_mode(&self) -> bool {
+        self.measurement_mode
+    }
     #[instrument(level = "trace", skip(self))]
     pub(super) fn registered_plugins(&self) -> &[&'static dyn Plugin] {
         &self.plugins

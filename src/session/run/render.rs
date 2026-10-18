@@ -36,7 +36,11 @@ pub(super) struct RenderPass<'a> {
     findings: &'a [Box<dyn Finding>],
 }
 
-#[instrument(level = "debug", skip(session, filter, pass, timings), err(level = "warn"))]
+#[instrument(
+    level = "debug",
+    skip(session, filter, pass, timings),
+    err(level = "warn")
+)]
 pub(super) fn render_and_write(
     session: &RuntimeSession,
     filter: &dyn RunFilter,
@@ -125,15 +129,25 @@ pub(super) fn render_and_write(
     )))]
     let _ = (filter, etiquettes, etiquette_ids);
 
-    for artifact in &all_artifacts {
-        let path = store.findings_dir().join(artifact.name());
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+    if !session.measurement_mode() {
+        for artifact in &all_artifacts {
+            let path = store.findings_dir().join(artifact.name());
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let mut file = std::fs::File::create(&path)?;
+            artifact.write_to(&mut file)?;
         }
-        let mut file = std::fs::File::create(&path)?;
-        artifact.write_to(&mut file)?;
     }
 
-    progress.finish(format!("Wrote {} report artifact(s)", all_artifacts.len()));
+    progress.finish(format!(
+        "{} {} report artifact(s)",
+        if session.measurement_mode() {
+            "Rendered"
+        } else {
+            "Wrote"
+        },
+        all_artifacts.len()
+    ));
     Ok(all_artifacts)
 }

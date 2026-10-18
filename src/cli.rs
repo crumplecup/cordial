@@ -18,6 +18,7 @@ mod exceptions;
 mod export;
 mod progress;
 mod run;
+mod timings;
 #[cfg(feature = "quality")]
 mod worklist;
 

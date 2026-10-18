@@ -83,7 +83,7 @@ starts in `quick` and moves only if measurement shows it does not belong.
 
 ### Measuring
 
-`cordial timings` runs each etiquette on its own, twice, and writes the result to
+`cordial timings` runs each enabled etiquette on its own, twice, and writes the result to
 the store:
 
 1. **Cold.** An empty `CARGO_TARGET_DIR` in a temporary directory, so the run
@@ -97,6 +97,9 @@ the other long commands (see "Progress on long commands" in the
 It runs against the project given by `-p`, so users measure their own code as
 well as cordial's. Output is `timings.md` for people and `timings.json` for the
 partitioner, with wall time per etiquette for each pass.
+`--etiquette <id>` narrows a measurement to one enabled etiquette. Timing
+passes read the normal project store and may refresh build caches, but do not
+replace quality reports, checklists, or the last-run ledger.
 
 ### Standalone cost
 
@@ -268,7 +271,8 @@ The tier selection becomes part of the worklist snapshot, replacing the
 ## Status
 
 - [x] Phase 1: per-hook timing and the ledger
-- [ ] Phase 2: `cordial timings`
+- [x] Phase 2: `cordial timings` (measured Cordial and Amenable on 2026-10-17;
+  unavailable etiquette measurements are recorded in their store reports)
 - [ ] Phase 3: thresholds and the built-in table
 - [ ] Phase 4: selection, config, `--tier`
 - [ ] Phase 5: report handling for tiers that did not run

@@ -31,6 +31,7 @@ derive_more = { version = "2", features = ["as_ref", "display", "error", "from"]
 petgraph = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+tempfile = "3"
 semver = { version = "1", optional = true }
 sha2 = "0.11"
 syn = { version = "3", features = ["full", "visit", "extra-traits"] }
@@ -363,7 +364,6 @@ name = "syn_doc_link"
 required-features = ["rustdoc"]
 
 [dev-dependencies]
-tempfile = "3"
 rustdoc-types = "0.61"
 miette = { version = "7", features = ["fancy"] }
 

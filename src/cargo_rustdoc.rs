@@ -89,6 +89,7 @@ pub(crate) fn build_workspace_members_with_progress(
         let artifact_path = store.build_artifact_path(target.crate_name());
         let cached_json = store.rustdoc_cache_path(target.crate_name());
         if !force
+            && !crate::tier::is_timing_process()
             && artifact_path.is_file()
             && cached_json.is_file()
             && rustdoc_cache_is_fresh(project_root, target.crate_root(), &cached_json)
@@ -109,7 +110,7 @@ pub(crate) fn build_workspace_members_with_progress(
             project_root,
             target.crate_name(),
             &[],
-            Some(&store.rustdoc_target_dir()),
+            Some(&crate::tier::timing_target_dir(store.rustdoc_target_dir())),
         )?;
 
         copy_rustdoc_json(&json_path, &cached_json)?;

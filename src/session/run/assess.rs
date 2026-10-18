@@ -18,7 +18,15 @@ use crate::session::{RuntimeSession, SessionView};
 
 #[instrument(
     level = "debug",
-    skip(session, store, targets, workspace, markers_by_crate, assessors, timings),
+    skip(
+        session,
+        store,
+        targets,
+        workspace,
+        markers_by_crate,
+        assessors,
+        timings
+    ),
     err(level = "warn")
 )]
 pub(super) fn assess_targets(

@@ -199,9 +199,11 @@ pub(super) fn run_session(
         &mut timings,
     )?;
 
-    let mut ledger = GateLedger::read(&store)?;
-    ledger.record_run(&etiquettes, &all_findings, &timings)?;
-    ledger.write(&store)?;
+    if !session.measurement_mode() {
+        let mut ledger = GateLedger::read(&store)?;
+        ledger.record_run(&etiquettes, &all_findings, &timings)?;
+        ledger.write(&store)?;
+    }
 
     Ok(Box::new(ConcreteRunOutcome {
         findings: all_findings,

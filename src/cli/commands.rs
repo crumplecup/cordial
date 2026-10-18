@@ -75,6 +75,21 @@ pub enum Commands {
     #[cfg(feature = "quality")]
     #[command(about = crate::worklist::INSTRUCTIONS_HELP)]
     Instructions,
+    /// Measure each enabled etiquette with a cold and warm Cargo target.
+    Timings {
+        /// Measure only this etiquette.
+        #[arg(long)]
+        etiquette: Option<String>,
+    },
+    /// Internal subprocess for one isolated timing pass.
+    #[command(hide = true)]
+    TimingsPass {
+        /// Etiquette to measure.
+        etiquette: String,
+        /// Private result file; subprocesses may write to stdout during a pass.
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Run all built-in etiquettes (quality + coverage).
     Run {
         /// Exit with failure when unresolved open findings remain.
@@ -262,6 +277,12 @@ impl Commands {
             | Self::Next
             | Self::Stats { .. }
             | Self::Instructions) => command.act_worklist(&ctx),
+            Self::Timings { etiquette } => {
+                super::timings::execute_timings(&ctx, etiquette.as_deref())
+            }
+            Self::TimingsPass { etiquette, output } => {
+                super::timings::execute_timings_pass(&ctx, &etiquette, &output)
+            }
             Self::Run { deny_open } => execute_run_plugins(
                 &ctx.project_root,
                 &ctx.store,

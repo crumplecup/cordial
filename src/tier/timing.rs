@@ -8,6 +8,26 @@ use tracing::instrument;
 
 use crate::CordialResult;
 
+/// The child timing pass uses this target instead of each etiquette's usual one.
+#[cfg(any(
+    feature = "rustdoc",
+    feature = "doc_warnings",
+    feature = "feature_warnings"
+))]
+#[instrument(level = "trace")]
+pub(crate) fn timing_target_dir(default: std::path::PathBuf) -> std::path::PathBuf {
+    std::env::var_os("CORDIAL_TIMINGS_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or(default)
+}
+
+/// Whether a child process is measuring build cost with isolated Cargo output.
+#[cfg(feature = "rustdoc")]
+#[instrument(level = "trace")]
+pub(crate) fn is_timing_process() -> bool {
+    std::env::var_os("CORDIAL_TIMINGS_TARGET_DIR").is_some()
+}
+
 /// Aggregated duration and invocation count for one hook.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct HookTiming {

@@ -82,6 +82,7 @@ pub(crate) fn build_shadow_dep_rustdoc_with_progress(
     let cached_json = store.shadow_dep_rustdoc_cache_path(shadow_crate, upstream_crate);
 
     if !force
+        && !crate::tier::is_timing_process()
         && artifact_path.is_file()
         && cached_json.is_file()
         && rustdoc_cache_is_fresh(
@@ -96,7 +97,7 @@ pub(crate) fn build_shadow_dep_rustdoc_with_progress(
 
     let dep_config = resolve_shadow_dep_build_config(project_root, shadow_crate, upstream_crate);
     let task = progress.spinner(format!("Building rustdoc for shadow dep {upstream_crate}"));
-    let rustdoc_target = store.rustdoc_target_dir();
+    let rustdoc_target = crate::tier::timing_target_dir(store.rustdoc_target_dir());
     let json_path = if let Some(activating_feature) = dep_config.activating_member_feature() {
         run_cargo_doc_for_optional_dep_to(
             project_root,

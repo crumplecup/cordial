@@ -251,7 +251,7 @@ fn run_cargo_doc(
     crate_name: &str,
     policy: &DocWarningsThresholds,
 ) -> CordialResult<String> {
-    let target_dir = crate_root.join("target");
+    let target_dir = crate::tier::timing_target_dir(crate_root.join("target"));
     let mut command = Command::new(cargo);
     command
         .current_dir(crate_root)
