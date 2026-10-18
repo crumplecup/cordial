@@ -16,6 +16,15 @@ use tracing::instrument;
 /// Top-level `cordial` subcommands.
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Remove generated cache, reports, and worklist data from recognized stores.
+    Clean {
+        /// Clean every recognized project store and the shared sysroot cache.
+        #[arg(long)]
+        all: bool,
+        /// Show the exact deletion plan without removing anything.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Show the current worklist item, building a list when needed.
     #[cfg(feature = "quality")]
     #[command(about = crate::worklist::OPEN_HELP)]
@@ -299,6 +308,14 @@ impl Commands {
     #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
     pub(super) fn act(self, ctx: ActCtx) -> CordialResult<()> {
         match self {
+            Self::Clean { all, dry_run } => super::clean::execute_clean(
+                &ctx.project_root,
+                &ctx.store,
+                ctx.store_home.as_deref(),
+                ctx.progress.as_ref(),
+                all,
+                dry_run,
+            ),
             #[cfg(feature = "quality")]
             command @ (Self::Open { .. }
             | Self::Peek { .. }

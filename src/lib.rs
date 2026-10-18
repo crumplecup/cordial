@@ -322,7 +322,7 @@ pub use cargo_rustdoc::{
 };
 pub use clean::{
     CleanFailure, CleanPath, CleanPlan, CleanReport, CleanScope, SkippedStore, plan_clean,
-    run_clean,
+    run_clean, run_clean_with_progress,
 };
 pub use config::{
     AntipatternsConfig, CfgHygieneThresholds, CfgScatterThresholds, CordialConfig,

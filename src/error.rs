@@ -1,5 +1,6 @@
 //! Crate error: parent boxes a Kind; Kind variants are native sources.
 
+mod clean;
 mod io;
 mod lint_order;
 mod local;
@@ -8,6 +9,7 @@ mod parse;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::path::{PathBuf, StripPrefixError};
 
+use clean::CleanSource;
 use io::{FmtSource, IoSource, PrefixSource};
 use lint_order::{LintOrderCycleSource, LintOrderDanglingSource, LintOrderUnknownConstraintSource};
 use local::{
@@ -29,6 +31,8 @@ pub struct CordialError {
 /// Umbrella kind boxed by [`CordialError`].
 #[derive(Debug)]
 pub enum CordialErrorKind {
+    /// A requested clean was refused or incomplete.
+    Clean(CleanSource),
     /// Filesystem I/O failed.
     Io(IoSource),
     /// JSON serialization or deserialization failed.
@@ -77,6 +81,12 @@ pub enum CordialErrorKind {
 pub type CordialResult<T> = Result<T, CordialError>;
 
 impl CordialError {
+    /// A requested clean was refused or incomplete.
+    #[track_caller]
+    #[instrument(level = "debug", skip(path, reason))]
+    pub fn clean(path: PathBuf, reason: impl Into<String>) -> Self {
+        Self::from_kind(CordialErrorKind::Clean(CleanSource::new(path, reason)))
+    }
     #[track_caller]
     #[instrument(level = "debug", skip(kind), ret)]
     fn from_kind(kind: CordialErrorKind) -> Self {
@@ -225,6 +235,7 @@ impl std::error::Error for CordialError {
     #[instrument(level = "trace", skip(self))]
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self.kind.as_ref() {
+            CordialErrorKind::Clean(source) => Some(source),
             CordialErrorKind::Io(source) => Some(source),
             CordialErrorKind::Json(source) => Some(source),
             CordialErrorKind::JsonParse(source) => Some(source),
@@ -254,6 +265,7 @@ impl Display for CordialErrorKind {
     #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self {
+            Self::Clean(source) => source.fmt(formatter),
             Self::Io(source) => source.fmt(formatter),
             Self::Json(source) => source.fmt(formatter),
             Self::JsonParse(source) => source.fmt(formatter),

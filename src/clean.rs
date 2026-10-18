@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use tracing::instrument;
 
-use crate::{CordialResult, StoreLayout, SysrootCache, project_slug_from_path};
+use crate::{CordialResult, ProgressSink, StoreLayout, SysrootCache, project_slug_from_path};
 
 /// Stores to consider for a clean operation.
 #[derive(Debug, Clone)]
@@ -105,7 +105,7 @@ impl CleanReport {
             && self
                 .skipped
                 .iter()
-                .all(|store| store.reason == "unrecognized store")
+                .all(|store| store.reason.starts_with("unrecognized"))
     }
 }
 
@@ -135,6 +135,13 @@ pub fn plan_clean(scope: CleanScope) -> CordialResult<CleanPlan> {
                     if entry.file_name() == "sysroot" {
                         continue;
                     }
+                    if entry.file_type()?.is_file() {
+                        plan.skipped.push(SkippedStore {
+                            path,
+                            reason: "unrecognized store".into(),
+                        });
+                        continue;
+                    }
                     let store = StoreLayout::from_root(&path, project_slug_from_path(&path));
                     plan_project(&mut plan, &store, &project_root)?;
                 }
@@ -156,6 +163,9 @@ fn plan_project(
     project_root: &Path,
 ) -> CordialResult<()> {
     let root = store.root();
+    if !root.exists() {
+        return Ok(());
+    }
     if let Some(reason) = refusal(root, project_root)? {
         plan.skipped.push(SkippedStore {
             path: root.clone(),
@@ -288,6 +298,13 @@ fn regular_file(path: &Path) -> io::Result<bool> {
 /// Execute an allowlisted plan, continuing after individual removal failures.
 #[instrument(level = "info", skip(plan))]
 pub fn run_clean(plan: CleanPlan) -> CleanReport {
+    run_clean_with_progress(plan, crate::noop_progress())
+}
+
+/// Execute a plan while reporting the number of paths processed.
+#[instrument(level = "info", skip(plan, progress))]
+pub fn run_clean_with_progress(plan: CleanPlan, progress: &dyn ProgressSink) -> CleanReport {
+    let task = progress.bar("Cleaning store artifacts".into(), plan.paths.len() as u64);
     let mut report = CleanReport {
         removed: Vec::new(),
         failures: Vec::new(),
@@ -295,6 +312,7 @@ pub fn run_clean(plan: CleanPlan) -> CleanReport {
         checked_off: plan.checked_off,
     };
     for target in plan.paths {
+        task.set_message(format!("Removing {}", target.path.display()));
         let result = match fs::symlink_metadata(&target.store) {
             Ok(metadata) if metadata.file_type().is_dir() => remove_path(&target.path),
             Ok(_) => Err(io::Error::other("store root changed type since planning")),
@@ -307,7 +325,12 @@ pub fn run_clean(plan: CleanPlan) -> CleanReport {
                 error,
             }),
         }
+        task.inc(1);
     }
+    task.finish(format!(
+        "Processed {} path(s)",
+        report.removed.len() + report.failures.len()
+    ));
     report
 }
 

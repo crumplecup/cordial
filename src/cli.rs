@@ -12,6 +12,7 @@ use crate::{
     project_slug_from_path,
 };
 
+mod clean;
 mod commands;
 mod exception_args;
 mod exceptions;
