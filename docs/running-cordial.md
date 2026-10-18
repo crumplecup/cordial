@@ -26,8 +26,8 @@ cordial skip <id>                    # set an item aside until the next list
 cordial peek                         # show the current item again
 cordial stats --verbose              # counts and item states
 cordial submit                       # rerun the gate and score claims
+cordial submit --tier all --deny-open # full worklist gate; fail if open items remain
 cordial quality -p <project>          # source-quality etiquettes
-cordial quality --deny-open --tier all # full gate; fail if open action items remain
 cordial quality --apply               # tracing recipes + crate-root lint attributes
 cordial quality --apply --dry-run     # log apply without writing
 cordial explain                       # id + one-line why for every compiled etiquette
@@ -38,6 +38,9 @@ cordial build sysroot                 # std-family rustdoc for framework coverag
 cordial coverage                      # impl / trenchcoat / shadow / std-family coverage
 cordial run                           # quality + coverage
 cordial run --deny-open               # CI gate for unresolved open findings
+cordial clean --dry-run                # preview regenerable paths and their sizes
+cordial clean                          # remove this project's generated artifacts
+cordial clean --all                    # clean recognized stores and shared sysroot cache
 cordial view findings/quality-report.md
 ```
 
@@ -67,8 +70,8 @@ and wait for it; commands issued while it runs wait for its new list.
 The worklist is the agent-facing view of `quality-report.md`. Raw checklists
 do not show checkoffs or the current cursor. `cordial explain <rule-id>` remains
 the authority for what each finding means and how to document an exception.
-For CI, commits, and promotion, use `cordial quality --deny-open --tier all` or
-`just cordial-gate` and clear every open item.
+For CI, commits, and promotion, use `cordial submit --tier all --deny-open`
+or `just cordial-gate` and clear every open item.
 
 ## Progress and logs
 
@@ -89,8 +92,25 @@ Reports write to `{store_home}/{project}/findings/`:
 - `findings/quality-report.md` for the quality rollup.
 - `worklist.json` for the current agent list, claims, and generation.
 
-Artifacts are local and regeneratable. They live under `~/.cordial/{project}/`
-by default and should not be committed to the target repository.
+Generated artifacts live under `~/.cordial/{project}/` by default and should
+not be committed to the target repository. The store also holds curated data:
+`exceptions/`, `quality/patches/`, `patches/`, and `config/`.
+
+`cordial clean` removes only this project's `cache/`, `findings/`, and
+`worklist.json`. `cordial clean --all` does the same for every recognized store
+directly under the store home and also removes the shared `sysroot/cache/`.
+Both commands keep curated paths, the store directories, and the store home's
+`cordial.toml`. The next run rebuilds removed artifacts and may be slower.
+Cleaning a worklist also discards any checked-off claims; the command reports
+how many.
+
+Use `cordial clean --dry-run` to preview the exact paths and measured sizes
+without removing anything; it combines with `--all`. A project clean waits for
+an active gate to release its store lock. `--all` skips busy stores or the shared
+sysroot cache, continues with the rest, and exits nonzero because the clean was
+incomplete. Unknown directories are skipped. Cordial recognizes a store by its
+marker or its legacy directory layout, and never follows symlinks during
+removal.
 
 ## Config
 

@@ -22,13 +22,18 @@ cargo install --path .
 cordial instructions
 cordial open -p <project>
 cordial submit -p <project>
-cordial quality -p <project> --deny-open
+cordial submit -p <project> --tier all --deny-open
+cordial clean -p <project> --dry-run
 cordial explain
 ```
 
 Agents can follow `open`, `done` or `skip`, and `submit` to work through a
 persisted list. `submit` verifies claims and builds the next list. Use
-`cordial quality --deny-open` for the zero-open commit or CI gate.
+`cordial submit --tier all --deny-open` for the zero-open commit or CI gate.
+`cordial clean` removes a project's generated cache, reports, and worklist;
+`cordial clean --all` also covers other recognized stores and the shared
+sysroot cache. [Running cordial](docs/running-cordial.md#store) describes what
+is kept and how to preview a clean.
 `cordial quality` runs source-quality etiquettes. `cordial coverage` runs
 rustdoc-backed inventory etiquettes and rebuilds workspace rustdoc cache inputs
 as needed. Artifacts land under `~/.cordial/{project}/findings/`.

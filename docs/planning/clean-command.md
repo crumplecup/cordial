@@ -233,4 +233,4 @@ Tests live in `tests/`, against temporary stores.
 - [x] Phase 2: `plan_clean`, `run_clean`
 - [x] Phase 3: `cordial clean`, `--all`, `--dry-run`
 - [x] Phase 4: store lock
-- [ ] Phase 5: docs
+- [x] Phase 5: docs
