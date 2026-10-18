@@ -216,11 +216,7 @@ pub(super) fn execute_run_plugins(
     write_worklist: bool,
     command: &'static str,
 ) -> CordialResult<()> {
-    #[cfg(feature = "quality")]
-    let _worklist_lock =
-        crate::worklist::WorklistLock::exclusive(store, command, progress.as_ref())?;
-    #[cfg(not(feature = "quality"))]
-    let _ = command;
+    let _worklist_lock = crate::WorklistLock::exclusive(store, command, progress.as_ref())?;
 
     execute_run_plugins_locked(
         project_root,

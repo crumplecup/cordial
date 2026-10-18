@@ -1,13 +1,15 @@
 //! Output and dispatch for `cordial clean`.
 
+use std::collections::BTreeSet;
 use std::io::{self, Write};
 use std::path::Path;
 
 use tracing::instrument;
 
 use crate::{
-    CleanPlan, CleanScope, CordialError, CordialResult, ProgressSink, StoreLayout,
-    default_store_home, plan_clean, run_clean_with_progress,
+    CleanPlan, CleanScope, CordialError, CordialResult, ProgressSink, StoreLayout, SysrootCache,
+    SysrootLock, WorklistLock, default_store_home, plan_clean, project_slug_from_path,
+    run_clean_with_progress,
 };
 
 #[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
@@ -31,7 +33,55 @@ pub(super) fn execute_clean(
         }
     };
     let task = progress.spinner("Planning clean".into());
-    let plan = plan_clean(scope)?;
+    let initial = plan_clean(scope.clone())?;
+    let mut project_locks = Vec::new();
+    let mut sysroot_lock = None;
+    let plan = if all {
+        let sysroot_root =
+            SysrootCache::from_home(store_home.map_or_else(default_store_home, Path::to_path_buf));
+        let mut held = BTreeSet::new();
+        let mut busy = BTreeSet::new();
+        for root in initial.stores() {
+            if root == sysroot_root.root() {
+                if let Some(lock) = SysrootLock::try_exclusive(&sysroot_root, "clean --all")? {
+                    sysroot_lock = Some(lock);
+                    held.insert(root.clone());
+                } else {
+                    busy.insert(root.clone());
+                }
+            } else {
+                let store = StoreLayout::from_root(root, project_slug_from_path(root));
+                if let Some(lock) = WorklistLock::try_exclusive(&store, "clean --all")? {
+                    project_locks.push(lock);
+                    held.insert(root.clone());
+                } else {
+                    busy.insert(root.clone());
+                }
+            }
+        }
+        let mut plan = plan_clean(scope)?;
+        for root in plan.stores().iter().filter(|root| !held.contains(*root)) {
+            busy.insert(root.clone());
+        }
+        for root in busy {
+            plan.exclude_store(&root, "busy or changed during planning");
+        }
+        plan
+    } else {
+        if let Some(skipped) = initial.skipped().first() {
+            return Err(CordialError::clean(
+                skipped.path().clone(),
+                skipped.reason(),
+            ));
+        }
+        if !initial.stores().is_empty() {
+            project_locks.push(WorklistLock::exclusive(store, "clean", progress)?);
+            plan_clean(scope)?
+        } else {
+            initial
+        }
+    };
+    let _locks = (project_locks, sysroot_lock);
     task.finish(format!("Planned {} path(s)", plan.paths().len()));
     print_plan(&plan, dry_run)?;
     if !all {

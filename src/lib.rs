@@ -74,6 +74,7 @@ pub mod rustdoc;
 mod rustdoc_loader;
 mod session;
 mod store;
+mod store_lock;
 mod targets;
 #[doc(hidden)]
 pub mod testing;
@@ -387,6 +388,7 @@ pub use session::{
     RunAll, RunFilter, RunOutcome, RuntimeSession, Session, SessionBuilder, SessionView,
 };
 pub use store::{StoreLayout, SysrootCache, default_store_home, project_slug_from_path};
+pub use store_lock::{SysrootLock, WorklistLock};
 pub use tier::{
     BUILTIN_TIER_ASSIGNMENTS, COLD_THRESHOLD, EtiquetteLedgerEntry, GateLedger, HookTiming,
     HookTimings, Tier, TierSelection, WARM_THRESHOLD, assigned_tier, builtin_tier, tier_for_timing,
@@ -395,7 +397,7 @@ pub use tier::{
 pub use worklist::{
     AmbiguousGroup, AreaScore, BuildRecord, ChecklistSource, ClaimChange, FindingSource, ItemId,
     ItemSource, ItemState, Scorecard, SoftStaleness, Validity, WORKLIST_INSTRUCTIONS, Worklist,
-    WorklistItem, WorklistLock, render_open, render_stats, render_submit, score, score_verified,
+    WorklistItem, render_open, render_stats, render_submit, score, score_verified,
 };
 #[cfg(feature = "homecoming_std")]
 pub use {

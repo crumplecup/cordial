@@ -232,5 +232,5 @@ Tests live in `tests/`, against temporary stores.
 - [x] Phase 1: classify the layout, marker
 - [x] Phase 2: `plan_clean`, `run_clean`
 - [x] Phase 3: `cordial clean`, `--all`, `--dry-run`
-- [ ] Phase 4: store lock
+- [x] Phase 4: store lock
 - [ ] Phase 5: docs

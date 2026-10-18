@@ -1,5 +1,6 @@
 //! Plan and remove only regenerable Cordial store artifacts.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -51,6 +52,8 @@ pub struct SkippedStore {
 /// Fixed deletion plan, also used by dry run output.
 #[derive(Debug, Clone, derive_getters::Getters)]
 pub struct CleanPlan {
+    /// Recognized stores, including stores with no current regenerable paths.
+    stores: Vec<PathBuf>,
     /// Paths to remove.
     paths: Vec<CleanPath>,
     /// Stores skipped during recognition or safety checks.
@@ -58,6 +61,8 @@ pub struct CleanPlan {
     /// Number of checked-off items in discarded worklists.
     #[getter(copy)]
     checked_off: usize,
+    /// Checked-off counts by store, so excluding a busy store also excludes its count.
+    checked_off_by_store: BTreeMap<PathBuf, usize>,
 }
 
 /// One deletion failure; other planned paths are still attempted.
@@ -84,6 +89,21 @@ pub struct CleanReport {
 }
 
 impl CleanPlan {
+    /// Exclude a store whose lock could not be held.
+    #[cfg(feature = "cli")]
+    #[instrument(level = "debug", skip(self))]
+    pub(crate) fn exclude_store(&mut self, root: &Path, reason: &str) {
+        self.paths.retain(|path| path.store != root);
+        self.stores.retain(|store| store != root);
+        if let Some(count) = self.checked_off_by_store.remove(root) {
+            self.checked_off -= count;
+        }
+        self.skipped.push(SkippedStore {
+            path: root.to_path_buf(),
+            reason: reason.to_owned(),
+        });
+    }
+
     /// Total estimated bytes in the plan.
     #[instrument(level = "trace", skip(self))]
     pub fn total_bytes(&self) -> u64 {
@@ -113,9 +133,11 @@ impl CleanReport {
 #[instrument(level = "debug", skip(scope), err(level = "warn"))]
 pub fn plan_clean(scope: CleanScope) -> CordialResult<CleanPlan> {
     let mut plan = CleanPlan {
+        stores: Vec::new(),
         paths: Vec::new(),
         skipped: Vec::new(),
         checked_off: 0,
+        checked_off_by_store: BTreeMap::new(),
     };
     match scope {
         CleanScope::Project {
@@ -188,15 +210,18 @@ fn plan_project(
         });
         return Ok(());
     }
+    plan.stores.push(root.clone());
     for path in store.regenerable_paths() {
         #[cfg(feature = "quality")]
         if path == store.worklist_path() && path.exists() {
             if let Ok(Some(list)) = crate::Worklist::read(store) {
-                plan.checked_off += list
+                let count = list
                     .items()
                     .iter()
                     .filter(|item| *item.state() == crate::ItemState::Done)
                     .count();
+                plan.checked_off += count;
+                plan.checked_off_by_store.insert(root.clone(), count);
             }
         }
         add_path(plan, root, path)?;
@@ -230,6 +255,7 @@ fn plan_sysroot(
         });
         return Ok(());
     }
+    plan.stores.push(root.clone());
     for path in sysroot.regenerable_paths() {
         add_path(plan, root, path)?;
     }

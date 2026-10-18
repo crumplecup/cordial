@@ -67,6 +67,7 @@ pub fn build_sysroot_libraries_with_progress(
     force: bool,
     progress: &dyn ProgressSink,
 ) -> CordialResult<Vec<BuildArtifact>> {
+    let _lock = crate::SysrootLock::exclusive(sysroot, "build sysroot", progress)?;
     sysroot.ensure_dirs()?;
 
     let mut sources: Vec<&str> = FRAMEWORK_STD_SOURCES.to_vec();

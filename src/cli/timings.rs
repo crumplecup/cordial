@@ -47,8 +47,7 @@ struct TimingReport {
 #[instrument(level = "debug", skip(ctx))]
 pub(super) fn execute_timings(ctx: &ActCtx, only: Option<&str>) -> CordialResult<()> {
     #[cfg(feature = "quality")]
-    let _lock =
-        crate::worklist::WorklistLock::exclusive(ctx.store(), "timings", ctx.progress().as_ref())?;
+    let _lock = crate::WorklistLock::exclusive(ctx.store(), "timings", ctx.progress().as_ref())?;
 
     let home = ctx.store_home().clone().unwrap_or_else(default_store_home);
     let session = SessionBuilder::new(ctx.project_root())
