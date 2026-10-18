@@ -19,6 +19,7 @@ mod export;
 mod gate_args;
 mod progress;
 mod run;
+mod tiers;
 mod timings;
 #[cfg(feature = "quality")]
 mod worklist;

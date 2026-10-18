@@ -9,7 +9,7 @@ use crate::{
     CordialError, CordialResult, CrateIr, Disposition, Etiquette, Finding, NamedRunFilter, Plugin,
     ProgressSink, RunAll, RunFilter, RunOutcome, Session, SessionBuilder, StoreLayout,
     SurrealGraphExport, all_plugins, default_store_home, etiquettes_from_plugins, lookup_etiquette,
-    render_explain_list, render_explain_page, run_tracing_instrument_apply,
+    run_tracing_instrument_apply,
 };
 use tracing::instrument;
 
@@ -98,16 +98,25 @@ pub(super) fn execute_explain(
     let owned = etiquettes_from_plugins(&plugins, &session);
     let etiquettes: Vec<&dyn Etiquette> =
         owned.iter().map(|etiquette| etiquette.as_ref()).collect();
+    let config = crate::load_session_config(&session);
     match id {
         None => {
-            write!(io::stdout(), "{}", render_explain_list(&etiquettes))?;
+            write!(
+                io::stdout(),
+                "{}",
+                super::tiers::render_explain_list_with_tiers(&etiquettes, &config)
+            )?;
             Ok(())
         }
         Some(query) => {
             let Some(etiquette) = lookup_etiquette(&etiquettes, query) else {
                 return Err(CordialError::unknown_etiquette(query));
             };
-            write!(io::stdout(), "{}", render_explain_page(etiquette))?;
+            write!(
+                io::stdout(),
+                "{}",
+                super::tiers::render_explain_page_with_tier(etiquette, &config)
+            )?;
             Ok(())
         }
     }

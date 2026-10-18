@@ -624,6 +624,45 @@ fn cli_explain_lists_compiled_etiquettes() -> miette::Result<()> {
 }
 
 #[test]
+fn cli_tiers_and_explain_use_project_assignment() -> miette::Result<()> {
+    cordial::init_tracing();
+    let project = tempfile::tempdir().into_diagnostic().wrap_err("project")?;
+    fs::write(
+        project.path().join("cordial.toml"),
+        "[tiers.assign]\ndoc_warnings = \"deep\"\n",
+    )
+    .into_diagnostic()
+    .wrap_err("tier config")?;
+    let project_path = utf8_path(project.path())?;
+    let run = |args: &[&str]| -> miette::Result<String> {
+        let output = cordial_command()
+            .args(["--project", project_path])
+            .args(args)
+            .output()
+            .into_diagnostic()
+            .wrap_err("run cordial")?;
+        assert!(
+            output.status.success(),
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    };
+    let tiers = run(&["tiers"])?;
+    assert!(tiers.contains("Default tiers: quick, build"));
+    assert!(tiers.contains("deep:\n"));
+    assert!(tiers.contains("doc_warnings (config)"));
+    let list = run(&["explain"])?;
+    assert!(
+        list.lines()
+            .any(|line| line.contains("doc_warnings") && line.contains("[deep]"))
+    );
+    let page = run(&["explain", "DOC-WARNING-001"])?;
+    assert!(page.contains("**Tier:** `deep` (config)"));
+    Ok(())
+}
+
+#[test]
 fn cli_explain_rule_id_prints_page() -> miette::Result<()> {
     cordial::init_tracing();
     let output = cordial_command()

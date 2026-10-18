@@ -94,6 +94,8 @@ pub enum Commands {
         #[arg(long)]
         output: PathBuf,
     },
+    /// List cost tiers, their etiquettes, and assignment sources.
+    Tiers,
     /// Run all built-in etiquettes (quality + coverage).
     Run {
         /// Exit with failure when unresolved open findings remain.
@@ -297,6 +299,7 @@ impl Commands {
             Self::TimingsPass { etiquette, output } => {
                 super::timings::execute_timings_pass(&ctx, &etiquette, &output)
             }
+            Self::Tiers => super::tiers::execute_tiers(&ctx.project_root, ctx.store_home.clone()),
             Self::Run {
                 deny_open,
                 selection,
