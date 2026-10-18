@@ -382,7 +382,10 @@ pub use session::{
     RunAll, RunFilter, RunOutcome, RuntimeSession, Session, SessionBuilder, SessionView,
 };
 pub use store::{StoreLayout, SysrootCache, default_store_home, project_slug_from_path};
-pub use tier::{EtiquetteLedgerEntry, GateLedger, HookTiming, HookTimings};
+pub use tier::{
+    BUILTIN_TIER_ASSIGNMENTS, COLD_THRESHOLD, EtiquetteLedgerEntry, GateLedger, HookTiming,
+    HookTimings, WARM_THRESHOLD, builtin_tier, tier_for_timing,
+};
 #[cfg(feature = "quality")]
 pub use worklist::{
     AmbiguousGroup, AreaScore, BuildRecord, ChecklistSource, ClaimChange, ItemId, ItemSource,

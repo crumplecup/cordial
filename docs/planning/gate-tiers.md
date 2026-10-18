@@ -39,8 +39,8 @@ user-defined tier is a new name and nothing more.
 
 | Tier | Meaning |
 | --- | --- |
-| `quick` | No external process. Cost is parsing, the graph, and assessment |
-| `build` | Spawns cargo or a tool. Expensive on a cold build, cheap once caches are warm |
+| `quick` | Cheap cold and warm; usually parsing, the graph, and assessment |
+| `build` | Expensive cold setup or build, cheap once caches are warm |
 | `deep` | Expensive even warm, or depends on the network or a toolchain that is slow to run |
 
 **Selecting tiers.** One run selects one or more tiers. With no flag, the run
@@ -124,6 +124,32 @@ threshold separates "no build involved" from "pays for a build the first time".
 Both are constants chosen after the first measurement pass, at the visible gaps in
 the data instead of at round numbers, and then recorded with the measurements
 they came from.
+
+The 2026-10-17 runs measured Cordial and the larger Amenable workspace. The
+complete per-etiquette results are in each project's default-store `timings.md`
+and `timings.json`. These rows determined the first thresholds (seconds):
+
+| Etiquette | Cordial cold/warm | Amenable cold/warm | Initial tier |
+| --- | ---: | ---: | --- |
+| `tracing` | 5.97 / 5.90 | 6.19 / 6.01 | `quick` |
+| `antipatterns` | 2.95 / 2.91 | 252.74 / 4.79 | `build` |
+| `amenable-ext-*` | unavailable | 39.78–57.52 / 2.01–3.73 | `build` |
+| `doc_warnings` | 41.08 / 2.07 | 146.15 / 3.05 | `build` |
+| `dependency_freshness` | 2.58 / 2.31 | 9.54 / 9.53 | `deep` |
+| `impl-coverage` | 59.04 / 2.15 | 157.75 / 10.73 | `deep` |
+| `verus_warnings` | 1.97 / 1.97 | 33.92 / 34.10 | `deep` |
+| `amenable-std` | unavailable | 39.55 / 38.04 | `deep` |
+
+The warm threshold is **8 seconds**, between the measured 6.19-second source
+checks and 9.53-second recurring work. The cold threshold is **20 seconds**,
+between the 9.54-second checks and 33.92-second builds or tool runs. A warm
+pass above 8 seconds wins even when its cold pass is also above 20 seconds.
+`feature_warnings` remains `deep` by design; it was disabled during these runs
+because its feature powerset is expensive. `creusot_diagnostics` is provisionally
+`deep` because neither checkout exercised a representative proof run.
+`homecoming-std` is provisionally `build` because neither checkout supplied
+the assessor findings needed to measure it; its rustdoc prerequisite has the
+same cold-build shape as the measured coverage checks.
 
 Measured results go into a table of built-ins, a `const` in the same style as the
 ordering table. Cordial merges it at runtime with the tier assignments from
@@ -273,7 +299,7 @@ The tier selection becomes part of the worklist snapshot, replacing the
 - [x] Phase 1: per-hook timing and the ledger
 - [x] Phase 2: `cordial timings` (measured Cordial and Amenable on 2026-10-17;
   unavailable etiquette measurements are recorded in their store reports)
-- [ ] Phase 3: thresholds and the built-in table
+- [x] Phase 3: thresholds and the built-in table
 - [ ] Phase 4: selection, config, `--tier`
 - [ ] Phase 5: report handling for tiers that did not run
 - [ ] Phase 6: `cordial tiers` and explain output
