@@ -847,7 +847,11 @@ Nothing in the second blocks the first.
     the covered-tiers line in `stats`, once [Gate tiers](gate-tiers.md) lands.
 12. **Rule ids.** A structured `ItemSource` that supplies the rule id for every
     item, and with it a prefilled `cordial exceptions add` line.
-13. **Optional.** `--json` output on the commands.
+13. **Optional.** `--json` output on `open`, `peek`, `stats`, `done`, `skip`,
+    and `submit`. Each invocation writes one versioned JSON object to stdout;
+    progress and lock notices stay on stderr. Responses include the worklist
+    generation and store path, and submit reports definite cleared and reopened
+    claim ids from the scorecard. JSON errors retain the command's exit status.
 
 ### Changes to `AGENTS.md`
 
@@ -972,4 +976,4 @@ Release 2:
 - [x] Phase 10: soft-stale line
 - [x] Phase 11: tiers
 - [x] Phase 12: rule ids and prefilled exceptions
-- [ ] Phase 13: `--json`
+- [x] Phase 13: `--json`

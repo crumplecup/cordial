@@ -763,6 +763,147 @@ fn cli_submit_carries_unverified_claim_and_repeats_tier() -> miette::Result<()> 
 }
 
 #[test]
+fn cli_worklist_json_round_trip_and_errors() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("project")?;
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    write_minimal_crate(
+        fixture.path(),
+        include_str!("fixtures/panics/cli_quality.rs"),
+    )?;
+    let project = utf8_path(fixture.path())?;
+    let home = utf8_path(store.path())?;
+    let run = |args: &[&str]| -> miette::Result<std::process::Output> {
+        cordial_command()
+            .args(["--project", project, "--store-home", home])
+            .args(args)
+            .output()
+            .into_diagnostic()
+            .wrap_err("run cordial")
+    };
+    let read = |output: &std::process::Output| -> miette::Result<serde_json::Value> {
+        serde_json::from_slice(&output.stdout)
+            .into_diagnostic()
+            .wrap_err(format!(
+                "JSON stdout: {}",
+                String::from_utf8_lossy(&output.stdout)
+            ))
+    };
+    let initial = run(&["quality", "--etiquette", "panics"])?;
+    assert!(
+        initial.status.success(),
+        "{}",
+        String::from_utf8_lossy(&initial.stderr)
+    );
+    let open_output = run(&["open", "--json"])?;
+    assert!(
+        open_output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&open_output.stderr)
+    );
+    let open = read(&open_output)?;
+    assert_eq!(open["version"], 1);
+    assert_eq!(open["command"], "open");
+    assert_eq!(open["list_generation"], 1);
+    assert!(open["store_path"].as_str().is_some());
+    assert!(open["current"]["rule_id"].as_str().is_some());
+    assert!(!String::from_utf8_lossy(&open_output.stdout).contains("Starting:"));
+    let id = open["current"]["id"]
+        .as_str()
+        .ok_or_else(|| miette::miette!("no id"))?;
+
+    let peek = read(&run(&["peek", "--json"])?)?;
+    assert_eq!(peek["current"]["id"], id);
+    let stats = read(&run(&["stats", "--verbose", "--json"])?)?;
+    assert_eq!(stats["items"][0]["id"], id);
+
+    let bad = run(&["done", id, "aaaaaa", "--json"])?;
+    assert!(!bad.status.success());
+    let error = read(&bad)?;
+    assert_eq!(error["error"]["kind"], "UnknownId");
+    assert_eq!(read(&run(&["peek", "--json"])?)?["current"]["id"], id);
+
+    let done = read(&run(&["done", id, "--json"])?)?;
+    assert_eq!(done["checked_off"][0]["was"], "open");
+    assert_eq!(done["checked_off"][0]["now"], "done");
+    let again = read(&run(&["done", id, "--json"])?)?;
+    assert_eq!(again["checked_off"][0]["was"], "done");
+
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        "pub fn boom() {}\npub fn quiet() {}\n",
+    )
+    .into_diagnostic()
+    .wrap_err("fix fixture")?;
+    let submit_output = run(&["submit", "--tier", "quick", "--json"])?;
+    assert!(
+        submit_output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&submit_output.stderr)
+    );
+    let submit = read(&submit_output)?;
+    assert_eq!(submit["command"], "submit");
+    assert_eq!(submit["previous_generation"], 1);
+    assert_eq!(submit["list_generation"], 2);
+    assert!(submit["outcomes"].as_array().is_some_and(|outcomes| {
+        outcomes
+            .iter()
+            .any(|outcome| outcome["id"] == id && outcome["outcome"] == "cleared")
+    }));
+    Ok(())
+}
+
+#[test]
+fn cli_worklist_json_skip_and_denied_submit() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("project")?;
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    write_minimal_crate(
+        fixture.path(),
+        include_str!("fixtures/panics/cli_quality.rs"),
+    )?;
+    let project = utf8_path(fixture.path())?;
+    let home = utf8_path(store.path())?;
+    let run = |args: &[&str]| -> miette::Result<std::process::Output> {
+        cordial_command()
+            .args(["--project", project, "--store-home", home])
+            .args(args)
+            .output()
+            .into_diagnostic()
+            .wrap_err("run cordial")
+    };
+    assert!(run(&["quality", "--etiquette", "panics"])?.status.success());
+    let open: serde_json::Value =
+        serde_json::from_slice(&run(&["open", "--json"])?.stdout).into_diagnostic()?;
+    let id = open["current"]["id"]
+        .as_str()
+        .ok_or_else(|| miette::miette!("no id"))?;
+    let skipped = run(&["skip", id, "--reason", "needs a design decision", "--json"])?;
+    assert!(
+        skipped.status.success(),
+        "{}",
+        String::from_utf8_lossy(&skipped.stderr)
+    );
+    let skipped: serde_json::Value = serde_json::from_slice(&skipped.stdout).into_diagnostic()?;
+    assert_eq!(skipped["checked_off"][0]["now"], "skipped");
+    let stats: serde_json::Value =
+        serde_json::from_slice(&run(&["stats", "--verbose", "--json"])?.stdout)
+            .into_diagnostic()?;
+    assert_eq!(
+        stats["items"][0]["skip_reasons"][0],
+        "needs a design decision"
+    );
+
+    let denied = run(&["submit", "--tier", "quick", "--deny-open", "--json"])?;
+    assert!(!denied.status.success());
+    let response: serde_json::Value = serde_json::from_slice(&denied.stdout).into_diagnostic()?;
+    assert_eq!(response["command"], "submit");
+    assert_eq!(response["error"]["kind"], "CommandFailed");
+    assert_eq!(response["list_generation"], 2);
+    Ok(())
+}
+
+#[test]
 fn cli_explain_rule_id_prints_page() -> miette::Result<()> {
     cordial::init_tracing();
     let output = cordial_command()

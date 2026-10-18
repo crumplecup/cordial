@@ -5,16 +5,11 @@ use std::sync::Arc;
 
 use clap::Subcommand;
 
-use super::exceptions::{
-    execute_add_coverage_skip, execute_add_exception, execute_backup_exceptions,
-    execute_edit_exception, execute_load_exceptions, execute_remove_exception, list_exceptions,
-    show_exceptions,
-};
 use super::gate_args::GateSelectionArgs;
 use super::run::{execute_quality_apply, execute_run_plugins, view_store_file};
 use crate::{
-    CordialError, CordialResult, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,
-    ProgressSink, StoreLayout, all_plugins, quality_plugins,
+    CordialResult, DEFAULT_EXCEPTIONS_REGISTRY, ProgressSink, StoreLayout, all_plugins,
+    quality_plugins,
 };
 use tracing::instrument;
 
@@ -24,15 +19,26 @@ pub enum Commands {
     /// Show the current worklist item, building a list when needed.
     #[cfg(feature = "quality")]
     #[command(about = crate::worklist::OPEN_HELP)]
-    Open,
+    Open {
+        /// Print one machine-readable JSON object.
+        #[arg(long)]
+        json: bool,
+    },
     /// Show the current item without building a list.
     #[cfg(feature = "quality")]
     #[command(about = crate::worklist::PEEK_HELP)]
-    Peek,
+    Peek {
+        /// Print one machine-readable JSON object.
+        #[arg(long)]
+        json: bool,
+    },
     /// Check off named items, or the current item.
     #[cfg(feature = "quality")]
     #[command(about = crate::worklist::DONE_HELP)]
     Done {
+        /// Print one machine-readable JSON object.
+        #[arg(long)]
+        json: bool,
         /// Stable item ids; omit to check off the current item.
         ids: Vec<String>,
     },
@@ -40,6 +46,9 @@ pub enum Commands {
     #[cfg(feature = "quality")]
     #[command(about = crate::worklist::SKIP_HELP)]
     Skip {
+        /// Print one machine-readable JSON object.
+        #[arg(long)]
+        json: bool,
         /// Stable item ids; omit to set aside the current item.
         ids: Vec<String>,
         /// Why this item cannot be acted on now; kept if it returns on later lists.
@@ -50,6 +59,9 @@ pub enum Commands {
     #[cfg(feature = "quality")]
     #[command(about = crate::worklist::SUBMIT_HELP)]
     Submit {
+        /// Print one machine-readable JSON object.
+        #[arg(long)]
+        json: bool,
         /// Fail if the new list still has open items.
         #[arg(long)]
         deny_open: bool,
@@ -65,6 +77,9 @@ pub enum Commands {
     #[cfg(feature = "quality")]
     #[command(about = crate::worklist::STATS_HELP)]
     Stats {
+        /// Print one machine-readable JSON object.
+        #[arg(long)]
+        json: bool,
         /// Show items and their checked state.
         #[arg(long)]
         verbose: bool,
@@ -285,8 +300,8 @@ impl Commands {
     pub(super) fn act(self, ctx: ActCtx) -> CordialResult<()> {
         match self {
             #[cfg(feature = "quality")]
-            command @ (Self::Open
-            | Self::Peek
+            command @ (Self::Open { .. }
+            | Self::Peek { .. }
             | Self::Done { .. }
             | Self::Skip { .. }
             | Self::Submit { .. }
@@ -394,82 +409,6 @@ impl Commands {
                 &ctx.project_root,
                 ctx.store_home.clone(),
                 id.as_deref(),
-            ),
-        }
-    }
-}
-
-impl ExceptionCommands {
-    #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
-    fn act(self, ctx: &ActCtx) -> CordialResult<()> {
-        match self {
-            Self::List => list_exceptions(&ctx.store),
-            Self::Show {
-                etiquette,
-                crate_name,
-            } => show_exceptions(
-                &ctx.store,
-                &etiquette,
-                crate_name.as_deref().unwrap_or(ctx.store.project_slug()),
-            ),
-            Self::Backup { root } => {
-                execute_backup_exceptions(&ctx.project_root, &ctx.store, &root)
-            }
-            Self::Load { root } => execute_load_exceptions(&ctx.project_root, &ctx.store, &root),
-            Self::Add {
-                etiquette,
-                file,
-                line,
-                rule_id,
-                context,
-                crate_name,
-                patch_set,
-                path,
-                reason,
-            } => {
-                if let Some(patch_set) = patch_set {
-                    let path = path
-                        .ok_or_else(|| CordialError::invariant("coverage skip requires --path"))?;
-                    execute_add_coverage_skip(
-                        &ctx.store,
-                        &patch_set,
-                        CoverageSkipEntry::new(path, reason),
-                    )
-                } else {
-                    let etiquette = etiquette.ok_or_else(|| {
-                        CordialError::invariant("quality exception requires an etiquette")
-                    })?;
-                    let file = file.ok_or_else(|| {
-                        CordialError::invariant("quality exception requires --file")
-                    })?;
-                    let crate_name = crate_name
-                        .or_else(|| ctx.crate_name.clone())
-                        .unwrap_or_else(|| ctx.store.project_slug().clone());
-                    let mut entry = ExceptionEntry::new(file, reason);
-                    if let Some(line) = line {
-                        entry = entry.with_line(line);
-                    }
-                    if let Some(rule_id) = rule_id {
-                        entry = entry.with_rule_id(rule_id);
-                    }
-                    if let Some(context) = context {
-                        entry = entry.with_context(context);
-                    }
-                    execute_add_exception(&ctx.store, &etiquette, &crate_name, entry)
-                }
-            }
-            Self::Remove { target } => execute_remove_exception(
-                &ctx.store,
-                &target.etiquette,
-                &target.crate_name(ctx),
-                &target.selector(),
-            ),
-            Self::Edit { target, new } => execute_edit_exception(
-                &ctx.store,
-                &target.etiquette,
-                &target.crate_name(ctx),
-                &target.selector(),
-                &new.update(),
             ),
         }
     }

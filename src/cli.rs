@@ -68,9 +68,21 @@ impl Cli {
             .unwrap_or_else(default_store_home)
             .join(&slug);
         let store = StoreLayout::from_root(store_root, slug);
+        #[cfg(feature = "quality")]
+        let json_worklist = matches!(
+            &self.command,
+            Commands::Open { json: true }
+                | Commands::Peek { json: true }
+                | Commands::Done { json: true, .. }
+                | Commands::Skip { json: true, .. }
+                | Commands::Submit { json: true, .. }
+                | Commands::Stats { json: true, .. }
+        );
+        #[cfg(not(feature = "quality"))]
+        let json_worklist = false;
         let progress: Arc<dyn ProgressSink> = if std::env::var_os("CORDIAL_NO_PROGRESS").is_some() {
             Arc::new(IndicatifProgress::hidden())
-        } else if std::io::stderr().is_terminal() {
+        } else if std::io::stderr().is_terminal() && !json_worklist {
             Arc::new(IndicatifProgress::new())
         } else {
             Arc::new(LineProgress::new())

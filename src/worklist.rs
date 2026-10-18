@@ -3,6 +3,7 @@
 mod finding_source;
 mod instructions;
 mod item;
+mod json;
 mod lock;
 mod render;
 mod score;
@@ -16,6 +17,7 @@ pub(crate) use instructions::{
     DONE_HELP, INSTRUCTIONS_HELP, OPEN_HELP, PEEK_HELP, SKIP_HELP, STATS_HELP, SUBMIT_HELP,
 };
 pub use item::{ItemId, ItemState, WorklistItem};
+pub(crate) use json::{json_claim, json_error, json_open, json_stats, json_status, json_submit};
 pub use lock::WorklistLock;
 pub use render::{render_open, render_stats, render_submit};
 pub use score::{AmbiguousGroup, AreaScore, Scorecard, score, score_verified};

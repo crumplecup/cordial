@@ -12,6 +12,8 @@ use crate::{
 };
 use tracing::instrument;
 
+use super::commands::{ActCtx, ExceptionCommands};
+
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
 pub(super) fn execute_backup_exceptions(
     project_root: &Path,
@@ -189,4 +191,80 @@ pub(super) fn show_exceptions(
         writeln!(io::stdout())?;
     }
     Ok(())
+}
+
+impl ExceptionCommands {
+    #[instrument(level = "debug", skip(self, ctx), err(level = "warn"))]
+    pub(super) fn act(self, ctx: &ActCtx) -> CordialResult<()> {
+        match self {
+            Self::List => list_exceptions(ctx.store()),
+            Self::Show {
+                etiquette,
+                crate_name,
+            } => show_exceptions(
+                ctx.store(),
+                &etiquette,
+                crate_name.as_deref().unwrap_or(ctx.store().project_slug()),
+            ),
+            Self::Backup { root } => {
+                execute_backup_exceptions(ctx.project_root(), ctx.store(), &root)
+            }
+            Self::Load { root } => execute_load_exceptions(ctx.project_root(), ctx.store(), &root),
+            Self::Add {
+                etiquette,
+                file,
+                line,
+                rule_id,
+                context,
+                crate_name,
+                patch_set,
+                path,
+                reason,
+            } => {
+                if let Some(patch_set) = patch_set {
+                    let path = path
+                        .ok_or_else(|| CordialError::invariant("coverage skip requires --path"))?;
+                    execute_add_coverage_skip(
+                        ctx.store(),
+                        &patch_set,
+                        CoverageSkipEntry::new(path, reason),
+                    )
+                } else {
+                    let etiquette = etiquette.ok_or_else(|| {
+                        CordialError::invariant("quality exception requires an etiquette")
+                    })?;
+                    let file = file.ok_or_else(|| {
+                        CordialError::invariant("quality exception requires --file")
+                    })?;
+                    let crate_name = crate_name
+                        .or_else(|| ctx.crate_name().clone())
+                        .unwrap_or_else(|| ctx.store().project_slug().clone());
+                    let mut entry = ExceptionEntry::new(file, reason);
+                    if let Some(line) = line {
+                        entry = entry.with_line(line);
+                    }
+                    if let Some(rule_id) = rule_id {
+                        entry = entry.with_rule_id(rule_id);
+                    }
+                    if let Some(context) = context {
+                        entry = entry.with_context(context);
+                    }
+                    execute_add_exception(ctx.store(), &etiquette, &crate_name, entry)
+                }
+            }
+            Self::Remove { target } => execute_remove_exception(
+                ctx.store(),
+                &target.etiquette,
+                &target.crate_name(ctx),
+                &target.selector(),
+            ),
+            Self::Edit { target, new } => execute_edit_exception(
+                ctx.store(),
+                &target.etiquette,
+                &target.crate_name(ctx),
+                &target.selector(),
+                &new.update(),
+            ),
+        }
+    }
 }

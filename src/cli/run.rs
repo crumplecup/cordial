@@ -234,6 +234,7 @@ pub(super) fn execute_run_plugins(
         deny_open,
         write_worklist,
         false,
+        false,
     )
 }
 
@@ -251,9 +252,10 @@ pub(super) fn execute_run_plugins_locked(
     deny_open: bool,
     write_worklist: bool,
     score_worklist: bool,
+    json_submit: bool,
 ) -> CordialResult<()> {
     #[cfg(not(feature = "quality"))]
-    let _ = (write_worklist, score_worklist);
+    let _ = (write_worklist, score_worklist, json_submit);
     let effective_store_home = store_home.unwrap_or_else(default_store_home);
     let mut builder = SessionBuilder::new(project_root)
         .with_store_root(store.root().clone())
@@ -300,10 +302,16 @@ pub(super) fn execute_run_plugins_locked(
         let scored = previous.map(|previous| {
             let scorecard = crate::worklist::score_verified(&previous, &mut list, &verified);
             list.carry_unverified(&previous, &verified);
-            crate::render_submit(&previous, &list, &scorecard)
+            if json_submit {
+                crate::worklist::json_submit(store, &previous, &list, &scorecard).to_string() + "\n"
+            } else {
+                crate::render_submit(&previous, &list, &scorecard)
+            }
         });
         list.write(store)?;
-        if let Some(summary) = scored {
+        if let Some(summary) =
+            scored.filter(|_| !json_submit || !deny_open || summary.open_action_items == 0)
+        {
             write!(io::stdout(), "{summary}")?;
         }
     }
