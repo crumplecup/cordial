@@ -12,7 +12,7 @@ use crate::{
     CordialConfig, CordialError, CordialResult, Disposition, Etiquette, Finding, StoreLayout,
 };
 
-use super::{HookTimings, assigned_tier};
+use super::{HookTiming, HookTimings, assigned_tier};
 
 /// Last completed run of one etiquette.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
@@ -30,9 +30,19 @@ pub struct GateLedger {
     entries: BTreeMap<String, EtiquetteLedgerEntry>,
     #[serde(default)]
     area_open_counts: BTreeMap<String, usize>,
+    #[serde(default)]
+    last_run_timings: Vec<HookTiming>,
+    #[serde(default)]
+    last_run_wall_nanos: u128,
 }
 
 impl GateLedger {
+    /// Save the latest run's phase, hook, and pipeline timings for inspection.
+    #[instrument(level = "debug", skip(self, timings))]
+    pub fn record_last_run_timings(&mut self, timings: Vec<HookTiming>, wall: std::time::Duration) {
+        self.last_run_timings = timings;
+        self.last_run_wall_nanos = wall.as_nanos();
+    }
     /// Save exact area counts only when every contributing etiquette ran.
     #[cfg(feature = "quality")]
     #[instrument(level = "debug", skip(self, report))]

@@ -554,6 +554,19 @@ fn quality_records_last_run_counts_and_hook_costs_in_the_ledger() -> miette::Res
     assert!(*panics.last_run_unix_secs() > 0);
     assert!(*panics.open_count() > 0);
     assert!(*panics.wall_time_nanos() > 0);
+    assert!(*ledger.last_run_wall_nanos() > 0);
+    assert!(
+        ledger
+            .last_run_timings()
+            .iter()
+            .any(|timing| timing.stage() == "phase" && timing.id() == "load_and_probe")
+    );
+    assert!(
+        ledger
+            .last_run_timings()
+            .iter()
+            .any(|timing| timing.stage() == "pipeline" && timing.id() == "artifact_write")
+    );
     Ok(())
 }
 
@@ -594,7 +607,8 @@ fn timings_measure_two_passes_without_replacing_quality_outputs() -> miette::Res
             .unwrap_or(0)
             > 0
     );
-    assert!(store.root().join("timings.md").is_file());
+    let markdown = fs::read_to_string(store.root().join("timings.md")).into_diagnostic()?;
+    assert!(markdown.contains("## Pipeline phases"));
     assert_eq!(fs::read(report_path).into_diagnostic()?, previous_report);
     assert_eq!(
         cordial::GateLedger::read(&store).into_diagnostic()?,

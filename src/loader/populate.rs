@@ -13,6 +13,7 @@ use tracing::instrument;
 impl SourceLoadView {
     /// Fill the crate IR from loaded views.
     #[instrument(level = "debug", skip(self, ir), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceLoadView")]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
         let root = ir.root();
         if !self.crate_kinds().is_empty() {
@@ -34,6 +35,7 @@ impl SourceLoadView {
     }
 
     #[instrument(level = "info", skip(self, ir, parent, file), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceLoadView")]
     fn load_file(
         &self,
         ir: &mut CrateIr,

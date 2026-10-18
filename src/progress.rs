@@ -38,9 +38,9 @@ pub trait ProgressTask: Send + Sync {
 
 /// Line-oriented progress for frontends whose stderr is not a terminal.
 ///
-/// Each task writes a start line and, when finished, a finish line. A running task writes a
-/// heartbeat every ten seconds. All lines go to the supplied writer, so a CLI
-/// can keep its result on stdout.
+/// Each task writes start, operation change, and finish lines. A running task
+/// writes a heartbeat every ten seconds. All lines go to the supplied writer,
+/// so a CLI can keep its result on stdout.
 pub struct LineProgress {
     output: Arc<Mutex<Box<dyn Write + Send>>>,
     heartbeat_interval: Duration,
@@ -164,7 +164,14 @@ impl ProgressTask for LineTask {
     #[instrument(level = "trace", skip(self))]
     fn set_message(&self, message: String) {
         if let Ok(mut state) = self.state.lock() {
-            state.message = message;
+            if state.message != message {
+                let count = state
+                    .total
+                    .map(|total| format!(" {}/{total}", state.position))
+                    .unwrap_or_default();
+                write_progress_line(&self.output, &format!("Working: {message}{count}"));
+                state.message = message;
+            }
         }
     }
 

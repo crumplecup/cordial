@@ -20,6 +20,16 @@ use crate::plugin::Plugin;
 use crate::progress::{ProgressSink, noop_progress, noop_progress_arc};
 
 use tracing::instrument;
+mod assess;
+#[cfg(any(
+    feature = "quality",
+    feature = "homecoming_std",
+    feature = "amenable_std",
+    feature = "elicitation"
+))]
+mod includes;
+mod load;
+mod render;
 mod resolve;
 mod run;
 

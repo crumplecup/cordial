@@ -48,7 +48,7 @@ depth = 2
 # A gate naming more features than this is too wide to read; the checklist
 # then advises a private (`_`-prefixed) feature that each of them enables.
 private_feature_threshold = 6
-exclude_features = ["slow_tests", "full", "quality", "elicitation"]
+exclude_features = ["slow_tests", "full", "quality", "elicitation", "hotpath"]
 group_features = [
     ["allows", "modularity", "derives", "cfg_scatter", "visibility", "cli_layout", "doc_warnings", "feature_warnings", "glob_imports", "inline_tests", "pageantry", "verus_warnings", "creusot_diagnostics"],
     ["error_sites", "error_chain", "internal_error_chain", "foreign_error_types", "foreign_error_attenuation"],

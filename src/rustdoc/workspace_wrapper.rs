@@ -24,6 +24,7 @@ fn wrapper_coverage_cache_path(store_root: &Path) -> std::path::PathBuf {
     skip(workspace, session, filter, loaders, enrichers),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn ensure_workspace_wrapper_coverage(
     workspace: &mut WorkspaceIr,
     session: &dyn SessionView,

@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
+use std::time::Instant;
 
 use tracing::instrument;
 
@@ -18,18 +19,7 @@ use super::resolve::{
     dedupe_assessors, dedupe_enrichers, dedupe_loaders, dedupe_probes, dedupe_reporters,
     dedupe_workspace_assessors, resolved_etiquettes,
 };
-use super::{RunFilter, RunOutcome, RuntimeSession, SessionView};
-
-mod assess;
-#[cfg(any(
-    feature = "quality",
-    feature = "homecoming_std",
-    feature = "amenable_std",
-    feature = "elicitation"
-))]
-mod includes;
-mod load;
-mod render;
+use super::{RunFilter, RunOutcome, RuntimeSession, SessionView, assess, load, render};
 
 struct ConcreteRunOutcome {
     findings: Vec<Box<dyn Finding>>,
@@ -79,10 +69,12 @@ fn empty_outcome() -> Box<dyn RunOutcome> {
 }
 
 #[instrument(level = "info", skip(session, filter), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn run_session(
     session: &RuntimeSession,
     filter: &dyn RunFilter,
 ) -> CordialResult<Box<dyn RunOutcome>> {
+    let run_started = Instant::now();
     let store = StoreLayout::from_root(
         session.store_root(),
         crate::store::project_slug_from_path(session.project_root()),
@@ -149,6 +141,8 @@ pub(super) fn run_session(
     ));
 
     let mut timings = HookTimings::default();
+    timings.record("phase", "setup", run_started.elapsed());
+    let started = Instant::now();
     let loaded = load::load_and_probe(
         session,
         filter,
@@ -158,14 +152,17 @@ pub(super) fn run_session(
         &enrichers,
         &probes,
         &mut timings,
-    )?;
+    );
+    timings.record("phase", "load_and_probe", started.elapsed());
+    let loaded = loaded?;
     #[cfg(feature = "shadow")]
     let (mut workspace, markers_by_crate) = loaded.into_parts();
     #[cfg(not(feature = "shadow"))]
     let (workspace, markers_by_crate) = loaded.into_parts();
 
     let etiquette_ids: Vec<&str> = etiquettes.iter().map(|etiquette| etiquette.id()).collect();
-    let mut all_findings = assess::assess_targets(
+    let started = Instant::now();
+    let all_findings = assess::assess_targets(
         session,
         &store,
         &targets,
@@ -174,24 +171,29 @@ pub(super) fn run_session(
         &assessors,
         &etiquette_ids,
         &mut timings,
-    )?;
+    );
+    timings.record("phase", "assess", started.elapsed());
+    let mut all_findings = all_findings?;
 
     #[cfg(feature = "shadow")]
     {
         let preload = session
             .progress()
             .spinner("Preparing shadow workspace inputs".to_string());
-        crate::shadow::preload_shadow_pair_crates(
-            &mut workspace,
-            session,
-            filter,
-            &loaders,
-            &enrichers,
-        )?;
+        timings.measure("phase", "shadow_preload", || {
+            crate::shadow::preload_shadow_pair_crates(
+                &mut workspace,
+                session,
+                filter,
+                &loaders,
+                &enrichers,
+            )
+        })?;
         preload.finish("Prepared shadow workspace inputs".to_string());
     }
 
     if !workspace_assessors.is_empty() {
+        let started = Instant::now();
         let task = session.progress().bar(
             "Assessing workspace rules".to_string(),
             workspace_assessors.len() as u64,
@@ -207,8 +209,10 @@ pub(super) fn run_session(
             "Assessed {} workspace rule(s)",
             workspace_assessors.len()
         ));
+        timings.record("phase", "workspace_assess", started.elapsed());
     }
 
+    let started = Instant::now();
     let all_artifacts = render::render_and_write(
         session,
         filter,
@@ -222,9 +226,15 @@ pub(super) fn run_session(
             &all_findings,
         ),
         &mut timings,
-    )?;
+    );
+    timings.record("phase", "render_and_write", started.elapsed());
+    let all_artifacts = all_artifacts?;
 
     if !session.measurement_mode() {
+        let started = Instant::now();
+        let task = session
+            .progress()
+            .spinner("Updating gate ledger".to_string());
         let mut ledger = GateLedger::read(&store)?;
         ledger.record_run(&etiquettes, &all_findings, &timings, &config)?;
         #[cfg(feature = "quality")]
@@ -236,7 +246,10 @@ pub(super) fn run_session(
             let report = crate::build_quality_report(&finding_refs)?;
             ledger.record_quality_areas(&report, &etiquette_ids);
         }
+        timings.record("phase", "ledger", started.elapsed());
+        ledger.record_last_run_timings(timings.clone().into_vec(), run_started.elapsed());
         ledger.write(&store)?;
+        task.finish("Updated gate ledger".to_string());
     }
 
     Ok(Box::new(ConcreteRunOutcome {

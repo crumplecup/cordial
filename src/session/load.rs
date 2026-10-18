@@ -37,6 +37,7 @@ impl LoadedWorkspace {
     skip(session, filter, store, targets, loaders, enrichers, probes, timings),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub(super) fn load_and_probe(
     session: &RuntimeSession,
     filter: &dyn RunFilter,
@@ -61,48 +62,61 @@ pub(super) fn load_and_probe(
         .iter()
         .any(|enricher| enricher.id() == crate::enricher::WrapperCoverageEnricher::ID)
     {
-        crate::rustdoc::ensure_workspace_wrapper_coverage(
-            &mut workspace,
-            session,
-            filter,
-            loaders,
-            enrichers,
-        )?;
+        let task = session
+            .progress()
+            .spinner("Preparing wrapper coverage".to_string());
+        let result = timings.measure("pipeline", "wrapper_coverage", || {
+            crate::rustdoc::ensure_workspace_wrapper_coverage(
+                &mut workspace,
+                session,
+                filter,
+                loaders,
+                enrichers,
+            )
+        });
+        task.finish("Prepared wrapper coverage".to_string());
+        result?;
     }
     #[cfg(not(feature = "impl_coverage"))]
     let _ = filter;
 
     let progress = session.progress().bar(
         "Loading, enriching, and probing crates".to_string(),
-        targets.len() as u64,
+        targets.len() as u64 * (loaders.len() + enrichers.len() + probes.len() + 1) as u64,
     );
-    for (index, target) in targets.iter().enumerate() {
-        progress.set_message(format!(
-            "Analyzing {} ({}/{})",
-            target.crate_name(),
-            index + 1,
-            targets.len()
-        ));
+    for target in targets {
         let mut crate_ir = CrateIr::new(target.crate_name());
 
         for loader in loaders {
+            progress.set_message(format!(
+                "Loading {} with {}",
+                target.crate_name(),
+                loader.id()
+            ));
             let view = timings.measure("load", loader.id(), || {
                 loader.load(LoadContext::new(session, target))
             })?;
             if view.loader_id() == SourceLoader::ID
                 && let Some(source) = view.as_any().downcast_ref::<SourceLoadView>()
             {
-                source.populate_ir(&mut crate_ir)?;
+                progress.set_message(format!("Building source IR for {}", target.crate_name()));
+                timings.measure("pipeline", "source_ir", || {
+                    source.populate_ir(&mut crate_ir)
+                })?;
             }
             #[cfg(feature = "rustdoc")]
             if view.loader_id() == crate::RustdocLoader::ID
                 && let Some(rustdoc) = view.as_any().downcast_ref::<crate::RustdocLoadView>()
             {
-                rustdoc.populate_ir(&mut crate_ir)?;
+                progress.set_message(format!("Building rustdoc IR for {}", target.crate_name()));
+                timings.measure("pipeline", "rustdoc_ir", || {
+                    rustdoc.populate_ir(&mut crate_ir)
+                })?;
             }
             load_views
                 .entry(format!("{}:{}", target.crate_name(), loader.id()))
                 .or_insert(view);
+            progress.inc(1);
         }
 
         if !workspace.crates().contains_key(target.crate_name()) {
@@ -110,26 +124,44 @@ pub(super) fn load_and_probe(
         }
 
         for enricher in enrichers {
+            progress.set_message(format!(
+                "Enriching {} with {}",
+                target.crate_name(),
+                enricher.id()
+            ));
             let load = select_load_view(*enricher, &load_views, target.crate_name())?;
             let mut view = CrateViewMut::new(&mut workspace, target.crate_name().clone());
             timings.measure("enrich", enricher.id(), || {
                 enricher.enrich(EnrichView::new(&mut view, load, session))
             })?;
+            progress.inc(1);
         }
 
-        let cached = workspace
-            .crate_ir(target.crate_name())
-            .ok_or_else(|| CordialError::invariant("crate ir must exist"))?;
-        cached.write_cache(&store.ir_cache_path(target.crate_name()))?;
-        let digest =
-            crate::cache_digest::IrCacheDigest::compute(target, &enricher_id_refs, &load_views)?;
-        digest.write(&crate::cache_digest::IrCacheDigest::cache_path(
-            &store.cache_dir(),
-            target.crate_name(),
-        ))?;
+        progress.set_message(format!("Caching IR for {}", target.crate_name()));
+        timings.measure("pipeline", "cache_ir", || {
+            let cached = workspace
+                .crate_ir(target.crate_name())
+                .ok_or_else(|| CordialError::invariant("crate ir must exist"))?;
+            cached.write_cache(&store.ir_cache_path(target.crate_name()))?;
+            let digest = crate::cache_digest::IrCacheDigest::compute(
+                target,
+                &enricher_id_refs,
+                &load_views,
+            )?;
+            digest.write(&crate::cache_digest::IrCacheDigest::cache_path(
+                &store.cache_dir(),
+                target.crate_name(),
+            ))
+        })?;
+        progress.inc(1);
 
         let crate_view = CrateView::new(&workspace, target.crate_name().clone());
         for probe in probes {
+            progress.set_message(format!(
+                "Probing {} with {}",
+                target.crate_name(),
+                probe.id()
+            ));
             let mut found = timings.measure("probe", probe.id(), || {
                 probe.probe(ProbeView::new(&crate_view, session))
             })?;
@@ -137,8 +169,8 @@ pub(super) fn load_and_probe(
                 .entry(target.crate_name().clone())
                 .or_default()
                 .append(&mut found);
+            progress.inc(1);
         }
-        progress.inc(1);
     }
     progress.finish(format!("Analyzed {} crate(s)", targets.len()));
 

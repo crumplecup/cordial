@@ -43,6 +43,7 @@ pub(super) struct RenderPass<'a> {
     skip(session, filter, pass, timings),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub(super) fn render_and_write(
     session: &RuntimeSession,
     filter: &dyn RunFilter,
@@ -69,20 +70,28 @@ pub(super) fn render_and_write(
         .map(|finding| finding.as_ref() as &dyn Finding)
         .collect();
 
-    let progress = session.progress().spinner("Writing reports".to_string());
+    let progress = session.progress().bar(
+        "Rendering reports".to_string(),
+        (reporters.len() + 1) as u64,
+    );
     let mut all_artifacts: Vec<Box<dyn Artifact>> = Vec::new();
     for reporter in reporters {
+        progress.set_message(format!("Rendering {}", reporter.id()));
         let mut artifacts = timings.measure("report", reporter.id(), || {
             reporter.render(RenderView::new(&finding_refs, &crate_view, session))
         })?;
         all_artifacts.append(&mut artifacts);
+        progress.inc(1);
     }
 
     let rollup = RollupReporter;
+    progress.set_message(format!("Rendering {}", rollup.id()));
     let mut rollup_artifacts = timings.measure("report", rollup.id(), || {
         rollup.render(RenderView::new(&finding_refs, &crate_view, session))
     })?;
     all_artifacts.append(&mut rollup_artifacts);
+    progress.inc(1);
+    progress.finish("Rendered primary reports".to_string());
 
     #[cfg(feature = "quality")]
     let includes_quality = run_includes_quality(session.registered_plugins(), filter, etiquettes);
@@ -98,6 +107,9 @@ pub(super) fn render_and_write(
 
     #[cfg(feature = "quality")]
     if includes_quality {
+        let task = session
+            .progress()
+            .spinner("Rendering quality summary".to_string());
         let quality_report = crate::reporter::QualityReportReporter;
         let fresh_artifacts: BTreeSet<String> = all_artifacts
             .iter()
@@ -116,6 +128,7 @@ pub(super) fn render_and_write(
             )
         })?;
         all_artifacts.append(&mut quality_artifacts);
+        task.finish("Rendered quality summary".to_string());
     }
 
     #[cfg(any(
@@ -124,18 +137,24 @@ pub(super) fn render_and_write(
         feature = "elicitation"
     ))]
     if run_includes_coverage(session.registered_plugins(), filter, etiquettes) {
-        crate::reporter::attach_coverage_summary_artifacts(
-            crate::reporter::CoverageSummaryPass::new(
-                session.registered_plugins(),
-                etiquette_ids,
-                &finding_refs,
-                workspace,
-                includes_quality,
-            ),
-            filter,
-            session,
-            &mut all_artifacts,
-        )?;
+        let task = session
+            .progress()
+            .spinner("Rendering coverage summary".to_string());
+        timings.measure("pipeline", "coverage_summary", || {
+            crate::reporter::attach_coverage_summary_artifacts(
+                crate::reporter::CoverageSummaryPass::new(
+                    session.registered_plugins(),
+                    etiquette_ids,
+                    &finding_refs,
+                    workspace,
+                    includes_quality,
+                ),
+                filter,
+                session,
+                &mut all_artifacts,
+            )
+        })?;
+        task.finish("Rendered coverage summary".to_string());
     }
     #[cfg(not(any(
         feature = "homecoming_std",
@@ -145,24 +164,24 @@ pub(super) fn render_and_write(
     let _ = (filter, etiquettes, etiquette_ids);
 
     if !session.measurement_mode() {
+        let writes = session.progress().bar(
+            "Writing report artifacts".to_string(),
+            all_artifacts.len() as u64,
+        );
         for artifact in &all_artifacts {
-            let path = store.findings_dir().join(artifact.name());
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            let mut file = std::fs::File::create(&path)?;
-            artifact.write_to(&mut file)?;
+            writes.set_message(format!("Writing {}", artifact.name()));
+            timings.measure("pipeline", "artifact_write", || {
+                let path = store.findings_dir().join(artifact.name());
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                let mut file = std::fs::File::create(&path)?;
+                artifact.write_to(&mut file)
+            })?;
+            writes.inc(1);
         }
+        writes.finish(format!("Wrote {} report artifact(s)", all_artifacts.len()));
     }
 
-    progress.finish(format!(
-        "{} {} report artifact(s)",
-        if session.measurement_mode() {
-            "Rendered"
-        } else {
-            "Wrote"
-        },
-        all_artifacts.len()
-    ));
     Ok(all_artifacts)
 }

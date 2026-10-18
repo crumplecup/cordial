@@ -19,6 +19,7 @@ use super::ir::{
     skip(workspace, session, filter, loaders, enrichers),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub fn preload_shadow_pair_crates(
     workspace: &mut WorkspaceIr,
     session: &dyn SessionView,

@@ -97,6 +97,7 @@ impl crate::loader::LoadView for RustdocLoadView {
 impl RustdocLoadView {
     /// Fill the crate IR from loaded views.
     #[instrument(level = "debug", skip(self, ir), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "RustdocLoadView")]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
         let root = ir.root();
         ir.set_attr(

@@ -29,6 +29,7 @@ use crate::session::{RuntimeSession, SessionView};
     ),
     err(level = "warn")
 )]
+#[hotpath::measure]
 pub(super) fn assess_targets(
     session: &RuntimeSession,
     store: &StoreLayout,
@@ -41,16 +42,11 @@ pub(super) fn assess_targets(
 ) -> CordialResult<Vec<Box<dyn Finding>>> {
     let mut all_findings: Vec<Box<dyn Finding>> = Vec::new();
 
-    let progress = session
-        .progress()
-        .bar("Assessing crate findings".to_string(), targets.len() as u64);
-    for (index, target) in targets.iter().enumerate() {
-        progress.set_message(format!(
-            "Assessing {} ({}/{})",
-            target.crate_name(),
-            index + 1,
-            targets.len()
-        ));
+    let progress = session.progress().bar(
+        "Assessing crate findings".to_string(),
+        targets.len() as u64 * (assessors.len() + 1) as u64,
+    );
+    for target in targets {
         let markers = markers_by_crate
             .get(target.crate_name())
             .map(Vec::as_slice)
@@ -63,6 +59,11 @@ pub(super) fn assess_targets(
 
         let mut crate_findings: Vec<Box<dyn Finding>> = Vec::new();
         for assessor in assessors {
+            progress.set_message(format!(
+                "Assessing {} with {}",
+                target.crate_name(),
+                assessor.id()
+            ));
             let relevant: Vec<&dyn Marker> = marker_refs
                 .iter()
                 .copied()
@@ -72,16 +73,23 @@ pub(super) fn assess_targets(
                 assessor.assess(AssessView::new(&relevant, &crate_view, session))
             })?;
             crate_findings.append(&mut findings);
+            progress.inc(1);
         }
 
-        let exception_sets =
-            crate::exceptions::load_exception_sets(store, etiquette_ids, target.crate_name())?;
-        crate::exceptions::warn_stale_exceptions(
-            target.crate_name(),
-            &crate_findings,
-            &exception_sets,
-        );
-        crate_findings = crate::exceptions::apply_exception_sets(crate_findings, &exception_sets);
+        progress.set_message(format!("Applying exceptions for {}", target.crate_name()));
+        crate_findings = timings.measure("pipeline", "exceptions", || {
+            let exception_sets =
+                crate::exceptions::load_exception_sets(store, etiquette_ids, target.crate_name())?;
+            crate::exceptions::warn_stale_exceptions(
+                target.crate_name(),
+                &crate_findings,
+                &exception_sets,
+            );
+            Ok(crate::exceptions::apply_exception_sets(
+                crate_findings,
+                &exception_sets,
+            ))
+        })?;
         all_findings.extend(crate_findings);
         progress.inc(1);
     }

@@ -1,5 +1,6 @@
 //! Cold and warm per-etiquette measurements using isolated Cargo targets.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -206,6 +207,33 @@ fn render_markdown(report: &TimingReport) -> String {
             cold.map_or_else(|| "n/a".to_string(), |value| format!("{value:.2}")),
             warm.map_or_else(|| "n/a".to_string(), |value| format!("{value:.2}")),
         ));
+    }
+    body.push_str("\n## Pipeline phases\n\nDurations are inclusive; phase rows overlap with hook and pipeline detail in `timings.json`.\n\n| Etiquette | Phase | Cold (s) | Warm (s) |\n| --- | --- | ---: | ---: |\n");
+    for entry in &report.entries {
+        let phases: BTreeSet<&str> = entry
+            .cold
+            .iter()
+            .chain(entry.warm.iter())
+            .flat_map(|pass| pass.hooks.iter())
+            .filter(|hook| hook.stage() == "phase")
+            .map(|hook| hook.id().as_str())
+            .collect();
+        for phase in phases {
+            let seconds = |pass: &TimingPass| {
+                pass.hooks
+                    .iter()
+                    .find(|hook| hook.stage() == "phase" && hook.id() == phase)
+                    .map(|hook| *hook.elapsed_nanos() as f64 / 1_000_000_000.0)
+            };
+            let cold = entry.cold.as_ref().and_then(seconds);
+            let warm = entry.warm.as_ref().and_then(seconds);
+            body.push_str(&format!(
+                "| `{}` | `{phase}` | {} | {} |\n",
+                entry.id,
+                cold.map_or_else(|| "n/a".to_string(), |value| format!("{value:.2}")),
+                warm.map_or_else(|| "n/a".to_string(), |value| format!("{value:.2}")),
+            ));
+        }
     }
     let unavailable: Vec<&TimingEntry> = report
         .entries

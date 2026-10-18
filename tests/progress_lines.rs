@@ -45,6 +45,7 @@ fn line_progress_reports_start_heartbeat_and_finish() -> miette::Result<()> {
 
     let lines = capture.text()?;
     assert!(lines.starts_with("Starting: Loading\n"), "{lines}");
+    assert!(lines.contains("Working: Loading crates 2/4\n"), "{lines}");
     assert!(
         lines.contains("still working: Loading crates 2/4"),
         "{lines}"

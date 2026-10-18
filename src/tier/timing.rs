@@ -38,7 +38,7 @@ pub struct HookTiming {
 }
 
 /// Collector for a run's hook calls, including repeated per-crate calls.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct HookTimings(BTreeMap<(String, String), HookTiming>);
 
 impl HookTimings {
