@@ -32,6 +32,7 @@ mod amenable_dump_registry;
 mod cache_digest;
 #[cfg(feature = "rustdoc")]
 mod cargo_rustdoc;
+mod clean;
 #[cfg(feature = "cli")]
 mod cli;
 mod config;
@@ -318,6 +319,10 @@ pub use tracing_init::{init_cli_tracing, init_tracing};
 pub use cargo_rustdoc::{
     build_active_shadow_deps, build_all_active_shadow_deps, build_shadow_dep_rustdoc,
     resolve_shadow_dep_build_config,
+};
+pub use clean::{
+    CleanFailure, CleanPath, CleanPlan, CleanReport, CleanScope, SkippedStore, plan_clean,
+    run_clean,
 };
 pub use config::{
     AntipatternsConfig, CfgHygieneThresholds, CfgScatterThresholds, CordialConfig,
