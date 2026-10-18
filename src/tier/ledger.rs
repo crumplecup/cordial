@@ -28,9 +28,27 @@ pub struct EtiquetteLedgerEntry {
 pub struct GateLedger {
     #[serde(default)]
     entries: BTreeMap<String, EtiquetteLedgerEntry>,
+    #[serde(default)]
+    area_open_counts: BTreeMap<String, usize>,
 }
 
 impl GateLedger {
+    /// Save exact area counts only when every contributing etiquette ran.
+    #[cfg(feature = "quality")]
+    #[instrument(level = "debug", skip(self, report))]
+    pub(crate) fn record_quality_areas(
+        &mut self,
+        report: &crate::QualityReport,
+        active_ids: &[&str],
+    ) {
+        for area in report.areas() {
+            let owners = crate::reporter::quality_area_owners(area.title());
+            if !owners.is_empty() && owners.iter().all(|id| active_ids.contains(id)) {
+                self.area_open_counts
+                    .insert(area.title().clone(), area.open_items());
+            }
+        }
+    }
     /// Read the previous ledger, or start an empty one.
     #[instrument(level = "debug", skip(store), err(level = "warn"))]
     pub fn read(store: &StoreLayout) -> CordialResult<Self> {

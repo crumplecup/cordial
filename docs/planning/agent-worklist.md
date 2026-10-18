@@ -862,7 +862,7 @@ change until the commands exist, so the edit lands with phase 8.
 - **Reports.** Tell agents to work from `open` and `stats` and not to read the
   checklists under `findings/` directly, since the checklists do not show
   progress made on the list.
-- **Promotion.** `just cordial-gate` and `cordial quality --deny-open` stay as the
+- **Promotion.** `just cordial-gate` and `cordial quality --deny-open --tier all` stay as the
   promotion check, and the text says so, so agents do not use `submit` for it.
 - **Routing table.** Unchanged. It points at `cordial explain` for rules.
 

@@ -110,6 +110,10 @@ pub trait RunOutcome: Send + Sync {
     fn hook_timings(&self) -> &[crate::HookTiming] {
         &[]
     }
+    /// Enabled etiquette tiers omitted from this run.
+    fn skipped_tiers(&self) -> &[String] {
+        &[]
+    }
 }
 
 /// Orchestrates plugin and etiquette execution.

@@ -36,7 +36,7 @@ cordial submit
    until submit reports zero open items. `cordial stats --verbose` shows list
    state. Use item ids when issuing several worklist commands concurrently.
 4. Before each commit, run `just cordial-gate` (or
-   `cordial quality -p . --deny-open`) and clear every open item, including
+   `cordial quality -p . --deny-open --tier all`) and clear every open item, including
    dependency freshness. This is also the promotion check for `dev` to `main`.
 
 Work from `open` and `stats`; raw checklists under `findings/` do not include

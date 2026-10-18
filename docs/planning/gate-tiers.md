@@ -301,6 +301,6 @@ The tier selection becomes part of the worklist snapshot, replacing the
   unavailable etiquette measurements are recorded in their store reports)
 - [x] Phase 3: thresholds and the built-in table
 - [x] Phase 4: selection, config, `--tier`
-- [ ] Phase 5: report handling for tiers that did not run
+- [x] Phase 5: report handling for tiers that did not run
 - [ ] Phase 6: `cordial tiers` and explain output
 - [ ] Phase 7: worklist integration

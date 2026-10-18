@@ -4,13 +4,21 @@ use std::fmt::Write as _;
 
 use crate::error::CordialResult;
 
-use super::QualityReport;
+use super::{QualityAreaSummary, QualityReport, ReportRunCoverage};
 
 use tracing::instrument;
 
 /// Render quality report markdown.
 #[instrument(level = "debug", skip(report), err(level = "warn"))]
 pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<String> {
+    render_quality_report_with_coverage(report, None)
+}
+
+#[instrument(level = "debug", skip(report, coverage))]
+pub(super) fn render_quality_report_with_coverage(
+    report: &QualityReport,
+    coverage: Option<&ReportRunCoverage>,
+) -> CordialResult<String> {
     let mut out = String::new();
     writeln!(out, "# Code quality report")?;
     writeln!(
@@ -18,6 +26,12 @@ pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<S
         "\n**Total open items:** {}\n",
         report.total_open_items()
     )?;
+    if coverage.is_some() {
+        writeln!(
+            out,
+            "_Total includes only checks run now; skipped areas retain their last full-run count below._\n"
+        )?;
+    }
     writeln!(
         out,
         "Resolve issues in the order below. Each area has a checklist (action items) \
@@ -39,14 +53,15 @@ pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<S
     )?;
     writeln!(out, "| ---: | --- | ---: | --- | --- |")?;
     for area in report.areas() {
+        let count = display_count(area, coverage);
+        let checklist = checklist_link(area.checklist(), coverage);
         writeln!(
             out,
-            "| {} | {} | {} | [`{}`]({}) | [`{}`]({}) |",
+            "| {} | {} | {} | {} | [`{}`]({}) |",
             area.priority(),
             area.title(),
-            area.open_items(),
-            area.checklist(),
-            area.checklist(),
+            count,
+            checklist,
             area.summary(),
             area.summary(),
         )?;
@@ -55,13 +70,20 @@ pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<S
 
     for area in report.areas() {
         writeln!(out, "## {}. {}\n", area.priority(), area.title())?;
-        writeln!(out, "**Open items:** {}\n", area.open_items())?;
-        writeln!(out, "_{}_\n", area.detail())?;
+        writeln!(out, "**Open items:** {}\n", display_count(area, coverage))?;
+        if let Some(status) = coverage.and_then(|coverage| coverage.area(area.title())) {
+            writeln!(out, "_{}._\n", status.status())?;
+        }
+        if coverage
+            .and_then(|coverage| coverage.area(area.title()))
+            .is_none_or(|status| status.ran())
+        {
+            writeln!(out, "_{}_\n", area.detail())?;
+        }
         writeln!(
             out,
-            "- Checklist: [`{}`]({})\n- Summary: [`{}`]({})\n",
-            area.checklist(),
-            area.checklist(),
+            "- Checklist: {}\n- Summary: [`{}`]({})\n",
+            checklist_link(area.checklist(), coverage),
             area.summary(),
             area.summary(),
         )?;
@@ -73,6 +95,14 @@ pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<S
 /// Render quality workspace summary markdown.
 #[instrument(level = "debug", skip(report), err(level = "warn"))]
 pub fn render_quality_workspace_summary_markdown(report: &QualityReport) -> CordialResult<String> {
+    render_quality_workspace_summary_with_coverage(report, None)
+}
+
+#[instrument(level = "debug", skip(report, coverage))]
+pub(super) fn render_quality_workspace_summary_with_coverage(
+    report: &QualityReport,
+    coverage: Option<&ReportRunCoverage>,
+) -> CordialResult<String> {
     let mut out = String::new();
     writeln!(out, "# Quality workspace summary")?;
     writeln!(
@@ -80,6 +110,12 @@ pub fn render_quality_workspace_summary_markdown(report: &QualityReport) -> Cord
         "\n**Total open items:** {}\n",
         report.total_open_items()
     )?;
+    if coverage.is_some() {
+        writeln!(
+            out,
+            "_Total includes only checks run now; skipped areas retain their last full-run count below._\n"
+        )?;
+    }
     writeln!(
         out,
         "Bird's-eye view after running quality heuristics on the workspace. \
@@ -94,20 +130,45 @@ pub fn render_quality_workspace_summary_markdown(report: &QualityReport) -> Cord
     )?;
     writeln!(out, "| --- | --- | ---: | --- | --- | --- |")?;
     for area in report.areas() {
+        let status = coverage.and_then(|coverage| coverage.area(area.title()));
         writeln!(
             out,
-            "| {} | {} | {} | [`{}`]({}) | [`{}`]({}) | {} |",
+            "| {} | {} | {} | {} | [`{}`]({}) | {} |",
             area.priority(),
             area.title(),
-            area.open_items(),
-            area.checklist(),
-            area.checklist(),
+            display_count(area, coverage),
+            checklist_link(area.checklist(), coverage),
             area.summary(),
             area.summary(),
-            area.detail(),
+            status.map_or_else(|| area.detail().as_str(), |status| status.status().as_str()),
         )?;
     }
     writeln!(out)?;
 
     Ok(out)
+}
+
+#[instrument(level = "debug", skip(area, coverage))]
+fn display_count(area: &QualityAreaSummary, coverage: Option<&ReportRunCoverage>) -> String {
+    match coverage.and_then(|coverage| coverage.area(area.title())) {
+        Some(status) if status.ran() => match status.previous_open() {
+            Some(previous) => format!("{} now; {previous} at last full run", area.open_items()),
+            None => format!("{} now; no prior full run", area.open_items()),
+        },
+        Some(status) => status.previous_open().map_or_else(
+            || "not run; no prior full run".to_string(),
+            |previous| format!("not run; {previous} at last full run"),
+        ),
+        None => area.open_items().to_string(),
+    }
+}
+
+#[instrument(level = "debug", skip(coverage))]
+fn checklist_link(name: &str, coverage: Option<&ReportRunCoverage>) -> String {
+    let stale = coverage.is_some_and(|coverage| coverage.checklist_is_stale(name));
+    if stale {
+        format!("[`{name}`]({name}) (stale)")
+    } else {
+        format!("[`{name}`]({name})")
+    }
 }

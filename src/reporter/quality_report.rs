@@ -1,5 +1,9 @@
+mod coverage;
 mod metrics;
 mod render;
+
+use std::collections::BTreeSet;
+use std::path::Path;
 
 use std::fmt::Write as _;
 
@@ -7,10 +11,14 @@ use crate::error::CordialResult;
 use crate::etiquette::{QualityChecklistSpec, count_open_rule};
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, TextArtifact};
+use crate::{CordialConfig, GateLedger};
 
 use tracing::instrument;
 
+use coverage::ReportRunCoverage;
 use metrics::{error_handling_metrics, panic_metrics};
+
+pub(crate) use coverage::quality_area_owners;
 
 pub use render::{render_quality_report_markdown, render_quality_workspace_summary_markdown};
 
@@ -194,6 +202,40 @@ pub struct QualityReportReporter;
 impl QualityReportReporter {
     /// Stable identifier for `QualityReportReporter`.
     pub const ID: &'static str = "quality-report";
+
+    /// Render a report with explicit coverage of checks that did not run.
+    #[instrument(level = "debug", skip(self, findings, config, ledger, fresh_artifacts))]
+    pub(crate) fn render_run(
+        &self,
+        findings: &[&dyn Finding],
+        active_ids: &[&str],
+        config: &CordialConfig,
+        ledger: &GateLedger,
+        fresh_artifacts: &BTreeSet<String>,
+        findings_dir: &Path,
+    ) -> CordialResult<Vec<Box<dyn Artifact>>> {
+        let report = build_quality_report(findings)?;
+        let coverage = ReportRunCoverage::new(
+            &report,
+            active_ids,
+            config,
+            ledger,
+            fresh_artifacts,
+            findings_dir,
+        );
+        Ok(vec![
+            Box::new(TextArtifact::new(
+                "quality-report.md".to_string(),
+                "text/markdown".to_string(),
+                render::render_quality_report_with_coverage(&report, Some(&coverage))?,
+            )),
+            Box::new(TextArtifact::new(
+                "summary.md".to_string(),
+                "text/markdown".to_string(),
+                render::render_quality_workspace_summary_with_coverage(&report, Some(&coverage))?,
+            )),
+        ])
+    }
 }
 
 impl Reporter for QualityReportReporter {

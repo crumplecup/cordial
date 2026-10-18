@@ -1,5 +1,7 @@
 //! Render reports and write the artifacts.
 
+#[cfg(feature = "quality")]
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use tracing::instrument;
@@ -97,8 +99,21 @@ pub(super) fn render_and_write(
     #[cfg(feature = "quality")]
     if includes_quality {
         let quality_report = crate::reporter::QualityReportReporter;
+        let fresh_artifacts: BTreeSet<String> = all_artifacts
+            .iter()
+            .map(|artifact| artifact.name().to_string())
+            .collect();
+        let config = crate::load_session_config(session);
+        let ledger = crate::GateLedger::read(store)?;
         let mut quality_artifacts = timings.measure("report", quality_report.id(), || {
-            quality_report.render(RenderView::new(&finding_refs, &crate_view, session))
+            quality_report.render_run(
+                &finding_refs,
+                etiquette_ids,
+                &config,
+                &ledger,
+                &fresh_artifacts,
+                &store.findings_dir(),
+            )
         })?;
         all_artifacts.append(&mut quality_artifacts);
     }

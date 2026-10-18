@@ -37,6 +37,8 @@ pub use coverage_summary::{
 ))]
 pub(crate) use coverage_summary::{CoverageSummaryPass, attach_coverage_summary_artifacts};
 #[cfg(feature = "quality")]
+pub(crate) use quality_report::quality_area_owners;
+#[cfg(feature = "quality")]
 pub use quality_report::{
     QualityAreaSummary, QualityChecklist, QualityReport, QualityReportReporter,
     build_quality_report, render_quality_report_markdown,

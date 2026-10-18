@@ -27,7 +27,7 @@ cordial peek                         # show the current item again
 cordial stats --verbose              # counts and item states
 cordial submit                       # rerun the gate and score claims
 cordial quality -p <project>          # source-quality etiquettes
-cordial quality --deny-open           # fail after reports if open action items remain
+cordial quality --deny-open --tier all # full gate; fail if open action items remain
 cordial quality --apply               # tracing recipes + crate-root lint attributes
 cordial quality --apply --dry-run     # log apply without writing
 cordial explain                       # id + one-line why for every compiled etiquette
@@ -67,7 +67,7 @@ and wait for it; commands issued while it runs wait for its new list.
 The worklist is the agent-facing view of `quality-report.md`. Raw checklists
 do not show checkoffs or the current cursor. `cordial explain <rule-id>` remains
 the authority for what each finding means and how to document an exception.
-For CI, commits, and promotion, use `cordial quality --deny-open` or
+For CI, commits, and promotion, use `cordial quality --deny-open --tier all` or
 `just cordial-gate` and clear every open item.
 
 ## Progress and logs
@@ -185,7 +185,9 @@ condition it covered no longer exists.
 
 ## Quality
 
-`cordial quality` runs every source-quality etiquette compiled into the binary.
+`cordial quality` runs the configured default tiers (`quick` and `build` by
+default). Use `--tier all` to run every compiled source-quality etiquette.
+Reports show unselected areas as not run and label earlier checklists stale.
 Quality `--apply` rewrites source only for supported apply paths:
 
 - tracing instrument recipes from the checklist;
@@ -208,7 +210,7 @@ pull request and green checks before the fast-forward lands:
 2. `check-features (ubuntu-latest)` — `just check-features`
    (`cargo hack` feature powerset, depth 2).
 3. `cordial-gate (ubuntu-latest)` — `just cordial-gate`
-   (`cordial quality --deny-open` from this checkout).
+   (`cordial quality --deny-open --tier all` from this checkout).
 
 Pre-flight from `dev` without opening a PR:
 

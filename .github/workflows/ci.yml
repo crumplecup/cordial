@@ -51,7 +51,7 @@ jobs:
   cordial:
     name: cordial-gate (ubuntu-latest)
     # Quality-etiquette gate: fails if any curated action item is open
-    # (`cordial quality --deny-open`, gating `quality-report.md`'s "Total
+    # (`cordial quality --deny-open --tier all`, gating `quality-report.md`'s "Total
     # open items"). Uses the checkout's own binary so the PR dogfoods
     # the tool it is about to ship.
     runs-on: ubuntu-latest

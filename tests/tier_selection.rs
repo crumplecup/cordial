@@ -149,3 +149,79 @@ fn named_etiquette_overrides_tier_but_disabled_still_wins() -> miette::Result<()
     );
     Ok(())
 }
+
+#[test]
+fn skipped_area_keeps_last_count_and_marks_checklist_stale() -> miette::Result<()> {
+    cordial::init_tracing();
+    let project = project()?;
+    let home = tempfile::tempdir().into_diagnostic()?;
+    fs::write(
+        project.path().join("src/lib.rs"),
+        "pub mod widgets;\npub fn root_item() {}\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
+        project.path().join("src/widgets.rs"),
+        "pub fn widget() {}\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
+        project.path().join("cordial.toml"),
+        "[tiers.assign]\nvisibility = \"deep\"\n",
+    )
+    .into_diagnostic()?;
+    let first = run(
+        project.path(),
+        home.path(),
+        &["quality", "--etiquette", "visibility"],
+    )?;
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let store = store(project.path(), home.path());
+    let ledger = GateLedger::read(&store).into_diagnostic()?;
+    let previous = *ledger
+        .area_open_counts()
+        .get("Module visibility")
+        .ok_or_else(|| miette::miette!("missing visibility count"))?;
+    assert!(previous > 0);
+    assert!(
+        store
+            .findings_dir()
+            .join("visibility.checklist.md")
+            .is_file()
+    );
+
+    let second = run(
+        project.path(),
+        home.path(),
+        &["quality", "--tier", "quick", "--deny-open"],
+    )?;
+    assert!(
+        String::from_utf8_lossy(&second.stderr).contains("Tiers not run: build, deep"),
+        "{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    let report =
+        fs::read_to_string(store.findings_dir().join("quality-report.md")).into_diagnostic()?;
+    let section = report
+        .split("## ")
+        .find(|section| section.contains("Module visibility\n"))
+        .ok_or_else(|| miette::miette!("missing visibility section"))?;
+    assert!(
+        section.contains("not run (tier checks skipped: visibility: deep)"),
+        "{section}"
+    );
+    assert!(
+        section.contains(&format!("not run; {previous} at last full run")),
+        "{section}"
+    );
+    assert!(
+        section.contains("[`visibility.checklist.md`](visibility.checklist.md) (stale)"),
+        "{section}"
+    );
+    assert!(!section.contains("**Open items:** 0"), "{section}");
+    Ok(())
+}

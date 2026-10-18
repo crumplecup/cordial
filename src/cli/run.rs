@@ -285,6 +285,13 @@ pub(super) fn execute_run_plugins_locked(
         "Reports available under {}",
         store.findings_dir().display()
     ));
+    if deny_open && !outcome.skipped_tiers().is_empty() {
+        writeln!(
+            io::stderr(),
+            "Tiers not run: {}",
+            outcome.skipped_tiers().join(", ")
+        )?;
+    }
     if deny_open && summary.open_action_items > 0 {
         return Err(CordialError::open_findings(summary.open_action_items));
     }

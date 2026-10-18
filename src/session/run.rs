@@ -1,5 +1,6 @@
 //! Session pipeline: load, probe, assess, render.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use tracing::instrument;
@@ -34,6 +35,7 @@ struct ConcreteRunOutcome {
     findings: Vec<Box<dyn Finding>>,
     artifacts: Vec<Box<dyn Artifact>>,
     timings: Vec<HookTiming>,
+    skipped_tiers: Vec<String>,
 }
 
 impl RunOutcome for ConcreteRunOutcome {
@@ -59,6 +61,11 @@ impl RunOutcome for ConcreteRunOutcome {
     fn hook_timings(&self) -> &[HookTiming] {
         &self.timings
     }
+
+    #[instrument(level = "trace", skip(self))]
+    fn skipped_tiers(&self) -> &[String] {
+        &self.skipped_tiers
+    }
 }
 
 #[instrument(level = "debug")]
@@ -67,6 +74,7 @@ fn empty_outcome() -> Box<dyn RunOutcome> {
         findings: Vec::new(),
         artifacts: Vec::new(),
         timings: Vec::new(),
+        skipped_tiers: Vec::new(),
     })
 }
 
@@ -84,16 +92,28 @@ pub(super) fn run_session(
     let setup = session
         .progress()
         .spinner("Preparing cordial run".to_string());
-    let etiquettes = resolved_etiquettes(
+    let available = resolved_etiquettes(
         session.registered_plugins(),
         session.registered_etiquettes(),
         filter,
         session,
     );
     let config = crate::load_session_config(session);
-    let selection = TierSelection::resolve(&etiquettes, &config, filter.tiers())?;
+    let selection = TierSelection::resolve(&available, &config, filter.tiers())?;
+    let skipped_tiers: Vec<String> = available
+        .iter()
+        .filter(|etiquette| config.etiquette_enabled(etiquette.id()))
+        .filter(|etiquette| !selection.includes(etiquette.as_ref(), &config))
+        .map(|etiquette| {
+            crate::assigned_tier(etiquette.as_ref(), &config)
+                .as_str()
+                .to_string()
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
     let explicit = filter.etiquettes().is_some();
-    let etiquettes: Vec<Arc<dyn Etiquette>> = etiquettes
+    let etiquettes: Vec<Arc<dyn Etiquette>> = available
         .into_iter()
         .filter(|etiquette| {
             config.etiquette_enabled(etiquette.id())
@@ -207,6 +227,15 @@ pub(super) fn run_session(
     if !session.measurement_mode() {
         let mut ledger = GateLedger::read(&store)?;
         ledger.record_run(&etiquettes, &all_findings, &timings, &config)?;
+        #[cfg(feature = "quality")]
+        {
+            let finding_refs: Vec<&dyn Finding> = all_findings
+                .iter()
+                .map(|finding| finding.as_ref())
+                .collect();
+            let report = crate::build_quality_report(&finding_refs)?;
+            ledger.record_quality_areas(&report, &etiquette_ids);
+        }
         ledger.write(&store)?;
     }
 
@@ -214,5 +243,6 @@ pub(super) fn run_session(
         findings: all_findings,
         artifacts: all_artifacts,
         timings: timings.into_vec(),
+        skipped_tiers,
     }))
 }
