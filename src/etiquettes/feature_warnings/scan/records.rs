@@ -12,6 +12,7 @@ use tracing::instrument;
 
 /// Turn a parsed run into one record per feature-dependent site.
 #[instrument(level = "debug", skip(run, ignore_features))]
+#[hotpath::measure]
 pub fn records_from_run(
     run: &HackRun,
     resolve_root: &Path,

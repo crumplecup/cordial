@@ -99,6 +99,7 @@ struct HackOutput {
 /// (cargo reports paths relative to the workspace root), as in
 /// `scan_crate_doc_warnings`.
 #[instrument(level = "debug", skip(policy), err(level = "warn"))]
+#[hotpath::measure]
 pub fn scan_crate_feature_warnings(
     crate_root: &Path,
     resolve_root: &Path,

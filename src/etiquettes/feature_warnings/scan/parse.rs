@@ -25,6 +25,7 @@ pub fn parse_cargo_hack_output(output: &str, package: &str) -> HackRun {
 /// invocation, in the same order as the `build-finished` records, so the Nth
 /// finished build takes the Nth description.
 #[instrument(level = "debug", skip(stdout, stderr))]
+#[hotpath::measure]
 pub fn parse_cargo_hack_run(stdout: &str, stderr: &str, package: &str) -> HackRun {
     let invocations = invocation_descriptions(stderr);
     let mut run = HackRun::default();

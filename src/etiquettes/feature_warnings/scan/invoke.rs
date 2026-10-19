@@ -2,7 +2,7 @@
 
 use std::ffi::OsString;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Output};
 
 use super::HackOutput;
 use crate::config::FeatureWarningsThresholds;
@@ -13,6 +13,7 @@ use tracing::instrument;
 /// The package's private features: those named with a leading `_`. They are
 /// only ever enabled by other features, so the powerset skips them as units.
 #[instrument(level = "debug")]
+#[hotpath::measure]
 fn private_features(crate_root: &Path, crate_name: &str) -> Vec<String> {
     let Ok(metadata) = cargo_metadata::MetadataCommand::new()
         .current_dir(crate_root)
@@ -40,6 +41,7 @@ fn cargo_command() -> Command {
 }
 
 #[instrument(level = "debug")]
+#[hotpath::measure]
 pub(super) fn cargo_hack_available(crate_root: &Path) -> bool {
     cargo_command()
         .current_dir(crate_root)
@@ -49,6 +51,7 @@ pub(super) fn cargo_hack_available(crate_root: &Path) -> bool {
 }
 
 #[instrument(level = "info", skip(policy), fields(crate_name = crate_name))]
+#[hotpath::measure]
 pub(super) fn run_cargo_hack(
     crate_root: &Path,
     crate_name: &str,
@@ -77,10 +80,16 @@ pub(super) fn run_cargo_hack(
     for group in policy.group_features() {
         command.arg("--group-features").arg(group.join(","));
     }
-    let output = command.output()?;
+    let output = wait_for_cargo_hack(&mut command)?;
     Ok(HackOutput {
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         success: output.status.success(),
     })
+}
+
+#[hotpath::measure]
+#[instrument(level = "debug", skip(command))]
+fn wait_for_cargo_hack(command: &mut Command) -> std::io::Result<Output> {
+    command.output()
 }

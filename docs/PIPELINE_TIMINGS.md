@@ -27,3 +27,16 @@ writes a hotpath JSON report to a temporary file. Set `HOTPATH_OUTPUT_PATH` to
 choose a stable report path, or set `RUST_LOG=info` to see its path on stderr.
 The report stays separate from Cordial's JSON stdout. The hotpath feature is
 opt-in; ordinary builds keep its instrumentation disabled.
+
+The feature-warning scan has separate hotpath markers for checking whether
+`cargo hack` is available, collecting private features, waiting for the
+`cargo hack` subprocess, parsing its output, and building finding records.
+The subprocess marker includes process startup, waiting, and captured output;
+it does not profile the child process's own functions.
+
+On 2026-10-18, a focused `feature_warnings` run with a warm Cargo cache took
+240.26 seconds. The subprocess boundary took 231.46 seconds (96.34% of the
+run); parsing took 0.33 seconds. The separate cold `all` tier run took 917.97
+seconds, of which the feature-warning enricher took 879.04 seconds. These
+absolute durations reflect different cache states, so use the focused profile
+for the within-run split.

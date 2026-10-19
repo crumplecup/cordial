@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use cordial::{
-    FEATURE_WARNINGS_ETIQUETTE, FeatureSet, FeatureWarningRuleId, Gate, RunAll, Session,
-    SessionBuilder, parse_cargo_hack_output, records_from_run, suggest_gate,
+    FEATURE_WARNINGS_ETIQUETTE, FeatureSet, FeatureWarningRuleId, Gate, NamedRunFilter, RunAll,
+    Session, SessionBuilder, parse_cargo_hack_output, records_from_run, suggest_gate,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -195,7 +195,7 @@ fn session_writes_checklist_grouped_by_gate_from_injected_cargo() -> miette::Res
             .with_store_root(store.path())
             .register(&*FEATURE_WARNINGS_ETIQUETTE)
             .build();
-        session.run(&RunAll)
+        session.run(&NamedRunFilter::etiquettes(["feature_warnings"]))
     };
     match previous {
         Some(value) => unsafe { std::env::set_var("CORDIAL_CARGO", value) },
