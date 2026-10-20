@@ -331,9 +331,30 @@ fn legacy_tiers() -> Vec<String> {
 
 #[instrument(level = "debug", skip(config))]
 fn config_fingerprint(config: &CordialConfig) -> CordialResult<String> {
-    let bytes = serde_json::to_vec(config)?;
+    let mut value = serde_json::to_value(config)?;
+    sort_object_keys(&mut value);
+    let bytes = serde_json::to_vec(&value)?;
     let digest = Sha256::digest(bytes);
     Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+/// HashMap iteration order must not make an unchanged config invalidate a list.
+#[instrument(level = "trace", skip(value))]
+fn sort_object_keys(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.sort_keys();
+            for value in map.values_mut() {
+                sort_object_keys(value);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for value in items {
+                sort_object_keys(value);
+            }
+        }
+        _ => {}
+    }
 }
 
 #[instrument(level = "trace")]

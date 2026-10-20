@@ -5,7 +5,7 @@ use miette::IntoDiagnostic;
 use cordial::{
     ChecklistSource, CordialConfig, Disposition, Finding, FindingSink, FindingSource, IrAnchor,
     ItemSource, NodeAnchor, NodeId, QualityAreaSummary, QualityChecklist, QualityReport, Rule,
-    StoreLayout, Validity, Worklist, render_open, render_stats,
+    StoreLayout, Validity, Worklist, load_cordial_config, render_open, render_stats,
 };
 
 struct SampleRule(String);
@@ -283,6 +283,40 @@ fn worklist_build_checks_counts_and_writes_generations() -> miette::Result<()> {
         1,
     );
     assert!(Worklist::build(&bad, &store, &source, &config).is_err());
+    Ok(())
+}
+
+#[test]
+fn unchanged_config_with_maps_keeps_worklist_current() -> miette::Result<()> {
+    cordial::init_tracing();
+    let project = tempfile::tempdir().into_diagnostic()?;
+    let home = tempfile::tempdir().into_diagnostic()?;
+    std::fs::write(
+        project.path().join("cordial.toml"),
+        "[cfg_hygiene]\ncrate_verifier = { amenable_kani = 'kani', amenable_creusot = 'creusot', amenable_verus = 'verus' }\n[visibility]\nmod_thin_skip = { amenable_verus = ['gallery'], amenable_core = ['proof'] }\n",
+    )
+    .into_diagnostic()?;
+    let config = load_cordial_config(project.path(), home.path());
+    let store = StoreLayout::from_root(home.path().join("fixture"), "fixture");
+    let list = Worklist::build(
+        &QualityReport::new(vec![], 0),
+        &store,
+        &ChecklistSource::new(&store),
+        &config,
+    )
+    .into_diagnostic()?;
+    list.write(&store).into_diagnostic()?;
+    let stored = Worklist::read(&store)
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("worklist missing"))?;
+    for _ in 0..32 {
+        let reloaded = load_cordial_config(project.path(), home.path());
+        assert_eq!(reloaded, config);
+        assert_eq!(
+            stored.validity(&reloaded).into_diagnostic()?,
+            Validity::Current
+        );
+    }
     Ok(())
 }
 

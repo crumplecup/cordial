@@ -164,6 +164,39 @@ fn open_builds_once_and_stats_reports_hard_invalidation() -> miette::Result<()> 
 }
 
 #[test]
+fn open_then_submit_accepts_unchanged_config_with_maps() -> miette::Result<()> {
+    cordial::init_tracing();
+    let (project, home, store) = fixture()?;
+    fs::write(
+        project.path().join("cordial.toml"),
+        "[cfg_hygiene]\ncrate_verifier = { amenable_kani = 'kani', amenable_creusot = 'creusot', amenable_verus = 'verus' }\n",
+    )
+    .into_diagnostic()?;
+
+    let opened = run(project.path(), home.path(), &["open", "--json"])?;
+    assert!(
+        opened.status.success(),
+        "{}",
+        String::from_utf8_lossy(&opened.stderr)
+    );
+    assert_eq!(*list(&store)?.record().generation(), 1);
+
+    let submitted = run(
+        project.path(),
+        home.path(),
+        &["submit", "--tier", "quick", "--json"],
+    )?;
+    assert!(
+        submitted.status.success(),
+        "stdout: {}\nstderr: {}",
+        stdout(&submitted),
+        String::from_utf8_lossy(&submitted.stderr)
+    );
+    assert_eq!(*list(&store)?.record().generation(), 2);
+    Ok(())
+}
+
+#[test]
 fn claims_are_atomic_idempotent_and_advance_only_when_current_is_acted_on() -> miette::Result<()> {
     cordial::init_tracing();
     let (project, home, store) = fixture()?;
