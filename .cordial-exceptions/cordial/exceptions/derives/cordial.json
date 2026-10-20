@@ -1,0 +1,14 @@
+[
+  {
+    "file": "src/etiquette/explain.rs",
+    "line": 55,
+    "rule_id": "DERIVE-USE-BUILDER-001",
+    "reason": "Tried derive_builder: every call site builds inside a LazyLock::new(|| ...) closure that cannot propagate build()'s Result, so the builder forced .expect() at ~33 sites -- real new panic sites in library code, confirmed by this crate's own panics etiquette (64 abort-site findings). The plain constructor enforces completeness at compile time with zero runtime fallibility, which is strictly safer for data that is always fully specified. User-approved exception."
+  },
+  {
+    "file": "src/etiquette/static_table.rs",
+    "line": 47,
+    "rule_id": "DERIVE-USE-BUILDER-001",
+    "reason": "Tried derive_builder: every call site builds inside a LazyLock::new(|| ...) closure that cannot propagate build()'s Result, so the builder forced .expect() at ~33 sites -- real new panic sites in library code, confirmed by this crate's own panics etiquette (64 abort-site findings). The plain constructor enforces completeness at compile time with zero runtime fallibility, which is strictly safer for data that is always fully specified. User-approved exception."
+  }
+]

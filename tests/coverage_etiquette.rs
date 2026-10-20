@@ -5,8 +5,8 @@ use cordial::rustdoc::{
     demo_impl_coverage_crate, demo_shadow_crate, demo_trenchcoat_crate, write_rustdoc_crate_json,
 };
 use cordial::{
-    IMPL_COVERAGE_ETIQUETTE, Plugin, RunAll, SHADOW_ETIQUETTE, Session, SessionBuilder,
-    TRENCHCOAT_ETIQUETTE,
+    IMPL_COVERAGE_ETIQUETTE, NamedRunFilter, Plugin, RunAll, SHADOW_ETIQUETTE, Session,
+    SessionBuilder, TRENCHCOAT_ETIQUETTE,
 };
 
 fn write_fixture(
@@ -39,7 +39,10 @@ fn impl_coverage_etiquette_finds_missing_traits() -> miette::Result<()> {
         .register(&*IMPL_COVERAGE_ETIQUETTE)
         .build();
 
-    let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
+    let outcome = session
+        .run(&NamedRunFilter::etiquettes(["impl-coverage"]))
+        .into_diagnostic()
+        .wrap_err("run")?;
     let open: Vec<_> = outcome
         .findings()
         .filter(|f| f.disposition() == cordial::Disposition::Open)

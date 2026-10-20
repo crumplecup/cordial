@@ -5,6 +5,8 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use super::commands::ActCtx;
+use super::gate_args::GateSelectionArgs;
 use crate::{
     CordialError, CordialResult, CrateIr, Disposition, Etiquette, Finding, NamedRunFilter, Plugin,
     ProgressSink, RunAll, RunFilter, RunOutcome, Session, SessionBuilder, StoreLayout,
@@ -202,54 +204,55 @@ pub(super) fn execute_tracing_apply(
     Ok(())
 }
 
-#[instrument(level = "debug", skip(store, progress, plugins), err(level = "warn"))]
+#[instrument(level = "debug", skip(ctx, selection, plugins), err(level = "warn"))]
 pub(super) fn execute_run_plugins(
-    project_root: &Path,
-    store: &StoreLayout,
-    crate_name: Option<&str>,
-    tiers: Option<&[String]>,
-    etiquette: Option<&str>,
-    store_home: Option<PathBuf>,
-    progress: Arc<dyn ProgressSink>,
+    ctx: &ActCtx,
+    selection: &GateSelectionArgs,
     plugins: Vec<&'static dyn Plugin>,
     deny_open: bool,
     write_worklist: bool,
     command: &'static str,
 ) -> CordialResult<()> {
-    let _worklist_lock = crate::WorklistLock::exclusive(store, command, progress.as_ref())?;
+    let _worklist_lock =
+        crate::WorklistLock::exclusive(ctx.store(), command, ctx.progress().as_ref())?;
 
     execute_run_plugins_locked(
-        project_root,
-        store,
-        crate_name,
-        tiers,
-        etiquette,
-        store_home,
-        progress,
+        ctx,
+        selection.tiers(),
+        selection.etiquette(),
         plugins,
-        deny_open,
-        write_worklist,
-        false,
-        false,
+        RunOptions::new(deny_open, write_worklist, false, false),
     )
 }
 
-/// Run after the caller has acquired the worklist lock.
-#[instrument(level = "debug", skip(store, progress, plugins), err(level = "warn"))]
-pub(super) fn execute_run_plugins_locked(
-    project_root: &Path,
-    store: &StoreLayout,
-    crate_name: Option<&str>,
-    tiers: Option<&[String]>,
-    etiquette: Option<&str>,
-    store_home: Option<PathBuf>,
-    progress: Arc<dyn ProgressSink>,
-    plugins: Vec<&'static dyn Plugin>,
+#[derive(derive_new::new)]
+pub(super) struct RunOptions {
     deny_open: bool,
     write_worklist: bool,
     score_worklist: bool,
     json_submit: bool,
+}
+
+/// Run after the caller has acquired the worklist lock.
+#[instrument(level = "debug", skip(ctx, plugins, options), err(level = "warn"))]
+pub(super) fn execute_run_plugins_locked(
+    ctx: &ActCtx,
+    tiers: Option<&[String]>,
+    etiquette: Option<&str>,
+    plugins: Vec<&'static dyn Plugin>,
+    options: RunOptions,
 ) -> CordialResult<()> {
+    let project_root = ctx.project_root().as_path();
+    let store = ctx.store();
+    let crate_name = ctx.crate_name().as_deref();
+    let store_home = ctx.store_home().clone();
+    let progress = ctx.progress().clone();
+    let RunOptions {
+        deny_open,
+        write_worklist,
+        score_worklist,
+        json_submit,
+    } = options;
     #[cfg(not(feature = "quality"))]
     let _ = (write_worklist, score_worklist, json_submit);
     let effective_store_home = store_home.unwrap_or_else(default_store_home);

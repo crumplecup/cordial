@@ -335,19 +335,7 @@ impl Commands {
             Self::Run {
                 deny_open,
                 selection,
-            } => execute_run_plugins(
-                &ctx.project_root,
-                &ctx.store,
-                ctx.crate_name.as_deref(),
-                selection.tiers(),
-                selection.etiquette(),
-                ctx.store_home.clone(),
-                ctx.progress.clone(),
-                all_plugins(),
-                deny_open,
-                true,
-                "run",
-            ),
+            } => execute_run_plugins(&ctx, &selection, all_plugins(), deny_open, true, "run"),
             Self::Quality {
                 apply,
                 dry_run,
@@ -367,13 +355,8 @@ impl Commands {
                     )
                 } else {
                     execute_run_plugins(
-                        &ctx.project_root,
-                        &ctx.store,
-                        ctx.crate_name.as_deref(),
-                        selection.tiers(),
-                        selection.etiquette(),
-                        ctx.store_home.clone(),
-                        ctx.progress.clone(),
+                        &ctx,
+                        &selection,
                         quality_plugins(),
                         deny_open,
                         true,
@@ -387,13 +370,8 @@ impl Commands {
                 {
                     let hub = crate::discover_workspace_hub(&ctx.project_root, &crate::RunAll)?;
                     execute_run_plugins(
-                        &ctx.project_root,
-                        &ctx.store,
-                        ctx.crate_name.as_deref(),
-                        selection.tiers(),
-                        selection.etiquette(),
-                        ctx.store_home.clone(),
-                        ctx.progress.clone(),
+                        &ctx,
+                        &selection,
                         crate::coverage_plugins_for_hub(hub),
                         false,
                         false,
@@ -403,13 +381,8 @@ impl Commands {
                 #[cfg(all(feature = "elicitation", not(feature = "homecoming_std")))]
                 {
                     execute_run_plugins(
-                        &ctx.project_root,
-                        &ctx.store,
-                        ctx.crate_name.as_deref(),
-                        selection.tiers(),
-                        selection.etiquette(),
-                        ctx.store_home.clone(),
-                        ctx.progress.clone(),
+                        &ctx,
+                        &selection,
                         crate::coverage_plugins(),
                         false,
                         false,

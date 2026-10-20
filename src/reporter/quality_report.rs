@@ -107,8 +107,10 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
         1,
         "Error handling",
         error_open,
-        "panics.checklist.md",
-        &[],
+        ChecklistSelection {
+            name: "panics.checklist.md",
+            rules: &[],
+        },
         &[
             QualityChecklistSpec::new("internal-error-chain.checklist.md"),
             QualityChecklistSpec::new("foreign-error-attenuation.checklist.md").with_rules(&[
@@ -142,8 +144,10 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
             priority,
             spec.title(),
             open_items,
-            spec.checklist(),
-            spec.checklist_rules(),
+            ChecklistSelection {
+                name: spec.checklist(),
+                rules: spec.checklist_rules(),
+            },
             spec.extra_checklists(),
             spec.summary(),
             detail,
@@ -156,20 +160,25 @@ pub fn build_quality_report(findings: &[&dyn Finding]) -> CordialResult<QualityR
     Ok(QualityReport::new(areas, total_open_items))
 }
 
-#[instrument(level = "debug", skip(extra_checklists))]
+struct ChecklistSelection<'a> {
+    name: &'a str,
+    rules: &'a [&'a str],
+}
+
+#[instrument(level = "debug", skip(checklist, extra_checklists))]
 fn quality_area(
     priority: u8,
     title: &str,
     open_items: usize,
-    checklist: &str,
-    checklist_rules: &[&str],
+    checklist: ChecklistSelection<'_>,
     extra_checklists: &[QualityChecklistSpec],
     summary: &str,
     detail: String,
 ) -> QualityAreaSummary {
     let mut checklists = vec![QualityChecklist::new(
-        checklist.to_string(),
-        checklist_rules
+        checklist.name.to_string(),
+        checklist
+            .rules
             .iter()
             .map(|rule| (*rule).to_string())
             .collect(),
@@ -188,7 +197,7 @@ fn quality_area(
         priority,
         title.to_string(),
         open_items,
-        checklist.to_string(),
+        checklist.name.to_string(),
         checklists,
         summary.to_string(),
         detail,

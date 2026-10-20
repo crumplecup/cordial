@@ -84,13 +84,11 @@ pub(super) fn execute_clean(
     let _locks = (project_locks, sysroot_lock);
     task.finish(format!("Planned {} path(s)", plan.paths().len()));
     print_plan(&plan, dry_run)?;
-    if !all {
-        if let Some(skipped) = plan.skipped().first() {
-            return Err(CordialError::clean(
-                skipped.path().clone(),
-                skipped.reason(),
-            ));
-        }
+    if !all && let Some(skipped) = plan.skipped().first() {
+        return Err(CordialError::clean(
+            skipped.path().clone(),
+            skipped.reason(),
+        ));
     }
     if dry_run {
         let skipped = plan

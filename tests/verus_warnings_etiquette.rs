@@ -4,8 +4,8 @@ use std::path::PathBuf;
 #[cfg(feature = "verus_ir")]
 use cordial::scan_crate_verus_ir;
 use cordial::{
-    RunAll, Session, SessionBuilder, VERUS_WARNINGS_ETIQUETTE, VerusWarningRuleId,
-    crate_is_verus_target, parse_verus_compiler_output, scan_crate_verus_warnings,
+    Session, SessionBuilder, VERUS_WARNINGS_ETIQUETTE, VerusWarningRuleId, crate_is_verus_target,
+    parse_verus_compiler_output, scan_crate_verus_warnings,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -230,7 +230,7 @@ fn session_writes_checklist_from_injected_verus() -> miette::Result<()> {
             .with_store_root(store.path())
             .register(&*VERUS_WARNINGS_ETIQUETTE)
             .build();
-        session.run(&RunAll)
+        session.run(&cordial::NamedRunFilter::etiquettes(["verus_warnings"]))
     };
     match previous {
         Some(value) => unsafe {

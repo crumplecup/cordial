@@ -213,16 +213,17 @@ fn plan_project(
     plan.stores.push(root.clone());
     for path in store.regenerable_paths() {
         #[cfg(feature = "quality")]
-        if path == store.worklist_path() && path.exists() {
-            if let Ok(Some(list)) = crate::Worklist::read(store) {
-                let count = list
-                    .items()
-                    .iter()
-                    .filter(|item| *item.state() == crate::ItemState::Done)
-                    .count();
-                plan.checked_off += count;
-                plan.checked_off_by_store.insert(root.clone(), count);
-            }
+        if path == store.worklist_path()
+            && path.exists()
+            && let Ok(Some(list)) = crate::Worklist::read(store)
+        {
+            let count = list
+                .items()
+                .iter()
+                .filter(|item| *item.state() == crate::ItemState::Done)
+                .count();
+            plan.checked_off += count;
+            plan.checked_off_by_store.insert(root.clone(), count);
         }
         add_path(plan, root, path)?;
     }

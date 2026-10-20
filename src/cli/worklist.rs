@@ -5,7 +5,7 @@ use std::io::{self, Write};
 use tracing::instrument;
 
 use super::commands::{ActCtx, Commands};
-use super::run::execute_run_plugins_locked;
+use super::run::{RunOptions, execute_run_plugins_locked};
 use crate::worklist::{json_claim, json_error, json_open, json_stats, json_status};
 use crate::{
     CordialError, CordialResult, ItemState, SoftStaleness, Validity, WORKLIST_INSTRUCTIONS,
@@ -92,22 +92,15 @@ pub(super) fn execute_submit(
         return Err(CordialError::invariant("Worklist is out of date"));
     }
     execute_run_plugins_locked(
-        ctx.project_root(),
-        ctx.store(),
-        ctx.crate_name().as_deref(),
+        ctx,
         Some(if tiers.is_empty() {
             previous.record().tiers()
         } else {
             tiers
         }),
         None,
-        ctx.store_home().clone(),
-        ctx.progress().clone(),
         quality_plugins(),
-        deny_open,
-        true,
-        true,
-        json,
+        RunOptions::new(deny_open, true, true, json),
     )?;
     Ok(())
 }
@@ -118,16 +111,15 @@ pub(super) fn execute_open(ctx: &ActCtx, json: bool) -> CordialResult<()> {
     let config = load_cordial_config(ctx.project_root(), &home);
     {
         let _lock = WorklistLock::shared(ctx.store(), ctx.progress().as_ref())?;
-        if let Some(list) = Worklist::read(ctx.store())? {
-            if list.validity(&config)? == Validity::Current
-                && (list.current().is_some()
-                    || list
-                        .items()
-                        .iter()
-                        .all(|item| *item.state() != ItemState::Open))
-            {
-                return write_open(ctx, &list, "open", json);
-            }
+        if let Some(list) = Worklist::read(ctx.store())?
+            && list.validity(&config)? == Validity::Current
+            && (list.current().is_some()
+                || list
+                    .items()
+                    .iter()
+                    .all(|item| *item.state() != ItemState::Open))
+        {
+            return write_open(ctx, &list, "open", json);
         }
     }
 
@@ -163,18 +155,11 @@ pub(super) fn execute_open(ctx: &ActCtx, json: bool) -> CordialResult<()> {
             }
         }
         execute_run_plugins_locked(
-            ctx.project_root(),
-            ctx.store(),
-            ctx.crate_name().as_deref(),
+            ctx,
             None,
             None,
-            ctx.store_home().clone(),
-            ctx.progress().clone(),
             quality_plugins(),
-            false,
-            true,
-            false,
-            false,
+            RunOptions::new(false, true, false, false),
         )?;
     }
     let mut list = Worklist::read(ctx.store())?

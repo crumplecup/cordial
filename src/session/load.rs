@@ -32,9 +32,16 @@ impl LoadedWorkspace {
     }
 }
 
+#[derive(derive_new::new)]
+pub(super) struct LoadingHooks<'a> {
+    loaders: &'a [&'a dyn Loader],
+    enrichers: &'a [&'a dyn IrEnricher],
+    probes: &'a [&'a dyn Probe],
+}
+
 #[instrument(
     level = "info",
-    skip(session, filter, store, targets, loaders, enrichers, probes, timings),
+    skip(session, filter, store, targets, hooks, timings),
     err(level = "warn")
 )]
 #[hotpath::measure]
@@ -43,11 +50,14 @@ pub(super) fn load_and_probe(
     filter: &dyn RunFilter,
     store: &StoreLayout,
     targets: &[CrateTarget],
-    loaders: &[&dyn Loader],
-    enrichers: &[&dyn IrEnricher],
-    probes: &[&dyn Probe],
+    hooks: LoadingHooks<'_>,
     timings: &mut HookTimings,
 ) -> CordialResult<LoadedWorkspace> {
+    let LoadingHooks {
+        loaders,
+        enrichers,
+        probes,
+    } = hooks;
     let mut workspace = WorkspaceIr::default();
     let mut load_views: HashMap<String, Box<dyn LoadView>> = HashMap::new();
     let mut markers_by_crate: HashMap<String, Vec<Box<dyn Marker>>> = HashMap::new();

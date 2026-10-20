@@ -87,4 +87,5 @@ check-features:
 # still has open action items. Uses this checkout's binary, not a pinned
 # install. CI runs this as `cordial-gate (ubuntu-latest)`.
 cordial-gate:
+    {{cargo}} run --features {{features}} --bin cordial -- exceptions load
     {{cargo}} run --features {{features}} --bin cordial -- quality --deny-open --tier all

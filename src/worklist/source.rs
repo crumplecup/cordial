@@ -95,10 +95,10 @@ fn parse_checklist(
             active_item = None;
             continue;
         }
-        if let Some(guidance) = italic_paragraph(line) {
-            if let Some((_, _, slot)) = headings.last_mut() {
-                *slot = Some(guidance.to_string());
-            }
+        if let Some(guidance) = italic_paragraph(line)
+            && let Some((_, _, slot)) = headings.last_mut()
+        {
+            *slot = Some(guidance.to_string());
         }
         if let Some(item_line) = line.strip_prefix("- [ ] ") {
             active_item = None;

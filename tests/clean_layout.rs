@@ -6,9 +6,9 @@ use cordial::{StoreLayout, SysrootCache};
 use miette::IntoDiagnostic;
 
 fn immediate_children(root: &std::path::Path) -> std::io::Result<BTreeSet<PathBuf>> {
-    Ok(fs::read_dir(root)?
+    fs::read_dir(root)?
         .map(|entry| entry.map(|entry| entry.path()))
-        .collect::<Result<_, _>>()?)
+        .collect::<Result<_, _>>()
 }
 
 #[test]

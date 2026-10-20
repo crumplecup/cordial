@@ -273,11 +273,11 @@ pub fn render_stats(list: &Worklist, verbose: bool, area: Option<&str>, all: boo
         .iter()
         .filter(|item| area.is_none_or(|name| item.area().eq_ignore_ascii_case(name)))
         .collect();
-    if let Some(name) = area {
-        if selected.is_empty() {
-            let _ = write!(output, "\nNo area named {name}.\n\nNEXT: cordial stats\n");
-            return output;
-        }
+    if let Some(name) = area
+        && selected.is_empty()
+    {
+        let _ = write!(output, "\nNo area named {name}.\n\nNEXT: cordial stats\n");
+        return output;
     }
     output.push('\n');
     if verbose {

@@ -91,7 +91,7 @@ pub(super) fn render_explain_list_with_tiers(
     etiquettes: &[&dyn Etiquette],
     config: &CordialConfig,
 ) -> String {
-    let mut rows: Vec<_> = etiquettes.iter().copied().collect();
+    let mut rows: Vec<_> = etiquettes.to_vec();
     rows.sort_by(|left, right| left.id().cmp(right.id()));
     let width = rows.iter().map(|item| item.id().len()).max().unwrap_or(0);
     let mut body = String::new();

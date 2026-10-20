@@ -295,10 +295,11 @@ impl Worklist {
         for index in selected {
             let item = &mut self.items[index];
             let was = item.replace_state(target);
-            if was != ItemState::Skipped && target == ItemState::Skipped {
-                if let Some(reason) = reason.map(str::trim).filter(|reason| !reason.is_empty()) {
-                    item.add_skip_reason(reason);
-                }
+            if was != ItemState::Skipped
+                && target == ItemState::Skipped
+                && let Some(reason) = reason.map(str::trim).filter(|reason| !reason.is_empty())
+            {
+                item.add_skip_reason(reason);
             }
             changes.push(ClaimChange {
                 id: item.id().as_str().to_string(),

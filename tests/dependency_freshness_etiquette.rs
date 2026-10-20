@@ -92,7 +92,11 @@ version = "2.3.4"
         .build();
 
     let outcome = session
-        .run(&NamedRunFilter::all_etiquettes().with_crate("app"))
+        .run(
+            &NamedRunFilter::all_etiquettes()
+                .with_crate("app")
+                .with_tiers(["deep"]),
+        )
         .into_diagnostic()
         .wrap_err("session run")?;
     assert_eq!(outcome.findings().count(), 4);
@@ -187,7 +191,11 @@ version = "1.0.0"
         .build();
 
     let outcome = session
-        .run(&NamedRunFilter::all_etiquettes().with_crate("app"))
+        .run(
+            &NamedRunFilter::all_etiquettes()
+                .with_crate("app")
+                .with_tiers(["deep"]),
+        )
         .into_diagnostic()
         .wrap_err("session run")?;
     assert_eq!(outcome.findings().count(), 1);
@@ -271,7 +279,11 @@ version = "0.1.0"
         .build();
 
     let outcome = session
-        .run(&NamedRunFilter::all_etiquettes().with_crate("app"))
+        .run(
+            &NamedRunFilter::all_etiquettes()
+                .with_crate("app")
+                .with_tiers(["deep"]),
+        )
         .into_diagnostic()
         .wrap_err("session run")?;
     assert_eq!(outcome.findings().count(), 0);
@@ -397,7 +409,11 @@ available_version = "3.0.5"
         .build();
 
     let outcome = session
-        .run(&NamedRunFilter::all_etiquettes().with_crate("app"))
+        .run(
+            &NamedRunFilter::all_etiquettes()
+                .with_crate("app")
+                .with_tiers(["deep"]),
+        )
         .into_diagnostic()
         .wrap_err("session run")?;
     assert_eq!(outcome.findings().count(), 3);
@@ -499,7 +515,11 @@ local_dep = { path = "../local_dep" }
         .build();
 
     let outcome = session
-        .run(&NamedRunFilter::all_etiquettes().with_crate("app"))
+        .run(
+            &NamedRunFilter::all_etiquettes()
+                .with_crate("app")
+                .with_tiers(["deep"]),
+        )
         .into_diagnostic()
         .wrap_err("session run")?;
     assert_eq!(outcome.findings().count(), 0);

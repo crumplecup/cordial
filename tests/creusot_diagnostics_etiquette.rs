@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use cordial::{
-    CREUSOT_DIAGNOSTICS_ETIQUETTE, CreusotDiagnosticRuleId, CreusotDiagnosticsThresholds, RunAll,
-    Session, SessionBuilder, crate_is_creusot_target, load_cordial_config,
-    parse_creusot_compiler_output, scan_crate_creusot_diagnostics,
+    CREUSOT_DIAGNOSTICS_ETIQUETTE, CreusotDiagnosticRuleId, CreusotDiagnosticsThresholds, Session,
+    SessionBuilder, crate_is_creusot_target, load_cordial_config, parse_creusot_compiler_output,
+    scan_crate_creusot_diagnostics,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -254,7 +254,9 @@ fn session_writes_checklist_from_injected_creusot() -> miette::Result<()> {
             .with_store_root(store.path())
             .register(&*CREUSOT_DIAGNOSTICS_ETIQUETTE)
             .build();
-        session.run(&RunAll)
+        session.run(&cordial::NamedRunFilter::etiquettes([
+            "creusot_diagnostics",
+        ]))
     };
     match previous {
         Some(value) => unsafe {

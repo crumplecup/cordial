@@ -148,9 +148,7 @@ pub(super) fn run_session(
         filter,
         &store,
         &targets,
-        &loaders,
-        &enrichers,
-        &probes,
+        load::LoadingHooks::new(&loaders, &enrichers, &probes),
         &mut timings,
     );
     timings.record("phase", "load_and_probe", started.elapsed());
@@ -168,8 +166,7 @@ pub(super) fn run_session(
         &targets,
         &workspace,
         &markers_by_crate,
-        &assessors,
-        &etiquette_ids,
+        assess::AssessmentHooks::new(&assessors, &etiquette_ids),
         &mut timings,
     );
     timings.record("phase", "assess", started.elapsed());

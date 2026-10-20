@@ -152,10 +152,10 @@ impl LineTask {
     #[instrument(level = "debug", skip(self))]
     fn stop_heartbeat(&self) {
         let _ = self.stop.send(());
-        if let Ok(mut worker) = self.worker.lock() {
-            if let Some(worker) = worker.take() {
-                let _ = worker.join();
-            }
+        if let Ok(mut worker) = self.worker.lock()
+            && let Some(worker) = worker.take()
+        {
+            let _ = worker.join();
         }
     }
 }
@@ -163,15 +163,15 @@ impl LineTask {
 impl ProgressTask for LineTask {
     #[instrument(level = "trace", skip(self))]
     fn set_message(&self, message: String) {
-        if let Ok(mut state) = self.state.lock() {
-            if state.message != message {
-                let count = state
-                    .total
-                    .map(|total| format!(" {}/{total}", state.position))
-                    .unwrap_or_default();
-                write_progress_line(&self.output, &format!("Working: {message}{count}"));
-                state.message = message;
-            }
+        if let Ok(mut state) = self.state.lock()
+            && state.message != message
+        {
+            let count = state
+                .total
+                .map(|total| format!(" {}/{total}", state.position))
+                .unwrap_or_default();
+            write_progress_line(&self.output, &format!("Working: {message}{count}"));
+            state.message = message;
         }
     }
 

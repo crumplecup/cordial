@@ -16,17 +16,15 @@ use crate::store::StoreLayout;
 
 use crate::session::{RuntimeSession, SessionView};
 
+#[derive(derive_new::new)]
+pub(super) struct AssessmentHooks<'a> {
+    assessors: &'a [&'a dyn Assessor],
+    etiquette_ids: &'a [&'a str],
+}
+
 #[instrument(
     level = "debug",
-    skip(
-        session,
-        store,
-        targets,
-        workspace,
-        markers_by_crate,
-        assessors,
-        timings
-    ),
+    skip(session, store, targets, workspace, markers_by_crate, hooks, timings),
     err(level = "warn")
 )]
 #[hotpath::measure]
@@ -36,10 +34,13 @@ pub(super) fn assess_targets(
     targets: &[CrateTarget],
     workspace: &WorkspaceIr,
     markers_by_crate: &HashMap<String, Vec<Box<dyn Marker>>>,
-    assessors: &[&dyn Assessor],
-    etiquette_ids: &[&str],
+    hooks: AssessmentHooks<'_>,
     timings: &mut HookTimings,
 ) -> CordialResult<Vec<Box<dyn Finding>>> {
+    let AssessmentHooks {
+        assessors,
+        etiquette_ids,
+    } = hooks;
     let mut all_findings: Vec<Box<dyn Finding>> = Vec::new();
 
     let progress = session.progress().bar(
