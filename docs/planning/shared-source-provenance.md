@@ -13,14 +13,12 @@ private fields and no public constructor. A separate token passed beside raw
 data would permit the data and token to be mismatched.
 
 The cache now issues a `SharedParsedFile` that keeps those four facts together,
-and a `SourceEnricher` receives a typed source view. This is an incremental
-boundary: most production enrichers still implement the older `IrEnricher`
-contract, and many scanners still accept `&str` and `&Path` and call
-`syn::parse_file` themselves. See [`SourceLoadView`](../../src/loader/source.rs),
+and a `SourceEnricher` receives a typed source view. Production source
+enrichers have been migrated across the quality, error, tracing, and Verus
+families. Standalone scan and apply APIs retain direct parsing for callers
+outside a source session. See [`SourceLoadView`](../../src/loader/source.rs),
 [`SourceEnricher`](../../src/hooks/enricher.rs), and the
-[`modularity` scanner](../../src/etiquettes/modularity/scan.rs) for the first
-migrated route. The glob-import and inline-test production scanners now use
-the same source view, including files reached under `tests/`.
+[`modularity` scanner](../../src/etiquettes/modularity/scan.rs) for this route.
 
 ## API shape
 

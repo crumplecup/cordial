@@ -19,15 +19,14 @@ described in [Part 1](writing-etiquettes.md#how-the-series-works).*
 
 ## Finding the sites
 
-Before any cordial types come into it, the job is to parse a file, walk the
-syntax tree, and notice macro calls named `todo`. The walk produces one record
+Before any cordial types come into it, the job is to walk a parsed file and
+notice macro calls named `todo`. The walk produces one record
 per call:
 
 ```rust
 // What the walk hands back for each `todo!()` it finds.
 struct TodoRecord {
     context: String,
-    file: std::path::PathBuf,
     line: u32,
     snippet: String,
 }
@@ -43,8 +42,6 @@ struct TodoVisitor {
     fn_stack: Vec<String>,
     // What the walk produces.
     records: Vec<TodoRecord>,
-    // The file being walked.
-    file: std::path::PathBuf,
 }
 
 impl TodoVisitor {
@@ -96,7 +93,6 @@ impl<'ast> Visit<'ast> for TodoVisitor {
             // 5. Record where it is.
             self.records.push(TodoRecord {
                 context: self.context(),
-                file: self.file.clone(),
                 line: node.span().start().line as u32,
                 snippet: "todo!()".to_string(),
             });
@@ -141,46 +137,39 @@ const TODO_ATTR: &str = "acme_todo";
 Then the enricher itself:
 
 ```rust
-impl IrEnricher for TodoInventoryEnricher {
+impl SourceEnricher for TodoInventoryEnricher {
     fn id(&self) -> &str {
         "acme-todo-inventory"
     }
 
-    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        // 1. Split the view into its parts.
-        let (ir, load, session) = view.into_parts();
-
-        // 2. Skip anything that isn't a source load.
-        let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
-            return Ok(());
-        };
+    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
+        // 1. The typed view gives us the graph, source loader, and session.
+        let (ir, source, session) = view.into_parts();
 
         for file in source.files() {
-            // 3. Parse the file.
-            let syntax = syn::parse_file(file.source()).map_err(|err| {
-                cordial::CordialError::syn_parse(file.path().display().to_string(), err)
-            })?;
+            // 2. Request the shared parsed tree for this source file.
+            let parsed = source.parsed_file(file.path(), SourceEnricher::id(self))?;
 
-            // 4. Run the visitor.
-            let module_prefix = cordial::module_path_from_src_file(source.src_root(), file.path());
+            // 3. Run the visitor over the tree from that same file.
+            let module_prefix =
+                cordial::module_path_from_src_file(source.src_root(), parsed.path());
             let mut visitor = TodoVisitor {
                 module_prefix,
                 fn_stack: Vec::new(),
                 records: Vec::new(),
-                file: file.path().clone(),
             };
-            visitor.visit_file(&syntax);
+            visitor.visit_file(parsed.syntax());
 
             for record in visitor.records {
-                // 5. Add a node for the record.
-                let span = FileSpan::new(record.file.clone(), record.line, 1);
+                // 4. Add a node using the path paired with the parsed tree.
+                let span = FileSpan::new(parsed.path().to_path_buf(), record.line, 1);
                 let node = ir.insert_node(
                     NodeWeight::new(NodeKind::Expr)
                         .with_span(span)
                         .with_name(record.snippet.clone()),
                 )?;
 
-                // 6. Tag the node and store the facts the assessor will need.
+                // 5. Tag the node and store the facts the assessor will need.
                 ir.set_attr(node, TODO_ATTR, serde_json::Value::Bool(true))?;
                 ir.set_attr(node, "context", serde_json::Value::String(record.context))?;
                 ir.set_attr(node, "snippet", serde_json::Value::String(record.snippet))?;
@@ -190,16 +179,16 @@ impl IrEnricher for TodoInventoryEnricher {
                     // Relative to the project root, so reports don't depend
                     // on where the checkout lives.
                     serde_json::Value::String(
-                        file.path()
+                        parsed.path()
                             .strip_prefix(session.project_root())
-                            .unwrap_or(file.path())
+                            .unwrap_or(parsed.path())
                             .display()
                             .to_string(),
                     ),
                 )?;
                 ir.set_attr(node, "line", serde_json::Value::Number(record.line.into()))?;
 
-                // 7. Attach the node to the crate root.
+                // 6. Attach the node to the crate root.
                 ir.insert_edge(ir.root()?, node, EdgeKind::Contains)?;
             }
         }
@@ -208,16 +197,16 @@ impl IrEnricher for TodoInventoryEnricher {
 }
 ```
 
-1. The enricher receives one view and splits it into the graph to write into,
-   the loader's output, and the session (which knows the project root).
-2. The loader hands over the crate's files as a `SourceLoadView`. If the load is
-   some other kind, there is nothing for this enricher to do.
-3. A parse failure becomes a cordial error that names the file.
-4. This is the visitor from the first half of this post, run over one file.
-5. Each record becomes an expression node with a span and a readable name.
-6. The `acme_todo = true` attribute is the tag. The others (`context`,
+1. The source-specific hook receives a typed view containing the graph, the
+   source loader, and the session (which knows the project root).
+2. `parsed_file` shares one outer-file parse across source hooks in this run.
+   The returned value keeps the path and syntax tree together; parse errors
+   identify the file.
+3. This is the visitor from the first half of this post, run over that tree.
+4. Each record becomes an expression node with a span from the same file.
+5. The `acme_todo = true` attribute is the tag. The others (`context`,
    `snippet`, `file`, `line`) are the facts the assessor reads back out.
-7. Every node hangs off the crate root with a `Contains` edge.
+6. Every node hangs off the crate root with a `Contains` edge.
 
 Routing everything through a graph means nothing downstream has to know about
 `syn`. The probe asks for nodes with a tag, and it gets them.

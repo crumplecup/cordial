@@ -79,8 +79,10 @@ flowchart LR
 ```
 
 The enricher is where cordial's design shows. Cordial builds a graph of each
-crate's code, nodes and edges, and every check reads from it, so a file is
-parsed once however many checks care about it. Enrichers add facts to that graph
+crate's code, nodes and edges, and every check reads from it. Source enrichers
+request outer Rust files through a shared parsed-file view, which parses each
+path once per run and reuses that tree across hooks. Parsers for macro bodies
+and other embedded languages are separate. Enrichers add facts to the graph
 and probes read facts back out.
 
 Cordial ships a loader for Rust source, so this lint writes the other four:
@@ -88,7 +90,7 @@ Cordial ships a loader for Rust source, so this lint writes the other four:
 | Hook | Our answer | Part |
 | --- | --- | --- |
 | `Loader` | the crate's Rust source (cordial ships this one) | none |
-| `IrEnricher` | walk each file, and record every `todo!()` in the graph | 2 |
+| `SourceEnricher` | walk each shared parsed file, and record every `todo!()` in the graph | 2 |
 | `Probe` | ask the graph for those records | 3 |
 | `Assessor` | every one is a violation | 3 |
 | `Reporter` | write them to a CSV | 4 |

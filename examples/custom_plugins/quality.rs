@@ -4,11 +4,12 @@
 //! plugin is just an id, a category, and the etiquettes it contributes.
 
 use cordial::{
-    AssessView, Assessor, AttributeEnricher, CordialResult, Disposition, EdgeKind, EnrichView,
-    Etiquette, EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, FileSpan, Finding,
-    FindingSink, IrAnchor, IrEnricher, Loader, Marker, NodeAnchor, NodeKind, NodeView, NodeWeight,
+    AssessView, Assessor, AttributeEnricher, CordialResult, Disposition, EdgeKind, Etiquette,
+    EtiquetteExplain, EtiquetteHooks, EtiquetteRuleExplain, FileSpan, Finding, FindingSink,
+    IrAnchor, IrEnricher, Loader, Marker, NodeAnchor, NodeKind, NodeView, NodeWeight,
     PluginCategory, Probe, ProbeView, Query, RenderView, Reporter, Rule, ScopeEnricher,
-    SourceLoadView, SourceLoader, SourceSpan, StaticEtiquette, StaticPlugin, TextArtifact,
+    SourceEnrichView, SourceEnricher, SourceLoader, SourceSpan, StaticEtiquette, StaticPlugin,
+    TextArtifact,
 };
 use std::sync::LazyLock;
 
@@ -157,7 +158,6 @@ impl Finding for TodoFinding {
 #[derive(Debug, Clone)]
 struct TodoRecord {
     context: String,
-    file: std::path::PathBuf,
     line: u32,
     snippet: String,
 }
@@ -165,34 +165,28 @@ struct TodoRecord {
 #[derive(Debug, Default, Clone, Copy)]
 struct TodoInventoryEnricher;
 
-impl IrEnricher for TodoInventoryEnricher {
+impl SourceEnricher for TodoInventoryEnricher {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "acme-todo-inventory"
     }
 
     #[instrument(level = "trace", skip(self, view))]
-    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let (ir, load, session) = view.into_parts();
-
-        let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
-            return Ok(());
-        };
+    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
+        let (ir, source, session) = view.into_parts();
 
         for file in source.files() {
-            let syntax = syn::parse_file(file.source()).map_err(|err| {
-                cordial::CordialError::syn_parse(file.path().display().to_string(), err)
-            })?;
-            let module_prefix = cordial::module_path_from_src_file(source.src_root(), file.path());
+            let parsed = source.parsed_file(file.path(), SourceEnricher::id(self))?;
+            let module_prefix =
+                cordial::module_path_from_src_file(source.src_root(), parsed.path());
             let mut visitor = TodoVisitor {
                 module_prefix,
                 fn_stack: Vec::new(),
                 records: Vec::new(),
-                file: file.path().clone(),
             };
-            visitor.visit_file(&syntax);
+            visitor.visit_file(parsed.syntax());
             for record in visitor.records {
-                let span = FileSpan::new(record.file.clone(), record.line, 1);
+                let span = FileSpan::new(parsed.path().to_path_buf(), record.line, 1);
                 let node = ir.insert_node(
                     NodeWeight::new(NodeKind::Expr)
                         .with_span(span)
@@ -205,9 +199,10 @@ impl IrEnricher for TodoInventoryEnricher {
                     node,
                     "file",
                     serde_json::Value::String(
-                        file.path()
+                        parsed
+                            .path()
                             .strip_prefix(session.project_root())
-                            .unwrap_or(file.path())
+                            .unwrap_or(parsed.path())
                             .display()
                             .to_string(),
                     ),
@@ -224,7 +219,6 @@ struct TodoVisitor {
     module_prefix: Vec<String>,
     fn_stack: Vec<String>,
     records: Vec<TodoRecord>,
-    file: std::path::PathBuf,
 }
 
 impl TodoVisitor {
@@ -253,7 +247,6 @@ impl<'ast> Visit<'ast> for TodoVisitor {
         if node.mac.path.is_ident("todo") {
             self.records.push(TodoRecord {
                 context: self.context(),
-                file: self.file.clone(),
                 line: node.span().start().line as u32,
                 snippet: node
                     .mac
