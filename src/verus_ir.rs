@@ -42,7 +42,11 @@ pub use types::{
 #[cfg(feature = "visibility")]
 pub(crate) use parse::count_verus_item_names;
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::Path;
+
+use crate::loader::SourceLoadView;
 
 use tracing::instrument;
 
@@ -53,6 +57,35 @@ use tracing::instrument;
 pub fn scan_crate_verus_ir(crate_root: &Path) -> crate::error::CordialResult<VerusCrateIr> {
     let blocks = parse::collect_verus_blocks(crate_root)?;
     facts::build_crate_ir(blocks)
+}
+
+thread_local! {
+    static SHARED_IR: RefCell<HashMap<(u64, std::path::PathBuf), VerusCrateIr>> = RefCell::new(HashMap::new());
+}
+
+/// Reuse the same Verus macro facts across source hooks in one run.
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+pub(crate) fn scan_crate_verus_ir_with_source(
+    crate_root: &Path,
+    source: &SourceLoadView,
+) -> crate::error::CordialResult<VerusCrateIr> {
+    let key = (source.session_id(), crate_root.to_path_buf());
+    if let Some(ir) = SHARED_IR.with(|cache| cache.borrow().get(&key).cloned()) {
+        return Ok(ir);
+    }
+    let blocks = parse::collect_verus_blocks_with_source(crate_root, source)?;
+    let ir = facts::build_crate_ir(blocks)?;
+    SHARED_IR.with(|cache| {
+        cache.borrow_mut().insert(key, ir.clone());
+    });
+    Ok(ir)
+}
+
+#[instrument(level = "trace")]
+pub(crate) fn release_shared_ir(session_id: u64) {
+    SHARED_IR.with(|cache| {
+        cache.borrow_mut().retain(|(id, _), _| *id != session_id);
+    });
 }
 
 /// Parse every `verus! { .. }` block in one already-read source string

@@ -160,6 +160,8 @@ impl ParsedSourceSession {
 impl Drop for ParsedSourceSession {
     #[tracing::instrument(level = "trace", skip(self))]
     fn drop(&mut self) {
+        #[cfg(feature = "verus_ir")]
+        crate::verus_ir::release_shared_ir(self.token.0);
         PARSED.with(|parsed| {
             parsed.borrow_mut().remove(&self.token.0);
         });

@@ -21,7 +21,9 @@ use std::path::{Path, PathBuf};
 use syn::visit::Visit;
 use verus_syn::parse::{Parse, ParseStream};
 
-use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
+use crate::loader::{
+    SourceLoadView, module_path_from_src_file, path_has_fixtures, quality_scan_trees,
+};
 
 use tracing::instrument;
 
@@ -76,6 +78,22 @@ impl VerusBlock {
 pub(super) fn collect_verus_blocks(
     crate_root: &Path,
 ) -> crate::error::CordialResult<Vec<VerusBlock>> {
+    collect_verus_blocks_impl(crate_root, None)
+}
+
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+pub(super) fn collect_verus_blocks_with_source(
+    crate_root: &Path,
+    source: &SourceLoadView,
+) -> crate::error::CordialResult<Vec<VerusBlock>> {
+    collect_verus_blocks_impl(crate_root, Some(source))
+}
+
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+fn collect_verus_blocks_impl(
+    crate_root: &Path,
+    source: Option<&SourceLoadView>,
+) -> crate::error::CordialResult<Vec<VerusBlock>> {
     let mut blocks = Vec::new();
     for src_root in quality_scan_trees(crate_root) {
         if !src_root.is_dir() {
@@ -91,9 +109,14 @@ pub(super) fn collect_verus_blocks(
             {
                 continue;
             }
-            let source = std::fs::read_to_string(path)?;
             let module_path = module_path_from_src_file(&src_root, path).join("::");
-            blocks.extend(blocks_in_source(&source, path, &module_path));
+            if let Some(source) = source {
+                let parsed = source.parsed_file(path, "verus-ir")?;
+                blocks.extend(blocks_in_syntax(parsed.syntax(), path, &module_path));
+            } else {
+                let text = std::fs::read_to_string(path)?;
+                blocks.extend(blocks_in_source(&text, path, &module_path));
+            }
         }
     }
     Ok(blocks)
@@ -108,8 +131,13 @@ pub(super) fn blocks_in_source(source: &str, file: &Path, module_path: &str) -> 
     let Ok(syntax) = syn::parse_file(source) else {
         return Vec::new();
     };
+    blocks_in_syntax(&syntax, file, module_path)
+}
+
+#[instrument(level = "debug", skip(syntax, file))]
+fn blocks_in_syntax(syntax: &syn::File, file: &Path, module_path: &str) -> Vec<VerusBlock> {
     let mut finder = VerusMacroFinder::default();
-    finder.visit_file(&syntax);
+    finder.visit_file(syntax);
     finder
         .macros
         .into_iter()

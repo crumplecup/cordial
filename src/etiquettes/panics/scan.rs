@@ -67,7 +67,11 @@ fn scan_crate_panics_impl(
     }
     #[cfg(feature = "verus_ir")]
     {
-        let verus_ir = crate::verus_ir::scan_crate_verus_ir(crate_root)?;
+        let verus_ir = if let Some(source) = source {
+            crate::verus_ir::scan_crate_verus_ir_with_source(crate_root, source)?
+        } else {
+            crate::verus_ir::scan_crate_verus_ir(crate_root)?
+        };
         findings.extend(verus_panics::findings(&verus_ir, crate_root)?);
     }
     findings.sort_by(|a, b| {

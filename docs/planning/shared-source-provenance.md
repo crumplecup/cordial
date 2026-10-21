@@ -189,3 +189,11 @@ discovery and the tracing call graph obtain their production syntax through
 that source view. Their standalone apply APIs retain direct parsing. The
 workspace facts caches distinguish sourced runs by session identity, so facts
 from a standalone call cannot bypass the shared-tree production path.
+
+## Fourteenth slice
+
+The production Verus IR collector now discovers macro invocations in shared
+outer-file trees. Panic and proof-pattern hooks reuse one Verus IR per crate
+and source session, avoiding a second Verus macro parse as well. Standalone
+Verus scans keep their direct parser; parsing the macro body's Verus grammar
+remains a separate, explicit operation.
