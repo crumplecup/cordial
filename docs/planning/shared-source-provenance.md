@@ -125,3 +125,12 @@ collects crate-wide trait and construction facts from shared parsed files, and
 its second pass visits those same trees. The standalone crate scan remains for
 direct callers. Contract-bound scans use separate macro-specific grammars and
 need their own audit before changing their parse path.
+
+## Sixth slice
+
+The crate-attribute inventory now inspects the library root through the shared
+parsed file. It retains `[lib] path` handling and the existing missing-library
+behavior. The tracing-print inventory now uses shared files across its crate
+scan roots while retaining its configured file exclusions. Both standalone
+scanners and the separate file-writing crate-attribute apply command retain
+their direct parsing paths.

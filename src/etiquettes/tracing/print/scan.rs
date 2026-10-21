@@ -8,7 +8,9 @@ use syn::{File, ItemMod};
 
 use crate::config::TracingStdioPolicy;
 use crate::error::CordialResult;
-use crate::loader::{module_path_from_src_file, quality_scan_trees};
+use crate::loader::{
+    SharedParsedFile, SourceLoadView, module_path_from_src_file, quality_scan_trees,
+};
 
 use super::types::{PrintRuleId, PrintSiteRecord};
 
@@ -31,6 +33,48 @@ pub fn scan_crate_tracing_print(
             .then(a.snippet().cmp(b.snippet()))
     });
     Ok(findings)
+}
+
+#[instrument(level = "debug", skip(source, policy), err(level = "warn"))]
+pub(super) fn scan_shared_crate_tracing_print(
+    source: &SourceLoadView,
+    crate_root: &Path,
+    policy: &TracingStdioPolicy,
+) -> CordialResult<Vec<PrintSiteRecord>> {
+    let mut findings = Vec::new();
+    for tree_root in quality_scan_trees(crate_root) {
+        for file in
+            source.parsed_rust_files_under(&tree_root, "tracing-print-inventory", |path| {
+                !policy.skips_file(path, crate_root)
+            })?
+        {
+            findings.extend(scan_shared_file(&file, &tree_root, crate_root, policy)?);
+        }
+    }
+    findings.sort_by(|a, b| {
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.snippet().cmp(b.snippet()))
+    });
+    Ok(findings)
+}
+
+#[instrument(level = "debug", skip(file, policy), err(level = "warn"))]
+fn scan_shared_file(
+    file: &SharedParsedFile,
+    tree_root: &Path,
+    crate_root: &Path,
+    policy: &TracingStdioPolicy,
+) -> CordialResult<Vec<PrintSiteRecord>> {
+    let module_prefix = module_path_from_src_file(tree_root, file.path());
+    scan_syntax(
+        file.syntax(),
+        file.path(),
+        crate_root,
+        &module_prefix,
+        policy,
+    )
 }
 
 #[instrument(level = "debug", skip(policy), err(level = "warn"))]

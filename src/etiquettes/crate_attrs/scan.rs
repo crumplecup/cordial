@@ -7,6 +7,7 @@ use syn::{Attribute, File, Meta, MetaList, Token};
 
 use crate::config::CrateAttrsThresholds;
 use crate::error::CordialResult;
+use crate::loader::SourceLoadView;
 
 use super::types::{CrateAttrsRuleId, CrateAttrsSiteRecord};
 
@@ -36,7 +37,37 @@ pub fn scan_crate_attrs(
         CrateLintPresence::default()
     };
 
-    let mut file = lib.clone();
+    records_for_presence(crate_root, crate_name, policy, &lib, presence)
+}
+
+#[instrument(level = "debug", skip(source, policy), err(level = "warn"))]
+pub(super) fn scan_shared_crate_attrs(
+    source: &SourceLoadView,
+    crate_root: &Path,
+    crate_name: &str,
+    policy: &CrateAttrsThresholds,
+) -> CordialResult<Vec<CrateAttrsSiteRecord>> {
+    let Some(lib) = library_root_rs(crate_root) else {
+        return Ok(Vec::new());
+    };
+    let presence = if lib.is_file() {
+        let file = source.parsed_file(&lib, "crate-attrs-inventory")?;
+        inspect_file(file.syntax())
+    } else {
+        CrateLintPresence::default()
+    };
+    records_for_presence(crate_root, crate_name, policy, &lib, presence)
+}
+
+#[instrument(level = "debug", skip(policy, presence), err(level = "warn"))]
+fn records_for_presence(
+    crate_root: &Path,
+    crate_name: &str,
+    policy: &CrateAttrsThresholds,
+    lib: &Path,
+    presence: CrateLintPresence,
+) -> CordialResult<Vec<CrateAttrsSiteRecord>> {
+    let mut file = lib.to_path_buf();
     if let Ok(rel) = file.strip_prefix(crate_root) {
         file = rel.to_path_buf();
     }
