@@ -6,8 +6,8 @@ use std::path::Path;
 use miette::{IntoDiagnostic, WrapErr};
 
 use cordial::{
-    ATTR_CRATE_KINDS, CrateIr, CrateKind, CrateTarget, IrMut, IrView, RunAll, SourceFile,
-    SourceLoadView, discover_crate_targets,
+    ATTR_CRATE_KINDS, CrateIr, CrateKind, CrateTarget, IrMut, IrView, LoadContext, Loader, RunAll,
+    SessionBuilder, SourceLoadView, SourceLoader, discover_crate_targets,
 };
 
 fn write_crate(
@@ -80,9 +80,19 @@ fn synthetic_target_without_a_manifest_has_unknown_kinds() -> miette::Result<()>
 }
 
 fn populated_ir(kinds: Vec<CrateKind>) -> miette::Result<CrateIr> {
-    let src_root = Path::new("/nonexistent/src").to_path_buf();
-    let lib = SourceFile::new(src_root.join("lib.rs"), "pub fn f() {}".to_string());
-    let view = SourceLoadView::new("fixture".to_string(), src_root, vec![lib], kinds);
+    let fixture = tempfile::tempdir().into_diagnostic()?;
+    let src_root = fixture.path().join("src");
+    fs::create_dir_all(&src_root).into_diagnostic()?;
+    fs::write(src_root.join("lib.rs"), "pub fn f() {}").into_diagnostic()?;
+    let session = SessionBuilder::new(fixture.path()).build();
+    let target = CrateTarget::new("fixture", fixture.path()).with_kinds(kinds);
+    let loaded = SourceLoader
+        .load(LoadContext::new(&session, &target))
+        .into_diagnostic()?;
+    let view = loaded
+        .as_any()
+        .downcast_ref::<SourceLoadView>()
+        .ok_or_else(|| miette::miette!("source loader returned another view"))?;
     let mut ir = CrateIr::new("fixture");
     view.populate_ir(&mut ir).into_diagnostic()?;
     Ok(ir)

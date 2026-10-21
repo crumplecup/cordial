@@ -59,7 +59,7 @@ fn scan_crate_panics_impl(
     for tree_root in quality_scan_trees(crate_root) {
         parsed.extend(parse_source_tree(&tree_root, crate_root, source)?);
     }
-    let reachability = build_kani_reachability(parsed.iter().map(|file| file.syntax().as_ref()));
+    let reachability = build_kani_reachability(parsed.iter().map(ParsedFile::syntax));
 
     let mut findings = Vec::new();
     for file in &parsed {
@@ -84,7 +84,7 @@ fn scan_crate_panics_impl(
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_source_tree(src_root: &Path, crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord>> {
     let parsed = parse_source_tree(src_root, crate_root, None)?;
-    let reachability = build_kani_reachability(parsed.iter().map(|file| file.syntax().as_ref()));
+    let reachability = build_kani_reachability(parsed.iter().map(ParsedFile::syntax));
     let mut findings = Vec::new();
     for file in &parsed {
         findings.extend(scan_parsed_file(file, crate_root, &reachability)?);
@@ -103,7 +103,8 @@ pub fn scan_rust_source(
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
     let reachability = build_kani_reachability(std::iter::once(&syntax));
-    let parsed = ParsedFile::new(file.to_path_buf(), src_root.to_path_buf(), Rc::new(syntax));
+    let parsed =
+        ParsedFile::standalone(file.to_path_buf(), src_root.to_path_buf(), Rc::new(syntax));
     let findings = scan_parsed_file(&parsed, crate_root, &reachability)?;
     #[cfg(feature = "verus_ir")]
     let findings = {

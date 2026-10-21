@@ -111,7 +111,7 @@ fn scan_crate_error_ir_impl(
             };
             let file_scan = if let Some(loaded) = loaded {
                 let unit = loaded.parsed_file(path, "error-ir-scan")?;
-                scan(&unit)?
+                scan(unit.syntax())?
             } else {
                 let source = crate::loader::source_read(path, "error-ir-scan")?;
                 let syntax = crate::loader::source_parse(&source, path, "error-ir-scan")?;

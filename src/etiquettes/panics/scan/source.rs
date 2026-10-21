@@ -2,17 +2,51 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use crate::error::CordialResult;
-use crate::loader::{SourceLoadView, path_has_fixtures};
+use crate::loader::{SharedParsedFile, SourceLoadView, path_has_fixtures};
 
 use tracing::instrument;
 
 /// One parsed source file plus the tree root it was discovered under
 /// (needed to derive its crate-relative module path).
-#[derive(derive_getters::Getters, derive_new::new)]
+#[derive(derive_getters::Getters)]
 pub(super) struct ParsedFile {
     path: PathBuf,
     src_root: PathBuf,
-    syntax: Rc<syn::File>,
+    #[getter(skip)]
+    syntax: ParsedSyntax,
+}
+
+enum ParsedSyntax {
+    Shared(SharedParsedFile),
+    Standalone(Rc<syn::File>),
+}
+
+impl ParsedFile {
+    #[instrument(level = "debug", skip(syntax))]
+    pub(super) fn shared(src_root: PathBuf, syntax: SharedParsedFile) -> Self {
+        Self {
+            path: syntax.path().to_path_buf(),
+            src_root,
+            syntax: ParsedSyntax::Shared(syntax),
+        }
+    }
+
+    #[instrument(level = "debug", skip(path, syntax))]
+    pub(super) fn standalone(path: PathBuf, src_root: PathBuf, syntax: Rc<syn::File>) -> Self {
+        Self {
+            path,
+            src_root,
+            syntax: ParsedSyntax::Standalone(syntax),
+        }
+    }
+
+    #[instrument(level = "debug", skip(self))]
+    pub(super) fn syntax(&self) -> &syn::File {
+        match &self.syntax {
+            ParsedSyntax::Shared(file) => file.syntax(),
+            ParsedSyntax::Standalone(syntax) => syntax,
+        }
+    }
 }
 
 #[instrument(level = "debug", skip(loaded), err(level = "warn"))]
@@ -35,21 +69,24 @@ pub(super) fn parse_source_tree(
         if path.extension().is_none_or(|ext| ext != "rs") || path_has_fixtures(path, crate_root) {
             continue;
         }
-        let syntax = if let Some(loaded) = loaded {
-            loaded.parsed_file(path, "panic-inventory")?
+        let file = if let Some(loaded) = loaded {
+            ParsedFile::shared(
+                src_root.to_path_buf(),
+                loaded.parsed_file(path, "panic-inventory")?,
+            )
         } else {
             let source = crate::loader::source_read(path, "panic-inventory")?;
-            Rc::new(crate::loader::source_parse(
-                &source,
-                path,
-                "panic-inventory",
-            )?)
+            ParsedFile::standalone(
+                path.to_path_buf(),
+                src_root.to_path_buf(),
+                Rc::new(crate::loader::source_parse(
+                    &source,
+                    path,
+                    "panic-inventory",
+                )?),
+            )
         };
-        parsed.push(ParsedFile::new(
-            path.to_path_buf(),
-            src_root.to_path_buf(),
-            syntax,
-        ));
+        parsed.push(file);
     }
 
     Ok(parsed)

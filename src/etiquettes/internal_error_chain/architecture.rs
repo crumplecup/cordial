@@ -63,15 +63,23 @@ fn load_src_file(
     src_root: &Path,
     source: Option<&crate::loader::SourceLoadView>,
 ) -> CordialResult<()> {
-    let syntax = if let Some(source) = source {
-        source.parsed_file(file, "error-architecture")?
+    enum ParsedInput {
+        Shared(crate::loader::SharedParsedFile),
+        Standalone(syn::File),
+    }
+    let input = if let Some(source) = source {
+        ParsedInput::Shared(source.parsed_file(file, "error-architecture")?)
     } else {
         let text = crate::loader::source_read(file, "error-architecture")?;
-        std::rc::Rc::new(crate::loader::source_parse(
+        ParsedInput::Standalone(crate::loader::source_parse(
             &text,
             file,
             "error-architecture",
         )?)
+    };
+    let syntax = match &input {
+        ParsedInput::Shared(file) => file.syntax(),
+        ParsedInput::Standalone(syntax) => syntax,
     };
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut visitor = CatalogVisitor::builder()
@@ -79,6 +87,6 @@ fn load_src_file(
         .module_prefix(module_prefix)
         .catalog(catalog)
         .build()?;
-    crate::loader::source_walk(file, "error-architecture", || visitor.visit_file(&syntax));
+    crate::loader::source_walk(file, "error-architecture", || visitor.visit_file(syntax));
     Ok(())
 }

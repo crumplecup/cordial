@@ -78,7 +78,12 @@ fn scan_source_tree_impl(
         }
         if let Some(loaded) = loaded {
             let unit = loaded.parsed_file(path, "allow-inventory")?;
-            findings.extend(scan_rust_syntax(&unit, path, tree_root, crate_root)?);
+            findings.extend(scan_rust_syntax(
+                unit.syntax(),
+                path,
+                tree_root,
+                crate_root,
+            )?);
         } else {
             let source = crate::loader::source_read(path, "allow-inventory")?;
             findings.extend(scan_rust_source(&source, path, tree_root, crate_root)?);

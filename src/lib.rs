@@ -345,7 +345,7 @@ pub use export::{SurrealEdge, SurrealGraphExport, SurrealNode, surreal_statement
 pub use filter::NamedRunFilter;
 pub use hooks::{
     AssessView, Assessor, EnrichView, IrEnricher, LoadContext, Loader, Probe, ProbeView,
-    RenderView, Reporter, WorkspaceAssessView, WorkspaceAssessor,
+    RenderView, Reporter, SourceEnrichView, SourceEnricher, WorkspaceAssessView, WorkspaceAssessor,
 };
 pub use ir::{
     ATTR_CRATE_KINDS, ATTR_IR_ORIGIN, ATTR_SYN_DOC_PEER, AttrKey, AttrValue, BasicQuery, CrateIr,
@@ -360,8 +360,8 @@ pub use ir::{
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use loader::path_has_fixtures;
 pub use loader::{
-    CrateTarget, LoadView, SourceFile, SourceLoadView, SourceLoader, module_path_from_src_file,
-    quality_scan_trees,
+    CrateTarget, LoadView, SharedParsedFile, SourceFile, SourceLoadView, SourceLoader,
+    module_path_from_src_file, quality_scan_trees,
 };
 pub use objects::{
     Artifact, Disposition, FileSpan, Finding, FindingSink, IrAnchor, MapFindingSink, Marker,

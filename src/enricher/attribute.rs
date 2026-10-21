@@ -57,7 +57,9 @@ impl IrEnricher for AttributeEnricher {
                     .replace('\\', "/"),
                 error: None,
             };
-            crate::loader::source_walk(file.path(), Self::ID, || visitor.visit_file(&syntax));
+            crate::loader::source_walk(file.path(), Self::ID, || {
+                visitor.visit_file(syntax.syntax())
+            });
             if let Some(err) = visitor.error {
                 return Err(err);
             }

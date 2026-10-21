@@ -1,6 +1,6 @@
 # Shared source provenance
 
-**Status:** Active design. Implement in small slices; run focused checks and a
+**Status:** In progress. Implement in small slices; run focused checks and a
 zero-open Cordial gate before each phase commit.
 
 ## Invariant
@@ -12,14 +12,14 @@ source text, path, syntax tree, and provenance travel together in one type with
 private fields and no public constructor. A separate token passed beside raw
 data would permit the data and token to be mismatched.
 
-The current cache is useful but does not enforce this invariant. `SourceLoadView`
-returns a cached `Rc<syn::File>`, while many production scanners still accept
-`&str` and `&Path` and call `syn::parse_file` themselves. Source hooks receive
-only `&dyn LoadView`, so they can bypass the cache without changing a type
-signature. See [`SourceLoadView`](../../src/loader/source.rs),
-[`IrEnricher`](../../src/hooks/enricher.rs), and the
-[`modularity` scanner](../../src/etiquettes/modularity/scan.rs) for one such
-route.
+The cache now issues a `SharedParsedFile` that keeps those four facts together,
+and a `SourceEnricher` receives a typed source view. This is an incremental
+boundary: most production enrichers still implement the older `IrEnricher`
+contract, and many scanners still accept `&str` and `&Path` and call
+`syn::parse_file` themselves. See [`SourceLoadView`](../../src/loader/source.rs),
+[`SourceEnricher`](../../src/hooks/enricher.rs), and the
+[`modularity` scanner](../../src/etiquettes/modularity/scan.rs) for the first
+migrated route.
 
 ## API shape
 
@@ -86,10 +86,10 @@ route.
   scanners. Any remaining direct parse has an explicit embedded-source or
   standalone-test purpose.
 
-## Open design decision for the first slice
+## First slice decision
 
-Prototype the carrier against one representative scanner, such as modularity,
-before choosing whether `IrEnricher` needs a source-specific companion trait or
-whether `EnrichView` should expose a typed source cursor. The chosen interface
-must make provenance-bearing source access the default for plugin authors; a
-mere helper method on the current untyped hook is insufficient.
+Modularity prototypes a `SourceEnricher` companion trait. Its adapter fixes the
+required loader to `SourceLoader` and passes a typed `SourceEnrichView`, while
+the scanner accepts `SharedParsedFile`. This removes the downcast and direct
+file parse from that production route. The older `IrEnricher` contract remains
+for migration; the invariant is not repo-wide until those source hooks move.

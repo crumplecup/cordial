@@ -1,6 +1,6 @@
-use crate::error::CordialResult;
+use crate::error::{CordialError, CordialResult};
 use crate::ir::IrMut;
-use crate::loader::{LoadView, SourceLoader};
+use crate::loader::{LoadView, SourceLoadView, SourceLoader};
 use crate::session::SessionView;
 
 use tracing::instrument;
@@ -29,6 +29,65 @@ pub trait IrEnricher: Send + Sync {
     ///
     /// Repeated runs over the same inputs should produce the same graph facts.
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()>;
+}
+
+/// Source-specific enricher whose loader is fixed to [`SourceLoader`].
+///
+/// Implement this instead of [`IrEnricher`] when deriving facts from Rust
+/// source. The adapter passes a typed source view to the hook, so its scanner
+/// can require provenance-bearing parsed files.
+pub trait SourceEnricher: Send + Sync {
+    /// Stable identifier used to deduplicate enricher runs.
+    fn id(&self) -> &str;
+
+    /// Lower values run first when source enrichers have fact dependencies.
+    fn priority(&self) -> u8 {
+        50
+    }
+
+    /// Mutate the IR using parsed files issued by the shared source view.
+    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()>;
+}
+
+impl<T: SourceEnricher> IrEnricher for T {
+    #[instrument(level = "trace", skip(self))]
+    fn id(&self) -> &str {
+        SourceEnricher::id(self)
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn priority(&self) -> u8 {
+        SourceEnricher::priority(self)
+    }
+
+    #[instrument(level = "trace", skip(self, view))]
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let (ir, load, session) = view.into_parts();
+        let source = load
+            .as_any()
+            .downcast_ref::<SourceLoadView>()
+            .ok_or_else(|| CordialError::invariant("source enricher received another loader"))?;
+        self.enrich_source(SourceEnrichView::new(ir, source, session))
+    }
+}
+
+/// Typed inputs for a source-specific enricher.
+#[derive(derive_getters::Getters, derive_new::new)]
+pub struct SourceEnrichView<'a> {
+    #[getter(skip)]
+    ir: &'a mut dyn IrMut,
+    #[getter(copy)]
+    source: &'a SourceLoadView,
+    #[getter(copy)]
+    session: &'a dyn SessionView,
+}
+
+impl<'a> SourceEnrichView<'a> {
+    /// Consume the view into its source hook inputs.
+    #[instrument(level = "debug", skip(self))]
+    pub fn into_parts(self) -> (&'a mut dyn IrMut, &'a SourceLoadView, &'a dyn SessionView) {
+        (self.ir, self.source, self.session)
+    }
 }
 
 /// Shared inputs for [`IrEnricher::enrich`].

@@ -8,18 +8,19 @@ use syn::visit::Visit;
 use syn::{ItemFn, ItemImpl, ItemMod, ItemTrait};
 
 use crate::error::CordialResult;
-use crate::loader::module_path_from_src_file;
+use crate::loader::{SharedParsedFile, SourceLoadView, module_path_from_src_file};
 
 use super::types::{ModularityKind, ModularitySiteRecord, ModularityThresholds};
 
 use tracing::instrument;
-#[instrument(level = "debug", skip(thresholds), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, thresholds), err(level = "warn"))]
 pub fn scan_source_tree(
-    src_root: &Path,
+    source: &SourceLoadView,
     crate_root: &Path,
     thresholds: &ModularityThresholds,
 ) -> CordialResult<Vec<ModularitySiteRecord>> {
     let mut findings = Vec::new();
+    let src_root = source.src_root();
     if !src_root.is_dir() {
         return Ok(findings);
     }
@@ -33,10 +34,8 @@ pub fn scan_source_tree(
         if path.extension().is_none_or(|ext| ext != "rs") {
             continue;
         }
-        let source = std::fs::read_to_string(path)?;
-        findings.extend(scan_rust_source(
-            &source, path, src_root, crate_root, thresholds,
-        )?);
+        let file = source.parsed_file(path, "modularity-inventory")?;
+        findings.extend(scan_shared_file(&file, src_root, crate_root, thresholds)?);
     }
 
     findings.sort_by(|left, right| {
@@ -60,20 +59,53 @@ pub fn scan_rust_source(
     crate_root: &Path,
     thresholds: &ModularityThresholds,
 ) -> CordialResult<Vec<ModularitySiteRecord>> {
+    let syntax = syn::parse_file(source)
+        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    scan_syntax(source, &syntax, file, src_root, crate_root, thresholds)
+}
+
+#[instrument(level = "debug", skip(file, thresholds), err(level = "warn"))]
+fn scan_shared_file(
+    file: &SharedParsedFile,
+    src_root: &Path,
+    crate_root: &Path,
+    thresholds: &ModularityThresholds,
+) -> CordialResult<Vec<ModularitySiteRecord>> {
+    scan_syntax(
+        file.source(),
+        file.syntax(),
+        file.path(),
+        src_root,
+        crate_root,
+        thresholds,
+    )
+}
+
+#[instrument(
+    level = "debug",
+    skip(source, syntax, file, thresholds),
+    err(level = "warn")
+)]
+fn scan_syntax(
+    source: &str,
+    syntax: &syn::File,
+    file: &Path,
+    src_root: &Path,
+    crate_root: &Path,
+    thresholds: &ModularityThresholds,
+) -> CordialResult<Vec<ModularitySiteRecord>> {
     let mut findings = Vec::new();
     let generated = thresholds.is_generated_file(file, crate_root);
     if !generated {
         maybe_push_file_finding(source, file, crate_root, thresholds, &mut findings)?;
     }
 
-    let syntax = syn::parse_file(source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    maybe_push_types_finding(&syntax, file, crate_root, thresholds, &mut findings)?;
+    maybe_push_types_finding(syntax, file, crate_root, thresholds, &mut findings)?;
     let module_prefix = module_path_from_src_file(src_root, file);
     if !generated {
         push_module_size_records(
             source,
-            &syntax,
+            syntax,
             file,
             crate_root,
             &module_prefix,
@@ -91,7 +123,7 @@ pub fn scan_rust_source(
         findings: Vec::new(),
         error: None,
     };
-    visitor.visit_file(&syntax);
+    visitor.visit_file(syntax);
     if let Some(error) = visitor.error {
         return Err(error);
     }

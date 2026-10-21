@@ -64,7 +64,7 @@ impl SourceLoadView {
         ir.insert_edge(parent, module_node, EdgeKind::Contains)?;
 
         super::source_work::walk(file.path(), "source-ir", || {
-            for item in &syntax.items {
+            for item in &syntax.syntax().items {
                 self.load_item(ir, module_node, &module_path, file.path(), item)?;
             }
             Ok::<(), crate::error::CordialError>(())

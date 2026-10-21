@@ -70,13 +70,12 @@ pub struct SourceFile {
 }
 
 /// Source loader output.
-#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub struct SourceLoadView {
     crate_name: String,
     src_root: PathBuf,
     files: Vec<SourceFile>,
     crate_kinds: Vec<CrateKind>,
-    #[new(default)]
     #[getter(skip)]
     cache_token: Arc<CacheToken>,
 }
@@ -92,7 +91,50 @@ impl Default for CacheToken {
     }
 }
 
-type ParsedFiles = HashMap<PathBuf, Rc<syn::File>>;
+/// One source snapshot and its syntax tree, issued by a source view.
+///
+/// The private fields keep syntax, text, path, and session provenance together.
+/// A scanner cannot construct this from an independently parsed tree.
+///
+/// ```compile_fail
+/// use cordial::SharedParsedFile;
+/// let syntax = syn::parse_file("fn example() {}").unwrap();
+/// let _: SharedParsedFile = syntax.into();
+/// ```
+#[derive(Debug, Clone)]
+pub struct SharedParsedFile {
+    inner: Rc<ParsedSource>,
+}
+
+#[derive(Debug)]
+struct ParsedSource {
+    path: PathBuf,
+    source: String,
+    syntax: syn::File,
+    session: u64,
+}
+
+impl SharedParsedFile {
+    /// Path used to load this source file.
+    #[instrument(level = "trace", skip(self))]
+    pub fn path(&self) -> &Path {
+        &self.inner.path
+    }
+
+    /// Source text parsed into this file's syntax tree.
+    #[instrument(level = "trace", skip(self))]
+    pub fn source(&self) -> &str {
+        &self.inner.source
+    }
+
+    /// Syntax tree parsed from this file's source text.
+    #[instrument(level = "trace", skip(self))]
+    pub fn syntax(&self) -> &syn::File {
+        &self.inner.syntax
+    }
+}
+
+type ParsedFiles = HashMap<PathBuf, SharedParsedFile>;
 type ParsedRuns = HashMap<u64, (Weak<CacheToken>, ParsedFiles)>;
 
 thread_local! {
@@ -100,11 +142,27 @@ thread_local! {
 }
 
 impl SourceLoadView {
+    #[instrument(level = "debug", skip(files, crate_kinds), fields(crate_name = crate_name))]
+    fn new(
+        crate_name: String,
+        src_root: PathBuf,
+        files: Vec<SourceFile>,
+        crate_kinds: Vec<CrateKind>,
+    ) -> Self {
+        Self {
+            crate_name,
+            src_root,
+            files,
+            crate_kinds,
+            cache_token: Arc::new(CacheToken::default()),
+        }
+    }
+
     /// Return the same parsed file to every hook scanning this path.
     /// Callers own tree discovery and fixture filtering.
     #[tracing::instrument(level = "debug", skip(self, path))]
     #[hotpath::measure(impl_type = "SourceLoadView")]
-    pub(crate) fn parsed_file(&self, path: &Path, hook: &str) -> CordialResult<Rc<syn::File>> {
+    pub fn parsed_file(&self, path: &Path, hook: &str) -> CordialResult<SharedParsedFile> {
         PARSED.with(|parsed| {
             let mut parsed = parsed.borrow_mut();
             parsed.retain(|_, (token, _)| token.strong_count() != 0);
@@ -112,19 +170,27 @@ impl SourceLoadView {
                 .entry(self.cache_token.0)
                 .or_insert_with(|| (Arc::downgrade(&self.cache_token), HashMap::new()))
                 .1;
-            if let Some(syntax) = files.get(path) {
+            if let Some(file) = files.get(path) {
+                debug_assert_eq!(file.inner.session, self.cache_token.0);
                 super::source_work::reuse(path, hook);
-                return Ok(Rc::clone(syntax));
+                return Ok(file.clone());
             }
-            let syntax = if let Some(file) = self.files.iter().find(|file| file.path() == path) {
-                super::source_work::parse(file.source(), path, hook)?
+            let source = if let Some(file) = self.files.iter().find(|file| file.path() == path) {
+                file.source().clone()
             } else {
-                let source = super::source_work::read(path, hook)?;
-                super::source_work::parse(&source, path, hook)?
+                super::source_work::read(path, hook)?
             };
-            let syntax = Rc::new(syntax);
-            files.insert(path.to_path_buf(), Rc::clone(&syntax));
-            Ok(syntax)
+            let syntax = super::source_work::parse(&source, path, hook)?;
+            let file = SharedParsedFile {
+                inner: Rc::new(ParsedSource {
+                    path: path.to_path_buf(),
+                    source,
+                    syntax,
+                    session: self.cache_token.0,
+                }),
+            };
+            files.insert(path.to_path_buf(), file.clone());
+            Ok(file)
         })
     }
 
