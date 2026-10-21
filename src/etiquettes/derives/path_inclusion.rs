@@ -39,6 +39,8 @@ use std::sync::Mutex;
 use syn::Item;
 use tracing::instrument;
 
+use crate::loader::SourceLoadView;
+
 /// Workspace-wide `#[path]`-splice graph plus each crate's real
 /// dependency set.
 #[derive(Debug, Default, Clone)]
@@ -134,7 +136,7 @@ impl PathInclusionFacts {
     }
 }
 
-type FactsCache = Mutex<Option<(PathBuf, PathInclusionFacts)>>;
+type FactsCache = Mutex<Option<(PathBuf, Option<u64>, PathInclusionFacts)>>;
 static FACTS_CACHE: FactsCache = Mutex::new(None);
 
 /// Cached, workspace-wide `#[path]`-splice + dependency facts. Cheap to
@@ -143,23 +145,44 @@ static FACTS_CACHE: FactsCache = Mutex::new(None);
 /// cache shape.
 #[instrument(level = "debug")]
 pub fn workspace_path_inclusions(workspace_root: &Path) -> PathInclusionFacts {
+    workspace_path_inclusions_impl(workspace_root, None)
+}
+
+#[instrument(level = "debug", skip(source))]
+pub(crate) fn workspace_path_inclusions_with_source(
+    workspace_root: &Path,
+    source: &SourceLoadView,
+) -> PathInclusionFacts {
+    workspace_path_inclusions_impl(workspace_root, Some(source))
+}
+
+#[instrument(level = "debug", skip(source))]
+fn workspace_path_inclusions_impl(
+    workspace_root: &Path,
+    source: Option<&SourceLoadView>,
+) -> PathInclusionFacts {
     let cache_key = canonical_or(workspace_root);
+    let session_id = source.map(SourceLoadView::session_id);
     if let Ok(cache) = FACTS_CACHE.lock()
-        && let Some((key, facts)) = cache.as_ref()
+        && let Some((key, cached_session, facts)) = cache.as_ref()
         && *key == cache_key
+        && *cached_session == session_id
     {
         return facts.clone();
     }
 
-    let facts = compute_path_inclusions(workspace_root);
+    let facts = compute_path_inclusions(workspace_root, source);
     if let Ok(mut cache) = FACTS_CACHE.lock() {
-        *cache = Some((cache_key, facts.clone()));
+        *cache = Some((cache_key, session_id, facts.clone()));
     }
     facts
 }
 
-#[instrument(level = "debug")]
-fn compute_path_inclusions(workspace_root: &Path) -> PathInclusionFacts {
+#[instrument(level = "debug", skip(source))]
+fn compute_path_inclusions(
+    workspace_root: &Path,
+    source: Option<&SourceLoadView>,
+) -> PathInclusionFacts {
     let Ok(meta) = cargo_metadata::MetadataCommand::new()
         .current_dir(workspace_root)
         .exec()
@@ -193,7 +216,7 @@ fn compute_path_inclusions(workspace_root: &Path) -> PathInclusionFacts {
         crate_roots.push((package.name.to_string(), crate_root));
     }
 
-    let included_by = discover_splices(&crate_roots);
+    let included_by = discover_splices(&crate_roots, source);
 
     PathInclusionFacts {
         included_by,
@@ -202,8 +225,11 @@ fn compute_path_inclusions(workspace_root: &Path) -> PathInclusionFacts {
     }
 }
 
-#[instrument(level = "debug", skip(crate_roots))]
-fn discover_splices(crate_roots: &[(String, PathBuf)]) -> HashMap<PathBuf, Vec<String>> {
+#[instrument(level = "debug", skip(crate_roots, source))]
+fn discover_splices(
+    crate_roots: &[(String, PathBuf)],
+    source: Option<&SourceLoadView>,
+) -> HashMap<PathBuf, Vec<String>> {
     let mut included_by: HashMap<PathBuf, Vec<String>> = HashMap::new();
     for (crate_name, crate_root) in crate_roots {
         let src_root = crate_root.join("src");
@@ -219,16 +245,24 @@ fn discover_splices(crate_roots: &[(String, PathBuf)]) -> HashMap<PathBuf, Vec<S
             if path.extension().is_none_or(|ext| ext != "rs") {
                 continue;
             }
-            let Ok(source) = std::fs::read_to_string(path) else {
-                continue;
-            };
-            let Ok(syntax) = syn::parse_file(&source) else {
-                continue;
+            let targets = if let Some(source) = source {
+                let Ok(parsed) = source.parsed_file(path, "path-inclusion") else {
+                    continue;
+                };
+                path_attr_targets(&parsed.syntax().items)
+            } else {
+                let Ok(text) = std::fs::read_to_string(path) else {
+                    continue;
+                };
+                let Ok(syntax) = syn::parse_file(&text) else {
+                    continue;
+                };
+                path_attr_targets(&syntax.items)
             };
             let Some(file_dir) = path.parent() else {
                 continue;
             };
-            for target in path_attr_targets(&syntax.items) {
+            for target in targets {
                 let resolved = canonical_or(&file_dir.join(&target));
                 included_by
                     .entry(resolved)

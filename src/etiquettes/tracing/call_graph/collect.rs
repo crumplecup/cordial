@@ -5,6 +5,7 @@ use tracing::instrument;
 
 use crate::PathInclusionFacts;
 use crate::config::TracingThresholds;
+use crate::loader::SourceLoadView;
 
 use super::super::apply::crate_gate_cfgs;
 use super::super::scan::{impl_method_local_name, self_type_key, syn_path_label, type_label};
@@ -35,10 +36,11 @@ pub(super) struct CollectedFn {
     body: Option<syn::Block>,
 }
 
-#[instrument(level = "debug", skip(config, path_facts))]
+#[instrument(level = "debug", skip(config, path_facts, source))]
 pub(super) fn collect_workspace_functions(
     config: &TracingThresholds,
     path_facts: &PathInclusionFacts,
+    source: Option<&SourceLoadView>,
 ) -> Vec<CollectedFn> {
     let mut collected: Vec<CollectedFn> = Vec::new();
 
@@ -59,10 +61,20 @@ pub(super) fn collect_workspace_functions(
             if path.extension().is_none_or(|ext| ext != "rs") {
                 continue;
             }
-            let Ok(source) = std::fs::read_to_string(path) else {
-                continue;
+            let parsed =
+                source.and_then(|source| source.parsed_file(path, "tracing-call-graph").ok());
+            let standalone = if source.is_none() {
+                std::fs::read_to_string(path)
+                    .ok()
+                    .and_then(|text| syn::parse_file(&text).ok())
+            } else {
+                None
             };
-            let Ok(syntax) = syn::parse_file(&source) else {
+            let Some(syntax) = parsed
+                .as_ref()
+                .map(|parsed| parsed.syntax())
+                .or(standalone.as_ref())
+            else {
                 continue;
             };
             let module_prefix = crate::loader::module_path_from_src_file(&src_root, path);

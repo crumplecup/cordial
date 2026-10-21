@@ -4,7 +4,6 @@ use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{ItemKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
 
-use super::call_graph::workspace_call_graph;
 use super::scan::scan_shared_source_tree;
 
 use tracing::instrument;
@@ -34,7 +33,11 @@ impl SourceEnricher for FunctionInventoryEnricher {
         let crate_root = member_crate_root(source, session);
         let config = crate::config::load_session_config(session);
         let extra_skip = config.tracing().extra_skip();
-        let call_graph = workspace_call_graph(session.project_root(), config.tracing());
+        let call_graph = super::call_graph::workspace_call_graph_with_source(
+            session.project_root(),
+            config.tracing(),
+            source,
+        );
         let never_instrument = call_graph.never_instrument(source.crate_name());
         let records = scan_shared_source_tree(
             source,
@@ -44,7 +47,10 @@ impl SourceEnricher for FunctionInventoryEnricher {
             extra_skip,
             never_instrument,
         )?;
-        let facts = crate::workspace_path_inclusions(session.project_root());
+        let facts = crate::etiquettes::derives::workspace_path_inclusions_with_source(
+            session.project_root(),
+            source,
+        );
         // Value: (policy tag, `not(..)` predicate). The predicate is
         // empty unless the policy is `gated`; it lets the assessor render
         // a checklist recipe byte-identical to what `--apply` writes for

@@ -139,6 +139,34 @@ type ParsedRuns = HashMap<u64, (Weak<CacheToken>, ParsedFiles)>;
 
 thread_local! {
     static PARSED: RefCell<ParsedRuns> = RefCell::new(HashMap::new());
+    static SESSION_TOKEN: RefCell<Option<Arc<CacheToken>>> = const { RefCell::new(None) };
+}
+
+/// Retain parsed files across all crate views in one load-and-probe run.
+pub(crate) struct ParsedSourceSession {
+    previous: Option<Arc<CacheToken>>,
+    token: Arc<CacheToken>,
+}
+
+impl ParsedSourceSession {
+    #[tracing::instrument(level = "debug")]
+    pub(crate) fn begin() -> Self {
+        let token = Arc::new(CacheToken::default());
+        let previous = SESSION_TOKEN.with(|current| current.replace(Some(token.clone())));
+        Self { previous, token }
+    }
+}
+
+impl Drop for ParsedSourceSession {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn drop(&mut self) {
+        PARSED.with(|parsed| {
+            parsed.borrow_mut().remove(&self.token.0);
+        });
+        SESSION_TOKEN.with(|current| {
+            current.replace(self.previous.take());
+        });
+    }
 }
 
 impl SourceLoadView {
@@ -154,7 +182,12 @@ impl SourceLoadView {
             src_root,
             files,
             crate_kinds,
-            cache_token: Arc::new(CacheToken::default()),
+            cache_token: SESSION_TOKEN.with(|current| {
+                current
+                    .borrow()
+                    .clone()
+                    .unwrap_or_else(|| Arc::new(CacheToken::default()))
+            }),
         }
     }
 
@@ -220,12 +253,10 @@ impl SourceLoadView {
         Ok(files)
     }
 
-    /// Drop parsed trees after the crate's enrichers have consumed them.
+    /// Identity of the run that issued this parsed-file view.
     #[tracing::instrument(level = "trace", skip(self))]
-    pub(crate) fn release_parsed(&self) {
-        PARSED.with(|parsed| {
-            parsed.borrow_mut().remove(&self.cache_token.0);
-        });
+    pub(crate) fn session_id(&self) -> u64 {
+        self.cache_token.0
     }
 }
 

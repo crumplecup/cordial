@@ -180,3 +180,12 @@ The attribute, allow, and foreign-error-attenuation enrichers now enter through
 the typed source hook. The first two already used shared parsed files in their
 production scans; attenuation joins facts already in the IR. This removes
 their loader downcasts without changing their scan results.
+
+## Thirteenth slice
+
+The parsed-file cache now lives for the whole load-and-probe run, so later
+crate views reuse trees opened by earlier workspace-wide scans. Path-inclusion
+discovery and the tracing call graph obtain their production syntax through
+that source view. Their standalone apply APIs retain direct parsing. The
+workspace facts caches distinguish sourced runs by session identity, so facts
+from a standalone call cannot bypass the shared-tree production path.

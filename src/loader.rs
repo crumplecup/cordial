@@ -11,6 +11,7 @@ use crate::ir::CrateKind;
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use scan_roots::path_has_fixtures;
 pub use scan_roots::quality_scan_trees;
+pub(crate) use source::ParsedSourceSession;
 pub use source::{SharedParsedFile, SourceFile, SourceLoadView, SourceLoader};
 pub(crate) use source_work::{
     parse as source_parse, read as source_read, reset as reset_source_work, walk as source_walk,

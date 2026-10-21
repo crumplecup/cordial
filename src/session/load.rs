@@ -8,7 +8,7 @@ use crate::error::{CordialError, CordialResult};
 
 use crate::hooks::{EnrichView, IrEnricher, LoadContext, Loader, Probe, ProbeView};
 use crate::ir::{CrateIr, CrateView, CrateViewMut, WorkspaceIr};
-use crate::loader::{CrateTarget, LoadView, SourceLoadView, SourceLoader};
+use crate::loader::{CrateTarget, LoadView, ParsedSourceSession, SourceLoadView, SourceLoader};
 use crate::objects::Marker;
 
 use crate::HookTimings;
@@ -54,6 +54,7 @@ pub(super) fn load_and_probe(
     timings: &mut HookTimings,
 ) -> CordialResult<LoadedWorkspace> {
     crate::loader::reset_source_work();
+    let _parsed_source_session = ParsedSourceSession::begin();
     let LoadingHooks {
         loaders,
         enrichers,
@@ -146,13 +147,6 @@ pub(super) fn load_and_probe(
                 enricher.enrich(EnrichView::new(&mut view, load, session))
             })?;
             progress.inc(1);
-        }
-
-        if let Some(source) = load_views
-            .get(&format!("{}:{}", target.crate_name(), SourceLoader::ID))
-            .and_then(|view| view.as_any().downcast_ref::<SourceLoadView>())
-        {
-            source.release_parsed();
         }
 
         progress.set_message(format!("Caching IR for {}", target.crate_name()));
