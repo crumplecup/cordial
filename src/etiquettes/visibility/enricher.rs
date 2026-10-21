@@ -1,11 +1,10 @@
 use crate::enricher::member_crate_root;
 use crate::error::CordialResult;
-use crate::hooks::{EnrichView, IrEnricher};
+use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
-use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 
-use super::scan::{BranchingCache, scan_crate_visibility_with_cache};
+use super::scan::{BranchingCache, scan_shared_crate_visibility_with_cache};
 use super::types::VisibilityRuleId;
 use crate::config::VisibilityThresholds;
 
@@ -18,19 +17,15 @@ impl VisibilityInventoryEnricher {
     pub const ID: &'static str = "visibility-inventory";
 }
 
-impl IrEnricher for VisibilityInventoryEnricher {
+impl SourceEnricher for VisibilityInventoryEnricher {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
     #[instrument(level = "trace", skip(self, view))]
-    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let (ir, load, session) = view.into_parts();
-
-        let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
-            return Ok(());
-        };
+    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
+        let (ir, source, session) = view.into_parts();
 
         let crate_root = member_crate_root(source, session);
         let thresholds = crate::config::load_session_config(session)
@@ -45,8 +40,12 @@ impl IrEnricher for VisibilityInventoryEnricher {
         } else {
             BranchingCache::load(&cache_path)
         };
-        let (records, new_cache) =
-            scan_crate_visibility_with_cache(&crate_root, thresholds.clone(), cached)?;
+        let (records, new_cache) = scan_shared_crate_visibility_with_cache(
+            source,
+            &crate_root,
+            thresholds.clone(),
+            cached,
+        )?;
         if let Some(cache) = new_cache {
             cache.write(&cache_path)?;
         }

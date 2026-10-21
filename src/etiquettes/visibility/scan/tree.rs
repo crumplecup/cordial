@@ -6,6 +6,7 @@ use syn::spanned::Spanned;
 use syn::{Attribute, Item, ItemMacro, ItemMod};
 
 use crate::error::CordialResult;
+use crate::loader::SourceLoadView;
 
 use super::vis::{VisKind, is_cfg_test, is_doc_hidden, item_vis, leaf_name_count, vis_kind};
 
@@ -50,25 +51,83 @@ pub(super) fn scan_module_file(
     ancestors_all_pub: bool,
     is_crate_root: bool,
 ) -> CordialResult<ModuleNode> {
-    let source = std::fs::read_to_string(file)?;
-    let syntax = syn::parse_file(&source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    scan_items(
-        &syntax.items,
-        ScanHeader {
-            file,
-            path,
-            declared_vis,
-            parent_declared_pub,
-            ancestors_all_pub,
-            is_crate_root,
-            line: 1,
-        },
+    scan_module_file_impl(
+        None,
+        file,
+        path,
+        declared_vis,
+        parent_declared_pub,
+        ancestors_all_pub,
+        is_crate_root,
     )
 }
 
-#[instrument(level = "debug", skip(items, header), err(level = "warn"))]
-fn scan_items(items: &[Item], header: ScanHeader<'_>) -> CordialResult<ModuleNode> {
+#[instrument(
+    level = "debug",
+    skip(source, file, path, declared_vis),
+    err(level = "warn")
+)]
+pub(super) fn scan_shared_module_file(
+    source: &SourceLoadView,
+    file: &Path,
+    path: String,
+    declared_vis: VisKind,
+    parent_declared_pub: bool,
+    ancestors_all_pub: bool,
+    is_crate_root: bool,
+) -> CordialResult<ModuleNode> {
+    scan_module_file_impl(
+        Some(source),
+        file,
+        path,
+        declared_vis,
+        parent_declared_pub,
+        ancestors_all_pub,
+        is_crate_root,
+    )
+}
+
+#[instrument(
+    level = "debug",
+    skip(source, file, path, declared_vis),
+    err(level = "warn")
+)]
+fn scan_module_file_impl(
+    source: Option<&SourceLoadView>,
+    file: &Path,
+    path: String,
+    declared_vis: VisKind,
+    parent_declared_pub: bool,
+    ancestors_all_pub: bool,
+    is_crate_root: bool,
+) -> CordialResult<ModuleNode> {
+    let header = ScanHeader {
+        file,
+        path,
+        declared_vis,
+        parent_declared_pub,
+        ancestors_all_pub,
+        is_crate_root,
+        line: 1,
+    };
+    if let Some(source) = source {
+        let shared = source.parsed_file(file, "visibility-inventory")?;
+        scan_items(&shared.syntax().items, header, Some(source))
+    } else {
+        let text = std::fs::read_to_string(file)?;
+        let syntax = syn::parse_file(&text).map_err(|err| {
+            crate::error::CordialError::syn_parse(file.display().to_string(), err)
+        })?;
+        scan_items(&syntax.items, header, None)
+    }
+}
+
+#[instrument(level = "debug", skip(items, header, source), err(level = "warn"))]
+fn scan_items(
+    items: &[Item],
+    header: ScanHeader<'_>,
+    source: Option<&SourceLoadView>,
+) -> CordialResult<ModuleNode> {
     let ScanHeader {
         file,
         path,
@@ -97,6 +156,7 @@ fn scan_items(items: &[Item], header: ScanHeader<'_>) -> CordialResult<ModuleNod
                 let child_line = item_mod.span().start().line as u32;
                 let child_ancestors_pub = ancestors_all_pub && child_vis.is_unrestricted_pub();
                 let child = scan_child_mod(
+                    source,
                     item_mod,
                     file,
                     child_path,
@@ -148,10 +208,11 @@ fn scan_items(items: &[Item], header: ScanHeader<'_>) -> CordialResult<ModuleNod
 
 #[instrument(
     level = "debug",
-    skip(item_mod, path, declared_vis),
+    skip(source, item_mod, path, declared_vis),
     err(level = "warn")
 )]
 fn scan_child_mod(
+    source: Option<&SourceLoadView>,
     item_mod: &ItemMod,
     parent_file: &Path,
     path: String,
@@ -172,6 +233,7 @@ fn scan_child_mod(
                 is_crate_root: false,
                 line,
             },
+            source,
         );
     }
     let Some(child_file) = resolve_mod_file(parent_file, &item_mod.ident.to_string(), item_mod)
@@ -189,7 +251,8 @@ fn scan_child_mod(
             children: Vec::new(),
         });
     };
-    scan_module_file(
+    scan_module_file_impl(
+        source,
         &child_file,
         path,
         declared_vis,

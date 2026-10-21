@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::CordialResult;
+use crate::loader::SourceLoadView;
 
 use super::types::{VisibilityRecord, VisibilityThresholds};
 
@@ -16,7 +17,7 @@ mod vis;
 
 use eval::resolve_eval;
 use findings::collect_findings;
-use tree::scan_module_file;
+use tree::{scan_module_file, scan_shared_module_file};
 use vis::VisKind;
 
 /// Cached branching floor from a previous peel. Digest is a hash of the
@@ -75,6 +76,29 @@ pub fn scan_crate_visibility_with_cache(
         return Ok((Vec::new(), None));
     };
     let root = scan_module_file(
+        &root_file,
+        "crate".to_string(),
+        VisKind::Pub,
+        true,
+        true,
+        true,
+    )?;
+    let (eval, new_cache) = resolve_eval(&root, thresholds.clone(), cached);
+    Ok((collect_findings(&root, thresholds, eval)?, new_cache))
+}
+
+#[instrument(level = "debug", skip(source, thresholds, cached), err(level = "warn"))]
+pub(super) fn scan_shared_crate_visibility_with_cache(
+    source: &SourceLoadView,
+    crate_root: &Path,
+    thresholds: VisibilityThresholds,
+    cached: Option<BranchingCache>,
+) -> CordialResult<(Vec<VisibilityRecord>, Option<BranchingCache>)> {
+    let Some(root_file) = crate_root_file(crate_root) else {
+        return Ok((Vec::new(), None));
+    };
+    let root = scan_shared_module_file(
+        source,
         &root_file,
         "crate".to_string(),
         VisKind::Pub,

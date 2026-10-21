@@ -153,3 +153,9 @@ now uses the typed `SourceEnricher` interface as well. The tracing call-graph
 collector still parses workspace files separately. Its workspace-wide scope
 needs a cache lifetime that spans individual crate source views before it can
 share those parsed trees safely.
+
+## Ninth slice
+
+The visibility inventory now follows the crate's module tree through shared
+parsed files, including out-of-line modules and `#[path]` modules. Its public
+standalone scanner retains direct parsing for callers outside a source session.
