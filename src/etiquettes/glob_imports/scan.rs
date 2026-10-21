@@ -7,7 +7,10 @@ use syn::visit::Visit;
 use syn::{File, ItemMod, ItemUse, UseTree};
 
 use crate::error::CordialResult;
-use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
+use crate::loader::{
+    SharedParsedFile, SourceLoadView, module_path_from_src_file, path_has_fixtures,
+    quality_scan_trees,
+};
 
 use super::types::{GlobImportRuleId, GlobImportSiteRecord};
 
@@ -29,6 +32,58 @@ pub fn scan_crate_glob_imports(crate_root: &Path) -> CordialResult<Vec<GlobImpor
     });
 
     Ok(findings)
+}
+
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+pub(super) fn scan_shared_crate_glob_imports(
+    source: &SourceLoadView,
+    crate_root: &Path,
+) -> CordialResult<Vec<GlobImportSiteRecord>> {
+    let mut findings = Vec::new();
+    for tree_root in quality_scan_trees(crate_root) {
+        findings.extend(scan_shared_source_tree(source, &tree_root, crate_root)?);
+    }
+    findings.sort_by(|a, b| {
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.snippet().cmp(b.snippet()))
+    });
+    Ok(findings)
+}
+
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+fn scan_shared_source_tree(
+    source: &SourceLoadView,
+    tree_root: &Path,
+    crate_root: &Path,
+) -> CordialResult<Vec<GlobImportSiteRecord>> {
+    let mut findings = Vec::new();
+    if !tree_root.is_dir() {
+        return Ok(findings);
+    }
+    for entry in walkdir::WalkDir::new(tree_root)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_file())
+    {
+        let path = entry.path();
+        if path.extension().is_none_or(|ext| ext != "rs") || path_has_fixtures(path, crate_root) {
+            continue;
+        }
+        let file = source.parsed_file(path, "glob-import-inventory")?;
+        findings.extend(scan_shared_file(&file, tree_root, crate_root)?);
+    }
+    Ok(findings)
+}
+
+#[instrument(level = "debug", skip(file), err(level = "warn"))]
+fn scan_shared_file(
+    file: &SharedParsedFile,
+    tree_root: &Path,
+    crate_root: &Path,
+) -> CordialResult<Vec<GlobImportSiteRecord>> {
+    scan_syntax(file.syntax(), file.path(), tree_root, crate_root)
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
@@ -70,6 +125,16 @@ pub fn scan_rust_source(
 ) -> CordialResult<Vec<GlobImportSiteRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    scan_syntax(&syntax, file, tree_root, crate_root)
+}
+
+#[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
+fn scan_syntax(
+    syntax: &File,
+    file: &Path,
+    tree_root: &Path,
+    crate_root: &Path,
+) -> CordialResult<Vec<GlobImportSiteRecord>> {
     let module_prefix = module_path_from_src_file(tree_root, file);
     let mut visitor = GlobImportVisitor {
         file: file.to_path_buf(),
@@ -78,7 +143,7 @@ pub fn scan_rust_source(
         findings: Vec::new(),
         error: None,
     };
-    visitor.visit_file(&syntax);
+    visitor.visit_file(syntax);
     if let Some(error) = visitor.error {
         return Err(error);
     }

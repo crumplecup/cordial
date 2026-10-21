@@ -7,7 +7,9 @@ use syn::visit::Visit;
 use syn::{Attribute, File, ImplItemFn, ItemFn, ItemImpl, ItemMod, ItemUse, Meta};
 
 use crate::error::CordialResult;
-use crate::loader::{module_path_from_src_file, path_has_fixtures};
+use crate::loader::{
+    SharedParsedFile, SourceLoadView, module_path_from_src_file, path_has_fixtures,
+};
 
 use super::types::{InlineTestRuleId, InlineTestSiteRecord};
 
@@ -17,6 +19,46 @@ use tracing::instrument;
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_inline_tests(crate_root: &Path) -> CordialResult<Vec<InlineTestSiteRecord>> {
     scan_source_tree(&crate_root.join("src"), crate_root)
+}
+
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+pub(super) fn scan_shared_crate_inline_tests(
+    source: &SourceLoadView,
+    crate_root: &Path,
+) -> CordialResult<Vec<InlineTestSiteRecord>> {
+    let src_root = crate_root.join("src");
+    let mut findings = Vec::new();
+    if !src_root.is_dir() {
+        return Ok(findings);
+    }
+    for entry in walkdir::WalkDir::new(&src_root)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_file())
+    {
+        let path = entry.path();
+        if path.extension().is_none_or(|ext| ext != "rs") || path_has_fixtures(path, crate_root) {
+            continue;
+        }
+        let file = source.parsed_file(path, "inline-test-inventory")?;
+        findings.extend(scan_shared_file(&file, &src_root, crate_root)?);
+    }
+    findings.sort_by(|a, b| {
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.snippet().cmp(b.snippet()))
+    });
+    Ok(findings)
+}
+
+#[instrument(level = "debug", skip(file), err(level = "warn"))]
+fn scan_shared_file(
+    file: &SharedParsedFile,
+    src_root: &Path,
+    crate_root: &Path,
+) -> CordialResult<Vec<InlineTestSiteRecord>> {
+    scan_syntax(file.syntax(), file.path(), src_root, crate_root)
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
@@ -65,6 +107,16 @@ pub fn scan_rust_source(
 ) -> CordialResult<Vec<InlineTestSiteRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    scan_syntax(&syntax, file, src_root, crate_root)
+}
+
+#[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
+fn scan_syntax(
+    syntax: &File,
+    file: &Path,
+    src_root: &Path,
+    crate_root: &Path,
+) -> CordialResult<Vec<InlineTestSiteRecord>> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut visitor = InlineTestVisitor {
         file: file.to_path_buf(),
@@ -74,7 +126,7 @@ pub fn scan_rust_source(
         findings: Vec::new(),
         error: None,
     };
-    visitor.visit_file(&syntax);
+    visitor.visit_file(syntax);
     if let Some(error) = visitor.error {
         return Err(error);
     }

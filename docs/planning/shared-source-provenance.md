@@ -19,7 +19,8 @@ contract, and many scanners still accept `&str` and `&Path` and call
 `syn::parse_file` themselves. See [`SourceLoadView`](../../src/loader/source.rs),
 [`SourceEnricher`](../../src/hooks/enricher.rs), and the
 [`modularity` scanner](../../src/etiquettes/modularity/scan.rs) for the first
-migrated route.
+migrated route. The glob-import and inline-test production scanners now use
+the same source view, including files reached under `tests/`.
 
 ## API shape
 
@@ -93,3 +94,12 @@ required loader to `SourceLoader` and passes a typed `SourceEnrichView`, while
 the scanner accepts `SharedParsedFile`. This removes the downcast and direct
 file parse from that production route. The older `IrEnricher` contract remains
 for migration; the invariant is not repo-wide until those source hooks move.
+
+## Second slice
+
+Glob-import and inline-test enrichers now use `SourceEnricher` and obtain each
+outer file through `SourceLoadView::parsed_file`. Their public standalone scan
+helpers remain for direct use and fixtures; production entry points accept the
+provenance-bearing file. The next migration should move the remaining source
+families onto this route and then retire standalone helpers from production
+surfaces.
