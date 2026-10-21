@@ -202,3 +202,12 @@ The Verus-warning production hook now uses the typed source view. When a
 compiler warning needs the Verus pattern-projection filter, that filter
 obtains the already-cached Verus IR from the same run. The direct standalone
 warning scan remains available outside a source session.
+
+## Sixteenth slice
+
+The feature-warning, doc-warning, and Creusot-diagnostic enrichers now use the
+typed source hook for their crate context. These hooks invoke external tools
+and do not parse outer Rust files themselves. The public plugin example and
+Part 2 of the writing-etiquettes series now request the shared parsed file
+instead of reparsing source text. The introduction narrows its parsed-once
+claim to outer Rust files in a source run.

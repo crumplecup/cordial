@@ -101,6 +101,16 @@ impl Default for CacheToken {
 /// let syntax = syn::parse_file("fn example() {}").unwrap();
 /// let _: SharedParsedFile = syntax.into();
 /// ```
+///
+/// Callers also cannot reach inside the carrier to pair another file's syntax
+/// or path with this source snapshot.
+///
+/// ```compile_fail
+/// use cordial::SharedParsedFile;
+/// fn replace_snapshot(file: &SharedParsedFile) {
+///     let _ = &file.inner;
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub struct SharedParsedFile {
     inner: Rc<ParsedSource>,
