@@ -158,12 +158,15 @@ fn scan_items(
                 let child = scan_child_mod(
                     source,
                     item_mod,
-                    file,
-                    child_path,
-                    child_vis,
-                    declared_vis.is_unrestricted_pub(),
-                    child_ancestors_pub,
-                    child_line,
+                    ScanHeader {
+                        file,
+                        path: child_path,
+                        declared_vis: child_vis,
+                        parent_declared_pub: declared_vis.is_unrestricted_pub(),
+                        ancestors_all_pub: child_ancestors_pub,
+                        is_crate_root: false,
+                        line: child_line,
+                    },
                 )?;
                 children.push(child);
             }
@@ -206,21 +209,21 @@ fn scan_items(
     })
 }
 
-#[instrument(
-    level = "debug",
-    skip(source, item_mod, path, declared_vis),
-    err(level = "warn")
-)]
+#[instrument(level = "debug", skip(source, item_mod, header), err(level = "warn"))]
 fn scan_child_mod(
     source: Option<&SourceLoadView>,
     item_mod: &ItemMod,
-    parent_file: &Path,
-    path: String,
-    declared_vis: VisKind,
-    parent_declared_pub: bool,
-    ancestors_all_pub: bool,
-    line: u32,
+    header: ScanHeader<'_>,
 ) -> CordialResult<ModuleNode> {
+    let ScanHeader {
+        file: parent_file,
+        path,
+        declared_vis,
+        parent_declared_pub,
+        ancestors_all_pub,
+        line,
+        ..
+    } = header;
     if let Some((_, items)) = &item_mod.content {
         return scan_items(
             items,

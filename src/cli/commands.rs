@@ -103,17 +103,26 @@ pub enum Commands {
     #[cfg(feature = "quality")]
     #[command(about = crate::worklist::INSTRUCTIONS_HELP)]
     Instructions,
-    /// Measure each enabled etiquette with a cold and warm Cargo target.
+    /// Measure standalone etiquette cost and optional leave-one-out cost.
     Timings {
         /// Measure only this etiquette.
         #[arg(long)]
         etiquette: Option<String>,
+        /// Compare the selected set with each etiquette removed.
+        #[arg(long)]
+        marginal: bool,
+        /// Limit the set used by marginal comparisons (comma separated).
+        #[arg(long, value_delimiter = ',', requires = "marginal")]
+        scope: Vec<String>,
     },
     /// Internal subprocess for one isolated timing pass.
     #[command(hide = true)]
     TimingsPass {
-        /// Etiquette to measure.
-        etiquette: String,
+        /// Label for this measurement.
+        label: String,
+        /// Exact etiquette selection; an empty list selects none.
+        #[arg(long = "include")]
+        included: Vec<String>,
         /// Private result file; subprocesses may write to stdout during a pass.
         #[arg(long)]
         output: PathBuf,
@@ -325,12 +334,16 @@ impl Commands {
             | Self::Next
             | Self::Stats { .. }
             | Self::Instructions) => command.act_worklist(&ctx),
-            Self::Timings { etiquette } => {
-                super::timings::execute_timings(&ctx, etiquette.as_deref())
-            }
-            Self::TimingsPass { etiquette, output } => {
-                super::timings::execute_timings_pass(&ctx, &etiquette, &output)
-            }
+            Self::Timings {
+                etiquette,
+                marginal,
+                scope,
+            } => super::timings::execute_timings(&ctx, etiquette.as_deref(), marginal, &scope),
+            Self::TimingsPass {
+                label,
+                included,
+                output,
+            } => super::timings::execute_timings_pass(&ctx, &label, &included, &output),
             Self::Tiers => super::tiers::execute_tiers(&ctx.project_root, ctx.store_home.clone()),
             Self::Run {
                 deny_open,

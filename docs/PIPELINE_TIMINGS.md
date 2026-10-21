@@ -22,6 +22,20 @@ etiquette in isolation; use the ledger when inspecting a real multi-etiquette
 gate. A cold and warm pair can have different Cargo cache state, so compare
 like with like.
 
+`cordial timings --marginal` additionally measures the enabled set against the
+same set with each etiquette removed. For each comparison, the full and omitted
+runs have separate initially empty Cargo targets, then each runs again warm.
+`--etiquette ID` limits which omission is measured; `--scope ID,ID` limits the
+full set for a focused experiment. The JSON report includes signed wall-time
+and per-stage deltas (full minus omitted). It also records standalone minus
+marginal time as overlap; this includes shared startup, shared hooks, and
+interactions, so it is not an exact allocation of shared cost. A negative delta
+is possible due to cache state and measurement noise. Repeat costly comparisons before changing
+tiers. The markdown report lists rule ids under their etiquette, but the times
+belong to the etiquette bundle: rules inside one assessor cannot be priced
+independently with the current execution filter. Timing passes omit report
+artifact writes and ledger updates.
+
 For deeper profiling, build with `cargo build --features hotpath`. Set
 `[hotpath] output_path` in `cordial.toml` to choose the JSON report location.
 Relative paths resolve inside the project's Cordial store; this repository

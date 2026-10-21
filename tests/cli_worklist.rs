@@ -649,3 +649,102 @@ fn timings_measure_two_passes_without_replacing_quality_outputs() -> miette::Res
     );
     Ok(())
 }
+
+#[test]
+fn timings_marginal_compares_exact_scoped_sets() -> miette::Result<()> {
+    cordial::init_tracing();
+    let (project, home, store) = fixture()?;
+    let measured = run(
+        project.path(),
+        home.path(),
+        &[
+            "timings",
+            "--marginal",
+            "--scope",
+            "panics,allows",
+            "--etiquette",
+            "panics",
+        ],
+    )?;
+    assert!(
+        measured.status.success(),
+        "{}",
+        String::from_utf8_lossy(&measured.stderr)
+    );
+    let json: serde_json::Value =
+        serde_json::from_slice(&fs::read(store.root().join("timings.json")).into_diagnostic()?)
+            .into_diagnostic()?;
+    assert_eq!(json["version"], 2);
+    assert_eq!(json["entries"][0]["id"], "panics");
+    assert_eq!(
+        json["entries"][0]["marginal"]["scope"],
+        serde_json::json!(["allows", "panics"])
+    );
+    for pass in ["cold", "warm"] {
+        let pair = &json["entries"][0]["marginal"][pass];
+        assert_eq!(
+            pair["full"]["included"],
+            serde_json::json!(["allows", "panics"])
+        );
+        assert_eq!(pair["without"]["included"], serde_json::json!(["allows"]));
+        assert!(pair["full"]["wall_time_nanos"].as_u64().unwrap_or(0) > 0);
+        assert!(pair["without"]["wall_time_nanos"].as_u64().unwrap_or(0) > 0);
+        let full = pair["full"]["wall_time_nanos"]
+            .as_i64()
+            .ok_or_else(|| miette::miette!("full wall time is not an integer"))?;
+        let without = pair["without"]["wall_time_nanos"]
+            .as_i64()
+            .ok_or_else(|| miette::miette!("omitted wall time is not an integer"))?;
+        let marginal = pair["wall_delta_nanos"]
+            .as_i64()
+            .ok_or_else(|| miette::miette!("marginal wall time is not an integer"))?;
+        assert_eq!(marginal, full - without);
+        let standalone = json["entries"][0][pass]["wall_time_nanos"]
+            .as_i64()
+            .ok_or_else(|| miette::miette!("standalone wall time is not an integer"))?;
+        let overlap_key = format!("{pass}_overlap_nanos");
+        assert_eq!(
+            json["entries"][0]["marginal"][overlap_key.as_str()].as_i64(),
+            Some(standalone - marginal)
+        );
+        assert!(
+            pair["stage_deltas"]
+                .as_array()
+                .is_some_and(|deltas| deltas.iter().any(|delta| delta["stage"] == "phase"))
+        );
+    }
+    let markdown = fs::read_to_string(store.root().join("timings.md")).into_diagnostic()?;
+    assert!(markdown.contains("## Marginal cost (full minus without)"));
+    assert!(markdown.contains("### Marginal pipeline phases"));
+    Ok(())
+}
+
+#[test]
+fn timings_marginal_can_omit_the_only_selected_etiquette() -> miette::Result<()> {
+    cordial::init_tracing();
+    let (project, home, store) = fixture()?;
+    let measured = run(
+        project.path(),
+        home.path(),
+        &[
+            "timings",
+            "--marginal",
+            "--scope",
+            "panics",
+            "--etiquette",
+            "panics",
+        ],
+    )?;
+    assert!(
+        measured.status.success(),
+        "{}",
+        String::from_utf8_lossy(&measured.stderr)
+    );
+    let json: serde_json::Value =
+        serde_json::from_slice(&fs::read(store.root().join("timings.json")).into_diagnostic()?)
+            .into_diagnostic()?;
+    let without = &json["entries"][0]["marginal"]["warm"]["without"];
+    assert_eq!(without["included"], serde_json::json!([]));
+    assert_eq!(without["hooks"], serde_json::json!([]));
+    Ok(())
+}

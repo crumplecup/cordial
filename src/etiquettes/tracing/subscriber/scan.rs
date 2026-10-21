@@ -92,7 +92,7 @@ fn findings_for_sites(
     let has_bin = crate_root.join("src").join("main.rs").is_file()
         || crate_root.join("src").join("bin").is_dir();
 
-    let helper_names = trusted_helper_names(&sites);
+    let helper_names = trusted_helper_names(sites);
     let helper_refs: Vec<&str> = helper_names.iter().map(String::as_str).collect();
 
     let mut findings = Vec::new();

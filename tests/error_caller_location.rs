@@ -17,6 +17,10 @@ fn source_line(needle: &str) -> miette::Result<u32> {
         .ok_or_else(|| miette::miette!("missing source line: {needle}"))
 }
 
+fn io_error(message: &str) -> Result<(), io::Error> {
+    Err(io::Error::other(message))
+}
+
 #[test]
 fn caller_location_survives_question_mark_and_map_err_closure() -> miette::Result<()> {
     cordial::init_tracing();
@@ -31,19 +35,19 @@ fn caller_location_survives_question_mark_and_map_err_closure() -> miette::Resul
         (file!(), source_line("Err(io::Error::other(\"bare\"))?;")?)
     );
 
-    let closure = Err::<(), _>(io::Error::other("closure"))
-        .map_err(|err| CordialError::from(err))
+    let closure = io_error("closure")
+        .map_err(|err| {
+            assert_eq!(err.kind(), io::ErrorKind::Other);
+            CordialError::from(err)
+        })
         .err()
         .ok_or_else(|| miette::miette!("expected closure error"))?;
     assert_eq!(
         io_location(&closure)?,
-        (
-            file!(),
-            source_line(".map_err(|err| CordialError::from(err))")?
-        )
+        (file!(), source_line("CordialError::from(err)")?)
     );
 
-    let item = Err::<(), _>(io::Error::other("item"))
+    let item = io_error("item")
         .map_err(CordialError::from)
         .err()
         .ok_or_else(|| miette::miette!("expected item error"))?;

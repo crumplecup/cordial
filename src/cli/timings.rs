@@ -1,24 +1,31 @@
 //! Cold and warm per-etiquette measurements using isolated Cargo targets.
 
-use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, Write};
-use std::path::Path;
-use std::process::{Command, Stdio};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
+mod marginal;
+mod pass;
+mod render;
+
+use marginal::measure_marginal;
+pub(super) use pass::execute_timings_pass;
+use pass::run_child;
+use render::render_markdown;
+
 use super::commands::ActCtx;
 use crate::{
-    CordialError, CordialResult, HookTiming, NamedRunFilter, Session, SessionBuilder, all_plugins,
-    default_store_home, etiquettes_from_plugins, load_cordial_config,
+    CordialError, CordialResult, HookTiming, SessionBuilder, all_plugins, default_store_home,
+    etiquettes_from_plugins, load_cordial_config,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
 struct TimingPass {
     id: String,
+    included: Vec<String>,
     wall_time_nanos: u128,
     hooks: Vec<HookTiming>,
 }
@@ -31,8 +38,22 @@ enum TimingPassResult {
 #[derive(Debug, Serialize)]
 struct TimingEntry {
     id: String,
+    rules: Vec<String>,
     cold: Option<TimingPass>,
     warm: Option<TimingPass>,
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    marginal: Option<MarginalMeasurement>,
+}
+
+#[derive(Debug, Serialize)]
+struct MarginalMeasurement {
+    scope: Vec<String>,
+    cold: Option<marginal::MarginalPair>,
+    warm: Option<marginal::MarginalPair>,
+    /// Standalone minus marginal; shared startup, shared hooks, and interactions.
+    cold_overlap_nanos: Option<i128>,
+    warm_overlap_nanos: Option<i128>,
     error: Option<String>,
 }
 
@@ -46,7 +67,12 @@ struct TimingReport {
 
 /// Measure each enabled etiquette twice, keeping the same empty target for its warm pass.
 #[instrument(level = "debug", skip(ctx))]
-pub(super) fn execute_timings(ctx: &ActCtx, only: Option<&str>) -> CordialResult<()> {
+pub(super) fn execute_timings(
+    ctx: &ActCtx,
+    only: Option<&str>,
+    marginal: bool,
+    scope: &[String],
+) -> CordialResult<()> {
     #[cfg(feature = "quality")]
     let _lock = crate::WorklistLock::exclusive(ctx.store(), "timings", ctx.progress().as_ref())?;
 
@@ -57,34 +83,81 @@ pub(super) fn execute_timings(ctx: &ActCtx, only: Option<&str>) -> CordialResult
         .build();
     let plugins = all_plugins();
     let config = load_cordial_config(ctx.project_root(), &home);
-    let mut ids: Vec<String> = etiquettes_from_plugins(&plugins, &session)
-        .into_iter()
+    let available = etiquettes_from_plugins(&plugins, &session);
+    let mut ids: Vec<String> = available
+        .iter()
         .filter(|etiquette| config.etiquette_enabled(etiquette.id()))
         .map(|etiquette| etiquette.id().to_string())
         .collect();
     ids.sort();
-    if let Some(id) = only {
+    for id in scope {
         if !ids.iter().any(|candidate| candidate == id) {
             return Err(CordialError::unknown_etiquette(id));
         }
-        ids.retain(|candidate| candidate == id);
+    }
+    if !scope.is_empty() {
+        ids.retain(|id| scope.contains(id));
+    }
+    if let Some(id) = only
+        && !ids.iter().any(|candidate| candidate == id)
+    {
+        return Err(CordialError::unknown_etiquette(id));
     }
 
-    let mut entries = Vec::with_capacity(ids.len());
-    for id in ids {
+    let selected: Vec<String> = match only {
+        Some(id) => ids
+            .iter()
+            .filter(|candidate| candidate.as_str() == id)
+            .cloned()
+            .collect(),
+        None => ids.clone(),
+    };
+    let mut entries = Vec::with_capacity(selected.len());
+    for id in selected {
         let target = tempfile::tempdir()?;
-        let (cold, warm, error) = match run_child(ctx, &id, target.path(), "cold")? {
-            TimingPassResult::Measured(cold) => match run_child(ctx, &id, target.path(), "warm")? {
-                TimingPassResult::Measured(warm) => (Some(cold), Some(warm), None),
-                TimingPassResult::Failed(error) => (Some(cold), None, Some(error)),
-            },
+        let standalone = [id.clone()];
+        let (cold, warm, error) = match run_child(ctx, &id, &standalone, target.path(), "cold")? {
+            TimingPassResult::Measured(cold) => {
+                match run_child(ctx, &id, &standalone, target.path(), "warm")? {
+                    TimingPassResult::Measured(warm) => (Some(cold), Some(warm), None),
+                    TimingPassResult::Failed(error) => (Some(cold), None, Some(error)),
+                }
+            }
             TimingPassResult::Failed(error) => (None, None, Some(error)),
+        };
+        let rules = available
+            .iter()
+            .find(|etiquette| etiquette.id() == id)
+            .map(|etiquette| {
+                etiquette
+                    .explain()
+                    .rules()
+                    .iter()
+                    .map(|rule| rule.id().clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let marginal = if marginal {
+            let mut measured = measure_marginal(ctx, &id, &ids)?;
+            measured.cold_overlap_nanos = cold
+                .as_ref()
+                .zip(measured.cold.as_ref())
+                .map(|(alone, pair)| alone.wall_time_nanos as i128 - *pair.wall_delta_nanos());
+            measured.warm_overlap_nanos = warm
+                .as_ref()
+                .zip(measured.warm.as_ref())
+                .map(|(alone, pair)| alone.wall_time_nanos as i128 - *pair.wall_delta_nanos());
+            Some(measured)
+        } else {
+            None
         };
         entries.push(TimingEntry {
             id,
+            rules,
             cold,
             warm,
             error,
+            marginal,
         });
     }
 
@@ -93,7 +166,7 @@ pub(super) fn execute_timings(ctx: &ActCtx, only: Option<&str>) -> CordialResult
         .map_err(|error| CordialError::invariant(error.to_string()))?
         .as_secs();
     let report = TimingReport {
-        version: 1,
+        version: if marginal { 2 } else { 1 },
         project: ctx.project_root().display().to_string(),
         measured_at_unix_secs,
         entries,
@@ -115,140 +188,4 @@ pub(super) fn execute_timings(ctx: &ActCtx, only: Option<&str>) -> CordialResult
         ctx.store().root().join("timings.json").display()
     )?;
     Ok(())
-}
-
-#[instrument(level = "info", skip(ctx), fields(id = id))]
-fn run_child(ctx: &ActCtx, id: &str, target: &Path, pass: &str) -> CordialResult<TimingPassResult> {
-    let task = ctx.progress().spinner(format!("Measuring {id} ({pass})"));
-    let home = ctx.store_home().clone().unwrap_or_else(default_store_home);
-    let result_path = target.join(format!("cordial-timings-{pass}.json"));
-    let mut command = Command::new(std::env::current_exe()?);
-    command
-        .arg("--project")
-        .arg(ctx.project_root())
-        .arg("--store-home")
-        .arg(home)
-        .arg("timings-pass")
-        .arg(id)
-        .arg("--output")
-        .arg(&result_path)
-        .env("CORDIAL_TIMINGS_TARGET_DIR", target)
-        .env("CARGO_TARGET_DIR", target)
-        .env("CORDIAL_NO_PROGRESS", "1")
-        .stdout(Stdio::null());
-    if let Some(name) = ctx.crate_name() {
-        command.arg("--crate-name").arg(name);
-    }
-    let output = command.output()?;
-    if !output.status.success() {
-        task.finish(format!("Measurement failed for {id} ({pass})"));
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let detail = stderr
-            .lines()
-            .find_map(|line| line.split_once("error=").map(|(_, detail)| detail.trim()))
-            .unwrap_or("timing pass failed; inspect the project and etiquette configuration");
-        return Ok(TimingPassResult::Failed(detail.to_string()));
-    }
-    let result: TimingPass = serde_json::from_slice(&fs::read(&result_path)?)
-        .map_err(|error| CordialError::json_parse(format!("timings-pass {id}"), error))?;
-    task.finish(format!(
-        "Measured {id} ({pass}) in {:.2}s",
-        result.wall_time_nanos as f64 / 1_000_000_000.0
-    ));
-    Ok(TimingPassResult::Measured(result))
-}
-
-/// Hidden process entry point; writes one JSON object to a private file.
-#[instrument(level = "debug", skip(ctx), err(level = "warn"))]
-pub(super) fn execute_timings_pass(ctx: &ActCtx, id: &str, output: &Path) -> CordialResult<()> {
-    let home = ctx.store_home().clone().unwrap_or_else(default_store_home);
-    let mut builder = SessionBuilder::new(ctx.project_root())
-        .with_store_root(ctx.store().root().clone())
-        .with_store_home(home)
-        .with_progress_sink(ctx.progress().clone())
-        .with_measurement_mode();
-    for plugin in all_plugins() {
-        builder = builder.register_plugin(plugin);
-    }
-    let session = builder.build();
-    let mut filter = NamedRunFilter::etiquettes([id]);
-    if let Some(name) = ctx.crate_name() {
-        filter = filter.with_crate(name.clone());
-    }
-    let started = Instant::now();
-    let outcome = session.run(&filter)?;
-    let pass = TimingPass {
-        id: id.to_string(),
-        wall_time_nanos: started.elapsed().as_nanos(),
-        hooks: outcome.hook_timings().to_vec(),
-    };
-    fs::write(output, serde_json::to_vec(&pass)?)?;
-    Ok(())
-}
-
-#[instrument(level = "trace", skip(report))]
-fn render_markdown(report: &TimingReport) -> String {
-    let mut body = format!(
-        "# Etiquette timings\n\nProject: `{}`  \nMeasured: Unix {}\n\nEach etiquette ran alone. Cold and warm passes used the same isolated Cargo target. Durations include session setup, hooks, and rendering.\n\n| Etiquette | Cold (s) | Warm (s) |\n| --- | ---: | ---: |\n",
-        report.project, report.measured_at_unix_secs
-    );
-    for entry in &report.entries {
-        let cold = entry
-            .cold
-            .as_ref()
-            .map(|pass| pass.wall_time_nanos as f64 / 1_000_000_000.0);
-        let warm = entry
-            .warm
-            .as_ref()
-            .map(|pass| pass.wall_time_nanos as f64 / 1_000_000_000.0);
-        body.push_str(&format!(
-            "| `{}` | {} | {} |\n",
-            entry.id,
-            cold.map_or_else(|| "n/a".to_string(), |value| format!("{value:.2}")),
-            warm.map_or_else(|| "n/a".to_string(), |value| format!("{value:.2}")),
-        ));
-    }
-    body.push_str("\n## Pipeline phases\n\nDurations are inclusive; phase rows overlap with hook and pipeline detail in `timings.json`.\n\n| Etiquette | Phase | Cold (s) | Warm (s) |\n| --- | --- | ---: | ---: |\n");
-    for entry in &report.entries {
-        let phases: BTreeSet<&str> = entry
-            .cold
-            .iter()
-            .chain(entry.warm.iter())
-            .flat_map(|pass| pass.hooks.iter())
-            .filter(|hook| hook.stage() == "phase")
-            .map(|hook| hook.id().as_str())
-            .collect();
-        for phase in phases {
-            let seconds = |pass: &TimingPass| {
-                pass.hooks
-                    .iter()
-                    .find(|hook| hook.stage() == "phase" && hook.id() == phase)
-                    .map(|hook| *hook.elapsed_nanos() as f64 / 1_000_000_000.0)
-            };
-            let cold = entry.cold.as_ref().and_then(seconds);
-            let warm = entry.warm.as_ref().and_then(seconds);
-            body.push_str(&format!(
-                "| `{}` | `{phase}` | {} | {} |\n",
-                entry.id,
-                cold.map_or_else(|| "n/a".to_string(), |value| format!("{value:.2}")),
-                warm.map_or_else(|| "n/a".to_string(), |value| format!("{value:.2}")),
-            ));
-        }
-    }
-    let unavailable: Vec<&TimingEntry> = report
-        .entries
-        .iter()
-        .filter(|entry| entry.error.is_some())
-        .collect();
-    if !unavailable.is_empty() {
-        body.push_str("\n## Unavailable measurements\n\n");
-        for entry in unavailable {
-            body.push_str(&format!(
-                "- `{}`: {}\n",
-                entry.id,
-                entry.error.as_deref().unwrap_or_default()
-            ));
-        }
-    }
-    body
 }

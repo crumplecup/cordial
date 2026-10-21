@@ -122,7 +122,7 @@ fn scan_rust_syntax(
         findings: Vec::new(),
         error: None,
     };
-    crate::loader::source_walk(file, "allow-inventory", || visitor.visit_file(&syntax));
+    crate::loader::source_walk(file, "allow-inventory", || visitor.visit_file(syntax));
     if let Some(error) = visitor.error {
         return Err(error);
     }
