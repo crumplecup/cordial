@@ -7,11 +7,12 @@ use syn::{Attribute, Type};
 
 use crate::enricher::is_cfg_test;
 use crate::error::CordialResult;
-use crate::loader::path_has_fixtures;
+use crate::loader::{SourceLoadView, path_has_fixtures};
 
 use tracing::instrument;
-#[instrument(level = "debug", skip(file, files), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, file, files), err(level = "warn"))]
 pub(super) fn collect_mod_tree(
+    source: Option<&SourceLoadView>,
     file: &Path,
     crate_root: &Path,
     files: &mut BTreeSet<PathBuf>,
@@ -22,14 +23,28 @@ pub(super) fn collect_mod_tree(
     if !files.insert(file.to_path_buf()) {
         return Ok(());
     }
-    let source = std::fs::read_to_string(file)?;
-    let syntax = syn::parse_file(&source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    walk_mod_items(file, &syntax.items, &[], crate_root, files)
+    if let Some(source) = source {
+        let parsed = source.parsed_file(file, "cli-layout-inventory")?;
+        walk_mod_items(
+            Some(source),
+            file,
+            &parsed.syntax().items,
+            &[],
+            crate_root,
+            files,
+        )
+    } else {
+        let text = std::fs::read_to_string(file)?;
+        let syntax = syn::parse_file(&text).map_err(|err| {
+            crate::error::CordialError::syn_parse(file.display().to_string(), err)
+        })?;
+        walk_mod_items(None, file, &syntax.items, &[], crate_root, files)
+    }
 }
 
-#[instrument(level = "debug", skip(items, files), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, items, files), err(level = "warn"))]
 fn walk_mod_items(
+    source: Option<&SourceLoadView>,
     current_file: &Path,
     items: &[syn::Item],
     inline_path: &[String],
@@ -48,13 +63,20 @@ fn walk_mod_items(
             Some((_, nested)) => {
                 let mut nested_path = inline_path.to_vec();
                 nested_path.push(name);
-                walk_mod_items(current_file, nested, &nested_path, crate_root, files)?;
+                walk_mod_items(
+                    source,
+                    current_file,
+                    nested,
+                    &nested_path,
+                    crate_root,
+                    files,
+                )?;
             }
             None => {
                 if let Some(child) =
                     resolve_mod_file(current_file, inline_path, &name, &item_mod.attrs)
                 {
-                    collect_mod_tree(&child, crate_root, files)?;
+                    collect_mod_tree(source, &child, crate_root, files)?;
                 }
             }
         }

@@ -10,7 +10,7 @@ use syn::visit::Visit;
 use syn::{Item, ItemFn};
 
 use crate::error::CordialResult;
-use crate::loader::path_has_fixtures;
+use crate::loader::{SourceLoadView, path_has_fixtures};
 
 use super::tree::collect_mod_tree;
 use super::types::{CliLayoutId, CliLayoutRecord};
@@ -19,13 +19,31 @@ pub(super) mod catalog;
 mod idents;
 
 use super::hunt::{finalize_acts, nested_clap_types};
-use catalog::{LayoutCatalog, TypeRec, load_file};
+use catalog::{LayoutCatalog, TypeRec, load_file, load_shared_file};
 
 use tracing::instrument;
 
 /// Scan lib+bin crates for CLI-island / missing `act` / fat `main`.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_cli_layout(
+    crate_root: &Path,
+    crate_name: &str,
+) -> CordialResult<Vec<CliLayoutRecord>> {
+    scan_crate_cli_layout_impl(None, crate_root, crate_name)
+}
+
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+pub(super) fn scan_shared_crate_cli_layout(
+    source: &SourceLoadView,
+    crate_root: &Path,
+    crate_name: &str,
+) -> CordialResult<Vec<CliLayoutRecord>> {
+    scan_crate_cli_layout_impl(Some(source), crate_root, crate_name)
+}
+
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+fn scan_crate_cli_layout_impl(
+    source: Option<&SourceLoadView>,
     crate_root: &Path,
     crate_name: &str,
 ) -> CordialResult<Vec<CliLayoutRecord>> {
@@ -40,16 +58,16 @@ pub fn scan_crate_cli_layout(
         return Ok(Vec::new());
     }
 
-    let lib_files = collect_tree(crate_root, &lib)?;
+    let lib_files = collect_tree(source, crate_root, &lib)?;
     let mut bin_files = BTreeSet::new();
     let mut entry_files = Vec::new();
     if main.is_file() {
-        bin_files.extend(collect_tree(crate_root, &main)?);
+        bin_files.extend(collect_tree(source, crate_root, &main)?);
         entry_files.push(main.clone());
     }
     if bin_dir.is_dir() {
         for path in rust_files_in(&bin_dir, crate_root)? {
-            bin_files.extend(collect_tree(crate_root, &path)?);
+            bin_files.extend(collect_tree(source, crate_root, &path)?);
             if path.parent() == Some(bin_dir.as_path()) {
                 entry_files.push(path);
             }
@@ -59,7 +77,15 @@ pub fn scan_crate_cli_layout(
 
     let mut catalog = LayoutCatalog::new(crate_name.to_string());
     for path in lib_files.iter().chain(bin_only.iter()) {
-        load_file(&mut catalog, path, lib_files.contains(path))?;
+        if let Some(source) = source {
+            load_shared_file(
+                &mut catalog,
+                &source.parsed_file(path, "cli-layout-inventory")?,
+                lib_files.contains(path),
+            )?;
+        } else {
+            load_file(&mut catalog, path, lib_files.contains(path))?;
+        }
     }
     finalize_acts(&mut catalog);
 
@@ -117,7 +143,12 @@ pub fn scan_crate_cli_layout(
             }
         }
         for path in &entry_files {
-            lint_thin_main(crate_name, path, &mut findings)?;
+            if let Some(source) = source {
+                let file = source.parsed_file(path, "cli-layout-inventory")?;
+                lint_thin_syntax(crate_name, file.path(), file.syntax(), &mut findings)?;
+            } else {
+                lint_thin_main(crate_name, path, &mut findings)?;
+            }
         }
     }
 
@@ -173,10 +204,14 @@ fn lint_act(
     Ok(())
 }
 
-#[instrument(level = "debug", err(level = "warn"))]
-fn collect_tree(crate_root: &Path, root: &Path) -> CordialResult<BTreeSet<PathBuf>> {
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+fn collect_tree(
+    source: Option<&SourceLoadView>,
+    crate_root: &Path,
+    root: &Path,
+) -> CordialResult<BTreeSet<PathBuf>> {
     let mut files = BTreeSet::new();
-    collect_mod_tree(root, crate_root, &mut files)?;
+    collect_mod_tree(source, root, crate_root, &mut files)?;
     Ok(files)
 }
 
@@ -208,6 +243,16 @@ fn lint_thin_main(
     let source = std::fs::read_to_string(file)?;
     let syntax = syn::parse_file(&source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    lint_thin_syntax(crate_name, file, &syntax, findings)
+}
+
+#[instrument(level = "debug", skip(file, syntax, findings), err(level = "warn"))]
+fn lint_thin_syntax(
+    crate_name: &str,
+    file: &Path,
+    syntax: &syn::File,
+    findings: &mut Vec<CliLayoutRecord>,
+) -> CordialResult<()> {
     for item in &syntax.items {
         match item {
             Item::Use(_) | Item::ExternCrate(_) => {}

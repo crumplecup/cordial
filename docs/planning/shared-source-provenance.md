@@ -159,3 +159,9 @@ share those parsed trees safely.
 The visibility inventory now follows the crate's module tree through shared
 parsed files, including out-of-line modules and `#[path]` modules. Its public
 standalone scanner retains direct parsing for callers outside a source session.
+
+## Tenth slice
+
+The CLI-layout production scan now reuses each shared tree across module
+discovery, clap/error type cataloging, and thin-main inspection. The public
+standalone scan retains its direct parser for callers outside a source session.

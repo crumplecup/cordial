@@ -94,7 +94,11 @@ pub fn scan_rust_source(
     )
 }
 
-#[instrument(level = "debug", skip(syntax, file, never_instrument), err(level = "warn"))]
+#[instrument(
+    level = "debug",
+    skip(syntax, file, never_instrument),
+    err(level = "warn")
+)]
 fn scan_syntax(
     syntax: &syn::File,
     file: &Path,

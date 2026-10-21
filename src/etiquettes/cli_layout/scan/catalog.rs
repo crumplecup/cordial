@@ -9,6 +9,7 @@ use syn::{ImplItem, ItemFn, ItemImpl};
 
 use crate::enricher::is_cfg_test;
 use crate::error::CordialResult;
+use crate::loader::SharedParsedFile;
 
 use super::super::tree::{item_derives_error, last_ident, trait_is_std_error, type_label};
 use super::idents::{
@@ -128,6 +129,25 @@ pub(crate) fn load_file(
     let source = std::fs::read_to_string(file)?;
     let syntax = syn::parse_file(&source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    load_syntax(catalog, file, &syntax, in_library)
+}
+
+#[instrument(level = "info", skip(catalog, file), err(level = "warn"))]
+pub(super) fn load_shared_file(
+    catalog: &mut LayoutCatalog,
+    file: &SharedParsedFile,
+    in_library: bool,
+) -> CordialResult<()> {
+    load_syntax(catalog, file.path(), file.syntax(), in_library)
+}
+
+#[instrument(level = "info", skip(catalog, file, syntax), err(level = "warn"))]
+fn load_syntax(
+    catalog: &mut LayoutCatalog,
+    file: &Path,
+    syntax: &syn::File,
+    in_library: bool,
+) -> CordialResult<()> {
     let mut visitor = LayoutVisitor {
         file: file.to_path_buf(),
         in_library,
@@ -135,7 +155,7 @@ pub(crate) fn load_file(
         error_impls: BTreeSet::new(),
         error: None,
     };
-    visitor.visit_file(&syntax);
+    visitor.visit_file(syntax);
     if let Some(error) = visitor.error {
         return Err(error);
     }
