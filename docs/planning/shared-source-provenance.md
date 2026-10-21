@@ -117,3 +117,11 @@ Pageantry and cfg-hygiene production hooks now use the typed source view and
 shared parsed files. The source view preserves pageantry's crate scan roots and
 fixture exclusions, while cfg hygiene still scans only `src/`. Their public
 standalone scanners remain available for direct callers and tests.
+
+## Fifth slice
+
+The antipattern production hook now takes a typed source view. Its first pass
+collects crate-wide trait and construction facts from shared parsed files, and
+its second pass visits those same trees. The standalone crate scan remains for
+direct callers. Contract-bound scans use separate macro-specific grammars and
+need their own audit before changing their parse path.

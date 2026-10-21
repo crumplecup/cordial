@@ -7,7 +7,10 @@ use syn::visit::Visit;
 
 use crate::config::StaticRefStrategy;
 use crate::error::CordialResult;
-use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
+use crate::loader::{
+    SharedParsedFile, SourceLoadView, module_path_from_src_file, path_has_fixtures,
+    quality_scan_trees,
+};
 
 use super::types::AntipatternSiteRecord;
 
@@ -56,7 +59,7 @@ pub fn scan_crate_trees_with_static_ref_strategy(
     let mut findings = Vec::new();
     for (syntax, path, tree_root) in parsed {
         findings.extend(scan_parsed(
-            syntax,
+            &syntax,
             &path,
             &tree_root,
             crate_root,
@@ -66,6 +69,74 @@ pub fn scan_crate_trees_with_static_ref_strategy(
         )?);
     }
     Ok(findings)
+}
+
+#[instrument(
+    level = "debug",
+    skip(source, static_ref_strategy),
+    err(level = "warn")
+)]
+pub(super) fn scan_shared_crate_trees(
+    source: &SourceLoadView,
+    crate_root: &Path,
+    static_ref_strategy: StaticRefStrategy,
+) -> CordialResult<Vec<AntipatternSiteRecord>> {
+    let mut parsed: Vec<(SharedParsedFile, PathBuf)> = Vec::new();
+    let mut local_trait_names = HashSet::new();
+    let mut const_constructed = HashSet::new();
+    let mut runtime_constructed = HashSet::new();
+    for tree_root in quality_scan_trees(crate_root) {
+        for file in source.parsed_rust_files_under(&tree_root, "antipattern-inventory", |path| {
+            !path_has_fixtures(path, crate_root)
+        })? {
+            local_trait_names.extend(collect_local_trait_names(file.syntax()));
+            collect_constructions(
+                file.syntax(),
+                &mut const_constructed,
+                &mut runtime_constructed,
+            );
+            parsed.push((file, tree_root.clone()));
+        }
+    }
+    let const_placed_types =
+        types_only_constructed_in_const(&const_constructed, &runtime_constructed);
+
+    let mut findings = Vec::new();
+    for (file, tree_root) in parsed {
+        findings.extend(scan_shared_file(
+            &file,
+            &tree_root,
+            crate_root,
+            &local_trait_names,
+            &const_placed_types,
+            static_ref_strategy,
+        )?);
+    }
+    Ok(findings)
+}
+
+#[instrument(
+    level = "debug",
+    skip(file, local_trait_names, const_placed_types, static_ref_strategy),
+    err(level = "warn")
+)]
+fn scan_shared_file(
+    file: &SharedParsedFile,
+    tree_root: &Path,
+    crate_root: &Path,
+    local_trait_names: &HashSet<String>,
+    const_placed_types: &HashSet<String>,
+    static_ref_strategy: StaticRefStrategy,
+) -> CordialResult<Vec<AntipatternSiteRecord>> {
+    scan_parsed(
+        file.syntax(),
+        file.path(),
+        tree_root,
+        crate_root,
+        local_trait_names,
+        const_placed_types,
+        static_ref_strategy,
+    )
 }
 
 /// Scan one Rust source file and return records.
@@ -103,7 +174,7 @@ pub fn scan_rust_source_with_static_ref_strategy(
     let const_placed_types =
         types_only_constructed_in_const(&const_constructed, &runtime_constructed);
     scan_parsed(
-        syntax,
+        &syntax,
         file,
         src_root,
         crate_root,
@@ -124,7 +195,7 @@ pub fn scan_rust_source_with_static_ref_strategy(
     )
 )]
 fn scan_parsed(
-    syntax: syn::File,
+    syntax: &syn::File,
     file: &Path,
     src_root: &Path,
     crate_root: &Path,
@@ -141,7 +212,7 @@ fn scan_parsed(
         const_placed_types,
         static_ref_strategy,
     );
-    visitor.visit_file(&syntax);
+    visitor.visit_file(syntax);
     visitor.into_findings()
 }
 
