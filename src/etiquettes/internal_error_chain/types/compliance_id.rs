@@ -22,6 +22,8 @@ pub enum InternalErrorComplianceId {
     ArchKindBox001,
     /// Kind variant does not hold a native source type.
     ArchKindVariant001,
+    /// Many distinct literal failures feed a Kind variant or native source.
+    ArchKindFanout001,
     /// Native source is not a variant of any Kind.
     ArchOrphanSource001,
 }
@@ -39,6 +41,7 @@ impl InternalErrorComplianceId {
             Self::ArchParent001 => "ERROR-CHAIN-COMPLIANCE-ARCH-PARENT-001",
             Self::ArchKindBox001 => "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-BOX-001",
             Self::ArchKindVariant001 => "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-VARIANT-001",
+            Self::ArchKindFanout001 => "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-FANOUT-001",
             Self::ArchOrphanSource001 => "ERROR-CHAIN-COMPLIANCE-ARCH-ORPHAN-SOURCE-001",
         }
     }
@@ -55,6 +58,7 @@ impl InternalErrorComplianceId {
             "ERROR-CHAIN-COMPLIANCE-ARCH-PARENT-001" => Some(Self::ArchParent001),
             "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-BOX-001" => Some(Self::ArchKindBox001),
             "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-VARIANT-001" => Some(Self::ArchKindVariant001),
+            "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-FANOUT-001" => Some(Self::ArchKindFanout001),
             "ERROR-CHAIN-COMPLIANCE-ARCH-ORPHAN-SOURCE-001" => Some(Self::ArchOrphanSource001),
             _ => None,
         }

@@ -3,15 +3,22 @@ use std::path::PathBuf;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{
-    Attribute, Expr, ExprMethodCall, Fields, FnArg, GenericArgument, ImplItem, ItemEnum, ItemImpl,
-    ItemMod, ItemStruct, Meta, PathArguments, Token, Type, punctuated::Punctuated,
+    Attribute, Expr, ExprCall, ExprMethodCall, Fields, FnArg, GenericArgument, ImplItem, ItemEnum,
+    ItemFn, ItemImpl, ItemMod, ItemStruct, Meta, PathArguments, Token, Type,
+    punctuated::Punctuated,
 };
 use tracing::instrument;
 
 use crate::enricher::is_cfg_test;
 use crate::error::CordialResult;
 
-use super::{Catalog, ConstructorRec, EnumInfo, MapErrSite, StructInfo, VariantInfo};
+use super::fanout::{
+    call_name, direct_source_target, direct_target, literal_string, wrapper_target,
+};
+use super::{
+    Catalog, ConstructorRec, EnumInfo, FanoutCall, FanoutWrapper, MapErrSite, StructInfo,
+    VariantInfo,
+};
 use crate::etiquettes::internal_error_chain::source_shape::{
     block_captures_location, has_track_caller, returns_self, sig_takes_location_arg,
     type_is_location,
@@ -31,6 +38,8 @@ pub(in crate::etiquettes::internal_error_chain::architecture) struct CatalogVisi
     file: PathBuf,
     module_prefix: Vec<String>,
     catalog: &'a mut Catalog,
+    #[builder(default)]
+    inside_kind_call: bool,
 }
 
 impl<'a> CatalogVisitor<'a> {
@@ -232,6 +241,67 @@ impl CatalogVisitor<'_> {
 }
 
 impl<'ast> Visit<'ast> for CatalogVisitor<'_> {
+    #[instrument(level = "debug", skip(self, node))]
+    fn visit_item_fn(&mut self, node: &'ast ItemFn) {
+        if is_cfg_test(&node.attrs) {
+            return;
+        }
+        if let Some(target) = wrapper_target(&node.sig, &node.block) {
+            self.catalog.fanout_wrappers.push(FanoutWrapper::new(
+                self.file.clone(),
+                self.module_prefix.clone(),
+                node.sig.ident.to_string(),
+                node.sig.ident.span().start().line as u32,
+                target,
+            ));
+        }
+        syn::visit::visit_item_fn(self, node);
+    }
+
+    #[instrument(level = "debug", skip(self, node))]
+    fn visit_expr_call(&mut self, node: &'ast ExprCall) {
+        let direct = direct_target(node);
+        if let Some((target, literal)) = &direct {
+            self.catalog.fanout_calls.push(FanoutCall::new(
+                self.file.clone(),
+                self.module_prefix.clone(),
+                node.span().start().line as u32,
+                String::new(),
+                Some(target.clone()),
+                literal.clone(),
+            ));
+        } else if !self.inside_kind_call
+            && let Some((target, literal)) = direct_source_target(node)
+        {
+            self.catalog.fanout_calls.push(FanoutCall::new(
+                self.file.clone(),
+                self.module_prefix.clone(),
+                node.span().start().line as u32,
+                String::new(),
+                Some(target),
+                literal,
+            ));
+        } else if node.args.len() == 1
+            && let (Some(callee), Some(literal)) = (
+                call_name(&node.func),
+                node.args.first().and_then(literal_string),
+            )
+        {
+            self.catalog.fanout_calls.push(FanoutCall::new(
+                self.file.clone(),
+                self.module_prefix.clone(),
+                node.span().start().line as u32,
+                callee,
+                None,
+                literal,
+            ));
+        }
+        let was_inside_kind_call = self.inside_kind_call;
+        self.inside_kind_call |= direct.is_some();
+        syn::visit::visit_expr_call(self, node);
+        self.inside_kind_call = was_inside_kind_call;
+    }
+
     #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
         if node.method == "map_err"

@@ -9,7 +9,8 @@
 //!
 //! **Flags.** Parent errors that do not box an umbrella `*Kind`, kind enums
 //! with wrong payload shapes, orphan native sources, stringified or discarded
-//! typed errors, native sources missing `#[track_caller]`, function-item
+//! typed errors, Kind variants with diverse literal fan-out, native sources
+//! missing `#[track_caller]`, function-item
 //! conversions that lose the caller location, and internal leaf /
 //! link / nested graph shapes. Native sources that wrap a foreign error keep
 //! it in `source` with owned `file` / `line` copied from `Location::caller()`.
@@ -20,8 +21,9 @@
 //! **Outputs.** `{store}/findings/internal-error-chain.checklist.md`,
 //! `internal-error-chain-summary.md`, type-graph CSVs, and compliance CSVs.
 //!
-//! **Config.** `[internal_error_chain] enabled = false` opts out in
-//! `cordial.toml`. Register [`INTERNAL_ERROR_CHAIN_ETIQUETTE`]. Policy:
+//! **Config.** `[internal_error_chain] enabled = false` opts out;
+//! `kind_fanout_max_call_sites = 0` flags every matching literal call site.
+//! Set these in `cordial.toml`. Register [`INTERNAL_ERROR_CHAIN_ETIQUETTE`]. Policy:
 //! `docs/planning/error-handling-as-plugin.md`.
 
 mod architecture;
@@ -132,6 +134,10 @@ pub static INTERNAL_ERROR_CHAIN_ETIQUETTE: LazyLock<StaticQualityEtiquette> = La
                     EtiquetteRuleExplain::new(
                         "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-VARIANT-001",
                         "Kind variant is not a native source",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-FANOUT-001",
+                        "Distinct literal call sites exceed [internal_error_chain] kind_fanout_max_call_sites (default 3) for a Kind variant or native-source constructor; review whether callers need distinct typed variants. Set the maximum to 0 to flag every matching site.",
                     ),
                     EtiquetteRuleExplain::new(
                         "ERROR-CHAIN-COMPLIANCE-ARCH-ORPHAN-SOURCE-001",

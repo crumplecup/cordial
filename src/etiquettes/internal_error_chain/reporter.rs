@@ -129,6 +129,7 @@ fn compliance_counts(rows: &[InternalErrorChainRow]) -> (usize, usize, usize, us
             id if id == InternalErrorComplianceId::ArchParent001.as_str()
                 || id == InternalErrorComplianceId::ArchKindBox001.as_str()
                 || id == InternalErrorComplianceId::ArchKindVariant001.as_str()
+                || id == InternalErrorComplianceId::ArchKindFanout001.as_str()
                 || id == InternalErrorComplianceId::ArchOrphanSource001.as_str() =>
             {
                 architecture += 1;

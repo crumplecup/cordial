@@ -7,8 +7,10 @@ use super::super::type_graph::last_ident;
 
 use tracing::instrument;
 
+mod fanout;
 mod visitor;
 
+pub(super) use fanout::{FanoutCall, FanoutTarget, FanoutWrapper};
 pub(super) use visitor::CatalogVisitor;
 
 #[derive(Debug, Clone, derive_getters::Getters)]
@@ -94,6 +96,8 @@ pub(super) struct Catalog {
     enums: BTreeMap<String, EnumInfo>,
     constructors: Vec<ConstructorRec>,
     map_err_sites: Vec<MapErrSite>,
+    fanout_wrappers: Vec<FanoutWrapper>,
+    fanout_calls: Vec<FanoutCall>,
     error_impls: BTreeSet<String>,
 }
 
@@ -106,6 +110,8 @@ impl Catalog {
             enums: BTreeMap::new(),
             constructors: Vec::new(),
             map_err_sites: Vec::new(),
+            fanout_wrappers: Vec::new(),
+            fanout_calls: Vec::new(),
             error_impls: BTreeSet::new(),
         }
     }

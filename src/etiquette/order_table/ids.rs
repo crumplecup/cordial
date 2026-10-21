@@ -102,6 +102,8 @@ pub(crate) const ERROR_HANDLING_RULE_IDS: &[&str] = &[
     #[cfg(feature = "internal_error_chain")]
     "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-VARIANT-001",
     #[cfg(feature = "internal_error_chain")]
+    "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-FANOUT-001",
+    #[cfg(feature = "internal_error_chain")]
     "ERROR-CHAIN-COMPLIANCE-ARCH-ORPHAN-SOURCE-001",
     #[cfg(feature = "internal_error_chain")]
     "ERROR-CHAIN-INTERNAL-LEAF-001",

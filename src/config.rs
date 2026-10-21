@@ -11,6 +11,7 @@ mod cfg;
 mod checks;
 mod gates;
 mod hotpath;
+mod internal_error_chain;
 mod modularity;
 mod pageantry;
 mod tiers;
@@ -35,6 +36,7 @@ pub use self::checks::{
 };
 pub use self::gates::EtiquetteGate;
 pub use self::hotpath::HotpathConfig;
+pub use self::internal_error_chain::InternalErrorChainThresholds;
 pub use self::modularity::ModularityThresholds;
 pub use self::pageantry::PageantryThresholds;
 pub use self::tiers::TierConfig;
@@ -86,7 +88,7 @@ pub struct CordialConfig {
     #[serde(default)]
     error_chain: EtiquetteGate,
     #[serde(default)]
-    internal_error_chain: EtiquetteGate,
+    internal_error_chain: InternalErrorChainThresholds,
     #[serde(default)]
     foreign_error_types: EtiquetteGate,
     #[serde(default)]

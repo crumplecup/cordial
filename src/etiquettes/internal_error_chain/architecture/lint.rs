@@ -9,6 +9,7 @@ use crate::error::CordialResult;
 
 use tracing::instrument;
 
+mod fanout;
 mod kind_variant;
 mod track_caller;
 
@@ -57,10 +58,14 @@ impl SiteClassifier {
 
 impl Catalog {
     #[instrument(level = "debug", skip(self))]
-    pub(super) fn into_findings(self) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
+    pub(super) fn into_findings(
+        self,
+        kind_fanout_max_call_sites: usize,
+    ) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
         let mut findings = Vec::new();
         self.emit_parent_findings(&mut findings)?;
         self.emit_kind_variant_findings(&mut findings)?;
+        self.emit_kind_fanout_findings(kind_fanout_max_call_sites, &mut findings)?;
         self.emit_native_source_findings(&mut findings)?;
         self.emit_parent_track_caller(&mut findings)?;
         self.emit_map_err_track_caller(&mut findings)?;

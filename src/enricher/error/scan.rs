@@ -52,7 +52,13 @@ pub fn scan_crate_error_ir(
     crate_root: &Path,
     crate_name: &str,
 ) -> CordialResult<ErrorIrScanReport> {
-    scan_crate_error_ir_impl(crate_root, crate_name, None)
+    scan_crate_error_ir_impl(
+        crate_root,
+        crate_name,
+        None,
+        #[cfg(feature = "internal_error_chain")]
+        crate::config::InternalErrorChainThresholds::default().kind_fanout_max_call_sites(),
+    )
 }
 
 #[instrument(level = "debug", skip(source))]
@@ -60,8 +66,15 @@ pub(super) fn scan_crate_error_ir_with_source(
     crate_root: &Path,
     crate_name: &str,
     source: &SourceLoadView,
+    #[cfg(feature = "internal_error_chain")] kind_fanout_max_call_sites: usize,
 ) -> CordialResult<ErrorIrScanReport> {
-    scan_crate_error_ir_impl(crate_root, crate_name, Some(source))
+    scan_crate_error_ir_impl(
+        crate_root,
+        crate_name,
+        Some(source),
+        #[cfg(feature = "internal_error_chain")]
+        kind_fanout_max_call_sites,
+    )
 }
 
 #[instrument(level = "debug", skip(loaded))]
@@ -69,6 +82,7 @@ fn scan_crate_error_ir_impl(
     crate_root: &Path,
     crate_name: &str,
     loaded: Option<&SourceLoadView>,
+    #[cfg(feature = "internal_error_chain")] kind_fanout_max_call_sites: usize,
 ) -> CordialResult<ErrorIrScanReport> {
     let src_root = crate_root.join("src");
     let mut report = ErrorIrScanReport::default();
@@ -154,7 +168,10 @@ fn scan_crate_error_ir_impl(
             );
         report.compliance.extend(if let Some(loaded) = loaded {
             crate::etiquettes::internal_error_chain::scan_crate_error_architecture_with_source(
-                crate_root, crate_name, loaded,
+                crate_root,
+                crate_name,
+                loaded,
+                kind_fanout_max_call_sites,
             )?
         } else {
             crate::etiquettes::internal_error_chain::scan_crate_error_architecture(

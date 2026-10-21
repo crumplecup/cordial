@@ -329,10 +329,10 @@ pub use config::{
     AntipatternsConfig, CfgHygieneThresholds, CfgScatterThresholds, CordialConfig,
     CrateAttrsThresholds, CreusotDiagnosticsThresholds, DependencyFreshnessThresholds,
     DerivesThresholds, DocWarningsThresholds, EtiquetteGate, FeatureWarningsThresholds,
-    HotpathConfig, ModularityThresholds, PageantryThresholds, StaticRefPolicy, StaticRefStrategy,
-    TierConfig, TracingBoundaryPolicy, TracingStdioPolicy, TracingSubscriberPolicy,
-    TracingThresholds, VisibilityThresholds, WorklistSettings, load_cordial_config,
-    load_derives_thresholds, load_session_config, load_visibility_thresholds,
+    HotpathConfig, InternalErrorChainThresholds, ModularityThresholds, PageantryThresholds,
+    StaticRefPolicy, StaticRefStrategy, TierConfig, TracingBoundaryPolicy, TracingStdioPolicy,
+    TracingSubscriberPolicy, TracingThresholds, VisibilityThresholds, WorklistSettings,
+    load_cordial_config, load_derives_thresholds, load_session_config, load_visibility_thresholds,
 };
 pub use exceptions::{
     AddExceptionOutcome, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,

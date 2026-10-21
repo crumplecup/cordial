@@ -11,6 +11,10 @@
 [hotpath]
 output_path = "hotpath.json"
 
+[internal_error_chain]
+# Flag every literal call site that feeds one Kind variant or native source.
+kind_fanout_max_call_sites = 0
+
 [visibility]
 max_crate_names_for_flat = 50
 min_module_names = 10

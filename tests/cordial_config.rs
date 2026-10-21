@@ -21,6 +21,31 @@ fn missing_config_files_use_default() -> miette::Result<()> {
 }
 
 #[test]
+fn kind_fanout_zero_threshold_is_loaded_without_disabling_etiquette() -> miette::Result<()> {
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir().into_diagnostic()?;
+    let store_home = tempfile::tempdir().into_diagnostic()?;
+    assert_eq!(
+        load_cordial_config(workspace.path(), store_home.path())
+            .internal_error_chain()
+            .kind_fanout_max_call_sites(),
+        3
+    );
+    fs::write(
+        workspace.path().join("cordial.toml"),
+        "[internal_error_chain]\nkind_fanout_max_call_sites = 0\n",
+    )
+    .into_diagnostic()?;
+    let loaded = load_cordial_config(workspace.path(), store_home.path());
+    assert_eq!(
+        loaded.internal_error_chain().kind_fanout_max_call_sites(),
+        0
+    );
+    assert!(loaded.etiquette_enabled("internal_error_chain"));
+    Ok(())
+}
+
+#[test]
 fn unreadable_config_falls_back_to_default() -> miette::Result<()> {
     cordial::init_tracing();
     let workspace = tempfile::tempdir()

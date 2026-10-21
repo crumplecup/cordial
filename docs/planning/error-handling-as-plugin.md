@@ -216,6 +216,7 @@ ParentError { kind: Box<ErrorKind> }
 | `ERROR-CHAIN-COMPLIANCE-ARCH-PARENT-001` | No parent boxing a Kind, error enum used as the parent, extra parent, or boxed type is not `*Kind` |
 | `ERROR-CHAIN-COMPLIANCE-ARCH-KIND-BOX-001` | `kind` field is not `Box<_>` |
 | `ERROR-CHAIN-COMPLIANCE-ARCH-KIND-VARIANT-001` | Kind (or leftover `*Error` enum) variant is not a native source that implements `Error` |
+| `ERROR-CHAIN-COMPLIANCE-ARCH-KIND-FANOUT-001` | Distinct literal call sites exceed `[internal_error_chain] kind_fanout_max_call_sites` (default 3; zero flags the first) for a Kind variant or native-source constructor; review whether the failures need distinct typed variants |
 | `ERROR-CHAIN-COMPLIANCE-ARCH-ORPHAN-SOURCE-001` | Native source is not a Kind variant |
 | `ERROR-CHAIN-COMPLIANCE-SOURCE-SHAPE-001` | Native source missing `source` / owned `file`+`line`, or storing `&'static Location` instead of copying those fields |
 | `ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001` | Native source missing `#[track_caller] fn new` that calls `Location::caller()` (not a helper, not `From` alone); `new` takes file/line/location as args; a parent/`From` wrapper lacks `#[track_caller]`; or a tracked constructor uses `#[instrument(ret)]` |
