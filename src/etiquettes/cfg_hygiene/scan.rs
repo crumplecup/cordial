@@ -24,7 +24,7 @@ use syn::{
 };
 
 use crate::error::CordialResult;
-use crate::loader::module_path_from_src_file;
+use crate::loader::{SharedParsedFile, module_path_from_src_file};
 
 use tracing::instrument;
 /// One cfg name mentioned by a `#[cfg(...)]`/`#[cfg_attr(...)]` attribute.
@@ -58,6 +58,25 @@ pub fn scan_rust_source(
 ) -> CordialResult<Vec<CfgNameOccurrence>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    scan_syntax(&syntax, file, src_root, crate_root)
+}
+
+#[instrument(level = "debug", skip(file), err(level = "warn"))]
+pub(super) fn scan_shared_file(
+    file: &SharedParsedFile,
+    src_root: &Path,
+    crate_root: &Path,
+) -> CordialResult<Vec<CfgNameOccurrence>> {
+    scan_syntax(file.syntax(), file.path(), src_root, crate_root)
+}
+
+#[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
+fn scan_syntax(
+    syntax: &syn::File,
+    file: &Path,
+    src_root: &Path,
+    crate_root: &Path,
+) -> CordialResult<Vec<CfgNameOccurrence>> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut rel_file = file.to_path_buf();
     if let Ok(rel) = rel_file.strip_prefix(crate_root) {
@@ -70,7 +89,7 @@ pub fn scan_rust_source(
         occurrences: Vec::new(),
         error: None,
     };
-    visitor.visit_file(&syntax);
+    visitor.visit_file(syntax);
     if let Some(error) = visitor.error {
         return Err(error);
     }

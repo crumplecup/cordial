@@ -110,3 +110,10 @@ The source view now walks a caller-selected Rust file tree and returns parsed
 files from its cache. Glob-import and inline-test scans use that walk, and the
 cfg-scatter and derive production scans now use the typed hook and shared
 files. Their standalone scan helpers remain available for direct callers.
+
+## Fourth slice
+
+Pageantry and cfg-hygiene production hooks now use the typed source view and
+shared parsed files. The source view preserves pageantry's crate scan roots and
+fixture exclusions, while cfg hygiene still scans only `src/`. Their public
+standalone scanners remain available for direct callers and tests.

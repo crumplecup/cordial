@@ -6,9 +6,10 @@ use std::path::Path;
 
 use crate::config::CfgHygieneThresholds;
 use crate::error::CordialResult;
+use crate::loader::SourceLoadView;
 
 use super::declared::{all_verifier_names, declared_names_for_crate, expected_verifier_for};
-use super::scan::{CfgNameOccurrence, scan_rust_source};
+use super::scan::{CfgNameOccurrence, scan_rust_source, scan_shared_file};
 use super::types::{CfgHygieneRuleId, CfgHygieneSiteRecord};
 
 use tracing::instrument;
@@ -23,12 +24,51 @@ pub fn scan_crate_cfg_hygiene(
     let src_root = crate_root.join("src");
     let occurrences = scan_source_tree(&src_root, crate_root)?;
 
+    records_for_occurrences(
+        &occurrences,
+        crate_root,
+        crate_name,
+        workspace_root,
+        thresholds,
+    )
+}
+
+#[instrument(level = "debug", skip(source, thresholds), err(level = "warn"))]
+pub(super) fn scan_shared_crate_cfg_hygiene(
+    source: &SourceLoadView,
+    crate_root: &Path,
+    crate_name: &str,
+    workspace_root: &Path,
+    thresholds: &CfgHygieneThresholds,
+) -> CordialResult<Vec<CfgHygieneSiteRecord>> {
+    let src_root = crate_root.join("src");
+    let mut occurrences = Vec::new();
+    for file in source.parsed_rust_files_under(&src_root, "cfg-hygiene-inventory", |_| true)? {
+        occurrences.extend(scan_shared_file(&file, &src_root, crate_root)?);
+    }
+    records_for_occurrences(
+        &occurrences,
+        crate_root,
+        crate_name,
+        workspace_root,
+        thresholds,
+    )
+}
+
+#[instrument(level = "debug", skip(occurrences, thresholds), err(level = "warn"))]
+fn records_for_occurrences(
+    occurrences: &[CfgNameOccurrence],
+    crate_root: &Path,
+    crate_name: &str,
+    workspace_root: &Path,
+    thresholds: &CfgHygieneThresholds,
+) -> CordialResult<Vec<CfgHygieneSiteRecord>> {
     let declared = declared_names_for_crate(crate_root, workspace_root, thresholds);
     let expected_verifier = expected_verifier_for(thresholds, crate_name);
     let verifier_names = all_verifier_names(thresholds);
 
     let mut records = Vec::new();
-    for occurrence in &occurrences {
+    for occurrence in occurrences {
         if !declared.contains(occurrence.name()) {
             records.push(record_for(occurrence, CfgHygieneRuleId::UnexpectedCfg001)?);
         }

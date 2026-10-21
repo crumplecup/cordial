@@ -1,11 +1,10 @@
 use crate::enricher::{member_crate_root, resolve_parent};
 use crate::error::CordialResult;
-use crate::hooks::{EnrichView, IrEnricher};
+use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
-use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 
-use super::scan_crate::scan_crate_cfg_hygiene;
+use super::scan_crate::scan_shared_crate_cfg_hygiene;
 
 use tracing::instrument;
 /// Materializes cfg-hygiene-site expression nodes in the IR graph.
@@ -16,25 +15,22 @@ impl CfgHygieneInventoryEnricher {
     pub const ID: &'static str = "cfg-hygiene-inventory";
 }
 
-impl IrEnricher for CfgHygieneInventoryEnricher {
+impl SourceEnricher for CfgHygieneInventoryEnricher {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
     #[instrument(level = "trace", skip(self, view))]
-    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let (ir, load, session) = view.into_parts();
-
-        let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
-            return Ok(());
-        };
+    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
+        let (ir, source, session) = view.into_parts();
 
         let crate_root = member_crate_root(source, session);
         let thresholds = crate::config::load_session_config(session)
             .cfg_hygiene()
             .clone();
-        let records = scan_crate_cfg_hygiene(
+        let records = scan_shared_crate_cfg_hygiene(
+            source,
             &crate_root,
             ir.crate_name(),
             session.project_root(),

@@ -7,7 +7,10 @@ use syn::spanned::Spanned;
 
 use crate::config::PageantryThresholds;
 use crate::error::CordialResult;
-use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
+use crate::loader::{
+    SharedParsedFile, SourceLoadView, module_path_from_src_file, path_has_fixtures,
+    quality_scan_trees,
+};
 
 use super::shim::{proc_macro_entry_attr, shim_overflow};
 use super::types::{PageantryRuleId, PageantrySiteRecord};
@@ -33,6 +36,46 @@ pub fn scan_crate_pageantry(
     });
 
     Ok(findings)
+}
+
+#[instrument(level = "debug", skip(source, thresholds), err(level = "warn"))]
+pub(super) fn scan_shared_crate_pageantry(
+    source: &SourceLoadView,
+    crate_root: &Path,
+    thresholds: &PageantryThresholds,
+) -> CordialResult<Vec<PageantrySiteRecord>> {
+    let mut findings = Vec::new();
+    for tree_root in quality_scan_trees(crate_root) {
+        for file in source.parsed_rust_files_under(&tree_root, "pageantry-inventory", |path| {
+            !path_has_fixtures(path, crate_root)
+        })? {
+            findings.extend(scan_shared_file(&file, &tree_root, crate_root, thresholds)?);
+        }
+    }
+    findings.sort_by(|a, b| {
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.snippet().cmp(b.snippet()))
+    });
+    Ok(findings)
+}
+
+#[instrument(level = "debug", skip(file, thresholds), err(level = "warn"))]
+fn scan_shared_file(
+    file: &SharedParsedFile,
+    tree_root: &Path,
+    crate_root: &Path,
+    thresholds: &PageantryThresholds,
+) -> CordialResult<Vec<PageantrySiteRecord>> {
+    let module_prefix = module_path_from_src_file(tree_root, file.path());
+    scan_syntax(
+        file.syntax(),
+        file.path(),
+        crate_root,
+        &module_prefix,
+        thresholds,
+    )
 }
 
 #[instrument(level = "debug", skip(thresholds), err(level = "warn"))]
