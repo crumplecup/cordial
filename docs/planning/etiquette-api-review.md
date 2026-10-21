@@ -19,6 +19,8 @@ etiquettes series and the pipeline behind it.
    or parsed facts where measurements show useful overlap. Preserve each
    scanner's source-tree and fixture rules, and verify finding parity. Do not
    assume that a shared graph already means one `syn` parse per file.
+   Follow-up: [shared source provenance](shared-source-provenance.md) makes the
+   cache an enforced scanner API invariant instead of an optional convention.
 3. [x] **Resolve the `Probe::interests()` contract.** Remove the unused
    declaration. Probes select nodes with `IrView::nodes_matching()` when they
    need a query; root- and inventory-driven probes do not declare a dummy
