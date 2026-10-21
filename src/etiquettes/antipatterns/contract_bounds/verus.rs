@@ -8,7 +8,7 @@ use tracing::instrument;
 
 use crate::error::{CordialError, CordialResult};
 use crate::etiquettes::antipatterns::types::AntipatternSiteRecord;
-use crate::loader::module_path_from_src_file;
+use crate::loader::{SharedParsedFile, module_path_from_src_file};
 
 use super::index::{
     ContractIndex, is_builtin_contract_inspection, is_trivial, normalize_tokens,
@@ -25,6 +25,25 @@ pub(super) fn scan_verus_source(
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| CordialError::syn_parse(file.display().to_string(), err))?;
+    scan_verus_syntax(&syntax, file, src_root, index)
+}
+
+#[instrument(level = "debug", skip(parsed, index), err(level = "warn"))]
+pub(super) fn scan_verus_shared(
+    parsed: &SharedParsedFile,
+    src_root: &Path,
+    index: &ContractIndex,
+) -> CordialResult<Vec<AntipatternSiteRecord>> {
+    scan_verus_syntax(parsed.syntax(), parsed.path(), src_root, index)
+}
+
+#[instrument(level = "debug", skip(syntax, file, index), err(level = "warn"))]
+fn scan_verus_syntax(
+    syntax: &syn::File,
+    file: &Path,
+    src_root: &Path,
+    index: &ContractIndex,
+) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut findings = Vec::new();
 

@@ -9,7 +9,7 @@ use tracing::instrument;
 
 use crate::error::{CordialError, CordialResult};
 use crate::etiquettes::antipatterns::types::AntipatternSiteRecord;
-use crate::loader::module_path_from_src_file;
+use crate::loader::{SharedParsedFile, module_path_from_src_file};
 
 use super::index::{ContractIndex, is_trivial, normalize_tokens};
 use super::{harness_macro_item_fn, make_finding, site_context};
@@ -23,6 +23,25 @@ pub(super) fn scan_creusot_source(
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| CordialError::syn_parse(file.display().to_string(), err))?;
+    scan_creusot_syntax(&syntax, file, src_root, index)
+}
+
+#[instrument(level = "debug", skip(parsed, index), err(level = "warn"))]
+pub(super) fn scan_creusot_shared(
+    parsed: &SharedParsedFile,
+    src_root: &Path,
+    index: &ContractIndex,
+) -> CordialResult<Vec<AntipatternSiteRecord>> {
+    scan_creusot_syntax(parsed.syntax(), parsed.path(), src_root, index)
+}
+
+#[instrument(level = "debug", skip(syntax, file, index), err(level = "warn"))]
+fn scan_creusot_syntax(
+    syntax: &syn::File,
+    file: &Path,
+    src_root: &Path,
+    index: &ContractIndex,
+) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut visitor = CreusotVisitor {
         file: file.to_path_buf(),
@@ -32,7 +51,7 @@ pub(super) fn scan_creusot_source(
         findings: Vec::new(),
         error: None,
     };
-    visitor.visit_file(&syntax);
+    visitor.visit_file(syntax);
     if let Some(err) = visitor.error {
         return Err(err);
     }

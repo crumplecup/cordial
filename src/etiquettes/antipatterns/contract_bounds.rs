@@ -67,6 +67,7 @@ use walkdir::WalkDir;
 use crate::error::CordialResult;
 use crate::etiquettes::antipatterns::scan::truncate_snippet;
 use crate::etiquettes::antipatterns::types::{AntipatternRuleId, AntipatternSiteRecord};
+use crate::loader::SourceLoadView;
 
 mod creusot;
 mod index;
@@ -99,6 +100,26 @@ pub fn scan_crate_contract_bounds(
     crate_name: &str,
     registry: &[ContractRecordDump],
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
+    scan_crate_contract_bounds_impl(crate_root, crate_name, registry, None)
+}
+
+#[instrument(level = "debug", skip(registry, source), err(level = "warn"))]
+pub(super) fn scan_crate_contract_bounds_with_source(
+    crate_root: &Path,
+    crate_name: &str,
+    registry: &[ContractRecordDump],
+    source: &SourceLoadView,
+) -> CordialResult<Vec<AntipatternSiteRecord>> {
+    scan_crate_contract_bounds_impl(crate_root, crate_name, registry, Some(source))
+}
+
+#[instrument(level = "debug", skip(registry, source), err(level = "warn"))]
+fn scan_crate_contract_bounds_impl(
+    crate_root: &Path,
+    crate_name: &str,
+    registry: &[ContractRecordDump],
+    source: Option<&SourceLoadView>,
+) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let Some(verifier) = verifier_for_crate(crate_name) else {
         return Ok(Vec::new());
     };
@@ -121,12 +142,22 @@ pub fn scan_crate_contract_bounds(
         if path.extension().is_none_or(|ext| ext != "rs") {
             continue;
         }
-        let source = std::fs::read_to_string(path)?;
-        let mut file_findings = match verifier {
-            "creusot" => creusot::scan_creusot_source(&source, path, &src_root, &index)?,
-            "verus" => verus::scan_verus_source(&source, path, &src_root, &index)?,
-            "kani" => kani::scan_kani_source(&source, path, &src_root, &index)?,
-            _ => Vec::new(),
+        let mut file_findings = if let Some(source) = source {
+            let parsed = source.parsed_file(path, "antipattern-contract-bounds")?;
+            match verifier {
+                "creusot" => creusot::scan_creusot_shared(&parsed, &src_root, &index)?,
+                "verus" => verus::scan_verus_shared(&parsed, &src_root, &index)?,
+                "kani" => kani::scan_kani_shared(&parsed, &src_root, &index)?,
+                _ => Vec::new(),
+            }
+        } else {
+            let text = std::fs::read_to_string(path)?;
+            match verifier {
+                "creusot" => creusot::scan_creusot_source(&text, path, &src_root, &index)?,
+                "verus" => verus::scan_verus_source(&text, path, &src_root, &index)?,
+                "kani" => kani::scan_kani_source(&text, path, &src_root, &index)?,
+                _ => Vec::new(),
+            }
         };
         findings.append(&mut file_findings);
     }

@@ -6,7 +6,9 @@ use crate::config::StaticRefStrategy;
 use crate::error::CordialResult;
 use crate::loader::SourceLoadView;
 
-use super::contract_bounds::{fetch_contract_records, scan_crate_contract_bounds};
+use super::contract_bounds::{
+    fetch_contract_records, scan_crate_contract_bounds, scan_crate_contract_bounds_with_source,
+};
 use super::scan::{
     scan_crate_trees, scan_crate_trees_with_static_ref_strategy, scan_shared_crate_trees,
 };
@@ -23,7 +25,14 @@ pub fn scan_crate_antipatterns(
     store_root: &Path,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let findings = scan_crate_trees(crate_root)?;
-    finish_crate_antipattern_scan(findings, crate_root, crate_name, workspace_root, store_root)
+    finish_crate_antipattern_scan(
+        findings,
+        crate_root,
+        crate_name,
+        workspace_root,
+        store_root,
+        None,
+    )
 }
 
 /// Scan one crate for antipatterns using a static-reference remediation strategy.
@@ -36,7 +45,14 @@ pub fn scan_crate_antipatterns_with_static_ref_strategy(
     static_ref_strategy: StaticRefStrategy,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let findings = scan_crate_trees_with_static_ref_strategy(crate_root, static_ref_strategy)?;
-    finish_crate_antipattern_scan(findings, crate_root, crate_name, workspace_root, store_root)
+    finish_crate_antipattern_scan(
+        findings,
+        crate_root,
+        crate_name,
+        workspace_root,
+        store_root,
+        None,
+    )
 }
 
 #[instrument(
@@ -53,21 +69,31 @@ pub(super) fn scan_shared_crate_antipatterns(
     static_ref_strategy: StaticRefStrategy,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let findings = scan_shared_crate_trees(source, crate_root, static_ref_strategy)?;
-    finish_crate_antipattern_scan(findings, crate_root, crate_name, workspace_root, store_root)
+    finish_crate_antipattern_scan(
+        findings,
+        crate_root,
+        crate_name,
+        workspace_root,
+        store_root,
+        Some(source),
+    )
 }
 
-#[instrument(level = "debug", skip(findings), err(level = "warn"))]
+#[instrument(level = "debug", skip(findings, source), err(level = "warn"))]
 fn finish_crate_antipattern_scan(
     mut findings: Vec<AntipatternSiteRecord>,
     crate_root: &Path,
     crate_name: &str,
     workspace_root: &Path,
     store_root: &Path,
+    source: Option<&SourceLoadView>,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let registry = fetch_contract_records(workspace_root, store_root);
-    findings.extend(scan_crate_contract_bounds(
-        crate_root, crate_name, &registry,
-    )?);
+    findings.extend(if let Some(source) = source {
+        scan_crate_contract_bounds_with_source(crate_root, crate_name, &registry, source)?
+    } else {
+        scan_crate_contract_bounds(crate_root, crate_name, &registry)?
+    });
 
     let version_by_crate = scan_workspace_version_in_member(workspace_root)?;
     if let Some(version_findings) = version_by_crate.get(crate_name) {

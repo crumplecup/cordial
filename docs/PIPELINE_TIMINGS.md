@@ -35,8 +35,9 @@ store when measuring repeated Rust source work in a combined run (for
 example, `~/.cordial/cordial/source-work.json`). The JSON array has one row
 per file, hook, and operation (`read`, `parse`, `walk`, or `reuse`), with a
 count and elapsed nanoseconds. `reuse` means the hook consumed a parsed tree
-from the current crate's source cache. The cache is released after that
-crate's enrichers finish. The source-work file is a diagnostic artifact;
+from the current run's source cache, including a tree opened by another crate
+view. The cache is released after the load-and-probe run. The source-work file
+is a diagnostic artifact;
 normal runs do not create it. The hotpath report and source-work file measure
 the parent Cordial process, not work inside a Cargo subprocess.
 

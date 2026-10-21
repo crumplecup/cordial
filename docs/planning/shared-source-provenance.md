@@ -211,3 +211,12 @@ and do not parse outer Rust files themselves. The public plugin example and
 Part 2 of the writing-etiquettes series now request the shared parsed file
 instead of reparsing source text. The introduction narrows its parsed-once
 claim to outer Rust files in a source run.
+
+## Seventeenth slice
+
+The antipatterns contract-bounds pass was the last production outer-file parse
+found by the source audit. Its Creusot, Verus, and Kani paths now consume a
+`SharedParsedFile` through the source view. Standalone source and crate scans
+retain their direct parser. The separate parsing of verifier macro contents
+remains necessary for those grammars. The production Kani session and the
+standalone contract shape matrix pass after this change.
