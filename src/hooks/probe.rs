@@ -1,5 +1,5 @@
 use crate::error::CordialResult;
-use crate::ir::{IrView, Query};
+use crate::ir::IrView;
 use crate::objects::Marker;
 use crate::session::SessionView;
 
@@ -12,12 +12,8 @@ use tracing::instrument;
 pub trait Probe: Send + Sync {
     /// Stable identifier used by markers and assessor routing.
     fn id(&self) -> &str;
-    /// IR query describing which nodes this probe considers.
-    ///
-    /// The query is the coarse interest declaration; `probe` may still inspect
-    /// neighboring facts before emitting a marker.
-    fn interests(&self) -> &dyn Query;
-    /// Walk the IR and emit markers.
+    /// Inspect the IR and emit markers. Use [`IrView::nodes_matching`] when
+    /// selecting nodes by kind or attribute.
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>>;
 }
 

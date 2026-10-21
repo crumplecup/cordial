@@ -3,7 +3,6 @@ use crate::framework_std::{
     FrameworkStdOptions, HOMECOMING_IMPL_CRATE, framework_std_type_items, load_merged_std_inventory,
 };
 use crate::hooks::{Probe, ProbeView};
-use crate::ir::{BasicQuery, Query};
 use crate::objects::Marker;
 use crate::store::SysrootCache;
 
@@ -22,12 +21,6 @@ impl Probe for HomecomingStdScopeProbe {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn interests(&self) -> &dyn Query {
-        static QUERY: BasicQuery = BasicQuery::ALL_NODES;
-        &QUERY
     }
 
     #[instrument(level = "trace", skip(self, view))]
@@ -67,7 +60,6 @@ mod amenable {
         load_merged_std_inventory,
     };
     use crate::hooks::{Probe, ProbeView};
-    use crate::ir::{BasicQuery, Query};
     use crate::objects::Marker;
 
     use crate::store::SysrootCache;
@@ -86,12 +78,6 @@ mod amenable {
         #[instrument(level = "trace", skip(self))]
         fn id(&self) -> &str {
             Self::ID
-        }
-
-        #[instrument(level = "trace", skip(self))]
-        fn interests(&self) -> &dyn Query {
-            static QUERY: BasicQuery = BasicQuery::ALL_NODES;
-            &QUERY
         }
 
         #[instrument(level = "trace", skip(self, view))]

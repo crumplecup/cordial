@@ -55,20 +55,15 @@ impl Probe for TodoSiteProbe {
         "acme-todo-site"
     }
 
-    // 1. Say which nodes this probe cares about.
-    fn interests(&self) -> &dyn Query {
-        &TODO_SITES_QUERY
-    }
-
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
         let ir = view.ir();
 
         Ok(ir
-            // 2. Run the query over the graph.
+            // 1. Run the query over the graph.
             .nodes_matching(&TODO_SITES_QUERY)
             .into_iter()
             .map(|node| {
-                // 3. Wrap each hit in a marker.
+                // 2. Wrap each hit in a marker.
                 Box::new(TodoMarker {
                     anchor: NodeAnchor::new(node.id()),
                 }) as Box<dyn Marker>
@@ -78,10 +73,9 @@ impl Probe for TodoSiteProbe {
 }
 ```
 
-1. `interests` hands cordial the query, so it knows which nodes this probe
-   looks at.
-2. `nodes_matching` runs the query and returns every node that passes.
-3. Each hit becomes a `TodoMarker`, shown next.
+1. `nodes_matching` runs the query and returns every node that passes.
+2. Each hit becomes a `TodoMarker`, shown next. A probe can also inspect the
+   crate root or an external inventory without a node query.
 
 A marker is a pointer back at a graph node, plus a label:
 

@@ -8,7 +8,6 @@ use crate::framework_std::{
     load_ext_inventory_from_shadow_dep,
 };
 use crate::hooks::{Probe, ProbeView};
-use crate::ir::{BasicQuery, Query};
 use crate::objects::{IrAnchor, Marker, NodeAnchor, SourceSpan};
 use crate::rustdoc::InventoryItemKind;
 use crate::store::StoreLayout;
@@ -79,12 +78,6 @@ impl Probe for ExtScopeProbe {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         &self.id
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn interests(&self) -> &dyn Query {
-        static QUERY: BasicQuery = BasicQuery::ALL_NODES;
-        &QUERY
     }
 
     #[instrument(level = "trace", skip(self, view))]

@@ -1,12 +1,11 @@
 use crate::ir::{EdgeKind, NodeKind, NodeView};
 
 use tracing::instrument;
-/// Probe interest declaration over IR nodes and edges.
+/// Reusable predicate for selecting IR nodes.
 ///
-/// A query is intentionally small: it advertises the node kinds and edge kinds
-/// a probe cares about, then supplies the final node predicate. This keeps
-/// probes declarative enough for future traversal optimization while still
-/// allowing custom attribute checks.
+/// [`IrView::nodes_matching`](crate::ir::IrView::nodes_matching) uses node kinds
+/// as a cheap prefilter, then calls the final node predicate. Probes can use a
+/// query directly when they need matching nodes.
 pub trait Query: Send + Sync {
     /// Node kinds that should be considered before calling [`Self::matches_node`].
     ///

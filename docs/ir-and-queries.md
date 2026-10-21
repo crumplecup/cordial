@@ -37,11 +37,6 @@ impl Probe for PublicTypeProbe {
         "acme-public-type"
     }
 
-    fn interests(&self) -> &dyn cordial::Query {
-        static QUERY: BasicQuery = BasicQuery::ALL_NODES;
-        &QUERY
-    }
-
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
         let query = BasicQuery::all_nodes();
         let public_types = view.ir.nodes_matching(&query).into_iter().filter(|node| {

@@ -19,12 +19,11 @@ etiquettes series and the pipeline behind it.
    or parsed facts where measurements show useful overlap. Preserve each
    scanner's source-tree and fixture rules, and verify finding parity. Do not
    assume that a shared graph already means one `syn` parse per file.
-3. [ ] **Resolve the `Probe::interests()` contract.** Decide whether the method
-   should be removed or should feed a concrete candidate-query API. Today the
-   session never reads it: probes call `nodes_matching()` themselves. Measure
-   query count and time before adding central query work; some probes declare
-   `ALL_NODES` but use only the crate root or an external inventory. Document
-   and test the chosen contract with a custom plugin.
+3. [x] **Resolve the `Probe::interests()` contract.** Remove the unused
+   declaration. Probes select nodes with `IrView::nodes_matching()` when they
+   need a query; root- and inventory-driven probes do not declare a dummy
+   `ALL_NODES` query. The custom plugin example exercises the simpler contract.
+   Measure query count and time before considering a central candidate API.
 4. [ ] **Give plugins a typed path through their own facts.** Keep the graph's
    cross-plugin boundary dynamic, but provide fallible typed helpers for a
    plugin's serialized attributes and required finding fields. Prefer the
@@ -73,12 +72,14 @@ etiquettes series and the pipeline behind it.
   was 14.26 seconds, with 13.23 seconds in load and probe; these wall times
   reflect different runs and are not a controlled speedup estimate. Hotpath
   attributed 0.589 seconds to `source_work::parse` in the optimized run.
-- [`Probe::interests`](../../src/hooks/probe.rs) is required by the trait but
-  unused by [`load_and_probe`](../../src/session/load.rs). Each
-  [`nodes_matching`](../../src/ir/view.rs) call scans the crate graph. The
-  current probe total makes query optimization a lower performance priority
-  than repeated source work, while the unused trait method remains an API
-  correctness issue.
+- `Probe::interests` was required by the trait but never read by
+  [`load_and_probe`](../../src/session/load.rs). Of 36 built-in implementations,
+  32 queried nodes inside `probe`; the other four worked from the crate root
+  or an external inventory. The latest build-tier run spent 36 ms across 26
+  active probes, out of 30.8 seconds total. This includes all probe work, so
+  a central query engine offered little demonstrated value. The declaration
+  was removed; [`nodes_matching`](../../src/ir/view.rs) remains available to
+  probes that need it.
 - Exceptions are already applied after assessment in
   [`session/assess.rs`](../../src/session/assess.rs). The series should teach
   this behavior rather than asking plugin assessors to implement it.

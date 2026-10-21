@@ -1,6 +1,6 @@
 use crate::error::CordialResult;
 use crate::hooks::{Probe, ProbeView};
-use crate::ir::{PanicSitesQuery, Query};
+use crate::ir::PanicSitesQuery;
 use crate::objects::Marker;
 
 use super::types::{PanicKind, PanicMarker};
@@ -20,11 +20,6 @@ impl Probe for PanicSiteProbe {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn interests(&self) -> &dyn Query {
-        &PANIC_SITES_QUERY
     }
 
     #[instrument(level = "trace", skip(self, view))]

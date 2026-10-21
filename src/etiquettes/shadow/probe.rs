@@ -1,33 +1,12 @@
 use crate::enricher::resolve_shadow_entries;
 use crate::error::CordialResult;
 use crate::hooks::{Probe, ProbeView};
-use crate::ir::{EdgeKind, Query};
+use crate::ir::EdgeKind;
 use crate::objects::Marker;
 
 use super::types::MissingMirrorMarker;
 
 use tracing::instrument;
-#[derive(Debug, Default, Clone, Copy)]
-struct ShadowTargetQuery;
-
-impl Query for ShadowTargetQuery {
-    #[instrument(level = "trace", skip(self))]
-    fn node_kinds(&self) -> &[crate::ir::NodeKind] {
-        &[]
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn edge_kinds(&self) -> &[EdgeKind] {
-        &[]
-    }
-
-    #[instrument(level = "trace", skip(self, node))]
-    fn matches_node(&self, node: &dyn crate::ir::NodeView) -> bool {
-        node.attr("shadow_path").is_some()
-    }
-}
-
-static SHADOW_TARGET_QUERY: ShadowTargetQuery = ShadowTargetQuery;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct MissingShadowMirrorProbe;
@@ -40,11 +19,6 @@ impl Probe for MissingShadowMirrorProbe {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn interests(&self) -> &dyn Query {
-        &SHADOW_TARGET_QUERY
     }
 
     #[instrument(level = "trace", skip(self, view))]
@@ -74,7 +48,6 @@ impl Probe for MissingShadowMirrorProbe {
             );
         }
 
-        let _ = SHADOW_TARGET_QUERY;
         Ok(markers)
     }
 }

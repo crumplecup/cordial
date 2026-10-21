@@ -132,11 +132,6 @@ impl Probe for MissingInstrumentProbe {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self))]
-    fn interests(&self) -> &dyn Query {
-        &MISSING_INSTRUMENT_QUERY
-    }
-
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
         let ir = view.ir();
@@ -166,11 +161,6 @@ impl Probe for RecipeDeltaProbe {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self))]
-    fn interests(&self) -> &dyn Query {
-        &INSTRUMENTED_QUERY
-    }
-
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
         let ir = view.ir();
@@ -198,11 +188,6 @@ impl Probe for ForbiddenInstrumentProbe {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn interests(&self) -> &dyn Query {
-        &FORBIDDEN_INSTRUMENT_QUERY
     }
 
     #[instrument(level = "trace", skip(self, view))]

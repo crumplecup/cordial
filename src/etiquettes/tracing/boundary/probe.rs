@@ -44,11 +44,6 @@ impl Probe for BoundarySiteProbe {
         Self::ID
     }
 
-    #[instrument(level = "trace", skip(self))]
-    fn interests(&self) -> &dyn Query {
-        &BOUNDARY_SITES_QUERY
-    }
-
     #[instrument(level = "trace", skip(self, view))]
     fn probe(&self, view: ProbeView<'_>) -> CordialResult<Vec<Box<dyn Marker>>> {
         let ir = view.ir();
