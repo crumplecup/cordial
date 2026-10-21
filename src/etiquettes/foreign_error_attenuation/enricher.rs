@@ -8,9 +8,8 @@ use crate::etiquettes::error_sites::ErrorSiteKind;
 use crate::etiquettes::foreign_error_types::{
     ForeignErrorRecordKind, ForeignErrorTypeRecord, ForeignErrorTypeReport,
 };
-use crate::hooks::{EnrichView, IrEnricher};
+use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{BasicQuery, IrMut, IrView, NodeKind};
-use crate::loader::SourceLoadView;
 
 use super::assess::{ErrorBridgeHint, build_foreign_error_attenuation_report_with_bridges};
 
@@ -35,7 +34,7 @@ impl ForeignErrorAttenuationInventoryEnricher {
     pub const ID: &'static str = "foreign-error-attenuation-inventory";
 }
 
-impl IrEnricher for ForeignErrorAttenuationInventoryEnricher {
+impl SourceEnricher for ForeignErrorAttenuationInventoryEnricher {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
@@ -47,12 +46,8 @@ impl IrEnricher for ForeignErrorAttenuationInventoryEnricher {
     }
 
     #[instrument(level = "trace", skip(self, view))]
-    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let (ir, load, session) = view.into_parts();
-
-        let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
-            return Ok(());
-        };
+    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
+        let (ir, source, session) = view.into_parts();
 
         let crate_root = member_crate_root(source, session);
         let foreign_report = foreign_report_from_ir(ir.as_view(), &crate_root)?;

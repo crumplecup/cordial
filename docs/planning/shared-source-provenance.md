@@ -173,3 +173,10 @@ internal-error architecture scan also reuses shared parsed files while
 discovering out-of-line modules, in addition to its existing shared catalog
 pass. Standalone crate scans retain their direct parser for callers outside a
 source session.
+
+## Twelfth slice
+
+The attribute, allow, and foreign-error-attenuation enrichers now enter through
+the typed source hook. The first two already used shared parsed files in their
+production scans; attenuation joins facts already in the IR. This removes
+their loader downcasts without changing their scan results.

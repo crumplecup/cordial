@@ -5,9 +5,8 @@ use syn::visit::Visit;
 use syn::{Attribute, ImplItem, Item, ItemFn, ItemImpl, ItemMod, Meta, Path as SynPath, Type};
 
 use crate::error::CordialResult;
-use crate::hooks::{EnrichView, IrEnricher};
+use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, IrMut, ItemKind, NodeKind, NodeWeight};
-use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 use crate::session::SessionView;
 
@@ -21,7 +20,7 @@ impl AttributeEnricher {
     pub const ID: &'static str = "attribute";
 }
 
-impl IrEnricher for AttributeEnricher {
+impl SourceEnricher for AttributeEnricher {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
@@ -33,12 +32,8 @@ impl IrEnricher for AttributeEnricher {
     }
 
     #[instrument(level = "trace", skip(self, view))]
-    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let (ir, load, session) = view.into_parts();
-
-        let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
-            return Ok(());
-        };
+    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
+        let (ir, source, session) = view.into_parts();
 
         for file in source.files() {
             let syntax = source.parsed_file(file.path(), Self::ID)?;
