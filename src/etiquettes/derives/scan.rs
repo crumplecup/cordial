@@ -9,53 +9,64 @@ use std::path::{Path, PathBuf};
 
 use crate::config::DerivesThresholds;
 use crate::error::CordialResult;
-use crate::loader::module_path_from_src_file;
+use crate::loader::{SharedParsedFile, SourceLoadView, module_path_from_src_file};
 
 use super::path_inclusion::PathInclusionFacts;
 use super::types::{DeriveRuleId, DeriveSiteRecord};
 
 use tracing::instrument;
 
-#[instrument(level = "debug", skip(thresholds, path_inclusions))]
-pub fn scan_source_tree(
-    src_root: &Path,
+#[instrument(
+    level = "debug",
+    skip(source, thresholds, path_inclusions),
+    err(level = "warn")
+)]
+pub(super) fn scan_source_tree(
+    source: &SourceLoadView,
     crate_root: &Path,
     thresholds: DerivesThresholds,
     path_inclusions: &PathInclusionFacts,
 ) -> CordialResult<Vec<DeriveSiteRecord>> {
+    let src_root = source.src_root();
     let mut findings = Vec::new();
-    if !src_root.is_dir() {
-        return Ok(findings);
-    }
-
-    for entry in walkdir::WalkDir::new(src_root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-    {
-        let path = entry.path();
-        if path.extension().is_none_or(|ext| ext != "rs") {
-            continue;
-        }
-        let source = std::fs::read_to_string(path)?;
-        findings.extend(scan_rust_source(
-            &source,
-            path,
+    for file in source.parsed_rust_files_under(src_root, "derive-inventory", |_| true)? {
+        findings.extend(scan_shared_file(
+            &file,
             src_root,
             crate_root,
             thresholds,
             path_inclusions,
         )?);
     }
-
     findings.sort_by(|a, b| {
         a.file()
             .cmp(b.file())
             .then(a.line().cmp(&b.line()))
             .then(a.qualified_name().cmp(b.qualified_name()))
     });
-
     Ok(findings)
+}
+
+#[instrument(
+    level = "debug",
+    skip(file, thresholds, path_inclusions),
+    err(level = "warn")
+)]
+fn scan_shared_file(
+    file: &SharedParsedFile,
+    src_root: &Path,
+    crate_root: &Path,
+    thresholds: DerivesThresholds,
+    path_inclusions: &PathInclusionFacts,
+) -> CordialResult<Vec<DeriveSiteRecord>> {
+    scan_syntax(
+        file.syntax(),
+        file.path(),
+        src_root,
+        crate_root,
+        thresholds,
+        path_inclusions,
+    )
 }
 
 #[instrument(level = "debug", skip(source, file, thresholds, path_inclusions))]
@@ -70,6 +81,29 @@ pub fn scan_rust_source(
 ) -> CordialResult<Vec<DeriveSiteRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    scan_syntax(
+        &syntax,
+        file,
+        src_root,
+        crate_root,
+        thresholds,
+        path_inclusions,
+    )
+}
+
+#[instrument(
+    level = "debug",
+    skip(syntax, file, thresholds, path_inclusions),
+    err(level = "warn")
+)]
+fn scan_syntax(
+    syntax: &syn::File,
+    file: &Path,
+    src_root: &Path,
+    crate_root: &Path,
+    thresholds: DerivesThresholds,
+    path_inclusions: &PathInclusionFacts,
+) -> CordialResult<Vec<DeriveSiteRecord>> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut visitor = DeriveScanVisitor {
         file: file.to_path_buf(),

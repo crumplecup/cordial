@@ -13,35 +13,22 @@ use syn::{
 };
 
 use crate::error::CordialResult;
-use crate::loader::module_path_from_src_file;
+use crate::loader::{SharedParsedFile, SourceLoadView, module_path_from_src_file};
 
 use super::types::{CfgScatterGroup, CfgScatterThresholds, CfgSiteKind, CfgSiteOccurrence};
 
 use tracing::instrument;
-#[instrument(level = "debug", skip(thresholds), err(level = "warn"))]
-pub fn scan_source_tree(
-    src_root: &Path,
+#[instrument(level = "debug", skip(source, thresholds), err(level = "warn"))]
+pub(super) fn scan_source_tree(
+    source: &SourceLoadView,
     crate_root: &Path,
     thresholds: CfgScatterThresholds,
 ) -> CordialResult<Vec<CfgScatterGroup>> {
+    let src_root = source.src_root();
     let mut groups = Vec::new();
-    if !src_root.is_dir() {
-        return Ok(groups);
+    for file in source.parsed_rust_files_under(src_root, "cfg-scatter-inventory", |_| true)? {
+        groups.extend(scan_shared_file(&file, src_root, crate_root)?);
     }
-
-    for entry in walkdir::WalkDir::new(src_root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-    {
-        let path = entry.path();
-        if path.extension().is_none_or(|ext| ext != "rs") {
-            continue;
-        }
-        let source = std::fs::read_to_string(path)?;
-        groups.extend(scan_rust_source(&source, path, src_root, crate_root)?);
-    }
-
     groups.retain(|group| group.is_scatter(&thresholds));
     groups.sort_by(|a, b| {
         b.non_field_count()
@@ -49,8 +36,16 @@ pub fn scan_source_tree(
             .then_with(|| a.file().cmp(b.file()))
             .then_with(|| a.predicate().cmp(b.predicate()))
     });
-
     Ok(groups)
+}
+
+#[instrument(level = "debug", skip(file), err(level = "warn"))]
+fn scan_shared_file(
+    file: &SharedParsedFile,
+    src_root: &Path,
+    crate_root: &Path,
+) -> CordialResult<Vec<CfgScatterGroup>> {
+    scan_syntax(file.syntax(), file.path(), src_root, crate_root)
 }
 
 /// Scan one Rust source file and return records.
@@ -63,6 +58,16 @@ pub fn scan_rust_source(
 ) -> CordialResult<Vec<CfgScatterGroup>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    scan_syntax(&syntax, file, src_root, crate_root)
+}
+
+#[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
+fn scan_syntax(
+    syntax: &syn::File,
+    file: &Path,
+    src_root: &Path,
+    crate_root: &Path,
+) -> CordialResult<Vec<CfgScatterGroup>> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut rel_file = file.to_path_buf();
     if let Ok(rel) = rel_file.strip_prefix(crate_root) {
@@ -76,7 +81,7 @@ pub fn scan_rust_source(
         occurrences: BTreeMap::new(),
         error: None,
     };
-    visitor.visit_file(&syntax);
+    visitor.visit_file(syntax);
     if let Some(error) = visitor.error {
         return Err(error);
     }

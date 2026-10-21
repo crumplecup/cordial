@@ -103,3 +103,10 @@ helpers remain for direct use and fixtures; production entry points accept the
 provenance-bearing file. The next migration should move the remaining source
 families onto this route and then retire standalone helpers from production
 surfaces.
+
+## Third slice
+
+The source view now walks a caller-selected Rust file tree and returns parsed
+files from its cache. Glob-import and inline-test scans use that walk, and the
+cfg-scatter and derive production scans now use the typed hook and shared
+files. Their standalone scan helpers remain available for direct callers.

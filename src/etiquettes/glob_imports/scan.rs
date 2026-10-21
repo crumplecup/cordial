@@ -59,19 +59,9 @@ fn scan_shared_source_tree(
     crate_root: &Path,
 ) -> CordialResult<Vec<GlobImportSiteRecord>> {
     let mut findings = Vec::new();
-    if !tree_root.is_dir() {
-        return Ok(findings);
-    }
-    for entry in walkdir::WalkDir::new(tree_root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-    {
-        let path = entry.path();
-        if path.extension().is_none_or(|ext| ext != "rs") || path_has_fixtures(path, crate_root) {
-            continue;
-        }
-        let file = source.parsed_file(path, "glob-import-inventory")?;
+    for file in source.parsed_rust_files_under(tree_root, "glob-import-inventory", |path| {
+        !path_has_fixtures(path, crate_root)
+    })? {
         findings.extend(scan_shared_file(&file, tree_root, crate_root)?);
     }
     Ok(findings)

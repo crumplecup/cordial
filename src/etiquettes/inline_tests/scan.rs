@@ -28,19 +28,9 @@ pub(super) fn scan_shared_crate_inline_tests(
 ) -> CordialResult<Vec<InlineTestSiteRecord>> {
     let src_root = crate_root.join("src");
     let mut findings = Vec::new();
-    if !src_root.is_dir() {
-        return Ok(findings);
-    }
-    for entry in walkdir::WalkDir::new(&src_root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-    {
-        let path = entry.path();
-        if path.extension().is_none_or(|ext| ext != "rs") || path_has_fixtures(path, crate_root) {
-            continue;
-        }
-        let file = source.parsed_file(path, "inline-test-inventory")?;
+    for file in source.parsed_rust_files_under(&src_root, "inline-test-inventory", |path| {
+        !path_has_fixtures(path, crate_root)
+    })? {
         findings.extend(scan_shared_file(&file, &src_root, crate_root)?);
     }
     findings.sort_by(|a, b| {

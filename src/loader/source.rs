@@ -194,6 +194,32 @@ impl SourceLoadView {
         })
     }
 
+    /// Walk Rust files under a root and issue their shared parsed snapshots.
+    /// The caller decides which paths belong to its scan.
+    #[tracing::instrument(level = "debug", skip(self, include), err(level = "warn"))]
+    pub fn parsed_rust_files_under(
+        &self,
+        root: &Path,
+        hook: &str,
+        mut include: impl FnMut(&Path) -> bool,
+    ) -> CordialResult<Vec<SharedParsedFile>> {
+        let mut files = Vec::new();
+        if !root.is_dir() {
+            return Ok(files);
+        }
+        for entry in walkdir::WalkDir::new(root)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_type().is_file())
+        {
+            let path = entry.path();
+            if path.extension().is_some_and(|extension| extension == "rs") && include(path) {
+                files.push(self.parsed_file(path, hook)?);
+            }
+        }
+        Ok(files)
+    }
+
     /// Drop parsed trees after the crate's enrichers have consumed them.
     #[tracing::instrument(level = "trace", skip(self))]
     pub(crate) fn release_parsed(&self) {

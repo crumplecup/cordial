@@ -27,6 +27,13 @@ fn source_view_reuses_the_same_snapshot_and_tree() -> miette::Result<()> {
     assert_eq!(first.source(), "fn original() {}");
     assert_eq!(first.syntax().items.len(), 1);
 
+    fs::write(src_root.join("skip.rs"), "fn excluded() {}").into_diagnostic()?;
+    let selected = view
+        .parsed_rust_files_under(&src_root, "walk", |candidate| candidate == path)
+        .into_diagnostic()?;
+    assert_eq!(selected.len(), 1);
+    assert!(std::ptr::eq(first.syntax(), selected[0].syntax()));
+
     fs::write(&path, "fn changed() {}").into_diagnostic()?;
     let second = view.parsed_file(&path, "second").into_diagnostic()?;
     assert!(std::ptr::eq(first.syntax(), second.syntax()));
