@@ -21,7 +21,7 @@ pub enum ErrorChainProbeId {
     PreservedQuestionMark001,
     /// Foreign `Result` converted via chain-preserving `map_err` then `?`
     /// (typed constructor / `From` / forwarding `err` plus caller context).
-    /// This is the preferred wrap, not a chain break.
+    /// This preserves the source chain; caller-location compliance is checked separately.
     PreservedMapErr001,
 }
 

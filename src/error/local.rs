@@ -17,7 +17,7 @@ pub struct InvariantSource {
 
 impl InvariantSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(message), ret)]
+    #[instrument(level = "debug", skip(message))]
     pub fn new(message: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -53,7 +53,7 @@ pub struct UnreachableSource {
 
 impl UnreachableSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(message), ret)]
+    #[instrument(level = "debug", skip(message))]
     pub fn new(message: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -93,7 +93,7 @@ pub struct BuilderSource {
 
 impl BuilderSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(source), ret)]
+    #[instrument(level = "debug", skip(source))]
     pub fn new(source: derive_builder::UninitializedFieldError) -> Self {
         let loc = Location::caller();
         Self {
@@ -106,7 +106,7 @@ impl BuilderSource {
 
 impl From<derive_builder::UninitializedFieldError> for BuilderSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(source), ret)]
+    #[instrument(level = "debug", skip(source))]
     fn from(source: derive_builder::UninitializedFieldError) -> Self {
         Self::new(source)
     }
@@ -141,7 +141,7 @@ pub struct UnknownEtiquetteSource {
 
 impl UnknownEtiquetteSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(id), ret)]
+    #[instrument(level = "debug", skip(id))]
     pub fn new(id: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -172,7 +172,7 @@ pub struct CargoMetadataSource {
 
 impl CargoMetadataSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(source), ret)]
+    #[instrument(level = "debug", skip(source))]
     pub fn new(source: cargo_metadata::Error) -> Self {
         let loc = Location::caller();
         Self {
@@ -185,7 +185,7 @@ impl CargoMetadataSource {
 
 impl From<cargo_metadata::Error> for CargoMetadataSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(source), ret)]
+    #[instrument(level = "debug", skip(source))]
     fn from(source: cargo_metadata::Error) -> Self {
         Self::new(source)
     }
@@ -216,7 +216,7 @@ pub struct NotFoundSource {
 
 impl NotFoundSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(path), ret)]
+    #[instrument(level = "debug", skip(path))]
     pub fn new(path: std::path::PathBuf) -> Self {
         let loc = Location::caller();
         Self {
@@ -249,7 +249,7 @@ pub struct NoExceptionsSource {
 
 impl NoExceptionsSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(etiquette, crate_name), ret)]
+    #[instrument(level = "debug", skip(etiquette, crate_name))]
     pub fn new(etiquette: impl Into<String>, crate_name: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -285,7 +285,7 @@ pub struct NoCachedIrSource {
 
 impl NoCachedIrSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(path), ret)]
+    #[instrument(level = "debug", skip(path))]
     pub fn new(path: PathBuf) -> Self {
         let loc = Location::caller();
         Self {
@@ -322,7 +322,7 @@ pub struct MissingRustdocJsonSource {
 
 impl MissingRustdocJsonSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(crate_name, crate_root), ret)]
+    #[instrument(level = "debug", skip(crate_name, crate_root))]
     pub fn new(crate_name: impl Into<String>, crate_root: PathBuf) -> Self {
         let loc = Location::caller();
         Self {
@@ -359,7 +359,7 @@ pub struct OpenFindingsSource {
 
 impl OpenFindingsSource {
     #[track_caller]
-    #[instrument(level = "debug", ret)]
+    #[instrument(level = "debug")]
     pub fn new(count: usize) -> Self {
         let loc = Location::caller();
         Self {

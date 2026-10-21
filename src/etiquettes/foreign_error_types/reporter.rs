@@ -241,7 +241,8 @@ impl Reporter for ForeignErrorTypesChecklistReporter {
         body.push_str(
             "Sites where `.map_err` **drops or stringifies** a std / third-party error. \
              Mapping into a typed constructor (`From`, `syn_parse`, forwarding `err` \
-             plus caller context) is the preferred wrap and is omitted here. \
+             plus caller context) preserves the source chain and is omitted here. \
+             Use bare `?` or a closure when the constructor tracks caller location. \
              Full inferred inventory is in `foreign-error-types.csv`. Resolution \
              strategies live in `foreign-error-attenuation.*`.\n\n",
         );

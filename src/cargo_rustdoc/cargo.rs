@@ -63,7 +63,7 @@ pub(crate) fn run_cargo_rustdoc_to(
         .arg("unstable-options");
 
     tracing::debug!("running cargo rustdoc");
-    let status = cmd.status().map_err(CordialError::from)?;
+    let status = cmd.status()?;
 
     if !status.success() {
         return Err(CordialError::invariant(format!(
@@ -132,7 +132,7 @@ pub(crate) fn run_cargo_doc_for_optional_dep_to(
         .arg(&project_target);
 
     tracing::debug!("running cargo doc for optional shadow dependency");
-    let status = cmd.status().map_err(CordialError::from)?;
+    let status = cmd.status()?;
 
     if !status.success() {
         return Err(CordialError::invariant(format!(
@@ -195,7 +195,7 @@ pub(crate) fn nightly_host_target() -> CordialResult<String> {
     if resolve_nightly_cargo_binary().is_none() {
         cmd.env("RUSTUP_TOOLCHAIN", "nightly");
     }
-    let output = cmd.arg("-vV").output().map_err(CordialError::from)?;
+    let output = cmd.arg("-vV").output()?;
     if !output.status.success() {
         return Err(CordialError::invariant(format!(
             "rustc -vV exited with {}",

@@ -16,7 +16,7 @@ pub struct IoSource {
 
 impl IoSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(source), ret)]
+    #[instrument(level = "debug", skip(source))]
     pub fn new(source: std::io::Error) -> Self {
         let loc = Location::caller();
         Self {
@@ -60,7 +60,7 @@ pub struct FmtSource {
 
 impl FmtSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(source), ret)]
+    #[instrument(level = "debug", skip(source))]
     pub fn new(source: std::fmt::Error) -> Self {
         let loc = Location::caller();
         Self {
@@ -104,7 +104,7 @@ pub struct PrefixSource {
 
 impl PrefixSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(source), ret)]
+    #[instrument(level = "debug", skip(source))]
     pub fn new(source: std::path::StripPrefixError) -> Self {
         let loc = Location::caller();
         Self {
@@ -117,7 +117,7 @@ impl PrefixSource {
 
 impl From<std::path::StripPrefixError> for PrefixSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(source), ret)]
+    #[instrument(level = "debug", skip(source))]
     fn from(source: std::path::StripPrefixError) -> Self {
         Self::new(source)
     }

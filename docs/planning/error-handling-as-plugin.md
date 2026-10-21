@@ -9,6 +9,37 @@ Complements [coverage-as-plugin.md](coverage-as-plugin.md) and
 
 ---
 
+## Priority correction: caller locations through `map_err`
+
+Earlier guidance called `map_err(CrateError::from)` a preferred wrap even
+when `From::from` (or a constructor it calls) records `Location::caller()`.
+`Result::map_err` does not propagate `#[track_caller]`, so this records a
+standard-library location. A bare `?` propagates the call site through
+`Result::from_residual`; where `map_err` is needed, a closure such as
+`.map_err(|err| CrateError::from(err))` records the closure's call site.
+
+- [x] Correct the deep-dive examples, compiled explanations, generated
+  attenuation advice, and planning text that recommend a function item for a
+  caller-tracking conversion. Prefer bare `?` when the return error has the
+  required `From` bridge; otherwise call the converter inside a closure.
+- [x] Add a compliance finding for `map_err(Type::from)` and equivalent
+  function-item converters when the cataloged constructor uses `#[track_caller]`.
+  Keep ordinary converters without caller-location behavior valid. Give the
+  finding a concrete bare-`?` or closure rewrite.
+- [x] Add regression tests that execute all three forms and assert the stored
+  file and line: bare `?` and a closure must identify the caller; passing the
+  function item must demonstrate the bad location. Add compliance fixtures for
+  flagged and allowed conversions, and verify generated advice does not
+  reintroduce the wrong form.
+- [x] Replace Cordial's own affected production call sites and run focused
+  checks, then a zero-open build-tier `cordial submit` before committing.
+
+`#[instrument(ret)]` also hid the call site by wrapping constructor bodies in a
+closure. The source track-caller rule now flags that attribute on tracked error
+constructors, and Cordial's constructors omit it.
+
+---
+
 ## Problem
 
 In `elicit_doc`, error analysis was a **family of complementary scanners**
@@ -127,9 +158,12 @@ error-site nodes when they share `(file, line)` — including every site
 kind on that line, so a same-line `map_err`+`?` pair both see preservation.
 Constructors that keep the foreign error (`From`, `syn_parse`, `json_parse`,
 `cargo_metadata`, `Fmt`/`TokenStreamParse` via `From`, forwarding `err` plus
-caller context) are the **preferred `map_err` wrap**, including the 1-arg
-function-pointer form `map_err(CrateError::cargo_metadata)`. Tail-position `map_err(ctor)` without `?`
-is the same wrap. `chain_break` is that conversion only
+caller context) preserve the source chain. Use bare `?` for a `From` bridge,
+or call a constructor inside a closure. A function item such as
+`map_err(CrateError::cargo_metadata)` loses the caller location when the
+constructor uses `#[track_caller]`. Tail-position `map_err(ctor)` without `?`
+still preserves the source chain but has the same caller-location defect.
+`chain_break` is that conversion only
 when the chain layer did not mark it preserved (`invariant` stringify remains
 a break). `?` on a foreign type that already has a type-graph `From` bridge is
 preserved, not pending infrastructure.
@@ -184,7 +218,8 @@ ParentError { kind: Box<ErrorKind> }
 | `ERROR-CHAIN-COMPLIANCE-ARCH-KIND-VARIANT-001` | Kind (or leftover `*Error` enum) variant is not a native source that implements `Error` |
 | `ERROR-CHAIN-COMPLIANCE-ARCH-ORPHAN-SOURCE-001` | Native source is not a Kind variant |
 | `ERROR-CHAIN-COMPLIANCE-SOURCE-SHAPE-001` | Native source missing `source` / owned `file`+`line`, or storing `&'static Location` instead of copying those fields |
-| `ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001` | Native source missing `#[track_caller] fn new` that calls `Location::caller()` (not a helper, not `From` alone); `new` takes file/line/location as args; or a parent/`From` wrapper lacks `#[track_caller]` |
+| `ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001` | Native source missing `#[track_caller] fn new` that calls `Location::caller()` (not a helper, not `From` alone); `new` takes file/line/location as args; a parent/`From` wrapper lacks `#[track_caller]`; or a tracked constructor uses `#[instrument(ret)]` |
+| `ERROR-CHAIN-COMPLIANCE-MAP-ERR-TRACK-CALLER-001` | `map_err` receives a caller-tracking constructor as a function item, losing the call site |
 
 Call-site chain preservation (stringify / discard) remains a separate layer.
 `std::error::Error::source()` forwarding is still inventory on the type graph.
@@ -247,7 +282,7 @@ merge cross-cutting, feature-optional logic; prefer plain mod-level gating
 | Move panics etiquette onto `StandardErrorHandling` | done |
 | Surface split: library → internal error types, binary/tests → miette | done |
 | SNR: `src/error.rs` type graph, preserve forwarding wrappers, panic checklist vs inventory | done |
-| `map_err` is the preferred typed wrap; chain break = un-preserved converter only | done |
+| Bare `?` or a `map_err` closure is the preferred typed wrap; chain break = un-preserved converter only | done |
 | `Result<_, String>` antipattern (newtype error carrier, rolls into error-handling) | done |
 | SNR: format! stringify, QuestionMark≠chain_break, type-graph advice, unique rollup | done |
 | Dogfood: typed `CargoMetadata`/`json_parse`/`CliError`; `map_err(ctor)` preserve | done |

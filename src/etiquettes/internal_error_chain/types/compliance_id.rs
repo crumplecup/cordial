@@ -14,6 +14,8 @@ pub enum InternalErrorComplianceId {
     SourceShape001,
     /// Native source missing `#[track_caller] fn new` that calls `Location::caller()`, or a wrapper that would hide the call site.
     SourceTrackCaller001,
+    /// A caller-tracking converter passed as a `map_err` function item.
+    MapErrTrackCaller001,
     /// Missing parent error that boxes a `*Kind` enum.
     ArchParent001,
     /// `kind` field is not `Box<Kind>`.
@@ -33,6 +35,7 @@ impl InternalErrorComplianceId {
             Self::DiscardTyped001 => "ERROR-CHAIN-COMPLIANCE-DISCARD-TYPED-001",
             Self::SourceShape001 => "ERROR-CHAIN-COMPLIANCE-SOURCE-SHAPE-001",
             Self::SourceTrackCaller001 => "ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001",
+            Self::MapErrTrackCaller001 => "ERROR-CHAIN-COMPLIANCE-MAP-ERR-TRACK-CALLER-001",
             Self::ArchParent001 => "ERROR-CHAIN-COMPLIANCE-ARCH-PARENT-001",
             Self::ArchKindBox001 => "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-BOX-001",
             Self::ArchKindVariant001 => "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-VARIANT-001",
@@ -48,6 +51,7 @@ impl InternalErrorComplianceId {
             "ERROR-CHAIN-COMPLIANCE-DISCARD-TYPED-001" => Some(Self::DiscardTyped001),
             "ERROR-CHAIN-COMPLIANCE-SOURCE-SHAPE-001" => Some(Self::SourceShape001),
             "ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001" => Some(Self::SourceTrackCaller001),
+            "ERROR-CHAIN-COMPLIANCE-MAP-ERR-TRACK-CALLER-001" => Some(Self::MapErrTrackCaller001),
             "ERROR-CHAIN-COMPLIANCE-ARCH-PARENT-001" => Some(Self::ArchParent001),
             "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-BOX-001" => Some(Self::ArchKindBox001),
             "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-VARIANT-001" => Some(Self::ArchKindVariant001),

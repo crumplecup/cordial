@@ -121,7 +121,9 @@ fn compliance_counts(rows: &[InternalErrorChainRow]) -> (usize, usize, usize, us
             }
             id if id == InternalErrorComplianceId::DiscardTyped001.as_str() => discard += 1,
             id if id == InternalErrorComplianceId::SourceShape001.as_str() => source_shape += 1,
-            id if id == InternalErrorComplianceId::SourceTrackCaller001.as_str() => {
+            id if id == InternalErrorComplianceId::SourceTrackCaller001.as_str()
+                || id == InternalErrorComplianceId::MapErrTrackCaller001.as_str() =>
+            {
                 track_caller += 1;
             }
             id if id == InternalErrorComplianceId::ArchParent001.as_str()

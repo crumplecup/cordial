@@ -231,7 +231,7 @@ checklist carries the fix:
 > **`ERROR-HANDLING-CHAIN-BREAK`**: Introduce a crate error newtype (or enum
 > variant) that holds `std::io::Error` as `source` and implements
 > `std::error::Error` + `From<std::io::Error>`. Then
-> `std::fs::read_to_string(…).map_err(CrateError::from)?`. Do not use
+> `std::fs::read_to_string(…)?`. Do not use
 > `Result<_, String>` or stringify with `.to_string()` / `format!("...{err}")`.
 
 The advice says to introduce a type. That means designing one, and a shortcut is
@@ -399,8 +399,10 @@ whose type isn't visible, is marked unknown and left for a person instead of
 being guessed at.
 
 `error_chain` then asks of each conversion whether it kept the cause. The
-preferred wrap is a `map_err` with a constructor that keeps the foreign error
-(`map_err(CrateError::from)`), or a bare `?` when a `From` impl exists. Turning
+preferred wrap is a bare `?` when a `From` impl exists, or a `map_err`
+closure that calls a constructor which keeps the foreign error. Passing a
+caller-tracking constructor as a function item to `map_err` loses the caller's
+location. Turning
 the error into text, whether with `.to_string()` or with `format!("{err}")`,
 is a chain break. Probe results and error sites are matched by file and line, so
 `map_err(..)?` on one line counts as one handoff.
@@ -471,6 +473,17 @@ function. A `?` calls `From::from`, so with the attribute on `From::from` and on
 and `Location::caller()` has to carry the attribute. Miss one and the recorded
 location is a line inside your own `From` impl.
 
+`Result::map_err` does not carry `#[track_caller]` through a function item.
+Thus `.map_err(ConfigError::from)?` can record a standard-library location even
+when `From::from` and `new` are annotated. Prefer the bare `?` shown above. If
+an explicit conversion is needed, `.map_err(|err| ConfigError::from(err))?`
+calls the converter on the closure's source line.
+
+Keep `#[instrument(ret)]` off caller-tracking constructors too. Its generated
+return-value wrapper puts the constructor body in a closure, so
+`Location::caller()` records the wrapper's line instead of the original call.
+`#[instrument]` without `ret` still records the span.
+
 ```mermaid
 flowchart LR
   subgraph good["every link annotated"]
@@ -486,7 +499,9 @@ flowchart LR
   class br nope;
 ```
 
-`ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001` enforces this. `new` must call
+`ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001` enforces the constructor chain;
+`ERROR-CHAIN-COMPLIANCE-MAP-ERR-TRACK-CALLER-001` catches tracked converters
+passed as function items. `new` must call
 `Location::caller()` itself, and it must not take file and line as arguments,
 since a location passed by hand has to be spelled out at every call site, where
 no `From` impl can supply it. Every parent `From` or constructor has to be
@@ -606,7 +621,7 @@ resolution. An illustrative row looks like this:
 
 - [ ] `load_config` — `src/config.rs:41` — `ERROR-RESOLUTION-REPLACE-STRINGIFY-MAP-ERR`
   - bad: `std::fs::read_to_string(…).map_err(…)`
-  - good: `std::fs::read_to_string(…).map_err(CrateError::from)?`
+  - good: `std::fs::read_to_string(…)?`
   - resolution: Introduce a crate error newtype (or enum variant) that holds
     `std::io::Error` as `source` and implements `std::error::Error` +
     `From<std::io::Error>`. …

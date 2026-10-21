@@ -159,7 +159,7 @@ fn run_sysroot_rustdoc(sysroot: &SysrootCache, crate_name: &str) -> CordialResul
         target_dir = %target_dir.display(),
         "running sysroot cargo rustdoc"
     );
-    let status = cmd.status().map_err(CordialError::from)?;
+    let status = cmd.status()?;
     if !status.success() {
         return Err(CordialError::invariant(format!(
             "sysroot cargo rustdoc for {crate_name} exited with {status}"

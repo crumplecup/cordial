@@ -9,7 +9,8 @@
 //!
 //! **Flags.** Parent errors that do not box an umbrella `*Kind`, kind enums
 //! with wrong payload shapes, orphan native sources, stringified or discarded
-//! typed errors, native sources missing `#[track_caller]`, and internal leaf /
+//! typed errors, native sources missing `#[track_caller]`, function-item
+//! conversions that lose the caller location, and internal leaf /
 //! link / nested graph shapes. Native sources that wrap a foreign error keep
 //! it in `source` with owned `file` / `line` copied from `Location::caller()`.
 //!
@@ -95,7 +96,7 @@ pub static INTERNAL_ERROR_CHAIN_ETIQUETTE: LazyLock<StaticQualityEtiquette> = La
             EtiquetteExplain::new(
                 "Do this crate's error types form the parent / Kind / native-source architecture?",
                 "Foreign-error etiquettes ask what leaks in. This one asks whether our error types are a place those leaks can land.",
-                "Catalogs every type that implements Error under src/. A parent boxes an umbrella *Kind enum; every Kind variant holds a native source; native sources that wrap a foreign error keep it in source with owned file/line from Location::caller() and #[track_caller]. Nested native sources may box another Kind. Feeds the hand-composed Error handling quality-report area.",
+                "Catalogs every type that implements Error under src/. A parent boxes an umbrella *Kind enum; every Kind variant holds a native source; native sources that wrap a foreign error keep it in source with owned file/line from Location::caller() and #[track_caller]. Passing a caller-tracking constructor as a map_err function item loses the caller location; use ? or a closure. Nested native sources may box another Kind. Feeds the hand-composed Error handling quality-report area.",
                 "`[internal_error_chain] enabled = false` in cordial.toml.",
                 vec![
                     EtiquetteRuleExplain::new(
@@ -113,6 +114,10 @@ pub static INTERNAL_ERROR_CHAIN_ETIQUETTE: LazyLock<StaticQualityEtiquette> = La
                     EtiquetteRuleExplain::new(
                         "ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001",
                         "Native source missing #[track_caller]",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "ERROR-CHAIN-COMPLIANCE-MAP-ERR-TRACK-CALLER-001",
+                        "map_err function item loses the caller location; use ? or a closure",
                     ),
                     EtiquetteRuleExplain::new(
                         "ERROR-CHAIN-COMPLIANCE-ARCH-PARENT-001",

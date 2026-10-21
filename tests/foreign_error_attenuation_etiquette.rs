@@ -251,7 +251,8 @@ fn chain_break_rows_carry_baked_in_resolution() -> miette::Result<()> {
         "resolution should name a crate error newtype, got: {}",
         broken.resolution()
     );
-    assert!(broken.good_pattern().contains("from"));
+    assert!(broken.good_pattern().contains(".map_err(|err|"));
+    assert!(!broken.good_pattern().contains(".map_err(CrateError::from)"));
     Ok(())
 }
 

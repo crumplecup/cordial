@@ -16,7 +16,7 @@ pub struct JsonSource {
 
 impl JsonSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(source), ret)]
+    #[instrument(level = "debug", skip(source))]
     pub fn new(source: serde_json::Error) -> Self {
         let loc = Location::caller();
         Self {
@@ -62,7 +62,7 @@ pub struct JsonParseSource {
 
 impl JsonParseSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(path, source), ret)]
+    #[instrument(level = "debug", skip(path, source))]
     pub fn new(path: impl Into<String>, source: serde_json::Error) -> Self {
         let loc = Location::caller();
         Self {
@@ -99,7 +99,7 @@ pub struct ConfigSource {
 
 impl ConfigSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(source), ret)]
+    #[instrument(level = "debug", skip(source))]
     pub fn new(source: config::ConfigError) -> Self {
         let loc = Location::caller();
         Self {
@@ -145,7 +145,7 @@ pub struct SynParseSource {
 
 impl SynParseSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(path, source), ret)]
+    #[instrument(level = "debug", skip(path, source))]
     pub fn new(path: impl Into<String>, source: syn::Error) -> Self {
         let loc = Location::caller();
         Self {
@@ -188,7 +188,7 @@ pub struct TokenStreamParseError {
 impl TokenStreamParseError {
     /// Construct a new value.
     #[track_caller]
-    #[instrument(level = "debug", skip(source), ret)]
+    #[instrument(level = "debug", skip(source))]
     pub fn new(source: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -201,7 +201,7 @@ impl TokenStreamParseError {
 
 impl From<proc_macro2::LexError> for TokenStreamParseError {
     #[track_caller]
-    #[instrument(level = "debug", skip(source), ret)]
+    #[instrument(level = "debug", skip(source))]
     fn from(source: proc_macro2::LexError) -> Self {
         Self::new(source.to_string())
     }

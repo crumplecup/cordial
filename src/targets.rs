@@ -99,7 +99,7 @@ fn workspace_targets(project_root: &Path) -> CordialResult<Vec<CrateTarget>> {
     let metadata = cargo_metadata::MetadataCommand::new()
         .current_dir(project_root)
         .exec()
-        .map_err(CordialError::cargo_metadata)?;
+        .map_err(|err| CordialError::cargo_metadata(err))?;
 
     let mut targets = Vec::new();
     for package_id in &metadata.workspace_members {

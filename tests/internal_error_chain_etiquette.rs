@@ -98,6 +98,63 @@ fn stringify_via_format() -> CordialResult<()> {
 "#;
 
 #[test]
+fn tracked_map_err_function_items_are_flagged_but_ordinary_converters_are_not() -> miette::Result<()>
+{
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic()?;
+    let src = fixture.path().join("src");
+    fs::create_dir_all(&src).into_diagnostic()?;
+    let source = r#"
+struct TrackedError { file: &'static str, line: u32 }
+impl std::fmt::Display for TrackedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "tracked") }
+}
+impl std::error::Error for TrackedError {}
+impl From<std::io::Error> for TrackedError {
+    #[track_caller]
+    fn from(_: std::io::Error) -> Self {
+        let caller = std::panic::Location::caller();
+        Self { file: caller.file(), line: caller.line() }
+    }
+}
+impl TrackedError {
+    #[track_caller]
+    fn wrap(_: std::io::Error) -> Self {
+        let caller = std::panic::Location::caller();
+        Self { file: caller.file(), line: caller.line() }
+    }
+    fn plain(_: std::io::Error) -> Self { Self { file: "plain", line: 0 } }
+}
+fn sites() {
+    let _ = std::fs::read("x").map_err(TrackedError::from);
+    let _ = std::fs::read("x").map_err(TrackedError::wrap);
+    let _ = std::fs::read("x").map_err(TrackedError::plain);
+    let _ = std::fs::read("x").map_err(|err| TrackedError::from(err));
+}
+"#;
+    fs::write(src.join("lib.rs"), source).into_diagnostic()?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    let findings: Vec<_> = report
+        .compliance()
+        .findings()
+        .iter()
+        .filter(|finding| finding.rule_id() == InternalErrorComplianceId::MapErrTrackCaller001)
+        .collect();
+    assert_eq!(findings.len(), 2);
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.snippet().contains("TrackedError::from"))
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding.snippet().contains("TrackedError::wrap"))
+    );
+    Ok(())
+}
+
+#[test]
 fn internal_leaf_is_detected_in_type_graph() -> miette::Result<()> {
     cordial::init_tracing();
     let error_root = Path::new("tests/fixtures/internal_error_chain");
@@ -645,6 +702,22 @@ fn well_formed_source_wrapper_is_not_a_compliance_violation() -> miette::Result<
         "well-formed parent/Kind/source must not be architecture-flagged: {:?}",
         report.compliance().findings()
     );
+    Ok(())
+}
+
+#[test]
+fn instrumented_return_hides_tracked_constructor_call_site() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = WELL_FORMED_SOURCE.replace(
+        "    #[track_caller]\n    pub fn new(source: io::Error)",
+        "    #[track_caller]\n    #[instrument(ret)]\n    pub fn new(source: io::Error)",
+    );
+    let fixture = write_error_crate(&source)?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    assert!(report.compliance().findings().iter().any(|finding| {
+        finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001
+            && finding.snippet().contains("instrument(ret)")
+    }));
     Ok(())
 }
 

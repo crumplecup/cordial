@@ -12,6 +12,38 @@ use super::super::catalog::{Catalog, ConstructorRec, StructInfo};
 use super::{FindingSite, SiteClassifier};
 
 impl Catalog {
+    #[instrument(level = "debug", skip(self, findings))]
+    pub(super) fn emit_map_err_track_caller(
+        &self,
+        findings: &mut Vec<InternalErrorComplianceFinding>,
+    ) -> CordialResult<()> {
+        for site in self.map_err_sites() {
+            let tracked = self.constructors().iter().any(|ctor| {
+                ctor.self_ident() == site.type_ident()
+                    && ctor.has_track_caller()
+                    && (ctor.name() == site.method()
+                        || (site.method() == "from" && ctor.from_trait()))
+            });
+            if !tracked || !self.impls_error(site.type_ident()) {
+                continue;
+            }
+            let converter = format!("{}::{}", site.type_ident(), site.method());
+            findings.push(self.finding(
+                InternalErrorComplianceId::MapErrTrackCaller001,
+                FindingSite::new(
+                    converter.clone(),
+                    site.file().clone(),
+                    site.line(),
+                    format!(
+                        "map_err({converter}) passes a caller-tracking converter as a function item; use a bare `?` when `From` applies, or `.map_err(|err| {converter}(err))`"
+                    ),
+                ),
+                SiteClassifier::constructor(None, converter),
+            )?);
+        }
+        Ok(())
+    }
+
     #[instrument(level = "debug", skip(self, findings, item))]
     pub(super) fn emit_track_caller(
         &self,
@@ -52,7 +84,7 @@ impl Catalog {
                 .iter()
                 .filter(|ctor| ctor.self_ident() == parent.ident())
             {
-                if ctor.has_track_caller() {
+                if ctor.has_track_caller() && !ctor.instrument_ret() {
                     continue;
                 }
                 findings.push(self.finding(
@@ -62,9 +94,8 @@ impl Catalog {
                         parent.file().clone(),
                         ctor.line(),
                         format!(
-                            "{}::{} must be `#[track_caller]` so native-source `new` sees the call site",
-                            parent.ident(),
-                            ctor.name()
+                            "{}::{} needs `#[track_caller]` without `#[instrument(ret)]`; return tracing wraps the body in a closure and hides the call site",
+                            parent.ident(), ctor.name()
                         ),
                     ),
                     SiteClassifier::constructor(None, ctor.name().clone()),
@@ -117,6 +148,18 @@ impl Catalog {
                     item.file().clone(),
                     ctor.line(),
                     format!("{}::new must be `#[track_caller]`", item.ident()),
+                ),
+                SiteClassifier::constructor(item.foreign_source().clone(), ctor.name().clone()),
+            )?);
+        }
+        if ctor.instrument_ret() {
+            findings.push(self.finding(
+                InternalErrorComplianceId::SourceTrackCaller001,
+                FindingSite::new(
+                    item.type_path().clone(),
+                    item.file().clone(),
+                    ctor.line(),
+                    format!("{}::new must omit `#[instrument(ret)]` so `Location::caller()` sees the call site", item.ident()),
                 ),
                 SiteClassifier::constructor(item.foreign_source().clone(), ctor.name().clone()),
             )?);
@@ -196,6 +239,22 @@ impl Catalog {
                     ctor.line(),
                     format!(
                         "{}::{} must be `#[track_caller]` so it can delegate to `new`",
+                        item.ident(),
+                        ctor.name()
+                    ),
+                ),
+                SiteClassifier::constructor(item.foreign_source().clone(), ctor.name().clone()),
+            )?);
+        }
+        if ctor.instrument_ret() {
+            findings.push(self.finding(
+                InternalErrorComplianceId::SourceTrackCaller001,
+                FindingSite::new(
+                    item.type_path().clone(),
+                    item.file().clone(),
+                    ctor.line(),
+                    format!(
+                        "{}::{} must omit `#[instrument(ret)]` so caller location propagates",
                         item.ident(),
                         ctor.name()
                     ),

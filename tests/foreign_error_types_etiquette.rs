@@ -208,7 +208,7 @@ fn foreign_error_types_session_produces_artifacts() -> miette::Result<()> {
     #[cfg(feature = "error_chain")]
     assert!(
         !checklist.contains("foreign_map_err"),
-        "map_err(CordialError::from) is the preferred wrap, not a break: {checklist}"
+        "typed map_err preserves the source chain; caller location is checked separately: {checklist}"
     );
 
     let summary = fs::read_to_string(findings_dir.join("foreign-error-types-summary.md"))

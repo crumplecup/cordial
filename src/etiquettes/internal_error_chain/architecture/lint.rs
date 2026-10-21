@@ -63,6 +63,7 @@ impl Catalog {
         self.emit_kind_variant_findings(&mut findings)?;
         self.emit_native_source_findings(&mut findings)?;
         self.emit_parent_track_caller(&mut findings)?;
+        self.emit_map_err_track_caller(&mut findings)?;
         Ok(findings)
     }
 

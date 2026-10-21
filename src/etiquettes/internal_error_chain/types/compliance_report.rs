@@ -37,7 +37,13 @@ impl InternalErrorComplianceReport {
     pub fn source_track_caller_count(&self) -> usize {
         self.findings()
             .iter()
-            .filter(|finding| finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001)
+            .filter(|finding| {
+                matches!(
+                    finding.rule_id(),
+                    InternalErrorComplianceId::SourceTrackCaller001
+                        | InternalErrorComplianceId::MapErrTrackCaller001
+                )
+            })
             .count()
     }
 

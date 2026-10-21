@@ -14,7 +14,7 @@ pub struct LintOrderCycleSource {
 
 impl LintOrderCycleSource {
     #[track_caller]
-    #[instrument(level = "debug", ret)]
+    #[instrument(level = "debug")]
     pub fn new() -> Self {
         let loc = Location::caller();
         Self {
@@ -46,7 +46,7 @@ pub struct LintOrderDanglingSource {
 
 impl LintOrderDanglingSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(from, missing), ret)]
+    #[instrument(level = "debug", skip(from, missing))]
     pub fn new(from: impl Into<String>, missing: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {
@@ -82,7 +82,7 @@ pub struct LintOrderUnknownConstraintSource {
 
 impl LintOrderUnknownConstraintSource {
     #[track_caller]
-    #[instrument(level = "debug", skip(id), ret)]
+    #[instrument(level = "debug", skip(id))]
     pub fn new(id: impl Into<String>) -> Self {
         let loc = Location::caller();
         Self {

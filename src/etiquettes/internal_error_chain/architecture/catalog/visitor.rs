@@ -3,15 +3,15 @@ use std::path::PathBuf;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{
-    Fields, FnArg, GenericArgument, ImplItem, ItemEnum, ItemImpl, ItemMod, ItemStruct,
-    PathArguments, Type,
+    Attribute, Expr, ExprMethodCall, Fields, FnArg, GenericArgument, ImplItem, ItemEnum, ItemImpl,
+    ItemMod, ItemStruct, Meta, PathArguments, Token, Type, punctuated::Punctuated,
 };
 use tracing::instrument;
 
 use crate::enricher::is_cfg_test;
 use crate::error::CordialResult;
 
-use super::{Catalog, ConstructorRec, EnumInfo, StructInfo, VariantInfo};
+use super::{Catalog, ConstructorRec, EnumInfo, MapErrSite, StructInfo, VariantInfo};
 use crate::etiquettes::internal_error_chain::source_shape::{
     block_captures_location, has_track_caller, returns_self, sig_takes_location_arg,
     type_is_location,
@@ -211,6 +211,7 @@ impl CatalogVisitor<'_> {
                     name: "From::from".to_string(),
                     line: method.span().start().line as u32,
                     has_track_caller: has_track_caller(&method.attrs),
+                    instrument_ret: has_instrument_ret(&method.attrs),
                     captures_location: block_captures_location(&method.block),
                     from_trait: true,
                     input_labels: input_type_labels(&method.sig),
@@ -239,6 +240,7 @@ impl CatalogVisitor<'_> {
                 name: method.sig.ident.to_string(),
                 line: method.span().start().line as u32,
                 has_track_caller: has_track_caller(&method.attrs),
+                instrument_ret: has_instrument_ret(&method.attrs),
                 captures_location: block_captures_location(&method.block),
                 from_trait: false,
                 input_labels: input_type_labels(&method.sig),
@@ -249,6 +251,27 @@ impl CatalogVisitor<'_> {
 }
 
 impl<'ast> Visit<'ast> for CatalogVisitor<'_> {
+    #[instrument(level = "debug", skip(self, node))]
+    fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
+        if matches!(self.phase, CatalogPhase::Impls)
+            && node.method == "map_err"
+            && let Some(Expr::Path(converter)) = node.args.first()
+        {
+            let segments: Vec<_> = converter.path.segments.iter().collect();
+            if segments.len() >= 2 {
+                let method = segments[segments.len() - 1].ident.to_string();
+                let type_ident = segments[segments.len() - 2].ident.to_string();
+                self.catalog.map_err_sites.push(MapErrSite {
+                    type_ident,
+                    method,
+                    file: self.file.clone(),
+                    line: node.method.span().start().line as u32,
+                });
+            }
+        }
+        syn::visit::visit_expr_method_call(self, node);
+    }
+
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_mod(&mut self, node: &'ast ItemMod) {
         if is_cfg_test(&node.attrs) {
@@ -290,6 +313,22 @@ impl<'ast> Visit<'ast> for CatalogVisitor<'_> {
         }
         syn::visit::visit_item_impl(self, node);
     }
+}
+
+#[instrument(level = "trace", skip(attrs), ret)]
+fn has_instrument_ret(attrs: &[Attribute]) -> bool {
+    attrs
+        .iter()
+        .filter(|attr| {
+            attr.path()
+                .segments
+                .last()
+                .is_some_and(|segment| segment.ident == "instrument")
+        })
+        .any(|attr| {
+            attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+                .is_ok_and(|args| args.iter().any(|arg| arg.path().is_ident("ret")))
+        })
 }
 
 #[instrument(level = "debug", skip(ty))]

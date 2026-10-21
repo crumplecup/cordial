@@ -88,7 +88,7 @@ impl CordialError {
         Self::from_kind(CordialErrorKind::Clean(CleanSource::new(path, reason)))
     }
     #[track_caller]
-    #[instrument(level = "debug", skip(kind), ret)]
+    #[instrument(level = "debug", skip(kind))]
     fn from_kind(kind: CordialErrorKind) -> Self {
         Self {
             kind: Box::new(kind),
@@ -339,7 +339,7 @@ impl From<proc_macro2::LexError> for CordialError {
 
 impl From<derive_builder::UninitializedFieldError> for CordialError {
     #[track_caller]
-    #[instrument(level = "debug", skip(value), ret)]
+    #[instrument(level = "debug", skip(value))]
     fn from(value: derive_builder::UninitializedFieldError) -> Self {
         Self::from_kind(CordialErrorKind::Builder(BuilderSource::from(value)))
     }
@@ -347,7 +347,7 @@ impl From<derive_builder::UninitializedFieldError> for CordialError {
 
 impl From<StripPrefixError> for CordialError {
     #[track_caller]
-    #[instrument(level = "debug", skip(value), ret)]
+    #[instrument(level = "debug", skip(value))]
     fn from(value: StripPrefixError) -> Self {
         Self::from_kind(CordialErrorKind::Prefix(PrefixSource::from(value)))
     }

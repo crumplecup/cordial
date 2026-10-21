@@ -350,9 +350,9 @@ fn good_pattern_template(
                 .rsplit_once("::")
                 .map(|(prefix, _)| prefix)
                 .unwrap_or(bridge.constructor().as_str());
-            format!("{source_snippet}.map_err({enum_name}::from)?")
+            format!("{source_snippet}.map_err(|err| {enum_name}::from(err))?")
         }
-        None => format!("{source_snippet}.map_err(CrateError::from)?"),
+        None => format!("{source_snippet}.map_err(|err| CrateError::from(err))?"),
     }
 }
 

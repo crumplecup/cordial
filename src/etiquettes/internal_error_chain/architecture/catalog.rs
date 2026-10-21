@@ -68,6 +68,8 @@ pub(super) struct ConstructorRec {
     #[getter(copy)]
     has_track_caller: bool,
     #[getter(copy)]
+    instrument_ret: bool,
+    #[getter(copy)]
     captures_location: bool,
     #[getter(copy)]
     from_trait: bool,
@@ -77,11 +79,21 @@ pub(super) struct ConstructorRec {
 }
 
 #[derive(Debug, Clone, derive_getters::Getters)]
+pub(super) struct MapErrSite {
+    type_ident: String,
+    method: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+}
+
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub(super) struct Catalog {
     crate_name: String,
     structs: BTreeMap<String, StructInfo>,
     enums: BTreeMap<String, EnumInfo>,
     constructors: Vec<ConstructorRec>,
+    map_err_sites: Vec<MapErrSite>,
     error_impls: BTreeSet<String>,
 }
 
@@ -93,6 +105,7 @@ impl Catalog {
             structs: BTreeMap::new(),
             enums: BTreeMap::new(),
             constructors: Vec::new(),
+            map_err_sites: Vec::new(),
             error_impls: BTreeSet::new(),
         }
     }

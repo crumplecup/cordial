@@ -50,7 +50,7 @@ pub fn member_dependency_package_name(
     let meta = cargo_metadata::MetadataCommand::new()
         .manifest_path(reference_workspace.join("Cargo.toml"))
         .exec()
-        .map_err(CordialError::cargo_metadata)?;
+        .map_err(|err| CordialError::cargo_metadata(err))?;
     let member_pkg = meta
         .packages
         .iter()
@@ -83,7 +83,7 @@ pub fn collect_member_dep_build_config(
     let meta = cargo_metadata::MetadataCommand::new()
         .manifest_path(reference_workspace.join("Cargo.toml"))
         .exec()
-        .map_err(CordialError::cargo_metadata)?;
+        .map_err(|err| CordialError::cargo_metadata(err))?;
 
     let member_pkg = meta
         .packages
@@ -140,7 +140,7 @@ pub fn collect_dep_serde_features(
         .manifest_path(reference_workspace.join("Cargo.toml"))
         .features(cargo_metadata::CargoOpt::AllFeatures)
         .exec()
-        .map_err(CordialError::cargo_metadata)?;
+        .map_err(|err| CordialError::cargo_metadata(err))?;
 
     let normalized = crate_name.replace('-', "_");
     let pkg = meta
