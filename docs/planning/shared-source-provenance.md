@@ -165,3 +165,11 @@ standalone scanner retains direct parsing for callers outside a source session.
 The CLI-layout production scan now reuses each shared tree across module
 discovery, clap/error type cataloging, and thin-main inspection. The public
 standalone scan retains its direct parser for callers outside a source session.
+
+## Eleventh slice
+
+The unified error IR scan now enters through the typed source hook. The
+internal-error architecture scan also reuses shared parsed files while
+discovering out-of-line modules, in addition to its existing shared catalog
+pass. Standalone crate scans retain their direct parser for callers outside a
+source session.

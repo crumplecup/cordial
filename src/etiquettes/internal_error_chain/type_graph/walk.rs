@@ -8,7 +8,7 @@ use walkdir::WalkDir;
 
 use crate::enricher::is_cfg_test;
 use crate::error::CordialResult;
-use crate::loader::path_has_fixtures;
+use crate::loader::{SourceLoadView, path_has_fixtures};
 
 use tracing::instrument;
 
@@ -22,20 +22,42 @@ use tracing::instrument;
 #[instrument(level = "debug", skip(visit), err(level = "warn"))]
 pub(crate) fn for_each_src_rust_file(
     crate_root: &Path,
+    visit: impl FnMut(&Path, &Path) -> CordialResult<()>,
+) -> CordialResult<()> {
+    for_each_src_rust_file_impl(None, crate_root, visit)
+}
+
+#[instrument(level = "debug", skip(source, visit), err(level = "warn"))]
+pub(crate) fn for_each_shared_src_rust_file(
+    source: &SourceLoadView,
+    crate_root: &Path,
+    visit: impl FnMut(&Path, &Path) -> CordialResult<()>,
+) -> CordialResult<()> {
+    for_each_src_rust_file_impl(Some(source), crate_root, visit)
+}
+
+#[instrument(level = "debug", skip(source, visit), err(level = "warn"))]
+fn for_each_src_rust_file_impl(
+    source: Option<&SourceLoadView>,
+    crate_root: &Path,
     mut visit: impl FnMut(&Path, &Path) -> CordialResult<()>,
 ) -> CordialResult<()> {
     let src_root = crate_root.join("src");
     if !src_root.is_dir() {
         return Ok(());
     }
-    for path in collect_library_src_files(crate_root, &src_root)? {
+    for path in collect_library_src_files(source, crate_root, &src_root)? {
         visit(&path, &src_root)?;
     }
     Ok(())
 }
 
-#[instrument(level = "debug", err(level = "warn"))]
-fn collect_library_src_files(crate_root: &Path, src_root: &Path) -> CordialResult<Vec<PathBuf>> {
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+fn collect_library_src_files(
+    source: Option<&SourceLoadView>,
+    crate_root: &Path,
+    src_root: &Path,
+) -> CordialResult<Vec<PathBuf>> {
     let lib = src_root.join("lib.rs");
     let main = src_root.join("main.rs");
     let roots = if lib.is_file() {
@@ -47,7 +69,7 @@ fn collect_library_src_files(crate_root: &Path, src_root: &Path) -> CordialResul
     };
     let mut files = BTreeSet::new();
     for root in roots {
-        collect_mod_tree(&root, crate_root, &mut files)?;
+        collect_mod_tree(source, &root, crate_root, &mut files)?;
     }
     Ok(files.into_iter().collect())
 }
@@ -73,8 +95,9 @@ fn collect_all_src_rs(crate_root: &Path, src_root: &Path) -> CordialResult<Vec<P
     Ok(files)
 }
 
-#[instrument(level = "debug", skip(file, files), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, file, files), err(level = "warn"))]
 pub(crate) fn collect_mod_tree(
+    source: Option<&SourceLoadView>,
     file: &Path,
     crate_root: &Path,
     files: &mut BTreeSet<PathBuf>,
@@ -85,14 +108,28 @@ pub(crate) fn collect_mod_tree(
     if !files.insert(file.to_path_buf()) {
         return Ok(());
     }
-    let source = std::fs::read_to_string(file)?;
-    let syntax = syn::parse_file(&source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    walk_mod_items(file, &syntax.items, &[], crate_root, files)
+    if let Some(source) = source {
+        let parsed = source.parsed_file(file, "error-architecture")?;
+        walk_mod_items(
+            Some(source),
+            file,
+            &parsed.syntax().items,
+            &[],
+            crate_root,
+            files,
+        )
+    } else {
+        let text = std::fs::read_to_string(file)?;
+        let syntax = syn::parse_file(&text).map_err(|err| {
+            crate::error::CordialError::syn_parse(file.display().to_string(), err)
+        })?;
+        walk_mod_items(None, file, &syntax.items, &[], crate_root, files)
+    }
 }
 
-#[instrument(level = "debug", skip(items, files), err(level = "warn"))]
+#[instrument(level = "debug", skip(source, items, files), err(level = "warn"))]
 fn walk_mod_items(
+    source: Option<&SourceLoadView>,
     current_file: &Path,
     items: &[syn::Item],
     inline_path: &[String],
@@ -111,13 +148,20 @@ fn walk_mod_items(
             Some((_, nested)) => {
                 let mut nested_path = inline_path.to_vec();
                 nested_path.push(name);
-                walk_mod_items(current_file, nested, &nested_path, crate_root, files)?;
+                walk_mod_items(
+                    source,
+                    current_file,
+                    nested,
+                    &nested_path,
+                    crate_root,
+                    files,
+                )?;
             }
             None => {
                 if let Some(child) =
                     resolve_mod_file(current_file, inline_path, &name, &item_mod.attrs)
                 {
-                    collect_mod_tree(&child, crate_root, files)?;
+                    collect_mod_tree(source, &child, crate_root, files)?;
                 }
             }
         }

@@ -17,8 +17,8 @@ mod walk;
 use visitor::scan_error_rust_file_raw;
 pub(crate) use visitor::{RawTypeNode, scan_error_rust_syntax_raw};
 pub(crate) use walk::{
-    for_each_src_rust_file, is_foreign_type_label, item_derives_error, last_ident,
-    trait_is_std_error, type_label, type_path_is_error_related,
+    for_each_shared_src_rust_file, for_each_src_rust_file, is_foreign_type_label,
+    item_derives_error, last_ident, trait_is_std_error, type_label, type_path_is_error_related,
 };
 
 /// Scan `src/**/*.rs` for the internal error type graph, seeded by `Error` impls.

@@ -5,9 +5,8 @@ use std::collections::HashMap;
 use crate::enricher::{member_crate_root, resolve_parent};
 use crate::error::CordialResult;
 use crate::etiquettes::error_sites::ErrorSiteRecord;
-use crate::hooks::{EnrichView, IrEnricher};
+use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, IrMut, NodeKind, NodeWeight};
-use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 
 use super::scan::scan_crate_error_ir_with_source;
@@ -22,7 +21,7 @@ impl ErrorIrScanEnricher {
     pub const ID: &'static str = "error-ir-scan";
 }
 
-impl IrEnricher for ErrorIrScanEnricher {
+impl SourceEnricher for ErrorIrScanEnricher {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
@@ -34,12 +33,8 @@ impl IrEnricher for ErrorIrScanEnricher {
     }
 
     #[instrument(level = "trace", skip(self, view))]
-    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let (ir, load, session) = view.into_parts();
-
-        let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
-            return Ok(());
-        };
+    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
+        let (ir, source, session) = view.into_parts();
 
         let crate_root = member_crate_root(source, session);
         let report = scan_crate_error_ir_with_source(&crate_root, ir.crate_name(), source)?;

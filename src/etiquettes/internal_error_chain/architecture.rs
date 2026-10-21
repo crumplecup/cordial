@@ -11,7 +11,7 @@ use syn::visit::Visit;
 use crate::error::CordialResult;
 use crate::loader::module_path_from_src_file;
 
-use super::type_graph::for_each_src_rust_file;
+use super::type_graph::{for_each_shared_src_rust_file, for_each_src_rust_file};
 use super::types::InternalErrorComplianceFinding;
 
 use tracing::instrument;
@@ -50,9 +50,15 @@ fn scan_crate_error_architecture_impl(
     source: Option<&crate::loader::SourceLoadView>,
 ) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
     let mut catalog = Catalog::new(crate_name);
-    for_each_src_rust_file(crate_root, |path, src_root| {
-        load_src_file(&mut catalog, path, src_root, source)
-    })?;
+    if let Some(source) = source {
+        for_each_shared_src_rust_file(source, crate_root, |path, src_root| {
+            load_src_file(&mut catalog, path, src_root, Some(source))
+        })?;
+    } else {
+        for_each_src_rust_file(crate_root, |path, src_root| {
+            load_src_file(&mut catalog, path, src_root, None)
+        })?;
+    }
     catalog.into_findings()
 }
 
