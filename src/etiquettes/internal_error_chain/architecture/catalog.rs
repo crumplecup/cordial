@@ -9,7 +9,7 @@ use tracing::instrument;
 
 mod visitor;
 
-pub(super) use visitor::{CatalogPhase, CatalogVisitor};
+pub(super) use visitor::CatalogVisitor;
 
 #[derive(Debug, Clone, derive_getters::Getters)]
 pub(super) struct StructInfo {

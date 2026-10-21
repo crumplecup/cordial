@@ -152,11 +152,15 @@ fn scan_crate_error_ir_impl(
                 crate_name.to_string(),
                 nodes,
             );
-        report.compliance.extend(
+        report.compliance.extend(if let Some(loaded) = loaded {
+            crate::etiquettes::internal_error_chain::scan_crate_error_architecture_with_source(
+                crate_root, crate_name, loaded,
+            )?
+        } else {
             crate::etiquettes::internal_error_chain::scan_crate_error_architecture(
                 crate_root, crate_name,
-            )?,
-        );
+            )?
+        });
         compliance_sort::sort_compliance(&mut report.compliance);
         for finding in &mut report.compliance {
             finding.strip_file_prefix(crate_root);

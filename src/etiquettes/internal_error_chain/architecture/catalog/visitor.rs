@@ -20,12 +20,6 @@ use crate::etiquettes::internal_error_chain::type_graph::{
     is_foreign_type_label, item_derives_error, trait_is_std_error, type_label,
 };
 
-#[derive(Debug, Clone, Copy)]
-pub(in crate::etiquettes::internal_error_chain::architecture) enum CatalogPhase {
-    Types,
-    Impls,
-}
-
 #[derive(derive_builder::Builder, derive_setters::Setters)]
 #[builder(
     name = "CatalogVisitorBuilder",
@@ -37,8 +31,6 @@ pub(in crate::etiquettes::internal_error_chain::architecture) struct CatalogVisi
     file: PathBuf,
     module_prefix: Vec<String>,
     catalog: &'a mut Catalog,
-    #[setters(generate, rename = "set_phase")]
-    phase: CatalogPhase,
 }
 
 impl<'a> CatalogVisitor<'a> {
@@ -46,14 +38,6 @@ impl<'a> CatalogVisitor<'a> {
     pub(in crate::etiquettes::internal_error_chain::architecture) fn builder()
     -> CatalogVisitorBuilder<'a> {
         CatalogVisitorBuilder::default()
-    }
-
-    #[instrument(level = "debug", skip(self, module_prefix))]
-    pub(in crate::etiquettes::internal_error_chain::architecture) fn reset_module_prefix(
-        &mut self,
-        module_prefix: Vec<String>,
-    ) {
-        self.module_prefix = module_prefix;
     }
 }
 
@@ -189,9 +173,6 @@ impl CatalogVisitor<'_> {
             self.catalog.error_impls.insert(self_ident);
             return;
         }
-        if !self.catalog.structs.contains_key(&self_ident) {
-            return;
-        }
         if let Some((trait_path, _)) = &item.trait_ {
             let Some(seg) = trait_path.segments.last() else {
                 return;
@@ -253,8 +234,7 @@ impl CatalogVisitor<'_> {
 impl<'ast> Visit<'ast> for CatalogVisitor<'_> {
     #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
-        if matches!(self.phase, CatalogPhase::Impls)
-            && node.method == "map_err"
+        if node.method == "map_err"
             && let Some(Expr::Path(converter)) = node.args.first()
         {
             let segments: Vec<_> = converter.path.segments.iter().collect();
@@ -292,25 +272,19 @@ impl<'ast> Visit<'ast> for CatalogVisitor<'_> {
 
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_struct(&mut self, node: &'ast ItemStruct) {
-        if matches!(self.phase, CatalogPhase::Types) {
-            self.record_struct(node);
-        }
+        self.record_struct(node);
         syn::visit::visit_item_struct(self, node);
     }
 
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_enum(&mut self, node: &'ast ItemEnum) {
-        if matches!(self.phase, CatalogPhase::Types) {
-            self.record_enum(node);
-        }
+        self.record_enum(node);
         syn::visit::visit_item_enum(self, node);
     }
 
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
-        if matches!(self.phase, CatalogPhase::Impls) {
-            self.record_impl(node);
-        }
+        self.record_impl(node);
         syn::visit::visit_item_impl(self, node);
     }
 }

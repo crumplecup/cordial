@@ -98,6 +98,47 @@ fn stringify_via_format() -> CordialResult<()> {
 "#;
 
 #[test]
+fn architecture_catalog_handles_impl_before_type_definition() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic()?;
+    let src = fixture.path().join("src");
+    fs::create_dir_all(&src).into_diagnostic()?;
+    fs::write(
+        src.join("lib.rs"),
+        r#"
+impl TrackedError {
+    #[track_caller]
+    fn new(_: std::io::Error) -> Self { Self }
+}
+
+#[derive(Debug)]
+struct TrackedError;
+impl std::fmt::Display for TrackedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "tracked")
+    }
+}
+impl std::error::Error for TrackedError {}
+
+fn site() {
+    let _ = std::fs::read("x").map_err(TrackedError::new);
+}
+"#,
+    )
+    .into_diagnostic()?;
+
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    let tracked_sites = report
+        .compliance()
+        .findings()
+        .iter()
+        .filter(|finding| finding.rule_id() == InternalErrorComplianceId::MapErrTrackCaller001)
+        .count();
+    assert_eq!(tracked_sites, 1);
+    Ok(())
+}
+
+#[test]
 fn tracked_map_err_function_items_are_flagged_but_ordinary_converters_are_not() -> miette::Result<()>
 {
     cordial::init_tracing();

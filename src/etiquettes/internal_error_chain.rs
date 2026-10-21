@@ -34,7 +34,9 @@ mod source_shape;
 mod type_graph;
 mod types;
 
-pub(crate) use architecture::scan_crate_error_architecture;
+pub(crate) use architecture::{
+    scan_crate_error_architecture, scan_crate_error_architecture_with_source,
+};
 pub use assessor::InternalErrorChainAssessor;
 pub use probe::InternalErrorChainProbe;
 pub use reporter::{

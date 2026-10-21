@@ -19,7 +19,7 @@ use tracing::instrument;
 mod catalog;
 mod lint;
 
-use catalog::{Catalog, CatalogPhase, CatalogVisitor};
+use catalog::{Catalog, CatalogVisitor};
 
 /// Scan `src/**/*.rs` for the parent / Kind / native-source suite.
 ///
@@ -30,28 +30,55 @@ pub fn scan_crate_error_architecture(
     crate_root: &Path,
     crate_name: &str,
 ) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
+    scan_crate_error_architecture_impl(crate_root, crate_name, None)
+}
+
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+pub(crate) fn scan_crate_error_architecture_with_source(
+    crate_root: &Path,
+    crate_name: &str,
+    source: &crate::loader::SourceLoadView,
+) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
+    scan_crate_error_architecture_impl(crate_root, crate_name, Some(source))
+}
+
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+#[hotpath::measure]
+fn scan_crate_error_architecture_impl(
+    crate_root: &Path,
+    crate_name: &str,
+    source: Option<&crate::loader::SourceLoadView>,
+) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
     let mut catalog = Catalog::new(crate_name);
     for_each_src_rust_file(crate_root, |path, src_root| {
-        load_src_file(&mut catalog, path, src_root)
+        load_src_file(&mut catalog, path, src_root, source)
     })?;
     catalog.into_findings()
 }
 
-#[instrument(level = "info", skip(catalog, file), err(level = "warn"))]
-fn load_src_file(catalog: &mut Catalog, file: &Path, src_root: &Path) -> CordialResult<()> {
-    let source = std::fs::read_to_string(file)?;
-    let syntax = syn::parse_file(&source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+#[instrument(level = "info", skip(catalog, file, source), err(level = "warn"))]
+fn load_src_file(
+    catalog: &mut Catalog,
+    file: &Path,
+    src_root: &Path,
+    source: Option<&crate::loader::SourceLoadView>,
+) -> CordialResult<()> {
+    let syntax = if let Some(source) = source {
+        source.parsed_file(file, "error-architecture")?
+    } else {
+        let text = crate::loader::source_read(file, "error-architecture")?;
+        std::rc::Rc::new(crate::loader::source_parse(
+            &text,
+            file,
+            "error-architecture",
+        )?)
+    };
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut visitor = CatalogVisitor::builder()
         .file(file.to_path_buf())
         .module_prefix(module_prefix)
         .catalog(catalog)
-        .phase(CatalogPhase::Types)
         .build()?;
-    visitor.visit_file(&syntax);
-    visitor.set_phase(CatalogPhase::Impls);
-    visitor.reset_module_prefix(module_path_from_src_file(src_root, file));
-    visitor.visit_file(&syntax);
+    crate::loader::source_walk(file, "error-architecture", || visitor.visit_file(&syntax));
     Ok(())
 }
