@@ -1,12 +1,11 @@
 use crate::enricher::{member_crate_root, resolve_parent};
 use crate::error::CordialResult;
-use crate::hooks::{EnrichView, IrEnricher};
+use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{ItemKind, NodeKind, NodeWeight};
-use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 
 use super::call_graph::workspace_call_graph;
-use super::scan::scan_source_tree;
+use super::scan::scan_shared_source_tree;
 
 use tracing::instrument;
 /// Materializes function item nodes (including impl methods) in the IR graph.
@@ -17,7 +16,7 @@ impl FunctionInventoryEnricher {
     pub const ID: &'static str = "function-inventory";
 }
 
-impl IrEnricher for FunctionInventoryEnricher {
+impl SourceEnricher for FunctionInventoryEnricher {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
@@ -29,19 +28,16 @@ impl IrEnricher for FunctionInventoryEnricher {
     }
 
     #[instrument(level = "trace", skip(self, view))]
-    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let (ir, load, session) = view.into_parts();
-
-        let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
-            return Ok(());
-        };
+    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
+        let (ir, source, session) = view.into_parts();
 
         let crate_root = member_crate_root(source, session);
         let config = crate::config::load_session_config(session);
         let extra_skip = config.tracing().extra_skip();
         let call_graph = workspace_call_graph(session.project_root(), config.tracing());
         let never_instrument = call_graph.never_instrument(source.crate_name());
-        let records = scan_source_tree(
+        let records = scan_shared_source_tree(
+            source,
             source.src_root(),
             &crate_root,
             source.crate_name(),

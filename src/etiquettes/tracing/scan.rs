@@ -6,7 +6,7 @@ use syn::visit::Visit;
 use syn::{Attribute, ImplItem, Item, ItemFn, ItemImpl, ItemMod, Type, Visibility};
 
 use crate::error::CordialResult;
-use crate::loader::module_path_from_src_file;
+use crate::loader::{SharedParsedFile, SourceLoadView, module_path_from_src_file};
 
 use super::classify::classify;
 use super::display_types::{DisplayTypeFacts, collect_display_type_facts};
@@ -15,45 +15,28 @@ use super::types::{FunctionKind, FunctionRecord, VisibilityLabel};
 
 use tracing::instrument;
 
-/// Scan every `src/**/*.rs` file under `src_root`. `never_instrument`
-/// names (already scoped to `crate_name`, qualified the same way
-/// [`FunctionRecord::qualified_name`] is) never get recorded at all --
-/// see [`super::call_graph::CallGraphFacts`] for how that set is computed.
-#[instrument(level = "debug", skip(never_instrument), err(level = "warn"))]
-pub fn scan_source_tree(
+/// Scan every `src/**/*.rs` file from the shared view. `never_instrument`
+/// names (already scoped to `crate_name`) never get recorded at all.
+#[instrument(level = "debug", skip(source, never_instrument), err(level = "warn"))]
+pub(super) fn scan_shared_source_tree(
+    source: &SourceLoadView,
     src_root: &Path,
     project_root: &Path,
     crate_name: &str,
     extra_skip: &[String],
     never_instrument: &HashSet<String>,
 ) -> CordialResult<Vec<FunctionRecord>> {
-    if !src_root.is_dir() {
-        return Ok(Vec::new());
-    }
-
     let mut records = Vec::new();
-    for entry in walkdir::WalkDir::new(src_root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-    {
-        let path = entry.path();
-        if path.extension().is_none_or(|ext| ext != "rs") {
-            continue;
-        }
-        let source = std::fs::read_to_string(path)?;
-        let mut file_records = scan_rust_source(
-            &source,
-            path,
+    for file in source.parsed_rust_files_under(src_root, "function-inventory", |_| true)? {
+        records.extend(scan_shared_file(
+            &file,
             src_root,
             project_root,
             crate_name,
             extra_skip,
             never_instrument,
-        )?;
-        records.append(&mut file_records);
+        )?);
     }
-
     records.sort_by(|a, b| {
         a.file()
             .cmp(b.file())
@@ -61,6 +44,26 @@ pub fn scan_source_tree(
             .then(a.qualified_name().cmp(b.qualified_name()))
     });
     Ok(records)
+}
+
+#[instrument(level = "debug", skip(file, never_instrument), err(level = "warn"))]
+fn scan_shared_file(
+    file: &SharedParsedFile,
+    src_root: &Path,
+    project_root: &Path,
+    crate_name: &str,
+    extra_skip: &[String],
+    never_instrument: &HashSet<String>,
+) -> CordialResult<Vec<FunctionRecord>> {
+    scan_syntax(
+        file.syntax(),
+        file.path(),
+        src_root,
+        project_root,
+        crate_name,
+        extra_skip,
+        never_instrument,
+    )
 }
 
 /// Parse one source file and return discovered functions (used by tests).
@@ -80,6 +83,27 @@ pub fn scan_rust_source(
 ) -> CordialResult<Vec<FunctionRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    scan_syntax(
+        &syntax,
+        file,
+        src_root,
+        project_root,
+        crate_name,
+        extra_skip,
+        never_instrument,
+    )
+}
+
+#[instrument(level = "debug", skip(syntax, file, never_instrument), err(level = "warn"))]
+fn scan_syntax(
+    syntax: &syn::File,
+    file: &Path,
+    src_root: &Path,
+    project_root: &Path,
+    crate_name: &str,
+    extra_skip: &[String],
+    never_instrument: &HashSet<String>,
+) -> CordialResult<Vec<FunctionRecord>> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let rel_file = file
         .strip_prefix(project_root)
@@ -97,7 +121,7 @@ pub fn scan_rust_source(
         records: Vec::new(),
         error: None,
     };
-    visitor.visit_file(&syntax);
+    visitor.visit_file(syntax);
     if let Some(error) = visitor.error {
         return Err(error);
     }

@@ -143,3 +143,13 @@ exclusions, helper analysis, and standalone direct scan functions. The
 baseline source-work report from the previously installed binary recorded 693
 shared parses for 693 distinct files and 8,942 cache reuses on a build-tier
 submit; direct parses are not included in those counts.
+
+## Eighth slice
+
+The tracing function inventory now obtains its outer files from the shared
+source view, while its one-file helper remains available for fixture tests.
+The panic inventory already used shared parsed files in production; its hook
+now uses the typed `SourceEnricher` interface as well. The tracing call-graph
+collector still parses workspace files separately. Its workspace-wide scope
+needs a cache lifetime that spans individual crate source views before it can
+share those parsed trees safely.

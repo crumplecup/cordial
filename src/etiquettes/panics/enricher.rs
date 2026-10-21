@@ -1,8 +1,7 @@
 use crate::enricher::{member_crate_root, resolve_parent};
 use crate::error::CordialResult;
-use crate::hooks::{EnrichView, IrEnricher};
+use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
-use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 
 use super::scan::scan_crate_panics_with_source;
@@ -16,7 +15,7 @@ impl PanicInventoryEnricher {
     pub const ID: &'static str = "panic-inventory";
 }
 
-impl IrEnricher for PanicInventoryEnricher {
+impl SourceEnricher for PanicInventoryEnricher {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
@@ -28,12 +27,8 @@ impl IrEnricher for PanicInventoryEnricher {
     }
 
     #[instrument(level = "trace", skip(self, view))]
-    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let (ir, load, session) = view.into_parts();
-
-        let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
-            return Ok(());
-        };
+    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
+        let (ir, source, session) = view.into_parts();
 
         let crate_root = member_crate_root(source, session);
         let records = scan_crate_panics_with_source(&crate_root, source)?;
@@ -76,7 +71,6 @@ impl IrEnricher for PanicInventoryEnricher {
             ir.insert_edge(parent, node, EdgeKind::Contains)?;
         }
 
-        let _ = source;
         Ok(())
     }
 }
