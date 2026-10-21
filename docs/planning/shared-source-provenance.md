@@ -134,3 +134,12 @@ behavior. The tracing-print inventory now uses shared files across its crate
 scan roots while retaining its configured file exclusions. Both standalone
 scanners and the separate file-writing crate-attribute apply command retain
 their direct parsing paths.
+
+## Seventh slice
+
+Tracing-subscriber and tracing-boundary production hooks now collect function
+sites from shared parsed files. Both preserve their crate scan roots, fixture
+exclusions, helper analysis, and standalone direct scan functions. The
+baseline source-work report from the previously installed binary recorded 693
+shared parses for 693 distinct files and 8,942 cache reuses on a build-tier
+submit; direct parses are not included in those counts.

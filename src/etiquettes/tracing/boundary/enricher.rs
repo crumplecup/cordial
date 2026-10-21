@@ -1,11 +1,10 @@
 use crate::enricher::{member_crate_root, resolve_parent};
 use crate::error::CordialResult;
-use crate::hooks::{EnrichView, IrEnricher};
+use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
-use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 
-use super::scan::scan_crate_tracing_boundary;
+use super::scan::scan_shared_crate_tracing_boundary;
 
 use tracing::instrument;
 
@@ -17,24 +16,21 @@ impl BoundaryInventoryEnricher {
     pub const ID: &'static str = "tracing-boundary-inventory";
 }
 
-impl IrEnricher for BoundaryInventoryEnricher {
+impl SourceEnricher for BoundaryInventoryEnricher {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
     #[instrument(level = "trace", skip(self, view))]
-    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let (ir, load, session) = view.into_parts();
-
-        let Some(source) = load.as_any().downcast_ref::<SourceLoadView>() else {
-            return Ok(());
-        };
+    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
+        let (ir, source, session) = view.into_parts();
 
         let crate_root = member_crate_root(source, session);
         let config = crate::config::load_session_config(session);
         let skip_program_lints = crate_skips_program_lints(source.crate_name(), config.tracing());
-        let records = scan_crate_tracing_boundary(
+        let records = scan_shared_crate_tracing_boundary(
+            source,
             &crate_root,
             source.crate_name(),
             config.tracing().boundary(),

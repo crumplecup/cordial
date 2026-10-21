@@ -10,7 +10,7 @@ use syn::{Attribute, File, ImplItemFn, ItemFn, ItemMod};
 
 use crate::config::TracingBoundaryPolicy;
 use crate::error::CordialResult;
-use crate::loader::{path_has_fixtures, quality_scan_trees};
+use crate::loader::{SharedParsedFile, SourceLoadView, path_has_fixtures, quality_scan_trees};
 
 use super::detect::BoundaryBodyFacts;
 use super::types::{BoundaryRuleId, BoundarySiteRecord};
@@ -57,6 +57,42 @@ pub fn scan_crate_tracing_boundary(
         )?);
     }
 
+    findings_for_sites(&sites, crate_root, policy, skip_program_lints)
+}
+
+#[instrument(level = "debug", skip(source, policy), err(level = "warn"))]
+pub(super) fn scan_shared_crate_tracing_boundary(
+    source: &SourceLoadView,
+    crate_root: &Path,
+    crate_name: &str,
+    policy: &TracingBoundaryPolicy,
+    skip_program_lints: bool,
+) -> CordialResult<Vec<BoundarySiteRecord>> {
+    let mut sites = Vec::new();
+    for tree_root in quality_scan_trees(crate_root) {
+        for file in
+            source.parsed_rust_files_under(&tree_root, "tracing-boundary-inventory", |path| {
+                !path_has_fixtures(path, crate_root)
+            })?
+        {
+            sites.extend(scan_shared_file(
+                &file,
+                crate_root,
+                crate_name,
+                policy.known_helper_paths(),
+            ));
+        }
+    }
+    findings_for_sites(&sites, crate_root, policy, skip_program_lints)
+}
+
+#[instrument(level = "debug", skip(sites, policy), err(level = "warn"))]
+fn findings_for_sites(
+    sites: &[FnSite],
+    crate_root: &Path,
+    policy: &TracingBoundaryPolicy,
+    skip_program_lints: bool,
+) -> CordialResult<Vec<BoundarySiteRecord>> {
     let has_bin = crate_root.join("src").join("main.rs").is_file()
         || crate_root.join("src").join("bin").is_dir();
 
@@ -67,7 +103,7 @@ pub fn scan_crate_tracing_boundary(
         .collect();
 
     let mut findings = Vec::new();
-    for site in &sites {
+    for site in sites {
         if policy.main_reports_errors()
             && !skip_program_lints
             && has_bin
@@ -150,6 +186,39 @@ fn scan_file(
 ) -> CordialResult<Vec<FnSite>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    Ok(scan_syntax(
+        &syntax,
+        file,
+        crate_root,
+        crate_name,
+        known_helper_paths,
+    ))
+}
+
+#[instrument(level = "debug", skip(file))]
+fn scan_shared_file(
+    file: &SharedParsedFile,
+    crate_root: &Path,
+    crate_name: &str,
+    known_helper_paths: &[String],
+) -> Vec<FnSite> {
+    scan_syntax(
+        file.syntax(),
+        file.path(),
+        crate_root,
+        crate_name,
+        known_helper_paths,
+    )
+}
+
+#[instrument(level = "debug", skip(syntax, file))]
+fn scan_syntax(
+    syntax: &File,
+    file: &Path,
+    crate_root: &Path,
+    crate_name: &str,
+    known_helper_paths: &[String],
+) -> Vec<FnSite> {
     let kind = file_kind(file, crate_root);
     let mut relative = file.to_path_buf();
     if let Ok(stripped) = file.strip_prefix(crate_root) {
@@ -163,8 +232,8 @@ fn scan_file(
         sites: Vec::new(),
         known_helper_paths: known_helper_paths.to_vec(),
     };
-    visitor.visit_file(&syntax);
-    Ok(visitor.sites)
+    visitor.visit_file(syntax);
+    visitor.sites
 }
 
 #[instrument(level = "debug", skip(path))]
