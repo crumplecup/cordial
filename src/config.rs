@@ -10,6 +10,7 @@ mod antipatterns;
 mod cfg;
 mod checks;
 mod gates;
+mod hotpath;
 mod modularity;
 mod pageantry;
 mod tiers;
@@ -33,6 +34,7 @@ pub use self::checks::{
     DerivesThresholds, DocWarningsThresholds, FeatureWarningsThresholds,
 };
 pub use self::gates::EtiquetteGate;
+pub use self::hotpath::HotpathConfig;
 pub use self::modularity::ModularityThresholds;
 pub use self::pageantry::PageantryThresholds;
 pub use self::tiers::TierConfig;
@@ -44,9 +46,11 @@ pub use self::worklist::WorklistSettings;
 
 use crate::session::SessionView;
 
-/// All etiquette knobs loaded from `cordial.toml`.
+/// All Cordial settings loaded from `cordial.toml`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct CordialConfig {
+    #[serde(default)]
+    hotpath: HotpathConfig,
     #[serde(default)]
     tiers: TierConfig,
     #[serde(default)]

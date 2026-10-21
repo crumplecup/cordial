@@ -63,12 +63,35 @@ impl Cli {
             None => std::env::current_dir()?,
         };
         let slug = project_slug_from_path(&project_root);
-        let store_root = self
-            .store_home
-            .clone()
-            .unwrap_or_else(default_store_home)
-            .join(&slug);
-        let store = StoreLayout::from_root(store_root, slug);
+        let store_home = self.store_home.clone().unwrap_or_else(default_store_home);
+        let store_root = store_home.join(&slug);
+        let store = StoreLayout::from_root(store_root.clone(), slug);
+        // The guard spans command execution and writes its report on drop.
+        #[cfg(feature = "hotpath")]
+        let _hotpath = {
+            let config = crate::load_cordial_config(&project_root, &store_home);
+            let path = config
+                .hotpath()
+                .output_path()
+                .as_ref()
+                .map(|configured| {
+                    if configured.is_absolute() {
+                        configured.clone()
+                    } else {
+                        store_root.join(configured)
+                    }
+                })
+                .unwrap_or_else(|| {
+                    std::env::temp_dir()
+                        .join(format!("cordial-hotpath-{}.json", std::process::id()))
+                });
+            tracing::info!(path = %path.display(), "hotpath report");
+            hotpath::HotpathGuardBuilder::new("cordial")
+                .format(hotpath::Format::JsonPretty)
+                .output_path(path)
+                .functions_limit(0)
+                .build()
+        };
         #[cfg(feature = "quality")]
         let json_worklist = matches!(
             &self.command,

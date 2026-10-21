@@ -8,6 +8,42 @@ fn cordial_command() -> Command {
     command
 }
 
+#[cfg(feature = "hotpath")]
+#[test]
+fn cli_hotpath_uses_project_config_and_store_path() -> miette::Result<()> {
+    cordial::init_tracing();
+    let project = tempfile::tempdir().into_diagnostic().wrap_err("project")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store home")?;
+    fs::write(
+        project.path().join("cordial.toml"),
+        "[hotpath]\noutput_path = \"profile.json\"\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write config")?;
+
+    let output = cordial_command()
+        .args([
+            "--project",
+            utf8_path(project.path())?,
+            "--store-home",
+            utf8_path(store_home.path())?,
+            "instructions",
+        ])
+        .output()
+        .into_diagnostic()
+        .wrap_err("run cordial instructions")?;
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let slug = cordial::project_slug_from_path(project.path());
+    assert!(store_home.path().join(slug).join("profile.json").is_file());
+    Ok(())
+}
+
 fn utf8_path(path: &std::path::Path) -> miette::Result<&str> {
     path.to_str()
         .ok_or_else(|| miette::miette!("path is not UTF-8: {}", path.display()))

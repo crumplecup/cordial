@@ -22,10 +22,11 @@ etiquette in isolation; use the ledger when inspecting a real multi-etiquette
 gate. A cold and warm pair can have different Cargo cache state, so compare
 like with like.
 
-For deeper profiling, build with `cargo build --features hotpath`. The binary
-writes a hotpath JSON report to a temporary file by default. Set
-`HOTPATH_OUTPUT_PATH` to a path in the project's default Cordial store to keep
-the report there, or set `RUST_LOG=info` to see its path on stderr.
+For deeper profiling, build with `cargo build --features hotpath`. Set
+`[hotpath] output_path` in `cordial.toml` to choose the JSON report location.
+Relative paths resolve inside the project's Cordial store; this repository
+sets `output_path = "hotpath.json"`. Without the setting, the binary writes to
+a temporary file. Set `RUST_LOG=info` to see the chosen path on stderr.
 The report stays separate from Cordial's JSON stdout. The hotpath feature is
 opt-in; ordinary builds keep its instrumentation disabled.
 

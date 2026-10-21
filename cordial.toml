@@ -4,8 +4,12 @@
 # `{store_home}/cordial.toml` (`~/.cordial` unless `CORDIAL_HOME` /
 # `--store-home` says otherwise), then `{workspace}/cordial.toml`.
 # Missing files fall back to Default; the run does not fail.
-# Every table accepts `enabled` (default true). `enabled = false` skips
+# Etiquette tables accept `enabled` (default true). `enabled = false` skips
 # that etiquette for the project (`cordial explain` names this line).
+
+# Relative paths are resolved inside this project's Cordial store.
+[hotpath]
+output_path = "hotpath.json"
 
 [visibility]
 max_crate_names_for_flat = 50
