@@ -1,4 +1,10 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::path::Path;
 use std::path::PathBuf;
+use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Weak};
 
 use crate::error::CordialResult;
 use crate::hooks::{LoadContext, Loader};
@@ -42,7 +48,7 @@ impl Loader for SourceLoader {
                 if path.extension().is_none_or(|ext| ext != "rs") {
                     continue;
                 }
-                let source = std::fs::read_to_string(path)?;
+                let source = super::source_work::read(path, Self::ID)?;
                 files.push(SourceFile::new(path.to_path_buf(), source));
             }
         }
@@ -70,6 +76,65 @@ pub struct SourceLoadView {
     src_root: PathBuf,
     files: Vec<SourceFile>,
     crate_kinds: Vec<CrateKind>,
+    #[new(default)]
+    #[getter(skip)]
+    cache_token: Arc<CacheToken>,
+}
+
+#[derive(Debug)]
+struct CacheToken(u64);
+
+impl Default for CacheToken {
+    #[tracing::instrument(level = "debug")]
+    fn default() -> Self {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        Self(NEXT.fetch_add(1, Ordering::Relaxed))
+    }
+}
+
+type ParsedFiles = HashMap<PathBuf, Rc<syn::File>>;
+type ParsedRuns = HashMap<u64, (Weak<CacheToken>, ParsedFiles)>;
+
+thread_local! {
+    static PARSED: RefCell<ParsedRuns> = RefCell::new(HashMap::new());
+}
+
+impl SourceLoadView {
+    /// Return the same parsed file to every hook scanning this path.
+    /// Callers own tree discovery and fixture filtering.
+    #[tracing::instrument(level = "debug", skip(self, path))]
+    #[hotpath::measure(impl_type = "SourceLoadView")]
+    pub(crate) fn parsed_file(&self, path: &Path, hook: &str) -> CordialResult<Rc<syn::File>> {
+        PARSED.with(|parsed| {
+            let mut parsed = parsed.borrow_mut();
+            parsed.retain(|_, (token, _)| token.strong_count() != 0);
+            let files = &mut parsed
+                .entry(self.cache_token.0)
+                .or_insert_with(|| (Arc::downgrade(&self.cache_token), HashMap::new()))
+                .1;
+            if let Some(syntax) = files.get(path) {
+                super::source_work::reuse(path, hook);
+                return Ok(Rc::clone(syntax));
+            }
+            let syntax = if let Some(file) = self.files.iter().find(|file| file.path() == path) {
+                super::source_work::parse(file.source(), path, hook)?
+            } else {
+                let source = super::source_work::read(path, hook)?;
+                super::source_work::parse(&source, path, hook)?
+            };
+            let syntax = Rc::new(syntax);
+            files.insert(path.to_path_buf(), Rc::clone(&syntax));
+            Ok(syntax)
+        })
+    }
+
+    /// Drop parsed trees after the crate's enrichers have consumed them.
+    #[tracing::instrument(level = "trace", skip(self))]
+    pub(crate) fn release_parsed(&self) {
+        PARSED.with(|parsed| {
+            parsed.borrow_mut().remove(&self.cache_token.0);
+        });
+    }
 }
 
 impl LoadView for SourceLoadView {

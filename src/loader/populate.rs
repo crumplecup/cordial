@@ -42,9 +42,7 @@ impl SourceLoadView {
         parent: crate::ir::NodeId,
         file: &SourceFile,
     ) -> CordialResult<()> {
-        let syntax = syn::parse_file(file.source()).map_err(|err| {
-            crate::error::CordialError::syn_parse(file.path().display().to_string(), err)
-        })?;
+        let syntax = self.parsed_file(file.path(), "source-ir")?;
 
         let parts = module_path_from_src_file(self.src_root(), file.path());
         let module_path = parts.join("::");
@@ -65,9 +63,12 @@ impl SourceLoadView {
         )?;
         ir.insert_edge(parent, module_node, EdgeKind::Contains)?;
 
-        for item in syntax.items {
-            self.load_item(ir, module_node, &module_path, file.path(), item)?;
-        }
+        super::source_work::walk(file.path(), "source-ir", || {
+            for item in &syntax.items {
+                self.load_item(ir, module_node, &module_path, file.path(), item)?;
+            }
+            Ok::<(), crate::error::CordialError>(())
+        })?;
         Ok(())
     }
 
@@ -82,7 +83,7 @@ impl SourceLoadView {
         parent: crate::ir::NodeId,
         module_path: &str,
         file: &Path,
-        item: syn::Item,
+        item: &syn::Item,
     ) -> CordialResult<()> {
         let (name, kind) = match &item {
             syn::Item::Fn(item_fn) => (item_fn.sig.ident.to_string(), ItemKind::Fn),

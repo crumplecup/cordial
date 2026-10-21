@@ -5,7 +5,7 @@ use std::path::Path;
 use crate::error::CordialResult;
 use crate::etiquettes::error_sites::ErrorSiteRecord;
 use crate::etiquettes::{ErrorIrScanLayers, scan_rust_file_syntax};
-use crate::loader::{path_has_fixtures, quality_scan_trees};
+use crate::loader::{SourceLoadView, path_has_fixtures, quality_scan_trees};
 
 #[cfg(feature = "error_chain")]
 use crate::etiquettes::error_chain::ErrorChainRecord;
@@ -52,6 +52,24 @@ pub fn scan_crate_error_ir(
     crate_root: &Path,
     crate_name: &str,
 ) -> CordialResult<ErrorIrScanReport> {
+    scan_crate_error_ir_impl(crate_root, crate_name, None)
+}
+
+#[instrument(level = "debug", skip(source))]
+pub(super) fn scan_crate_error_ir_with_source(
+    crate_root: &Path,
+    crate_name: &str,
+    source: &SourceLoadView,
+) -> CordialResult<ErrorIrScanReport> {
+    scan_crate_error_ir_impl(crate_root, crate_name, Some(source))
+}
+
+#[instrument(level = "debug", skip(loaded))]
+fn scan_crate_error_ir_impl(
+    crate_root: &Path,
+    crate_name: &str,
+    loaded: Option<&SourceLoadView>,
+) -> CordialResult<ErrorIrScanReport> {
     let src_root = crate_root.join("src");
     let mut report = ErrorIrScanReport::default();
 
@@ -77,21 +95,28 @@ pub fn scan_crate_error_ir(
                 continue;
             }
 
-            let source = std::fs::read_to_string(path)?;
-            let syntax = syn::parse_file(&source).map_err(|err| {
-                crate::error::CordialError::syn_parse(path.display().to_string(), err)
-            })?;
-
             let under_src = path.starts_with(&src_root);
-            let file_scan = scan_rust_file_syntax(
-                &syntax,
-                path,
-                &tree_root,
-                &src_root,
-                crate_root,
-                crate_name,
-                ErrorIrScanLayers::for_unified_file(under_src),
-            )?;
+            let scan = |syntax: &syn::File| {
+                crate::loader::source_walk(path, "error-ir-scan", || {
+                    scan_rust_file_syntax(
+                        syntax,
+                        path,
+                        &tree_root,
+                        &src_root,
+                        crate_root,
+                        crate_name,
+                        ErrorIrScanLayers::for_unified_file(under_src),
+                    )
+                })
+            };
+            let file_scan = if let Some(loaded) = loaded {
+                let unit = loaded.parsed_file(path, "error-ir-scan")?;
+                scan(&unit)?
+            } else {
+                let source = crate::loader::source_read(path, "error-ir-scan")?;
+                let syntax = crate::loader::source_parse(&source, path, "error-ir-scan")?;
+                scan(&syntax)?
+            };
 
             report.sites.extend(file_scan.sites().iter().cloned());
             #[cfg(feature = "error_chain")]

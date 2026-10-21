@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use crate::error::CordialResult;
-use crate::loader::path_has_fixtures;
+use crate::loader::{SourceLoadView, path_has_fixtures};
 
 use tracing::instrument;
 
@@ -11,13 +12,14 @@ use tracing::instrument;
 pub(super) struct ParsedFile {
     path: PathBuf,
     src_root: PathBuf,
-    syntax: syn::File,
+    syntax: Rc<syn::File>,
 }
 
-#[instrument(level = "debug", err(level = "warn"))]
+#[instrument(level = "debug", skip(loaded), err(level = "warn"))]
 pub(super) fn parse_source_tree(
     src_root: &Path,
     crate_root: &Path,
+    loaded: Option<&SourceLoadView>,
 ) -> CordialResult<Vec<ParsedFile>> {
     let mut parsed = Vec::new();
     if !src_root.is_dir() {
@@ -33,10 +35,16 @@ pub(super) fn parse_source_tree(
         if path.extension().is_none_or(|ext| ext != "rs") || path_has_fixtures(path, crate_root) {
             continue;
         }
-        let source = std::fs::read_to_string(path)?;
-        let syntax = syn::parse_file(&source).map_err(|err| {
-            crate::error::CordialError::syn_parse(path.display().to_string(), err)
-        })?;
+        let syntax = if let Some(loaded) = loaded {
+            loaded.parsed_file(path, "panic-inventory")?
+        } else {
+            let source = crate::loader::source_read(path, "panic-inventory")?;
+            Rc::new(crate::loader::source_parse(
+                &source,
+                path,
+                "panic-inventory",
+            )?)
+        };
         parsed.push(ParsedFile::new(
             path.to_path_buf(),
             src_root.to_path_buf(),

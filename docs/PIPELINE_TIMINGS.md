@@ -23,10 +23,21 @@ gate. A cold and warm pair can have different Cargo cache state, so compare
 like with like.
 
 For deeper profiling, build with `cargo build --features hotpath`. The binary
-writes a hotpath JSON report to a temporary file. Set `HOTPATH_OUTPUT_PATH` to
-choose a stable report path, or set `RUST_LOG=info` to see its path on stderr.
+writes a hotpath JSON report to a temporary file by default. Set
+`HOTPATH_OUTPUT_PATH` to a path in the project's default Cordial store to keep
+the report there, or set `RUST_LOG=info` to see its path on stderr.
 The report stays separate from Cordial's JSON stdout. The hotpath feature is
 opt-in; ordinary builds keep its instrumentation disabled.
+
+Set `CORDIAL_SOURCE_WORK_PATH` to a file in the project's default Cordial
+store when measuring repeated Rust source work in a combined run (for
+example, `~/.cordial/cordial/source-work.json`). The JSON array has one row
+per file, hook, and operation (`read`, `parse`, `walk`, or `reuse`), with a
+count and elapsed nanoseconds. `reuse` means the hook consumed a parsed tree
+from the current crate's source cache. The cache is released after that
+crate's enrichers finish. The source-work file is a diagnostic artifact;
+normal runs do not create it. The hotpath report and source-work file measure
+the parent Cordial process, not work inside a Cargo subprocess.
 
 The feature-warning scan has separate hotpath markers for checking whether
 `cargo hack` is available, collecting private features, waiting for the

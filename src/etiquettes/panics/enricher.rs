@@ -5,7 +5,7 @@ use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 
-use super::scan::scan_crate_panics;
+use super::scan::scan_crate_panics_with_source;
 
 use tracing::instrument;
 /// Materializes panic-site expression nodes in the IR graph.
@@ -36,7 +36,7 @@ impl IrEnricher for PanicInventoryEnricher {
         };
 
         let crate_root = member_crate_root(source, session);
-        let records = scan_crate_panics(&crate_root)?;
+        let records = scan_crate_panics_with_source(&crate_root, source)?;
 
         for record in records {
             let parent = resolve_parent(ir, record.context())?;

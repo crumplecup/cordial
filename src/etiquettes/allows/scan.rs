@@ -11,7 +11,9 @@ use syn::{
 };
 
 use crate::error::CordialResult;
-use crate::loader::{module_path_from_src_file, path_has_fixtures, quality_scan_trees};
+use crate::loader::{
+    SourceLoadView, module_path_from_src_file, path_has_fixtures, quality_scan_trees,
+};
 
 use super::types::{AllowRuleId, AllowSiteRecord};
 
@@ -19,9 +21,25 @@ use tracing::instrument;
 /// Scan one crate for allows.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_allows(crate_root: &Path) -> CordialResult<Vec<AllowSiteRecord>> {
+    scan_crate_allows_impl(crate_root, None)
+}
+
+#[instrument(level = "debug", skip(source))]
+pub(super) fn scan_crate_allows_with_source(
+    crate_root: &Path,
+    source: &SourceLoadView,
+) -> CordialResult<Vec<AllowSiteRecord>> {
+    scan_crate_allows_impl(crate_root, Some(source))
+}
+
+#[instrument(level = "debug", skip(source))]
+fn scan_crate_allows_impl(
+    crate_root: &Path,
+    source: Option<&SourceLoadView>,
+) -> CordialResult<Vec<AllowSiteRecord>> {
     let mut findings = Vec::new();
     for tree_root in quality_scan_trees(crate_root) {
-        findings.extend(scan_source_tree(&tree_root, crate_root)?);
+        findings.extend(scan_source_tree_impl(&tree_root, crate_root, source)?);
     }
 
     findings.sort_by(|a, b| {
@@ -35,10 +53,11 @@ pub fn scan_crate_allows(crate_root: &Path) -> CordialResult<Vec<AllowSiteRecord
     Ok(findings)
 }
 
-#[instrument(level = "debug", err(level = "warn"))]
-pub fn scan_source_tree(
+#[instrument(level = "debug", skip(loaded))]
+fn scan_source_tree_impl(
     tree_root: &Path,
     crate_root: &Path,
+    loaded: Option<&SourceLoadView>,
 ) -> CordialResult<Vec<AllowSiteRecord>> {
     let mut findings = Vec::new();
     if !tree_root.is_dir() {
@@ -57,8 +76,13 @@ pub fn scan_source_tree(
         if path_has_fixtures(path, crate_root) {
             continue;
         }
-        let source = std::fs::read_to_string(path)?;
-        findings.extend(scan_rust_source(&source, path, tree_root, crate_root)?);
+        if let Some(loaded) = loaded {
+            let unit = loaded.parsed_file(path, "allow-inventory")?;
+            findings.extend(scan_rust_syntax(&unit, path, tree_root, crate_root)?);
+        } else {
+            let source = crate::loader::source_read(path, "allow-inventory")?;
+            findings.extend(scan_rust_source(&source, path, tree_root, crate_root)?);
+        }
     }
 
     Ok(findings)
@@ -72,8 +96,17 @@ pub fn scan_rust_source(
     tree_root: &Path,
     crate_root: &Path,
 ) -> CordialResult<Vec<AllowSiteRecord>> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    let syntax = crate::loader::source_parse(source, file, "allow-inventory")?;
+    scan_rust_syntax(&syntax, file, tree_root, crate_root)
+}
+
+#[instrument(level = "debug", skip(syntax, file))]
+fn scan_rust_syntax(
+    syntax: &syn::File,
+    file: &Path,
+    tree_root: &Path,
+    crate_root: &Path,
+) -> CordialResult<Vec<AllowSiteRecord>> {
     let module_prefix = module_path_from_src_file(tree_root, file);
     let mut visitor = AllowScanVisitor {
         file: file.to_path_buf(),
@@ -84,7 +117,7 @@ pub fn scan_rust_source(
         findings: Vec::new(),
         error: None,
     };
-    visitor.visit_file(&syntax);
+    crate::loader::source_walk(file, "allow-inventory", || visitor.visit_file(&syntax));
     if let Some(error) = visitor.error {
         return Err(error);
     }

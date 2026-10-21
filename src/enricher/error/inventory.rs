@@ -10,7 +10,7 @@ use crate::ir::{EdgeKind, IrMut, NodeKind, NodeWeight};
 use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 
-use super::scan::scan_crate_error_ir;
+use super::scan::scan_crate_error_ir_with_source;
 
 use tracing::instrument;
 /// Single enricher pass: unified scan → IR nodes (sites and chain merged by location).
@@ -42,7 +42,7 @@ impl IrEnricher for ErrorIrScanEnricher {
         };
 
         let crate_root = member_crate_root(source, session);
-        let report = scan_crate_error_ir(&crate_root, ir.crate_name())?;
+        let report = scan_crate_error_ir_with_source(&crate_root, ir.crate_name(), source)?;
         materialize_error_ir(ir, &crate_root, &report)?;
         Ok(())
     }

@@ -41,9 +41,7 @@ impl IrEnricher for AttributeEnricher {
         };
 
         for file in source.files() {
-            let syntax = syn::parse_file(file.source()).map_err(|err| {
-                crate::error::CordialError::syn_parse(file.path().display().to_string(), err)
-            })?;
+            let syntax = source.parsed_file(file.path(), Self::ID)?;
             let module_prefix =
                 crate::loader::module_path_from_src_file(source.src_root(), file.path());
             let mut visitor = AttributeVisitor {
@@ -59,7 +57,7 @@ impl IrEnricher for AttributeEnricher {
                     .replace('\\', "/"),
                 error: None,
             };
-            visitor.visit_file(&syntax);
+            crate::loader::source_walk(file.path(), Self::ID, || visitor.visit_file(&syntax));
             if let Some(err) = visitor.error {
                 return Err(err);
             }

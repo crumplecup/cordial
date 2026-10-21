@@ -5,7 +5,7 @@ use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
 
-use super::scan::scan_crate_allows;
+use super::scan::scan_crate_allows_with_source;
 
 use tracing::instrument;
 /// Materializes allow-attribute expression nodes in the IR graph.
@@ -31,7 +31,7 @@ impl IrEnricher for AllowInventoryEnricher {
         };
 
         let crate_root = member_crate_root(source, session);
-        let records = scan_crate_allows(&crate_root)?;
+        let records = scan_crate_allows_with_source(&crate_root, source)?;
 
         for record in records {
             let parent = resolve_parent(ir, record.context())?;

@@ -12,7 +12,7 @@ etiquettes series and the pipeline behind it.
    for `?`, a closure, and a function item, and repair Cordial's own affected
    calls. The detailed checklist is in
    [error handling as plugin](error-handling-as-plugin.md#priority-correction-caller-locations-through-map_err).
-2. [ ] **Measure and remove repeated source work.** Record parse counts and
+2. [x] **Measure and remove repeated source work.** Record parse counts and
    durations by file and hook during a combined run, including repeated reads
    and walks of the same file. Use hotpath for the expensive call paths and
    explicit counters for repeated `(file, hook)` operations. Then share source
@@ -57,11 +57,22 @@ etiquettes series and the pipeline behind it.
   registered enricher from running once per etiquette. It does not prevent
   distinct enrichers from parsing overlapping source files.
 - [`SourceLoadView::populate_ir`](../../src/loader/populate.rs) and
-  [`AttributeEnricher`](../../src/enricher/attribute.rs) each parse source.
-  Scanners such as [`allows`](../../src/etiquettes/allows/scan.rs) and
-  [`panics`](../../src/etiquettes/panics/scan/source.rs) independently read and
-  parse overlapping files. The unified error IR scan already shares a parse
-  across some error-handling layers; preserve that gain.
+  [`AttributeEnricher`](../../src/enricher/attribute.rs) previously parsed
+  source independently. Scanners such as
+  [`allows`](../../src/etiquettes/allows/scan.rs) and
+  [`panics`](../../src/etiquettes/panics/scan/source.rs) also read and parsed
+  overlapping files. The unified error IR scan already shared a parse across
+  some error-handling layers; that gain is preserved.
+- In a combined quick-tier run on 2026-10-20, per-file counters found 691
+  distinct Rust files, 2,670 reads, and 3,267 `syn` parses across these five
+  hooks. Parse time summed to 2.422 seconds. With the shared parsed-tree cache,
+  the same run shape read and parsed each of those 691 files once (0.586
+  seconds of parse time); later hooks reused the tree. The source loader still
+  owns the `src/` snapshot, while each scanner keeps its existing tree and
+  fixture selection and its own AST walk. The optimized run's full wall time
+  was 14.26 seconds, with 13.23 seconds in load and probe; these wall times
+  reflect different runs and are not a controlled speedup estimate. Hotpath
+  attributed 0.589 seconds to `source_work::parse` in the optimized run.
 - [`Probe::interests`](../../src/hooks/probe.rs) is required by the trait but
   unused by [`load_and_probe`](../../src/session/load.rs). Each
   [`nodes_matching`](../../src/ir/view.rs) call scans the crate graph. The

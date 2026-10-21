@@ -2,6 +2,7 @@ use tracing::instrument;
 mod populate;
 mod scan_roots;
 mod source;
+mod source_work;
 
 use std::path::{Path, PathBuf};
 
@@ -11,6 +12,10 @@ use crate::ir::CrateKind;
 pub use scan_roots::path_has_fixtures;
 pub use scan_roots::quality_scan_trees;
 pub use source::{SourceFile, SourceLoadView, SourceLoader};
+pub(crate) use source_work::{
+    parse as source_parse, read as source_read, reset as reset_source_work, walk as source_walk,
+    write as write_source_work,
+};
 
 /// Opaque bundle produced by a loader.
 pub trait LoadView: Send + Sync {
