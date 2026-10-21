@@ -232,3 +232,41 @@ contents. The standalone antipattern crate scan also uses a short-lived source
 view across its trait inventory and contract-bound pass. A one-file helper that
 receives raw source still needs one parse when invoked alone; it cannot reuse
 another invocation without a shared view.
+
+## Source-work comparison
+
+A build-tier run before the migration recorded 693 shared outer-file parses
+for 693 distinct paths, 3,872 walks, and 8,942 cache reuses. The final
+installed binary recorded 693 parses for 693 distinct paths, 3,872 walks, and
+15,202 reuses. Neither run recorded a path parsed twice in its session. The
+increase in reuse reflects the scanners now asking the shared view for trees
+that they formerly parsed outside this counter. The baseline counter did not
+instrument those direct parses, so these figures do not quantify the removed
+work or prove an elapsed-time improvement. The focused scanner and apply tests
+cover finding and patch behavior across the migrated paths.
+
+The 6,260 additional cache reuses provide an illustrative scale for the work
+removed. Multiplying each file's extra reuse count by its baseline shared-parse
+cost gives 4.94 seconds of parse-equivalent work in this build-tier run, **if**
+each extra reuse displaced one direct parse. The old direct parses were outside
+the counter, so this is a scenario estimate, not measured time saved. The
+measured shared-parse total changed from 0.566 to 0.587 seconds.
+
+An isolated `tracing` cold/warm measurement on 2026-10-21 used the installed
+binary after the source migration:
+
+| Project | Cold (s) | Warm (s) | Largest warm detail |
+| --- | ---: | ---: | --- |
+| Cordial | 7.00 | 5.39 | IR cache write 2.59 s |
+| Amenable | 7.56 | 2.77 | function inventory 0.98 s |
+| Homecoming | 8.36 | 1.00 | setup 0.57 s |
+
+The 2026-10-17 pre-migration measurements were Cordial 5.97/5.90 s and
+Amenable 6.19/6.01 s. Cordial's warm pass is 0.51 s lower, but these are
+single samples with different Cargo and filesystem cache states and intervening
+code changes. They do not isolate the parsing refactor. Homecoming's cold setup
+took 4.64 s, dropping to 0.57 s warm. Cordial's 2.59 s warm IR cache write is
+a larger optimization candidate than the 0.59 s of shared parsing measured in
+the combined build-tier run. In an earlier all-tier Cordial run,
+feature-warning inventory occupied 662.0 of 667.1 wall seconds, so Cargo Hack
+still dominates that gate.

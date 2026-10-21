@@ -184,6 +184,7 @@ impl Drop for ParsedSourceSession {
 impl SourceLoadView {
     /// A lazy shared parse cache for a standalone operation outside a session.
     /// Its caller must drop the view before rescanning files it has edited.
+    #[cfg(any(feature = "antipatterns", feature = "tracing"))]
     #[instrument(level = "debug")]
     pub(crate) fn for_standalone_scan() -> Self {
         Self::new(String::new(), PathBuf::new(), Vec::new(), Vec::new())
@@ -273,6 +274,17 @@ impl SourceLoadView {
     }
 
     /// Identity of the run that issued this parsed-file view.
+    #[cfg(any(
+        feature = "derives",
+        all(
+            feature = "verus_ir",
+            any(
+                feature = "panics",
+                feature = "proof_patterns",
+                feature = "verus_warnings"
+            )
+        )
+    ))]
     #[tracing::instrument(level = "trace", skip(self))]
     pub(crate) fn session_id(&self) -> u64 {
         self.cache_token.0

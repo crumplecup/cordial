@@ -46,8 +46,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::loader::SourceLoadView;
-
 use tracing::instrument;
 
 /// Parse every `verus! { .. }` block under `crate_root` and extract real
@@ -64,10 +62,15 @@ thread_local! {
 }
 
 /// Reuse the same Verus macro facts across source hooks in one run.
+#[cfg(any(
+    feature = "panics",
+    feature = "proof_patterns",
+    feature = "verus_warnings"
+))]
 #[instrument(level = "debug", skip(source), err(level = "warn"))]
 pub(crate) fn scan_crate_verus_ir_with_source(
     crate_root: &Path,
-    source: &SourceLoadView,
+    source: &crate::loader::SourceLoadView,
 ) -> crate::error::CordialResult<VerusCrateIr> {
     let key = (source.session_id(), crate_root.to_path_buf());
     if let Some(ir) = SHARED_IR.with(|cache| cache.borrow().get(&key).cloned()) {

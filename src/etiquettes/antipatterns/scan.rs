@@ -24,53 +24,6 @@ use visitor::{AntipatternScanVisitor, collect_local_trait_names};
 
 pub(crate) use preds::truncate_snippet;
 
-/// Scan every quality tree under `crate_root`, sharing one crate-local trait name set.
-#[instrument(level = "debug", err(level = "warn"))]
-pub fn scan_crate_trees(crate_root: &Path) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    scan_crate_trees_with_static_ref_strategy(crate_root, StaticRefStrategy::default())
-}
-
-/// Scan every quality tree under `crate_root` using a static-reference strategy.
-#[instrument(level = "debug", skip(static_ref_strategy))]
-pub fn scan_crate_trees_with_static_ref_strategy(
-    crate_root: &Path,
-    static_ref_strategy: StaticRefStrategy,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    let mut parsed = Vec::new();
-    let mut local_trait_names = HashSet::new();
-    let mut const_constructed = HashSet::new();
-    let mut runtime_constructed = HashSet::new();
-    for tree_root in quality_scan_trees(crate_root) {
-        if !tree_root.is_dir() {
-            continue;
-        }
-        for (source, path) in rust_sources(&tree_root, crate_root)? {
-            let syntax = syn::parse_file(&source).map_err(|err| {
-                crate::error::CordialError::syn_parse(path.display().to_string(), err)
-            })?;
-            local_trait_names.extend(collect_local_trait_names(&syntax));
-            collect_constructions(&syntax, &mut const_constructed, &mut runtime_constructed);
-            parsed.push((syntax, path, tree_root.clone()));
-        }
-    }
-    let const_placed_types =
-        types_only_constructed_in_const(&const_constructed, &runtime_constructed);
-
-    let mut findings = Vec::new();
-    for (syntax, path, tree_root) in parsed {
-        findings.extend(scan_parsed(
-            &syntax,
-            &path,
-            &tree_root,
-            crate_root,
-            &local_trait_names,
-            &const_placed_types,
-            static_ref_strategy,
-        )?);
-    }
-    Ok(findings)
-}
-
 #[instrument(
     level = "debug",
     skip(source, static_ref_strategy),
@@ -214,24 +167,4 @@ fn scan_parsed(
     );
     visitor.visit_file(syntax);
     visitor.into_findings()
-}
-
-#[instrument(level = "debug", skip(tree_root, crate_root), err(level = "warn"))]
-fn rust_sources(tree_root: &Path, crate_root: &Path) -> CordialResult<Vec<(String, PathBuf)>> {
-    let mut files = Vec::new();
-    if !tree_root.is_dir() {
-        return Ok(files);
-    }
-    for entry in walkdir::WalkDir::new(tree_root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-    {
-        let path = entry.path();
-        if path.extension().is_none_or(|ext| ext != "rs") || path_has_fixtures(path, crate_root) {
-            continue;
-        }
-        files.push((std::fs::read_to_string(path)?, path.to_path_buf()));
-    }
-    Ok(files)
 }

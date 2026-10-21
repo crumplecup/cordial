@@ -81,6 +81,11 @@ pub(super) fn collect_verus_blocks(
     collect_verus_blocks_impl(crate_root, None)
 }
 
+#[cfg(any(
+    feature = "panics",
+    feature = "proof_patterns",
+    feature = "verus_warnings"
+))]
 #[instrument(level = "debug", skip(source), err(level = "warn"))]
 pub(super) fn collect_verus_blocks_with_source(
     crate_root: &Path,

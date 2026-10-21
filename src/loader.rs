@@ -13,10 +13,11 @@ pub use scan_roots::path_has_fixtures;
 pub use scan_roots::quality_scan_trees;
 pub(crate) use source::ParsedSourceSession;
 pub use source::{SharedParsedFile, SourceFile, SourceLoadView, SourceLoader};
-pub(crate) use source_work::{
-    parse as source_parse, read as source_read, reset as reset_source_work, walk as source_walk,
-    write as write_source_work,
-};
+#[cfg(feature = "_attribute_scan")]
+pub(crate) use source_work::walk as source_walk;
+#[cfg(any(feature = "allows", feature = "error_sites", feature = "panics"))]
+pub(crate) use source_work::{parse as source_parse, read as source_read};
+pub(crate) use source_work::{reset as reset_source_work, write as write_source_work};
 
 /// Opaque bundle produced by a loader.
 pub trait LoadView: Send + Sync {
