@@ -47,7 +47,7 @@ pub(super) fn scan_shared_source_tree(
 }
 
 #[instrument(level = "debug", skip(file, never_instrument), err(level = "warn"))]
-fn scan_shared_file(
+pub(super) fn scan_shared_file(
     file: &SharedParsedFile,
     src_root: &Path,
     project_root: &Path,

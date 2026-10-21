@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use crate::error::CordialResult;
-use crate::loader::CrateTarget;
+use crate::loader::{CrateTarget, SourceLoadView};
 use crate::session::RunAll;
 use crate::targets::discover_crate_targets;
 
@@ -21,8 +21,8 @@ mod instrument;
 mod parse;
 mod verifier_policy;
 
-use super::call_graph::workspace_call_graph;
-use super::scan::scan_rust_source;
+use super::call_graph::workspace_call_graph_with_source;
+use super::scan::scan_shared_file;
 use instrument::{
     GapApplyOutcome, InstrumentAttrStyle, apply_gap, attr_style, ensure_use_instrument,
     recipe_for_gap, strip_instrument,
@@ -35,7 +35,7 @@ pub(super) use verifier_policy::{
     crate_gate_cfgs, gate_attr, gate_predicate, resolve_tracing_apply_policy,
 };
 
-use crate::{PathInclusionFacts, workspace_path_inclusions};
+use crate::PathInclusionFacts;
 
 /// One open checklist row targeting a function or method.
 #[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
@@ -135,9 +135,14 @@ pub fn run_tracing_instrument_apply(
         unresolved: 0,
     };
 
-    let facts: PathInclusionFacts = workspace_path_inclusions(project_root);
+    let source_view = SourceLoadView::for_standalone_scan();
+    let facts: PathInclusionFacts =
+        crate::etiquettes::derives::workspace_path_inclusions_with_source(
+            project_root,
+            &source_view,
+        );
     let config = crate::config::load_cordial_config(project_root, project_root);
-    let call_graph = workspace_call_graph(project_root, config.tracing());
+    let call_graph = workspace_call_graph_with_source(project_root, config.tracing(), &source_view);
 
     for ((crate_name, rel_path), mut file_gaps) in by_file {
         let Some(crate_root) = crate_roots.get(&crate_name) else {
@@ -154,7 +159,8 @@ pub fn run_tracing_instrument_apply(
             continue;
         }
 
-        let source = std::fs::read_to_string(&path)?;
+        let parsed = source_view.parsed_file(&path, "tracing-instrument-apply")?;
+        let source = parsed.source();
         let src_root = {
             let src = crate_root.join("src");
             if src.is_dir() {
@@ -165,9 +171,8 @@ pub fn run_tracing_instrument_apply(
         };
         let extra_skip = config.tracing().extra_skip();
         let never_instrument = call_graph.never_instrument(&crate_name);
-        let records = match scan_rust_source(
-            &source,
-            &path,
+        let records = match scan_shared_file(
+            &parsed,
             &src_root,
             crate_root,
             &crate_name,

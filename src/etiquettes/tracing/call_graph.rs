@@ -40,9 +40,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use crate::PathInclusionFacts;
 use crate::config::TracingThresholds;
 use crate::loader::SourceLoadView;
-use crate::{PathInclusionFacts, workspace_path_inclusions};
 
 use tracing::instrument;
 
@@ -75,16 +75,8 @@ impl CallGraphFacts {
     }
 }
 
-type FactsCache = Mutex<Option<(PathBuf, Option<u64>, CallGraphFacts)>>;
+type FactsCache = Mutex<Option<(PathBuf, u64, CallGraphFacts)>>;
 static FACTS_CACHE: FactsCache = Mutex::new(None);
-
-/// Cached, workspace-wide call-graph facts -- computed once per
-/// `workspace_root` per session, matching
-/// [`crate::workspace_path_inclusions`]'s own cache shape.
-#[instrument(level = "debug", skip(config))]
-pub fn workspace_call_graph(workspace_root: &Path, config: &TracingThresholds) -> CallGraphFacts {
-    workspace_call_graph_impl(workspace_root, config, None)
-}
 
 #[instrument(level = "debug", skip(config, source))]
 pub(super) fn workspace_call_graph_with_source(
@@ -92,19 +84,10 @@ pub(super) fn workspace_call_graph_with_source(
     config: &TracingThresholds,
     source: &SourceLoadView,
 ) -> CallGraphFacts {
-    workspace_call_graph_impl(workspace_root, config, Some(source))
-}
-
-#[instrument(level = "debug", skip(config, source))]
-fn workspace_call_graph_impl(
-    workspace_root: &Path,
-    config: &TracingThresholds,
-    source: Option<&SourceLoadView>,
-) -> CallGraphFacts {
     let cache_key = workspace_root
         .canonicalize()
         .unwrap_or_else(|_| workspace_root.to_path_buf());
-    let session_id = source.map(SourceLoadView::session_id);
+    let session_id = source.session_id();
     if let Ok(cache) = FACTS_CACHE.lock()
         && let Some((key, cached_session, facts)) = cache.as_ref()
         && *key == cache_key
@@ -113,11 +96,8 @@ fn workspace_call_graph_impl(
         return facts.clone();
     }
 
-    let path_facts = if let Some(source) = source {
-        crate::etiquettes::derives::workspace_path_inclusions_with_source(workspace_root, source)
-    } else {
-        workspace_path_inclusions(workspace_root)
-    };
+    let path_facts =
+        crate::etiquettes::derives::workspace_path_inclusions_with_source(workspace_root, source);
     let facts = compute_call_graph(config, &path_facts, source);
     if let Ok(mut cache) = FACTS_CACHE.lock() {
         *cache = Some((cache_key, session_id, facts.clone()));
@@ -129,7 +109,7 @@ fn workspace_call_graph_impl(
 fn compute_call_graph(
     config: &TracingThresholds,
     path_facts: &PathInclusionFacts,
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
 ) -> CallGraphFacts {
     let collected = collect_workspace_functions(config, path_facts, source);
     let never_instrument = never_instrument_from_calls(&collected);

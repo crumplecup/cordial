@@ -40,7 +40,7 @@ pub(super) struct CollectedFn {
 pub(super) fn collect_workspace_functions(
     config: &TracingThresholds,
     path_facts: &PathInclusionFacts,
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
 ) -> Vec<CollectedFn> {
     let mut collected: Vec<CollectedFn> = Vec::new();
 
@@ -61,22 +61,10 @@ pub(super) fn collect_workspace_functions(
             if path.extension().is_none_or(|ext| ext != "rs") {
                 continue;
             }
-            let parsed =
-                source.and_then(|source| source.parsed_file(path, "tracing-call-graph").ok());
-            let standalone = if source.is_none() {
-                std::fs::read_to_string(path)
-                    .ok()
-                    .and_then(|text| syn::parse_file(&text).ok())
-            } else {
-                None
-            };
-            let Some(syntax) = parsed
-                .as_ref()
-                .map(|parsed| parsed.syntax())
-                .or(standalone.as_ref())
-            else {
+            let Ok(parsed) = source.parsed_file(path, "tracing-call-graph") else {
                 continue;
             };
+            let syntax = parsed.syntax();
             let module_prefix = crate::loader::module_path_from_src_file(&src_root, path);
             let mut visitor = CollectVisitor {
                 crate_name: crate_name.to_string(),

@@ -216,7 +216,19 @@ claim to outer Rust files in a source run.
 
 The antipatterns contract-bounds pass was the last production outer-file parse
 found by the source audit. Its Creusot, Verus, and Kani paths now consume a
-`SharedParsedFile` through the source view. Standalone source and crate scans
-retain their direct parser. The separate parsing of verifier macro contents
+`SharedParsedFile` through the source view. Standalone one-file scans retain
+their direct parser. The separate parsing of verifier macro contents
 remains necessary for those grammars. The production Kani session and the
 standalone contract shape matrix pass after this change.
+
+## Eighteenth slice
+
+The apply audit found duplicate parses within individual operations. Crate
+attribute apply now uses one syntax tree for the lint decision and insertion
+position. Tracing apply uses one short-lived source view for path inclusion,
+the call graph, and each file's recipe scan. Its view is dropped before the
+subsequent quality run, so files changed by apply are parsed from their new
+contents. The standalone antipattern crate scan also uses a short-lived source
+view across its trait inventory and contract-bound pass. A one-file helper that
+receives raw source still needs one parse when invoked alone; it cannot reuse
+another invocation without a shared view.

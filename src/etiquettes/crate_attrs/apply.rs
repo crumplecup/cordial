@@ -15,7 +15,7 @@ use crate::error::CordialResult;
 use crate::session::RunAll;
 use crate::targets::discover_crate_targets;
 
-use super::scan::{library_root_rs, scan_crate_attrs};
+use super::scan::{library_root_rs, scan_crate_attrs, scan_parsed_crate_attrs};
 use super::types::CrateAttrsRuleId;
 
 use tracing::instrument;
@@ -64,19 +64,11 @@ pub fn run_crate_attrs_apply(
         if only_crate.is_some_and(|name| name != crate_name.as_str()) {
             continue;
         }
-        if library_root_rs(crate_root).is_none() {
-            continue;
-        }
-        let records = scan_crate_attrs(crate_root, crate_name, &policy)?;
-        if records.is_empty() {
-            summary.skipped_existing += 1;
-            continue;
-        }
-
         let Some(lib) = library_root_rs(crate_root) else {
             continue;
         };
         if !lib.is_file() {
+            let records = scan_crate_attrs(crate_root, crate_name, &policy)?;
             tracing::warn!(
                 path = %lib.display(),
                 crate_name = %crate_name,
@@ -87,24 +79,19 @@ pub fn run_crate_attrs_apply(
         }
 
         let source = std::fs::read_to_string(&lib)?;
+        let syntax = syn::parse_file(&source)
+            .map_err(|err| crate::error::CordialError::syn_parse(lib.display().to_string(), err))?;
+        let records = scan_parsed_crate_attrs(crate_root, crate_name, &policy, &lib, &syntax)?;
+        if records.is_empty() {
+            summary.skipped_existing += 1;
+            continue;
+        }
         let to_insert = attr_lines_for(&records);
         if to_insert.is_empty() {
             summary.skipped_existing += 1;
             continue;
         }
-        let patched = match insert_crate_attrs(&source, &lib, &to_insert) {
-            Ok(patched) => patched,
-            Err(error) => {
-                tracing::warn!(
-                    path = %lib.display(),
-                    crate_name = %crate_name,
-                    error = %error,
-                    "failed to insert crate attributes"
-                );
-                summary.unresolved += records.len();
-                continue;
-            }
-        };
+        let patched = insert_crate_attrs(&source, &syntax, &to_insert);
         if patched == source {
             summary.skipped_existing += 1;
             continue;
@@ -148,10 +135,8 @@ fn attr_lines_for(records: &[super::types::CrateAttrsSiteRecord]) -> Vec<String>
     lines
 }
 
-#[instrument(level = "debug", skip(source, path, to_insert), err(level = "warn"))]
-fn insert_crate_attrs(source: &str, path: &Path, to_insert: &[String]) -> CordialResult<String> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| crate::error::CordialError::syn_parse(path.display().to_string(), err))?;
+#[instrument(level = "debug", skip(source, syntax, to_insert))]
+fn insert_crate_attrs(source: &str, syntax: &syn::File, to_insert: &[String]) -> String {
     let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
     let insert_at = match syntax.items.first() {
         Some(item) => item.span().start().line.saturating_sub(1).min(lines.len()),
@@ -164,5 +149,5 @@ fn insert_crate_attrs(source: &str, path: &Path, to_insert: &[String]) -> Cordia
     if source.ends_with('\n') || !body.ends_with('\n') {
         body.push('\n');
     }
-    Ok(body)
+    body
 }

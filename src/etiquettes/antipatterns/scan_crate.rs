@@ -6,12 +6,8 @@ use crate::config::StaticRefStrategy;
 use crate::error::CordialResult;
 use crate::loader::SourceLoadView;
 
-use super::contract_bounds::{
-    fetch_contract_records, scan_crate_contract_bounds, scan_crate_contract_bounds_with_source,
-};
-use super::scan::{
-    scan_crate_trees, scan_crate_trees_with_static_ref_strategy, scan_shared_crate_trees,
-};
+use super::contract_bounds::{fetch_contract_records, scan_crate_contract_bounds_with_source};
+use super::scan::scan_shared_crate_trees;
 use super::types::AntipatternSiteRecord;
 use super::version_in_member::scan_workspace_version_in_member;
 
@@ -24,14 +20,14 @@ pub fn scan_crate_antipatterns(
     workspace_root: &Path,
     store_root: &Path,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    let findings = scan_crate_trees(crate_root)?;
-    finish_crate_antipattern_scan(
-        findings,
+    let source = SourceLoadView::for_standalone_scan();
+    scan_shared_crate_antipatterns(
+        &source,
         crate_root,
         crate_name,
         workspace_root,
         store_root,
-        None,
+        StaticRefStrategy::default(),
     )
 }
 
@@ -44,14 +40,14 @@ pub fn scan_crate_antipatterns_with_static_ref_strategy(
     store_root: &Path,
     static_ref_strategy: StaticRefStrategy,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    let findings = scan_crate_trees_with_static_ref_strategy(crate_root, static_ref_strategy)?;
-    finish_crate_antipattern_scan(
-        findings,
+    let source = SourceLoadView::for_standalone_scan();
+    scan_shared_crate_antipatterns(
+        &source,
         crate_root,
         crate_name,
         workspace_root,
         store_root,
-        None,
+        static_ref_strategy,
     )
 }
 
@@ -75,7 +71,7 @@ pub(super) fn scan_shared_crate_antipatterns(
         crate_name,
         workspace_root,
         store_root,
-        Some(source),
+        source,
     )
 }
 
@@ -86,14 +82,12 @@ fn finish_crate_antipattern_scan(
     crate_name: &str,
     workspace_root: &Path,
     store_root: &Path,
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let registry = fetch_contract_records(workspace_root, store_root);
-    findings.extend(if let Some(source) = source {
-        scan_crate_contract_bounds_with_source(crate_root, crate_name, &registry, source)?
-    } else {
-        scan_crate_contract_bounds(crate_root, crate_name, &registry)?
-    });
+    findings.extend(scan_crate_contract_bounds_with_source(
+        crate_root, crate_name, &registry, source,
+    )?);
 
     let version_by_crate = scan_workspace_version_in_member(workspace_root)?;
     if let Some(version_findings) = version_by_crate.get(crate_name) {
