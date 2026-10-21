@@ -197,3 +197,10 @@ outer-file trees. Panic and proof-pattern hooks reuse one Verus IR per crate
 and source session, avoiding a second Verus macro parse as well. Standalone
 Verus scans keep their direct parser; parsing the macro body's Verus grammar
 remains a separate, explicit operation.
+
+## Fifteenth slice
+
+The Verus-warning production hook now uses the typed source view. When a
+compiler warning needs the Verus pattern-projection filter, that filter
+obtains the already-cached Verus IR from the same run. The direct standalone
+warning scan remains available outside a source session.
