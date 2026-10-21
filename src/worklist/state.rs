@@ -238,9 +238,26 @@ impl Worklist {
         self.cursor.is_some()
     }
 
-    /// Check off named items, or the current item when no ids are given.
+    /// Check off named items, every open item with `*`, or the current item.
     #[instrument(level = "debug", skip(self, ids))]
     pub fn done(&mut self, ids: &[String]) -> CordialResult<Vec<ClaimChange>> {
+        if ids == ["*"] {
+            let open_ids = self
+                .items
+                .iter()
+                .filter(|item| *item.state() == ItemState::Open)
+                .map(|item| item.id().as_str().to_string())
+                .collect::<Vec<_>>();
+            if open_ids.is_empty() {
+                return Ok(Vec::new());
+            }
+            return self.apply(&open_ids, ItemState::Done, None);
+        }
+        if ids.iter().any(|id| id == "*") {
+            return Err(CordialError::invariant(
+                "Use `cordial done '*'` by itself, or name item ids without `*`",
+            ));
+        }
         self.apply(ids, ItemState::Done, None)
     }
 

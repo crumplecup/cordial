@@ -23,6 +23,10 @@ and run `cordial done <id> <id> <id>`. Running done twice on the same id is
 harmless. Without an id, done and skip act on the current item. When sending
 several commands at once, always name the ids.
 
+After fixing and checking all open items, run `cordial done '*'` to claim them
+in one step. Quote `*` so the shell does not expand it to file names. This
+leaves skipped items deferred. Run `cordial submit` to verify the claims.
+
 Run `cordial submit` on its own and wait for it. Another cordial command will
 wait for submit to finish and then see the new list.
 
@@ -50,7 +54,7 @@ pub(crate) const OPEN_HELP: &str =
     "Show the current item; build a list if needed. See `cordial instructions` for the full loop.";
 pub(crate) const PEEK_HELP: &str = "Show the current item again without running the gate.";
 pub(crate) const DONE_HELP: &str =
-    "Claim that named items, or the current item, are fixed. Submit later to verify.";
+    "Claim named items, the current item, or all open items with a quoted '*'. Submit to verify.";
 pub(crate) const SKIP_HELP: &str =
     "Set named items, or the current item, aside until the next list; --reason records why.";
 pub(crate) const SUBMIT_HELP: &str = "Rerun the gate, score claims, and build a fresh list.";

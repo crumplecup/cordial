@@ -41,14 +41,14 @@ pub enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// Check off named items, or the current item.
+    /// Check off named items, the current item, or all open items with '*'.
     #[cfg(feature = "quality")]
     #[command(about = crate::worklist::DONE_HELP)]
     Done {
         /// Print one machine-readable JSON object.
         #[arg(long)]
         json: bool,
-        /// Stable item ids; omit to check off the current item.
+        /// Stable item ids; use '*' alone for all open items, or omit for the current item.
         ids: Vec<String>,
     },
     /// Set named items aside, or the current item.

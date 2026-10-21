@@ -22,6 +22,7 @@ feature-gated on the `cordial` crate, including `panics`, `tracing`, `quality`,
 cordial instructions                 # compiled agent worklist workflow
 cordial open                         # show the current item; build a list if needed
 cordial done <id>                    # claim a fix and show the next item
+cordial done '*'                     # claim all open items after checking them
 cordial skip <id>                    # set an item aside until the next list
 cordial peek                         # show the current item again
 cordial stats --verbose              # counts and item states

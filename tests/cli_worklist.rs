@@ -260,6 +260,71 @@ fn claims_are_atomic_idempotent_and_advance_only_when_current_is_acted_on() -> m
 }
 
 #[test]
+fn done_wildcard_claims_open_items_and_preserves_skips() -> miette::Result<()> {
+    cordial::init_tracing();
+    let (project, home, store) = fixture()?;
+    let gate = run(project.path(), home.path(), &["quality"])?;
+    assert!(
+        gate.status.success(),
+        "{}",
+        String::from_utf8_lossy(&gate.stderr)
+    );
+    let initial = list(&store)?;
+    assert!(initial.items().len() >= 2);
+    let skipped_id = initial.items()[0].id().as_str();
+    let skip = run(project.path(), home.path(), &["skip", skipped_id])?;
+    assert!(skip.status.success());
+    let before = list(&store)?;
+
+    let mixed = run(
+        project.path(),
+        home.path(),
+        &["done", "*", before.items()[1].id().as_str(), "--json"],
+    )?;
+    assert!(!mixed.status.success());
+    assert_eq!(list(&store)?, before);
+
+    let done = run(project.path(), home.path(), &["done", "*", "--json"])?;
+    assert!(
+        done.status.success(),
+        "{}",
+        String::from_utf8_lossy(&done.stderr)
+    );
+    let response: serde_json::Value = serde_json::from_slice(&done.stdout).into_diagnostic()?;
+    let checked = response["checked_off"]
+        .as_array()
+        .ok_or_else(|| miette::miette!("missing checked_off array"))?;
+    assert_eq!(
+        checked.len(),
+        before
+            .items()
+            .iter()
+            .filter(|item| *item.state() == cordial::ItemState::Open)
+            .count()
+    );
+    assert!(
+        checked
+            .iter()
+            .all(|change| change["was"] == "open" && change["now"] == "done")
+    );
+    let after = list(&store)?;
+    assert_eq!(*after.items()[0].state(), cordial::ItemState::Skipped);
+    assert!(
+        after.items()[1..]
+            .iter()
+            .all(|item| *item.state() == cordial::ItemState::Done)
+    );
+    assert!(after.current().is_none());
+
+    let repeated = run(project.path(), home.path(), &["done", "*", "--json"])?;
+    assert!(repeated.status.success());
+    let response: serde_json::Value = serde_json::from_slice(&repeated.stdout).into_diagnostic()?;
+    assert_eq!(response["checked_off"], serde_json::json!([]));
+    assert_eq!(list(&store)?, after);
+    Ok(())
+}
+
+#[test]
 fn peek_activates_a_fresh_list_and_next_does_not_change_it() -> miette::Result<()> {
     cordial::init_tracing();
     let (project, home, store) = fixture()?;
