@@ -185,8 +185,10 @@ The first lifetime planner handles a closed, private, single-field error whose
 one constructor has an explicit named lifetime on its `&str` parameter. It
 moves that lifetime from the constructor method to the error type and its
 `Display`/`Error` impls, and reverses the move under owned strategy. Direct
-associated constructor calls may keep type inference. An explicit use of the
-error type outside those impls blocks the edit until its containing signature
-and callers can be planned together. Compile-checked fixtures cover the round
-trip, dry run, repeat apply, and that blocker. Multiple fields, constructors,
-files, and typed source/Kind edges remain outside this narrow planner.
+associated constructor calls may keep type inference. A private function with
+the same named input lifetime can forward that input directly to the one
+constructor; its explicit return type changes with the error type in both
+directions. Other explicit type uses still block the edit until their containing
+signatures and callers can be planned together. Compile-checked fixtures cover
+the round trip, dry run, repeat apply, and that blocker. Multiple fields,
+constructors, files, and typed source/Kind edges remain outside this planner.

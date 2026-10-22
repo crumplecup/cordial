@@ -149,6 +149,9 @@ impl MessageError {
 fn caller() {
     let _ = MessageError::new("hello");
 }
+fn make<'a>(message: &'a str) -> MessageError {
+    MessageError::new(message)
+}
 "#;
     let fixture = fixture(original, "borrowed")?;
     let root = fixture.path();
@@ -161,6 +164,7 @@ fn caller() {
     assert!(changed.contains("struct MessageError<'a> { message: &'a str }"));
     assert!(changed.contains("impl<'a> MessageError<'a>"));
     assert!(changed.contains("fn new(message: &'a str)"));
+    assert!(changed.contains("fn make<'a>(message: &'a str) -> MessageError<'a>"));
     check_fixture(root)?;
     assert_eq!(
         run_error_file_apply(root, root, None, false)
@@ -176,6 +180,7 @@ fn caller() {
     assert!(changed.contains("struct MessageError { message: String }"));
     assert!(changed.contains("impl MessageError"));
     assert!(changed.contains("fn new<'a>(message: &'a str)"));
+    assert!(changed.contains("fn make<'a>(message: &'a str) -> MessageError"));
     check_fixture(root)?;
     assert_eq!(
         run_error_file_apply(root, root, None, false)
@@ -204,6 +209,37 @@ impl MessageError {
 }
 fn make(message: &str) -> MessageError {
     MessageError::new(message)
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(result.unresolved(), 1);
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn new_lifetime_declines_return_that_does_not_forward_input() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new<'a>(message: &'a str) -> Self {
+        Self { message: String::from(message) }
+    }
+}
+fn make<'a>(message: &'a str) -> MessageError {
+    let _ = message;
+    MessageError::new("fixed")
 }
 "#;
     let fixture = fixture(original, "borrowed")?;

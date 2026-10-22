@@ -4,7 +4,9 @@ use std::collections::BTreeSet;
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{FnArg, GenericParam, ImplItem, Item, ItemImpl, ItemStruct, Pat, ReturnType, Type};
+use syn::{
+    Expr, FnArg, GenericParam, ImplItem, Item, ItemFn, ItemImpl, ItemStruct, Pat, ReturnType, Type,
+};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
@@ -36,8 +38,8 @@ pub(super) fn is_candidate(
 /// Move the one constructor lifetime onto the private error type, or undo it.
 ///
 /// This deliberately accepts only a single-field, single-constructor unit.
-/// Every type mention must be the self type of an impl; inference-based direct
-/// calls are safe because their signatures remain unchanged.
+/// Type mentions must be impl self types or direct forwarding function returns;
+/// inference-based direct calls are safe because their signatures remain unchanged.
 #[instrument(level = "debug", skip(file, item, unit, strategy))]
 pub(super) fn plan(
     file: &SharedParsedFile,
@@ -84,6 +86,7 @@ pub(super) fn plan(
     let mut impls = Vec::new();
     let mut allowed_type_uses = BTreeSet::new();
     let mut constructors = 0;
+    let mut constructor_name = None;
     for syntax_item in &file.syntax().items {
         let Item::Impl(implementation) = syntax_item else {
             continue;
@@ -132,15 +135,35 @@ pub(super) fn plan(
                 return None;
             }
             constructors += 1;
+            constructor_name = Some(method.sig.ident.to_string());
         }
         impls.push(implementation);
     }
-    if constructors != 1
-        || unit.sites().iter().any(|site| {
-            site.kind() == ErrorConversionSiteKind::TypeUse
-                && !allowed_type_uses.contains(&(site.line(), site.column()))
-        })
-    {
+    if constructors != 1 {
+        return None;
+    }
+    let mut return_edits = Vec::new();
+    for syntax_item in &file.syntax().items {
+        let Item::Fn(function) = syntax_item else {
+            continue;
+        };
+        if let Some((position, edit)) = forwarding_return(
+            file,
+            function,
+            &item.ident.to_string(),
+            field_name,
+            constructor_name.as_deref()?,
+            &lifetime,
+            strategy,
+        ) {
+            allowed_type_uses.insert(position);
+            return_edits.push(edit);
+        }
+    }
+    if unit.sites().iter().any(|site| {
+        site.kind() == ErrorConversionSiteKind::TypeUse
+            && !allowed_type_uses.contains(&(site.line(), site.column()))
+    }) {
         return None;
     }
     let empty = BTreeSet::new();
@@ -157,6 +180,7 @@ pub(super) fn plan(
     );
     initializer.visit_file(file.syntax());
     let mut edits = initializer.finish()?;
+    edits.append(&mut return_edits);
     let (field_start, field_end) = span_range(file.source(), field.ty.span())?;
     edits.push(Edit {
         start: field_start,
@@ -188,6 +212,101 @@ pub(super) fn plan(
         edit_impl(file, implementation, &lifetime, strategy, &mut edits)?;
     }
     Some(edits)
+}
+
+#[instrument(level = "debug", skip(file, function, strategy))]
+fn forwarding_return(
+    file: &SharedParsedFile,
+    function: &ItemFn,
+    type_name: &str,
+    field_name: &str,
+    constructor_name: &str,
+    lifetime: &str,
+    strategy: ErrorFieldStrategy,
+) -> Option<((usize, usize), Edit)> {
+    if !function.attrs.is_empty()
+        || !matches!(function.vis, syn::Visibility::Inherited)
+        || function.sig.asyncness.is_some()
+        || function.sig.constness.is_some()
+        || matches!(function.sig.safety, syn::Safety::Unsafe(_))
+        || function.sig.generics.where_clause.is_some()
+        || function.sig.generics.params.len() != 1
+        || function.sig.inputs.len() != 1
+        || function.block.stmts.len() != 1
+    {
+        return None;
+    }
+    let Some(GenericParam::Lifetime(param)) = function.sig.generics.params.first() else {
+        return None;
+    };
+    if param.lifetime.ident != lifetime || !param.attrs.is_empty() || !param.bounds.is_empty() {
+        return None;
+    }
+    let Some(FnArg::Typed(argument)) = function.sig.inputs.first() else {
+        return None;
+    };
+    if !matches!(&*argument.pat, Pat::Ident(pat) if pat.ident == field_name && pat.subpat.is_none())
+        || !is_str_ref_with_lifetime(&argument.ty, lifetime)
+    {
+        return None;
+    }
+    let ReturnType::Type(_, return_ty) = &function.sig.output else {
+        return None;
+    };
+    let Type::Path(return_path) = &**return_ty else {
+        return None;
+    };
+    if return_path.qself.is_some() || return_path.path.segments.len() != 1 {
+        return None;
+    }
+    let segment = return_path.path.segments.first()?;
+    if segment.ident != type_name {
+        return None;
+    }
+    let correct_arguments = match strategy {
+        ErrorFieldStrategy::Borrowed => matches!(segment.arguments, syn::PathArguments::None),
+        ErrorFieldStrategy::Owned => {
+            matches!(&segment.arguments, syn::PathArguments::AngleBracketed(args)
+            if matches!(args.args.first(), Some(syn::GenericArgument::Lifetime(named)) if named.ident == lifetime)
+                && args.args.len() == 1)
+        }
+    };
+    if !correct_arguments {
+        return None;
+    }
+    let [syn::Stmt::Expr(Expr::Call(call), None)] = function.block.stmts.as_slice() else {
+        return None;
+    };
+    let Expr::Path(callee) = &*call.func else {
+        return None;
+    };
+    let segments: Vec<_> = callee.path.segments.iter().collect();
+    let [type_part, method_part] = segments.as_slice() else {
+        return None;
+    };
+    if callee.qself.is_some()
+        || type_part.ident != type_name
+        || !matches!(type_part.arguments, syn::PathArguments::None)
+        || method_part.ident != constructor_name
+        || !matches!(method_part.arguments, syn::PathArguments::None)
+        || call.args.len() != 1
+        || !matches!(call.args.first(), Some(Expr::Path(path)) if path.path.is_ident(field_name))
+    {
+        return None;
+    }
+    let start = return_ty.span().start();
+    let (edit_start, edit_end) = span_range(file.source(), return_ty.span())?;
+    Some((
+        (start.line, start.column),
+        Edit {
+            start: edit_start,
+            end: edit_end,
+            replacement: match strategy {
+                ErrorFieldStrategy::Borrowed => format!("{type_name}<'{lifetime}>"),
+                ErrorFieldStrategy::Owned => type_name.to_string(),
+            },
+        },
+    ))
 }
 
 #[instrument(level = "debug", skip(file))]
