@@ -100,7 +100,15 @@ The first guard declines a conversion when the field is used outside a simple
 formatting argument, destructured from the error, or constructed inside a
 macro the initializer visitor cannot inspect. Regression fixtures cover
 mutation, owned return, struct pattern, and macro construction; existing
-formatting reads still round trip. This is an initial guard, not completion of
-slice 0: type/name resolution, escaped constructors through aliases, and
-clearer per-field blocker reporting remain to be addressed before widening
-the accepted expression set.
+formatting reads still round trip.
+
+The next guard audits each parsed file once for visible imports, aliases,
+glob imports, and local definitions that could shadow `String`, `Location`,
+`write!`, or the error type. It declines a field when an error type has an
+alias that could hide another constructor. The apply summary now exposes the
+candidate file, type, field, and blocker reason; the apply pass also emits
+these as tracing events in write and dry-run mode. Compiling fixtures cover
+aliases, a custom `String`, a custom `Location`, and a custom formatting macro.
+These are conservative source checks, not complete Rust name resolution:
+macro expansion and names introduced outside the file still need a stronger
+evidence boundary. Slice 0 remains open for those cases.

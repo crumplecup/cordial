@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use cordial::run_error_file_apply;
+use cordial::{ErrorFieldApplyBlockerReason, run_error_file_apply};
 use miette::{IntoDiagnostic, WrapErr};
 
 fn fixture(source: &str, strategy: &str) -> miette::Result<tempfile::TempDir> {
@@ -370,6 +370,7 @@ impl std::fmt::Display for MessageError {
         write!(f, "{}", self.message)
     }
 }
+
 impl std::error::Error for MessageError {}
 macro_rules! make_error { () => { MessageError { message: "macro".to_string() } }; }
 impl MessageError {
@@ -382,6 +383,91 @@ impl MessageError {
         run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
     assert_eq!(result.converted_fields(), 0);
     assert_eq!(result.unresolved(), 1);
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn local_name_shadows_and_constructor_aliases_block_conversion() -> miette::Result<()> {
+    cordial::init_tracing();
+    let base = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new() -> Self { Self { message: String::from("fixed") } }
+}
+"#;
+    let fixture = fixture(base, "borrowed")?;
+    let cases = [
+        format!("type String = std::string::String;\n{base}"),
+        format!(
+            r#"#[derive(Debug)]
+struct String(&'static str);
+impl From<&'static str> for String {{ fn from(value: &'static str) -> Self {{ Self(value) }} }}
+impl std::fmt::Display for String {{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{ write!(f, "{{}}", self.0) }}
+}}
+{base}"#
+        ),
+        format!("use std::string::String as RenamedString;\ntype String = RenamedString;\n{base}"),
+        format!(
+            "{base}\ntype Alias = MessageError;\nimpl Alias {{ fn alias() -> Self {{ Alias {{ message: String::from(\"alias\") }} }} }}\n"
+        ),
+        format!("{base}\nuse self::MessageError as Alias;\n"),
+        format!(
+            "macro_rules! write {{ ($f:expr, $fmt:literal, $v:expr) => {{ std::write!($f, $fmt, $v) }}; }}\n{base}"
+        ),
+    ];
+    for candidate in cases {
+        fs::write(fixture.path().join("src/lib.rs"), &candidate).into_diagnostic()?;
+        let summary =
+            run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+        assert_eq!(summary.converted_fields(), 0, "{candidate}");
+        assert_eq!(summary.unresolved(), 1, "{candidate}");
+        assert_eq!(summary.blockers()[0].type_name(), "MessageError");
+        assert_eq!(summary.blockers()[0].field_name(), "message");
+        assert_eq!(
+            summary.blockers()[0].reason(),
+            ErrorFieldApplyBlockerReason::AmbiguousName
+        );
+        assert_eq!(source(fixture.path())?, candidate);
+        check_fixture(fixture.path())?;
+    }
+    Ok(())
+}
+
+#[test]
+fn local_location_shadow_blocks_call_site_conversion() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"struct Location;
+impl Location {
+    fn caller() -> Self { Self }
+    fn file(&self) -> &'static str { "custom" }
+}
+#[derive(Debug)]
+struct SiteError { file: String }
+impl std::fmt::Display for SiteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.file) }
+}
+impl std::error::Error for SiteError {}
+impl SiteError {
+    fn new() -> Self { Self { file: Location::caller().file().to_string() } }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let summary =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(summary.converted_fields(), 0);
+    assert_eq!(
+        summary.blockers()[0].reason(),
+        ErrorFieldApplyBlockerReason::AmbiguousName
+    );
     assert_eq!(source(fixture.path())?, original);
     check_fixture(fixture.path())?;
     Ok(())

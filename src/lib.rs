@@ -179,12 +179,12 @@ pub use etiquettes::inline_tests::{
 };
 #[cfg(feature = "internal_error_chain")]
 pub use etiquettes::internal_error_chain::{
-    ErrorFieldApplySummary, ErrorFileApplySummary, INTERNAL_ERROR_CHAIN_ETIQUETTE,
-    InternalErrorChainScanReport, InternalErrorComplianceFinding, InternalErrorComplianceId,
-    InternalErrorNodeClass, InternalErrorTypeNode, InternalErrorTypeProbeId,
-    WorkspaceInternalErrorChainSummary, build_workspace_internal_error_chain_summary,
-    run_error_field_apply, run_error_file_apply, scan_compliance_rust_source,
-    scan_crate_internal_error_chain, scan_error_rust_source,
+    ErrorFieldApplyBlocker, ErrorFieldApplyBlockerReason, ErrorFieldApplySummary,
+    ErrorFileApplySummary, INTERNAL_ERROR_CHAIN_ETIQUETTE, InternalErrorChainScanReport,
+    InternalErrorComplianceFinding, InternalErrorComplianceId, InternalErrorNodeClass,
+    InternalErrorTypeNode, InternalErrorTypeProbeId, WorkspaceInternalErrorChainSummary,
+    build_workspace_internal_error_chain_summary, run_error_field_apply, run_error_file_apply,
+    scan_compliance_rust_source, scan_crate_internal_error_chain, scan_error_rust_source,
 };
 #[cfg(feature = "modularity")]
 pub use etiquettes::modularity::{

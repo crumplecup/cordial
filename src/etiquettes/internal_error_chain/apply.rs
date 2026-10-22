@@ -1,7 +1,7 @@
 //! Conservative string field storage edits for the selected error strategy.
 
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -17,10 +17,58 @@ use crate::targets::discover_crate_targets;
 use super::type_graph::{for_each_shared_src_rust_file, item_derives_error, trait_is_std_error};
 
 mod initializers;
+mod names;
 mod uses;
 
 use self::initializers::{FieldKind, InitializerVisitor};
+use self::names::audit_names;
 use self::uses::has_unhandled_field_use;
+
+/// Why an error field could not be converted safely.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorFieldApplyBlockerReason {
+    /// The type or field is public, duplicated, or used in another file.
+    OutsideFile,
+    /// A local definition, import, or alias makes a relied-on name ambiguous.
+    AmbiguousName,
+    /// At least one initializer is missing or outside the recognized forms.
+    Initializer,
+    /// A field use may require the existing storage type.
+    FieldUse,
+    /// Source spans or planned edits could not be used safely.
+    InvalidEdit,
+}
+
+/// A candidate left untouched by the error field apply pass.
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
+pub struct ErrorFieldApplyBlocker {
+    /// File containing the candidate field.
+    path: PathBuf,
+    /// Error struct containing the field.
+    type_name: String,
+    /// Candidate field name.
+    field_name: String,
+    /// Why the field was left unchanged.
+    #[getter(copy)]
+    reason: ErrorFieldApplyBlockerReason,
+}
+
+impl ErrorFieldApplyBlocker {
+    #[instrument(level = "debug", skip(path, reason))]
+    fn new(
+        path: &Path,
+        type_name: &str,
+        field_name: &str,
+        reason: ErrorFieldApplyBlockerReason,
+    ) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            type_name: type_name.to_string(),
+            field_name: field_name.to_string(),
+            reason,
+        }
+    }
+}
 
 /// Result of changing string fields and their recognized initializers.
 #[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
@@ -34,6 +82,8 @@ pub struct ErrorFieldApplySummary {
     /// Candidate fields left untouched because the conversion was incomplete.
     #[getter(copy)]
     unresolved: usize,
+    /// Candidate fields left untouched, with their reasons.
+    blockers: Vec<ErrorFieldApplyBlocker>,
 }
 
 /// Compatibility name for the original file-only apply result.
@@ -58,6 +108,7 @@ pub fn run_error_field_apply(
         changed_files: 0,
         converted_fields: 0,
         unresolved: 0,
+        blockers: Vec::new(),
     };
     if !policy.enabled() {
         return Ok(summary);
@@ -75,10 +126,14 @@ pub fn run_error_field_apply(
             Ok(())
         })?;
         for file in &files {
-            let (patched, converted, unresolved) =
+            let (patched, converted, blockers) =
                 patch_file(file, policy.field_strategy(), &files, dry_run);
             summary.converted_fields += converted;
-            summary.unresolved += unresolved;
+            summary.unresolved += blockers.len();
+            for blocker in &blockers {
+                tracing::info!(path = %blocker.path.display(), type_name = %blocker.type_name, field = %blocker.field_name, reason = ?blocker.reason, "error field apply: candidate left unchanged");
+            }
+            summary.blockers.extend(blockers);
             if let Some(patched) = patched {
                 if dry_run {
                     tracing::info!(path = %file.path().display(), converted, "dry run: would update error field storage");
@@ -108,7 +163,7 @@ fn patch_file(
     strategy: ErrorFieldStrategy,
     files: &[SharedParsedFile],
     dry_run: bool,
-) -> (Option<String>, usize, usize) {
+) -> (Option<String>, usize, Vec<ErrorFieldApplyBlocker>) {
     let syntax = file.syntax();
     let error_impls: BTreeSet<String> = syntax
         .items
@@ -126,8 +181,10 @@ fn patch_file(
         })
         .collect();
     let mut edits = Vec::new();
+    let name_audit = audit_names(syntax);
     let mut converted = 0;
-    let mut unresolved = 0;
+    let mut blockers = Vec::new();
+    let mut pending = Vec::new();
     for item in &syntax.items {
         let Item::Struct(item) = item else { continue };
         let name = item.ident.to_string();
@@ -158,25 +215,46 @@ fn patch_file(
                     other.path() != file.path() && source_has_ident(other.source(), &name)
                 })
             {
-                unresolved += 1;
-                tracing::info!(path = %file.path().display(), type_name = %name, field = %field_name, "error field apply: public or cross-file type skipped");
+                blockers.push(ErrorFieldApplyBlocker::new(file.path(), &name, &field_name, ErrorFieldApplyBlockerReason::OutsideFile));
+                continue;
+            }
+            if name_audit.blocks(&name) {
+                blockers.push(ErrorFieldApplyBlocker::new(
+                    file.path(),
+                    &name,
+                    &field_name,
+                    ErrorFieldApplyBlockerReason::AmbiguousName,
+                ));
                 continue;
             }
             let mut visitor =
                 InitializerVisitor::new(&name, &field_name, kind, strategy, file.source());
             visitor.visit_file(syntax);
             let Some(mut initializers) = visitor.finish() else {
-                unresolved += 1;
-                tracing::info!(path = %file.path().display(), type_name = %name, field = %field_name, "error field apply: initializer not fully recognized");
+                blockers.push(ErrorFieldApplyBlocker::new(
+                    file.path(),
+                    &name,
+                    &field_name,
+                    ErrorFieldApplyBlockerReason::Initializer,
+                ));
                 continue;
             };
             if has_unhandled_field_use(syntax, &name, &field_name) {
-                unresolved += 1;
-                tracing::info!(path = %file.path().display(), type_name = %name, field = %field_name, "error field apply: field use requires the original type or cannot be resolved");
+                blockers.push(ErrorFieldApplyBlocker::new(
+                    file.path(),
+                    &name,
+                    &field_name,
+                    ErrorFieldApplyBlockerReason::FieldUse,
+                ));
                 continue;
             }
             let Some(field_span) = span_range(file.source(), field.ty.span()) else {
-                unresolved += 1;
+                blockers.push(ErrorFieldApplyBlocker::new(
+                    file.path(),
+                    &name,
+                    &field_name,
+                    ErrorFieldApplyBlockerReason::InvalidEdit,
+                ));
                 continue;
             };
             edits.push(Edit {
@@ -185,24 +263,41 @@ fn patch_file(
                 replacement: source_type.to_string(),
             });
             edits.append(&mut initializers);
+            pending.push((name.clone(), field_name));
             converted += 1;
         }
     }
     if edits.is_empty() {
-        return (None, converted, unresolved);
+        return (None, converted, blockers);
     }
     edits.sort_by_key(|edit| std::cmp::Reverse(edit.start));
     let mut patched = file.source().to_string();
     let mut limit = patched.len();
     for edit in &edits {
         if edit.end > limit || edit.start > edit.end {
-            return (None, 0, unresolved + converted);
+            blockers.extend(pending.iter().map(|(type_name, field_name)| {
+                ErrorFieldApplyBlocker::new(
+                    file.path(),
+                    type_name,
+                    field_name,
+                    ErrorFieldApplyBlockerReason::InvalidEdit,
+                )
+            }));
+            return (None, 0, blockers);
         }
         patched.replace_range(edit.start..edit.end, &edit.replacement);
         limit = edit.start;
     }
     if syn::parse_file(&patched).is_err() {
-        return (None, 0, unresolved + converted);
+        blockers.extend(pending.iter().map(|(type_name, field_name)| {
+            ErrorFieldApplyBlocker::new(
+                file.path(),
+                type_name,
+                field_name,
+                ErrorFieldApplyBlockerReason::InvalidEdit,
+            )
+        }));
+        return (None, 0, blockers);
     }
     if dry_run {
         for edit in &edits {
@@ -214,7 +309,7 @@ fn patch_file(
             );
         }
     }
-    (Some(patched), converted, unresolved)
+    (Some(patched), converted, blockers)
 }
 
 #[instrument(level = "debug", skip(ty))]
