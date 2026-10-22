@@ -94,8 +94,9 @@ pub use ErrorFieldApplySummary as ErrorFileApplySummary;
 /// Only private error structs and private fields with recognized same-file
 /// initializers are patched: `file` from `Location::caller().file()`, and other
 /// string fields from literals, qualified same-module string constants and
-/// statics, or qualified built-in static string macros. Dynamic fields,
-/// lifetime propagation, and cross-file constructors are left for manual work.
+/// statics, qualified built-in static string macros, or explicit static string
+/// constructor parameters. Dynamic fields, lifetime propagation, and cross-file
+/// constructors are left for manual work.
 #[instrument(level = "info", err(level = "warn"))]
 pub fn run_error_field_apply(
     project_root: &Path,

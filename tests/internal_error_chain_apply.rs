@@ -379,6 +379,112 @@ impl MessageError {
 }
 
 #[test]
+fn static_string_constructor_parameter_round_trips() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new(message: &'static str) -> Self { Self { message: String::from(message) } }
+    fn alternate(message: &'static str) -> Self { Self { message: std::string::String::from(message) } }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let preview =
+        run_error_file_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
+    assert_eq!(preview.converted_fields(), 1);
+    assert_eq!(source(fixture.path())?, original);
+
+    let borrowed =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(borrowed.converted_fields(), 1);
+    assert_eq!(borrowed.unresolved(), 0);
+    let changed = source(fixture.path())?;
+    assert!(changed.contains("message: &'static str"));
+    assert_eq!(changed.matches("Self { message: message }").count(), 2);
+    check_fixture(fixture.path())?;
+    assert_eq!(
+        run_error_file_apply(fixture.path(), fixture.path(), None, false)
+            .into_diagnostic()?
+            .changed_files(),
+        0
+    );
+
+    set_strategy(fixture.path(), "owned")?;
+    let owned =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(owned.converted_fields(), 1);
+    let changed = source(fixture.path())?;
+    assert!(changed.contains("message: String"));
+    assert_eq!(
+        changed
+            .matches("Self { message: String::from(message) }")
+            .count(),
+        2
+    );
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn shadowed_constructor_parameter_stays_owned() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new(message: &'static str) -> Self {
+        let message = format!("{message}!");
+        Self { message: String::from(message) }
+    }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(
+        result.blockers()[0].reason(),
+        ErrorFieldApplyBlockerReason::Initializer
+    );
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn dynamic_constructor_parameter_stays_owned() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new(message: &str) -> Self { Self { message: String::from(message) } }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(
+        result.blockers()[0].reason(),
+        ErrorFieldApplyBlockerReason::Initializer
+    );
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
 fn dynamic_string_field_stays_owned_while_literal_field_converts() -> miette::Result<()> {
     cordial::init_tracing();
     let original = r#"#[derive(Debug)]

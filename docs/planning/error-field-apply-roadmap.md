@@ -19,6 +19,8 @@ recognized constructors. It handles `file: String` built from
 or explicitly qualified same-module `const` and immutable `static` bindings
 typed `&'static str`, including constants whose values use `concat!(...)`.
 Direct `::core` or `::std` forms of `concat!` and `include_str!` also qualify.
+An explicit `&'static str` constructor parameter used through `String::from`
+qualifies when the body has no same-name binding that could shadow it.
 It recognizes `to_string`, `to_owned`, `into`, and selected `String::from` forms.
 It mirrors those conversions back to owned `String`. It uses a shared parsed
 file view while scanning and checks that edited source parses. It leaves dynamic
@@ -126,3 +128,12 @@ the value may use `concat!(...)` without interpreting macro expansion. Direct
 also round trip. Bare names, conditional or duplicate declarations, and direct
 macro expressions without a qualified built-in path remain unsupported until
 their bindings or expansions can be resolved safely.
+
+### Slice 2 progress
+
+The first constructor-parameter case keeps the constructor signature intact:
+`String::from(parameter)` becomes `parameter` when the parameter is explicitly
+`&'static str` and no binding in the body shadows it. Owned mode restores
+`String::from(parameter)`. Dynamic `&str` parameters and body-local aliases
+remain blocked; named lifetime propagation and constructor-call edits are still
+future work.

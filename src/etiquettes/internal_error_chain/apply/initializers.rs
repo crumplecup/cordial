@@ -4,12 +4,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Expr, ExprStruct, ImplItemFn, ItemFn, ItemImpl, Member, Pat};
+use syn::{Expr, ExprStruct, FnArg, ImplItemFn, ItemFn, ItemImpl, Member, Pat, Signature};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
 
-use super::{Edit, simple_type_name, span_range};
+use super::{Edit, is_static_str, simple_type_name, span_range};
 
 pub(super) struct InitializerVisitor<'a> {
     type_name: &'a str,
@@ -20,6 +20,7 @@ pub(super) struct InitializerVisitor<'a> {
     static_strings: &'a BTreeSet<String>,
     current_impl: Option<String>,
     caller_aliases: BTreeSet<String>,
+    static_params: BTreeSet<String>,
     edits: Vec<Edit>,
     found: usize,
     unresolved: bool,
@@ -50,6 +51,7 @@ impl<'a> InitializerVisitor<'a> {
             static_strings,
             current_impl: None,
             caller_aliases: BTreeSet::new(),
+            static_params: BTreeSet::new(),
             edits: Vec::new(),
             found: 0,
             unresolved: false,
@@ -61,11 +63,16 @@ impl<'a> InitializerVisitor<'a> {
         (self.found > 0 && !self.unresolved).then_some(self.edits)
     }
 
-    #[instrument(level = "debug", skip(self, block))]
-    fn visit_block_with_aliases(&mut self, block: &syn::Block) {
+    #[instrument(level = "debug", skip(self, signature, block))]
+    fn visit_constructor_block(&mut self, signature: &Signature, block: &syn::Block) {
         let previous = std::mem::replace(&mut self.caller_aliases, caller_aliases(block));
+        let previous_params = std::mem::replace(
+            &mut self.static_params,
+            static_string_params(signature, block),
+        );
         syn::visit::visit_block(self, block);
         self.caller_aliases = previous;
+        self.static_params = previous_params;
     }
 }
 
@@ -84,12 +91,12 @@ impl<'ast> Visit<'ast> for InitializerVisitor<'_> {
 
     #[instrument(level = "debug", skip(self, item))]
     fn visit_item_fn(&mut self, item: &'ast ItemFn) {
-        self.visit_block_with_aliases(&item.block);
+        self.visit_constructor_block(&item.sig, &item.block);
     }
 
     #[instrument(level = "debug", skip(self, item))]
     fn visit_impl_item_fn(&mut self, item: &'ast ImplItemFn) {
-        self.visit_block_with_aliases(&item.block);
+        self.visit_constructor_block(&item.sig, &item.block);
     }
 
     #[instrument(level = "debug", skip(self, item))]
@@ -124,6 +131,7 @@ impl<'ast> Visit<'ast> for InitializerVisitor<'_> {
                         &field.expr,
                         self.strategy,
                         self.static_strings,
+                        &self.static_params,
                     ),
                 };
                 if let (Some((start, end)), Some(replacement)) =
@@ -193,12 +201,16 @@ fn file_initializer_replacement(
     })
 }
 
-#[instrument(level = "debug", skip(source, expr, strategy, static_strings))]
+#[instrument(
+    level = "debug",
+    skip(source, expr, strategy, static_strings, static_params)
+)]
 fn static_string_initializer_replacement(
     source: &str,
     expr: &Expr,
     strategy: ErrorFieldStrategy,
     static_strings: &BTreeSet<String>,
+    static_params: &BTreeSet<String>,
 ) -> Option<String> {
     let expr = without_parens(expr);
     let value = match strategy {
@@ -217,6 +229,12 @@ fn static_string_initializer_replacement(
         ErrorFieldStrategy::Owned => expr,
     };
     let value = without_parens(value);
+    let parameter = matches!(value, Expr::Path(path)
+        if path.qself.is_none()
+            && path.path.get_ident().is_some_and(|name| static_params.contains(&name.to_string())));
+    if parameter && strategy == ErrorFieldStrategy::Borrowed && !matches!(expr, Expr::Call(_)) {
+        return None;
+    }
     let literal = matches!(value, Expr::Lit(lit) if matches!(&lit.lit, syn::Lit::Str(_)));
     let qualified_const = matches!(value, Expr::Path(path)
         if path.qself.is_none()
@@ -226,15 +244,46 @@ fn static_string_initializer_replacement(
         if macro_expr.mac.path.leading_colon.is_some()
             && matches!(macro_expr.mac.path.segments.iter().map(|part| part.ident.to_string()).collect::<Vec<_>>().as_slice(), [root, name]
                 if (root == "core" || root == "std") && (name == "concat" || name == "include_str")));
-    if !literal && !qualified_const && !qualified_builtin_macro {
+    if !literal && !qualified_const && !qualified_builtin_macro && !parameter {
         return None;
     }
     let (start, end) = span_range(source, value.span())?;
     let value_text = source.get(start..end)?;
     Some(match strategy {
         ErrorFieldStrategy::Borrowed => value_text.to_string(),
+        ErrorFieldStrategy::Owned if parameter => format!("String::from({value_text})"),
         ErrorFieldStrategy::Owned => format!("{value_text}.to_string()"),
     })
+}
+
+#[instrument(level = "debug", skip(signature, block))]
+fn static_string_params(signature: &Signature, block: &syn::Block) -> BTreeSet<String> {
+    let mut params: BTreeSet<String> = signature
+        .inputs
+        .iter()
+        .filter_map(|arg| match arg {
+            FnArg::Typed(arg) if is_static_str(&arg.ty) => match &*arg.pat {
+                Pat::Ident(ident) if ident.subpat.is_none() => Some(ident.ident.to_string()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    let mut shadows = BindingNames::default();
+    shadows.visit_block(block);
+    params.retain(|name| !shadows.0.contains(name));
+    params
+}
+
+#[derive(Default)]
+struct BindingNames(BTreeSet<String>);
+
+impl<'ast> Visit<'ast> for BindingNames {
+    #[instrument(level = "debug", skip(self, ident))]
+    fn visit_pat_ident(&mut self, ident: &'ast syn::PatIdent) {
+        self.0.insert(ident.ident.to_string());
+        syn::visit::visit_pat_ident(self, ident);
+    }
 }
 
 #[instrument(level = "debug", skip(expr))]

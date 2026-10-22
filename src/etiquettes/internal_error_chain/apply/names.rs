@@ -69,7 +69,7 @@ impl<'ast> Visit<'ast> for NameVisitor {
         if name.is_some_and(|name| {
             matches!(
                 name.to_string().as_str(),
-                "String" | "Location" | "std" | "core" | "alloc" | "write" | "writeln"
+                "String" | "Location" | "str" | "std" | "core" | "alloc" | "write" | "writeln"
             )
         }) {
             self.audit.ambiguous = true;
@@ -155,7 +155,7 @@ impl NameVisitor {
 fn protected_name(name: &str) -> bool {
     matches!(
         name,
-        "String" | "Location" | "std" | "core" | "alloc" | "write" | "writeln"
+        "String" | "Location" | "str" | "std" | "core" | "alloc" | "write" | "writeln"
     )
 }
 
