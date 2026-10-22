@@ -162,13 +162,6 @@ impl<'ast> Visit<'ast> for InitializerVisitor<'_> {
             } else if let Some(field) = item.fields.iter().find(
                 |field| matches!(&field.member, Member::Named(name) if name == self.field_name),
             ) {
-                if field.colon_token.is_none() {
-                    // A shorthand field has no expression span that can hold
-                    // an expanded `field: replacement` initializer.
-                    self.unresolved = true;
-                    syn::visit::visit_expr_struct(self, item);
-                    return;
-                }
                 let replacement = match self.kind {
                     FieldKind::CallSiteFile => file_initializer_replacement(
                         self.source,
@@ -188,6 +181,11 @@ impl<'ast> Visit<'ast> for InitializerVisitor<'_> {
                 if let (Some((start, end)), Some(replacement)) =
                     (span_range(self.source, field.expr.span()), replacement)
                 {
+                    let replacement = if field.colon_token.is_none() {
+                        format!("{}: {replacement}", self.field_name)
+                    } else {
+                        replacement
+                    };
                     self.edits.push(Edit {
                         start,
                         end,

@@ -157,8 +157,10 @@ non-string reference field that keeps it in use under both strategies, a
 matching `impl<'a> MessageError<'a>` can convert a `String` field to `&'a str` when
 every recognized constructor uses `&'a str` parameters or typed aliases.
 The reverse conversion restores owned storage. A parameter with an unrelated
-or elided lifetime blocks the field, as does a shorthand field initializer;
-this slice does not add lifetimes or edit caller signatures.
+or elided lifetime blocks the field. A shorthand borrowed initializer such as
+`Self { message }` now expands to `message: String::from(message)` in owned mode;
+the borrowed direction recognizes the resulting explicit initializer. This
+slice does not add lifetimes or edit caller signatures.
 
 ### Next prerequisite: a complete conversion unit
 
