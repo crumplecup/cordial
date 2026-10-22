@@ -430,6 +430,124 @@ impl MessageError {
 }
 
 #[test]
+fn typed_static_local_alias_round_trips() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new(message: &'static str) -> Self {
+        let alias: &'static str = message;
+        Self { message: String::from(alias) }
+    }
+    fn fixed() -> Self {
+        let alias: &'static str = "fixed";
+        Self { message: String::from(alias) }
+    }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let root = fixture.path();
+    assert_eq!(
+        run_error_file_apply(root, root, None, true)
+            .into_diagnostic()?
+            .converted_fields(),
+        1
+    );
+    assert_eq!(source(root)?, original);
+
+    let borrowed = run_error_file_apply(root, root, None, false).into_diagnostic()?;
+    assert_eq!(borrowed.converted_fields(), 1);
+    assert_eq!(borrowed.unresolved(), 0);
+    let changed = source(root)?;
+    assert!(changed.contains("message: &'static str"));
+    assert_eq!(changed.matches("Self { message: alias }").count(), 2);
+    check_fixture(root)?;
+    assert_eq!(
+        run_error_file_apply(root, root, None, false)
+            .into_diagnostic()?
+            .changed_files(),
+        0
+    );
+
+    set_strategy(root, "owned")?;
+    let owned = run_error_file_apply(root, root, None, false).into_diagnostic()?;
+    assert_eq!(owned.converted_fields(), 1);
+    let changed = source(root)?;
+    assert!(changed.contains("message: String"));
+    assert_eq!(
+        changed
+            .matches("Self { message: String::from(alias) }")
+            .count(),
+        2
+    );
+    check_fixture(root)?;
+    Ok(())
+}
+
+#[test]
+fn shadowed_static_local_alias_stays_owned() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new(message: &'static str) -> Self {
+        let alias: &'static str = message;
+        let alias = format!("{alias}!");
+        Self { message: String::from(alias) }
+    }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(
+        result.blockers()[0].reason(),
+        ErrorFieldApplyBlockerReason::Initializer
+    );
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn untyped_local_alias_stays_owned() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new(message: &'static str) -> Self {
+        let alias = message;
+        Self { message: String::from(alias) }
+    }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(
+        result.blockers()[0].reason(),
+        ErrorFieldApplyBlockerReason::Initializer
+    );
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
 fn shadowed_constructor_parameter_stays_owned() -> miette::Result<()> {
     cordial::init_tracing();
     let original = r#"#[derive(Debug)]

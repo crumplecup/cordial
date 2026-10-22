@@ -21,6 +21,7 @@ pub(super) struct InitializerVisitor<'a> {
     current_impl: Option<String>,
     caller_aliases: BTreeSet<String>,
     static_params: BTreeSet<String>,
+    static_locals: BTreeMap<String, usize>,
     edits: Vec<Edit>,
     found: usize,
     unresolved: bool,
@@ -52,6 +53,7 @@ impl<'a> InitializerVisitor<'a> {
             current_impl: None,
             caller_aliases: BTreeSet::new(),
             static_params: BTreeSet::new(),
+            static_locals: BTreeMap::new(),
             edits: Vec::new(),
             found: 0,
             unresolved: false,
@@ -65,14 +67,22 @@ impl<'a> InitializerVisitor<'a> {
 
     #[instrument(level = "debug", skip(self, signature, block))]
     fn visit_constructor_block(&mut self, signature: &Signature, block: &syn::Block) {
-        let previous = std::mem::replace(&mut self.caller_aliases, caller_aliases(block));
+        let mut bindings = BindingCounts::default();
+        bindings.visit_block(block);
+        let previous =
+            std::mem::replace(&mut self.caller_aliases, caller_aliases(block, &bindings));
         let previous_params = std::mem::replace(
             &mut self.static_params,
-            static_string_params(signature, block),
+            static_string_params(signature, &bindings),
+        );
+        let previous_locals = std::mem::replace(
+            &mut self.static_locals,
+            static_string_locals(signature, block, &bindings, self.source),
         );
         syn::visit::visit_block(self, block);
         self.caller_aliases = previous;
         self.static_params = previous_params;
+        self.static_locals = previous_locals;
     }
 }
 
@@ -132,6 +142,7 @@ impl<'ast> Visit<'ast> for InitializerVisitor<'_> {
                         self.strategy,
                         self.static_strings,
                         &self.static_params,
+                        &self.static_locals,
                     ),
                 };
                 if let (Some((start, end)), Some(replacement)) =
@@ -203,7 +214,7 @@ fn file_initializer_replacement(
 
 #[instrument(
     level = "debug",
-    skip(source, expr, strategy, static_strings, static_params)
+    skip(source, expr, strategy, static_strings, static_params, static_locals)
 )]
 fn static_string_initializer_replacement(
     source: &str,
@@ -211,6 +222,7 @@ fn static_string_initializer_replacement(
     strategy: ErrorFieldStrategy,
     static_strings: &BTreeSet<String>,
     static_params: &BTreeSet<String>,
+    static_locals: &BTreeMap<String, usize>,
 ) -> Option<String> {
     let expr = without_parens(expr);
     let value = match strategy {
@@ -229,10 +241,18 @@ fn static_string_initializer_replacement(
         ErrorFieldStrategy::Owned => expr,
     };
     let value = without_parens(value);
-    let parameter = matches!(value, Expr::Path(path)
-        if path.qself.is_none()
-            && path.path.get_ident().is_some_and(|name| static_params.contains(&name.to_string())));
-    if parameter && strategy == ErrorFieldStrategy::Borrowed && !matches!(expr, Expr::Call(_)) {
+    let (start, end) = span_range(source, value.span())?;
+    let local_static_source = matches!(value, Expr::Path(path)
+    if path.qself.is_none()
+        && path.path.get_ident().is_some_and(|name| {
+            let name = name.to_string();
+            static_params.contains(&name)
+                || static_locals.get(&name).is_some_and(|declaration_end| *declaration_end <= start)
+        }));
+    if local_static_source
+        && strategy == ErrorFieldStrategy::Borrowed
+        && !matches!(expr, Expr::Call(_))
+    {
         return None;
     }
     let literal = matches!(value, Expr::Lit(lit) if matches!(&lit.lit, syn::Lit::Str(_)));
@@ -244,20 +264,19 @@ fn static_string_initializer_replacement(
         if macro_expr.mac.path.leading_colon.is_some()
             && matches!(macro_expr.mac.path.segments.iter().map(|part| part.ident.to_string()).collect::<Vec<_>>().as_slice(), [root, name]
                 if (root == "core" || root == "std") && (name == "concat" || name == "include_str")));
-    if !literal && !qualified_const && !qualified_builtin_macro && !parameter {
+    if !literal && !qualified_const && !qualified_builtin_macro && !local_static_source {
         return None;
     }
-    let (start, end) = span_range(source, value.span())?;
     let value_text = source.get(start..end)?;
     Some(match strategy {
         ErrorFieldStrategy::Borrowed => value_text.to_string(),
-        ErrorFieldStrategy::Owned if parameter => format!("String::from({value_text})"),
+        ErrorFieldStrategy::Owned if local_static_source => format!("String::from({value_text})"),
         ErrorFieldStrategy::Owned => format!("{value_text}.to_string()"),
     })
 }
 
-#[instrument(level = "debug", skip(signature, block))]
-fn static_string_params(signature: &Signature, block: &syn::Block) -> BTreeSet<String> {
+#[instrument(level = "debug", skip(signature, bindings))]
+fn static_string_params(signature: &Signature, bindings: &BindingCounts) -> BTreeSet<String> {
     let mut params: BTreeSet<String> = signature
         .inputs
         .iter()
@@ -269,21 +288,56 @@ fn static_string_params(signature: &Signature, block: &syn::Block) -> BTreeSet<S
             _ => None,
         })
         .collect();
-    let mut shadows = BindingNames::default();
-    shadows.visit_block(block);
-    params.retain(|name| !shadows.0.contains(name));
+    params.retain(|name| !bindings.0.contains_key(name));
     params
 }
 
-#[derive(Default)]
-struct BindingNames(BTreeSet<String>);
-
-impl<'ast> Visit<'ast> for BindingNames {
-    #[instrument(level = "debug", skip(self, ident))]
-    fn visit_pat_ident(&mut self, ident: &'ast syn::PatIdent) {
-        self.0.insert(ident.ident.to_string());
-        syn::visit::visit_pat_ident(self, ident);
-    }
+#[instrument(level = "debug", skip(signature, block, bindings, source))]
+fn static_string_locals(
+    signature: &Signature,
+    block: &syn::Block,
+    bindings: &BindingCounts,
+    source: &str,
+) -> BTreeMap<String, usize> {
+    let argument_names: BTreeSet<String> = signature
+        .inputs
+        .iter()
+        .filter_map(|arg| match arg {
+            FnArg::Typed(arg) => match &*arg.pat {
+                Pat::Ident(ident) => Some(ident.ident.to_string()),
+                _ => None,
+            },
+            FnArg::Receiver(_) => None,
+        })
+        .collect();
+    block
+        .stmts
+        .iter()
+        .filter_map(|statement| {
+            let syn::Stmt::Local(local) = statement else {
+                return None;
+            };
+            let Pat::Type(typed) = &local.pat else {
+                return None;
+            };
+            let Pat::Ident(ident) = &*typed.pat else {
+                return None;
+            };
+            let name = ident.ident.to_string();
+            if !local.attrs.is_empty()
+                || local.init.is_none()
+                || ident.mutability.is_some()
+                || ident.subpat.is_some()
+                || !is_static_str(&typed.ty)
+                || argument_names.contains(&name)
+                || bindings.0.get(&name) != Some(&1)
+            {
+                return None;
+            }
+            let (_, end) = span_range(source, local.span())?;
+            Some((name, end))
+        })
+        .collect()
 }
 
 #[instrument(level = "debug", skip(expr))]
@@ -323,8 +377,8 @@ fn without_parens(mut expr: &Expr) -> &Expr {
     expr
 }
 
-#[instrument(level = "debug", skip(block))]
-fn caller_aliases(block: &syn::Block) -> BTreeSet<String> {
+#[instrument(level = "debug", skip(block, bindings))]
+fn caller_aliases(block: &syn::Block, bindings: &BindingCounts) -> BTreeSet<String> {
     let mut aliases: BTreeSet<String> = block.stmts.iter().filter_map(|stmt| {
         let syn::Stmt::Local(local) = stmt else { return None };
         let Pat::Ident(pat) = &local.pat else { return None };
@@ -333,8 +387,6 @@ fn caller_aliases(block: &syn::Block) -> BTreeSet<String> {
         }
         Some(pat.ident.to_string())
     }).collect();
-    let mut bindings = BindingCounts::default();
-    bindings.visit_block(block);
     aliases.retain(|name| bindings.0.get(name) == Some(&1));
     aliases
 }

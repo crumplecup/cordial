@@ -95,8 +95,9 @@ pub use ErrorFieldApplySummary as ErrorFileApplySummary;
 /// initializers are patched: `file` from `Location::caller().file()`, and other
 /// string fields from literals, qualified same-module string constants and
 /// statics, qualified built-in static string macros, or explicit static string
-/// constructor parameters. Dynamic fields, lifetime propagation, and cross-file
-/// constructors are left for manual work.
+/// constructor parameters, or explicitly typed static string local aliases.
+/// Dynamic fields, lifetime propagation, and cross-file constructors are left
+/// for manual work.
 #[instrument(level = "info", err(level = "warn"))]
 pub fn run_error_field_apply(
     project_root: &Path,

@@ -21,10 +21,12 @@ typed `&'static str`, including constants whose values use `concat!(...)`.
 Direct `::core` or `::std` forms of `concat!` and `include_str!` also qualify.
 An explicit `&'static str` constructor parameter used through `String::from`
 qualifies when the body has no same-name binding that could shadow it.
+An explicitly typed, immutable top-level local `&'static str` alias also
+qualifies after its declaration when no same-name binding occurs in the body.
 It recognizes `to_string`, `to_owned`, `into`, and selected `String::from` forms.
 It mirrors those conversions back to owned `String`. It uses a shared parsed
 file view while scanning and checks that edited source parses. It leaves dynamic
-expressions, constructor parameters, `source` and `kind`, public types, and
+expressions, dynamic constructor parameters, `source` and `kind`, public types, and
 cross-file uses untouched. See
 [`apply.rs`](../../src/etiquettes/internal_error_chain/apply.rs) and its
 [`initializers.rs`](../../src/etiquettes/internal_error_chain/apply/initializers.rs).
@@ -134,6 +136,8 @@ their bindings or expansions can be resolved safely.
 The first constructor-parameter case keeps the constructor signature intact:
 `String::from(parameter)` becomes `parameter` when the parameter is explicitly
 `&'static str` and no binding in the body shadows it. Owned mode restores
-`String::from(parameter)`. Dynamic `&str` parameters and body-local aliases
-remain blocked; named lifetime propagation and constructor-call edits are still
-future work.
+`String::from(parameter)`. The same round trip works for an immutable
+top-level local alias explicitly typed `&'static str` when it is in scope at
+the construction site and has no same-name binding elsewhere in the body.
+Shadowed and untyped aliases remain blocked. Dynamic `&str` parameters, named
+lifetime propagation, and constructor-call edits are still future work.
