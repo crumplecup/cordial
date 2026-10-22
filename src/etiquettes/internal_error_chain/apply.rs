@@ -18,6 +18,7 @@ use super::type_graph::{for_each_shared_src_rust_file, item_derives_error, trait
 
 mod initializers;
 mod inventory;
+mod lifetime;
 mod names;
 mod uses;
 
@@ -180,42 +181,8 @@ fn patch_file(
     Vec<ErrorConversionUnit>,
 ) {
     let syntax = file.syntax();
-    let error_impls: BTreeSet<String> = syntax
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Impl(item)
-                if item
-                    .trait_
-                    .as_ref()
-                    .is_some_and(|(path, _)| trait_is_std_error(path)) =>
-            {
-                simple_type_name(&item.self_ty)
-            }
-            _ => None,
-        })
-        .collect();
-    let mut static_declarations: BTreeMap<String, Vec<bool>> = BTreeMap::new();
-    for item in &syntax.items {
-        let (name, ty, attrs, immutable) = match item {
-            Item::Const(item) => (&item.ident, &item.ty, &item.attrs, true),
-            Item::Static(item) => (
-                &item.ident,
-                &item.ty,
-                &item.attrs,
-                matches!(item.mutability, syn::StaticMutability::None),
-            ),
-            _ => continue,
-        };
-        static_declarations
-            .entry(name.to_string())
-            .or_default()
-            .push(immutable && attrs.is_empty() && is_static_str(ty));
-    }
-    let static_strings: BTreeSet<String> = static_declarations
-        .into_iter()
-        .filter_map(|(name, declarations)| (declarations.as_slice() == [true]).then_some(name))
-        .collect();
+    let error_impls = known_error_impls(syntax);
+    let static_strings = known_static_strings(syntax);
     let mut edits = Vec::new();
     let name_audit = audit_names(syntax);
     let mut converted = 0;
@@ -241,6 +208,43 @@ fn patch_file(
                 _ => FieldKind::StaticString,
             };
             let struct_lifetime = single_struct_lifetime(item);
+            let unit = ErrorConversionUnit::collect(
+                files,
+                file.path(),
+                &name,
+                &field_name,
+                name_audit.blocks(&name),
+            );
+            let has_cross_file_reference =
+                unit.sites().iter().any(|site| site.path() != file.path());
+            let has_unknown_field_use = unit.blocks_existing_field_edit();
+            let lifetime_candidate =
+                lifetime::is_candidate(item, field, kind, struct_lifetime.as_deref(), strategy);
+            if lifetime_candidate
+                && !has_cross_file_reference
+                && !name_audit.blocks(&name)
+                && matches!(item.vis, Visibility::Inherited)
+                && matches!(field.vis, Visibility::Inherited)
+            {
+                if let Some(mut planned) = lifetime::plan(file, item, &field_name, &unit, strategy)
+                {
+                    edits.append(&mut planned);
+                    pending.push((name.clone(), field_name));
+                    converted += 1;
+                    units.push(unit);
+                    continue;
+                }
+            }
+            if lifetime_candidate && strategy == ErrorFieldStrategy::Owned {
+                blockers.push(ErrorFieldApplyBlocker::new(
+                    file.path(),
+                    &name,
+                    &field_name,
+                    ErrorFieldApplyBlockerReason::Initializer,
+                ));
+                units.push(unit);
+                continue;
+            }
             let (source_type, dynamic_lifetime) = match strategy {
                 ErrorFieldStrategy::Borrowed if is_string(&field.ty) => {
                     let lifetime = struct_lifetime.as_deref();
@@ -258,16 +262,6 @@ fn patch_file(
                 }
                 _ => continue,
             };
-            let unit = ErrorConversionUnit::collect(
-                files,
-                file.path(),
-                &name,
-                &field_name,
-                name_audit.blocks(&name),
-            );
-            let has_cross_file_reference =
-                unit.sites().iter().any(|site| site.path() != file.path());
-            let has_unknown_field_use = unit.blocks_existing_field_edit();
             units.push(unit);
             if !matches!(item.vis, Visibility::Inherited)
                 || !matches!(field.vis, Visibility::Inherited)
@@ -294,6 +288,7 @@ fn patch_file(
                 file.source(),
                 &static_strings,
                 dynamic_lifetime,
+                false,
             );
             visitor.visit_file(syntax);
             let Some(mut initializers) = visitor.finish() else {
@@ -376,6 +371,50 @@ fn patch_file(
         }
     }
     (Some(patched), converted, blockers, units)
+}
+
+#[instrument(level = "debug", skip(syntax))]
+fn known_error_impls(syntax: &syn::File) -> BTreeSet<String> {
+    syntax
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Impl(item)
+                if item
+                    .trait_
+                    .as_ref()
+                    .is_some_and(|(path, _)| trait_is_std_error(path)) =>
+            {
+                simple_type_name(&item.self_ty)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[instrument(level = "debug", skip(syntax))]
+fn known_static_strings(syntax: &syn::File) -> BTreeSet<String> {
+    let mut declarations: BTreeMap<String, Vec<bool>> = BTreeMap::new();
+    for item in &syntax.items {
+        let (name, ty, attrs, immutable) = match item {
+            Item::Const(item) => (&item.ident, &item.ty, &item.attrs, true),
+            Item::Static(item) => (
+                &item.ident,
+                &item.ty,
+                &item.attrs,
+                matches!(item.mutability, syn::StaticMutability::None),
+            ),
+            _ => continue,
+        };
+        declarations
+            .entry(name.to_string())
+            .or_default()
+            .push(immutable && attrs.is_empty() && is_static_str(ty));
+    }
+    declarations
+        .into_iter()
+        .filter_map(|(name, declarations)| (declarations.as_slice() == [true]).then_some(name))
+        .collect()
 }
 
 #[instrument(level = "debug", skip(ty))]

@@ -30,9 +30,10 @@ It recognizes `to_string`, `to_owned`, `into`, and selected `String::from` forms
 It mirrors those conversions back to owned `String`. A private error type with
 one existing named lifetime and a separate non-string lifetime-bearing field
 can also borrow constructor parameters and typed local aliases tied to that
-same lifetime. It uses a shared parsed file view
+same lifetime. A closed private single-field error can move an explicit
+constructor lifetime onto its type and back. It uses a shared parsed file view
 while scanning and checks that edited source parses. It leaves unrelated
-dynamic constructor parameters, new lifetime propagation, `source` and `kind`,
+dynamic constructor parameters, wider lifetime propagation, `source` and `kind`,
 public types, and cross-file uses untouched. See
 [`apply.rs`](../../src/etiquettes/internal_error_chain/apply.rs) and its
 [`initializers.rs`](../../src/etiquettes/internal_error_chain/apply/initializers.rs).
@@ -149,7 +150,7 @@ no binding in the body shadows it. Owned mode restores `String::from(parameter)`
 The same round trip works for an immutable
 top-level local alias explicitly typed `&'static str` when it is in scope at
 the construction site and has no same-name binding elsewhere in the body.
-Shadowed and untyped aliases remain blocked. Elided `&str` parameters, new named
+Shadowed and untyped aliases remain blocked. Elided `&str` parameters, wider
 lifetime propagation, and constructor-call edits are still future work.
 
 For a private error struct that already has exactly one named lifetime and a
@@ -176,6 +177,16 @@ available when those paths are absent.
 
 The inventory is syntactic: a direct path has a known target shape, while macro
 expansion, type inference for field receivers, and `?` conversion targets remain
-unresolved. A future conversion planner must require a closed unit, plan every
+unresolved. Broader conversion planners must require a closed unit, plan every
 field, constructor, caller, signature, and error edge together, validate the
 whole unit, and write its files atomically before extending slices 2 and 3.
+
+The first lifetime planner handles a closed, private, single-field error whose
+one constructor has an explicit named lifetime on its `&str` parameter. It
+moves that lifetime from the constructor method to the error type and its
+`Display`/`Error` impls, and reverses the move under owned strategy. Direct
+associated constructor calls may keep type inference. An explicit use of the
+error type outside those impls blocks the edit until its containing signature
+and callers can be planned together. Compile-checked fixtures cover the round
+trip, dry run, repeat apply, and that blocker. Multiple fields, constructors,
+files, and typed source/Kind edges remain outside this narrow planner.

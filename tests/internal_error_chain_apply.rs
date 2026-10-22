@@ -111,6 +111,7 @@ struct MessageError { message: String }
 impl std::fmt::Display for MessageError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
 }
+
 impl std::error::Error for MessageError {}
 impl MessageError { fn new() -> Self { Self { message: "fixed".to_owned() } } }
 "#;
@@ -129,6 +130,92 @@ impl MessageError { fn new() -> Self { Self { message: "fixed".to_owned() } } }
     assert_eq!(source(fixture.path())?, original);
     Ok(())
 }
+#[test]
+fn new_error_lifetime_round_trips_when_conversion_unit_is_closed() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new<'a>(message: &'a str) -> Self {
+        Self { message: String::from(message) }
+    }
+}
+fn caller() {
+    let _ = MessageError::new("hello");
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let root = fixture.path();
+    let preview = run_error_file_apply(root, root, None, true).into_diagnostic()?;
+    assert_eq!(preview.converted_fields(), 1);
+    assert_eq!(source(root)?, original);
+    let borrowed = run_error_file_apply(root, root, None, false).into_diagnostic()?;
+    assert_eq!(borrowed.converted_fields(), 1);
+    let changed = source(root)?;
+    assert!(changed.contains("struct MessageError<'a> { message: &'a str }"));
+    assert!(changed.contains("impl<'a> MessageError<'a>"));
+    assert!(changed.contains("fn new(message: &'a str)"));
+    check_fixture(root)?;
+    assert_eq!(
+        run_error_file_apply(root, root, None, false)
+            .into_diagnostic()?
+            .changed_files(),
+        0
+    );
+
+    set_strategy(root, "owned")?;
+    let owned = run_error_file_apply(root, root, None, false).into_diagnostic()?;
+    assert_eq!(owned.converted_fields(), 1);
+    let changed = source(root)?;
+    assert!(changed.contains("struct MessageError { message: String }"));
+    assert!(changed.contains("impl MessageError"));
+    assert!(changed.contains("fn new<'a>(message: &'a str)"));
+    check_fixture(root)?;
+    assert_eq!(
+        run_error_file_apply(root, root, None, false)
+            .into_diagnostic()?
+            .changed_files(),
+        0
+    );
+    Ok(())
+}
+
+#[test]
+fn new_lifetime_declines_explicit_type_use_outside_impls() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new<'a>(message: &'a str) -> Self {
+        Self { message: String::from(message) }
+    }
+}
+fn make(message: &str) -> MessageError {
+    MessageError::new(message)
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(result.unresolved(), 1);
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
 fn fixture(source: &str, strategy: &str) -> miette::Result<tempfile::TempDir> {
     let root = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(root.path().join("src")).into_diagnostic()?;

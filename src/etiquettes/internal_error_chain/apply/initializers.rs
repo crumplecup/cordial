@@ -14,9 +14,8 @@ use super::{Edit, simple_type_name, span_range};
 mod bindings;
 mod replacements;
 
-use bindings::{
-    BindingCounts, caller_aliases, impl_uses_lifetime, static_string_locals, static_string_params,
-};
+pub(super) use bindings::impl_uses_lifetime;
+use bindings::{BindingCounts, caller_aliases, static_string_locals, static_string_params};
 use replacements::{file_initializer_replacement, static_string_initializer_replacement};
 
 pub(super) struct InitializerVisitor<'a> {
@@ -27,6 +26,7 @@ pub(super) struct InitializerVisitor<'a> {
     source: &'a str,
     static_strings: &'a BTreeSet<String>,
     target_lifetime: Option<&'a str>,
+    pending_lifetime: bool,
     current_impl: Option<String>,
     current_impl_lifetime_matches: bool,
     caller_aliases: BTreeSet<String>,
@@ -53,6 +53,7 @@ impl<'a> InitializerVisitor<'a> {
         source: &'a str,
         static_strings: &'a BTreeSet<String>,
         target_lifetime: Option<&'a str>,
+        pending_lifetime: bool,
     ) -> Self {
         Self {
             type_name,
@@ -62,6 +63,7 @@ impl<'a> InitializerVisitor<'a> {
             source,
             static_strings,
             target_lifetime,
+            pending_lifetime,
             current_impl: None,
             current_impl_lifetime_matches: false,
             caller_aliases: BTreeSet::new(),
@@ -122,8 +124,11 @@ impl<'ast> Visit<'ast> for InitializerVisitor<'_> {
         let previous = std::mem::replace(&mut self.current_impl, simple_type_name(&item.self_ty));
         let previous_lifetime = std::mem::replace(
             &mut self.current_impl_lifetime_matches,
-            self.target_lifetime
-                .is_some_and(|lifetime| impl_uses_lifetime(item, self.type_name, lifetime)),
+            self.target_lifetime.is_some_and(|lifetime| {
+                impl_uses_lifetime(item, self.type_name, lifetime)
+                    || (self.pending_lifetime
+                        && simple_type_name(&item.self_ty).as_deref() == Some(self.type_name))
+            }),
         );
         syn::visit::visit_item_impl(self, item);
         self.current_impl = previous;

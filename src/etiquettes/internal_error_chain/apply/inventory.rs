@@ -340,7 +340,7 @@ impl<'ast> Visit<'ast> for InventoryVisitor<'_> {
             self.record(
                 ErrorConversionSiteKind::TypeUse,
                 item.span(),
-                item.qself.is_none() && item.path.is_ident(self.type_name),
+                item.qself.is_none() && item.path.segments.len() == 1,
             );
         }
         syn::visit::visit_type_path(self, item);

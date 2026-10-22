@@ -117,7 +117,7 @@ pub(super) fn static_string_locals(
 }
 
 #[instrument(level = "trace", skip(item, type_name, lifetime))]
-pub(super) fn impl_uses_lifetime(item: &ItemImpl, type_name: &str, lifetime: &str) -> bool {
+pub(crate) fn impl_uses_lifetime(item: &ItemImpl, type_name: &str, lifetime: &str) -> bool {
     if item.generics.where_clause.is_some() || item.generics.params.len() != 1 {
         return false;
     }
