@@ -292,3 +292,97 @@ impl SiteError {
     assert_eq!(source(fixture.path())?, shadowed);
     Ok(())
 }
+
+#[test]
+fn field_use_that_needs_string_blocks_conversion() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new() -> Self { Self { message: "fixed".to_string() } }
+    fn extend(&mut self) { self.message.push_str(" more"); }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let preview =
+        run_error_file_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
+    assert_eq!(preview.converted_fields(), 0);
+    assert_eq!(preview.unresolved(), 1);
+    assert_eq!(source(fixture.path())?, original);
+
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(result.unresolved(), 1);
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn owned_return_and_struct_pattern_block_conversion() -> miette::Result<()> {
+    cordial::init_tracing();
+    let return_source = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new() -> Self { Self { message: "fixed".to_string() } }
+    fn into_message(self) -> String { self.message }
+}
+"#;
+    let fixture = fixture(return_source, "borrowed")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.unresolved(), 1);
+    assert_eq!(source(fixture.path())?, return_source);
+
+    let pattern_source = return_source.replace(
+        "fn into_message(self) -> String { self.message }",
+        "fn into_message(self) -> String { let Self { message } = self; message }",
+    );
+    fs::write(fixture.path().join("src/lib.rs"), &pattern_source).into_diagnostic()?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.unresolved(), 1);
+    assert_eq!(source(fixture.path())?, pattern_source);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn constructor_hidden_in_macro_blocks_conversion() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl std::error::Error for MessageError {}
+macro_rules! make_error { () => { MessageError { message: "macro".to_string() } }; }
+impl MessageError {
+    fn new() -> Self { Self { message: "direct".to_string() } }
+    fn from_macro() -> Self { make_error!() }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(result.unresolved(), 1);
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}

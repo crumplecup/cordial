@@ -93,3 +93,14 @@ rewrites and gives later slices a reusable way to decline unsafe changes.
 After that, choose the first slice 1 expression based on actual unresolved
 cases in a fixture or dogfood project, rather than adding syntax forms simply
 because they are easy to recognize.
+
+### Slice 0 progress
+
+The first guard declines a conversion when the field is used outside a simple
+formatting argument, destructured from the error, or constructed inside a
+macro the initializer visitor cannot inspect. Regression fixtures cover
+mutation, owned return, struct pattern, and macro construction; existing
+formatting reads still round trip. This is an initial guard, not completion of
+slice 0: type/name resolution, escaped constructors through aliases, and
+clearer per-field blocker reporting remain to be addressed before widening
+the accepted expression set.

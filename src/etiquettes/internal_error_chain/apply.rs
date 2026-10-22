@@ -17,8 +17,10 @@ use crate::targets::discover_crate_targets;
 use super::type_graph::{for_each_shared_src_rust_file, item_derives_error, trait_is_std_error};
 
 mod initializers;
+mod uses;
 
 use self::initializers::{FieldKind, InitializerVisitor};
+use self::uses::has_unhandled_field_use;
 
 /// Result of changing string fields and their recognized initializers.
 #[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
@@ -168,6 +170,11 @@ fn patch_file(
                 tracing::info!(path = %file.path().display(), type_name = %name, field = %field_name, "error field apply: initializer not fully recognized");
                 continue;
             };
+            if has_unhandled_field_use(syntax, &name, &field_name) {
+                unresolved += 1;
+                tracing::info!(path = %file.path().display(), type_name = %name, field = %field_name, "error field apply: field use requires the original type or cannot be resolved");
+                continue;
+            }
             let Some(field_span) = span_range(file.source(), field.ty.span()) else {
                 unresolved += 1;
                 continue;
