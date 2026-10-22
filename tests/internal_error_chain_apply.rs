@@ -72,6 +72,24 @@ impl SiteError {
     fn direct() -> Self {
         Self { file: Location::caller().file().to_owned(), line: 1 }
     }
+    #[track_caller]
+    fn inferred() -> Self {
+        let loc = Location::caller();
+        Self { file: loc.file().into(), line: loc.line() }
+    }
+    #[track_caller]
+    fn from_direct() -> Self {
+        Self { file: String::from(Location::caller().file()), line: 2 }
+    }
+    #[track_caller]
+    fn from_alias() -> Self {
+        let loc = Location::caller();
+        Self { file: std::string::String::from(loc.file()), line: loc.line() }
+    }
+    #[track_caller]
+    fn grouped() -> Self {
+        Self { file: (String::from((Location::caller().file()))), line: 3 }
+    }
 }
 "#;
     let fixture = fixture(original, "borrowed")?;
@@ -85,10 +103,10 @@ impl SiteError {
     assert_eq!(applied.unresolved(), 0);
     let borrowed = source(root)?;
     assert!(borrowed.contains("file: &'static str"), "{borrowed}");
-    assert!(borrowed.contains("file: loc.file()"), "{borrowed}");
-    assert!(
-        borrowed.contains("file: Location::caller().file()"),
-        "{borrowed}"
+    assert_eq!(borrowed.matches("file: loc.file()").count(), 3);
+    assert_eq!(
+        borrowed.matches("file: Location::caller().file()").count(),
+        3
     );
     check_fixture(root)?;
     assert_eq!(
@@ -101,9 +119,13 @@ impl SiteError {
     set_strategy(root, "owned")?;
     let reverse = run_error_file_apply(root, root, None, false).into_diagnostic()?;
     assert_eq!(reverse.converted_fields(), 1);
+    let owned = source(root)?;
+    assert_eq!(owned.matches("file: loc.file().to_string()").count(), 3);
     assert_eq!(
-        source(root)?,
-        original.replace(".to_owned()", ".to_string()")
+        owned
+            .matches("file: Location::caller().file().to_string()")
+            .count(),
+        3
     );
     check_fixture(root)?;
     Ok(())
@@ -130,6 +152,9 @@ impl MessageError {
     fn third() -> Self {
         Self { message: String::from("third"), context: std::string::String::from("fixed") }
     }
+    fn grouped() -> Self {
+        Self { message: ("grouped".to_string()), context: String::from(("fixed")) }
+    }
 }
 "#;
     let fixture = fixture(original, "borrowed")?;
@@ -146,6 +171,7 @@ impl MessageError {
     assert!(result.contains("message: \"first\", context: \"fixed\""));
     assert!(result.contains("message: \"second\", context: \"fixed\""));
     assert!(result.contains("message: \"third\", context: \"fixed\""));
+    assert!(result.contains("message: \"grouped\", context: \"fixed\""));
     check_fixture(root)?;
 
     set_strategy(root, "owned")?;
@@ -156,6 +182,7 @@ impl MessageError {
     assert!(result.contains("message: \"first\".to_string(), context: \"fixed\".to_string()"));
     assert!(result.contains("message: \"second\".to_string(), context: \"fixed\".to_string()"));
     assert!(result.contains("message: \"third\".to_string(), context: \"fixed\".to_string()"));
+    assert!(result.contains("message: \"grouped\".to_string(), context: \"fixed\".to_string()"));
     check_fixture(root)?;
     Ok(())
 }
@@ -202,7 +229,7 @@ impl std::error::Error for SiteError {}
 impl std::fmt::Debug for SiteError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.file) } }
 impl std::fmt::Display for SiteError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.file) } }
 impl SiteError {
-    fn new(file: String) -> Self { Self { file } }
+    fn new(file: &str) -> Self { Self { file: String::from(file) } }
     fn caller() -> Self { Self { file: Location::caller().file().to_string() } }
 }
 "#;

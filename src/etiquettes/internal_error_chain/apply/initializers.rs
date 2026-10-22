@@ -146,28 +146,29 @@ fn file_initializer_replacement(
     strategy: ErrorFieldStrategy,
     aliases: &BTreeSet<String>,
 ) -> Option<String> {
-    let Expr::MethodCall(method) = expr else {
-        return None;
-    };
+    let expr = without_parens(expr);
     let file_call = match strategy {
-        ErrorFieldStrategy::Borrowed
-            if method.method == "to_string" || method.method == "to_owned" =>
-        {
-            if !method.args.is_empty() {
-                return None;
+        ErrorFieldStrategy::Borrowed => match expr {
+            Expr::MethodCall(method)
+                if matches!(
+                    method.method.to_string().as_str(),
+                    "to_string" | "to_owned" | "into"
+                ) && method.args.is_empty() =>
+            {
+                &*method.receiver
             }
-            &*method.receiver
-        }
+            _ => string_from_argument(expr)?,
+        },
         ErrorFieldStrategy::Owned => expr,
-        _ => return None,
     };
+    let file_call = without_parens(file_call);
     let Expr::MethodCall(file_method) = file_call else {
         return None;
     };
     if file_method.method != "file" || !file_method.args.is_empty() {
         return None;
     }
-    let valid_receiver = match &*file_method.receiver {
+    let valid_receiver = match without_parens(&file_method.receiver) {
         Expr::Path(path) => path
             .path
             .get_ident()
@@ -192,6 +193,7 @@ fn literal_initializer_replacement(
     expr: &Expr,
     strategy: ErrorFieldStrategy,
 ) -> Option<String> {
+    let expr = without_parens(expr);
     let literal = match strategy {
         ErrorFieldStrategy::Borrowed => match expr {
             Expr::MethodCall(method)
@@ -202,31 +204,12 @@ fn literal_initializer_replacement(
             {
                 &*method.receiver
             }
-            Expr::Call(call) if call.args.len() == 1 => {
-                let Expr::Path(path) = &*call.func else {
-                    return None;
-                };
-                if path.qself.is_some() {
-                    return None;
-                }
-                let names: Vec<String> = path
-                    .path
-                    .segments
-                    .iter()
-                    .map(|segment| segment.ident.to_string())
-                    .collect();
-                if !matches!(names.as_slice(), [string, from] if string == "String" && from == "from")
-                    && !matches!(names.as_slice(), [root, module, string, from]
-                            if (root == "std" || root == "alloc") && module == "string" && string == "String" && from == "from")
-                {
-                    return None;
-                }
-                call.args.first()?
-            }
+            Expr::Call(_) => string_from_argument(expr)?,
             _ => return None,
         },
         ErrorFieldStrategy::Owned => expr,
     };
+    let literal = without_parens(literal);
     if !matches!(literal, Expr::Lit(value) if matches!(&value.lit, syn::Lit::Str(_))) {
         return None;
     }
@@ -236,6 +219,43 @@ fn literal_initializer_replacement(
         ErrorFieldStrategy::Borrowed => literal_text.to_string(),
         ErrorFieldStrategy::Owned => format!("{literal_text}.to_string()"),
     })
+}
+
+#[instrument(level = "debug", skip(expr))]
+fn string_from_argument(expr: &Expr) -> Option<&Expr> {
+    let Expr::Call(call) = without_parens(expr) else {
+        return None;
+    };
+    if call.args.len() != 1 {
+        return None;
+    }
+    let Expr::Path(path) = without_parens(&call.func) else {
+        return None;
+    };
+    if path.qself.is_some() {
+        return None;
+    }
+    let names: Vec<String> = path
+        .path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect();
+    if !matches!(names.as_slice(), [string, from] if string == "String" && from == "from")
+        && !matches!(names.as_slice(), [root, module, string, from]
+            if (root == "std" || root == "alloc") && module == "string" && string == "String" && from == "from")
+    {
+        return None;
+    }
+    call.args.first()
+}
+
+#[instrument(level = "debug", skip(expr))]
+fn without_parens(mut expr: &Expr) -> &Expr {
+    while let Expr::Paren(paren) = expr {
+        expr = &paren.expr;
+    }
+    expr
 }
 
 #[instrument(level = "debug", skip(block))]
