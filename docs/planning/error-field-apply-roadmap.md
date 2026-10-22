@@ -159,3 +159,19 @@ every recognized constructor uses `&'a str` parameters or typed aliases.
 The reverse conversion restores owned storage. A parameter with an unrelated
 or elided lifetime blocks the field, as does a shorthand field initializer;
 this slice does not add lifetimes or edit caller signatures.
+
+### Next prerequisite: a complete conversion unit
+
+Adding a lifetime to an error type, or borrowing its `Kind` and `source`, is
+blocked on evidence the current apply scanner does not collect. Its initializer
+visitor recognizes same-file struct expressions, while the internal error type
+graph records type and source links without constructors, callers, or lifetime
+bounds. A syntax-only edit could therefore change a field while missing a
+constructor or a caller that needs an owned value.
+
+Before extending slices 2 and 3, build a conversion-unit inventory that records
+every construction path, field-dependent read or write, `From`/`?` conversion,
+and caller for a private error graph. It must distinguish resolved paths from
+unresolved macro, alias, and cross-file uses, and reject a unit with any unknown
+path. Then plan all edits together, validate the whole unit, and write it
+atomically. Keep the existing single-file conversions available independently.
