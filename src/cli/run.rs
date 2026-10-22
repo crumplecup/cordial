@@ -182,10 +182,10 @@ pub(super) fn execute_quality_apply(
     #[cfg(feature = "internal_error_chain")]
     if only_etiquette.is_none_or(|name| name == "internal_error_chain") {
         let home = store_home.clone().unwrap_or_else(default_store_home);
-        let task = progress.spinner("Applying error file storage policy".to_string());
-        let summary = crate::run_error_file_apply(project_root, &home, crate_name, dry_run)?;
+        let task = progress.spinner("Applying error field storage policy".to_string());
+        let summary = crate::run_error_field_apply(project_root, &home, crate_name, dry_run)?;
         task.finish(format!(
-            "Error file storage converted for {} type(s)",
+            "Error field storage converted for {} field(s)",
             summary.converted_fields()
         ));
         tracing::info!(

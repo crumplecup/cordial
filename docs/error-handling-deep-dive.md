@@ -486,13 +486,15 @@ The borrowed mode adds `FIELD-STRATEGY-001` for owned non-`Copy` fields and
 changes `ARCH-KIND-BOX-001` to require a borrowed Kind.
 
 `cordial quality --apply --etiquette internal_error_chain --dry-run` previews a
-small part of a strategy change. Without `--dry-run`, it converts a private
-error type's private `file` field between `String` and `&'static str` when all
-its constructors in the same file initialize it from
-`Location::caller().file()`. It removes or adds `.to_string()` at those sites.
-It skips public and cross-file types and constructors it cannot recognize.
-Other fields, including `source` and `kind`, still need manual changes to their
-lifetimes and call sites. Run the focused Cargo checks after applying edits.
+small part of a strategy change. Without `--dry-run`, it converts private
+`String` fields of private error types to `&'static str`, and mirrors the edit
+for the owned strategy. For `file`, every same-file initializer must use
+`Location::caller().file()`. For other fields, every initializer must be a
+string literal, using `.to_string()`, `.to_owned()`, or `.into()` in owned mode.
+It skips public and cross-file types and fields whose initializers it cannot
+recognize. Dynamic fields, including `source` and `kind`, still need manual
+changes to their lifetimes and call sites. Run the focused Cargo checks after
+applying edits.
 
 ### Recording the right line
 

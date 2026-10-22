@@ -39,7 +39,9 @@ mod source_shape;
 mod type_graph;
 mod types;
 
-pub use apply::{ErrorFileApplySummary, run_error_file_apply};
+pub use apply::{
+    ErrorFieldApplySummary, ErrorFileApplySummary, run_error_field_apply, run_error_file_apply,
+};
 pub(crate) use architecture::{
     scan_crate_error_architecture, scan_crate_error_architecture_with_source,
 };

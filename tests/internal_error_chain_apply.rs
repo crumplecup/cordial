@@ -55,6 +55,7 @@ impl std::fmt::Debug for SiteError {
         write!(f, "{}:{}", self.file, self.line)
     }
 }
+
 impl std::fmt::Display for SiteError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}", self.file, self.line)
@@ -104,6 +105,85 @@ impl SiteError {
         source(root)?,
         original.replace(".to_owned()", ".to_string()")
     );
+    check_fixture(root)?;
+    Ok(())
+}
+
+#[test]
+fn literal_string_fields_round_trip_between_strategies() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String, context: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.context, self.message)
+    }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn first() -> Self {
+        Self { message: "first".to_string(), context: "fixed".to_owned() }
+    }
+    fn second() -> Self {
+        Self { message: "second".into(), context: "fixed".to_string() }
+    }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let root = fixture.path();
+    let preview = run_error_file_apply(root, root, None, true).into_diagnostic()?;
+    assert_eq!(preview.converted_fields(), 2);
+    assert_eq!(source(root)?, original);
+
+    let borrowed = run_error_file_apply(root, root, None, false).into_diagnostic()?;
+    assert_eq!(borrowed.converted_fields(), 2);
+    assert_eq!(borrowed.unresolved(), 0);
+    let result = source(root)?;
+    assert!(result.contains("message: &'static str, context: &'static str"));
+    assert!(result.contains("message: \"first\", context: \"fixed\""));
+    assert!(result.contains("message: \"second\", context: \"fixed\""));
+    check_fixture(root)?;
+
+    set_strategy(root, "owned")?;
+    let owned = run_error_file_apply(root, root, None, false).into_diagnostic()?;
+    assert_eq!(owned.converted_fields(), 2);
+    let result = source(root)?;
+    assert!(result.contains("message: String, context: String"));
+    assert!(result.contains("message: \"first\".to_string(), context: \"fixed\".to_string()"));
+    assert!(result.contains("message: \"second\".to_string(), context: \"fixed\".to_string()"));
+    check_fixture(root)?;
+    Ok(())
+}
+
+#[test]
+fn dynamic_string_field_stays_owned_while_literal_field_converts() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String, context: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.context, self.message)
+    }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new(message: String) -> Self {
+        Self { message, context: "fixed".to_string() }
+    }
+    fn fixed() -> Self {
+        Self { message: "literal".to_string(), context: "fixed".to_string() }
+    }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let root = fixture.path();
+    let result = run_error_file_apply(root, root, None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 1);
+    assert_eq!(result.unresolved(), 1);
+    let changed = source(root)?;
+    assert!(changed.contains("message: String, context: &'static str"));
+    assert!(changed.contains("message, context: \"fixed\""));
+    assert!(changed.contains("message: \"literal\".to_string(), context: \"fixed\""));
     check_fixture(root)?;
     Ok(())
 }

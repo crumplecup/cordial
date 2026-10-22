@@ -140,7 +140,7 @@ pub enum Commands {
     },
     /// Run source-quality etiquettes, or apply mechanical patches.
     Quality {
-        /// Apply supported tracing, crate-attribute, and error-file edits.
+        /// Apply supported tracing, crate-attribute, and error-field edits.
         #[arg(long)]
         apply: bool,
         /// Log apply changes without writing source files.
@@ -148,7 +148,7 @@ pub enum Commands {
         dry_run: bool,
         /// Tracing instrument checklist (default:
         /// `{store}/findings/tracing-instrument.checklist.md`). Crate-attrs
-        /// and error-file apply scan source directly and do not use this path.
+        /// and error-field apply scan source directly and do not use this path.
         #[arg(long)]
         checklist: Option<PathBuf>,
         /// Exit with failure when unresolved open findings remain.
