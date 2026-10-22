@@ -490,7 +490,8 @@ small part of a strategy change. Without `--dry-run`, it converts private
 `String` fields of private error types to `&'static str`, and mirrors the edit
 for the owned strategy. For `file`, every same-file initializer must use
 `Location::caller().file()`. For other fields, every initializer must be a
-string literal, using `.to_string()`, `.to_owned()`, or `.into()` in owned mode.
+string literal, using `.to_string()`, `.to_owned()`, `.into()`, or
+`String::from("literal")` in owned mode.
 It skips public and cross-file types and fields whose initializers it cannot
 recognize. Dynamic fields, including `source` and `kind`, still need manual
 changes to their lifetimes and call sites. Run the focused Cargo checks after

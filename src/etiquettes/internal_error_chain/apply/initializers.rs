@@ -193,19 +193,38 @@ fn literal_initializer_replacement(
     strategy: ErrorFieldStrategy,
 ) -> Option<String> {
     let literal = match strategy {
-        ErrorFieldStrategy::Borrowed => {
-            let Expr::MethodCall(method) = expr else {
-                return None;
-            };
-            if !matches!(
-                method.method.to_string().as_str(),
-                "to_string" | "to_owned" | "into"
-            ) || !method.args.is_empty()
+        ErrorFieldStrategy::Borrowed => match expr {
+            Expr::MethodCall(method)
+                if matches!(
+                    method.method.to_string().as_str(),
+                    "to_string" | "to_owned" | "into"
+                ) && method.args.is_empty() =>
             {
-                return None;
+                &*method.receiver
             }
-            &*method.receiver
-        }
+            Expr::Call(call) if call.args.len() == 1 => {
+                let Expr::Path(path) = &*call.func else {
+                    return None;
+                };
+                if path.qself.is_some() {
+                    return None;
+                }
+                let names: Vec<String> = path
+                    .path
+                    .segments
+                    .iter()
+                    .map(|segment| segment.ident.to_string())
+                    .collect();
+                if !matches!(names.as_slice(), [string, from] if string == "String" && from == "from")
+                    && !matches!(names.as_slice(), [root, module, string, from]
+                            if (root == "std" || root == "alloc") && module == "string" && string == "String" && from == "from")
+                {
+                    return None;
+                }
+                call.args.first()?
+            }
+            _ => return None,
+        },
         ErrorFieldStrategy::Owned => expr,
     };
     if !matches!(literal, Expr::Lit(value) if matches!(&value.lit, syn::Lit::Str(_))) {

@@ -127,6 +127,9 @@ impl MessageError {
     fn second() -> Self {
         Self { message: "second".into(), context: "fixed".to_string() }
     }
+    fn third() -> Self {
+        Self { message: String::from("third"), context: std::string::String::from("fixed") }
+    }
 }
 "#;
     let fixture = fixture(original, "borrowed")?;
@@ -142,6 +145,7 @@ impl MessageError {
     assert!(result.contains("message: &'static str, context: &'static str"));
     assert!(result.contains("message: \"first\", context: \"fixed\""));
     assert!(result.contains("message: \"second\", context: \"fixed\""));
+    assert!(result.contains("message: \"third\", context: \"fixed\""));
     check_fixture(root)?;
 
     set_strategy(root, "owned")?;
@@ -151,6 +155,7 @@ impl MessageError {
     assert!(result.contains("message: String, context: String"));
     assert!(result.contains("message: \"first\".to_string(), context: \"fixed\".to_string()"));
     assert!(result.contains("message: \"second\".to_string(), context: \"fixed\".to_string()"));
+    assert!(result.contains("message: \"third\".to_string(), context: \"fixed\".to_string()"));
     check_fixture(root)?;
     Ok(())
 }
@@ -167,8 +172,8 @@ impl std::fmt::Display for MessageError {
 }
 impl std::error::Error for MessageError {}
 impl MessageError {
-    fn new(message: String) -> Self {
-        Self { message, context: "fixed".to_string() }
+    fn new(message: &str) -> Self {
+        Self { message: String::from(message), context: "fixed".to_string() }
     }
     fn fixed() -> Self {
         Self { message: "literal".to_string(), context: "fixed".to_string() }
@@ -182,7 +187,7 @@ impl MessageError {
     assert_eq!(result.unresolved(), 1);
     let changed = source(root)?;
     assert!(changed.contains("message: String, context: &'static str"));
-    assert!(changed.contains("message, context: \"fixed\""));
+    assert!(changed.contains("message: String::from(message), context: \"fixed\""));
     assert!(changed.contains("message: \"literal\".to_string(), context: \"fixed\""));
     check_fixture(root)?;
     Ok(())
