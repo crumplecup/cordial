@@ -299,6 +299,86 @@ impl MessageError {
 }
 
 #[test]
+fn qualified_builtin_macros_round_trip() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String, context: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.context, self.message)
+    }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new() -> Self {
+        Self { message: String::from(::core::concat!("fix", "ed")), context: ::std::include_str!("context.txt").to_owned() }
+    }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    fs::write(fixture.path().join("src/context.txt"), "site").into_diagnostic()?;
+    let preview =
+        run_error_file_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
+    assert_eq!(preview.converted_fields(), 2);
+    assert_eq!(source(fixture.path())?, original);
+
+    let borrowed =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(borrowed.converted_fields(), 2);
+    assert_eq!(borrowed.unresolved(), 0);
+    let changed = source(fixture.path())?;
+    assert!(changed.contains("message: &'static str, context: &'static str"));
+    assert!(changed.contains(
+        "message: ::core::concat!(\"fix\", \"ed\"), context: ::std::include_str!(\"context.txt\")"
+    ));
+    check_fixture(fixture.path())?;
+    assert_eq!(
+        run_error_file_apply(fixture.path(), fixture.path(), None, false)
+            .into_diagnostic()?
+            .changed_files(),
+        0
+    );
+
+    set_strategy(fixture.path(), "owned")?;
+    let owned =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(owned.converted_fields(), 2);
+    let changed = source(fixture.path())?;
+    assert!(changed.contains("message: String, context: String"));
+    assert!(changed.contains("message: ::core::concat!(\"fix\", \"ed\").to_string()"));
+    assert!(changed.contains("context: ::std::include_str!(\"context.txt\").to_string()"));
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn unqualified_custom_macro_is_not_assumed_to_be_builtin() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"macro_rules! concat { ($text:literal) => { $text } }
+#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new() -> Self { Self { message: String::from(concat!("local")) } }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(
+        result.blockers()[0].reason(),
+        ErrorFieldApplyBlockerReason::Initializer
+    );
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
 fn dynamic_string_field_stays_owned_while_literal_field_converts() -> miette::Result<()> {
     cordial::init_tracing();
     let original = r#"#[derive(Debug)]

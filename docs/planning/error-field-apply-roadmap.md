@@ -18,6 +18,7 @@ recognized constructors. It handles `file: String` built from
 `Location::caller().file()` and other `String` fields built from string literals,
 or explicitly qualified same-module `const` and immutable `static` bindings
 typed `&'static str`, including constants whose values use `concat!(...)`.
+Direct `::core` or `::std` forms of `concat!` and `include_str!` also qualify.
 It recognizes `to_string`, `to_owned`, `into`, and selected `String::from` forms.
 It mirrors those conversions back to owned `String`. It uses a shared parsed
 file view while scanning and checks that edited source parses. It leaves dynamic
@@ -120,6 +121,8 @@ evidence boundary. Slice 0 remains open for those cases.
 Explicit `self::NAME` references to a unique, unconditionally declared
 same-module `const` or immutable `static` typed `&'static str` now round trip
 between owned and borrowed storage. The binding's type supplies the proof, so
-the value may use `concat!(...)` without interpreting macro expansion. Bare
-names, conditional or duplicate declarations, and direct macro expressions
-remain unsupported until their bindings or expansions can be resolved safely.
+the value may use `concat!(...)` without interpreting macro expansion. Direct
+`::core` and `::std` calls to the built-in `concat!` and `include_str!` macros
+also round trip. Bare names, conditional or duplicate declarations, and direct
+macro expressions without a qualified built-in path remain unsupported until
+their bindings or expansions can be resolved safely.

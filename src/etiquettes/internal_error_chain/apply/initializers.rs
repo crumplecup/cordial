@@ -222,7 +222,11 @@ fn static_string_initializer_replacement(
         if path.qself.is_none()
             && matches!(path.path.segments.iter().map(|part| part.ident.to_string()).collect::<Vec<_>>().as_slice(), [scope, name]
                 if scope == "self" && static_strings.contains(name)));
-    if !literal && !qualified_const {
+    let qualified_builtin_macro = matches!(value, Expr::Macro(macro_expr)
+        if macro_expr.mac.path.leading_colon.is_some()
+            && matches!(macro_expr.mac.path.segments.iter().map(|part| part.ident.to_string()).collect::<Vec<_>>().as_slice(), [root, name]
+                if (root == "core" || root == "std") && (name == "concat" || name == "include_str")));
+    if !literal && !qualified_const && !qualified_builtin_macro {
         return None;
     }
     let (start, end) = span_range(source, value.span())?;
