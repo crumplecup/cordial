@@ -230,6 +230,8 @@ payloads and every other non-`Copy` error field use references, and call-site
 `ERROR-CHAIN-COMPLIANCE-FIELD-STRATEGY-001` rule checks those fields; the Kind
 storage and source-shape findings follow the selected policy. General
 `[antipatterns.static_refs]` advice continues to apply outside error types.
+The staged source-rewrite plan for this switch is the
+[error field apply roadmap](error-field-apply-roadmap.md).
 
 Call-site chain preservation (stringify / discard) remains a separate layer.
 `std::error::Error::source()` forwarding is still inventory on the type graph.

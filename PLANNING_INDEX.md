@@ -37,6 +37,7 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 | [amenable-ext targets in cordial.toml](docs/planning/amenable-ext-targets-config.md) | **Complete** | Config-driven `[[amenable_ext.target]]` list, owned `Arc<dyn Etiquette>` registration. Steps 0-2 landed |
 | [amenable-ext generic instantiations](docs/planning/amenable-ext-generic-instantiations.md) | **Active** | Per-instantiation coverage rows for generic types (chrono `DateTime`/`Date`), adapting to amenable's CHRONO_SUPPORT_PLAN; canonical type identity; aggregate parent rows. Phase 0 (registry read side) done |
 | [Error handling as plugin](docs/planning/error-handling-as-plugin.md) | **Reference** | Unified `ErrorHandling` plugin; parent / Kind / native-source architecture lints |
+| [Error field apply roadmap](docs/planning/error-field-apply-roadmap.md) | **Active** | Safe owned/borrowed `--apply` expansion: use-site guards, static expressions, constructor parameters, and private Kind/source graphs |
 | [One crate, CLI in the library](docs/planning/one-crate-cli-layout.md) | **Reference** | One `CordialError`; `cli_layout` etiquette; clap dispatch in the library |
 
 ## Etiquette notes
