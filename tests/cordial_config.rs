@@ -2,8 +2,8 @@ use miette::{IntoDiagnostic, WrapErr};
 use std::fs;
 
 use cordial::{
-    CordialConfig, DependencyFreshnessThresholds, StaticRefStrategy, VisibilityThresholds,
-    load_cordial_config, load_visibility_thresholds,
+    CordialConfig, DependencyFreshnessThresholds, ErrorFieldStrategy, StaticRefStrategy,
+    VisibilityThresholds, load_cordial_config, load_visibility_thresholds,
 };
 
 #[test]
@@ -17,6 +17,31 @@ fn missing_config_files_use_default() -> miette::Result<()> {
         .wrap_err("store home")?;
     let loaded = load_cordial_config(workspace.path(), store_home.path());
     assert_eq!(loaded, CordialConfig::default());
+    Ok(())
+}
+
+#[test]
+fn error_field_strategy_defaults_to_owned_and_accepts_borrowed() -> miette::Result<()> {
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir().into_diagnostic()?;
+    let store_home = tempfile::tempdir().into_diagnostic()?;
+    assert_eq!(
+        load_cordial_config(workspace.path(), store_home.path())
+            .internal_error_chain()
+            .field_strategy(),
+        ErrorFieldStrategy::Owned
+    );
+    fs::write(
+        workspace.path().join("cordial.toml"),
+        "[internal_error_chain]\nfield_strategy = \"borrowed\"\n",
+    )
+    .into_diagnostic()?;
+    assert_eq!(
+        load_cordial_config(workspace.path(), store_home.path())
+            .internal_error_chain()
+            .field_strategy(),
+        ErrorFieldStrategy::Borrowed
+    );
     Ok(())
 }
 

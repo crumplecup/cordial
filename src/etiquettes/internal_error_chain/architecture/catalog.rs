@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
+use syn::Type;
 
 use super::super::type_graph::last_ident;
 
@@ -22,6 +23,7 @@ pub(super) struct StructInfo {
     line: u32,
     snippet: String,
     kind_box_of: Option<String>,
+    kind_borrowed_of: Option<String>,
     kind_unboxed_of: Option<String>,
     foreign_source: Option<String>,
     #[getter(copy)]
@@ -90,6 +92,17 @@ pub(super) struct MapErrSite {
 }
 
 #[derive(Debug, Clone, derive_getters::Getters)]
+pub(super) struct ErrorField {
+    owner: String,
+    name: String,
+    context: String,
+    file: PathBuf,
+    #[getter(copy)]
+    line: u32,
+    ty: Type,
+}
+
+#[derive(Debug, Clone, derive_getters::Getters)]
 pub(super) struct Catalog {
     crate_name: String,
     structs: BTreeMap<String, StructInfo>,
@@ -99,6 +112,8 @@ pub(super) struct Catalog {
     fanout_wrappers: Vec<FanoutWrapper>,
     fanout_calls: Vec<FanoutCall>,
     error_impls: BTreeSet<String>,
+    fields: Vec<ErrorField>,
+    copy_impls: BTreeSet<String>,
 }
 
 impl Catalog {
@@ -113,6 +128,8 @@ impl Catalog {
             fanout_wrappers: Vec::new(),
             fanout_calls: Vec::new(),
             error_impls: BTreeSet::new(),
+            fields: Vec::new(),
+            copy_impls: BTreeSet::new(),
         }
     }
 
@@ -141,6 +158,7 @@ impl Catalog {
         let boxed_by_error = self.structs.values().any(|item_struct| {
             self.impls_error(&item_struct.ident)
                 && (item_struct.kind_box_of.as_deref() == Some(item.ident.as_str())
+                    || item_struct.kind_borrowed_of.as_deref() == Some(item.ident.as_str())
                     || item_struct.kind_unboxed_of.as_deref() == Some(item.ident.as_str()))
         });
         if boxed_by_error {
@@ -178,7 +196,7 @@ impl Catalog {
             .values()
             .filter(|item| {
                 self.impls_error(&item.ident)
-                    && item.kind_box_of.is_some()
+                    && (item.kind_box_of.is_some() || item.kind_borrowed_of.is_some())
                     && !payloads.contains(&item.ident)
             })
             .collect()

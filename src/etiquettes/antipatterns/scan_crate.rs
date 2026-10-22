@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use crate::config::StaticRefStrategy;
+use crate::config::{ErrorFieldStrategy, StaticRefStrategy};
 use crate::error::CordialResult;
 use crate::loader::SourceLoadView;
 
@@ -28,6 +28,7 @@ pub fn scan_crate_antipatterns(
         workspace_root,
         store_root,
         StaticRefStrategy::default(),
+        ErrorFieldStrategy::default(),
     )
 }
 
@@ -48,12 +49,13 @@ pub fn scan_crate_antipatterns_with_static_ref_strategy(
         workspace_root,
         store_root,
         static_ref_strategy,
+        ErrorFieldStrategy::default(),
     )
 }
 
 #[instrument(
     level = "debug",
-    skip(source, static_ref_strategy),
+    skip(source, static_ref_strategy, error_field_strategy),
     err(level = "warn")
 )]
 pub(super) fn scan_shared_crate_antipatterns(
@@ -63,8 +65,14 @@ pub(super) fn scan_shared_crate_antipatterns(
     workspace_root: &Path,
     store_root: &Path,
     static_ref_strategy: StaticRefStrategy,
+    error_field_strategy: ErrorFieldStrategy,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    let findings = scan_shared_crate_trees(source, crate_root, static_ref_strategy)?;
+    let findings = scan_shared_crate_trees(
+        source,
+        crate_root,
+        static_ref_strategy,
+        error_field_strategy,
+    )?;
     finish_crate_antipattern_scan(
         findings,
         crate_root,

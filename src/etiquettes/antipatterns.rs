@@ -10,7 +10,8 @@
 //! **Flags.** `Box<dyn Error>`, `Result<_, String>`, unused `_arg`
 //! parameters, struct fields that are `&'static` references where owned data
 //! would do, unnamed verifier contract bounds, and workspace members that pin
-//! a version in workspace-adjacent tables.
+//! a version in workspace-adjacent tables. Error types use
+//! `[internal_error_chain] field_strategy` when set to `"borrowed"`.
 //!
 //! **Ignores.** Unused `_arg` is allowed on impls of traits not defined in
 //! this crate. `&'static dyn` of a crate-local trait may be a view/registry
@@ -47,7 +48,9 @@ pub use probe::AntipatternSiteProbe;
 pub use reporter::{
     AntipatternChecklistReporter, AntipatternCsvReporter, AntipatternSummaryReporter,
 };
-pub use scan::{scan_rust_source, scan_rust_source_with_static_ref_strategy};
+pub use scan::{
+    scan_rust_source, scan_rust_source_with_static_ref_strategy, scan_rust_source_with_strategies,
+};
 pub use scan_crate::{scan_crate_antipatterns, scan_crate_antipatterns_with_static_ref_strategy};
 pub use types::{AntipatternRuleId, AntipatternSiteRecord};
 pub use version_reporter::{
@@ -105,7 +108,7 @@ pub static ANTIPATTERNS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::
                 "Untyped error carriers and related source smells?",
                 "These are quality problems adjacent to error handling that are not site/chain/foreign layers: they erase types, hide unused work, or fight workspace versioning.",
                 "Flags Box<dyn Error>, Result<_, String>, unused _arg (except on impls of foreign traits), struct &'static fields where an owned type or configured static-ref strategy would do, unnamed contract bounds (Kani/Creusot/Verus), and workspace members that pin a version. Some Box<dyn Error> / unused-arg rows feed the Error handling quality-report area.",
-                "`[antipatterns] enabled = false` in cordial.toml. `[antipatterns.static_refs] strategy = \"string\" | \"cow\" | \"const\"` changes the static-ref remediation guidance; `const` falls back to `Cow<'static, str>` for runtime string fields.",
+                "`[antipatterns] enabled = false` in cordial.toml. `[antipatterns.static_refs] strategy = \"string\" | \"cow\" | \"const\"` changes the static-ref remediation guidance; `const` falls back to `Cow<'static, str>` for runtime string fields. `[internal_error_chain] field_strategy = \"borrowed\"` exempts Error types and their Kind enums; the internal error chain etiquette checks their field storage instead.",
                 vec![
                     EtiquetteRuleExplain::new(
                         "ANTIPATTERN-BOX-DYN-ERROR-001",

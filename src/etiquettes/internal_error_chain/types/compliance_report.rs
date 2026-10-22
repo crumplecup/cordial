@@ -33,6 +33,15 @@ impl InternalErrorComplianceReport {
             .count()
     }
 
+    /// Fields with storage that conflicts with the selected error policy.
+    #[instrument(level = "trace", skip(self))]
+    pub fn field_strategy_count(&self) -> usize {
+        self.findings()
+            .iter()
+            .filter(|finding| finding.rule_id() == InternalErrorComplianceId::FieldStrategy001)
+            .count()
+    }
+
     #[instrument(level = "trace", skip(self))]
     pub fn source_track_caller_count(&self) -> usize {
         self.findings()

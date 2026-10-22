@@ -104,6 +104,7 @@ pub use etiquettes::antipatterns::{
     scan_creusot_contract_bounds_source, scan_kani_contract_bounds_source,
     scan_rust_source as scan_antipatterns_rust_source,
     scan_rust_source_with_static_ref_strategy as scan_antipatterns_rust_source_with_static_ref_strategy,
+    scan_rust_source_with_strategies as scan_antipatterns_rust_source_with_strategies,
     scan_verus_contract_bounds_source,
 };
 #[cfg(feature = "cfg_hygiene")]
@@ -328,11 +329,12 @@ pub use clean::{
 pub use config::{
     AntipatternsConfig, CfgHygieneThresholds, CfgScatterThresholds, CordialConfig,
     CrateAttrsThresholds, CreusotDiagnosticsThresholds, DependencyFreshnessThresholds,
-    DerivesThresholds, DocWarningsThresholds, EtiquetteGate, FeatureWarningsThresholds,
-    HotpathConfig, InternalErrorChainThresholds, ModularityThresholds, PageantryThresholds,
-    StaticRefPolicy, StaticRefStrategy, TierConfig, TracingBoundaryPolicy, TracingStdioPolicy,
-    TracingSubscriberPolicy, TracingThresholds, VisibilityThresholds, WorklistSettings,
-    load_cordial_config, load_derives_thresholds, load_session_config, load_visibility_thresholds,
+    DerivesThresholds, DocWarningsThresholds, ErrorFieldStrategy, EtiquetteGate,
+    FeatureWarningsThresholds, HotpathConfig, InternalErrorChainThresholds, ModularityThresholds,
+    PageantryThresholds, StaticRefPolicy, StaticRefStrategy, TierConfig, TracingBoundaryPolicy,
+    TracingStdioPolicy, TracingSubscriberPolicy, TracingThresholds, VisibilityThresholds,
+    WorklistSettings, load_cordial_config, load_derives_thresholds, load_session_config,
+    load_visibility_thresholds,
 };
 pub use exceptions::{
     AddExceptionOutcome, CoverageSkipEntry, DEFAULT_EXCEPTIONS_REGISTRY, ExceptionEntry,

@@ -671,6 +671,89 @@ fn write_error_crate(src: &str) -> miette::Result<tempfile::TempDir> {
     Ok(fixture)
 }
 
+fn scan_error_with_strategy(src: &str, strategy: &str) -> miette::Result<String> {
+    let fixture = write_error_crate(src)?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        format!("[internal_error_chain]\nfield_strategy = \"{strategy}\"\n"),
+    )
+    .into_diagnostic()?;
+    let store = tempfile::tempdir().into_diagnostic()?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&*INTERNAL_ERROR_CHAIN_ETIQUETTE)
+        .build();
+    session.run(&RunAll).into_diagnostic()?;
+    fs::read_to_string(store.path().join("findings/internal-error-compliance.csv"))
+        .into_diagnostic()
+}
+
+#[test]
+fn borrowed_strategy_checks_every_non_copy_error_field_and_kind() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source =
+        WELL_FORMED_SOURCE.replace("    line: u32,", "    line: u32,\n    code: LocalCode,");
+    let source = format!("#[derive(Clone, Copy)]\nstruct LocalCode(u32);\n{source}");
+    let csv = scan_error_with_strategy(&source, "borrowed")?;
+    assert!(
+        csv.contains("ERROR-CHAIN-COMPLIANCE-ARCH-KIND-BOX-001"),
+        "{csv}"
+    );
+    for field in ["IoSource::source", "IoSource::file", "ErrorKind::Io::_0"] {
+        assert!(csv.contains(field), "missing {field}: {csv}");
+    }
+    assert!(!csv.contains("IoSource::line"), "{csv}");
+    assert!(!csv.contains("IoSource::code"), "{csv}");
+    assert!(
+        !csv.contains("Error::kind,ERROR-CHAIN-COMPLIANCE-FIELD-STRATEGY-001"),
+        "{csv}"
+    );
+    Ok(())
+}
+
+#[test]
+fn borrowed_strategy_accepts_borrowed_kind_source_and_file() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+use std::io;
+pub struct Error<'a> { kind: &'a ErrorKind<'a> }
+pub enum ErrorKind<'a> { Io(&'a IoSource<'a>) }
+pub struct IoSource<'a> {
+    source: &'a io::Error,
+    file: &'static str,
+    line: u32,
+}
+impl std::fmt::Display for Error<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "error") }
+}
+impl std::fmt::Debug for Error<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "error") }
+}
+impl std::fmt::Display for IoSource<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "io") }
+}
+impl std::fmt::Debug for IoSource<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "io") }
+}
+impl std::error::Error for Error<'_> {}
+impl std::error::Error for IoSource<'_> {}
+"#;
+    let csv = scan_error_with_strategy(source, "borrowed")?;
+    assert!(
+        !csv.contains("ERROR-CHAIN-COMPLIANCE-FIELD-STRATEGY-001"),
+        "{csv}"
+    );
+    assert!(
+        !csv.contains("ERROR-CHAIN-COMPLIANCE-ARCH-KIND-BOX-001"),
+        "{csv}"
+    );
+    assert!(
+        !csv.contains("ERROR-CHAIN-COMPLIANCE-ARCH-KIND-VARIANT-001"),
+        "{csv}"
+    );
+    Ok(())
+}
+
 #[test]
 fn incomplete_source_wrapper_is_shape_and_track_caller_violation() -> miette::Result<()> {
     cordial::init_tracing();

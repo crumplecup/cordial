@@ -2,10 +2,63 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use cordial::{
-    ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, RunAll, Session, SessionBuilder, StaticRefStrategy,
-    scan_antipatterns_rust_source, scan_antipatterns_rust_source_with_static_ref_strategy,
-    scan_crate_antipatterns,
+    ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, ErrorFieldStrategy, RunAll, Session, SessionBuilder,
+    StaticRefStrategy, scan_antipatterns_rust_source,
+    scan_antipatterns_rust_source_with_static_ref_strategy,
+    scan_antipatterns_rust_source_with_strategies, scan_crate_antipatterns,
 };
+
+#[test]
+fn borrowed_error_fields_do_not_disable_general_static_ref_rule() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+struct ErrorType { file: &'static str }
+impl std::error::Error for ErrorType {}
+struct Ordinary { file: &'static str }
+struct UnrelatedKind { file: &'static str }
+"#;
+    let root = Path::new("/fixture/src");
+    let file = root.join("lib.rs");
+    let borrowed = scan_antipatterns_rust_source_with_strategies(
+        source,
+        &file,
+        root,
+        root,
+        StaticRefStrategy::String,
+        ErrorFieldStrategy::Borrowed,
+    )
+    .into_diagnostic()?;
+    assert!(
+        !borrowed
+            .iter()
+            .any(|finding| finding.context().contains("ErrorType"))
+    );
+    assert!(
+        borrowed
+            .iter()
+            .any(|finding| finding.context().contains("Ordinary"))
+    );
+    assert!(
+        borrowed
+            .iter()
+            .any(|finding| finding.context().contains("UnrelatedKind"))
+    );
+    let owned = scan_antipatterns_rust_source_with_strategies(
+        source,
+        &file,
+        root,
+        root,
+        StaticRefStrategy::String,
+        ErrorFieldStrategy::Owned,
+    )
+    .into_diagnostic()?;
+    assert!(
+        owned
+            .iter()
+            .any(|finding| finding.context().contains("ErrorType"))
+    );
+    Ok(())
+}
 
 use miette::{IntoDiagnostic, WrapErr};
 

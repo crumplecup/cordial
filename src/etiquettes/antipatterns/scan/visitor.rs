@@ -3,27 +3,27 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{
-    Attribute, Block, Fields, FnArg, ItemEnum, ItemFn, ItemImpl, ItemMod, ItemStruct, ItemTrait,
-    ItemType, Signature, TraitItem, Type,
+    Fields, ItemEnum, ItemFn, ItemImpl, ItemMod, ItemStruct, ItemTrait, ItemType, TraitItem, Type,
 };
 
-use crate::config::StaticRefStrategy;
+use crate::config::{ErrorFieldStrategy, StaticRefStrategy};
 use crate::enricher::is_cfg_test;
 
 use super::preds::{
-    box_dyn_error_snippet, box_dyn_error_trait_object, cfg_sibling_real_param_names_in_impl_items,
-    cfg_sibling_real_param_names_in_items, has_proc_macro_abi_attr, is_creusot_opaque_logic_stub,
-    is_stringish_error_type, result_error_type, result_string_error_snippet,
-    static_ref_field_snippet, truncate_snippet, type_contains_disallowed_static_ref,
-    type_is_location_capture, type_label, unused_argument_bindings,
+    cfg_sibling_real_param_names_in_impl_items, cfg_sibling_real_param_names_in_items, type_label,
 };
 use crate::error::CordialResult;
 use crate::etiquettes::antipatterns::types::{AntipatternRuleId, AntipatternSiteRecord};
 
 use tracing::instrument;
+mod checks;
+mod error_types;
+mod trait_names;
+pub(super) use error_types::{collect_error_kind_names, collect_error_type_names};
+pub(super) use trait_names::collect_local_trait_names;
+use trait_names::is_foreign_trait_impl;
 pub(super) struct AntipatternScanVisitor<'a> {
     file: PathBuf,
     crate_root: PathBuf,
@@ -33,8 +33,10 @@ pub(super) struct AntipatternScanVisitor<'a> {
     in_trait_definition: bool,
     in_foreign_trait_impl: bool,
     local_trait_names: &'a HashSet<String>,
+    error_type_names: &'a HashSet<String>,
     const_placed_types: &'a HashSet<String>,
     static_ref_strategy: StaticRefStrategy,
+    error_field_strategy: ErrorFieldStrategy,
     cfg_sibling_real_params: HashMap<String, HashSet<String>>,
     findings: Vec<AntipatternSiteRecord>,
     error: Option<crate::error::CordialError>,
@@ -43,15 +45,24 @@ pub(super) struct AntipatternScanVisitor<'a> {
 impl<'a> AntipatternScanVisitor<'a> {
     #[instrument(
         level = "debug",
-        skip(file, local_trait_names, const_placed_types, static_ref_strategy)
+        skip(
+            file,
+            local_trait_names,
+            error_type_names,
+            const_placed_types,
+            static_ref_strategy,
+            error_field_strategy
+        )
     )]
     pub(super) fn new(
         file: PathBuf,
         crate_root: PathBuf,
         module_prefix: Vec<String>,
         local_trait_names: &'a HashSet<String>,
+        error_type_names: &'a HashSet<String>,
         const_placed_types: &'a HashSet<String>,
         static_ref_strategy: StaticRefStrategy,
+        error_field_strategy: ErrorFieldStrategy,
     ) -> Self {
         Self {
             file,
@@ -62,8 +73,10 @@ impl<'a> AntipatternScanVisitor<'a> {
             in_trait_definition: false,
             in_foreign_trait_impl: false,
             local_trait_names,
+            error_type_names,
             const_placed_types,
             static_ref_strategy,
+            error_field_strategy,
             cfg_sibling_real_params: HashMap::new(),
             findings: Vec::new(),
             error: None,
@@ -124,124 +137,6 @@ impl AntipatternScanVisitor<'_> {
             .strip_prefix(&self.crate_root)
             .map(Path::to_path_buf)
             .unwrap_or_else(|_| self.file.clone())
-    }
-
-    #[instrument(level = "debug", skip(self, ty))]
-    fn check_box_dyn_error_type(&mut self, ty: &Type) {
-        let Some(trait_obj) = box_dyn_error_trait_object(ty) else {
-            return;
-        };
-        self.push_record(
-            AntipatternRuleId::BoxDynError001,
-            self.site_context(),
-            ty.span().start().line as u32,
-            box_dyn_error_snippet(trait_obj),
-        );
-    }
-
-    #[instrument(level = "debug", skip(self, ty))]
-    fn check_string_error_type(&mut self, ty: &Type) {
-        let Some(error_ty) = result_error_type(ty) else {
-            return;
-        };
-        if !is_stringish_error_type(error_ty) {
-            return;
-        }
-        self.push_record(
-            AntipatternRuleId::StringError001,
-            self.site_context(),
-            ty.span().start().line as u32,
-            truncate_snippet(&result_string_error_snippet(ty), 96),
-        );
-    }
-
-    #[instrument(level = "debug", skip(self, ty))]
-    fn check_adt_field(&mut self, owner: &str, field_name: &str, ty: &Type) {
-        if !type_contains_disallowed_static_ref(ty, self.local_trait_names) {
-            return;
-        }
-        let type_name = owner.split("::").next().unwrap_or(owner);
-        if !type_is_location_capture(ty) && self.const_placed_types.contains(type_name) {
-            return;
-        }
-        self.push_record(
-            AntipatternRuleId::StructStaticRef001,
-            self.adt_field_context(owner, field_name),
-            ty.span().start().line as u32,
-            static_ref_field_snippet(ty, self.static_ref_strategy),
-        );
-    }
-
-    #[instrument(level = "debug", skip(self, variant))]
-    fn check_enum_variant(&mut self, enum_name: &str, variant: &syn::Variant) {
-        let owner = format!("{enum_name}::{}", variant.ident);
-        match &variant.fields {
-            Fields::Named(fields) => self.check_named_fields(&owner, fields),
-            Fields::Unnamed(fields) => self.check_unnamed_fields(&owner, fields),
-            Fields::Unit => {}
-        }
-    }
-
-    #[instrument(level = "debug", skip(self))]
-    fn adt_field_context(&self, owner: &str, field_name: &str) -> String {
-        let mut parts = self.module_prefix.clone();
-        parts.push(owner.to_string());
-        parts.push(field_name.to_string());
-        parts.join("::")
-    }
-
-    #[instrument(level = "debug", skip(self, fields))]
-    fn check_named_fields(&mut self, owner: &str, fields: &syn::FieldsNamed) {
-        for field in &fields.named {
-            let name = field
-                .ident
-                .as_ref()
-                .map(ToString::to_string)
-                .unwrap_or_else(|| "_".to_string());
-            self.check_adt_field(owner, &name, &field.ty);
-        }
-    }
-
-    #[instrument(level = "debug", skip(self, fields))]
-    fn check_unnamed_fields(&mut self, owner: &str, fields: &syn::FieldsUnnamed) {
-        for (index, field) in fields.unnamed.iter().enumerate() {
-            self.check_adt_field(owner, &format!("_{index}"), &field.ty);
-        }
-    }
-
-    #[instrument(level = "debug", skip(self, attrs, sig, block))]
-    fn check_fn_sig(&mut self, attrs: &[Attribute], sig: &Signature, block: &Block) {
-        if self.in_trait_definition || self.in_foreign_trait_impl {
-            return;
-        }
-        if has_proc_macro_abi_attr(attrs) || is_creusot_opaque_logic_stub(attrs, block) {
-            return;
-        }
-        let real_names_elsewhere = self
-            .fn_stack
-            .last()
-            .and_then(|name| self.cfg_sibling_real_params.get(name))
-            .cloned();
-        for arg in &sig.inputs {
-            let FnArg::Typed(pat_type) = arg else {
-                continue;
-            };
-            for binding in unused_argument_bindings(&pat_type.pat) {
-                if let Some(unprefixed) = binding.snippet().strip_prefix('_')
-                    && real_names_elsewhere
-                        .as_ref()
-                        .is_some_and(|names| names.contains(unprefixed))
-                {
-                    continue;
-                }
-                self.push_record(
-                    AntipatternRuleId::UnusedUnderscoreArg001,
-                    self.site_context(),
-                    binding.line(),
-                    binding.snippet().clone(),
-                );
-            }
-        }
     }
 
     #[instrument(level = "debug", skip(self, items))]
@@ -366,45 +261,4 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor<'_> {
         self.check_string_error_type(node);
         syn::visit::visit_type(self, node);
     }
-}
-
-/// Trait identifiers defined in this crate's scanned sources.
-#[instrument(level = "debug", skip(file))]
-pub(super) fn collect_local_trait_names(file: &syn::File) -> HashSet<String> {
-    let mut collector = TraitNameCollector {
-        names: HashSet::new(),
-    };
-    collector.visit_file(file);
-    collector.names
-}
-
-struct TraitNameCollector {
-    names: HashSet<String>,
-}
-
-impl<'ast> Visit<'ast> for TraitNameCollector {
-    #[instrument(level = "trace", skip(self, node))]
-    fn visit_item_trait(&mut self, node: &'ast ItemTrait) {
-        self.names.insert(node.ident.to_string());
-        syn::visit::visit_item_trait(self, node);
-    }
-
-    #[instrument(level = "trace", skip(self, node))]
-    fn visit_item_mod(&mut self, node: &'ast ItemMod) {
-        if is_cfg_test(&node.attrs) {
-            return;
-        }
-        syn::visit::visit_item_mod(self, node);
-    }
-}
-
-#[instrument(level = "trace", skip(node, local_trait_names), ret)]
-fn is_foreign_trait_impl(node: &ItemImpl, local_trait_names: &HashSet<String>) -> bool {
-    let Some((path, _)) = node.trait_.as_ref() else {
-        return false;
-    };
-    let Some(segment) = path.segments.last() else {
-        return false;
-    };
-    !local_trait_names.contains(&segment.ident.to_string())
 }

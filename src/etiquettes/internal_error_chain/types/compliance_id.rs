@@ -12,6 +12,8 @@ pub enum InternalErrorComplianceId {
     DiscardTyped001,
     /// Foreign-source wrapper missing `source` and/or owned `file`+`line`.
     SourceShape001,
+    /// An Error field violates the configured owned or borrowed storage policy.
+    FieldStrategy001,
     /// Native source missing `#[track_caller] fn new` that calls `Location::caller()`, or a wrapper that would hide the call site.
     SourceTrackCaller001,
     /// A caller-tracking converter passed as a `map_err` function item.
@@ -36,6 +38,7 @@ impl InternalErrorComplianceId {
             Self::StringifyForeign001 => "ERROR-CHAIN-COMPLIANCE-STRINGIFY-001",
             Self::DiscardTyped001 => "ERROR-CHAIN-COMPLIANCE-DISCARD-TYPED-001",
             Self::SourceShape001 => "ERROR-CHAIN-COMPLIANCE-SOURCE-SHAPE-001",
+            Self::FieldStrategy001 => "ERROR-CHAIN-COMPLIANCE-FIELD-STRATEGY-001",
             Self::SourceTrackCaller001 => "ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001",
             Self::MapErrTrackCaller001 => "ERROR-CHAIN-COMPLIANCE-MAP-ERR-TRACK-CALLER-001",
             Self::ArchParent001 => "ERROR-CHAIN-COMPLIANCE-ARCH-PARENT-001",
@@ -53,6 +56,7 @@ impl InternalErrorComplianceId {
             "ERROR-CHAIN-COMPLIANCE-STRINGIFY-001" => Some(Self::StringifyForeign001),
             "ERROR-CHAIN-COMPLIANCE-DISCARD-TYPED-001" => Some(Self::DiscardTyped001),
             "ERROR-CHAIN-COMPLIANCE-SOURCE-SHAPE-001" => Some(Self::SourceShape001),
+            "ERROR-CHAIN-COMPLIANCE-FIELD-STRATEGY-001" => Some(Self::FieldStrategy001),
             "ERROR-CHAIN-COMPLIANCE-SOURCE-TRACK-CALLER-001" => Some(Self::SourceTrackCaller001),
             "ERROR-CHAIN-COMPLIANCE-MAP-ERR-TRACK-CALLER-001" => Some(Self::MapErrTrackCaller001),
             "ERROR-CHAIN-COMPLIANCE-ARCH-PARENT-001" => Some(Self::ArchParent001),

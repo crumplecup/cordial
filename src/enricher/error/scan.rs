@@ -58,15 +58,17 @@ pub fn scan_crate_error_ir(
         None,
         #[cfg(feature = "internal_error_chain")]
         crate::config::InternalErrorChainThresholds::default().kind_fanout_max_call_sites(),
+        crate::config::ErrorFieldStrategy::default(),
     )
 }
 
-#[instrument(level = "debug", skip(source))]
+#[instrument(level = "debug", skip(source, field_strategy))]
 pub(super) fn scan_crate_error_ir_with_source(
     crate_root: &Path,
     crate_name: &str,
     source: &SourceLoadView,
     #[cfg(feature = "internal_error_chain")] kind_fanout_max_call_sites: usize,
+    field_strategy: crate::config::ErrorFieldStrategy,
 ) -> CordialResult<ErrorIrScanReport> {
     scan_crate_error_ir_impl(
         crate_root,
@@ -74,16 +76,20 @@ pub(super) fn scan_crate_error_ir_with_source(
         Some(source),
         #[cfg(feature = "internal_error_chain")]
         kind_fanout_max_call_sites,
+        field_strategy,
     )
 }
 
-#[instrument(level = "debug", skip(loaded))]
+#[instrument(level = "debug", skip(loaded, field_strategy))]
 fn scan_crate_error_ir_impl(
     crate_root: &Path,
     crate_name: &str,
     loaded: Option<&SourceLoadView>,
     #[cfg(feature = "internal_error_chain")] kind_fanout_max_call_sites: usize,
+    field_strategy: crate::config::ErrorFieldStrategy,
 ) -> CordialResult<ErrorIrScanReport> {
+    #[cfg(not(feature = "internal_error_chain"))]
+    let _ = field_strategy;
     let src_root = crate_root.join("src");
     let mut report = ErrorIrScanReport::default();
 
@@ -172,6 +178,7 @@ fn scan_crate_error_ir_impl(
                 crate_name,
                 loaded,
                 kind_fanout_max_call_sites,
+                field_strategy,
             )?
         } else {
             crate::etiquettes::internal_error_chain::scan_crate_error_architecture(

@@ -465,6 +465,26 @@ The rules check that this shape holds. All of their ids start with
 | `ARCH-ORPHAN-SOURCE-001` | no native source is left out of the Kind |
 | `SOURCE-SHAPE-001` | native sources have `source` plus owned `file` and `line` |
 
+The example above uses the default error field strategy, `owned`. To check a
+borrowed error representation instead, set:
+
+```toml
+[internal_error_chain]
+field_strategy = "borrowed"
+```
+
+In this mode the parent holds `kind: &'a ErrorKind<'a>`. Kind variants and
+native source fields must borrow every non-`Copy` value, including the foreign
+`source`; `line: u32` can remain owned. The call-site file is
+`file: &'static str`, taken from `Location::caller().file()`. The general
+`[antipatterns.static_refs]` strategy still applies to other types. Borrowing
+a foreign source with a nonstatic lifetime also affects whether an
+`std::error::Error::source()` implementation can return it, because that trait
+method exposes only `'static` source trait objects.
+
+The borrowed mode adds `FIELD-STRATEGY-001` for owned non-`Copy` fields and
+changes `ARCH-KIND-BOX-001` to require a borrowed Kind.
+
 ### Recording the right line
 
 `Location::caller()` returns the call site of the nearest `#[track_caller]`

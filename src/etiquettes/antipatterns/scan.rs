@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use syn::visit::Visit;
 
-use crate::config::StaticRefStrategy;
+use crate::config::{ErrorFieldStrategy, StaticRefStrategy};
 use crate::error::CordialResult;
 use crate::loader::{
     SharedParsedFile, SourceLoadView, module_path_from_src_file, path_has_fixtures,
@@ -20,22 +20,27 @@ mod preds;
 mod visitor;
 
 use constructions::{collect_constructions, types_only_constructed_in_const};
-use visitor::{AntipatternScanVisitor, collect_local_trait_names};
+use visitor::{
+    AntipatternScanVisitor, collect_error_kind_names, collect_error_type_names,
+    collect_local_trait_names,
+};
 
 pub(crate) use preds::truncate_snippet;
 
 #[instrument(
     level = "debug",
-    skip(source, static_ref_strategy),
+    skip(source, static_ref_strategy, error_field_strategy),
     err(level = "warn")
 )]
 pub(super) fn scan_shared_crate_trees(
     source: &SourceLoadView,
     crate_root: &Path,
     static_ref_strategy: StaticRefStrategy,
+    error_field_strategy: ErrorFieldStrategy,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let mut parsed: Vec<(SharedParsedFile, PathBuf)> = Vec::new();
     let mut local_trait_names = HashSet::new();
+    let mut error_type_names = HashSet::new();
     let mut const_constructed = HashSet::new();
     let mut runtime_constructed = HashSet::new();
     for tree_root in quality_scan_trees(crate_root) {
@@ -43,6 +48,7 @@ pub(super) fn scan_shared_crate_trees(
             !path_has_fixtures(path, crate_root)
         })? {
             local_trait_names.extend(collect_local_trait_names(file.syntax()));
+            error_type_names.extend(collect_error_type_names(file.syntax()));
             collect_constructions(
                 file.syntax(),
                 &mut const_constructed,
@@ -53,6 +59,10 @@ pub(super) fn scan_shared_crate_trees(
     }
     let const_placed_types =
         types_only_constructed_in_const(&const_constructed, &runtime_constructed);
+    for (file, _) in &parsed {
+        let kinds = collect_error_kind_names(file.syntax(), &error_type_names);
+        error_type_names.extend(kinds);
+    }
 
     let mut findings = Vec::new();
     for (file, tree_root) in parsed {
@@ -61,8 +71,10 @@ pub(super) fn scan_shared_crate_trees(
             &tree_root,
             crate_root,
             &local_trait_names,
+            &error_type_names,
             &const_placed_types,
             static_ref_strategy,
+            error_field_strategy,
         )?);
     }
     Ok(findings)
@@ -70,7 +82,14 @@ pub(super) fn scan_shared_crate_trees(
 
 #[instrument(
     level = "debug",
-    skip(file, local_trait_names, const_placed_types, static_ref_strategy),
+    skip(
+        file,
+        local_trait_names,
+        error_type_names,
+        const_placed_types,
+        static_ref_strategy,
+        error_field_strategy
+    ),
     err(level = "warn")
 )]
 fn scan_shared_file(
@@ -78,8 +97,10 @@ fn scan_shared_file(
     tree_root: &Path,
     crate_root: &Path,
     local_trait_names: &HashSet<String>,
+    error_type_names: &HashSet<String>,
     const_placed_types: &HashSet<String>,
     static_ref_strategy: StaticRefStrategy,
+    error_field_strategy: ErrorFieldStrategy,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     scan_parsed(
         file.syntax(),
@@ -87,8 +108,10 @@ fn scan_shared_file(
         tree_root,
         crate_root,
         local_trait_names,
+        error_type_names,
         const_placed_types,
         static_ref_strategy,
+        error_field_strategy,
     )
 }
 
@@ -118,9 +141,35 @@ pub fn scan_rust_source_with_static_ref_strategy(
     crate_root: &Path,
     static_ref_strategy: StaticRefStrategy,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
+    scan_rust_source_with_strategies(
+        source,
+        file,
+        src_root,
+        crate_root,
+        static_ref_strategy,
+        ErrorFieldStrategy::Owned,
+    )
+}
+
+/// Scan one source file with general static-reference and error-field policies.
+#[instrument(
+    level = "debug",
+    skip(source, file, static_ref_strategy, error_field_strategy)
+)]
+pub fn scan_rust_source_with_strategies(
+    source: &str,
+    file: &Path,
+    src_root: &Path,
+    crate_root: &Path,
+    static_ref_strategy: StaticRefStrategy,
+    error_field_strategy: ErrorFieldStrategy,
+) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
     let local_trait_names = collect_local_trait_names(&syntax);
+    let mut error_type_names = collect_error_type_names(&syntax);
+    let kinds = collect_error_kind_names(&syntax, &error_type_names);
+    error_type_names.extend(kinds);
     let mut const_constructed = HashSet::new();
     let mut runtime_constructed = HashSet::new();
     collect_constructions(&syntax, &mut const_constructed, &mut runtime_constructed);
@@ -132,8 +181,10 @@ pub fn scan_rust_source_with_static_ref_strategy(
         src_root,
         crate_root,
         &local_trait_names,
+        &error_type_names,
         &const_placed_types,
         static_ref_strategy,
+        error_field_strategy,
     )
 }
 
@@ -143,8 +194,10 @@ pub fn scan_rust_source_with_static_ref_strategy(
         syntax,
         file,
         local_trait_names,
+        error_type_names,
         const_placed_types,
-        static_ref_strategy
+        static_ref_strategy,
+        error_field_strategy
     )
 )]
 fn scan_parsed(
@@ -153,8 +206,10 @@ fn scan_parsed(
     src_root: &Path,
     crate_root: &Path,
     local_trait_names: &HashSet<String>,
+    error_type_names: &HashSet<String>,
     const_placed_types: &HashSet<String>,
     static_ref_strategy: StaticRefStrategy,
+    error_field_strategy: ErrorFieldStrategy,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut visitor = AntipatternScanVisitor::new(
@@ -162,8 +217,10 @@ fn scan_parsed(
         crate_root.to_path_buf(),
         module_prefix,
         local_trait_names,
+        error_type_names,
         const_placed_types,
         static_ref_strategy,
+        error_field_strategy,
     );
     visitor.visit_file(syntax);
     visitor.into_findings()

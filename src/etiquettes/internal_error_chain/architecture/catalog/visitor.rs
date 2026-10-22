@@ -16,8 +16,8 @@ use super::fanout::{
     call_name, direct_source_target, direct_target, literal_string, wrapper_target,
 };
 use super::{
-    Catalog, ConstructorRec, EnumInfo, FanoutCall, FanoutWrapper, MapErrSite, StructInfo,
-    VariantInfo,
+    Catalog, ConstructorRec, EnumInfo, ErrorField, FanoutCall, FanoutWrapper, MapErrSite,
+    StructInfo, VariantInfo,
 };
 use crate::etiquettes::internal_error_chain::source_shape::{
     block_captures_location, has_track_caller, returns_self, sig_takes_location_arg,
@@ -26,6 +26,21 @@ use crate::etiquettes::internal_error_chain::source_shape::{
 use crate::etiquettes::internal_error_chain::type_graph::{
     is_foreign_type_label, item_derives_error, trait_is_std_error, type_label,
 };
+
+#[instrument(level = "debug", skip(attrs))]
+fn item_derives_copy(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        if !attr.path().is_ident("derive") {
+            return false;
+        }
+        let mut found = false;
+        let _ = attr.parse_nested_meta(|meta| {
+            found |= meta.path.is_ident("Copy");
+            Ok(())
+        });
+        found
+    })
+}
 
 #[derive(derive_builder::Builder, derive_setters::Setters)]
 #[builder(
@@ -60,6 +75,32 @@ impl<'a> CatalogVisitorBuilder<'a> {
 }
 
 impl CatalogVisitor<'_> {
+    #[instrument(level = "debug", skip(self, fields))]
+    fn record_fields(&mut self, owner: &str, variant: Option<&str>, fields: &Fields) {
+        for (index, field) in fields.iter().enumerate() {
+            let name = field
+                .ident
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| format!("_{index}"));
+            let mut context = self.qualified(owner);
+            if let Some(variant) = variant {
+                context.push_str("::");
+                context.push_str(variant);
+            }
+            context.push_str("::");
+            context.push_str(&name);
+            self.catalog.fields.push(ErrorField {
+                owner: owner.to_string(),
+                name,
+                context,
+                file: self.file.clone(),
+                line: field.ty.span().start().line as u32,
+                ty: field.ty.clone(),
+            });
+        }
+    }
+
     #[instrument(level = "debug", skip(self))]
     fn qualified(&self, name: &str) -> String {
         if self.module_prefix.is_empty() {
@@ -78,6 +119,10 @@ impl CatalogVisitor<'_> {
         if item_derives_error(&item.attrs) {
             self.catalog.error_impls.insert(ident.clone());
         }
+        if item_derives_copy(&item.attrs) {
+            self.catalog.copy_impls.insert(ident.clone());
+        }
+        self.record_fields(&ident, None, &item.fields);
         let mut info = StructInfo {
             ident: ident.clone(),
             type_path: self.qualified(&ident),
@@ -85,6 +130,7 @@ impl CatalogVisitor<'_> {
             line: item.span().start().line as u32,
             snippet: format!("struct {ident}"),
             kind_box_of: None,
+            kind_borrowed_of: None,
             kind_unboxed_of: None,
             foreign_source: None,
             has_source_field: false,
@@ -103,7 +149,13 @@ impl CatalogVisitor<'_> {
                     }
                     match name.as_str() {
                         "kind" => {
-                            if let Some(inner) = box_inner(&field.ty) {
+                            if let Type::Reference(reference) = &field.ty {
+                                let label = type_label(&reference.elem);
+                                let last = Catalog::last_ident(&label).to_string();
+                                if last.ends_with("Kind") {
+                                    info.kind_borrowed_of = Some(last);
+                                }
+                            } else if let Some(inner) = box_inner(&field.ty) {
                                 info.kind_box_of = Some(Catalog::last_ident(&inner).to_string());
                             } else {
                                 let label = type_label(&field.ty);
@@ -147,8 +199,12 @@ impl CatalogVisitor<'_> {
         if item_derives_error(&item.attrs) {
             self.catalog.error_impls.insert(ident.clone());
         }
+        if item_derives_copy(&item.attrs) {
+            self.catalog.copy_impls.insert(ident.clone());
+        }
         let mut variants = Vec::new();
         for variant in &item.variants {
+            self.record_fields(&ident, Some(&variant.ident.to_string()), &variant.fields);
             let payloads = variant_payloads(&variant.fields);
             variants.push(VariantInfo {
                 name: variant.ident.to_string(),
@@ -176,6 +232,13 @@ impl CatalogVisitor<'_> {
             return;
         }
         let self_ident = Catalog::last_ident(&type_label(&item.self_ty)).to_string();
+        if item
+            .trait_
+            .as_ref()
+            .is_some_and(|(path, _)| path.segments.last().is_some_and(|seg| seg.ident == "Copy"))
+        {
+            self.catalog.copy_impls.insert(self_ident.clone());
+        }
         if let Some((trait_path, _)) = &item.trait_
             && trait_is_std_error(trait_path)
         {
@@ -378,7 +441,7 @@ fn has_instrument_ret(attrs: &[Attribute]) -> bool {
 #[instrument(level = "debug", skip(ty))]
 fn box_inner(ty: &Type) -> Option<String> {
     match ty {
-        Type::Reference(reference) => box_inner(&reference.elem),
+        Type::Reference(_) => None,
         Type::Paren(paren) => box_inner(&paren.elem),
         Type::Group(group) => box_inner(&group.elem),
         Type::Path(path) => {

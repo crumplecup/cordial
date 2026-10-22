@@ -12,6 +12,10 @@ pub struct InternalErrorChainThresholds {
     #[serde(default = "default_kind_fanout_max_call_sites")]
     #[getter(copy)]
     kind_fanout_max_call_sites: usize,
+    /// Storage policy for fields of types that implement `Error`.
+    #[serde(default)]
+    #[getter(copy)]
+    field_strategy: ErrorFieldStrategy,
     /// Run this etiquette (`true`) or skip it (`false`).
     #[serde(default = "default_true")]
     #[getter(copy)]
@@ -28,7 +32,19 @@ impl Default for InternalErrorChainThresholds {
     fn default() -> Self {
         Self {
             kind_fanout_max_call_sites: default_kind_fanout_max_call_sites(),
+            field_strategy: ErrorFieldStrategy::default(),
             enabled: true,
         }
     }
+}
+
+/// Preferred storage for non-`Copy` fields in an `Error` implementation.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorFieldStrategy {
+    /// Preserve the existing owned error architecture.
+    #[default]
+    Owned,
+    /// Borrow non-`Copy` fields; keep scalar `Copy` values by value.
+    Borrowed,
 }

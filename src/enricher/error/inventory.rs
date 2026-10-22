@@ -38,15 +38,22 @@ impl SourceEnricher for ErrorIrScanEnricher {
 
         let crate_root = member_crate_root(source, session);
         #[cfg(feature = "internal_error_chain")]
-        let kind_fanout_max_call_sites = crate::config::load_session_config(session)
+        let error_config = crate::config::load_session_config(session);
+        #[cfg(feature = "internal_error_chain")]
+        let kind_fanout_max_call_sites = error_config
             .internal_error_chain()
             .kind_fanout_max_call_sites();
+        #[cfg(feature = "internal_error_chain")]
+        let field_strategy = error_config.internal_error_chain().field_strategy();
+        #[cfg(not(feature = "internal_error_chain"))]
+        let field_strategy = crate::config::ErrorFieldStrategy::default();
         let report = scan_crate_error_ir_with_source(
             &crate_root,
             ir.crate_name(),
             source,
             #[cfg(feature = "internal_error_chain")]
             kind_fanout_max_call_sites,
+            field_strategy,
         )?;
         materialize_error_ir(ir, &crate_root, &report)?;
         Ok(())

@@ -36,7 +36,7 @@ pub use self::checks::{
 };
 pub use self::gates::EtiquetteGate;
 pub use self::hotpath::HotpathConfig;
-pub use self::internal_error_chain::InternalErrorChainThresholds;
+pub use self::internal_error_chain::{ErrorFieldStrategy, InternalErrorChainThresholds};
 pub use self::modularity::ModularityThresholds;
 pub use self::pageantry::PageantryThresholds;
 pub use self::tiers::TierConfig;
