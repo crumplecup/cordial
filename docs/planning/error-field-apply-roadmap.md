@@ -192,3 +192,17 @@ directions. Other explicit type uses still block the edit until their containing
 signatures and callers can be planned together. Compile-checked fixtures cover
 the round trip, dry run, repeat apply, and that blocker. Multiple fields,
 constructors, files, and typed source/Kind edges remain outside this planner.
+
+### Next boundary: Kind and source graph
+
+The next slice cannot use the current per-file writer: it writes a patched file
+inside the scan loop, before the other files in a conversion unit have been
+planned or validated. A parent `Box<Kind>`, its Kind variants, and a native
+`source` field must instead be planned together and committed only after every
+file in that unit is ready. The inventory currently locates `From` impls and
+`?` expressions, but does not resolve their source and target types. For a
+`From<io::Error>` path, changing `source: io::Error` to a reference changes
+who owns the `io::Error`; the syntax of `?` alone cannot prove the caller can
+hold it long enough. The first graph fixture should include a parent, Kind,
+native source, `Error::source()`, a `From` path, and a `?` caller, then prove
+borrowed and owned round trips plus no partial write on an unresolved edge.

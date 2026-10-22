@@ -102,8 +102,9 @@ pub use ErrorFieldApplySummary as ErrorFileApplySummary;
 /// constants and statics, qualified built-in static string macros, explicit
 /// static string constructor parameters, or typed static string local aliases.
 /// Parameters tied to an existing private error lifetime can also be borrowed.
-/// New lifetime propagation and cross-file constructors are left for manual
-/// work.
+/// A closed single-field unit can move one constructor lifetime onto the error
+/// type and direct forwarding return types. Wider lifetime propagation and
+/// cross-file constructors are left for manual work.
 #[instrument(level = "info", err(level = "warn"))]
 pub fn run_error_field_apply(
     project_root: &Path,
