@@ -27,10 +27,13 @@ could shadow it.
 An explicitly typed, immutable top-level local `&'static str` alias also
 qualifies after its declaration when no same-name binding occurs in the body.
 It recognizes `to_string`, `to_owned`, `into`, and selected `String::from` forms.
-It mirrors those conversions back to owned `String`. It uses a shared parsed
-file view while scanning and checks that edited source parses. It leaves dynamic
-expressions, dynamic constructor parameters, `source` and `kind`, public types, and
-cross-file uses untouched. See
+It mirrors those conversions back to owned `String`. A private error type with
+one existing named lifetime and a separate non-string lifetime-bearing field
+can also borrow constructor parameters and typed local aliases tied to that
+same lifetime. It uses a shared parsed file view
+while scanning and checks that edited source parses. It leaves unrelated
+dynamic constructor parameters, new lifetime propagation, `source` and `kind`,
+public types, and cross-file uses untouched. See
 [`apply.rs`](../../src/etiquettes/internal_error_chain/apply.rs) and its
 [`initializers.rs`](../../src/etiquettes/internal_error_chain/apply/initializers.rs).
 
@@ -146,5 +149,13 @@ no binding in the body shadows it. Owned mode restores `String::from(parameter)`
 The same round trip works for an immutable
 top-level local alias explicitly typed `&'static str` when it is in scope at
 the construction site and has no same-name binding elsewhere in the body.
-Shadowed and untyped aliases remain blocked. Dynamic `&str` parameters, named
+Shadowed and untyped aliases remain blocked. Elided `&str` parameters, new named
 lifetime propagation, and constructor-call edits are still future work.
+
+For a private error struct that already has exactly one named lifetime and a
+non-string reference field that keeps it in use under both strategies, a
+matching `impl<'a> MessageError<'a>` can convert a `String` field to `&'a str` when
+every recognized constructor uses `&'a str` parameters or typed aliases.
+The reverse conversion restores owned storage. A parameter with an unrelated
+or elided lifetime blocks the field, as does a shorthand field initializer;
+this slice does not add lifetimes or edit caller signatures.

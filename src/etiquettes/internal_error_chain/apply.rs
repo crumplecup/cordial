@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Item, Type, Visibility};
+use syn::{GenericParam, Item, ItemStruct, Type, Visibility};
 use tracing::instrument;
 
 use crate::config::{ErrorFieldStrategy, load_cordial_config};
@@ -96,8 +96,9 @@ pub use ErrorFieldApplySummary as ErrorFileApplySummary;
 /// string fields from literals, qualified same-module or block-scoped string
 /// constants and statics, qualified built-in static string macros, explicit
 /// static string constructor parameters, or typed static string local aliases.
-/// Dynamic fields, lifetime propagation, and cross-file constructors are left
-/// for manual work.
+/// Parameters tied to an existing private error lifetime can also be borrowed.
+/// New lifetime propagation and cross-file constructors are left for manual
+/// work.
 #[instrument(level = "info", err(level = "warn"))]
 pub fn run_error_field_apply(
     project_root: &Path,
@@ -227,9 +228,22 @@ fn patch_file(
                 "source" | "kind" => continue,
                 _ => FieldKind::StaticString,
             };
-            let source_type = match strategy {
-                ErrorFieldStrategy::Borrowed if is_string(&field.ty) => "&'static str",
-                ErrorFieldStrategy::Owned if is_static_str(&field.ty) => "String",
+            let struct_lifetime = single_struct_lifetime(item);
+            let (source_type, dynamic_lifetime) = match strategy {
+                ErrorFieldStrategy::Borrowed if is_string(&field.ty) => {
+                    let lifetime = struct_lifetime.as_deref();
+                    (format!("&'{} str", lifetime.unwrap_or("static")), lifetime)
+                }
+                ErrorFieldStrategy::Owned if is_static_str(&field.ty) => {
+                    ("String".to_string(), None)
+                }
+                ErrorFieldStrategy::Owned
+                    if struct_lifetime
+                        .as_deref()
+                        .is_some_and(|lifetime| is_str_ref_with_lifetime(&field.ty, lifetime)) =>
+                {
+                    ("String".to_string(), struct_lifetime.as_deref())
+                }
                 _ => continue,
             };
             if !matches!(item.vis, Visibility::Inherited)
@@ -258,6 +272,7 @@ fn patch_file(
                 strategy,
                 file.source(),
                 &static_strings,
+                dynamic_lifetime,
             );
             visitor.visit_file(syntax);
             let Some(mut initializers) = visitor.finish() else {
@@ -290,7 +305,7 @@ fn patch_file(
             edits.push(Edit {
                 start: field_span.0,
                 end: field_span.1,
-                replacement: source_type.to_string(),
+                replacement: source_type,
             });
             edits.append(&mut initializers);
             pending.push((name.clone(), field_name));
@@ -361,10 +376,39 @@ fn is_string(ty: &Type) -> bool {
 
 #[instrument(level = "trace", skip(ty), ret)]
 fn is_static_str(ty: &Type) -> bool {
+    is_str_ref_with_lifetime(ty, "static")
+}
+
+#[instrument(level = "trace", skip(ty, lifetime), ret)]
+fn is_str_ref_with_lifetime(ty: &Type, lifetime: &str) -> bool {
     matches!(ty, Type::Reference(reference)
         if reference.mutability.is_none()
-            && reference.lifetime.as_ref().is_some_and(|lifetime| lifetime.ident == "static")
+            && reference.lifetime.as_ref().is_some_and(|named| named.ident == lifetime)
             && matches!(&*reference.elem, Type::Path(path) if path.path.is_ident("str")))
+}
+
+#[instrument(level = "trace", skip(item), ret)]
+fn single_struct_lifetime(item: &ItemStruct) -> Option<String> {
+    if item.generics.where_clause.is_some() || item.generics.params.len() != 1 {
+        return None;
+    }
+    match item.generics.params.first()? {
+        GenericParam::Lifetime(param) if param.attrs.is_empty() && param.bounds.is_empty() => {
+            let lifetime = param.lifetime.ident.to_string();
+            item.fields
+                .iter()
+                .any(|field| is_non_string_lifetime_anchor(&field.ty, &lifetime))
+                .then_some(lifetime)
+        }
+        _ => None,
+    }
+}
+
+#[instrument(level = "trace", skip(ty, lifetime), ret)]
+fn is_non_string_lifetime_anchor(ty: &Type, lifetime: &str) -> bool {
+    matches!(ty, Type::Reference(reference)
+        if reference.lifetime.as_ref().is_some_and(|named| named.ident == lifetime)
+            && !matches!(&*reference.elem, Type::Path(path) if path.path.is_ident("str")))
 }
 
 #[instrument(level = "debug", skip(source, span))]

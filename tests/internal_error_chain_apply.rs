@@ -562,6 +562,152 @@ impl MessageError {
 }
 
 #[test]
+fn existing_error_lifetime_parameter_round_trips() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError<'a> { message: String, context: &'a [u8] }
+impl<'a> std::fmt::Display for MessageError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl<'a> std::error::Error for MessageError<'a> {}
+impl<'a> MessageError<'a> {
+    fn new(message: &'a str, context: &'a [u8]) -> Self {
+        Self { message: String::from(message), context }
+    }
+    fn via_alias(message: &'a str, context: &'a [u8]) -> Self {
+        let alias: &'a str = message;
+        Self { message: alias.to_string(), context }
+    }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let root = fixture.path();
+    assert_eq!(
+        run_error_file_apply(root, root, None, true)
+            .into_diagnostic()?
+            .converted_fields(),
+        1
+    );
+    assert_eq!(source(root)?, original);
+    let borrowed = run_error_file_apply(root, root, None, false).into_diagnostic()?;
+    assert_eq!(borrowed.converted_fields(), 1);
+    assert_eq!(borrowed.unresolved(), 0);
+    let changed = source(root)?;
+    assert!(changed.contains("message: &'a str"));
+    assert!(changed.contains("Self { message: message, context }"));
+    assert!(changed.contains("Self { message: alias, context }"));
+    check_fixture(root)?;
+    assert_eq!(
+        run_error_file_apply(root, root, None, false)
+            .into_diagnostic()?
+            .changed_files(),
+        0
+    );
+
+    set_strategy(root, "owned")?;
+    let owned = run_error_file_apply(root, root, None, false).into_diagnostic()?;
+    assert_eq!(owned.converted_fields(), 1);
+    let changed = source(root)?;
+    assert!(changed.contains("message: String"));
+    assert!(changed.contains("Self { message: String::from(message), context }"));
+    assert!(changed.contains("Self { message: String::from(alias), context }"));
+    check_fixture(root)?;
+    Ok(())
+}
+
+#[test]
+fn unrelated_constructor_lifetime_stays_owned() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError<'a> { message: String, context: &'a [u8] }
+impl<'a> std::fmt::Display for MessageError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl<'a> std::error::Error for MessageError<'a> {}
+impl<'a> MessageError<'a> {
+    fn new(message: &str, context: &'a [u8]) -> Self {
+        Self { message: String::from(message), context }
+    }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(
+        result.blockers()[0].reason(),
+        ErrorFieldApplyBlockerReason::Initializer
+    );
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn borrowed_string_field_needs_independent_lifetime_anchor() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError<'a> { message: String, context: &'a str }
+impl<'a> std::fmt::Display for MessageError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.context, self.message)
+    }
+}
+impl<'a> std::error::Error for MessageError<'a> {}
+impl<'a> MessageError<'a> {
+    fn new(message: &'a str, context: &'a str) -> Self {
+        Self { message: String::from(message), context }
+    }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(
+        result.blockers()[0].reason(),
+        ErrorFieldApplyBlockerReason::Initializer
+    );
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn shorthand_field_initializer_stays_borrowed() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError<'a> { message: &'a str, context: &'a [u8] }
+impl<'a> std::fmt::Display for MessageError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl<'a> std::error::Error for MessageError<'a> {}
+impl<'a> MessageError<'a> {
+    fn new(message: &'a str, context: &'a [u8]) -> Self {
+        Self { message, context }
+    }
+}
+"#;
+    let fixture = fixture(original, "owned")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(
+        result.blockers()[0].reason(),
+        ErrorFieldApplyBlockerReason::Initializer
+    );
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
 fn shadowed_block_scoped_constant_stays_owned() -> miette::Result<()> {
     cordial::init_tracing();
     let original = r#"#[derive(Debug)]
