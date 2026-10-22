@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
-use crate::objects::{Artifact, TextArtifact};
+use crate::objects::{Artifact, Finding, TextArtifact};
 
 use super::super::hierarchy::{build_module_hierarchy, fat_leaves};
 use super::rows::{
@@ -17,6 +17,14 @@ pub struct ModularityChecklistReporter;
 
 impl ModularityChecklistReporter {
     pub const ID: &'static str = "modularity-checklist";
+}
+
+/// Count the same top-level items that the checklist renderer emits.
+#[instrument(level = "debug", skip(findings))]
+pub(in crate::etiquettes::modularity) fn checklist_open_items(findings: &[&dyn Finding]) -> usize {
+    let rows = modularity_rows(findings);
+    let open: Vec<_> = open_rows(&rows).collect();
+    render_checklist_sections(&open).1
 }
 
 impl Reporter for ModularityChecklistReporter {
@@ -74,22 +82,7 @@ impl Reporter for ModularityChecklistReporter {
             thresholds.min_module_lines(),
         ));
 
-        let mut open_items = 0usize;
-        let mut rendered = String::new();
-        for crate_name in crate_names(&open) {
-            let crate_open: Vec<_> = open
-                .iter()
-                .copied()
-                .filter(|row| row.crate_name() == &crate_name)
-                .collect();
-            let (section, count) = render_crate_checklist(&crate_open);
-            if section.is_empty() {
-                continue;
-            }
-            open_items += count;
-            rendered.push_str(&format!("## `{crate_name}`\n\n"));
-            rendered.push_str(&section);
-        }
+        let (rendered, open_items) = render_checklist_sections(&open);
 
         body.push_str(&format!("**Open items:** {open_items}\n\n"));
         if rendered.is_empty() {
@@ -107,6 +100,27 @@ impl Reporter for ModularityChecklistReporter {
             body,
         ))])
     }
+}
+
+#[instrument(level = "debug", skip(open))]
+fn render_checklist_sections(open: &[&ModularityRow]) -> (String, usize) {
+    let mut open_items = 0;
+    let mut rendered = String::new();
+    for crate_name in crate_names(open) {
+        let crate_open: Vec<_> = open
+            .iter()
+            .copied()
+            .filter(|row| row.crate_name() == &crate_name)
+            .collect();
+        let (section, count) = render_crate_checklist(&crate_open);
+        if section.is_empty() {
+            continue;
+        }
+        open_items += count;
+        rendered.push_str(&format!("## `{crate_name}`\n\n"));
+        rendered.push_str(&section);
+    }
+    (rendered, open_items)
 }
 
 struct FileHotspot<'a> {

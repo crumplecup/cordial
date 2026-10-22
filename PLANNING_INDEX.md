@@ -55,6 +55,7 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 | [Glob imports](docs/planning/glob-imports-etiquette.md) | **Reference** | Flag `use ...::*`; replace with explicit names |
 | [Inline tests](docs/planning/inline-tests-etiquette.md) | **Reference** | `#[cfg(test)]` / `#[test]` under `src/` belong in `tests/` |
 | [Modularity etiquette](docs/planning/modularity-etiquette.md) | **Reference** | Size, packing, hierarchy, file inventory, and extraction signals |
+| [Modularity nested-finding count mismatch](docs/planning/modularity-nested-finding-count-mismatch.md) | **Done** | Quality-area count now comes from the checklist renderer's top-level items; regression covers a file with both FILE and TYPES-PER-FILE findings |
 | [Pageantry etiquette](docs/planning/pageantry-etiquette.md) | **Reference** | File-level type arrangement; traits belong in a leading block |
 | [Proc-macro barrel](docs/planning/proc-macro-barrel.md) | **Done** | Crate kind in the IR, plus a configurable shim check (`PAGEANTRY-BARREL-SHIM-001`) for proc-macro entry points in `lib.rs` |
 | [Proof patterns etiquette](docs/planning/proof-patterns-etiquette.md) | **Reference** | `assume` / `admit` / `external_body` / `uninterp` / `axiom` / `broadcast` visibility |

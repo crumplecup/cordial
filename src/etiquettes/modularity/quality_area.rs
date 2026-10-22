@@ -8,7 +8,6 @@ use tracing::instrument;
 #[derive(Debug, Default, Clone, Copy)]
 struct Metrics {
     inventory_total: usize,
-    checklist_total: usize,
     large_files: usize,
     large_functions: usize,
     types_per_file: usize,
@@ -50,7 +49,6 @@ fn metrics(findings: &[&dyn Finding]) -> Metrics {
         if finding_field(finding, "checklist").as_deref() != Some("true") {
             continue;
         }
-        metrics.checklist_total += 1;
         match finding_field(finding, "kind").unwrap_or_default().as_str() {
             "MODULARITY-FILE" => metrics.large_files += 1,
             "MODULARITY-FUNCTION" => metrics.large_functions += 1,
@@ -67,6 +65,7 @@ fn metrics(findings: &[&dyn Finding]) -> Metrics {
 #[instrument(level = "debug", skip(findings))]
 pub(super) fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String) {
     let metrics = metrics(findings);
+    let checklist_total = super::reporter::checklist_open_items(findings);
     let detail = format!(
         "large files **{}**, large functions **{}**, types-per-file **{}**, \
          diagnostic module-size outliers **{}**, top-heavy **{}**, lopsided **{}**, \
@@ -80,5 +79,5 @@ pub(super) fn quality_area_compute(findings: &[&dyn Finding]) -> (usize, String)
         metrics.collapse,
         metrics.inventory_total,
     );
-    (metrics.checklist_total, detail)
+    (checklist_total, detail)
 }

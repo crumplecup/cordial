@@ -1,6 +1,8 @@
 use miette::{IntoDiagnostic, WrapErr};
 use std::fs;
 
+#[cfg(feature = "quality")]
+use cordial::{ChecklistSource, CordialConfig, StoreLayout, Worklist, build_quality_report};
 use cordial::{
     Finding, MODULARITY_ETIQUETTE, MapFindingSink, ModularityKind, ModularityThresholds,
     ModuleHierarchyNode, ModuleSizeInput, ModuleSizeStats, RunAll, Session, SessionBuilder,
@@ -705,6 +707,69 @@ fn checklist_lists_over_limit_files_by_descending_size() -> miette::Result<()> {
         !checklist.contains("z="),
         "z-scores should stay out of the action queue copy: {checklist}"
     );
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "quality")]
+fn nested_file_findings_count_as_one_worklist_item() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::create_dir_all(fixture.path().join("src"))
+        .into_diagnostic()
+        .wrap_err("src")?;
+    let mut source = String::new();
+    for index in 0..11 {
+        source.push_str(&format!("pub struct Type{index};\n"));
+    }
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        pad_source_to_lines(source, 600),
+    )
+    .into_diagnostic()
+    .wrap_err("lib")?;
+
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&*MODULARITY_ETIQUETTE)
+        .build();
+    let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
+    let findings: Vec<_> = outcome.findings().collect();
+    assert!(findings.iter().any(|finding| {
+        finding.rule().id() == "MODULARITY-FILE"
+            && field(*finding, "checklist").as_deref() == Some("true")
+    }));
+    assert!(findings.iter().any(|finding| {
+        finding.rule().id() == "MODULARITY-TYPES-PER-FILE"
+            && field(*finding, "checklist").as_deref() == Some("true")
+    }));
+
+    let checklist = fs::read_to_string(store.path().join("findings/modularity.checklist.md"))
+        .into_diagnostic()
+        .wrap_err("checklist")?;
+    assert_eq!(checklist.matches("- [ ] ").count(), 1, "{checklist}");
+    assert!(
+        checklist.contains("peel types: **11 types**"),
+        "{checklist}"
+    );
+
+    let report = build_quality_report(&findings).into_diagnostic()?;
+    let modularity = report
+        .areas()
+        .iter()
+        .find(|area| area.title() == "Modularity")
+        .ok_or_else(|| miette::miette!("missing Modularity area"))?;
+    assert_eq!(modularity.open_items(), 1);
+    let layout = StoreLayout::from_root(store.path(), "modularity_fixture");
+    let list = Worklist::build(
+        &report,
+        &layout,
+        &ChecklistSource::new(&layout),
+        &CordialConfig::default(),
+    )
+    .into_diagnostic()?;
+    assert_eq!(list.items().len(), 1);
     Ok(())
 }
 
