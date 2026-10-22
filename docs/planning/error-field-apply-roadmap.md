@@ -19,8 +19,11 @@ recognized constructors. It handles `file: String` built from
 or explicitly qualified same-module `const` and immutable `static` bindings
 typed `&'static str`, including constants whose values use `concat!(...)`.
 Direct `::core` or `::std` forms of `concat!` and `include_str!` also qualify.
-An explicit `&'static str` constructor parameter used through `String::from`
-qualifies when the body has no same-name binding that could shadow it.
+Unique block-scoped `const` and immutable `static` bindings explicitly typed
+`&'static str` qualify when no local name can shadow them.
+An explicit `&'static str` constructor parameter used through a recognized
+owned-string conversion qualifies when the body has no same-name binding that
+could shadow it.
 An explicitly typed, immutable top-level local `&'static str` alias also
 qualifies after its declaration when no same-name binding occurs in the body.
 It recognizes `to_string`, `to_owned`, `into`, and selected `String::from` forms.
@@ -127,16 +130,20 @@ same-module `const` or immutable `static` typed `&'static str` now round trip
 between owned and borrowed storage. The binding's type supplies the proof, so
 the value may use `concat!(...)` without interpreting macro expansion. Direct
 `::core` and `::std` calls to the built-in `concat!` and `include_str!` macros
-also round trip. Bare names, conditional or duplicate declarations, and direct
+also round trip. Bare module names, conditional or duplicate declarations, and direct
 macro expressions without a qualified built-in path remain unsupported until
 their bindings or expansions can be resolved safely.
+Unique block-scoped `const` and immutable `static` declarations typed
+`&'static str` now work through bare names within the enclosing constructor;
+same-name local bindings and opaque local imports still block that conversion.
 
 ### Slice 2 progress
 
 The first constructor-parameter case keeps the constructor signature intact:
-`String::from(parameter)` becomes `parameter` when the parameter is explicitly
-`&'static str` and no binding in the body shadows it. Owned mode restores
-`String::from(parameter)`. The same round trip works for an immutable
+`String::from(parameter)`, `parameter.to_string()`, `parameter.to_owned()`, and
+`parameter.into()` become `parameter` when it is explicitly `&'static str` and
+no binding in the body shadows it. Owned mode restores `String::from(parameter)`.
+The same round trip works for an immutable
 top-level local alias explicitly typed `&'static str` when it is in scope at
 the construction site and has no same-name binding elsewhere in the body.
 Shadowed and untyped aliases remain blocked. Dynamic `&str` parameters, named

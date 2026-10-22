@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Expr, ExprStruct, FnArg, ImplItemFn, ItemFn, ItemImpl, Member, Pat, Signature};
+use syn::{Expr, ExprStruct, FnArg, ImplItemFn, Item, ItemFn, ItemImpl, Member, Pat, Signature};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
@@ -249,12 +249,6 @@ fn static_string_initializer_replacement(
             static_params.contains(&name)
                 || static_locals.get(&name).is_some_and(|declaration_end| *declaration_end <= start)
         }));
-    if local_static_source
-        && strategy == ErrorFieldStrategy::Borrowed
-        && !matches!(expr, Expr::Call(_))
-    {
-        return None;
-    }
     let literal = matches!(value, Expr::Lit(lit) if matches!(&lit.lit, syn::Lit::Str(_)));
     let qualified_const = matches!(value, Expr::Path(path)
         if path.qself.is_none()
@@ -288,7 +282,7 @@ fn static_string_params(signature: &Signature, bindings: &BindingCounts) -> BTre
             _ => None,
         })
         .collect();
-    params.retain(|name| !bindings.0.contains_key(name));
+    params.retain(|name| !bindings.opaque_local_names && !bindings.names.contains_key(name));
     params
 }
 
@@ -299,6 +293,9 @@ fn static_string_locals(
     bindings: &BindingCounts,
     source: &str,
 ) -> BTreeMap<String, usize> {
+    if bindings.opaque_local_names {
+        return BTreeMap::new();
+    }
     let argument_names: BTreeSet<String> = signature
         .inputs
         .iter()
@@ -314,28 +311,41 @@ fn static_string_locals(
         .stmts
         .iter()
         .filter_map(|statement| {
-            let syn::Stmt::Local(local) = statement else {
-                return None;
+            let (name, declaration_end) = match statement {
+                syn::Stmt::Local(local) => {
+                    let Pat::Type(typed) = &local.pat else {
+                        return None;
+                    };
+                    let Pat::Ident(ident) = &*typed.pat else {
+                        return None;
+                    };
+                    if !local.attrs.is_empty()
+                        || local.init.is_none()
+                        || ident.mutability.is_some()
+                        || ident.subpat.is_some()
+                        || !is_static_str(&typed.ty)
+                    {
+                        return None;
+                    }
+                    let (_, end) = span_range(source, local.span())?;
+                    (ident.ident.to_string(), end)
+                }
+                syn::Stmt::Item(Item::Const(item))
+                    if item.attrs.is_empty() && is_static_str(&item.ty) =>
+                {
+                    (item.ident.to_string(), 0)
+                }
+                syn::Stmt::Item(Item::Static(item))
+                    if item.attrs.is_empty()
+                        && matches!(item.mutability, syn::StaticMutability::None)
+                        && is_static_str(&item.ty) =>
+                {
+                    (item.ident.to_string(), 0)
+                }
+                _ => return None,
             };
-            let Pat::Type(typed) = &local.pat else {
-                return None;
-            };
-            let Pat::Ident(ident) = &*typed.pat else {
-                return None;
-            };
-            let name = ident.ident.to_string();
-            if !local.attrs.is_empty()
-                || local.init.is_none()
-                || ident.mutability.is_some()
-                || ident.subpat.is_some()
-                || !is_static_str(&typed.ty)
-                || argument_names.contains(&name)
-                || bindings.0.get(&name) != Some(&1)
-            {
-                return None;
-            }
-            let (_, end) = span_range(source, local.span())?;
-            Some((name, end))
+            (!argument_names.contains(&name) && bindings.names.get(&name) == Some(&1))
+                .then_some((name, declaration_end))
         })
         .collect()
 }
@@ -387,18 +397,42 @@ fn caller_aliases(block: &syn::Block, bindings: &BindingCounts) -> BTreeSet<Stri
         }
         Some(pat.ident.to_string())
     }).collect();
-    aliases.retain(|name| bindings.0.get(name) == Some(&1));
+    aliases.retain(|name| !bindings.opaque_local_names && bindings.names.get(name) == Some(&1));
     aliases
 }
 
 #[derive(Default)]
-struct BindingCounts(BTreeMap<String, usize>);
+struct BindingCounts {
+    names: BTreeMap<String, usize>,
+    opaque_local_names: bool,
+}
 
 impl<'ast> Visit<'ast> for BindingCounts {
     #[instrument(level = "debug", skip(self, pat))]
     fn visit_pat_ident(&mut self, pat: &'ast syn::PatIdent) {
-        *self.0.entry(pat.ident.to_string()).or_default() += 1;
+        *self.names.entry(pat.ident.to_string()).or_default() += 1;
         syn::visit::visit_pat_ident(self, pat);
+    }
+
+    #[instrument(level = "debug", skip(self, item))]
+    fn visit_item(&mut self, item: &'ast Item) {
+        let name = match item {
+            Item::Const(item) => Some(&item.ident),
+            Item::Static(item) => Some(&item.ident),
+            Item::Fn(item) => Some(&item.sig.ident),
+            Item::Struct(item) => Some(&item.ident),
+            Item::Enum(item) => Some(&item.ident),
+            Item::Union(item) => Some(&item.ident),
+            Item::Use(_) | Item::Macro(_) => {
+                self.opaque_local_names = true;
+                None
+            }
+            _ => None,
+        };
+        if let Some(name) = name {
+            *self.names.entry(name.to_string()).or_default() += 1;
+        }
+        syn::visit::visit_item(self, item);
     }
 }
 
