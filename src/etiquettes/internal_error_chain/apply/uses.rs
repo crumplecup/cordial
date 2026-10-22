@@ -20,6 +20,17 @@ pub(super) fn has_unhandled_field_use(syntax: &File, type_name: &str, field_name
     visitor.unhandled
 }
 
+#[instrument(level = "debug", skip(mac))]
+pub(super) fn macro_has_unhandled_field_use(mac: &Macro, field_name: &str) -> bool {
+    let mut visitor = FieldUseVisitor {
+        type_name: "",
+        field_name,
+        unhandled: false,
+    };
+    visitor.visit_macro(mac);
+    visitor.unhandled
+}
+
 struct FieldUseVisitor<'a> {
     type_name: &'a str,
     field_name: &'a str,
@@ -125,7 +136,7 @@ fn expr_accesses_field(expr: &Expr, field_name: &str) -> bool {
 }
 
 #[instrument(level = "debug", skip(tokens))]
-fn tokens_access_field(tokens: &TokenStream, field_name: &str) -> bool {
+pub(super) fn tokens_access_field(tokens: &TokenStream, field_name: &str) -> bool {
     let trees: Vec<_> = tokens.clone().into_iter().collect();
     for (index, tree) in trees.iter().enumerate() {
         if let TokenTree::Group(group) = tree {
@@ -144,7 +155,7 @@ fn tokens_access_field(tokens: &TokenStream, field_name: &str) -> bool {
 }
 
 #[instrument(level = "debug", skip(tokens))]
-fn tokens_construct_type(tokens: &TokenStream, type_name: &str) -> bool {
+pub(super) fn tokens_construct_type(tokens: &TokenStream, type_name: &str) -> bool {
     let trees: Vec<_> = tokens.clone().into_iter().collect();
     for (index, tree) in trees.iter().enumerate() {
         if let TokenTree::Group(group) = tree {

@@ -17,10 +17,12 @@ use crate::targets::discover_crate_targets;
 use super::type_graph::{for_each_shared_src_rust_file, item_derives_error, trait_is_std_error};
 
 mod initializers;
+mod inventory;
 mod names;
 mod uses;
 
 use self::initializers::{FieldKind, InitializerVisitor};
+pub use self::inventory::{ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit};
 use self::names::audit_names;
 use self::uses::has_unhandled_field_use;
 
@@ -84,6 +86,8 @@ pub struct ErrorFieldApplySummary {
     unresolved: usize,
     /// Candidate fields left untouched, with their reasons.
     blockers: Vec<ErrorFieldApplyBlocker>,
+    /// Construction, use, and unresolved paths for each candidate field.
+    conversion_units: Vec<ErrorConversionUnit>,
 }
 
 /// Compatibility name for the original file-only apply result.
@@ -113,6 +117,7 @@ pub fn run_error_field_apply(
         converted_fields: 0,
         unresolved: 0,
         blockers: Vec::new(),
+        conversion_units: Vec::new(),
     };
     if !policy.enabled() {
         return Ok(summary);
@@ -130,8 +135,9 @@ pub fn run_error_field_apply(
             Ok(())
         })?;
         for file in &files {
-            let (patched, converted, blockers) =
+            let (patched, converted, blockers, units) =
                 patch_file(file, policy.field_strategy(), &files, dry_run);
+            summary.conversion_units.extend(units);
             summary.converted_fields += converted;
             summary.unresolved += blockers.len();
             for blocker in &blockers {
@@ -167,7 +173,12 @@ fn patch_file(
     strategy: ErrorFieldStrategy,
     files: &[SharedParsedFile],
     dry_run: bool,
-) -> (Option<String>, usize, Vec<ErrorFieldApplyBlocker>) {
+) -> (
+    Option<String>,
+    usize,
+    Vec<ErrorFieldApplyBlocker>,
+    Vec<ErrorConversionUnit>,
+) {
     let syntax = file.syntax();
     let error_impls: BTreeSet<String> = syntax
         .items
@@ -210,6 +221,7 @@ fn patch_file(
     let mut converted = 0;
     let mut blockers = Vec::new();
     let mut pending = Vec::new();
+    let mut units = Vec::new();
     for item in &syntax.items {
         let Item::Struct(item) = item else { continue };
         let name = item.ident.to_string();
@@ -246,12 +258,21 @@ fn patch_file(
                 }
                 _ => continue,
             };
+            let unit = ErrorConversionUnit::collect(
+                files,
+                file.path(),
+                &name,
+                &field_name,
+                name_audit.blocks(&name),
+            );
+            let has_cross_file_reference =
+                unit.sites().iter().any(|site| site.path() != file.path());
+            let has_unknown_field_use = unit.blocks_existing_field_edit();
+            units.push(unit);
             if !matches!(item.vis, Visibility::Inherited)
                 || !matches!(field.vis, Visibility::Inherited)
                 || syntax.items.iter().filter(|candidate| matches!(candidate, Item::Struct(other) if other.ident == item.ident)).count() != 1
-                || files.iter().any(|other| {
-                    other.path() != file.path() && source_has_ident(other.source(), &name)
-                })
+                || has_cross_file_reference
             {
                 blockers.push(ErrorFieldApplyBlocker::new(file.path(), &name, &field_name, ErrorFieldApplyBlockerReason::OutsideFile));
                 continue;
@@ -284,7 +305,7 @@ fn patch_file(
                 ));
                 continue;
             };
-            if has_unhandled_field_use(syntax, &name, &field_name) {
+            if has_unknown_field_use || has_unhandled_field_use(syntax, &name, &field_name) {
                 blockers.push(ErrorFieldApplyBlocker::new(
                     file.path(),
                     &name,
@@ -313,7 +334,7 @@ fn patch_file(
         }
     }
     if edits.is_empty() {
-        return (None, converted, blockers);
+        return (None, converted, blockers, units);
     }
     edits.sort_by_key(|edit| std::cmp::Reverse(edit.start));
     let mut patched = file.source().to_string();
@@ -328,7 +349,7 @@ fn patch_file(
                     ErrorFieldApplyBlockerReason::InvalidEdit,
                 )
             }));
-            return (None, 0, blockers);
+            return (None, 0, blockers, units);
         }
         patched.replace_range(edit.start..edit.end, &edit.replacement);
         limit = edit.start;
@@ -342,7 +363,7 @@ fn patch_file(
                 ErrorFieldApplyBlockerReason::InvalidEdit,
             )
         }));
-        return (None, 0, blockers);
+        return (None, 0, blockers, units);
     }
     if dry_run {
         for edit in &edits {
@@ -354,7 +375,7 @@ fn patch_file(
             );
         }
     }
-    (Some(patched), converted, blockers)
+    (Some(patched), converted, blockers, units)
 }
 
 #[instrument(level = "debug", skip(ty))]

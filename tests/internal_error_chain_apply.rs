@@ -2,9 +2,133 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use cordial::{ErrorFieldApplyBlockerReason, run_error_file_apply};
+use cordial::{ErrorConversionSiteKind, ErrorFieldApplyBlockerReason, run_error_file_apply};
 use miette::{IntoDiagnostic, WrapErr};
 
+#[test]
+fn conversion_unit_records_constructors_callers_and_error_edges() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String, source: std::io::Error }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new(source: std::io::Error) -> Self {
+        Self { message: "fixed".to_owned(), source }
+    }
+}
+impl From<std::io::Error> for MessageError {
+    fn from(source: std::io::Error) -> Self { Self::new(source) }
+}
+fn caller() -> Result<(), MessageError> {
+    std::fs::read("missing")?;
+    let _ = MessageError::new(std::io::Error::other("x"));
+    Ok(())
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let summary =
+        run_error_file_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
+    let unit = summary
+        .conversion_units()
+        .iter()
+        .find(|unit| unit.field_name() == "message")
+        .wrap_err("message conversion unit")?;
+    let kinds: Vec<_> = unit.sites().iter().map(|site| site.kind()).collect();
+    for kind in [
+        ErrorConversionSiteKind::Constructor,
+        ErrorConversionSiteKind::Caller,
+        ErrorConversionSiteKind::TypeUse,
+        ErrorConversionSiteKind::FromConversion,
+        ErrorConversionSiteKind::TryConversion,
+        ErrorConversionSiteKind::ErrorEdge,
+    ] {
+        assert!(kinds.contains(&kind), "missing {kind:?}: {kinds:?}");
+    }
+    assert!(!unit.is_closed(), "the `?` conversion is not resolved");
+    assert!(unit.sites().iter().all(|site| site.line() > 0));
+    assert!(unit.sites().iter().any(|site| {
+        site.kind() == ErrorConversionSiteKind::ErrorEdge
+            && site.related_type().as_deref() == Some("std::io::Error")
+    }));
+    assert_eq!(source(fixture.path())?, original);
+    Ok(())
+}
+
+#[test]
+fn conversion_unit_locates_cross_file_and_macro_paths() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError { fn new() -> Self { Self { message: "fixed".to_owned() } } }
+macro_rules! hidden { () => { MessageError { message: "hidden".to_owned() } }; }
+mod sibling;
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    fs::write(
+        fixture.path().join("src/sibling.rs"),
+        "use crate::MessageError;\nfn caller() { let _ = MessageError::new(); }\n",
+    )
+    .into_diagnostic()?;
+    let summary =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    let unit = summary
+        .conversion_units()
+        .iter()
+        .find(|unit| unit.field_name() == "message")
+        .wrap_err("message conversion unit")?;
+    assert!(
+        unit.sites()
+            .iter()
+            .any(|site| site.kind() == ErrorConversionSiteKind::Macro && !site.resolved())
+    );
+    assert!(
+        unit.sites()
+            .iter()
+            .any(|site| site.kind() == ErrorConversionSiteKind::Caller
+                && site.path().ends_with("sibling.rs")
+                && !site.resolved())
+    );
+    assert!(!unit.is_closed());
+    assert_eq!(summary.changed_files(), 0);
+    assert_eq!(source(fixture.path())?, original);
+    Ok(())
+}
+
+#[test]
+fn generated_default_constructor_is_inventory_blocker() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug, Default)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError { fn new() -> Self { Self { message: "fixed".to_owned() } } }
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let summary =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    let unit = summary
+        .conversion_units()
+        .iter()
+        .find(|unit| unit.field_name() == "message")
+        .wrap_err("message conversion unit")?;
+    assert!(unit.sites().iter().any(|site| site.kind()
+        == ErrorConversionSiteKind::GeneratedConstructor
+        && !site.resolved()));
+    assert_eq!(summary.changed_files(), 0);
+    assert_eq!(source(fixture.path())?, original);
+    Ok(())
+}
 fn fixture(source: &str, strategy: &str) -> miette::Result<tempfile::TempDir> {
     let root = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(root.path().join("src")).into_diagnostic()?;

@@ -162,18 +162,20 @@ or elided lifetime blocks the field. A shorthand borrowed initializer such as
 the borrowed direction recognizes the resulting explicit initializer. This
 slice does not add lifetimes or edit caller signatures.
 
-### Next prerequisite: a complete conversion unit
+### Conversion-unit inventory
 
 Adding a lifetime to an error type, or borrowing its `Kind` and `source`, is
-blocked on evidence the current apply scanner does not collect. Its initializer
-visitor recognizes same-file struct expressions, while the internal error type
-graph records type and source links without constructors, callers, or lifetime
-bounds. A syntax-only edit could therefore change a field while missing a
-constructor or a caller that needs an owned value.
+now supported by a conversion-unit inventory built from the shared parsed files.
+Each candidate field carries located evidence for direct constructors, associated
+calls, type uses, field reads and patterns, `From` implementations, `?` sites,
+`source`/`kind` edges, aliases, macros, and cross-file references. A derive or
+attribute that may generate a constructor is recorded as unresolved. The
+single-file apply path uses the inventory to reject unknown field, macro, alias,
+generated-constructor, and cross-file paths. Existing narrow conversions remain
+available when those paths are absent.
 
-Before extending slices 2 and 3, build a conversion-unit inventory that records
-every construction path, field-dependent read or write, `From`/`?` conversion,
-and caller for a private error graph. It must distinguish resolved paths from
-unresolved macro, alias, and cross-file uses, and reject a unit with any unknown
-path. Then plan all edits together, validate the whole unit, and write it
-atomically. Keep the existing single-file conversions available independently.
+The inventory is syntactic: a direct path has a known target shape, while macro
+expansion, type inference for field receivers, and `?` conversion targets remain
+unresolved. A future conversion planner must require a closed unit, plan every
+field, constructor, caller, signature, and error edge together, validate the
+whole unit, and write its files atomically before extending slices 2 and 3.
