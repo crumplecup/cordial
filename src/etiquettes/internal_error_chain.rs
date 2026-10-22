@@ -28,6 +28,7 @@
 //! Set these in `cordial.toml`. Register [`INTERNAL_ERROR_CHAIN_ETIQUETTE`]. Policy:
 //! `docs/planning/error-handling-as-plugin.md`.
 
+mod apply;
 mod architecture;
 mod assessor;
 mod compliance;
@@ -38,6 +39,7 @@ mod source_shape;
 mod type_graph;
 mod types;
 
+pub use apply::{ErrorFileApplySummary, run_error_file_apply};
 pub(crate) use architecture::{
     scan_crate_error_architecture, scan_crate_error_architecture_with_source,
 };

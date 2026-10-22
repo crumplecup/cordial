@@ -485,6 +485,15 @@ method exposes only `'static` source trait objects.
 The borrowed mode adds `FIELD-STRATEGY-001` for owned non-`Copy` fields and
 changes `ARCH-KIND-BOX-001` to require a borrowed Kind.
 
+`cordial quality --apply --etiquette internal_error_chain --dry-run` previews a
+small part of a strategy change. Without `--dry-run`, it converts a private
+error type's private `file` field between `String` and `&'static str` when all
+its constructors in the same file initialize it from
+`Location::caller().file()`. It removes or adds `.to_string()` at those sites.
+It skips public and cross-file types and constructors it cannot recognize.
+Other fields, including `source` and `kind`, still need manual changes to their
+lifetimes and call sites. Run the focused Cargo checks after applying edits.
+
 ### Recording the right line
 
 `Location::caller()` returns the call site of the nearest `#[track_caller]`

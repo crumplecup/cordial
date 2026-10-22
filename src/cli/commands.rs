@@ -140,7 +140,7 @@ pub enum Commands {
     },
     /// Run source-quality etiquettes, or apply mechanical patches.
     Quality {
-        /// Write tracing `#[instrument]` recipes and crate-root lint attributes.
+        /// Apply supported tracing, crate-attribute, and error-file edits.
         #[arg(long)]
         apply: bool,
         /// Log apply changes without writing source files.
@@ -148,7 +148,7 @@ pub enum Commands {
         dry_run: bool,
         /// Tracing instrument checklist (default:
         /// `{store}/findings/tracing-instrument.checklist.md`). Crate-attrs
-        /// apply scans library roots and does not use this path.
+        /// and error-file apply scan source directly and do not use this path.
         #[arg(long)]
         checklist: Option<PathBuf>,
         /// Exit with failure when unresolved open findings remain.
@@ -365,6 +365,7 @@ impl Commands {
                         checklist.as_deref(),
                         ctx.progress.clone(),
                         dry_run,
+                        selection.etiquette(),
                     )
                 } else {
                     execute_run_plugins(

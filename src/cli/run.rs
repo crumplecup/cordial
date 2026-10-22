@@ -133,12 +133,13 @@ pub(super) fn execute_quality_apply(
     checklist: Option<&Path>,
     progress: Arc<dyn ProgressSink>,
     dry_run: bool,
+    only_etiquette: Option<&str>,
 ) -> CordialResult<()> {
-    #[cfg(not(feature = "crate_attrs"))]
+    #[cfg(not(any(feature = "crate_attrs", feature = "internal_error_chain")))]
     let _ = store_home;
 
     #[cfg(feature = "crate_attrs")]
-    {
+    if only_etiquette.is_none_or(|name| name == "crate_attrs") {
         let home = store_home.clone().unwrap_or_else(default_store_home);
         let task = progress.spinner("Applying crate-level attributes".to_string());
         let summary = crate::run_crate_attrs_apply(project_root, &home, crate_name, dry_run)?;
@@ -156,7 +157,7 @@ pub(super) fn execute_quality_apply(
     }
 
     #[cfg(feature = "tracing")]
-    {
+    if only_etiquette.is_none_or(|name| name == "tracing") {
         let checklist_path = checklist
             .map(Path::to_path_buf)
             .unwrap_or_else(|| store.findings_dir().join("tracing-instrument.checklist.md"));
@@ -176,6 +177,23 @@ pub(super) fn execute_quality_apply(
                 "tracing apply: no checklist, skipped"
             );
         }
+    }
+
+    #[cfg(feature = "internal_error_chain")]
+    if only_etiquette.is_none_or(|name| name == "internal_error_chain") {
+        let home = store_home.clone().unwrap_or_else(default_store_home);
+        let task = progress.spinner("Applying error file storage policy".to_string());
+        let summary = crate::run_error_file_apply(project_root, &home, crate_name, dry_run)?;
+        task.finish(format!(
+            "Error file storage converted for {} type(s)",
+            summary.converted_fields()
+        ));
+        tracing::info!(
+            changed_files = summary.changed_files(),
+            converted_fields = summary.converted_fields(),
+            unresolved = summary.unresolved(),
+            "error file apply"
+        );
     }
 
     Ok(())
