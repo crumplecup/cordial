@@ -17,6 +17,7 @@ pub(super) struct InitializerVisitor<'a> {
     kind: FieldKind,
     strategy: ErrorFieldStrategy,
     source: &'a str,
+    static_strings: &'a BTreeSet<String>,
     current_impl: Option<String>,
     caller_aliases: BTreeSet<String>,
     edits: Vec<Edit>,
@@ -27,17 +28,18 @@ pub(super) struct InitializerVisitor<'a> {
 #[derive(Debug, Clone, Copy)]
 pub(super) enum FieldKind {
     CallSiteFile,
-    StaticLiteral,
+    StaticString,
 }
 
 impl<'a> InitializerVisitor<'a> {
-    #[instrument(level = "debug", skip(kind, strategy, source))]
+    #[instrument(level = "debug", skip(kind, strategy, source, static_strings))]
     pub(super) fn new(
         type_name: &'a str,
         field_name: &'a str,
         kind: FieldKind,
         strategy: ErrorFieldStrategy,
         source: &'a str,
+        static_strings: &'a BTreeSet<String>,
     ) -> Self {
         Self {
             type_name,
@@ -45,6 +47,7 @@ impl<'a> InitializerVisitor<'a> {
             kind,
             strategy,
             source,
+            static_strings,
             current_impl: None,
             caller_aliases: BTreeSet::new(),
             edits: Vec::new(),
@@ -116,9 +119,12 @@ impl<'ast> Visit<'ast> for InitializerVisitor<'_> {
                         self.strategy,
                         &self.caller_aliases,
                     ),
-                    FieldKind::StaticLiteral => {
-                        literal_initializer_replacement(self.source, &field.expr, self.strategy)
-                    }
+                    FieldKind::StaticString => static_string_initializer_replacement(
+                        self.source,
+                        &field.expr,
+                        self.strategy,
+                        self.static_strings,
+                    ),
                 };
                 if let (Some((start, end)), Some(replacement)) =
                     (span_range(self.source, field.expr.span()), replacement)
@@ -187,14 +193,15 @@ fn file_initializer_replacement(
     })
 }
 
-#[instrument(level = "debug", skip(source, expr, strategy))]
-fn literal_initializer_replacement(
+#[instrument(level = "debug", skip(source, expr, strategy, static_strings))]
+fn static_string_initializer_replacement(
     source: &str,
     expr: &Expr,
     strategy: ErrorFieldStrategy,
+    static_strings: &BTreeSet<String>,
 ) -> Option<String> {
     let expr = without_parens(expr);
-    let literal = match strategy {
+    let value = match strategy {
         ErrorFieldStrategy::Borrowed => match expr {
             Expr::MethodCall(method)
                 if matches!(
@@ -209,15 +216,20 @@ fn literal_initializer_replacement(
         },
         ErrorFieldStrategy::Owned => expr,
     };
-    let literal = without_parens(literal);
-    if !matches!(literal, Expr::Lit(value) if matches!(&value.lit, syn::Lit::Str(_))) {
+    let value = without_parens(value);
+    let literal = matches!(value, Expr::Lit(lit) if matches!(&lit.lit, syn::Lit::Str(_)));
+    let qualified_const = matches!(value, Expr::Path(path)
+        if path.qself.is_none()
+            && matches!(path.path.segments.iter().map(|part| part.ident.to_string()).collect::<Vec<_>>().as_slice(), [scope, name]
+                if scope == "self" && static_strings.contains(name)));
+    if !literal && !qualified_const {
         return None;
     }
-    let (start, end) = span_range(source, literal.span())?;
-    let literal_text = source.get(start..end)?;
+    let (start, end) = span_range(source, value.span())?;
+    let value_text = source.get(start..end)?;
     Some(match strategy {
-        ErrorFieldStrategy::Borrowed => literal_text.to_string(),
-        ErrorFieldStrategy::Owned => format!("{literal_text}.to_string()"),
+        ErrorFieldStrategy::Borrowed => value_text.to_string(),
+        ErrorFieldStrategy::Owned => format!("{value_text}.to_string()"),
     })
 }
 

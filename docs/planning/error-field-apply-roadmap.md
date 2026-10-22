@@ -16,7 +16,9 @@ reverse a prior migration.
 The current apply pass changes private, same-file error struct fields with
 recognized constructors. It handles `file: String` built from
 `Location::caller().file()` and other `String` fields built from string literals,
-including `to_string`, `to_owned`, `into`, and recognized `String::from` forms.
+or explicitly qualified same-module `const` and immutable `static` bindings
+typed `&'static str`, including constants whose values use `concat!(...)`.
+It recognizes `to_string`, `to_owned`, `into`, and selected `String::from` forms.
 It mirrors those conversions back to owned `String`. It uses a shared parsed
 file view while scanning and checks that edited source parses. It leaves dynamic
 expressions, constructor parameters, `source` and `kind`, public types, and
@@ -112,3 +114,12 @@ aliases, a custom `String`, a custom `Location`, and a custom formatting macro.
 These are conservative source checks, not complete Rust name resolution:
 macro expansion and names introduced outside the file still need a stronger
 evidence boundary. Slice 0 remains open for those cases.
+
+### Slice 1 progress
+
+Explicit `self::NAME` references to a unique, unconditionally declared
+same-module `const` or immutable `static` typed `&'static str` now round trip
+between owned and borrowed storage. The binding's type supplies the proof, so
+the value may use `concat!(...)` without interpreting macro expansion. Bare
+names, conditional or duplicate declarations, and direct macro expressions
+remain unsupported until their bindings or expansions can be resolved safely.

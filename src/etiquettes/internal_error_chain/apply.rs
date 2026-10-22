@@ -1,6 +1,6 @@
 //! Conservative string field storage edits for the selected error strategy.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
@@ -93,8 +93,9 @@ pub use ErrorFieldApplySummary as ErrorFileApplySummary;
 ///
 /// Only private error structs and private fields with recognized same-file
 /// initializers are patched: `file` from `Location::caller().file()`, and other
-/// string fields from literals. Dynamic fields, lifetime propagation, and
-/// cross-file constructors are left for manual work.
+/// string fields from literals or explicitly qualified same-module string
+/// constants and statics. Dynamic fields, lifetime propagation, and cross-file
+/// constructors are left for manual work.
 #[instrument(level = "info", err(level = "warn"))]
 pub fn run_error_field_apply(
     project_root: &Path,
@@ -180,6 +181,27 @@ fn patch_file(
             _ => None,
         })
         .collect();
+    let mut static_declarations: BTreeMap<String, Vec<bool>> = BTreeMap::new();
+    for item in &syntax.items {
+        let (name, ty, attrs, immutable) = match item {
+            Item::Const(item) => (&item.ident, &item.ty, &item.attrs, true),
+            Item::Static(item) => (
+                &item.ident,
+                &item.ty,
+                &item.attrs,
+                matches!(item.mutability, syn::StaticMutability::None),
+            ),
+            _ => continue,
+        };
+        static_declarations
+            .entry(name.to_string())
+            .or_default()
+            .push(immutable && attrs.is_empty() && is_static_str(ty));
+    }
+    let static_strings: BTreeSet<String> = static_declarations
+        .into_iter()
+        .filter_map(|(name, declarations)| (declarations.as_slice() == [true]).then_some(name))
+        .collect();
     let mut edits = Vec::new();
     let name_audit = audit_names(syntax);
     let mut converted = 0;
@@ -201,7 +223,7 @@ fn patch_file(
             let kind = match field_name.as_str() {
                 "file" => FieldKind::CallSiteFile,
                 "source" | "kind" => continue,
-                _ => FieldKind::StaticLiteral,
+                _ => FieldKind::StaticString,
             };
             let source_type = match strategy {
                 ErrorFieldStrategy::Borrowed if is_string(&field.ty) => "&'static str",
@@ -227,8 +249,14 @@ fn patch_file(
                 ));
                 continue;
             }
-            let mut visitor =
-                InitializerVisitor::new(&name, &field_name, kind, strategy, file.source());
+            let mut visitor = InitializerVisitor::new(
+                &name,
+                &field_name,
+                kind,
+                strategy,
+                file.source(),
+                &static_strings,
+            );
             visitor.visit_file(syntax);
             let Some(mut initializers) = visitor.finish() else {
                 blockers.push(ErrorFieldApplyBlocker::new(

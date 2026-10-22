@@ -141,6 +141,7 @@ impl std::fmt::Display for MessageError {
         write!(f, "{}: {}", self.context, self.message)
     }
 }
+
 impl std::error::Error for MessageError {}
 impl MessageError {
     fn first() -> Self {
@@ -184,6 +185,116 @@ impl MessageError {
     assert!(result.contains("message: \"third\".to_string(), context: \"fixed\".to_string()"));
     assert!(result.contains("message: \"grouped\".to_string(), context: \"fixed\".to_string()"));
     check_fixture(root)?;
+    Ok(())
+}
+
+#[test]
+fn qualified_static_string_constants_round_trip() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"const MESSAGE: &'static str = concat!("fix", "ed");
+static CONTEXT: &'static str = "site";
+#[derive(Debug)]
+struct MessageError { message: String, context: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.context, self.message)
+    }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new() -> Self {
+        Self { message: String::from(self::MESSAGE), context: self::CONTEXT.to_owned() }
+    }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let preview =
+        run_error_file_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
+    assert_eq!(preview.converted_fields(), 2);
+    assert_eq!(source(fixture.path())?, original);
+
+    let borrowed =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(borrowed.converted_fields(), 2);
+    assert_eq!(borrowed.unresolved(), 0);
+    let changed = source(fixture.path())?;
+    assert!(changed.contains("message: &'static str, context: &'static str"));
+    assert!(changed.contains("message: self::MESSAGE, context: self::CONTEXT"));
+    check_fixture(fixture.path())?;
+    assert_eq!(
+        run_error_file_apply(fixture.path(), fixture.path(), None, false)
+            .into_diagnostic()?
+            .changed_files(),
+        0
+    );
+
+    set_strategy(fixture.path(), "owned")?;
+    let owned =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(owned.converted_fields(), 2);
+    let changed = source(fixture.path())?;
+    assert!(changed.contains("message: String, context: String"));
+    assert!(
+        changed.contains("message: self::MESSAGE.to_string(), context: self::CONTEXT.to_string()")
+    );
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn unqualified_constant_is_not_assumed_to_be_the_static_binding() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"const MESSAGE: &'static str = "fixed";
+#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new() -> Self { Self { message: MESSAGE.to_string() } }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(
+        result.blockers()[0].reason(),
+        ErrorFieldApplyBlockerReason::Initializer
+    );
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn conditional_constant_does_not_prove_static_string_source() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[cfg(any())]
+const MESSAGE: &'static str = "other";
+#[cfg(not(any()))]
+const MESSAGE: &'static str = "fixed";
+#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new() -> Self { Self { message: self::MESSAGE.to_string() } }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let result =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.converted_fields(), 0);
+    assert_eq!(
+        result.blockers()[0].reason(),
+        ErrorFieldApplyBlockerReason::Initializer
+    );
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
     Ok(())
 }
 
