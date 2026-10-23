@@ -37,43 +37,35 @@ content fields are all `String`. That shape alone does not establish that
 an earlier error was stringified: a fresh invariant error may legitimately
 carry a message. The conversion site supplies the evidence for this rule.
 
-## Required fix: follow the value through calls
+## Required fix: follow error types through signatures
 
 The direct conversion check is a useful early warning, but it does not close
 the reported loophole. A helper can stringify a caught error and return a
-message-only error. Conversely, passing the caught error as an argument does
-not prove that the returned error exposes it through `Error::source()`. Neither
-case can be decided from the spelling of a call or the name of a field.
+message-only error. Follow the **types** across the called functions instead
+of looking for particular expressions in their bodies. At each call, resolve
+the callee signature, substitute generic parameters, and compare the input
+error type with the error type it emits. If the emitted type has no reachable
+source path to the input error type, that call broke the chain. This detects
+the violation regardless of whether the helper uses `format!`, `to_string()`,
+or another way to make text.
 
-Build this rule on compiler-resolved types and control flow. Begin at each
-caught `Err` value, follow assignments, branches, closures, and calls, and
-summarize local functions in terms of which input error values can reach the
-returned error's `source()` chain. Compute summaries to a fixed point for
-recursive calls. Check every return path; a message derived from the caught
-error is useful diagnostic evidence, but loss of the typed source is the
-violation even when no explicit `format!` or `to_string()` appears at the
-boundary. Follow the actual `Error::source()` implementation for local error
-types rather than treating a `source` field or constructor argument as proof.
+Reuse and extend the existing internal error type graph. Its `source_target`
+edges are the starting point, but they need resolved type identities and a
+verified `Error::source()` relationship before they can support this rule;
+the current graph sometimes infers an edge from a field name. Build a
+signature index from the shared source trees and resolve calls against it.
+Ambiguous calls, trait-object erasure, or an unknown external source graph
+must yield **unknown**, not an assumed pass. No MIR or body-wide value-flow
+analysis is required for the definite broken-chain finding.
 
-Record three outcomes for each conversion: **preserved**, **lost**, and
-**unknown**. An unresolved call, dynamic dispatch target, external body, or
-unprovable source implementation must remain unknown; it must not silently
-count as preservation. Decide how unknowns surface in the worklist before
-enabling the semantic rule by default. Keep the existing direct check only as
-an explicitly partial signal while this backend is built.
-
-The current shared `syn` tree can locate candidate boundaries without another
-parse, but it does not supply resolved calls or MIR. Prototype a compiler
-analysis adapter using a pinned toolchain and a separate process, then measure
-its cost before assigning a tier. Rustc's
-[`after_analysis` callback](https://rustc-dev-guide.rust-lang.org/rustc-driver/interacting-with-the-ast.html)
-exposes type information, and
-[MIR](https://rustc-dev-guide.rust-lang.org/mir/index.html) provides the
-control-flow representation needed for the summaries. Its
-[internal API](https://rustc-dev-guide.rust-lang.org/rustc-driver/external-rustc-drivers.html)
-requires matching compiler components and is unstable, so the prototype must
-establish a supported toolchain and failure policy before it enters the normal
-pipeline.
+This is a one-way proof: absence of the input error type from every reachable
+source path proves loss, while presence only shows that the output type *can*
+carry it. For example, `fn wrap(err: IoError) -> AppError` could return either
+`AppError::Io(err)` or `AppError::Message(err.to_string())` if both variants
+exist. The signature alone cannot distinguish those bodies. Keep the direct
+conversion check for such cases, and report the signature-level result as
+**reachable**, not **preserved**. If we later need to prove preservation on
+every path, that is a separate, deeper analysis.
 
 ### Acceptance cases
 
@@ -81,14 +73,14 @@ pipeline.
   the caller's `map_err` is reported.
 - Two or more helpers forward the error before one stringifies it; the caller
   is reported.
-- A helper formats a message and returns an error whose `source()` exposes
-  the caught error; the caller passes.
+- A helper returns a type with a verified source path to the caught error
+  type; the signature-level check records reachability.
 - A helper accepts the error but drops it before returning a message-only
   error; the caller is reported.
-- A branch preserves the source on one path and loses it on another; the
-  losing path is reported.
-- An opaque external or dynamic call produces an explicit unknown result,
-  never a silent pass.
+- A broad return enum has both source-carrying and message-only variants;
+  reachability is not mislabeled as proof of preservation.
+- An unresolved or opaque call produces an explicit unknown result, never a
+  silent pass.
 
-Use compiled fixtures for these cases. The existing source-snippet fixtures
-do not resolve types or call targets and cannot validate this rule.
+Use compiled fixtures for resolved-call cases. The existing source-snippet
+fixtures do not resolve types or call targets and cannot validate this rule.
