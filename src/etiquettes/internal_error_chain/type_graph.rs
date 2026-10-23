@@ -5,48 +5,17 @@ use std::path::Path;
 
 use crate::error::CordialResult;
 
-use super::types::{
-    InternalErrorNodeClass, InternalErrorTypeGraphReport, InternalErrorTypeNode,
-    InternalErrorTypeProbeId,
-};
+use super::types::{InternalErrorNodeClass, InternalErrorTypeNode, InternalErrorTypeProbeId};
 
 use tracing::instrument;
 mod visitor;
 mod walk;
 
-use visitor::scan_error_rust_file_raw;
 pub(crate) use visitor::{RawTypeNode, scan_error_rust_syntax_raw};
 pub(crate) use walk::{
-    for_each_shared_src_rust_file, for_each_src_rust_file, is_foreign_type_label,
-    item_derives_error, last_ident, trait_is_std_error, type_label, type_path_is_error_related,
+    for_each_shared_src_rust_file, is_foreign_type_label, item_derives_error, last_ident,
+    trait_is_std_error, type_label, type_path_is_error_related,
 };
-
-/// Scan `src/**/*.rs` for the internal error type graph, seeded by `Error` impls.
-#[instrument(level = "debug", err(level = "warn"))]
-pub fn scan_crate_internal_error_type_graph(
-    crate_root: &Path,
-    crate_name: &str,
-) -> CordialResult<InternalErrorTypeGraphReport> {
-    let mut raw_nodes = Vec::new();
-    let mut error_impls = BTreeSet::new();
-    for_each_src_rust_file(crate_root, |path, src_root| {
-        let scan = scan_error_rust_file_raw(path, src_root)?;
-        raw_nodes.extend(scan.nodes().iter().cloned());
-        error_impls.extend(scan.error_impls().iter().cloned());
-        Ok(())
-    })?;
-    raw_nodes.retain(|node| type_path_is_error_related(node.type_path(), &error_impls));
-
-    let nodes = finalize_type_graph(raw_nodes, crate_name)?
-        .into_iter()
-        .map(|node| relativize_type_node(node, crate_root))
-        .collect::<CordialResult<Vec<_>>>()?;
-
-    Ok(InternalErrorTypeGraphReport::new(
-        crate_name.to_string(),
-        nodes,
-    ))
-}
 
 /// Scan one error-module source file (used by tests).
 #[instrument(level = "debug", skip(source, file), err(level = "warn"))]
@@ -107,30 +76,6 @@ pub(crate) fn finalize_type_graph(
             .then(a.line().cmp(&b.line()))
     });
     Ok(nodes)
-}
-
-#[instrument(level = "debug", skip(node))]
-fn relativize_type_node(
-    node: InternalErrorTypeNode,
-    crate_root: &Path,
-) -> CordialResult<InternalErrorTypeNode> {
-    let file = node
-        .file()
-        .strip_prefix(crate_root)
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|_| node.file().clone());
-    InternalErrorTypeNode::builder()
-        .crate_name(node.crate_name().clone())
-        .type_path(node.type_path().clone())
-        .node_class(node.node_class())
-        .probe_id(node.probe_id())
-        .source_target(node.source_target().clone())
-        .reaches_foreign(node.reaches_foreign())
-        .chain_depth(node.chain_depth())
-        .file(file)
-        .line(node.line())
-        .snippet(node.snippet().clone())
-        .build()
 }
 
 #[instrument(level = "debug", skip(raw))]

@@ -9,6 +9,8 @@ mod inventory;
 mod scan;
 
 pub use inventory::ErrorIrScanEnricher;
+#[cfg(feature = "internal_error_chain")]
+pub(crate) use scan::compliance_sort::scan_crate_error_ir_with_absolute_paths;
 pub use scan::{ErrorIrScanReport, scan_crate_error_ir};
 
 use crate::enricher::{AttributeEnricher, ErrorFlowEnricher, ScopeEnricher};

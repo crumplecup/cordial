@@ -187,7 +187,8 @@ impl SourceLoadView {
     #[cfg(any(
         feature = "antipatterns",
         feature = "tracing",
-        feature = "internal_error_chain"
+        feature = "internal_error_chain",
+        feature = "error_sites"
     ))]
     #[instrument(level = "debug")]
     pub(crate) fn for_standalone_scan() -> Self {

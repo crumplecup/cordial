@@ -19,29 +19,13 @@ use tracing::instrument;
 /// bin-only wrappers (`src/main.rs`, `src/boundary.rs` linked from main) stay
 /// out of the architecture catalog. Crates with no `lib.rs`/`main.rs` fall
 /// back to every `.rs` file under `src/`.
-#[instrument(level = "debug", skip(visit), err(level = "warn"))]
-pub(crate) fn for_each_src_rust_file(
-    crate_root: &Path,
-    visit: impl FnMut(&Path, &Path) -> CordialResult<()>,
-) -> CordialResult<()> {
-    for_each_src_rust_file_impl(None, crate_root, visit)
-}
-
 #[instrument(level = "debug", skip(source, visit), err(level = "warn"))]
 pub(crate) fn for_each_shared_src_rust_file(
     source: &SourceLoadView,
     crate_root: &Path,
     visit: impl FnMut(&Path, &Path) -> CordialResult<()>,
 ) -> CordialResult<()> {
-    for_each_src_rust_file_impl(Some(source), crate_root, visit)
-}
-
-#[instrument(level = "debug", skip(source, visit), err(level = "warn"))]
-fn for_each_src_rust_file_impl(
-    source: Option<&SourceLoadView>,
-    crate_root: &Path,
-    mut visit: impl FnMut(&Path, &Path) -> CordialResult<()>,
-) -> CordialResult<()> {
+    let mut visit = visit;
     let src_root = crate_root.join("src");
     if !src_root.is_dir() {
         return Ok(());
@@ -54,7 +38,7 @@ fn for_each_src_rust_file_impl(
 
 #[instrument(level = "debug", skip(source), err(level = "warn"))]
 fn collect_library_src_files(
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
     crate_root: &Path,
     src_root: &Path,
 ) -> CordialResult<Vec<PathBuf>> {
@@ -97,7 +81,7 @@ fn collect_all_src_rs(crate_root: &Path, src_root: &Path) -> CordialResult<Vec<P
 
 #[instrument(level = "debug", skip(source, file, files), err(level = "warn"))]
 pub(crate) fn collect_mod_tree(
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
     file: &Path,
     crate_root: &Path,
     files: &mut BTreeSet<PathBuf>,
@@ -108,28 +92,13 @@ pub(crate) fn collect_mod_tree(
     if !files.insert(file.to_path_buf()) {
         return Ok(());
     }
-    if let Some(source) = source {
-        let parsed = source.parsed_file(file, "error-architecture")?;
-        walk_mod_items(
-            Some(source),
-            file,
-            &parsed.syntax().items,
-            &[],
-            crate_root,
-            files,
-        )
-    } else {
-        let text = std::fs::read_to_string(file)?;
-        let syntax = syn::parse_file(&text).map_err(|err| {
-            crate::error::CordialError::syn_parse(file.display().to_string(), err)
-        })?;
-        walk_mod_items(None, file, &syntax.items, &[], crate_root, files)
-    }
+    let parsed = source.parsed_file(file, "error-architecture")?;
+    walk_mod_items(source, file, &parsed.syntax().items, &[], crate_root, files)
 }
 
 #[instrument(level = "debug", skip(source, items, files), err(level = "warn"))]
 fn walk_mod_items(
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
     current_file: &Path,
     items: &[syn::Item],
     inline_path: &[String],

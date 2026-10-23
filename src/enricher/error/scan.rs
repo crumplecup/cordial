@@ -25,6 +25,9 @@ pub struct ErrorIrScanReport {
     /// Compliance findings for this crate.
     #[cfg(feature = "internal_error_chain")]
     compliance: Vec<crate::etiquettes::internal_error_chain::InternalErrorComplianceFinding>,
+    /// Signature-level source-chain assessments, including unresolved calls.
+    #[cfg(feature = "internal_error_chain")]
+    signature_checks: Vec<crate::etiquettes::internal_error_chain::SignatureChainCheck>,
 }
 
 impl ErrorIrScanReport {
@@ -42,6 +45,7 @@ impl ErrorIrScanReport {
                 crate_name.to_string(),
                 self.compliance.clone(),
             ),
+            self.signature_checks.clone(),
         )
     }
 }
@@ -52,13 +56,15 @@ pub fn scan_crate_error_ir(
     crate_root: &Path,
     crate_name: &str,
 ) -> CordialResult<ErrorIrScanReport> {
+    let source = SourceLoadView::for_standalone_scan();
     scan_crate_error_ir_impl(
         crate_root,
         crate_name,
-        None,
+        &source,
         #[cfg(feature = "internal_error_chain")]
         crate::config::InternalErrorChainThresholds::default().kind_fanout_max_call_sites(),
         crate::config::ErrorFieldStrategy::default(),
+        true,
     )
 }
 
@@ -73,20 +79,22 @@ pub(super) fn scan_crate_error_ir_with_source(
     scan_crate_error_ir_impl(
         crate_root,
         crate_name,
-        Some(source),
+        source,
         #[cfg(feature = "internal_error_chain")]
         kind_fanout_max_call_sites,
         field_strategy,
+        true,
     )
 }
 
-#[instrument(level = "debug", skip(loaded, field_strategy))]
+#[instrument(level = "debug", skip(source, field_strategy))]
 fn scan_crate_error_ir_impl(
     crate_root: &Path,
     crate_name: &str,
-    loaded: Option<&SourceLoadView>,
+    source: &SourceLoadView,
     #[cfg(feature = "internal_error_chain")] kind_fanout_max_call_sites: usize,
     field_strategy: crate::config::ErrorFieldStrategy,
+    relative_paths: bool,
 ) -> CordialResult<ErrorIrScanReport> {
     #[cfg(not(feature = "internal_error_chain"))]
     let _ = field_strategy;
@@ -97,6 +105,9 @@ fn scan_crate_error_ir_impl(
     let mut type_graph_raw = Vec::<crate::etiquettes::internal_error_chain::RawTypeNode>::new();
     #[cfg(feature = "internal_error_chain")]
     let mut error_impls = std::collections::BTreeSet::<String>::new();
+    #[cfg(feature = "internal_error_chain")]
+    let mut signature_chain =
+        crate::etiquettes::internal_error_chain::SignatureChainIndex::default();
 
     for tree_root in quality_scan_trees(crate_root) {
         if !tree_root.is_dir() {
@@ -116,7 +127,11 @@ fn scan_crate_error_ir_impl(
             }
 
             let under_src = path.starts_with(&src_root);
-            let scan = |syntax: &syn::File| {
+            let mut scan = |syntax: &syn::File| {
+                #[cfg(feature = "internal_error_chain")]
+                if under_src {
+                    signature_chain.collect(syntax, path, &src_root);
+                }
                 crate::loader::source_walk(path, "error-ir-scan", || {
                     scan_rust_file_syntax(
                         syntax,
@@ -129,14 +144,8 @@ fn scan_crate_error_ir_impl(
                     )
                 })
             };
-            let file_scan = if let Some(loaded) = loaded {
-                let unit = loaded.parsed_file(path, "error-ir-scan")?;
-                scan(unit.syntax())?
-            } else {
-                let source = crate::loader::source_read(path, "error-ir-scan")?;
-                let syntax = crate::loader::source_parse(&source, path, "error-ir-scan")?;
-                scan(&syntax)?
-            };
+            let unit = source.parsed_file(path, "error-ir-scan")?;
+            let file_scan = scan(unit.syntax())?;
 
             report.sites.extend(file_scan.sites().iter().cloned());
             #[cfg(feature = "error_chain")]
@@ -164,30 +173,38 @@ fn scan_crate_error_ir_impl(
             type_graph_raw,
             crate_name,
         )?;
-        for node in &mut nodes {
-            node.strip_file_prefix(crate_root);
+        if relative_paths {
+            for node in &mut nodes {
+                node.strip_file_prefix(crate_root);
+            }
         }
         report.type_graph =
             crate::etiquettes::internal_error_chain::InternalErrorTypeGraphReport::new(
                 crate_name.to_string(),
                 nodes,
             );
-        report.compliance.extend(if let Some(loaded) = loaded {
+        report.compliance.extend(
             crate::etiquettes::internal_error_chain::scan_crate_error_architecture_with_source(
                 crate_root,
                 crate_name,
-                loaded,
+                source,
                 kind_fanout_max_call_sites,
                 field_strategy,
-            )?
-        } else {
-            crate::etiquettes::internal_error_chain::scan_crate_error_architecture(
-                crate_root, crate_name,
-            )?
-        });
+            )?,
+        );
+        let (findings, mut checks) = signature_chain.assess(crate_name)?;
+        report.compliance.extend(findings);
+        if relative_paths {
+            for check in &mut checks {
+                check.strip_file_prefix(crate_root);
+            }
+        }
+        report.signature_checks = checks;
         compliance_sort::sort_compliance(&mut report.compliance);
-        for finding in &mut report.compliance {
-            finding.strip_file_prefix(crate_root);
+        if relative_paths {
+            for finding in &mut report.compliance {
+                finding.strip_file_prefix(crate_root);
+            }
         }
     }
 
@@ -226,9 +243,31 @@ mod chain_sort {
 }
 
 #[cfg(feature = "internal_error_chain")]
-mod compliance_sort {
+pub(super) mod compliance_sort {
+    use std::path::Path;
+
+    use crate::error::CordialResult;
     use crate::etiquettes::internal_error_chain::InternalErrorComplianceFinding;
+    use crate::loader::SourceLoadView;
     use tracing::instrument;
+
+    use super::{ErrorIrScanReport, scan_crate_error_ir_impl};
+
+    #[instrument(level = "debug")]
+    pub(crate) fn scan_crate_error_ir_with_absolute_paths(
+        crate_root: &Path,
+        crate_name: &str,
+    ) -> CordialResult<ErrorIrScanReport> {
+        let source = SourceLoadView::for_standalone_scan();
+        scan_crate_error_ir_impl(
+            crate_root,
+            crate_name,
+            &source,
+            crate::config::InternalErrorChainThresholds::default().kind_fanout_max_call_sites(),
+            crate::config::ErrorFieldStrategy::default(),
+            false,
+        )
+    }
 
     #[instrument(level = "debug", skip(findings))]
     pub(super) fn sort_compliance(findings: &mut [InternalErrorComplianceFinding]) {

@@ -183,9 +183,10 @@ pub use etiquettes::internal_error_chain::{
     ErrorFieldApplyBlockerReason, ErrorFieldApplySummary, ErrorFileApplySummary,
     INTERNAL_ERROR_CHAIN_ETIQUETTE, InternalErrorChainScanReport, InternalErrorComplianceFinding,
     InternalErrorComplianceId, InternalErrorNodeClass, InternalErrorTypeNode,
-    InternalErrorTypeProbeId, WorkspaceInternalErrorChainSummary,
-    build_workspace_internal_error_chain_summary, run_error_field_apply, run_error_file_apply,
-    scan_compliance_rust_source, scan_crate_internal_error_chain, scan_error_rust_source,
+    InternalErrorTypeProbeId, SignatureChainCheck, SignatureChainStatus,
+    WorkspaceInternalErrorChainSummary, build_workspace_internal_error_chain_summary,
+    run_error_field_apply, run_error_file_apply, scan_compliance_rust_source,
+    scan_crate_internal_error_chain, scan_error_rust_source,
 };
 #[cfg(feature = "modularity")]
 pub use etiquettes::modularity::{

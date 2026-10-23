@@ -4,9 +4,78 @@ use std::path::Path;
 
 use cordial::{
     INTERNAL_ERROR_CHAIN_ETIQUETTE, InternalErrorComplianceId, InternalErrorNodeClass,
-    InternalErrorTypeProbeId, RunAll, Session, SessionBuilder, scan_compliance_rust_source,
-    scan_crate_internal_error_chain, scan_error_rust_source,
+    InternalErrorTypeProbeId, RunAll, Session, SessionBuilder, SignatureChainStatus,
+    scan_compliance_rust_source, scan_crate_internal_error_chain, scan_error_rust_source,
 };
+
+#[test]
+fn signature_chain_catches_helpers_across_modules() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic()?;
+    let src = fixture.path().join("src");
+    fs::create_dir_all(&src).into_diagnostic()?;
+    fs::write(
+        src.join("lib.rs"),
+        include_str!("fixtures/signature_chain_fixture.rs"),
+    )
+    .into_diagnostic()?;
+
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    let signature_findings: Vec<_> = report
+        .compliance()
+        .findings()
+        .iter()
+        .filter(|finding| {
+            finding.rule_id() == InternalErrorComplianceId::DiscardTyped001
+                && finding.snippet().starts_with("map_err conversion:")
+        })
+        .collect();
+    assert_eq!(signature_findings.len(), 4, "{signature_findings:#?}");
+    assert!(
+        signature_findings
+            .iter()
+            .any(|finding| finding.context().is_empty())
+    );
+    assert_eq!(
+        signature_findings
+            .iter()
+            .filter(|finding| finding
+                .snippet()
+                .contains("MessageError cannot preserve SourceError"))
+            .count(),
+        3
+    );
+    assert!(signature_findings.iter().any(|finding| {
+        finding
+            .snippet()
+            .contains("FakeChainError cannot preserve SourceError")
+    }));
+    assert_eq!(
+        report
+            .signature_checks()
+            .iter()
+            .filter(|check| check.status() == SignatureChainStatus::Broken)
+            .count(),
+        4
+    );
+    assert_eq!(
+        report
+            .signature_checks()
+            .iter()
+            .filter(|check| check.status() == SignatureChainStatus::Preserved)
+            .count(),
+        3
+    );
+    assert_eq!(
+        report
+            .signature_checks()
+            .iter()
+            .filter(|check| check.status() == SignatureChainStatus::Unknown)
+            .count(),
+        1
+    );
+    Ok(())
+}
 
 const TYPE_GRAPH_FIXTURE: &str = r#"
 use std::error::Error;

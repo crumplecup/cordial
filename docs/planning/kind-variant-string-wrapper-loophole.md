@@ -1,6 +1,6 @@
 # Stringified error source chain gap
 
-Status: **Partial — direct conversions detected; call-chain analysis pending**
+Status: **Implemented — direct conversions and signature-level source reachability**
 
 ## Reported symptom
 
@@ -37,7 +37,7 @@ content fields are all `String`. That shape alone does not establish that
 an earlier error was stringified: a fresh invariant error may legitimately
 carry a message. The conversion site supplies the evidence for this rule.
 
-## Required fix: follow error types through signatures
+## Signature-level fix: follow error types through signatures
 
 The direct conversion check is a useful early warning, but it does not close
 the reported loophole. A helper can stringify a caught error and return a
@@ -82,5 +82,19 @@ variant the helper constructs. That is the deliberate limit of this lint.
 - An unresolved or opaque call produces an explicit unknown result, never a
   silent pass.
 
-Use compiled fixtures for resolved-call cases. The existing source-snippet
-fixtures do not resolve types or call targets and cannot validate this rule.
+The signature index is collected from the same shared parsed source trees as
+the error IR scan. Standalone scans create one `SourceLoadView` and pass it to
+both the error IR and architecture analyses, so they reuse each file's parsed
+tree. The index resolves local free and associated functions, imports,
+simple generic parameters, and nested calls. It verifies source edges from
+`#[derive(Error)]` source fields or recognizable `Error::source()` methods.
+Unknown calls and opaque source methods remain explicit `Unknown` checks in
+`InternalErrorChainScanReport`; they do not generate a broken-chain finding.
+The signature check currently handles `map_err` closures that pass their
+caught error to a locally resolved function call. The existing direct
+conversion check still covers stringification at the conversion site.
+
+Compiled fixtures cover the resolved-call cases, including cross-module
+helpers, nested calls, a generic helper, a manual source method, a misleading
+`source` field without a source method, a broad enum, and an opaque external
+call. Source-snippet fixtures alone cannot resolve types or call targets.

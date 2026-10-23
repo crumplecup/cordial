@@ -51,17 +51,6 @@ pub(crate) fn scan_error_rust_syntax_raw(
     ))
 }
 
-#[instrument(level = "debug", skip(file), err(level = "warn"))]
-pub(super) fn scan_error_rust_file_raw(
-    file: &Path,
-    module_root: &Path,
-) -> CordialResult<RawTypeGraphScan> {
-    let source = std::fs::read_to_string(file)?;
-    let syntax = syn::parse_file(&source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    scan_error_rust_syntax_raw(&syntax, file, module_root)
-}
-
 #[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub(crate) struct RawTypeNode {

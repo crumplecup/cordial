@@ -31,6 +31,8 @@ pub use attribute::{AttributeEnricher, is_cfg_test, is_gated_instrument_attr, is
 #[cfg(feature = "_quality_support")]
 #[cfg(feature = "_attribute_scan")]
 pub use attribute_paths::{member_crate_root, resolve_parent};
+#[cfg(feature = "internal_error_chain")]
+pub(crate) use error::scan_crate_error_ir_with_absolute_paths;
 #[cfg(feature = "_attribute_scan")]
 #[cfg(feature = "error_sites")]
 pub use error::{

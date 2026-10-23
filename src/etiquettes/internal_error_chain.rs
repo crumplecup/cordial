@@ -36,6 +36,7 @@ mod compliance;
 mod probe;
 mod reporter;
 mod scan;
+mod signature_chain;
 mod source_shape;
 mod type_graph;
 mod types;
@@ -45,9 +46,7 @@ pub use apply::{
     ErrorFieldApplyBlockerReason, ErrorFieldApplySummary, ErrorFileApplySummary,
     run_error_field_apply, run_error_file_apply,
 };
-pub(crate) use architecture::{
-    scan_crate_error_architecture, scan_crate_error_architecture_with_source,
-};
+pub(crate) use architecture::scan_crate_error_architecture_with_source;
 pub use assessor::InternalErrorChainAssessor;
 pub use probe::InternalErrorChainProbe;
 pub use reporter::{
@@ -57,6 +56,8 @@ pub use reporter::{
 pub use scan::{
     scan_compliance_rust_source, scan_crate_internal_error_chain, scan_error_rust_source,
 };
+pub(crate) use signature_chain::SignatureChainIndex;
+pub use signature_chain::{SignatureChainCheck, SignatureChainStatus};
 pub(crate) use type_graph::{
     RawTypeNode, finalize_type_graph, scan_error_rust_syntax_raw, type_path_is_error_related,
 };
@@ -110,7 +111,7 @@ pub static INTERNAL_ERROR_CHAIN_ETIQUETTE: LazyLock<StaticQualityEtiquette> = La
                 "Do this crate's error types form the parent / Kind / native-source architecture?",
                 "Foreign-error etiquettes ask what leaks in. This one asks whether our error types are a place those leaks can land.",
                 "Catalogs every type that implements Error under src/. By default a parent boxes an umbrella *Kind enum; every Kind variant holds a native source; native sources that wrap a foreign error keep it in source with owned file/line from Location::caller() and #[track_caller]. With [internal_error_chain] field_strategy = \"borrowed\", the parent holds &'a Kind, and every non-Copy field in an error type or its Kind is borrowed, including source and file (`&'static str`). Passing a caller-tracking constructor as a map_err function item loses the caller location; use ? or a closure. Feeds the hand-composed Error handling quality-report area.",
-                "`[internal_error_chain] enabled = false` opts out. `field_strategy = \"owned\" | \"borrowed\"` selects error field storage independently of `[antipatterns.static_refs]` (default owned).",
+                "`[internal_error_chain] enabled = false` in cordial.toml opts out. `field_strategy = \"owned\" | \"borrowed\"` selects error field storage independently of `[antipatterns.static_refs]` (default owned).",
                 vec![
                     EtiquetteRuleExplain::new(
                         "ERROR-CHAIN-COMPLIANCE-STRINGIFY-001",
