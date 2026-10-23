@@ -24,7 +24,7 @@ pub struct InternalErrorChainThresholds {
 
 #[instrument(level = "trace")]
 fn default_kind_fanout_max_call_sites() -> usize {
-    3
+    0
 }
 
 impl Default for InternalErrorChainThresholds {

@@ -6,8 +6,11 @@
 //! inside this file needs its own `#[cfg]`.
 
 use syn::spanned::Spanned;
-use syn::{Expr, ExprCall, ExprIf, ExprMatch, ExprPath, Stmt};
+use syn::{Expr, ExprCall, ExprIf, ExprMatch, ExprPath, Pat, Stmt};
 
+use super::stringified_binding::{
+    discards_stringified_binding, map_err_discards_stringified_binding,
+};
 use super::visitor::expr::{pat_is_err, raw_expr_snippet, truncate_snippet};
 use super::visitor::{ErrorIrScanLayers, ErrorIrScanLayersBuilder, SiteCtx};
 use crate::error::CordialResult;
@@ -69,11 +72,9 @@ impl ComplianceLayer {
     ) {
         let source_snippet = compliance_expr_snippet(receiver);
         let foreign_type = infer_foreign_error_type(&source_snippet).map(|(ty, _, _)| ty);
-        if foreign_type.is_none() {
-            return;
-        }
-
-        if let Some(constructor) = internal_leaf_constructor(converter) {
+        if foreign_type.is_some()
+            && let Some(constructor) = internal_leaf_constructor(converter)
+        {
             self.push(
                 InternalErrorComplianceId::DiscardTyped001,
                 line,
@@ -82,6 +83,20 @@ impl ComplianceLayer {
                 Some(constructor),
                 ctx,
             );
+            return;
+        }
+        if map_err_discards_stringified_binding(converter) {
+            self.push(
+                InternalErrorComplianceId::StringifyForeign001,
+                line,
+                format!("{source_snippet}.map_err(…) — error converted to text without retaining its source"),
+                foreign_type,
+                None,
+                ctx,
+            );
+            return;
+        }
+        if foreign_type.is_none() {
             return;
         }
 
@@ -102,6 +117,7 @@ impl ComplianceLayer {
         &mut self,
         payload: &Expr,
         source_expr: Option<&Expr>,
+        error_binding: Option<String>,
         line: u32,
         site: &str,
         ctx: &SiteCtx,
@@ -114,10 +130,9 @@ impl ComplianceLayer {
                 infer_foreign_error_type(&compliance_expr_snippet(payload)).map(|(ty, _, _)| ty)
             })
             .or_else(|| foreign_binding_in_expr(payload));
-        if foreign_type.is_none() {
-            return;
-        }
-        if let Some(constructor) = internal_leaf_constructor(payload) {
+        if foreign_type.is_some()
+            && let Some(constructor) = internal_leaf_constructor(payload)
+        {
             self.push(
                 InternalErrorComplianceId::DiscardTyped001,
                 line,
@@ -126,7 +141,26 @@ impl ComplianceLayer {
                 Some(constructor),
                 ctx,
             );
-        } else if compliance_expr_contains_to_string(payload) {
+            return;
+        }
+        if error_binding
+            .as_deref()
+            .is_some_and(|name| discards_stringified_binding(payload, name))
+        {
+            self.push(
+                InternalErrorComplianceId::StringifyForeign001,
+                line,
+                format!("{site} — error converted to text without retaining its source"),
+                foreign_type,
+                None,
+                ctx,
+            );
+            return;
+        }
+        if foreign_type.is_none() {
+            return;
+        }
+        if compliance_expr_contains_to_string(payload) {
             self.push(
                 InternalErrorComplianceId::StringifyForeign001,
                 line,
@@ -141,7 +175,7 @@ impl ComplianceLayer {
     #[instrument(level = "debug", skip(self, expr, ctx))]
     pub(super) fn on_return_err(&mut self, expr: &Expr, line: u32, ctx: &SiteCtx) {
         if let Some(payload) = compliance_err_payload(expr) {
-            self.on_err_payload(payload, None, line, "return Err(…)", ctx);
+            self.on_err_payload(payload, None, None, line, "return Err(…)", ctx);
         }
     }
 
@@ -156,6 +190,7 @@ impl ComplianceLayer {
         self.on_err_payload(
             payload,
             Some(source),
+            if_let_error_binding(&node.cond),
             node.cond.span().start().line as u32,
             "if let Err(…) = …",
             ctx,
@@ -171,6 +206,7 @@ impl ComplianceLayer {
                 self.on_err_payload(
                     payload,
                     Some(&node.expr),
+                    error_binding_name(&arm.pat),
                     arm.span().start().line as u32,
                     "match … {{ Err(…) => … }}",
                     ctx,
@@ -202,6 +238,28 @@ fn if_let_err_source(expr: &Expr) -> Option<&Expr> {
         return None;
     }
     Some(&let_expr.expr)
+}
+
+#[instrument(level = "trace", skip(expr))]
+fn if_let_error_binding(expr: &Expr) -> Option<String> {
+    let Expr::Let(let_expr) = expr else {
+        return None;
+    };
+    error_binding_name(&let_expr.pat)
+}
+
+#[instrument(level = "trace", skip(pat))]
+fn error_binding_name(pat: &Pat) -> Option<String> {
+    let Pat::TupleStruct(tuple) = pat else {
+        return None;
+    };
+    if !tuple.path.is_ident("Err") {
+        return None;
+    }
+    let Pat::Ident(binding) = tuple.elems.first()? else {
+        return None;
+    };
+    Some(binding.ident.to_string())
 }
 
 #[instrument(level = "debug", skip(expr))]

@@ -107,10 +107,7 @@ impl Worklist {
         let generation = Self::read(store)?
             .map(|previous| previous.record.generation.saturating_add(1))
             .unwrap_or(1);
-        let built_at_unix_secs = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|error| CordialError::invariant(error.to_string()))?
-            .as_secs();
+        let built_at_unix_secs = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
         let record = BuildRecord {
             schema_version: SCHEMA_VERSION,
             cordial_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -171,10 +168,7 @@ impl Worklist {
     pub fn write(&self, store: &StoreLayout) -> CordialResult<()> {
         fs::create_dir_all(store.root())?;
         let target = store.worklist_path();
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|error| CordialError::invariant(error.to_string()))?
-            .as_nanos();
+        let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let temp = store
             .root()
             .join(format!("worklist.json.tmp-{}-{stamp}", std::process::id()));

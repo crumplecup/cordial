@@ -161,10 +161,7 @@ pub(super) fn execute_timings(
         });
     }
 
-    let measured_at_unix_secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| CordialError::invariant(error.to_string()))?
-        .as_secs();
+    let measured_at_unix_secs = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let report = TimingReport {
         version: if marginal { 2 } else { 1 },
         project: ctx.project_root().display().to_string(),

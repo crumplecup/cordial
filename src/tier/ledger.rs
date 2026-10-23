@@ -84,10 +84,7 @@ impl GateLedger {
         timings: &HookTimings,
         config: &CordialConfig,
     ) -> CordialResult<()> {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|error| CordialError::invariant(error.to_string()))?
-            .as_secs();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
         for etiquette in etiquettes {
             let open_count = findings
                 .iter()
@@ -151,10 +148,7 @@ impl GateLedger {
     pub fn write(&self, store: &StoreLayout) -> CordialResult<()> {
         fs::create_dir_all(store.root())?;
         let path = store.root().join("ledger.json");
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|error| CordialError::invariant(error.to_string()))?
-            .as_nanos();
+        let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let temporary = store
             .root()
             .join(format!("ledger.json.tmp-{}-{stamp}", std::process::id()));

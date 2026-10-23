@@ -100,10 +100,7 @@ pub fn run_amenable_dump_registry(workspace: &Path, out_path: &Path) -> CordialR
         .arg("dump-registry")
         .arg("--out")
         .arg(out_path)
-        .status()
-        .map_err(|err| {
-            CordialError::invariant(format!("failed to run amenable dump-registry: {err}"))
-        })?;
+        .status()?;
 
     if !status.success() {
         return Err(CordialError::invariant(format!(

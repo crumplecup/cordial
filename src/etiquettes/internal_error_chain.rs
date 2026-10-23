@@ -22,7 +22,8 @@
 //! `internal-error-chain-summary.md`, type-graph CSVs, and compliance CSVs.
 //!
 //! **Config.** `[internal_error_chain] enabled = false` opts out;
-//! `kind_fanout_max_call_sites = 0` flags every matching literal call site.
+//! `kind_fanout_max_call_sites = 0` is the default and flags every matching
+//! literal call site.
 //! `field_strategy = "borrowed"` requires borrowed non-Copy fields, including
 //! `kind`, `source`, and `file`; the default is `"owned"`.
 //! Set these in `cordial.toml`. Register [`INTERNAL_ERROR_CHAIN_ETIQUETTE`]. Policy:
@@ -113,7 +114,7 @@ pub static INTERNAL_ERROR_CHAIN_ETIQUETTE: LazyLock<StaticQualityEtiquette> = La
                 vec![
                     EtiquetteRuleExplain::new(
                         "ERROR-CHAIN-COMPLIANCE-STRINGIFY-001",
-                        "Stringifies a foreign error",
+                        "Converts an error to text without retaining its typed source",
                     ),
                     EtiquetteRuleExplain::new(
                         "ERROR-CHAIN-COMPLIANCE-DISCARD-TYPED-001",
@@ -149,7 +150,7 @@ pub static INTERNAL_ERROR_CHAIN_ETIQUETTE: LazyLock<StaticQualityEtiquette> = La
                     ),
                     EtiquetteRuleExplain::new(
                         "ERROR-CHAIN-COMPLIANCE-ARCH-KIND-FANOUT-001",
-                        "Distinct literal call sites exceed [internal_error_chain] kind_fanout_max_call_sites (default 3) for a Kind variant or native-source constructor; review whether callers need distinct typed variants. Set the maximum to 0 to flag every matching site.",
+                        "Distinct literal call sites exceed [internal_error_chain] kind_fanout_max_call_sites (default 0) for a Kind variant or native-source constructor; review whether callers need distinct typed variants. Raise the maximum to allow matching sites.",
                     ),
                     EtiquetteRuleExplain::new(
                         "ERROR-CHAIN-COMPLIANCE-ARCH-ORPHAN-SOURCE-001",

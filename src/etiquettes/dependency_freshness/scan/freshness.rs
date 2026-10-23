@@ -33,9 +33,8 @@ fn freshness_cache_index(store_root: &Path) -> CordialResult<FreshnessIndex> {
         return Ok(BTreeMap::new());
     }
     let content = fs::read_to_string(&path)?;
-    let cache: DependencyFreshnessCache = toml::from_str(&content).map_err(|error| {
-        CordialError::invariant(format!("failed to parse {}: {error}", path.display()))
-    })?;
+    let cache: DependencyFreshnessCache = toml::from_str(&content)
+        .map_err(|error| CordialError::toml_parse(path.display().to_string(), error))?;
     let mut out: FreshnessIndex = BTreeMap::new();
     for package in cache.package {
         out.entry(package.name)

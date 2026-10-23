@@ -428,10 +428,6 @@ fn version_record(
 
 #[instrument(level = "debug")]
 fn parse_manifest_table(content: &str, manifest_path: &Path) -> CordialResult<toml::Table> {
-    toml::from_str(content).map_err(|error| {
-        CordialError::invariant(format!(
-            "failed to parse {}: {error}",
-            manifest_path.display()
-        ))
-    })
+    toml::from_str(content)
+        .map_err(|error| CordialError::toml_parse(manifest_path.display().to_string(), error))
 }

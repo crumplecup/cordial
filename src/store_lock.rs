@@ -147,10 +147,7 @@ fn acquire_lock(
     if let Some(command) = command {
         file.set_len(0)?;
         file.seek(SeekFrom::Start(0))?;
-        let start_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|error| CordialError::invariant(error.to_string()))?
-            .as_secs();
+        let start_time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
         writeln!(file, "{command}\nstarted {start_time}")?;
         file.sync_all()?;
     }

@@ -5,6 +5,9 @@ mod io;
 mod lint_order;
 mod local;
 mod parse;
+mod time;
+#[cfg(any(feature = "antipatterns", feature = "dependency_freshness"))]
+mod toml_parse;
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::path::{PathBuf, StripPrefixError};
@@ -19,6 +22,7 @@ use local::{
 };
 pub use parse::TokenStreamParseError;
 use parse::{ConfigSource, JsonParseSource, JsonSource, SynParseSource};
+use time::ClockSource;
 
 use tracing::instrument;
 
@@ -39,6 +43,11 @@ pub enum CordialErrorKind {
     Json(JsonSource),
     /// A JSON file failed to parse.
     JsonParse(JsonParseSource),
+    /// A TOML file failed to parse.
+    #[cfg(any(feature = "antipatterns", feature = "dependency_freshness"))]
+    TomlParse(toml_parse::TomlParseSource),
+    /// The system clock was before the Unix epoch.
+    Clock(ClockSource),
     /// `cordial.toml` (or layered config) failed to load.
     Config(ConfigSource),
     /// `syn` failed to parse a Rust file.
@@ -239,6 +248,9 @@ impl std::error::Error for CordialError {
             CordialErrorKind::Io(source) => Some(source),
             CordialErrorKind::Json(source) => Some(source),
             CordialErrorKind::JsonParse(source) => Some(source),
+            #[cfg(any(feature = "antipatterns", feature = "dependency_freshness"))]
+            CordialErrorKind::TomlParse(source) => Some(source),
+            CordialErrorKind::Clock(source) => Some(source),
             CordialErrorKind::Config(source) => Some(source),
             CordialErrorKind::SynParse(source) => Some(source),
             CordialErrorKind::CargoMetadata(source) => Some(source),
@@ -269,6 +281,9 @@ impl Display for CordialErrorKind {
             Self::Io(source) => source.fmt(formatter),
             Self::Json(source) => source.fmt(formatter),
             Self::JsonParse(source) => source.fmt(formatter),
+            #[cfg(any(feature = "antipatterns", feature = "dependency_freshness"))]
+            Self::TomlParse(source) => source.fmt(formatter),
+            Self::Clock(source) => source.fmt(formatter),
             Self::Config(source) => source.fmt(formatter),
             Self::SynParse(source) => source.fmt(formatter),
             Self::Invariant(source) => source.fmt(formatter),
@@ -295,6 +310,13 @@ impl From<std::io::Error> for CordialError {
     #[track_caller]
     fn from(value: std::io::Error) -> Self {
         Self::from_kind(CordialErrorKind::Io(IoSource::from(value)))
+    }
+}
+
+impl From<std::time::SystemTimeError> for CordialError {
+    #[track_caller]
+    fn from(value: std::time::SystemTimeError) -> Self {
+        Self::from_kind(CordialErrorKind::Clock(ClockSource::from(value)))
     }
 }
 

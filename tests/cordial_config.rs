@@ -46,7 +46,7 @@ fn error_field_strategy_defaults_to_owned_and_accepts_borrowed() -> miette::Resu
 }
 
 #[test]
-fn kind_fanout_zero_threshold_is_loaded_without_disabling_etiquette() -> miette::Result<()> {
+fn kind_fanout_defaults_to_zero_and_accepts_override() -> miette::Result<()> {
     cordial::init_tracing();
     let workspace = tempfile::tempdir().into_diagnostic()?;
     let store_home = tempfile::tempdir().into_diagnostic()?;
@@ -54,17 +54,17 @@ fn kind_fanout_zero_threshold_is_loaded_without_disabling_etiquette() -> miette:
         load_cordial_config(workspace.path(), store_home.path())
             .internal_error_chain()
             .kind_fanout_max_call_sites(),
-        3
+        0
     );
     fs::write(
         workspace.path().join("cordial.toml"),
-        "[internal_error_chain]\nkind_fanout_max_call_sites = 0\n",
+        "[internal_error_chain]\nkind_fanout_max_call_sites = 2\n",
     )
     .into_diagnostic()?;
     let loaded = load_cordial_config(workspace.path(), store_home.path());
     assert_eq!(
         loaded.internal_error_chain().kind_fanout_max_call_sites(),
-        0
+        2
     );
     assert!(loaded.etiquette_enabled("internal_error_chain"));
     Ok(())

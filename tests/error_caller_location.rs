@@ -1,4 +1,7 @@
+#[cfg(any(feature = "antipatterns", feature = "dependency_freshness"))]
+use std::error::Error as _;
 use std::io;
+use std::time::{Duration, UNIX_EPOCH};
 
 use cordial::{CordialError, CordialErrorKind, CordialResult};
 
@@ -52,5 +55,40 @@ fn caller_location_survives_question_mark_and_map_err_closure() -> miette::Resul
         .err()
         .ok_or_else(|| miette::miette!("expected item error"))?;
     assert_ne!(io_location(&item)?.0, file!());
+    Ok(())
+}
+
+#[test]
+#[cfg(any(feature = "antipatterns", feature = "dependency_freshness"))]
+fn clock_and_toml_errors_keep_typed_sources() -> miette::Result<()> {
+    cordial::init_tracing();
+    let clock = (|| -> CordialResult<()> {
+        UNIX_EPOCH.duration_since(UNIX_EPOCH + Duration::from_secs(1))?;
+        Ok(())
+    })()
+    .err()
+    .ok_or_else(|| miette::miette!("expected clock error"))?;
+    assert!(matches!(clock.kind(), CordialErrorKind::Clock(_)));
+    assert!(
+        clock
+            .source()
+            .and_then(std::error::Error::source)
+            .and_then(|source| source.downcast_ref::<std::time::SystemTimeError>())
+            .is_some()
+    );
+
+    let parse = toml::from_str::<toml::Table>("invalid = [")
+        .err()
+        .ok_or_else(|| miette::miette!("expected TOML parse error"))?;
+    let wrapped = CordialError::toml_parse("broken.toml", parse);
+    assert!(matches!(wrapped.kind(), CordialErrorKind::TomlParse(_)));
+    assert!(wrapped.to_string().contains("broken.toml"));
+    assert!(
+        wrapped
+            .source()
+            .and_then(std::error::Error::source)
+            .and_then(|source| source.downcast_ref::<toml::de::Error>())
+            .is_some()
+    );
     Ok(())
 }

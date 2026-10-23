@@ -101,10 +101,10 @@ to one) across the crate's reachable library source files. The shared parser
 cache still serves the same syntax trees to other scanners in the run.
 
 **Step 4 — flag when call-site count and literal diversity cross a
-threshold.** The default threshold is more than three distinct call sites
-with more than three distinct literal texts. Set
-`[internal_error_chain] kind_fanout_max_call_sites = 0` to flag the first
-matching literal call site; this project uses zero. The finding points at
+threshold.** The default threshold is zero, so the first matching literal
+call site is flagged. Projects can raise
+`[internal_error_chain] kind_fanout_max_call_sites` to allow that many sites
+and distinct literal texts. The finding points at
 the `Kind` variant **definition**, when it is in the scanned crate, as the fix site (split
 into more variants, most of which won't need a `String` field at all — many
 of the 17 examples above are plain preconditions with no dynamic content,
@@ -137,9 +137,9 @@ runs during that existing architecture walk; it adds no parse or traversal.
   this design avoids. If a real case needs more hops, that's a signal the
   wrapper itself is doing too much, which is worth flagging on its own
   terms rather than chasing through it.
-- **Threshold tuning.** Three is the default, not derived from data. Projects
-  can set `kind_fanout_max_call_sites` under `[internal_error_chain]`; zero
-  outlaws the pattern entirely.
+- **Threshold tuning.** Zero is the default. Projects can set
+  `kind_fanout_max_call_sites` under `[internal_error_chain]` to allow a
+  limited number of matching sites.
 - **Per-crate aggregation.** The architecture catalog is built per crate, so
   call-site totals do not yet combine separate workspace members. Imported
   Kind variants can still be detected from call expressions within one crate.

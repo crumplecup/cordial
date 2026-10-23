@@ -381,6 +381,99 @@ fn format_interpolation_of_error_binding_is_compliance_violation() -> miette::Re
     Ok(())
 }
 
+#[test]
+fn stringified_map_err_binding_is_caught_without_receiver_type_inference() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+fn builder_failure(builder: Builder) -> Result<Value, TemporalError> {
+    builder.build().map_err(|err| {
+        TemporalError::new(TemporalErrorKind::InvalidDescriptor(
+            InvalidDescriptorSource::new(format!("could not build: {err}")),
+        ))
+    })
+}
+fn parser_failure(input: &str) -> Result<Value, TemporalError> {
+    input.parse().map_err(|cause| {
+        TemporalError::new(TemporalErrorKind::ParseRejected(
+            ParseRejectedSource::new("date", cause.to_string()),
+        ))
+    })
+}
+fn if_let_failure(builder: Builder) -> Result<Value, TemporalError> {
+    if let Err(cause) = builder.build() {
+        return Err(TemporalError::new(TemporalErrorKind::InvalidDescriptor(
+            InvalidDescriptorSource::new(format!("could not build: {cause}")),
+        )));
+    }
+    Ok(Value::default())
+}
+fn match_failure(builder: Builder) -> Result<Value, TemporalError> {
+    match builder.build() {
+        Err(cause) => Err(TemporalError::new(TemporalErrorKind::InvalidDescriptor(
+            InvalidDescriptorSource::new(cause.to_string()),
+        ))),
+        Ok(value) => Ok(value),
+    }
+}
+fn side_effect_does_not_retain(builder: Builder) -> Result<Value, TemporalError> {
+    builder.build().map_err(|err| {
+        let message = format!("could not build: {err}");
+        observe(err);
+        TemporalError::new(TemporalErrorKind::InvalidDescriptor(
+            InvalidDescriptorSource::new(message),
+        ))
+    })
+}
+fn preserved(builder: Builder) -> Result<Value, TemporalError> {
+    builder.build().map_err(|err| {
+        TemporalError::new(TemporalErrorKind::Builder(
+            BuilderSource::new(err, format!("builder rejected: {err}")),
+        ))
+    })
+}
+"#;
+    let root = Path::new("tests/fixtures/internal_error_chain");
+    let findings =
+        scan_compliance_rust_source(source, &root.join("stringified.rs"), root, "fixture")
+            .into_diagnostic()?;
+    let stringify: Vec<_> = findings
+        .iter()
+        .filter(|finding| finding.rule_id() == InternalErrorComplianceId::StringifyForeign001)
+        .collect();
+    assert_eq!(stringify.len(), 5, "{findings:?}");
+    assert!(
+        stringify
+            .iter()
+            .any(|finding| finding.context().ends_with("builder_failure"))
+    );
+    assert!(
+        stringify
+            .iter()
+            .any(|finding| finding.context().ends_with("parser_failure"))
+    );
+    assert!(
+        stringify
+            .iter()
+            .any(|finding| finding.context().ends_with("if_let_failure"))
+    );
+    assert!(
+        stringify
+            .iter()
+            .any(|finding| finding.context().ends_with("match_failure"))
+    );
+    assert!(
+        stringify
+            .iter()
+            .any(|finding| finding.context().ends_with("side_effect_does_not_retain"))
+    );
+    assert!(
+        !findings
+            .iter()
+            .any(|finding| finding.context().ends_with("preserved"))
+    );
+    Ok(())
+}
+
 const ERROR_RS_FIXTURE: &str = r#"
 use std::error::Error;
 
@@ -1603,7 +1696,7 @@ fn a() { let _ = InvalidDescriptorSource::new("hour"); }
 }
 
 #[test]
-fn kind_fanout_requires_distinct_literals() -> miette::Result<()> {
+fn kind_fanout_default_zero_flags_repeated_literal_sites() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = write_error_crate(
         r#"
@@ -1618,7 +1711,7 @@ fn d() { invalid("same".to_owned()); }
     )?;
     let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
     assert!(
-        !report
+        report
             .compliance()
             .findings()
             .iter()

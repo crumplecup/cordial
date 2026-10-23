@@ -61,7 +61,6 @@ pub(crate) fn survey_crate_dependency_freshness(
 
 #[instrument(level = "debug", skip(path))]
 fn parse_table(content: &str, path: &Path) -> CordialResult<toml::Table> {
-    toml::from_str(content).map_err(|error| {
-        CordialError::invariant(format!("failed to parse {}: {error}", path.display()))
-    })
+    toml::from_str(content)
+        .map_err(|error| CordialError::toml_parse(path.display().to_string(), error))
 }
