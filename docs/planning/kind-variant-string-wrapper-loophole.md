@@ -55,17 +55,17 @@ verified `Error::source()` relationship before they can support this rule;
 the current graph sometimes infers an edge from a field name. Build a
 signature index from the shared source trees and resolve calls against it.
 Ambiguous calls, trait-object erasure, or an unknown external source graph
-must yield **unknown**, not an assumed pass. No MIR or body-wide value-flow
-analysis is required for the definite broken-chain finding.
+must yield **unknown**, not an assumed pass. The rule stops at type
+reachability: if the resolved output error type can carry the input error
+through its source chain, it passes. If no such path exists, report a broken
+chain. The rule does not require MIR, body-wide value-flow analysis, or proof
+that a particular runtime value was retained.
 
-This is a one-way proof: absence of the input error type from every reachable
-source path proves loss, while presence only shows that the output type *can*
-carry it. For example, `fn wrap(err: IoError) -> AppError` could return either
-`AppError::Io(err)` or `AppError::Message(err.to_string())` if both variants
-exist. The signature alone cannot distinguish those bodies. Keep the direct
-conversion check for such cases, and report the signature-level result as
-**reachable**, not **preserved**. If we later need to prove preservation on
-every path, that is a separate, deeper analysis.
+For example, `fn wrap(err: IoError) -> AppError` can pass if `AppError` has a
+source-carrying `Io(IoError)` variant, even if it also has a `Message(String)`
+variant. A direct `err.to_string()` conversion can still be caught by the
+existing local check, but this signature-level rule does not inspect which
+variant the helper constructs. That is the deliberate limit of this lint.
 
 ### Acceptance cases
 
@@ -74,11 +74,11 @@ every path, that is a separate, deeper analysis.
 - Two or more helpers forward the error before one stringifies it; the caller
   is reported.
 - A helper returns a type with a verified source path to the caught error
-  type; the signature-level check records reachability.
+  type; the signature-level check passes.
 - A helper accepts the error but drops it before returning a message-only
   error; the caller is reported.
 - A broad return enum has both source-carrying and message-only variants;
-  reachability is not mislabeled as proof of preservation.
+  the signature-level check passes.
 - An unresolved or opaque call produces an explicit unknown result, never a
   silent pass.
 
