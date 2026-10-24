@@ -72,6 +72,8 @@ pub struct ErrorConversionUnit {
     #[getter(copy)]
     name_ambiguous: bool,
     #[getter(skip)]
+    field: FieldEvidence,
+    #[getter(skip)]
     initializer: InitializerEvidence,
     sites: Vec<ErrorConversionSite>,
 }
@@ -83,6 +85,33 @@ struct InitializerEvidence {
     edits: Option<Vec<Edit>>,
 }
 
+/// Declaration facts that the edit planner needs without revisiting syntax.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub(super) struct FieldEvidence {
+    #[getter(copy)]
+    kind: FieldKind,
+    storage: StringStorage,
+    struct_lifetime: Option<String>,
+    #[getter(copy)]
+    private: bool,
+    #[getter(copy)]
+    unique_struct: bool,
+    #[getter(copy)]
+    type_range: Option<(usize, usize)>,
+    #[getter(copy)]
+    lifetime_candidate: bool,
+}
+
+/// The source storage shape, independent of the configured target strategy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) enum StringStorage {
+    Owned,
+    Borrowed {
+        lifetime: Option<String>,
+        mutable: bool,
+    },
+}
+
 /// A field identified once from its declaration before site collection.
 struct ConversionCandidate {
     declaration: PathBuf,
@@ -90,12 +119,21 @@ struct ConversionCandidate {
     field_name: String,
     line: u32,
     name_ambiguous: bool,
+    field: FieldEvidence,
     initializer: InitializerEvidence,
     initializer_kind: FieldKind,
     initializer_lifetime: Option<String>,
 }
 
 impl ErrorConversionUnit {
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn field_evidence(&self) -> &FieldEvidence {
+        &self.field
+    }
+    #[instrument(level = "trace", skip(self, strategy))]
+    pub(super) fn lifetime_candidate(&self, strategy: ErrorFieldStrategy) -> bool {
+        self.field.lifetime_candidate && self.initializer.target == strategy
+    }
     #[instrument(level = "trace", skip(self, strategy))]
     pub(super) fn initializer_edits(&self, strategy: ErrorFieldStrategy) -> Option<Vec<Edit>> {
         (self.initializer.target == strategy)

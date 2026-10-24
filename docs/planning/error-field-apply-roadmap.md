@@ -221,12 +221,12 @@ borrowed and owned round trips plus no partial write on an unresolved edge.
 reads conversion units from the error IR. Its site collector identifies
 candidates first, then visits each shared syntax tree once per file to attach
 construction and use sites. Parsing patched text is a separate validation step.
-The remaining planner dependency is the syntax tree for field declarations
-and lifetime decisions. The narrow initializer choices, field-use blocker,
-and ambiguous-name decision now travel in typed conversion-unit IR records.
-Those records still need to become a complete unit query so apply can read
-source text only for located edits. A missing fact belongs in collection or
-enrichment, not in an apply-specific fallback.
+The remaining planner dependency is the syntax tree for the special lifetime
+migration. Field declarations, storage shape, visibility, initializer choices,
+field-use blockers, and ambiguous-name decisions now travel in typed
+conversion-unit IR records. Those records still need to become a complete
+unit query so apply can read source text only for located edits. A missing
+fact belongs in collection or enrichment, not in an apply-specific fallback.
 
 | Stage | Facts or responsibility |
 | --- | --- |
@@ -274,12 +274,10 @@ Implementation checkpoints:
   walking it, and name-resolution work inside selected hooks remains a possible
   optimization target.
 - [ ] Move initializer, field-use, and lifetime-planning evidence into typed IR
-  facts. The current edit planner still reads `SharedParsedFile::syntax()`;
-  replace that access with `IrView` plus a source-text-only edit view. The
-  field-use blocker and ambiguous-name decision now come from the conversion
-  unit in IR, removing their separate planner scans. Existing narrow
-  initializer replacements are collected in one file traversal and serialized
-  with each unit; lifetime planning and field-declaration decisions still read
-  the shared syntax tree.
+  facts. The ordinary field planner now reads declaration and initializer
+  facts from each conversion unit; its only syntax access is isolated in the
+  special lifetime planner. Move that planner's signature, impl, and
+  forwarding-return evidence into IR, then give apply a source-text-only edit
+  view with no `syntax()` method.
 - [ ] Add source-digest checks and whole-unit writes before allowing cross-file
   conversions. Keep unknown name, cfg, or macro edges as explicit blockers.

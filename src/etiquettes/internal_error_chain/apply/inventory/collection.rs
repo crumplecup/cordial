@@ -1,9 +1,9 @@
 //! Identify conversion candidates and visit each shared file once for sites.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use syn::Item;
 use syn::spanned::Spanned;
+use syn::{Item, Type, Visibility};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
@@ -12,13 +12,14 @@ use crate::loader::SharedParsedFile;
 use super::batch::BatchInventoryVisitor;
 use super::{
     ConversionCandidate, ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit,
-    InitializerEvidence,
+    FieldEvidence, InitializerEvidence, StringStorage,
 };
+use crate::etiquettes::internal_error_chain::apply::lifetime;
 use crate::etiquettes::internal_error_chain::apply::{
     initializers::{FieldKind, InitializerBatchInput, collect_initializer_edits},
     is_error_string_field, is_string, known_error_impls, known_static_strings,
     names::audit_names,
-    single_struct_lifetime,
+    single_struct_lifetime, span_range,
 };
 use crate::etiquettes::internal_error_chain::type_graph::item_derives_error;
 
@@ -78,6 +79,7 @@ pub(super) fn collect_conversion_units(
                     type_name: candidate.type_name,
                     field_name: candidate.field_name,
                     name_ambiguous: candidate.name_ambiguous,
+                    field: candidate.field,
                     initializer: candidate.initializer,
                     sites,
                 },
@@ -95,6 +97,14 @@ fn find_candidates(files: &[SharedParsedFile]) -> Vec<ConversionCandidate> {
         let syntax = file.syntax();
         let error_impls = known_error_impls(syntax);
         let name_audit = audit_names(syntax);
+        let mut struct_counts = HashMap::new();
+        for item in &syntax.items {
+            if let Item::Struct(item) = item {
+                *struct_counts
+                    .entry(item.ident.to_string())
+                    .or_insert(0usize) += 1;
+            }
+        }
         for item in &syntax.items {
             let Item::Struct(item) = item else { continue };
             let type_name = item.ident.to_string();
@@ -124,12 +134,41 @@ fn find_candidates(files: &[SharedParsedFile]) -> Vec<ConversionCandidate> {
                     FieldKind::StaticString
                 };
                 let lifetime = single_struct_lifetime(item);
+                let storage = if is_string(&field.ty) {
+                    StringStorage::Owned
+                } else if let Type::Reference(reference) = &field.ty {
+                    StringStorage::Borrowed {
+                        lifetime: reference
+                            .lifetime
+                            .as_ref()
+                            .map(|value| value.ident.to_string()),
+                        mutable: reference.mutability.is_some(),
+                    }
+                } else {
+                    continue;
+                };
                 candidates.push(ConversionCandidate {
                     declaration: file.path().to_path_buf(),
                     type_name: type_name.clone(),
                     field_name,
                     line: field.span().start().line as u32,
                     name_ambiguous: name_audit.blocks(&type_name),
+                    field: FieldEvidence {
+                        kind,
+                        storage,
+                        struct_lifetime: lifetime.clone(),
+                        private: matches!(item.vis, Visibility::Inherited)
+                            && matches!(field.vis, Visibility::Inherited),
+                        unique_struct: struct_counts.get(&type_name) == Some(&1),
+                        type_range: span_range(file.source(), field.ty.span()),
+                        lifetime_candidate: lifetime::is_candidate(
+                            item,
+                            field,
+                            kind,
+                            lifetime.as_deref(),
+                            strategy,
+                        ),
+                    },
                     initializer: InitializerEvidence {
                         target: strategy,
                         edits: None,

@@ -45,7 +45,7 @@ struct ConstructorContext {
     static_locals: BTreeMap<String, usize>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) enum FieldKind {
     CallSiteFile,
     StaticString,

@@ -1,21 +1,14 @@
 //! Plan and validate edits for one shared parsed source file.
 
-use syn::spanned::Spanned;
-use syn::{Item, Visibility};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
-use crate::error::{CordialError, CordialResult};
+use crate::error::CordialResult;
 use crate::loader::SharedParsedFile;
 
-use super::super::type_graph::item_derives_error;
-use super::initializers::FieldKind;
+use super::inventory::StringStorage;
 use super::lifetime;
-use super::{
-    Edit, ErrorConversionUnit, ErrorFieldApplyBlocker, ErrorFieldApplyBlockerReason,
-    is_error_string_field, is_static_str, is_str_ref_with_lifetime, is_string, known_error_impls,
-    single_struct_lifetime, span_range,
-};
+use super::{Edit, ErrorConversionUnit, ErrorFieldApplyBlocker, ErrorFieldApplyBlockerReason};
 
 #[instrument(level = "debug", skip(file, strategy, ir_units))]
 pub(super) fn patch_file(
@@ -29,147 +22,110 @@ pub(super) fn patch_file(
     Vec<ErrorFieldApplyBlocker>,
     Vec<ErrorConversionUnit>,
 )> {
-    let syntax = file.syntax();
-    let error_impls = known_error_impls(syntax);
     let mut edits = Vec::new();
     let mut converted = 0;
     let mut blockers = Vec::new();
     let mut pending = Vec::new();
     let mut units = Vec::new();
-    for item in &syntax.items {
-        let Item::Struct(item) = item else { continue };
-        let name = item.ident.to_string();
-        if !error_impls.contains(&name) && !item_derives_error(&item.attrs) {
-            continue;
-        }
-        let syn::Fields::Named(fields) = &item.fields else {
-            continue;
-        };
-        for field in &fields.named {
-            let Some(field_name) = field.ident.as_ref().map(ToString::to_string) else {
-                continue;
-            };
-            let kind = match field_name.as_str() {
-                "file" => FieldKind::CallSiteFile,
-                "source" | "kind" => continue,
-                _ => FieldKind::StaticString,
-            };
-            let struct_lifetime = single_struct_lifetime(item);
-            if !is_error_string_field(&field.ty) {
-                continue;
-            }
-            let unit = ir_units
-                .iter()
-                .find(|unit| {
-                    unit.declaration() == file.path()
-                        && unit.type_name() == &name
-                        && unit.field_name() == &field_name
-                })
-                .ok_or_else(|| {
-                    CordialError::missing_conversion_unit(file.path(), &name, &field_name)
-                })?
-                .clone();
-            let has_cross_file_reference =
-                unit.sites().iter().any(|site| site.path() != file.path());
-            let has_unknown_field_use = unit.blocks_existing_field_edit();
-            let name_ambiguous = unit.name_ambiguous();
-            let lifetime_candidate =
-                lifetime::is_candidate(item, field, kind, struct_lifetime.as_deref(), strategy);
-            if lifetime_candidate
-                && !has_cross_file_reference
-                && !name_ambiguous
-                && matches!(item.vis, Visibility::Inherited)
-                && matches!(field.vis, Visibility::Inherited)
-            {
-                if let Some(mut planned) = lifetime::plan(file, item, &field_name, &unit, strategy)
-                {
-                    edits.append(&mut planned);
-                    pending.push((name.clone(), field_name));
-                    converted += 1;
-                    units.push(unit);
-                    continue;
-                }
-            }
-            if lifetime_candidate && strategy == ErrorFieldStrategy::Owned {
-                blockers.push(ErrorFieldApplyBlocker::new(
-                    file.path(),
-                    &name,
-                    &field_name,
-                    ErrorFieldApplyBlockerReason::Initializer,
-                ));
+    for unit in ir_units
+        .iter()
+        .filter(|unit| unit.declaration() == file.path())
+    {
+        let unit = unit.clone();
+        let name = unit.type_name().clone();
+        let field_name = unit.field_name().clone();
+        let field = unit.field_evidence();
+        let has_cross_file_reference = unit.sites().iter().any(|site| site.path() != file.path());
+        let has_unknown_field_use = unit.blocks_existing_field_edit();
+        let name_ambiguous = unit.name_ambiguous();
+        let lifetime_candidate = unit.lifetime_candidate(strategy);
+        if lifetime_candidate && !has_cross_file_reference && !name_ambiguous && field.private() {
+            if let Some(mut planned) = lifetime::plan_for_unit(file, &unit, strategy) {
+                edits.append(&mut planned);
+                pending.push((name.clone(), field_name));
+                converted += 1;
                 units.push(unit);
                 continue;
             }
-            let source_type = match strategy {
-                ErrorFieldStrategy::Borrowed if is_string(&field.ty) => {
-                    let lifetime = struct_lifetime.as_deref();
-                    format!("&'{} str", lifetime.unwrap_or("static"))
-                }
-                ErrorFieldStrategy::Owned if is_static_str(&field.ty) => "String".to_string(),
-                ErrorFieldStrategy::Owned
-                    if struct_lifetime
-                        .as_deref()
-                        .is_some_and(|lifetime| is_str_ref_with_lifetime(&field.ty, lifetime)) =>
-                {
-                    "String".to_string()
-                }
-                _ => continue,
-            };
-            let initializer_edits = unit.initializer_edits(strategy);
-            units.push(unit);
-            if !matches!(item.vis, Visibility::Inherited)
-                || !matches!(field.vis, Visibility::Inherited)
-                || syntax.items.iter().filter(|candidate| matches!(candidate, Item::Struct(other) if other.ident == item.ident)).count() != 1
-                || has_cross_file_reference
-            {
-                blockers.push(ErrorFieldApplyBlocker::new(file.path(), &name, &field_name, ErrorFieldApplyBlockerReason::OutsideFile));
-                continue;
-            }
-            if name_ambiguous {
-                blockers.push(ErrorFieldApplyBlocker::new(
-                    file.path(),
-                    &name,
-                    &field_name,
-                    ErrorFieldApplyBlockerReason::AmbiguousName,
-                ));
-                continue;
-            }
-            let Some(mut initializers) = initializer_edits else {
-                blockers.push(ErrorFieldApplyBlocker::new(
-                    file.path(),
-                    &name,
-                    &field_name,
-                    ErrorFieldApplyBlockerReason::Initializer,
-                ));
-                continue;
-            };
-            if has_unknown_field_use {
-                blockers.push(ErrorFieldApplyBlocker::new(
-                    file.path(),
-                    &name,
-                    &field_name,
-                    ErrorFieldApplyBlockerReason::FieldUse,
-                ));
-                continue;
-            }
-            let Some(field_span) = span_range(file.source(), field.ty.span()) else {
-                blockers.push(ErrorFieldApplyBlocker::new(
-                    file.path(),
-                    &name,
-                    &field_name,
-                    ErrorFieldApplyBlockerReason::InvalidEdit,
-                ));
-                continue;
-            };
-            edits.push(Edit {
-                start: field_span.0,
-                end: field_span.1,
-                replacement: source_type,
-            });
-            edits.append(&mut initializers);
-            pending.push((name.clone(), field_name));
-            converted += 1;
         }
+        if lifetime_candidate && strategy == ErrorFieldStrategy::Owned {
+            blockers.push(ErrorFieldApplyBlocker::new(
+                file.path(),
+                &name,
+                &field_name,
+                ErrorFieldApplyBlockerReason::Initializer,
+            ));
+            units.push(unit);
+            continue;
+        }
+        let source_type = match strategy {
+            ErrorFieldStrategy::Borrowed if matches!(field.storage(), StringStorage::Owned) => {
+                let lifetime = field.struct_lifetime().as_deref();
+                format!("&'{} str", lifetime.unwrap_or("static"))
+            }
+            ErrorFieldStrategy::Owned if matches!(field.storage(), StringStorage::Borrowed { lifetime: Some(lifetime), mutable: false } if lifetime == "static") => {
+                "String".to_string()
+            }
+            ErrorFieldStrategy::Owned if matches!(field.storage(), StringStorage::Borrowed { lifetime: Some(lifetime), mutable: false } if field.struct_lifetime().as_deref() == Some(lifetime.as_str())) => {
+                "String".to_string()
+            }
+            _ => continue,
+        };
+        let initializer_edits = unit.initializer_edits(strategy);
+        units.push(unit.clone());
+        if !field.private() || !field.unique_struct() || has_cross_file_reference {
+            blockers.push(ErrorFieldApplyBlocker::new(
+                file.path(),
+                &name,
+                &field_name,
+                ErrorFieldApplyBlockerReason::OutsideFile,
+            ));
+            continue;
+        }
+        if name_ambiguous {
+            blockers.push(ErrorFieldApplyBlocker::new(
+                file.path(),
+                &name,
+                &field_name,
+                ErrorFieldApplyBlockerReason::AmbiguousName,
+            ));
+            continue;
+        }
+        let Some(mut initializers) = initializer_edits else {
+            blockers.push(ErrorFieldApplyBlocker::new(
+                file.path(),
+                &name,
+                &field_name,
+                ErrorFieldApplyBlockerReason::Initializer,
+            ));
+            continue;
+        };
+        if has_unknown_field_use {
+            blockers.push(ErrorFieldApplyBlocker::new(
+                file.path(),
+                &name,
+                &field_name,
+                ErrorFieldApplyBlockerReason::FieldUse,
+            ));
+            continue;
+        }
+        let Some(field_span) = field.type_range() else {
+            blockers.push(ErrorFieldApplyBlocker::new(
+                file.path(),
+                &name,
+                &field_name,
+                ErrorFieldApplyBlockerReason::InvalidEdit,
+            ));
+            continue;
+        };
+        edits.push(Edit {
+            start: field_span.0,
+            end: field_span.1,
+            replacement: source_type,
+        });
+        edits.append(&mut initializers);
+        pending.push((name.clone(), field_name));
+        converted += 1;
     }
     apply_planned_edits(file, edits, converted, blockers, pending, units, dry_run)
 }

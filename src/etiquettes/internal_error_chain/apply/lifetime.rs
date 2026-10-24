@@ -16,6 +16,20 @@ use super::initializers::{FieldKind, InitializerVisitor};
 use super::inventory::{ErrorConversionSiteKind, ErrorConversionUnit};
 use super::{Edit, is_str_ref_with_lifetime, is_string, simple_type_name, span_range};
 
+/// Keep syntax access for the special lifetime migration inside its planner.
+#[instrument(level = "debug", skip(file, unit, strategy))]
+pub(super) fn plan_for_unit(
+    file: &SharedParsedFile,
+    unit: &ErrorConversionUnit,
+    strategy: ErrorFieldStrategy,
+) -> Option<Vec<Edit>> {
+    let item = file.syntax().items.iter().find_map(|item| match item {
+        Item::Struct(item) if item.ident == unit.type_name().as_str() => Some(item),
+        _ => None,
+    })?;
+    plan(file, item, unit.field_name(), unit, strategy)
+}
+
 #[instrument(level = "trace", skip(item, field, kind, strategy))]
 pub(super) fn is_candidate(
     item: &ItemStruct,
