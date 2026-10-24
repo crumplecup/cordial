@@ -69,13 +69,13 @@ impl WorkspaceIr {
     #[instrument(level = "debug", skip(self))]
     fn require_crate(&self, crate_name: &str) -> CordialResult<&CrateIr> {
         self.crate_ir(crate_name)
-            .ok_or_else(|| CordialError::invariant(format!("crate `{crate_name}` must exist")))
+            .ok_or_else(|| CordialError::crate_must_exist(crate_name))
     }
 
     #[instrument(level = "debug", skip(self))]
     fn require_crate_mut(&mut self, crate_name: &str) -> CordialResult<&mut CrateIr> {
         self.crate_ir_mut(crate_name)
-            .ok_or_else(|| CordialError::invariant(format!("crate `{crate_name}` must exist")))
+            .ok_or_else(|| CordialError::crate_must_exist(crate_name))
     }
 
     /// Insert cross crate edge.

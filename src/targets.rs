@@ -107,14 +107,9 @@ fn workspace_targets(project_root: &Path) -> CordialResult<Vec<CrateTarget>> {
             .packages
             .iter()
             .find(|candidate| &candidate.id == package_id)
-            .ok_or_else(|| {
-                CordialError::invariant(format!("missing package metadata for {package_id}"))
-            })?;
+            .ok_or_else(|| CordialError::missing_package_metadata(package_id.to_string()))?;
         let crate_root = package.manifest_path.parent().ok_or_else(|| {
-            CordialError::invariant(format!(
-                "manifest path has no parent: {}",
-                package.manifest_path
-            ))
+            CordialError::manifest_path_has_no_parent(package.manifest_path.to_string())
         })?;
         targets.push(
             CrateTarget::new(package.name.to_string(), PathBuf::from(crate_root.as_str()))
@@ -123,10 +118,9 @@ fn workspace_targets(project_root: &Path) -> CordialResult<Vec<CrateTarget>> {
     }
 
     if targets.is_empty() {
-        return Err(CordialError::invariant(format!(
-            "no workspace members found at {}",
-            project_root.display()
-        )));
+        return Err(CordialError::no_workspace_members_found(
+            project_root.to_path_buf(),
+        ));
     }
     Ok(targets)
 }

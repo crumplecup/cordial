@@ -49,3 +49,11 @@ impl std::error::Error for ClockSource {
         Some(&self.source)
     }
 }
+
+impl From<SystemTimeError> for super::CordialError {
+    #[track_caller]
+    #[instrument(level = "debug", skip(value))]
+    fn from(value: SystemTimeError) -> Self {
+        Self::from_kind(super::CordialErrorKind::Clock(ClockSource::from(value)))
+    }
+}

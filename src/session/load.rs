@@ -153,7 +153,7 @@ pub(super) fn load_and_probe(
         timings.measure("pipeline", "cache_ir", || {
             let cached = workspace
                 .crate_ir(target.crate_name())
-                .ok_or_else(|| CordialError::invariant("crate ir must exist"))?;
+                .ok_or_else(|| CordialError::crate_ir_must_exist())?;
             cached.write_cache(&store.ir_cache_path(target.crate_name()))?;
             let digest = crate::cache_digest::IrCacheDigest::compute(
                 target,

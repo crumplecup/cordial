@@ -105,3 +105,32 @@ impl Display for LintOrderUnknownConstraintSource {
 }
 
 impl std::error::Error for LintOrderUnknownConstraintSource {}
+
+impl super::CordialError {
+    /// Lint-order `After` edges contain a cycle.
+    #[track_caller]
+    #[instrument(level = "debug")]
+    pub fn lint_order_cycle() -> Self {
+        Self::from_kind(super::CordialErrorKind::LintOrderCycle(
+            LintOrderCycleSource::new(),
+        ))
+    }
+
+    /// `from` names `missing`, which is not in the known lint-id set.
+    #[track_caller]
+    #[instrument(level = "debug", skip(from, missing))]
+    pub fn lint_order_dangling(from: impl Into<String>, missing: impl Into<String>) -> Self {
+        Self::from_kind(super::CordialErrorKind::LintOrderDangling(
+            LintOrderDanglingSource::new(from, missing),
+        ))
+    }
+
+    /// Constraint `id` is not in the known lint-id set.
+    #[track_caller]
+    #[instrument(level = "debug", skip(id))]
+    pub fn lint_order_unknown_constraint(id: impl Into<String>) -> Self {
+        Self::from_kind(super::CordialErrorKind::LintOrderUnknownConstraint(
+            LintOrderUnknownConstraintSource::new(id),
+        ))
+    }
+}

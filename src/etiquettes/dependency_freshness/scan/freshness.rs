@@ -79,9 +79,7 @@ fn cargo_update_dry_run_freshness_index(project_root: &Path) -> CordialResult<Fr
         text.push_str(&String::from_utf8_lossy(&output.stderr));
     }
     if !output.status.success() {
-        return Err(CordialError::invariant(format!(
-            "`cargo update --dry-run --verbose` failed while checking dependency freshness: {text}"
-        )));
+        return Err(CordialError::dependency_freshness_check_failed(text));
     }
     Ok(parse_cargo_update_dry_run_freshness(&text))
 }

@@ -6,37 +6,6 @@ use std::path::PathBuf;
 
 use tracing::instrument;
 
-#[derive(Debug, derive_getters::Getters)]
-pub struct InvariantSource {
-    #[getter(skip)]
-    message: String,
-    file: String,
-    #[getter(copy)]
-    line: u32,
-}
-
-impl InvariantSource {
-    #[track_caller]
-    #[instrument(level = "debug", skip(message))]
-    pub fn new(message: impl Into<String>) -> Self {
-        let loc = Location::caller();
-        Self {
-            message: message.into(),
-            file: loc.file().to_string(),
-            line: loc.line(),
-        }
-    }
-}
-
-impl Display for InvariantSource {
-    #[instrument(level = "trace", skip(self, formatter))]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-        write!(formatter, "invariant violated: {}", self.message)
-    }
-}
-
-impl std::error::Error for InvariantSource {}
-
 /// A match arm (or equivalent control path) that must not execute.
 ///
 /// Prefer making every arm of a sum type meaningful. When a path is still
@@ -76,6 +45,40 @@ impl Display for UnreachableSource {
 }
 
 impl std::error::Error for UnreachableSource {}
+
+/// `apply_gap` was called for `TracingApplyPolicy::Skip`, which
+/// `strip_instrument` handles instead -- `apply_gap` only ever runs for
+/// the write path.
+#[derive(Debug, derive_getters::Getters)]
+pub struct ApplyGapWriteOnlySource {
+    file: String,
+    #[getter(copy)]
+    line: u32,
+}
+
+impl ApplyGapWriteOnlySource {
+    #[track_caller]
+    #[instrument(level = "debug")]
+    pub fn new() -> Self {
+        let loc = Location::caller();
+        Self {
+            file: loc.file().to_string(),
+            line: loc.line(),
+        }
+    }
+}
+
+impl Display for ApplyGapWriteOnlySource {
+    #[instrument(level = "trace", skip(self, formatter))]
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        write!(
+            formatter,
+            "apply_gap is the write path; Skip is handled by strip_instrument"
+        )
+    }
+}
+
+impl std::error::Error for ApplyGapWriteOnlySource {}
 
 /// A [`derive_builder`] `build()` that left a field unset.
 ///
@@ -382,3 +385,109 @@ impl Display for OpenFindingsSource {
 }
 
 impl std::error::Error for OpenFindingsSource {}
+
+impl super::CordialError {
+    /// A match arm (or equivalent control path) that must not execute.
+    ///
+    /// Use this instead of `unreachable!` / `panic!` so the location stays on
+    /// the error and callers can keep control through `?`.
+    #[track_caller]
+    #[instrument(level = "debug", skip(message))]
+    pub fn unreachable(message: impl Into<String>) -> Self {
+        Self::from_kind(super::CordialErrorKind::Unreachable(
+            UnreachableSource::new(message),
+        ))
+    }
+
+    /// `apply_gap` was called for `TracingApplyPolicy::Skip`.
+    #[track_caller]
+    #[instrument(level = "debug")]
+    pub fn apply_gap_write_only() -> Self {
+        Self::from_kind(super::CordialErrorKind::ApplyGapWriteOnly(
+            ApplyGapWriteOnlySource::new(),
+        ))
+    }
+
+    /// A [`derive_builder`] `build()` left a required field unset.
+    #[track_caller]
+    #[instrument(level = "debug", skip(source))]
+    pub fn builder(source: derive_builder::UninitializedFieldError) -> Self {
+        Self::from(source)
+    }
+
+    /// No etiquette is registered under this id.
+    #[track_caller]
+    #[instrument(level = "debug", skip(id))]
+    pub fn unknown_etiquette(id: impl Into<String>) -> Self {
+        Self::from_kind(super::CordialErrorKind::UnknownEtiquette(
+            UnknownEtiquetteSource::new(id),
+        ))
+    }
+
+    /// Wrap a `cargo_metadata` failure.
+    #[track_caller]
+    #[instrument(level = "debug", skip(err))]
+    pub fn cargo_metadata(err: cargo_metadata::Error) -> Self {
+        Self::from(err)
+    }
+
+    /// This path does not exist.
+    #[track_caller]
+    #[instrument(level = "debug", skip(path))]
+    pub fn not_found(path: PathBuf) -> Self {
+        Self::from_kind(super::CordialErrorKind::NotFound(NotFoundSource::new(path)))
+    }
+
+    /// No exception file exists for this etiquette and crate.
+    #[track_caller]
+    #[instrument(level = "debug", skip(etiquette, crate_name))]
+    pub fn no_exceptions(etiquette: impl Into<String>, crate_name: impl Into<String>) -> Self {
+        Self::from_kind(super::CordialErrorKind::NoExceptions(
+            NoExceptionsSource::new(etiquette, crate_name),
+        ))
+    }
+
+    /// No cached IR artifact exists at this path.
+    #[track_caller]
+    #[instrument(level = "debug", skip(path))]
+    pub fn no_cached_ir(path: PathBuf) -> Self {
+        Self::from_kind(super::CordialErrorKind::NoCachedIr(NoCachedIrSource::new(
+            path,
+        )))
+    }
+
+    /// Rustdoc JSON is required for this crate but has not been built.
+    #[track_caller]
+    #[instrument(level = "debug", skip(crate_root, crate_name))]
+    pub fn missing_rustdoc_json(crate_name: impl Into<String>, crate_root: PathBuf) -> Self {
+        Self::from_kind(super::CordialErrorKind::MissingRustdocJson(
+            MissingRustdocJsonSource::new(crate_name, crate_root),
+        ))
+    }
+
+    /// Open action items were denied by a CLI gate.
+    #[track_caller]
+    #[instrument(level = "debug")]
+    pub fn open_findings(count: usize) -> Self {
+        Self::from_kind(super::CordialErrorKind::OpenFindings(
+            OpenFindingsSource::new(count),
+        ))
+    }
+}
+
+impl From<cargo_metadata::Error> for super::CordialError {
+    #[track_caller]
+    fn from(value: cargo_metadata::Error) -> Self {
+        Self::from_kind(super::CordialErrorKind::CargoMetadata(
+            CargoMetadataSource::from(value),
+        ))
+    }
+}
+
+impl From<derive_builder::UninitializedFieldError> for super::CordialError {
+    #[track_caller]
+    #[instrument(level = "debug", skip(value))]
+    fn from(value: derive_builder::UninitializedFieldError) -> Self {
+        Self::from_kind(super::CordialErrorKind::Builder(BuilderSource::from(value)))
+    }
+}

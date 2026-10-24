@@ -62,12 +62,7 @@ pub fn load_crate_ir_if_missing(
             .or_else(|| load_views.get(&format!("{crate_name}:{}", SourceLoader::ID)))
             .or_else(|| load_views.get(&format!("{crate_name}:{}", RustdocLoader::ID)))
             .map(|view| view.as_ref())
-            .ok_or_else(|| {
-                CordialError::invariant(format!(
-                    "no load view for enricher `{}` on crate `{crate_name}`",
-                    enricher.id()
-                ))
-            })?;
+            .ok_or_else(|| CordialError::no_load_view_for_enricher(enricher.id(), crate_name))?;
         let mut view = CrateViewMut::new(workspace, crate_name.to_string());
         enricher.enrich(EnrichView::new(&mut view, load, session))?;
     }

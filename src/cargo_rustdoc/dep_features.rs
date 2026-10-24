@@ -55,22 +55,14 @@ pub fn member_dependency_package_name(
         .packages
         .iter()
         .find(|pkg| pkg.name == member_crate_name)
-        .ok_or_else(|| {
-            CordialError::invariant(format!(
-                "workspace package `{member_crate_name}` not found in cargo metadata"
-            ))
-        })?;
+        .ok_or_else(|| CordialError::workspace_package_not_found(member_crate_name))?;
     let normalized = crate_name.replace('-', "_");
     member_pkg
         .dependencies
         .iter()
         .find(|dep| dep.name.replace('-', "_") == normalized)
         .map(|dep| dep.name.clone())
-        .ok_or_else(|| {
-            CordialError::invariant(format!(
-                "dependency '{crate_name}' not found in `{member_crate_name}` package metadata"
-            ))
-        })
+        .ok_or_else(|| CordialError::dependency_not_found_in_package(crate_name, member_crate_name))
 }
 
 /// Resolve dependency features from a workspace member's `Cargo.toml`.
@@ -89,11 +81,7 @@ pub fn collect_member_dep_build_config(
         .packages
         .iter()
         .find(|pkg| pkg.name == member_crate_name)
-        .ok_or_else(|| {
-            CordialError::invariant(format!(
-                "workspace package `{member_crate_name}` not found in cargo metadata"
-            ))
-        })?;
+        .ok_or_else(|| CordialError::workspace_package_not_found(member_crate_name))?;
 
     let normalized = crate_name.replace('-', "_");
     let dep = member_pkg
@@ -107,9 +95,7 @@ pub fn collect_member_dep_build_config(
                 })
         })
         .ok_or_else(|| {
-            CordialError::invariant(format!(
-                "dependency '{crate_name}' not found in `{member_crate_name}` package metadata"
-            ))
+            CordialError::dependency_not_found_in_package(crate_name, member_crate_name)
         })?;
 
     let mut activated_features = dep.features.clone();
@@ -147,11 +133,7 @@ pub fn collect_dep_serde_features(
         .packages
         .iter()
         .find(|pkg| pkg.name == crate_name || pkg.name.replace('-', "_") == normalized)
-        .ok_or_else(|| {
-            CordialError::invariant(format!(
-                "package '{crate_name}' not found in workspace metadata"
-            ))
-        })?;
+        .ok_or_else(|| CordialError::package_not_found_in_workspace(crate_name))?;
 
     let available = collect_available_serde_features(&pkg.features);
     let mut activated_owned: Vec<String> = activated

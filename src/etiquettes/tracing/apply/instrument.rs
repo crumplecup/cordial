@@ -79,9 +79,7 @@ pub(super) fn apply_gap(
             gate_attr(&qualified, &gate_predicate(cfgs))
         }
         TracingApplyPolicy::Skip => {
-            return Err(CordialError::unreachable(
-                "apply_gap is the write path; Skip is handled by strip_instrument",
-            ));
+            return Err(CordialError::apply_gap_write_only());
         }
     };
     if let Some((start, end)) = instrument_attr_range(lines, fn_idx) {

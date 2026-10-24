@@ -35,18 +35,16 @@ impl TierSelection {
         let selected = requested.unwrap_or(config.tiers().default());
         let mut names = if selected.iter().any(|tier| tier == "all") {
             if selected.len() != 1 {
-                return Err(CordialError::invariant(
-                    "`all` must be the only tier requested",
-                ));
+                return Err(CordialError::all_must_be_only_tier_requested());
             }
             known
         } else {
             for tier in selected {
                 if !known.contains(tier) {
-                    return Err(CordialError::invariant(format!(
-                        "Unknown tier `{tier}`; known tiers: {}",
-                        known.iter().cloned().collect::<Vec<_>>().join(", ")
-                    )));
+                    return Err(CordialError::unknown_tier(
+                        tier,
+                        known.iter().cloned().collect::<Vec<_>>().join(", "),
+                    ));
                 }
             }
             selected.iter().cloned().collect()

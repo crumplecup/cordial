@@ -35,9 +35,7 @@ impl Reporter for AmenableStdReporter {
 
         let options = AmenableStdOptions::default();
         let report = amenable_report_from_findings(findings, options.include_nightly())?
-            .ok_or_else(|| {
-                CordialError::invariant("amenable std reporter requires assessor findings")
-            })?;
+            .ok_or_else(|| CordialError::amenable_std_reporter_requires_assessor_findings())?;
         let gaps = amenable_gaps_from_findings(findings);
         let store = StoreLayout::from_root(
             session.store_root(),

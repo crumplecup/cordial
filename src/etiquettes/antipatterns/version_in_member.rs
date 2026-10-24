@@ -67,12 +67,10 @@ pub fn scan_workspace_version_in_member(
             .packages
             .iter()
             .find(|candidate| &candidate.id == package_id)
-            .ok_or_else(|| {
-                CordialError::invariant(format!("missing package metadata for {package_id}"))
-            })?;
+            .ok_or_else(|| CordialError::missing_package_metadata(package_id.to_string()))?;
         let manifest_path = Path::new(package.manifest_path.as_str());
         let crate_root = manifest_path.parent().ok_or_else(|| {
-            CordialError::invariant(format!("no parent for {}", manifest_path.display()))
+            CordialError::no_parent_for_manifest(manifest_path.display().to_string())
         })?;
         let findings = scan_member_manifest(
             manifest_path,

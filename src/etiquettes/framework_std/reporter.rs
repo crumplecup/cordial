@@ -32,9 +32,7 @@ impl Reporter for HomecomingStdReporter {
 
         let options = FrameworkStdOptions::default();
         let report = framework_report_from_findings(findings, options.include_nightly())?
-            .ok_or_else(|| {
-                CordialError::invariant("homecoming std reporter requires assessor findings")
-            })?;
+            .ok_or_else(|| CordialError::homecoming_std_reporter_requires_assessor_findings())?;
         let gaps = framework_gaps_from_findings(findings);
         let store = StoreLayout::from_root(
             session.store_root(),

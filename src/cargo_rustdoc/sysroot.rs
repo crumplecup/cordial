@@ -23,28 +23,20 @@ pub fn is_std_family_crate(crate_name: &str) -> bool {
 /// Path to `{toolchain}/lib/rustlib/src/rust/library/{crate}/Cargo.toml`.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn resolve_sysroot_library_manifest(crate_name: &str) -> CordialResult<PathBuf> {
-    let cargo = resolve_nightly_cargo_binary().ok_or_else(|| {
-        CordialError::invariant(
-            "nightly toolchain required for std-family rustdoc JSON (install via rustup)",
-        )
-    })?;
+    let cargo =
+        resolve_nightly_cargo_binary().ok_or_else(|| CordialError::nightly_toolchain_required())?;
     let toolchain_root = cargo
         .parent()
         .and_then(|bin_dir| bin_dir.parent())
-        .ok_or_else(|| {
-            CordialError::invariant(
-                "could not resolve nightly toolchain root from cargo binary path",
-            )
-        })?;
+        .ok_or_else(|| CordialError::nightly_toolchain_root_unresolved())?;
     let manifest = toolchain_root
         .join("lib/rustlib/src/rust/library")
         .join(crate_name)
         .join("Cargo.toml");
     if !manifest.is_file() {
-        return Err(CordialError::invariant(format!(
-            "sysroot manifest for `{crate_name}` not found at {}",
-            manifest.display()
-        )));
+        return Err(CordialError::sysroot_manifest_not_found(
+            crate_name, manifest,
+        ));
     }
     Ok(manifest)
 }
@@ -73,9 +65,7 @@ pub fn build_sysroot_libraries_with_progress(
     let mut sources: Vec<&str> = FRAMEWORK_STD_SOURCES.to_vec();
     if let Some(name) = only_crate {
         if !is_std_family_crate(name) {
-            return Err(CordialError::invariant(format!(
-                "sysroot build requested for non-std-family crate `{name}`"
-            )));
+            return Err(CordialError::sysroot_build_requested_for_non_std_family_crate(name));
         }
         sources.retain(|source| *source == name);
     }
@@ -161,9 +151,9 @@ fn run_sysroot_rustdoc(sysroot: &SysrootCache, crate_name: &str) -> CordialResul
     );
     let status = cmd.status()?;
     if !status.success() {
-        return Err(CordialError::invariant(format!(
-            "sysroot cargo rustdoc for {crate_name} exited with {status}"
-        )));
+        return Err(CordialError::sysroot_cargo_rustdoc_exited(
+            crate_name, status,
+        ));
     }
 
     let normalized = crate_name.replace('-', "_");
@@ -172,10 +162,7 @@ fn run_sysroot_rustdoc(sysroot: &SysrootCache, crate_name: &str) -> CordialResul
         .join("doc")
         .join(format!("{normalized}.json"));
     if !json_path.is_file() {
-        return Err(CordialError::invariant(format!(
-            "rustdoc JSON not found at {}",
-            json_path.display()
-        )));
+        return Err(CordialError::rustdoc_json_not_found(json_path));
     }
 
     tracing::debug!(path = %json_path.display(), "sysroot rustdoc JSON produced");

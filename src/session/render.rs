@@ -62,7 +62,7 @@ pub(super) fn render_and_write(
     let primary_name = targets
         .first()
         .map(|target| target.crate_name().clone())
-        .ok_or_else(|| CordialError::invariant("workspace missing crate targets"))?;
+        .ok_or_else(|| CordialError::workspace_missing_crate_targets())?;
     let crate_view = CrateView::new(workspace, primary_name);
 
     let finding_refs: Vec<&dyn Finding> = all_findings

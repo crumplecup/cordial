@@ -46,10 +46,10 @@ pub fn load_std_inventory_from_json(
     crate_name: &str,
 ) -> CordialResult<Vec<StdInventoryItem>> {
     if !json_path.is_file() {
-        return Err(CordialError::invariant(format!(
-            "rustdoc JSON not found for `{crate_name}` at {}",
-            json_path.display()
-        )));
+        return Err(CordialError::rustdoc_json_not_found_for_crate(
+            crate_name,
+            json_path.to_path_buf(),
+        ));
     }
     let content = std::fs::read_to_string(json_path)?;
     let krate: Crate = serde_json::from_str(&content)?;
@@ -70,9 +70,7 @@ pub fn load_merged_std_inventory(sysroot: &SysrootCache) -> CordialResult<Vec<St
         }
     }
     if inventories.is_empty() {
-        return Err(CordialError::invariant(
-            "no std-family rustdoc cache found under ~/.cordial/sysroot — run `cordial build sysroot`",
-        ));
+        return Err(CordialError::no_std_family_rustdoc_cache());
     }
     Ok(crate::framework_std::types::merge_std_inventory_items(
         &inventories,

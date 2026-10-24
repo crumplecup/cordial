@@ -103,15 +103,12 @@ pub fn run_amenable_dump_registry(workspace: &Path, out_path: &Path) -> CordialR
         .status()?;
 
     if !status.success() {
-        return Err(CordialError::invariant(format!(
-            "amenable dump-registry exited with {status}"
-        )));
+        return Err(CordialError::amenable_dump_registry_exited(status));
     }
     if !out_path.is_file() {
-        return Err(CordialError::invariant(format!(
-            "amenable dump-registry did not write {}",
-            out_path.display()
-        )));
+        return Err(CordialError::amenable_dump_registry_did_not_write(
+            out_path.to_path_buf(),
+        ));
     }
     std::fs::write(features_sidecar(out_path), AMENABLE_DUMP_REGISTRY_FEATURES)?;
     Ok(())

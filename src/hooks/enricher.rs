@@ -66,7 +66,7 @@ impl<T: SourceEnricher> IrEnricher for T {
         let source = load
             .as_any()
             .downcast_ref::<SourceLoadView>()
-            .ok_or_else(|| CordialError::invariant("source enricher received another loader"))?;
+            .ok_or_else(|| CordialError::source_enricher_wrong_loader())?;
         self.enrich_source(SourceEnrichView::new(ir, source, session))
     }
 }

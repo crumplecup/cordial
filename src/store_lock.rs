@@ -50,7 +50,7 @@ impl WorklistLock {
             Some(progress),
             command.is_none(),
         )?
-        .ok_or_else(|| CordialError::invariant("waiting lock acquisition returned busy"))?;
+        .ok_or_else(|| CordialError::waiting_lock_busy())?;
         Ok(Self { _file: file })
     }
 }
@@ -69,9 +69,7 @@ impl SysrootLock {
         progress: &dyn ProgressSink,
     ) -> CordialResult<Self> {
         let file = acquire_lock(&sysroot.lock_path(), Some(command), Some(progress), false)?
-            .ok_or_else(|| {
-                CordialError::invariant("waiting sysroot lock acquisition returned busy")
-            })?;
+            .ok_or_else(|| CordialError::waiting_sysroot_lock_busy())?;
         Ok(Self { _file: file })
     }
 
@@ -101,9 +99,7 @@ fn acquire_lock(
         .open(path)?;
     let wait = progress.is_some();
     if shared && command.is_some() {
-        return Err(CordialError::invariant(
-            "shared lock cannot record an exclusive command",
-        ));
+        return Err(CordialError::shared_lock_exclusive_command());
     }
     {
         let started = Instant::now();
@@ -122,10 +118,7 @@ fn acquire_lock(
                     }
                     if started.elapsed() >= WAIT_LIMIT {
                         let holder = std::fs::read_to_string(path).unwrap_or_default();
-                        return Err(CordialError::invariant(format!(
-                            "timed out waiting for store lock held by {}",
-                            holder.trim()
-                        )));
+                        return Err(CordialError::store_lock_timed_out(holder.trim()));
                     }
                     if started.elapsed() >= next_notice {
                         let holder = std::fs::read_to_string(path).unwrap_or_default();

@@ -82,7 +82,7 @@ impl CrateIr {
         if self.graph.node_weight(from.to_index()).is_none()
             || self.graph.node_weight(to.to_index()).is_none()
         {
-            return Err(CordialError::invariant("edge references missing node"));
+            return Err(CordialError::edge_references_missing_node());
         }
         self.graph
             .add_edge(from.to_index(), to.to_index(), EdgeWeight::new(kind));
@@ -100,7 +100,7 @@ impl CrateIr {
         let weight = self
             .graph
             .node_weight_mut(node.to_index())
-            .ok_or_else(|| CordialError::invariant("set_attr on missing node"))?;
+            .ok_or_else(|| CordialError::set_attr_on_missing_node())?;
         weight.set_attr(key, value);
         if let Some(node_weight) = self.graph.node_weight(node.to_index()) {
             self.indexes.index_node(node, node_weight);
@@ -147,9 +147,10 @@ impl CrateIr {
                 .graph
                 .edge_indices()
                 .map(|edge| {
-                    let (from, to) = self.graph.edge_endpoints(edge).ok_or_else(|| {
-                        CordialError::invariant("snapshot edge missing endpoints")
-                    })?;
+                    let (from, to) = self
+                        .graph
+                        .edge_endpoints(edge)
+                        .ok_or_else(|| CordialError::snapshot_edge_missing_endpoints())?;
                     Ok((
                         from.index() as u32,
                         to.index() as u32,
@@ -175,11 +176,11 @@ impl CrateIr {
             let from_index = index_map
                 .get(from as usize)
                 .copied()
-                .ok_or_else(|| CordialError::invariant("snapshot edge from invalid"))?;
+                .ok_or_else(|| CordialError::snapshot_edge_from_invalid())?;
             let to_index = index_map
                 .get(to as usize)
                 .copied()
-                .ok_or_else(|| CordialError::invariant("snapshot edge to invalid"))?;
+                .ok_or_else(|| CordialError::snapshot_edge_to_invalid())?;
             graph.add_edge(from_index, to_index, weight);
         }
 

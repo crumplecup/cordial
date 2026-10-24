@@ -94,12 +94,11 @@ impl Worklist {
         for area in report.areas() {
             let from_area = source.items(area)?;
             if from_area.len() != area.open_items() {
-                return Err(CordialError::invariant(format!(
-                    "{}: report has {} open items but checklists have {}",
+                return Err(CordialError::area_open_item_count_mismatch(
                     area.title(),
                     area.open_items(),
-                    from_area.len()
-                )));
+                    from_area.len(),
+                ));
             }
             items.extend(from_area);
         }
@@ -248,9 +247,7 @@ impl Worklist {
             return self.apply(&open_ids, ItemState::Done, None);
         }
         if ids.iter().any(|id| id == "*") {
-            return Err(CordialError::invariant(
-                "Use `cordial done '*'` by itself, or name item ids without `*`",
-            ));
+            return Err(CordialError::star_must_be_alone());
         }
         self.apply(ids, ItemState::Done, None)
     }
@@ -273,10 +270,7 @@ impl Worklist {
         reason: Option<&str>,
     ) -> CordialResult<Vec<ClaimChange>> {
         let selected = if ids.is_empty() {
-            vec![
-                self.cursor
-                    .ok_or_else(|| CordialError::invariant("No current item"))?,
-            ]
+            vec![self.cursor.ok_or_else(|| CordialError::no_current_item())?]
         } else {
             let mut selected = Vec::new();
             for id in ids {
@@ -284,7 +278,7 @@ impl Worklist {
                     .items
                     .iter()
                     .position(|item| item.id().as_str() == id)
-                    .ok_or_else(|| CordialError::invariant(format!("No item {id} on this list")))?;
+                    .ok_or_else(|| CordialError::no_item_on_list(id))?;
                 if !selected.contains(&index) {
                     selected.push(index);
                 }
@@ -294,10 +288,9 @@ impl Worklist {
         if target == ItemState::Skipped {
             for &index in &selected {
                 if *self.items[index].state() == ItemState::Done {
-                    return Err(CordialError::invariant(format!(
-                        "Item {} is already checked off and cannot be skipped",
-                        self.items[index].id().as_str()
-                    )));
+                    return Err(CordialError::item_already_done_cannot_skip(
+                        self.items[index].id().as_str(),
+                    ));
                 }
             }
         }

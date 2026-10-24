@@ -228,7 +228,7 @@ pub(super) fn assign_ids(items: &mut [WorklistItem]) -> CordialResult<()> {
                     other_key == key || hash[..*length] != other_hash[..*length]
                 })
             })
-            .ok_or_else(|| CordialError::invariant("distinct scoring keys share a full digest"))?;
+            .ok_or_else(|| CordialError::distinct_scoring_keys_share_digest())?;
         prefixes.insert(key, &hash[..length]);
     }
     let mut occurrences = HashMap::<String, usize>::new();
@@ -238,7 +238,7 @@ pub(super) fn assign_ids(items: &mut [WorklistItem]) -> CordialResult<()> {
         *occurrence += 1;
         let prefix = prefixes
             .get(&key)
-            .ok_or_else(|| CordialError::invariant("missing worklist id prefix"))?;
+            .ok_or_else(|| CordialError::missing_worklist_id_prefix())?;
         let id = if *occurrence == 1 {
             (*prefix).to_string()
         } else {

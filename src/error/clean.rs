@@ -42,3 +42,14 @@ impl Display for CleanSource {
 }
 
 impl std::error::Error for CleanSource {}
+
+impl super::CordialError {
+    /// A requested clean was refused or incomplete.
+    #[track_caller]
+    #[instrument(level = "debug", skip(path, reason))]
+    pub fn clean(path: PathBuf, reason: impl Into<String>) -> Self {
+        Self::from_kind(super::CordialErrorKind::Clean(CleanSource::new(
+            path, reason,
+        )))
+    }
+}

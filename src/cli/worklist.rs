@@ -46,10 +46,8 @@ impl Commands {
             Self::Instructions => {
                 write!(io::stdout(), "{WORKLIST_INSTRUCTIONS}").map_err(Into::into)
             }
-            Self::Next => Err(CordialError::invariant(
-                "Did you mean `cordial done` or `cordial skip`?",
-            )),
-            _ => Err(CordialError::invariant("not a worklist command")),
+            Self::Next => Err(CordialError::next_command_unrecognized()),
+            _ => Err(CordialError::not_a_worklist_command()),
         };
         if let (Some(command), Err(error)) = (json_command, &result) {
             let response = json_error(command, ctx.store(), &error.to_string());
@@ -77,7 +75,7 @@ pub(super) fn execute_submit(
         if !json {
             writeln!(io::stdout(), "No list yet.\n\nNEXT: cordial open")?;
         }
-        return Err(CordialError::invariant("No current worklist"));
+        return Err(CordialError::no_current_worklist());
     };
     let home = ctx.store_home().clone().unwrap_or_else(default_store_home);
     let config = load_cordial_config(ctx.project_root(), &home);
@@ -89,7 +87,7 @@ pub(super) fn execute_submit(
                 previous.record().generation()
             )?;
         }
-        return Err(CordialError::invariant("Worklist is out of date"));
+        return Err(CordialError::worklist_out_of_date());
     }
     execute_run_plugins_locked(
         ctx,
@@ -148,9 +146,7 @@ pub(super) fn execute_open(ctx: &ActCtx, json: bool) -> CordialResult<()> {
                     )?;
                 }
                 _ => {
-                    return Err(CordialError::invariant(
-                        "worklist validity state is incomplete",
-                    ));
+                    return Err(CordialError::worklist_validity_incomplete());
                 }
             }
         }
@@ -162,8 +158,8 @@ pub(super) fn execute_open(ctx: &ActCtx, json: bool) -> CordialResult<()> {
             RunOptions::new(false, true, false, false),
         )?;
     }
-    let mut list = Worklist::read(ctx.store())?
-        .ok_or_else(|| CordialError::invariant("gate did not write a worklist"))?;
+    let mut list =
+        Worklist::read(ctx.store())?.ok_or_else(|| CordialError::gate_did_not_write_worklist())?;
     if list.activate() {
         list.write(ctx.store())?;
     }
@@ -248,7 +244,7 @@ pub(super) fn execute_claim(
         if !json {
             writeln!(io::stdout(), "No list yet.\n\nNEXT: cordial open")?;
         }
-        return Err(CordialError::invariant("No current worklist"));
+        return Err(CordialError::no_current_worklist());
     };
     let home = ctx.store_home().clone().unwrap_or_else(default_store_home);
     let config = load_cordial_config(ctx.project_root(), &home);
@@ -260,7 +256,7 @@ pub(super) fn execute_claim(
                 list.record().generation()
             )?;
         }
-        return Err(CordialError::invariant("Worklist is out of date"));
+        return Err(CordialError::worklist_out_of_date());
     }
     let changes = if skip {
         list.skip(ids, reason)

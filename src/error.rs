@@ -1,28 +1,53 @@
 //! Crate error: parent boxes a Kind; Kind variants are native sources.
 
+mod cargo_rustdoc_build;
+mod cargo_rustdoc_metadata;
+mod cargo_rustdoc_toolchain;
 mod clean;
+mod exceptions_cli;
+mod exceptions_edit;
+mod graph;
+mod graph_sources;
 mod io;
 mod lint_order;
 mod local;
 mod parse;
+mod scan;
+mod scan_sources;
+mod store_lock;
+mod targets;
+mod tier;
 mod time;
 #[cfg(any(feature = "antipatterns", feature = "dependency_freshness"))]
 mod toml_parse;
+mod worklist_cli;
+mod worklist_state;
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::path::{PathBuf, StripPrefixError};
 
+use cargo_rustdoc_build::CargoRustdocBuildError;
+use cargo_rustdoc_metadata::CargoRustdocMetadataError;
+use cargo_rustdoc_toolchain::CargoRustdocToolchainError;
 use clean::CleanSource;
+use exceptions_cli::ExceptionsCliError;
+use exceptions_edit::ExceptionsEditError;
+use graph::GraphError;
 use io::{FmtSource, IoSource, PrefixSource};
 use lint_order::{LintOrderCycleSource, LintOrderDanglingSource, LintOrderUnknownConstraintSource};
 use local::{
-    BuilderSource, CargoMetadataSource, InvariantSource, MissingRustdocJsonSource,
+    ApplyGapWriteOnlySource, BuilderSource, CargoMetadataSource, MissingRustdocJsonSource,
     NoCachedIrSource, NoExceptionsSource, NotFoundSource, OpenFindingsSource,
     UnknownEtiquetteSource, UnreachableSource,
 };
 pub use parse::TokenStreamParseError;
 use parse::{ConfigSource, JsonParseSource, JsonSource, SynParseSource};
+use scan::ScanError;
+use store_lock::StoreLockError;
+use targets::TargetsError;
+use tier::TierError;
 use time::ClockSource;
+use worklist_cli::WorklistCliError;
+use worklist_state::WorklistStateError;
 
 use tracing::instrument;
 
@@ -52,10 +77,10 @@ pub enum CordialErrorKind {
     Config(ConfigSource),
     /// `syn` failed to parse a Rust file.
     SynParse(SynParseSource),
-    /// An internal invariant was violated.
-    Invariant(InvariantSource),
     /// A match arm (or equivalent control path) that must not execute.
     Unreachable(UnreachableSource),
+    /// `apply_gap` was called for `TracingApplyPolicy::Skip`.
+    ApplyGapWriteOnly(ApplyGapWriteOnlySource),
     /// A [`derive_builder`] `build()` left a required field unset.
     Builder(BuilderSource),
     /// No etiquette is registered under that id.
@@ -84,18 +109,37 @@ pub enum CordialErrorKind {
     LintOrderDangling(LintOrderDanglingSource),
     /// A constraint's own id is not in the known set.
     LintOrderUnknownConstraint(LintOrderUnknownConstraintSource),
+    /// A `cargo rustdoc`/`cargo doc` build (or the `amenable dump-registry`
+    /// subprocess that shares its shape) failed.
+    CargoRustdocBuild(CargoRustdocBuildError),
+    /// Resolving or invoking the nightly toolchain for std-family sysroot rustdoc JSON failed.
+    CargoRustdocToolchain(CargoRustdocToolchainError),
+    /// A `cargo metadata` workspace/dependency lookup failed.
+    CargoRustdocMetadata(CargoRustdocMetadataError),
+    /// An advisory store-lock operation failed.
+    StoreLock(StoreLockError),
+    /// An IR scan-engine graph/workspace/loader invariant was violated.
+    Graph(GraphError),
+    /// A workspace-member/package lookup failed.
+    Targets(TargetsError),
+    /// A scan-engine probe/rustdoc-cache/reporter/freshness invariant was violated.
+    Scan(ScanError),
+    /// The worklist CLI's own dispatch failed.
+    WorklistCli(WorklistCliError),
+    /// `cordial exceptions add`'s own CLI validation failed.
+    ExceptionsCli(ExceptionsCliError),
+    /// `cordial exceptions edit`'s own validation failed.
+    ExceptionsEdit(ExceptionsEditError),
+    /// A `--tier` selection failed.
+    Tier(TierError),
+    /// A worklist item/state mutation failed.
+    WorklistState(WorklistStateError),
 }
 
 /// Result alias that uses [`CordialError`].
 pub type CordialResult<T> = Result<T, CordialError>;
 
 impl CordialError {
-    /// A requested clean was refused or incomplete.
-    #[track_caller]
-    #[instrument(level = "debug", skip(path, reason))]
-    pub fn clean(path: PathBuf, reason: impl Into<String>) -> Self {
-        Self::from_kind(CordialErrorKind::Clean(CleanSource::new(path, reason)))
-    }
     #[track_caller]
     #[instrument(level = "debug", skip(kind))]
     fn from_kind(kind: CordialErrorKind) -> Self {
@@ -108,128 +152,6 @@ impl CordialError {
     #[instrument(level = "trace", skip(self))]
     pub fn kind(&self) -> &CordialErrorKind {
         &self.kind
-    }
-
-    /// An internal invariant was violated.
-    #[track_caller]
-    #[instrument(level = "debug", skip(message))]
-    pub fn invariant(message: impl Into<String>) -> Self {
-        Self::from_kind(CordialErrorKind::Invariant(InvariantSource::new(message)))
-    }
-
-    /// A match arm (or equivalent control path) that must not execute.
-    ///
-    /// Use this instead of `unreachable!` / `panic!` so the location stays on
-    /// the error and callers can keep control through `?`.
-    #[track_caller]
-    #[instrument(level = "debug", skip(message))]
-    pub fn unreachable(message: impl Into<String>) -> Self {
-        Self::from_kind(CordialErrorKind::Unreachable(UnreachableSource::new(
-            message,
-        )))
-    }
-
-    /// A [`derive_builder`] `build()` left a required field unset.
-    #[track_caller]
-    #[instrument(level = "debug", skip(source))]
-    pub fn builder(source: derive_builder::UninitializedFieldError) -> Self {
-        Self::from(source)
-    }
-
-    /// No etiquette is registered under this id.
-    #[track_caller]
-    #[instrument(level = "debug", skip(id))]
-    pub fn unknown_etiquette(id: impl Into<String>) -> Self {
-        Self::from_kind(CordialErrorKind::UnknownEtiquette(
-            UnknownEtiquetteSource::new(id),
-        ))
-    }
-
-    /// `syn` failed to parse this source file.
-    #[track_caller]
-    #[instrument(level = "debug", skip(path, err))]
-    pub fn syn_parse(path: impl Into<String>, err: syn::Error) -> Self {
-        Self::from_kind(CordialErrorKind::SynParse(SynParseSource::new(path, err)))
-    }
-
-    /// JSON failed to parse at this path.
-    #[track_caller]
-    #[instrument(level = "debug", skip(path, err))]
-    pub fn json_parse(path: impl Into<String>, err: serde_json::Error) -> Self {
-        Self::from_kind(CordialErrorKind::JsonParse(JsonParseSource::new(path, err)))
-    }
-
-    /// Wrap a `cargo_metadata` failure.
-    #[track_caller]
-    #[instrument(level = "debug", skip(err))]
-    pub fn cargo_metadata(err: cargo_metadata::Error) -> Self {
-        Self::from(err)
-    }
-
-    /// This path does not exist.
-    #[track_caller]
-    #[instrument(level = "debug", skip(path))]
-    pub fn not_found(path: PathBuf) -> Self {
-        Self::from_kind(CordialErrorKind::NotFound(NotFoundSource::new(path)))
-    }
-
-    /// No exception file exists for this etiquette and crate.
-    #[track_caller]
-    #[instrument(level = "debug", skip(etiquette, crate_name))]
-    pub fn no_exceptions(etiquette: impl Into<String>, crate_name: impl Into<String>) -> Self {
-        Self::from_kind(CordialErrorKind::NoExceptions(NoExceptionsSource::new(
-            etiquette, crate_name,
-        )))
-    }
-
-    /// No cached IR artifact exists at this path.
-    #[track_caller]
-    #[instrument(level = "debug", skip(path))]
-    pub fn no_cached_ir(path: PathBuf) -> Self {
-        Self::from_kind(CordialErrorKind::NoCachedIr(NoCachedIrSource::new(path)))
-    }
-
-    /// Rustdoc JSON is required for this crate but has not been built.
-    #[track_caller]
-    #[instrument(level = "debug", skip(crate_root, crate_name))]
-    pub fn missing_rustdoc_json(crate_name: impl Into<String>, crate_root: PathBuf) -> Self {
-        Self::from_kind(CordialErrorKind::MissingRustdocJson(
-            MissingRustdocJsonSource::new(crate_name, crate_root),
-        ))
-    }
-
-    /// Open action items were denied by a CLI gate.
-    #[track_caller]
-    #[instrument(level = "debug")]
-    pub fn open_findings(count: usize) -> Self {
-        Self::from_kind(CordialErrorKind::OpenFindings(OpenFindingsSource::new(
-            count,
-        )))
-    }
-
-    /// Lint-order `After` edges contain a cycle.
-    #[track_caller]
-    #[instrument(level = "debug")]
-    pub fn lint_order_cycle() -> Self {
-        Self::from_kind(CordialErrorKind::LintOrderCycle(LintOrderCycleSource::new()))
-    }
-
-    /// `from` names `missing`, which is not in the known lint-id set.
-    #[track_caller]
-    #[instrument(level = "debug", skip(from, missing))]
-    pub fn lint_order_dangling(from: impl Into<String>, missing: impl Into<String>) -> Self {
-        Self::from_kind(CordialErrorKind::LintOrderDangling(
-            LintOrderDanglingSource::new(from, missing),
-        ))
-    }
-
-    /// Constraint `id` is not in the known lint-id set.
-    #[track_caller]
-    #[instrument(level = "debug", skip(id))]
-    pub fn lint_order_unknown_constraint(id: impl Into<String>) -> Self {
-        Self::from_kind(CordialErrorKind::LintOrderUnknownConstraint(
-            LintOrderUnknownConstraintSource::new(id),
-        ))
     }
 }
 
@@ -258,8 +180,20 @@ impl std::error::Error for CordialError {
             CordialErrorKind::TokenStreamParse(source) => Some(source),
             CordialErrorKind::Prefix(source) => Some(source),
             CordialErrorKind::Builder(source) => Some(source),
-            CordialErrorKind::Invariant(_)
-            | CordialErrorKind::Unreachable(_)
+            CordialErrorKind::CargoRustdocBuild(source) => Some(source),
+            CordialErrorKind::CargoRustdocToolchain(source) => Some(source),
+            CordialErrorKind::CargoRustdocMetadata(source) => Some(source),
+            CordialErrorKind::Graph(source) => Some(source),
+            CordialErrorKind::Scan(source) => Some(source),
+            CordialErrorKind::StoreLock(source) => Some(source),
+            CordialErrorKind::Targets(source) => Some(source),
+            CordialErrorKind::WorklistCli(source) => Some(source),
+            CordialErrorKind::ExceptionsCli(source) => Some(source),
+            CordialErrorKind::ExceptionsEdit(source) => Some(source),
+            CordialErrorKind::Tier(source) => Some(source),
+            CordialErrorKind::WorklistState(source) => Some(source),
+            CordialErrorKind::Unreachable(_)
+            | CordialErrorKind::ApplyGapWriteOnly(_)
             | CordialErrorKind::UnknownEtiquette(_)
             | CordialErrorKind::NotFound(_)
             | CordialErrorKind::NoExceptions(_)
@@ -286,8 +220,8 @@ impl Display for CordialErrorKind {
             Self::Clock(source) => source.fmt(formatter),
             Self::Config(source) => source.fmt(formatter),
             Self::SynParse(source) => source.fmt(formatter),
-            Self::Invariant(source) => source.fmt(formatter),
             Self::Unreachable(source) => source.fmt(formatter),
+            Self::ApplyGapWriteOnly(source) => source.fmt(formatter),
             Self::Builder(source) => source.fmt(formatter),
             Self::UnknownEtiquette(source) => source.fmt(formatter),
             Self::CargoMetadata(source) => source.fmt(formatter),
@@ -302,75 +236,18 @@ impl Display for CordialErrorKind {
             Self::LintOrderCycle(source) => source.fmt(formatter),
             Self::LintOrderDangling(source) => source.fmt(formatter),
             Self::LintOrderUnknownConstraint(source) => source.fmt(formatter),
+            Self::CargoRustdocBuild(source) => source.fmt(formatter),
+            Self::CargoRustdocToolchain(source) => source.fmt(formatter),
+            Self::CargoRustdocMetadata(source) => source.fmt(formatter),
+            Self::StoreLock(source) => source.fmt(formatter),
+            Self::Graph(source) => source.fmt(formatter),
+            Self::Targets(source) => source.fmt(formatter),
+            Self::Scan(source) => source.fmt(formatter),
+            Self::WorklistCli(source) => source.fmt(formatter),
+            Self::ExceptionsCli(source) => source.fmt(formatter),
+            Self::ExceptionsEdit(source) => source.fmt(formatter),
+            Self::Tier(source) => source.fmt(formatter),
+            Self::WorklistState(source) => source.fmt(formatter),
         }
-    }
-}
-
-impl From<std::io::Error> for CordialError {
-    #[track_caller]
-    fn from(value: std::io::Error) -> Self {
-        Self::from_kind(CordialErrorKind::Io(IoSource::from(value)))
-    }
-}
-
-impl From<std::time::SystemTimeError> for CordialError {
-    #[track_caller]
-    fn from(value: std::time::SystemTimeError) -> Self {
-        Self::from_kind(CordialErrorKind::Clock(ClockSource::from(value)))
-    }
-}
-
-impl From<serde_json::Error> for CordialError {
-    #[track_caller]
-    fn from(value: serde_json::Error) -> Self {
-        Self::from_kind(CordialErrorKind::Json(JsonSource::from(value)))
-    }
-}
-
-impl From<config::ConfigError> for CordialError {
-    #[track_caller]
-    fn from(value: config::ConfigError) -> Self {
-        Self::from_kind(CordialErrorKind::Config(ConfigSource::from(value)))
-    }
-}
-
-impl From<cargo_metadata::Error> for CordialError {
-    #[track_caller]
-    fn from(value: cargo_metadata::Error) -> Self {
-        Self::from_kind(CordialErrorKind::CargoMetadata(CargoMetadataSource::from(
-            value,
-        )))
-    }
-}
-
-impl From<std::fmt::Error> for CordialError {
-    #[track_caller]
-    fn from(value: std::fmt::Error) -> Self {
-        Self::from_kind(CordialErrorKind::Fmt(FmtSource::from(value)))
-    }
-}
-
-impl From<proc_macro2::LexError> for CordialError {
-    #[track_caller]
-    fn from(value: proc_macro2::LexError) -> Self {
-        Self::from_kind(CordialErrorKind::TokenStreamParse(
-            TokenStreamParseError::from(value),
-        ))
-    }
-}
-
-impl From<derive_builder::UninitializedFieldError> for CordialError {
-    #[track_caller]
-    #[instrument(level = "debug", skip(value))]
-    fn from(value: derive_builder::UninitializedFieldError) -> Self {
-        Self::from_kind(CordialErrorKind::Builder(BuilderSource::from(value)))
-    }
-}
-
-impl From<StripPrefixError> for CordialError {
-    #[track_caller]
-    #[instrument(level = "debug", skip(value))]
-    fn from(value: StripPrefixError) -> Self {
-        Self::from_kind(CordialErrorKind::Prefix(PrefixSource::from(value)))
     }
 }

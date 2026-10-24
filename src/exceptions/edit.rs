@@ -194,10 +194,7 @@ pub fn update_exception(
     update: &ExceptionUpdate,
 ) -> CordialResult<UpdateExceptionOutcome> {
     if update.is_empty() {
-        return Err(CordialError::invariant(
-            "edit requires at least one new value (--new-file, --new-line, \
-             --new-rule-id, --new-context, or --new-reason)",
-        ));
+        return Err(CordialError::edit_requires_new_value());
     }
     let Located {
         mut files,
@@ -215,9 +212,7 @@ pub fn update_exception(
     });
     let rendered = serde_json::to_string(&after)?;
     if duplicate {
-        return Err(CordialError::invariant(format!(
-            "edited exception duplicates an existing row: {rendered}"
-        )));
+        return Err(CordialError::edited_exception_duplicates_row(rendered));
     }
     let target = &mut files[file];
     target.entries[row] = after.clone();
@@ -237,15 +232,13 @@ fn locate(
     selector: &ExceptionSelector,
 ) -> CordialResult<Located> {
     if etiquette_id.trim().is_empty() {
-        return Err(CordialError::invariant("etiquette must not be empty"));
+        return Err(CordialError::etiquette_must_not_be_empty());
     }
     if crate_name.trim().is_empty() {
-        return Err(CordialError::invariant("crate_name must not be empty"));
+        return Err(CordialError::crate_name_must_not_be_empty());
     }
     if selector.is_empty() {
-        return Err(CordialError::invariant(
-            "selector requires at least one of --rule-id, --context, --file, --line",
-        ));
+        return Err(CordialError::selector_requires_at_least_one_field());
     }
     let canonical = exception_file_path(store, etiquette_id, crate_name);
     let alias = store
@@ -281,20 +274,24 @@ fn locate(
             row: *row,
             files,
         }),
-        [] => Err(CordialError::invariant(format!(
-            "no exception for etiquette `{etiquette_id}` crate `{crate_name}` matches {selector:?}"
-        ))),
+        [] => Err(CordialError::no_exception_matches_selector(
+            etiquette_id,
+            crate_name,
+            format!("{selector:?}"),
+        )),
         many => {
             let mut listing = String::new();
             for (file, row) in many {
                 listing.push_str("\n  ");
                 listing.push_str(&serde_json::to_string(&files[*file].entries[*row])?);
             }
-            Err(CordialError::invariant(format!(
-                "{} exceptions for etiquette `{etiquette_id}` crate `{crate_name}` match \
-                 {selector:?}; add more selector fields to pick one:{listing}",
-                many.len()
-            )))
+            Err(CordialError::multiple_exceptions_match_selector(
+                many.len(),
+                etiquette_id,
+                crate_name,
+                format!("{selector:?}"),
+                listing,
+            ))
         }
     }
 }

@@ -215,3 +215,48 @@ impl Display for TokenStreamParseError {
 }
 
 impl std::error::Error for TokenStreamParseError {}
+
+impl super::CordialError {
+    /// `syn` failed to parse this source file.
+    #[track_caller]
+    #[instrument(level = "debug", skip(path, err))]
+    pub fn syn_parse(path: impl Into<String>, err: syn::Error) -> Self {
+        Self::from_kind(super::CordialErrorKind::SynParse(SynParseSource::new(
+            path, err,
+        )))
+    }
+
+    /// JSON failed to parse at this path.
+    #[track_caller]
+    #[instrument(level = "debug", skip(path, err))]
+    pub fn json_parse(path: impl Into<String>, err: serde_json::Error) -> Self {
+        Self::from_kind(super::CordialErrorKind::JsonParse(JsonParseSource::new(
+            path, err,
+        )))
+    }
+}
+
+impl From<serde_json::Error> for super::CordialError {
+    #[track_caller]
+    #[instrument(level = "debug", skip(value))]
+    fn from(value: serde_json::Error) -> Self {
+        Self::from_kind(super::CordialErrorKind::Json(JsonSource::from(value)))
+    }
+}
+
+impl From<config::ConfigError> for super::CordialError {
+    #[track_caller]
+    fn from(value: config::ConfigError) -> Self {
+        Self::from_kind(super::CordialErrorKind::Config(ConfigSource::from(value)))
+    }
+}
+
+impl From<proc_macro2::LexError> for super::CordialError {
+    #[track_caller]
+    #[instrument(level = "debug", skip(value))]
+    fn from(value: proc_macro2::LexError) -> Self {
+        Self::from_kind(super::CordialErrorKind::TokenStreamParse(
+            TokenStreamParseError::from(value),
+        ))
+    }
+}

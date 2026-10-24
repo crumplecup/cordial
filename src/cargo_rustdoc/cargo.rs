@@ -66,9 +66,7 @@ pub(crate) fn run_cargo_rustdoc_to(
     let status = cmd.status()?;
 
     if !status.success() {
-        return Err(CordialError::invariant(format!(
-            "cargo rustdoc for {crate_name} exited with {status}"
-        )));
+        return Err(CordialError::cargo_rustdoc_exited(crate_name, status));
     }
 
     let normalized = crate_name.replace('-', "_");
@@ -77,10 +75,7 @@ pub(crate) fn run_cargo_rustdoc_to(
         .join(format!("{normalized}.json"));
 
     if !json_path.is_file() {
-        return Err(CordialError::invariant(format!(
-            "rustdoc JSON not found at {}",
-            json_path.display()
-        )));
+        return Err(CordialError::rustdoc_json_not_found(json_path));
     }
 
     tracing::debug!(path = %json_path.display(), "rustdoc JSON produced");
@@ -135,9 +130,11 @@ pub(crate) fn run_cargo_doc_for_optional_dep_to(
     let status = cmd.status()?;
 
     if !status.success() {
-        return Err(CordialError::invariant(format!(
-            "cargo doc for {shadow_crate} (features={activating_feature}) exited with {status}"
-        )));
+        return Err(CordialError::cargo_doc_for_optional_dep_exited(
+            shadow_crate,
+            activating_feature,
+            status,
+        ));
     }
 
     let normalized = upstream_crate.replace('-', "_");
@@ -146,10 +143,7 @@ pub(crate) fn run_cargo_doc_for_optional_dep_to(
         .join(format!("{normalized}.json"));
 
     if !json_path.is_file() {
-        return Err(CordialError::invariant(format!(
-            "rustdoc JSON not found at {}",
-            json_path.display()
-        )));
+        return Err(CordialError::rustdoc_json_not_found(json_path));
     }
 
     tracing::debug!(path = %json_path.display(), "rustdoc JSON produced via cargo doc side effect");
@@ -197,10 +191,7 @@ pub(crate) fn nightly_host_target() -> CordialResult<String> {
     }
     let output = cmd.arg("-vV").output()?;
     if !output.status.success() {
-        return Err(CordialError::invariant(format!(
-            "rustc -vV exited with {}",
-            output.status
-        )));
+        return Err(CordialError::rustc_vv_exited(output.status));
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     stdout
@@ -209,9 +200,7 @@ pub(crate) fn nightly_host_target() -> CordialResult<String> {
         .map(str::trim)
         .filter(|host| !host.is_empty())
         .map(str::to_string)
-        .ok_or_else(|| {
-            CordialError::invariant("rustc -vV output missing host target triple".to_string())
-        })
+        .ok_or_else(|| CordialError::rustc_vv_missing_host_target())
 }
 
 #[instrument(level = "debug", err(level = "warn"))]
@@ -221,11 +210,7 @@ fn resolve_nightly_rustc_binary() -> CordialResult<PathBuf> {
             .parent()
             .map(|bin_dir| bin_dir.join("rustc"))
             .filter(|path| path.is_file())
-            .ok_or_else(|| {
-                CordialError::invariant(
-                    "nightly toolchain cargo found but rustc binary missing".to_string(),
-                )
-            })?;
+            .ok_or_else(|| CordialError::nightly_cargo_missing_rustc())?;
         return Ok(rustc);
     }
 

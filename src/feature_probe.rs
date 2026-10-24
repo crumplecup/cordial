@@ -155,9 +155,7 @@ fn resolve_probe_prereqs(
     }
 
     if !should_build_probe_rustdoc() {
-        return Err(crate::error::CordialError::invariant(
-            "probe rustdoc cache miss and live probe builds disabled".to_string(),
-        ));
+        return Err(crate::error::CordialError::probe_rustdoc_cache_miss());
     }
 
     let mut features: Vec<String> = probe_features.iter().map(|s| (*s).to_string()).collect();

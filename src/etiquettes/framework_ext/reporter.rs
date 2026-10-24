@@ -45,10 +45,8 @@ impl Reporter for ExtReporter {
         let findings = view.findings();
         let session = view.session();
 
-        let report =
-            ext_report_from_findings(findings, &self.category, false)?.ok_or_else(|| {
-                CordialError::invariant("amenable ext reporter requires assessor findings")
-            })?;
+        let report = ext_report_from_findings(findings, &self.category, false)?
+            .ok_or_else(|| CordialError::amenable_ext_reporter_requires_assessor_findings())?;
         let gaps = ext_gaps_from_findings(findings, &self.category);
         let store = StoreLayout::from_root(
             session.store_root(),

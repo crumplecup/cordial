@@ -435,7 +435,5 @@ fn has_cross_crate_mirror(
 
 #[instrument(level = "debug")]
 fn missing_crate_ir(crate_name: &str) -> CordialError {
-    CordialError::invariant(format!(
-        "crate `{crate_name}` IR not loaded in workspace for shadow compare"
-    ))
+    CordialError::crate_ir_not_loaded_for_shadow_compare(crate_name)
 }

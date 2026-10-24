@@ -189,10 +189,10 @@ pub(super) fn select_load_view<'a>(
     if let Some(view) = load_views.get(&format!("{crate_name}:{}", RustdocLoader::ID)) {
         return Ok(view.as_ref());
     }
-    Err(CordialError::invariant(format!(
-        "no load view available for enricher `{}` on crate `{crate_name}`",
-        enricher.id()
-    )))
+    Err(CordialError::no_load_view_available_for_enricher(
+        enricher.id(),
+        crate_name,
+    ))
 }
 
 #[instrument(level = "debug", skip(etiquettes))]

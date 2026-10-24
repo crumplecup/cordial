@@ -222,20 +222,17 @@ impl ExceptionCommands {
                 reason,
             } => {
                 if let Some(patch_set) = patch_set {
-                    let path = path
-                        .ok_or_else(|| CordialError::invariant("coverage skip requires --path"))?;
+                    let path = path.ok_or_else(|| CordialError::coverage_skip_requires_path())?;
                     execute_add_coverage_skip(
                         ctx.store(),
                         &patch_set,
                         CoverageSkipEntry::new(path, reason),
                     )
                 } else {
-                    let etiquette = etiquette.ok_or_else(|| {
-                        CordialError::invariant("quality exception requires an etiquette")
-                    })?;
-                    let file = file.ok_or_else(|| {
-                        CordialError::invariant("quality exception requires --file")
-                    })?;
+                    let etiquette = etiquette
+                        .ok_or_else(|| CordialError::quality_exception_requires_etiquette())?;
+                    let file =
+                        file.ok_or_else(|| CordialError::quality_exception_requires_file())?;
                     let crate_name = crate_name
                         .or_else(|| ctx.crate_name().clone())
                         .unwrap_or_else(|| ctx.store().project_slug().clone());
