@@ -4,21 +4,8 @@ use proc_macro2::{TokenStream, TokenTree};
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
 use syn::visit::Visit;
-use syn::{Expr, ExprField, File, Macro, Member, PatStruct, Token};
+use syn::{Expr, ExprField, Macro, Member, PatStruct, Token};
 use tracing::instrument;
-
-/// Only direct formatting reads are known to work with both `String` and `str`.
-/// Unknown uses are blockers until the apply pass can rewrite or prove them.
-#[instrument(level = "trace", skip(syntax))]
-pub(super) fn has_unhandled_field_use(syntax: &File, type_name: &str, field_name: &str) -> bool {
-    let mut visitor = FieldUseVisitor {
-        type_name,
-        field_name,
-        unhandled: false,
-    };
-    visitor.visit_file(syntax);
-    visitor.unhandled
-}
 
 #[instrument(level = "debug", skip(mac))]
 pub(super) fn macro_has_unhandled_field_use(mac: &Macro, field_name: &str) -> bool {

@@ -72,6 +72,7 @@ pub(super) fn collect_conversion_units(
                     declaration: candidate.declaration,
                     type_name: candidate.type_name,
                     field_name: candidate.field_name,
+                    name_ambiguous: candidate.name_ambiguous,
                     sites,
                 },
                 candidate.line,

@@ -13,6 +13,14 @@ which fields were converted and why the others were left alone. Both directions
 matter: `borrowed` is useful to verifiers, while `owned` must let a project
 reverse a prior migration.
 
+This is a strategy migration, not a collection of local lint fixes. A policy
+may permit several mutually exclusive code designs; `--apply` can move a
+complete conversion unit between them when the necessary evidence proves that
+the code's purpose and behavior are preserved. The same model can later cover
+other policy choices, such as test error handling with `miette`, `anyhow`, or a
+boxed error. The chosen strategy controls the transformation; the collected
+facts and unresolved edges remain independent of that choice.
+
 The current apply pass changes private, same-file error struct fields with
 recognized constructors. It handles `file: String` built from
 `Location::caller().file()` and other `String` fields built from string literals,
@@ -266,6 +274,9 @@ Implementation checkpoints:
   optimization target.
 - [ ] Move initializer, field-use, and lifetime-planning evidence into typed IR
   facts. The current edit planner still reads `SharedParsedFile::syntax()`;
-  replace that access with `IrView` plus a source-text-only edit view.
+  replace that access with `IrView` plus a source-text-only edit view. The
+  field-use blocker and ambiguous-name decision now come from the conversion
+  unit in IR, removing their separate planner scans. Initializer and lifetime
+  evidence still need to move.
 - [ ] Add source-digest checks and whole-unit writes before allowing cross-file
   conversions. Keep unknown name, cfg, or macro edges as explicit blockers.

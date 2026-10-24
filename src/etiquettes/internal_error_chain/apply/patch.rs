@@ -12,8 +12,6 @@ use crate::loader::SharedParsedFile;
 use super::super::type_graph::item_derives_error;
 use super::initializers::{FieldKind, InitializerVisitor};
 use super::lifetime;
-use super::names::audit_names;
-use super::uses::has_unhandled_field_use;
 use super::{
     Edit, ErrorConversionUnit, ErrorFieldApplyBlocker, ErrorFieldApplyBlockerReason,
     is_error_string_field, is_static_str, is_str_ref_with_lifetime, is_string, known_error_impls,
@@ -36,7 +34,6 @@ pub(super) fn patch_file(
     let error_impls = known_error_impls(syntax);
     let static_strings = known_static_strings(syntax);
     let mut edits = Vec::new();
-    let name_audit = audit_names(syntax);
     let mut converted = 0;
     let mut blockers = Vec::new();
     let mut pending = Vec::new();
@@ -77,11 +74,12 @@ pub(super) fn patch_file(
             let has_cross_file_reference =
                 unit.sites().iter().any(|site| site.path() != file.path());
             let has_unknown_field_use = unit.blocks_existing_field_edit();
+            let name_ambiguous = unit.name_ambiguous();
             let lifetime_candidate =
                 lifetime::is_candidate(item, field, kind, struct_lifetime.as_deref(), strategy);
             if lifetime_candidate
                 && !has_cross_file_reference
-                && !name_audit.blocks(&name)
+                && !name_ambiguous
                 && matches!(item.vis, Visibility::Inherited)
                 && matches!(field.vis, Visibility::Inherited)
             {
@@ -130,7 +128,7 @@ pub(super) fn patch_file(
                 blockers.push(ErrorFieldApplyBlocker::new(file.path(), &name, &field_name, ErrorFieldApplyBlockerReason::OutsideFile));
                 continue;
             }
-            if name_audit.blocks(&name) {
+            if name_ambiguous {
                 blockers.push(ErrorFieldApplyBlocker::new(
                     file.path(),
                     &name,
@@ -159,7 +157,7 @@ pub(super) fn patch_file(
                 ));
                 continue;
             };
-            if has_unknown_field_use || has_unhandled_field_use(syntax, &name, &field_name) {
+            if has_unknown_field_use {
                 blockers.push(ErrorFieldApplyBlocker::new(
                     file.path(),
                     &name,

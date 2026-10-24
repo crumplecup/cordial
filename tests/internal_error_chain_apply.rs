@@ -1296,6 +1296,11 @@ impl MessageError {
         run_error_file_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
     assert_eq!(preview.converted_fields(), 0);
     assert_eq!(preview.unresolved(), 1);
+    assert!(preview.conversion_units().iter().any(|unit| {
+        unit.sites()
+            .iter()
+            .any(|site| site.kind() == ErrorConversionSiteKind::FieldUse && !site.resolved())
+    }));
     assert_eq!(source(fixture.path())?, original);
 
     let result =

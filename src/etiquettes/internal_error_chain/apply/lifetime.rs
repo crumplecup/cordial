@@ -14,7 +14,6 @@ use crate::loader::SharedParsedFile;
 
 use super::initializers::{FieldKind, InitializerVisitor};
 use super::inventory::{ErrorConversionSiteKind, ErrorConversionUnit};
-use super::uses::has_unhandled_field_use;
 use super::{Edit, is_str_ref_with_lifetime, is_string, simple_type_name, span_range};
 
 #[instrument(level = "trace", skip(item, field, kind, strategy))]
@@ -51,10 +50,7 @@ pub(super) fn plan(
     let syn::Fields::Named(fields) = &item.fields else {
         return None;
     };
-    if fields.named.len() != 1
-        || !unit.is_closed()
-        || has_unhandled_field_use(file.syntax(), &item.ident.to_string(), field_name)
-    {
+    if fields.named.len() != 1 || !unit.is_closed() || unit.blocks_existing_field_edit() {
         return None;
     }
     let field = fields.named.first()?;

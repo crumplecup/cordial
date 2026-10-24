@@ -66,6 +66,8 @@ pub struct ErrorConversionUnit {
     declaration: PathBuf,
     type_name: String,
     field_name: String,
+    #[getter(copy)]
+    name_ambiguous: bool,
     sites: Vec<ErrorConversionSite>,
 }
 
