@@ -221,11 +221,12 @@ borrowed and owned round trips plus no partial write on an unresolved edge.
 reads conversion units from the error IR. Its site collector identifies
 candidates first, then visits each shared syntax tree once per file to attach
 construction and use sites. Parsing patched text is a separate validation step.
-The remaining duplication is in the edit planner: it still reads the syntax
-tree for initializer, field-use, and lifetime decisions. Those facts need to
-move into typed IR records so apply can query a complete conversion unit and
-read source text only for located edits. A missing fact belongs in collection
-or enrichment, not in an apply-specific fallback.
+The remaining planner dependency is the syntax tree for field declarations
+and lifetime decisions. The narrow initializer choices, field-use blocker,
+and ambiguous-name decision now travel in typed conversion-unit IR records.
+Those records still need to become a complete unit query so apply can read
+source text only for located edits. A missing fact belongs in collection or
+enrichment, not in an apply-specific fallback.
 
 | Stage | Facts or responsibility |
 | --- | --- |
@@ -276,7 +277,9 @@ Implementation checkpoints:
   facts. The current edit planner still reads `SharedParsedFile::syntax()`;
   replace that access with `IrView` plus a source-text-only edit view. The
   field-use blocker and ambiguous-name decision now come from the conversion
-  unit in IR, removing their separate planner scans. Initializer and lifetime
-  evidence still need to move.
+  unit in IR, removing their separate planner scans. Existing narrow
+  initializer replacements are collected in one file traversal and serialized
+  with each unit; lifetime planning and field-declaration decisions still read
+  the shared syntax tree.
 - [ ] Add source-digest checks and whole-unit writes before allowing cross-file
   conversions. Keep unknown name, cfg, or macro edges as explicit blockers.

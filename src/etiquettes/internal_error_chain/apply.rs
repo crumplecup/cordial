@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
 use syn::{GenericParam, Item, ItemStruct, Type};
 use tracing::instrument;
 
@@ -26,7 +27,7 @@ pub use self::inventory::{ErrorConversionSite, ErrorConversionSiteKind, ErrorCon
 pub(crate) use self::inventory::{conversion_units_from_ir, enrich_conversion_units};
 use self::patch::patch_file;
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Edit {
     start: usize,
     end: usize,

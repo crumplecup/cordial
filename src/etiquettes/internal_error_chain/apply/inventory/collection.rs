@@ -6,14 +6,19 @@ use syn::Item;
 use syn::spanned::Spanned;
 use tracing::instrument;
 
+use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
 use super::batch::BatchInventoryVisitor;
 use super::{
     ConversionCandidate, ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit,
+    InitializerEvidence,
 };
 use crate::etiquettes::internal_error_chain::apply::{
-    is_error_string_field, known_error_impls, names::audit_names,
+    initializers::{FieldKind, InitializerBatchInput, collect_initializer_edits},
+    is_error_string_field, is_string, known_error_impls, known_static_strings,
+    names::audit_names,
+    single_struct_lifetime,
 };
 use crate::etiquettes::internal_error_chain::type_graph::item_derives_error;
 
@@ -73,6 +78,7 @@ pub(super) fn collect_conversion_units(
                     type_name: candidate.type_name,
                     field_name: candidate.field_name,
                     name_ambiguous: candidate.name_ambiguous,
+                    initializer: candidate.initializer,
                     sites,
                 },
                 candidate.line,
@@ -85,6 +91,7 @@ pub(super) fn collect_conversion_units(
 fn find_candidates(files: &[SharedParsedFile]) -> Vec<ConversionCandidate> {
     let mut candidates = Vec::new();
     for file in files {
+        let start = candidates.len();
         let syntax = file.syntax();
         let error_impls = known_error_impls(syntax);
         let name_audit = audit_names(syntax);
@@ -106,14 +113,53 @@ fn find_candidates(files: &[SharedParsedFile]) -> Vec<ConversionCandidate> {
                 {
                     continue;
                 }
+                let strategy = if is_string(&field.ty) {
+                    ErrorFieldStrategy::Borrowed
+                } else {
+                    ErrorFieldStrategy::Owned
+                };
+                let kind = if field_name == "file" {
+                    FieldKind::CallSiteFile
+                } else {
+                    FieldKind::StaticString
+                };
+                let lifetime = single_struct_lifetime(item);
                 candidates.push(ConversionCandidate {
                     declaration: file.path().to_path_buf(),
                     type_name: type_name.clone(),
                     field_name,
                     line: field.span().start().line as u32,
                     name_ambiguous: name_audit.blocks(&type_name),
+                    initializer: InitializerEvidence {
+                        target: strategy,
+                        edits: None,
+                    },
+                    initializer_kind: kind,
+                    initializer_lifetime: lifetime,
                 });
             }
+        }
+        if start == candidates.len() {
+            continue;
+        }
+        let static_strings = known_static_strings(syntax);
+        let edits = {
+            let inputs: Vec<_> = candidates[start..]
+                .iter()
+                .map(|candidate| {
+                    InitializerBatchInput::new(
+                        &candidate.type_name,
+                        &candidate.field_name,
+                        candidate.initializer_kind,
+                        candidate.initializer.target,
+                        candidate.initializer_lifetime.as_deref(),
+                    )
+                })
+                .collect();
+            collect_initializer_edits(file, &inputs, &static_strings)
+        };
+        for (candidate, initializer_edits) in candidates[start..].iter_mut().zip(edits) {
+            candidate.initializer.edits = initializer_edits;
         }
     }
     candidates

@@ -11,9 +11,11 @@ use crate::config::ErrorFieldStrategy;
 
 use super::{Edit, simple_type_name, span_range};
 
+mod batch;
 mod bindings;
 mod replacements;
 
+pub(super) use batch::{InitializerBatchInput, collect_initializer_edits};
 pub(super) use bindings::impl_uses_lifetime;
 use bindings::{BindingCounts, caller_aliases, static_string_locals, static_string_params};
 use replacements::{file_initializer_replacement, static_string_initializer_replacement};
@@ -35,6 +37,12 @@ pub(super) struct InitializerVisitor<'a> {
     edits: Vec<Edit>,
     found: usize,
     unresolved: bool,
+}
+
+struct ConstructorContext {
+    caller_aliases: BTreeSet<String>,
+    static_params: BTreeSet<String>,
+    static_locals: BTreeMap<String, usize>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -84,71 +92,57 @@ impl<'a> InitializerVisitor<'a> {
     fn visit_constructor_block(&mut self, signature: &Signature, block: &syn::Block) {
         let mut bindings = BindingCounts::default();
         bindings.visit_block(block);
-        let previous =
-            std::mem::replace(&mut self.caller_aliases, caller_aliases(block, &bindings));
-        let previous_params = std::mem::replace(
+        let aliases = caller_aliases(block, &bindings);
+        let previous = self.enter_constructor_block(signature, block, &bindings, &aliases);
+        syn::visit::visit_block(self, block);
+        self.leave_constructor_block(previous);
+    }
+
+    #[instrument(level = "debug", skip(self, signature, block, bindings, aliases))]
+    fn enter_constructor_block(
+        &mut self,
+        signature: &Signature,
+        block: &syn::Block,
+        bindings: &BindingCounts,
+        aliases: &BTreeSet<String>,
+    ) -> ConstructorContext {
+        let caller_aliases = std::mem::replace(&mut self.caller_aliases, aliases.clone());
+        let static_params = std::mem::replace(
             &mut self.static_params,
             static_string_params(
                 signature,
-                &bindings,
+                bindings,
                 self.target_lifetime,
                 self.current_impl_lifetime_matches,
             ),
         );
-        let previous_locals = std::mem::replace(
+        let static_locals = std::mem::replace(
             &mut self.static_locals,
             static_string_locals(
                 signature,
                 block,
-                &bindings,
+                bindings,
                 self.source,
                 self.target_lifetime,
                 self.current_impl_lifetime_matches,
             ),
         );
-        syn::visit::visit_block(self, block);
-        self.caller_aliases = previous;
-        self.static_params = previous_params;
-        self.static_locals = previous_locals;
-    }
-}
-
-impl<'ast> Visit<'ast> for InitializerVisitor<'_> {
-    #[instrument(level = "debug", skip(self, _item))]
-    fn visit_item_mod(&mut self, _item: &'ast syn::ItemMod) {
-        // A nested module has its own `Self` and privacy context.
+        ConstructorContext {
+            caller_aliases,
+            static_params,
+            static_locals,
+        }
     }
 
-    #[instrument(level = "debug", skip(self, item))]
-    fn visit_item_impl(&mut self, item: &'ast ItemImpl) {
-        let previous = std::mem::replace(&mut self.current_impl, simple_type_name(&item.self_ty));
-        let previous_lifetime = std::mem::replace(
-            &mut self.current_impl_lifetime_matches,
-            self.target_lifetime.is_some_and(|lifetime| {
-                impl_uses_lifetime(item, self.type_name, lifetime)
-                    || (self.pending_lifetime
-                        && simple_type_name(&item.self_ty).as_deref() == Some(self.type_name))
-            }),
-        );
-        syn::visit::visit_item_impl(self, item);
-        self.current_impl = previous;
-        self.current_impl_lifetime_matches = previous_lifetime;
+    #[instrument(level = "debug", skip(self, previous))]
+    fn leave_constructor_block(&mut self, previous: ConstructorContext) {
+        self.caller_aliases = previous.caller_aliases;
+        self.static_params = previous.static_params;
+        self.static_locals = previous.static_locals;
     }
 
     #[instrument(level = "debug", skip(self, item))]
-    fn visit_item_fn(&mut self, item: &'ast ItemFn) {
-        let previous = std::mem::replace(&mut self.current_impl_lifetime_matches, false);
-        self.visit_constructor_block(&item.sig, &item.block);
-        self.current_impl_lifetime_matches = previous;
-    }
-
-    #[instrument(level = "debug", skip(self, item))]
-    fn visit_impl_item_fn(&mut self, item: &'ast ImplItemFn) {
-        self.visit_constructor_block(&item.sig, &item.block);
-    }
-
-    #[instrument(level = "debug", skip(self, item))]
-    fn visit_expr_struct(&mut self, item: &'ast ExprStruct) {
+    fn inspect_expr_struct(&mut self, item: &ExprStruct) {
         let target = item.path.is_ident(self.type_name)
             || (item.path.is_ident("Self") && self.current_impl.as_deref() == Some(self.type_name));
         if !target
@@ -203,6 +197,46 @@ impl<'ast> Visit<'ast> for InitializerVisitor<'_> {
                 self.unresolved = true;
             }
         }
+    }
+}
+
+impl<'ast> Visit<'ast> for InitializerVisitor<'_> {
+    #[instrument(level = "debug", skip(self, _item))]
+    fn visit_item_mod(&mut self, _item: &'ast syn::ItemMod) {
+        // A nested module has its own `Self` and privacy context.
+    }
+
+    #[instrument(level = "debug", skip(self, item))]
+    fn visit_item_impl(&mut self, item: &'ast ItemImpl) {
+        let previous = std::mem::replace(&mut self.current_impl, simple_type_name(&item.self_ty));
+        let previous_lifetime = std::mem::replace(
+            &mut self.current_impl_lifetime_matches,
+            self.target_lifetime.is_some_and(|lifetime| {
+                impl_uses_lifetime(item, self.type_name, lifetime)
+                    || (self.pending_lifetime
+                        && simple_type_name(&item.self_ty).as_deref() == Some(self.type_name))
+            }),
+        );
+        syn::visit::visit_item_impl(self, item);
+        self.current_impl = previous;
+        self.current_impl_lifetime_matches = previous_lifetime;
+    }
+
+    #[instrument(level = "debug", skip(self, item))]
+    fn visit_item_fn(&mut self, item: &'ast ItemFn) {
+        let previous = std::mem::replace(&mut self.current_impl_lifetime_matches, false);
+        self.visit_constructor_block(&item.sig, &item.block);
+        self.current_impl_lifetime_matches = previous;
+    }
+
+    #[instrument(level = "debug", skip(self, item))]
+    fn visit_impl_item_fn(&mut self, item: &'ast ImplItemFn) {
+        self.visit_constructor_block(&item.sig, &item.block);
+    }
+
+    #[instrument(level = "debug", skip(self, item))]
+    fn visit_expr_struct(&mut self, item: &'ast ExprStruct) {
+        self.inspect_expr_struct(item);
         syn::visit::visit_expr_struct(self, item);
     }
 }

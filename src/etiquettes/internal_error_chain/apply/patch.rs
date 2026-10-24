@@ -1,7 +1,6 @@
 //! Plan and validate edits for one shared parsed source file.
 
 use syn::spanned::Spanned;
-use syn::visit::Visit;
 use syn::{Item, Visibility};
 use tracing::instrument;
 
@@ -10,12 +9,12 @@ use crate::error::{CordialError, CordialResult};
 use crate::loader::SharedParsedFile;
 
 use super::super::type_graph::item_derives_error;
-use super::initializers::{FieldKind, InitializerVisitor};
+use super::initializers::FieldKind;
 use super::lifetime;
 use super::{
     Edit, ErrorConversionUnit, ErrorFieldApplyBlocker, ErrorFieldApplyBlockerReason,
     is_error_string_field, is_static_str, is_str_ref_with_lifetime, is_string, known_error_impls,
-    known_static_strings, single_struct_lifetime, span_range,
+    single_struct_lifetime, span_range,
 };
 
 #[instrument(level = "debug", skip(file, strategy, ir_units))]
@@ -32,7 +31,6 @@ pub(super) fn patch_file(
 )> {
     let syntax = file.syntax();
     let error_impls = known_error_impls(syntax);
-    let static_strings = known_static_strings(syntax);
     let mut edits = Vec::new();
     let mut converted = 0;
     let mut blockers = Vec::new();
@@ -102,23 +100,22 @@ pub(super) fn patch_file(
                 units.push(unit);
                 continue;
             }
-            let (source_type, dynamic_lifetime) = match strategy {
+            let source_type = match strategy {
                 ErrorFieldStrategy::Borrowed if is_string(&field.ty) => {
                     let lifetime = struct_lifetime.as_deref();
-                    (format!("&'{} str", lifetime.unwrap_or("static")), lifetime)
+                    format!("&'{} str", lifetime.unwrap_or("static"))
                 }
-                ErrorFieldStrategy::Owned if is_static_str(&field.ty) => {
-                    ("String".to_string(), None)
-                }
+                ErrorFieldStrategy::Owned if is_static_str(&field.ty) => "String".to_string(),
                 ErrorFieldStrategy::Owned
                     if struct_lifetime
                         .as_deref()
                         .is_some_and(|lifetime| is_str_ref_with_lifetime(&field.ty, lifetime)) =>
                 {
-                    ("String".to_string(), struct_lifetime.as_deref())
+                    "String".to_string()
                 }
                 _ => continue,
             };
+            let initializer_edits = unit.initializer_edits(strategy);
             units.push(unit);
             if !matches!(item.vis, Visibility::Inherited)
                 || !matches!(field.vis, Visibility::Inherited)
@@ -137,18 +134,7 @@ pub(super) fn patch_file(
                 ));
                 continue;
             }
-            let mut visitor = InitializerVisitor::new(
-                &name,
-                &field_name,
-                kind,
-                strategy,
-                file.source(),
-                &static_strings,
-                dynamic_lifetime,
-                false,
-            );
-            visitor.visit_file(syntax);
-            let Some(mut initializers) = visitor.finish() else {
+            let Some(mut initializers) = initializer_edits else {
                 blockers.push(ErrorFieldApplyBlocker::new(
                     file.path(),
                     &name,

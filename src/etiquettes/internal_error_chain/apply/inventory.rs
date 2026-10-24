@@ -6,6 +6,9 @@
 
 use std::path::PathBuf;
 
+use super::Edit;
+use super::initializers::FieldKind;
+use crate::config::ErrorFieldStrategy;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 mod batch;
@@ -68,7 +71,16 @@ pub struct ErrorConversionUnit {
     field_name: String,
     #[getter(copy)]
     name_ambiguous: bool,
+    #[getter(skip)]
+    initializer: InitializerEvidence,
     sites: Vec<ErrorConversionSite>,
+}
+
+/// A proven initializer edit for the storage direction implied by this source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct InitializerEvidence {
+    target: ErrorFieldStrategy,
+    edits: Option<Vec<Edit>>,
 }
 
 /// A field identified once from its declaration before site collection.
@@ -78,9 +90,18 @@ struct ConversionCandidate {
     field_name: String,
     line: u32,
     name_ambiguous: bool,
+    initializer: InitializerEvidence,
+    initializer_kind: FieldKind,
+    initializer_lifetime: Option<String>,
 }
 
 impl ErrorConversionUnit {
+    #[instrument(level = "trace", skip(self, strategy))]
+    pub(super) fn initializer_edits(&self, strategy: ErrorFieldStrategy) -> Option<Vec<Edit>> {
+        (self.initializer.target == strategy)
+            .then(|| self.initializer.edits.clone())
+            .flatten()
+    }
     /// Whether every recorded path is understood well enough to plan a unit.
     #[instrument(level = "trace", skip(self))]
     pub fn is_closed(&self) -> bool {
