@@ -220,13 +220,14 @@ borrowed and owned round trips plus no partial write on an unresolved edge.
 `quality --apply` now builds the same `SourceLoadView` as normal sessions and
 reads conversion units from the error IR. Its site collector identifies
 candidates first, then visits each shared syntax tree once per file to attach
-construction and use sites. Parsing patched text is a separate validation step.
-The remaining planner dependency is the syntax tree for the special lifetime
-migration. Field declarations, storage shape, visibility, initializer choices,
-field-use blockers, and ambiguous-name decisions now travel in typed
-conversion-unit IR records. Those records still need to become a complete
-unit query so apply can read source text only for located edits. A missing
-fact belongs in collection or enrichment, not in an apply-specific fallback.
+construction and use sites. The special lifetime collector still makes
+additional visits to that same shared tree for candidate units. Parsing patched
+text is a separate validation step. Field declarations, storage shape,
+visibility, initializer choices, lifetime edits, field-use blockers, and
+ambiguous-name decisions now travel in typed conversion-unit IR records. Apply
+reads only source text and digests through `SourceEditView`. These records still
+need to become a complete unit query. A missing fact belongs in collection or
+enrichment, not in an apply-specific fallback.
 
 | Stage | Facts or responsibility |
 | --- | --- |
@@ -275,10 +276,11 @@ Implementation checkpoints:
   optimization target.
 - [ ] Move initializer, field-use, and lifetime-planning evidence into typed IR
   facts. The ordinary field planner now reads declaration and initializer
-  facts from each conversion unit; its only syntax access is isolated in the
-  special lifetime planner. Move that planner's signature, impl, and
-  forwarding-return evidence into IR, then give apply a source-text-only edit
-  view with no `syntax()` method.
+  facts from each conversion unit. The special lifetime planner now runs during
+  collection and serializes its proven edits into the unit. Extract its
+  signature, impl, and forwarding-return facts to avoid repeated tree walks.
+  Apply now receives `SourceEditView`, which exposes text and digest but no
+  `syntax()` method.
 - [ ] Add source-digest checks and whole-unit writes before allowing cross-file
   conversions. Shared source snapshots and conversion units now carry digests;
   apply rejects mismatched IR facts and checks every planned file against disk

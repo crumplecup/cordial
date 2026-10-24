@@ -124,6 +124,12 @@ pub struct SharedParsedFile {
     inner: Rc<ParsedSource>,
 }
 
+/// Source snapshot available to edit planning without syntax-tree access.
+#[derive(Debug, Clone)]
+pub(crate) struct SourceEditView {
+    inner: Rc<ParsedSource>,
+}
+
 #[derive(Debug)]
 struct ParsedSource {
     path: PathBuf,
@@ -134,6 +140,14 @@ struct ParsedSource {
 }
 
 impl SharedParsedFile {
+    /// Issue the text-only view used after collection has finished.
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn edit_view(&self) -> SourceEditView {
+        SourceEditView {
+            inner: Rc::clone(&self.inner),
+        }
+    }
+
     /// Path used to load this source file.
     #[instrument(level = "trace", skip(self))]
     pub fn path(&self) -> &Path {
@@ -155,15 +169,37 @@ impl SharedParsedFile {
     /// Whether the file still contains the bytes used to build this snapshot.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
     pub fn matches_disk(&self) -> CordialResult<bool> {
-        let current = std::fs::read(&self.inner.path)?;
-        let digest: [u8; 32] = Sha256::digest(current).into();
-        Ok(digest == self.inner.digest)
+        self.edit_view().matches_disk()
     }
 
     /// Syntax tree parsed from this file's source text.
     #[instrument(level = "trace", skip(self))]
     pub fn syntax(&self) -> &syn::File {
         &self.inner.syntax
+    }
+}
+
+impl SourceEditView {
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn path(&self) -> &Path {
+        &self.inner.path
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn source(&self) -> &str {
+        &self.inner.source
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn source_digest(&self) -> [u8; 32] {
+        self.inner.digest
+    }
+
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    pub(crate) fn matches_disk(&self) -> CordialResult<bool> {
+        let current = std::fs::read(&self.inner.path)?;
+        let digest: [u8; 32] = Sha256::digest(current).into();
+        Ok(digest == self.inner.digest)
     }
 }
 

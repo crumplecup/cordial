@@ -77,12 +77,21 @@ pub struct ErrorConversionUnit {
     field: FieldEvidence,
     #[getter(skip)]
     initializer: InitializerEvidence,
+    #[getter(skip)]
+    lifetime: LifetimeEvidence,
     sites: Vec<ErrorConversionSite>,
 }
 
 /// A proven initializer edit for the storage direction implied by this source.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct InitializerEvidence {
+    target: ErrorFieldStrategy,
+    edits: Option<Vec<Edit>>,
+}
+
+/// A closed same-file lifetime migration proven against the shared tree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct LifetimeEvidence {
     target: ErrorFieldStrategy,
     edits: Option<Vec<Edit>>,
 }
@@ -141,6 +150,12 @@ impl ErrorConversionUnit {
     pub(super) fn initializer_edits(&self, strategy: ErrorFieldStrategy) -> Option<Vec<Edit>> {
         (self.initializer.target == strategy)
             .then(|| self.initializer.edits.clone())
+            .flatten()
+    }
+    #[instrument(level = "trace", skip(self, strategy))]
+    pub(super) fn lifetime_edits(&self, strategy: ErrorFieldStrategy) -> Option<Vec<Edit>> {
+        (self.lifetime.target == strategy)
+            .then(|| self.lifetime.edits.clone())
             .flatten()
     }
     /// Whether every recorded path is understood well enough to plan a unit.

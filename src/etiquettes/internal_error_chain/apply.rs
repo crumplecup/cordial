@@ -145,8 +145,9 @@ pub fn run_error_field_apply(
         })?;
         enrich_conversion_units(&mut ir, &files)?;
         let units = conversion_units_from_ir(&ir)?;
+        let edit_files: Vec<_> = files.iter().map(|file| file.edit_view()).collect();
         let mut planned = Vec::new();
-        for file in &files {
+        for file in &edit_files {
             let (patched, converted, blockers, units) =
                 patch_file(file, policy.field_strategy(), &units, dry_run)?;
             summary.conversion_units.extend(units);

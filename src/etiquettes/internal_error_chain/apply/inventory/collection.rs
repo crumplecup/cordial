@@ -1,6 +1,7 @@
 //! Identify conversion candidates and visit each shared file once for sites.
 
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 use syn::spanned::Spanned;
 use syn::{Item, Type, Visibility};
@@ -12,7 +13,7 @@ use crate::loader::SharedParsedFile;
 use super::batch::BatchInventoryVisitor;
 use super::{
     ConversionCandidate, ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit,
-    FieldEvidence, InitializerEvidence, StringStorage,
+    FieldEvidence, InitializerEvidence, LifetimeEvidence, StringStorage,
 };
 use crate::etiquettes::internal_error_chain::apply::lifetime;
 use crate::etiquettes::internal_error_chain::apply::{
@@ -69,7 +70,7 @@ pub(super) fn collect_conversion_units(
             all_sites[index].append(&mut sites[index]);
         }
     }
-    candidates
+    let mut units: Vec<_> = candidates
         .into_iter()
         .zip(all_sites)
         .map(|(candidate, sites)| {
@@ -81,13 +82,32 @@ pub(super) fn collect_conversion_units(
                     field_name: candidate.field_name,
                     name_ambiguous: candidate.name_ambiguous,
                     field: candidate.field,
+                    lifetime: LifetimeEvidence {
+                        target: candidate.initializer.target,
+                        edits: None,
+                    },
                     initializer: candidate.initializer,
                     sites,
                 },
                 candidate.line,
             )
         })
-        .collect()
+        .collect();
+    let files_by_path: HashMap<&Path, &SharedParsedFile> =
+        files.iter().map(|file| (file.path(), file)).collect();
+    for (unit, _) in &mut units {
+        if !unit.lifetime_candidate(unit.lifetime.target)
+            || unit.name_ambiguous
+            || !unit.field.private
+            || unit.sites.iter().any(|site| site.path != unit.declaration)
+        {
+            continue;
+        }
+        if let Some(file) = files_by_path.get(unit.declaration.as_path()) {
+            unit.lifetime.edits = lifetime::plan_for_unit(file, unit, unit.lifetime.target);
+        }
+    }
+    units
 }
 
 #[instrument(level = "debug", skip(files))]

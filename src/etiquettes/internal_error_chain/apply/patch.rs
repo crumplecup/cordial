@@ -4,15 +4,14 @@ use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
 use crate::error::{CordialError, CordialResult};
-use crate::loader::SharedParsedFile;
+use crate::loader::SourceEditView;
 
 use super::inventory::StringStorage;
-use super::lifetime;
 use super::{Edit, ErrorConversionUnit, ErrorFieldApplyBlocker, ErrorFieldApplyBlockerReason};
 
 #[instrument(level = "debug", skip(file, strategy, ir_units))]
 pub(super) fn patch_file(
-    file: &SharedParsedFile,
+    file: &SourceEditView,
     strategy: ErrorFieldStrategy,
     ir_units: &[ErrorConversionUnit],
     dry_run: bool,
@@ -43,7 +42,7 @@ pub(super) fn patch_file(
         let name_ambiguous = unit.name_ambiguous();
         let lifetime_candidate = unit.lifetime_candidate(strategy);
         if lifetime_candidate && !has_cross_file_reference && !name_ambiguous && field.private() {
-            if let Some(mut planned) = lifetime::plan_for_unit(file, &unit, strategy) {
+            if let Some(mut planned) = unit.lifetime_edits(strategy) {
                 edits.append(&mut planned);
                 pending.push((name.clone(), field_name));
                 converted += 1;
@@ -135,7 +134,7 @@ pub(super) fn patch_file(
 
 #[instrument(level = "debug", skip(file, edits, blockers, pending, units))]
 fn apply_planned_edits(
-    file: &SharedParsedFile,
+    file: &SourceEditView,
     mut edits: Vec<Edit>,
     converted: usize,
     mut blockers: Vec<ErrorFieldApplyBlocker>,

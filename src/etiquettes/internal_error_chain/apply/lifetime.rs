@@ -16,7 +16,7 @@ use super::initializers::{FieldKind, InitializerVisitor};
 use super::inventory::{ErrorConversionSiteKind, ErrorConversionUnit};
 use super::{Edit, is_str_ref_with_lifetime, is_string, simple_type_name, span_range};
 
-/// Keep syntax access for the special lifetime migration inside its planner.
+/// Collect a special lifetime migration from the shared parsed tree.
 #[instrument(level = "debug", skip(file, unit, strategy))]
 pub(super) fn plan_for_unit(
     file: &SharedParsedFile,
