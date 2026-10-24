@@ -67,6 +67,8 @@ pub struct ErrorConversionSite {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct ErrorConversionUnit {
     declaration: PathBuf,
+    #[getter(copy)]
+    source_digest: [u8; 32],
     type_name: String,
     field_name: String,
     #[getter(copy)]
@@ -115,6 +117,7 @@ pub(super) enum StringStorage {
 /// A field identified once from its declaration before site collection.
 struct ConversionCandidate {
     declaration: PathBuf,
+    source_digest: [u8; 32],
     type_name: String,
     field_name: String,
     line: u32,

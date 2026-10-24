@@ -7,6 +7,7 @@ mod clean;
 mod exceptions_cli;
 mod exceptions_edit;
 mod graph;
+mod graph_apply_sources;
 mod graph_sources;
 mod io;
 mod lint_order;

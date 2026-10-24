@@ -76,6 +76,7 @@ pub(super) fn collect_conversion_units(
             (
                 ErrorConversionUnit {
                     declaration: candidate.declaration,
+                    source_digest: candidate.source_digest,
                     type_name: candidate.type_name,
                     field_name: candidate.field_name,
                     name_ambiguous: candidate.name_ambiguous,
@@ -149,6 +150,7 @@ fn find_candidates(files: &[SharedParsedFile]) -> Vec<ConversionCandidate> {
                 };
                 candidates.push(ConversionCandidate {
                     declaration: file.path().to_path_buf(),
+                    source_digest: file.source_digest(),
                     type_name: type_name.clone(),
                     field_name,
                     line: field.span().start().line as u32,

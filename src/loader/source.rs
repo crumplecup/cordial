@@ -6,6 +6,8 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 
+use sha2::{Digest, Sha256};
+
 use crate::error::CordialResult;
 use crate::hooks::{LoadContext, Loader};
 use crate::ir::CrateKind;
@@ -127,6 +129,7 @@ struct ParsedSource {
     path: PathBuf,
     source: String,
     syntax: syn::File,
+    digest: [u8; 32],
     session: u64,
 }
 
@@ -141,6 +144,20 @@ impl SharedParsedFile {
     #[instrument(level = "trace", skip(self))]
     pub fn source(&self) -> &str {
         &self.inner.source
+    }
+
+    /// Digest of the exact source text that produced this syntax tree.
+    #[instrument(level = "trace", skip(self))]
+    pub fn source_digest(&self) -> [u8; 32] {
+        self.inner.digest
+    }
+
+    /// Whether the file still contains the bytes used to build this snapshot.
+    #[instrument(level = "debug", skip(self), err(level = "warn"))]
+    pub fn matches_disk(&self) -> CordialResult<bool> {
+        let current = std::fs::read(&self.inner.path)?;
+        let digest: [u8; 32] = Sha256::digest(current).into();
+        Ok(digest == self.inner.digest)
     }
 
     /// Syntax tree parsed from this file's source text.
@@ -245,11 +262,13 @@ impl SourceLoadView {
                 super::source_work::read(path, hook)?
             };
             let syntax = super::source_work::parse(&source, path, hook)?;
+            let digest = Sha256::digest(source.as_bytes()).into();
             let file = SharedParsedFile {
                 inner: Rc::new(ParsedSource {
                     path: path.to_path_buf(),
                     source,
                     syntax,
+                    digest,
                     session: self.cache_token.0,
                 }),
             };

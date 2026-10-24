@@ -7,10 +7,11 @@ use std::panic::Location;
 
 use tracing::instrument;
 
+use super::graph_apply_sources::{MissingConversionUnitSource, StaleSourceSnapshotSource};
 use super::graph_sources::{
-    CrateMustExistSource, EdgeReferencesMissingNodeSource, MissingConversionUnitSource,
-    NoLoadViewAvailableForEnricherSource, NoLoadViewForEnricherSource, SetAttrOnMissingNodeSource,
-    SnapshotEdgeFromInvalidSource, SnapshotEdgeMissingEndpointsSource, SnapshotEdgeToInvalidSource,
+    CrateMustExistSource, EdgeReferencesMissingNodeSource, NoLoadViewAvailableForEnricherSource,
+    NoLoadViewForEnricherSource, SetAttrOnMissingNodeSource, SnapshotEdgeFromInvalidSource,
+    SnapshotEdgeMissingEndpointsSource, SnapshotEdgeToInvalidSource,
     SourceEnricherWrongLoaderSource,
 };
 
@@ -28,6 +29,7 @@ pub enum GraphErrorKind {
     NoLoadViewAvailableForEnricher(NoLoadViewAvailableForEnricherSource),
     SourceEnricherWrongLoader(SourceEnricherWrongLoaderSource),
     MissingConversionUnit(MissingConversionUnitSource),
+    StaleSourceSnapshot(StaleSourceSnapshotSource),
 }
 
 #[derive(Debug)]
@@ -65,6 +67,7 @@ impl std::fmt::Display for GraphError {
             GraphErrorKind::NoLoadViewAvailableForEnricher(source) => source.fmt(formatter),
             GraphErrorKind::SourceEnricherWrongLoader(source) => source.fmt(formatter),
             GraphErrorKind::MissingConversionUnit(source) => source.fmt(formatter),
+            GraphErrorKind::StaleSourceSnapshot(source) => source.fmt(formatter),
         }
     }
 }
@@ -83,11 +86,21 @@ impl std::error::Error for GraphError {
             GraphErrorKind::NoLoadViewAvailableForEnricher(source) => Some(source),
             GraphErrorKind::SourceEnricherWrongLoader(source) => Some(source),
             GraphErrorKind::MissingConversionUnit(source) => Some(source),
+            GraphErrorKind::StaleSourceSnapshot(source) => Some(source),
         }
     }
 }
 
 impl super::CordialError {
+    /// An apply plan no longer matches the source file it would overwrite.
+    #[track_caller]
+    #[instrument(level = "debug", skip(path))]
+    pub fn stale_source_snapshot(path: &std::path::Path) -> Self {
+        Self::from_kind(super::CordialErrorKind::Graph(GraphError::new(
+            GraphErrorKind::StaleSourceSnapshot(StaleSourceSnapshotSource::new(path)),
+        )))
+    }
+
     /// A conversion candidate was absent from the shared IR.
     #[track_caller]
     #[instrument(level = "debug", skip(path, type_name, field_name))]

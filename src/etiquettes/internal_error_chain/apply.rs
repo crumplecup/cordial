@@ -8,7 +8,7 @@ use syn::{GenericParam, Item, ItemStruct, Type};
 use tracing::instrument;
 
 use crate::config::load_cordial_config;
-use crate::error::CordialResult;
+use crate::error::{CordialError, CordialResult};
 use crate::ir::CrateIr;
 use crate::loader::SourceLoadView;
 use crate::session::RunAll;
@@ -145,6 +145,7 @@ pub fn run_error_field_apply(
         })?;
         enrich_conversion_units(&mut ir, &files)?;
         let units = conversion_units_from_ir(&ir)?;
+        let mut planned = Vec::new();
         for file in &files {
             let (patched, converted, blockers, units) =
                 patch_file(file, policy.field_strategy(), &units, dry_run)?;
@@ -156,13 +157,21 @@ pub fn run_error_field_apply(
             }
             summary.blockers.extend(blockers);
             if let Some(patched) = patched {
-                if dry_run {
-                    tracing::info!(path = %file.path().display(), converted, "dry run: would update error field storage");
-                } else {
-                    std::fs::write(file.path(), patched)?;
-                }
-                summary.changed_files += 1;
+                planned.push((file, patched, converted));
             }
+        }
+        for (file, _, _) in &planned {
+            if !file.matches_disk()? {
+                return Err(CordialError::stale_source_snapshot(file.path()));
+            }
+        }
+        for (file, patched, converted) in planned {
+            if dry_run {
+                tracing::info!(path = %file.path().display(), converted, "dry run: would update error field storage");
+            } else {
+                std::fs::write(file.path(), patched)?;
+            }
+            summary.changed_files += 1;
         }
     }
     Ok(summary)

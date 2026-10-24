@@ -3,7 +3,7 @@
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
-use crate::error::CordialResult;
+use crate::error::{CordialError, CordialResult};
 use crate::loader::SharedParsedFile;
 
 use super::inventory::StringStorage;
@@ -31,6 +31,9 @@ pub(super) fn patch_file(
         .iter()
         .filter(|unit| unit.declaration() == file.path())
     {
+        if unit.source_digest() != file.source_digest() {
+            return Err(CordialError::stale_source_snapshot(file.path()));
+        }
         let unit = unit.clone();
         let name = unit.type_name().clone();
         let field_name = unit.field_name().clone();

@@ -26,6 +26,7 @@ fn source_view_reuses_the_same_snapshot_and_tree() -> miette::Result<()> {
     assert_eq!(first.path(), path);
     assert_eq!(first.source(), "fn original() {}");
     assert_eq!(first.syntax().items.len(), 1);
+    assert!(first.matches_disk().into_diagnostic()?);
 
     fs::write(src_root.join("skip.rs"), "fn excluded() {}").into_diagnostic()?;
     let selected = view
@@ -35,6 +36,7 @@ fn source_view_reuses_the_same_snapshot_and_tree() -> miette::Result<()> {
     assert!(std::ptr::eq(first.syntax(), selected[0].syntax()));
 
     fs::write(&path, "fn changed() {}").into_diagnostic()?;
+    assert!(!first.matches_disk().into_diagnostic()?);
     let second = view.parsed_file(&path, "second").into_diagnostic()?;
     assert!(std::ptr::eq(first.syntax(), second.syntax()));
     assert_eq!(second.source(), "fn original() {}");
@@ -48,6 +50,8 @@ fn source_view_reuses_the_same_snapshot_and_tree() -> miette::Result<()> {
         .ok_or_else(|| miette::miette!("source loader returned another view"))?;
     let fresh = fresh_view.parsed_file(&path, "fresh").into_diagnostic()?;
     assert_eq!(fresh.source(), "fn changed() {}");
+    assert!(fresh.matches_disk().into_diagnostic()?);
+    assert_ne!(first.source_digest(), fresh.source_digest());
     assert!(!std::ptr::eq(first.syntax(), fresh.syntax()));
     Ok(())
 }

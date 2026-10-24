@@ -280,4 +280,7 @@ Implementation checkpoints:
   forwarding-return evidence into IR, then give apply a source-text-only edit
   view with no `syntax()` method.
 - [ ] Add source-digest checks and whole-unit writes before allowing cross-file
-  conversions. Keep unknown name, cfg, or macro edges as explicit blockers.
+  conversions. Shared source snapshots and conversion units now carry digests;
+  apply rejects mismatched IR facts and checks every planned file against disk
+  before writing a crate target. Multi-file writes are not yet atomic. Keep
+  unknown name, cfg, or macro edges as explicit blockers.
