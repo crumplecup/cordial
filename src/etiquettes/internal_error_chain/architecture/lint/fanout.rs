@@ -20,16 +20,17 @@ impl Catalog {
         findings: &mut Vec<InternalErrorComplianceFinding>,
     ) -> CordialResult<()> {
         let mut sites: BTreeMap<FanoutTarget, BTreeMap<(PathBuf, u32), String>> = BTreeMap::new();
+        // Keyed by (owning type, name) only -- never by the file/module
+        // the wrapper happens to be defined in. A wrapper constructor
+        // such as `AmenableError::io`/`::invariant` is defined once and
+        // meant to be called from every other file in the crate; a
+        // file-scoped key silently dropped all of those real calls.
         let wrappers: HashMap<_, _> = self
             .fanout_wrappers()
             .iter()
             .map(|wrapper| {
                 (
-                    (
-                        wrapper.file().as_path(),
-                        wrapper.module().as_slice(),
-                        wrapper.name().as_str(),
-                    ),
+                    (wrapper.self_ty().as_deref(), wrapper.name().as_str()),
                     wrapper.target(),
                 )
             })
@@ -39,11 +40,7 @@ impl Catalog {
                 Some(target)
             } else {
                 wrappers
-                    .get(&(
-                        call.file().as_path(),
-                        call.module().as_slice(),
-                        call.callee().as_str(),
-                    ))
+                    .get(&(call.self_ty().as_deref(), call.callee().as_str()))
                     .copied()
             };
             let Some(target) = target.and_then(|target| self.resolved_fanout_target(target)) else {

@@ -3,7 +3,8 @@
 use std::path::PathBuf;
 
 use syn::{
-    Expr, FnArg, GenericArgument, Lit, Pat, PathArguments, ReturnType, Signature, Stmt, Type,
+    Expr, FnArg, GenericArgument, Lit, Pat, PathArguments, ReturnType, Signature, Stmt, Token,
+    Type, punctuated::Punctuated,
 };
 use tracing::instrument;
 
@@ -16,10 +17,16 @@ pub(crate) struct FanoutTarget {
     source: String,
 }
 
+/// A wrapper constructor is matched by its owning type (`None` for a
+/// free function) plus its own name -- never by the file/module it
+/// happens to be defined in. These constructors (`AmenableError::io`,
+/// `::invariant`, and similar) are deliberately defined once and
+/// called from every other file in the crate; keying the match on the
+/// definition site's file silently dropped every one of those calls.
 #[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub(crate) struct FanoutWrapper {
     file: PathBuf,
-    module: Vec<String>,
+    self_ty: Option<String>,
     name: String,
     #[getter(copy)]
     line: u32,
@@ -29,9 +36,9 @@ pub(crate) struct FanoutWrapper {
 #[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
 pub(crate) struct FanoutCall {
     file: PathBuf,
-    module: Vec<String>,
     #[getter(copy)]
     line: u32,
+    self_ty: Option<String>,
     callee: String,
     target: Option<FanoutTarget>,
     literal: String,
@@ -168,14 +175,48 @@ pub(super) fn literal_string(expr: &Expr) -> Option<String> {
         {
             literal_string(&call.receiver)
         }
+        // `format!("...", data)` is still one real call site worth
+        // counting for fan-out, not a reason to drop the call from
+        // consideration entirely -- its template is the distinguishing
+        // text, same role a bare literal plays above. Interpolated
+        // runtime data never changes which call site produced it.
+        Expr::Macro(mac)
+            if mac
+                .mac
+                .path
+                .segments
+                .last()
+                .is_some_and(|segment| segment.ident == "format") =>
+        {
+            let args = mac
+                .mac
+                .parse_body_with(Punctuated::<Expr, Token![,]>::parse_terminated)
+                .ok()?;
+            match args.first()? {
+                Expr::Lit(lit) => match &lit.lit {
+                    Lit::Str(value) => Some(value.value()),
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
         _ => None,
     }
 }
 
+/// The owning type (`None` for a free function) and name of a call's
+/// callee, so `AmenableError::invariant(...)` resolves the same way a
+/// wrapper constructor defined on that type does -- matching by name
+/// alone, the way `call_name` used to, silently rejected every
+/// qualified associated-function call before it even reached the
+/// wrapper lookup.
 #[instrument(level = "trace", skip(expr))]
-pub(super) fn call_name(expr: &Expr) -> Option<String> {
+pub(super) fn call_owner_and_name(expr: &Expr) -> Option<(Option<String>, String)> {
     let path = call_path(expr)?;
-    (path.segments.len() == 1).then(|| path.segments[0].ident.to_string())
+    let mut segments = path.segments.iter().rev();
+    let name = segments.next()?.ident.to_string();
+    let owner = segments.next().map(|segment| segment.ident.to_string());
+    Some((owner, name))
 }
 
 #[instrument(level = "trace", skip(expr))]

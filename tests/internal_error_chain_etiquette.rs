@@ -1674,6 +1674,89 @@ fn f() { let _ = InvalidSource::new("invalid calendar"); }
     Ok(())
 }
 
+/// `AmenableError::io`/`::invariant`-shaped wrappers: defined once as a
+/// method inside `impl DomainError { }` (never a bare top-level `fn`),
+/// then called through the qualified path `DomainError::invalid(...)`
+/// from other files, some with `format!()` interpolation. Each of
+/// those three traits independently hid the whole class of call from
+/// fan-out detection before the fix in catalog/visitor.rs and
+/// catalog/fanout.rs: `visit_item_fn` never saw the impl method,
+/// `call_name` rejected the 2-segment call path, and even a
+/// same-named free-function wrapper would have been keyed by its own
+/// definition file, which the real call sites never share.
+#[test]
+fn kind_fanout_catches_impl_block_wrapper_called_by_qualified_path_across_files()
+-> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic()?;
+    let src = fixture.path().join("src");
+    fs::create_dir_all(&src).into_diagnostic()?;
+    fs::write(src.join("lib.rs"), "mod error; mod alpha; mod beta;\n").into_diagnostic()?;
+    fs::write(
+        src.join("error.rs"),
+        r#"
+pub struct DomainError { kind: Box<DomainKind> }
+pub enum DomainKind { Invalid(InvalidSource) }
+pub struct InvalidSource { detail: String, file: String, line: u32 }
+impl InvalidSource {
+    pub fn new(detail: impl Into<String>) -> Self {
+        Self { detail: detail.into(), file: String::new(), line: 0 }
+    }
+}
+impl std::error::Error for InvalidSource {}
+impl DomainError {
+    pub fn new(kind: DomainKind) -> Self {
+        Self { kind: Box::new(kind) }
+    }
+    pub fn invalid(detail: impl Into<String>) -> Self {
+        Self::new(DomainKind::Invalid(InvalidSource::new(detail)))
+    }
+}
+"#,
+    )
+    .into_diagnostic()?;
+    fs::write(
+        src.join("alpha.rs"),
+        r#"
+use crate::error::DomainError;
+fn a(id: &str) { DomainError::invalid(format!("unknown id: {id}")); }
+fn b() { DomainError::invalid("hour overflow"); }
+"#,
+    )
+    .into_diagnostic()?;
+    fs::write(
+        src.join("beta.rs"),
+        r#"
+use crate::error::DomainError;
+fn c(path: &str) { DomainError::invalid(format!("missing path: {path}")); }
+fn d() { DomainError::invalid("month overflow"); }
+"#,
+    )
+    .into_diagnostic()?;
+    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    let fanout: Vec<_> = report
+        .compliance()
+        .findings()
+        .iter()
+        .filter(|finding| finding.rule_id() == InternalErrorComplianceId::ArchKindFanout001)
+        .collect();
+    assert_eq!(fanout.len(), 1, "{fanout:?}");
+    assert_eq!(fanout[0].context(), "DomainKind::Invalid");
+    for literal in [
+        "unknown id: {id}",
+        "hour overflow",
+        "missing path: {path}",
+        "month overflow",
+    ] {
+        assert!(
+            fanout[0].snippet().contains(literal),
+            "missing {literal}: {}",
+            fanout[0].snippet()
+        );
+    }
+    Ok(())
+}
+
 #[test]
 fn kind_fanout_anchors_external_kind_at_wrapper_and_ignores_branching() -> miette::Result<()> {
     cordial::init_tracing();
