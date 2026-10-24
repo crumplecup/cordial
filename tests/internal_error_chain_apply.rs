@@ -279,6 +279,43 @@ fn make<'a>(message: &'a str) -> MessageError {
 }
 
 #[test]
+fn error_lifetime_round_trips_with_scalar_constructor_argument() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String, line: u32 }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} at {}", self.message, self.line)
+    }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new<'a>(message: &'a str, line: u32) -> Self {
+        Self { message: String::from(message), line }
+    }
+}
+fn caller() {
+    let _ = MessageError::new("hello", 7);
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let root = fixture.path();
+    let borrowed = run_error_file_apply(root, root, None, false).into_diagnostic()?;
+    assert_eq!(borrowed.converted_fields(), 1);
+    let changed = source(root)?;
+    assert!(changed.contains("struct MessageError<'a> { message: &'a str, line: u32 }"));
+    assert!(changed.contains("fn new(message: &'a str, line: u32)"));
+    check_fixture(root)?;
+
+    set_strategy(root, "owned")?;
+    let owned = run_error_file_apply(root, root, None, false).into_diagnostic()?;
+    assert_eq!(owned.converted_fields(), 1);
+    assert!(source(root)?.contains("struct MessageError { message: String, line: u32 }"));
+    check_fixture(root)?;
+    Ok(())
+}
+
+#[test]
 fn new_lifetime_declines_explicit_type_use_outside_impls() -> miette::Result<()> {
     cordial::init_tracing();
     let original = r#"#[derive(Debug)]

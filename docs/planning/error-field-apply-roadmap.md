@@ -192,7 +192,8 @@ whole unit, and write its files atomically before extending slices 2 and 3.
 
 The first lifetime planner handles a closed, private error with one migrated
 string field and optional scalar `Copy` context fields, whose
-one constructor has an explicit named lifetime on its `&str` parameter. It
+one constructor has an explicit named lifetime on its `&str` parameter. The
+constructor can take matching scalar context parameters. It
 moves that lifetime from the constructor method to the error type and its
 `Display`/`Error` impls, and reverses the move under owned strategy. Direct
 associated constructor calls may keep type inference. A private function with

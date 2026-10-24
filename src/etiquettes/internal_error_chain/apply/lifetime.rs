@@ -80,3 +80,34 @@ pub(super) fn is_candidate(
                     && matches!(&*reference.elem, Type::Path(path) if path.path.is_ident("str"))),
         }
 }
+
+#[instrument(level = "trace", skip(ty))]
+fn scalar_copy_name(ty: &Type) -> Option<&syn::Ident> {
+    let Type::Path(path) = ty else {
+        return None;
+    };
+    if path.qself.is_some() || path.path.segments.len() != 1 {
+        return None;
+    }
+    let segment = path.path.segments.first()?;
+    (matches!(
+        segment.ident.to_string().as_str(),
+        "bool"
+            | "char"
+            | "u8"
+            | "u16"
+            | "u32"
+            | "u64"
+            | "u128"
+            | "usize"
+            | "i8"
+            | "i16"
+            | "i32"
+            | "i64"
+            | "i128"
+            | "isize"
+            | "f32"
+            | "f64"
+    ) && matches!(segment.arguments, syn::PathArguments::None))
+    .then_some(&segment.ident)
+}

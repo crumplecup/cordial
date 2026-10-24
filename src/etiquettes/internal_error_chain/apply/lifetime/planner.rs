@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{GenericParam, ImplItem, ItemStruct, Type};
+use syn::{GenericParam, ImplItem, ItemStruct};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
@@ -13,9 +13,9 @@ use crate::loader::SharedParsedFile;
 use super::super::initializers::{FieldKind, InitializerVisitor, impl_uses_lifetime};
 use super::super::inventory::{ErrorConversionSiteKind, ErrorConversionUnit};
 use super::super::{Edit, is_str_ref_with_lifetime, is_string, span_range};
-use super::LifetimeFileIndex;
 use super::forwarding::forwarding_return;
 use super::methods::{constructor_lifetime, constructor_signature, edit_impl};
+use super::{LifetimeFileIndex, scalar_copy_name};
 
 /// Move the one constructor lifetime onto the private error type, or undo it.
 ///
@@ -44,7 +44,7 @@ pub(super) fn plan(
     if fields
         .named
         .iter()
-        .any(|other| other.ident != field.ident && !is_scalar_copy_type(&other.ty))
+        .any(|other| other.ident != field.ident && scalar_copy_name(&other.ty).is_none())
     {
         return None;
     }
@@ -118,7 +118,7 @@ pub(super) fn plan(
             let Some(ImplItem::Fn(method)) = implementation.items.first() else {
                 return None;
             };
-            if !constructor_signature(method, field_name, &lifetime, strategy) {
+            if !constructor_signature(method, item, field_name, &lifetime, strategy) {
                 return None;
             }
             constructors += 1;
@@ -196,34 +196,4 @@ pub(super) fn plan(
         edit_impl(file, implementation, &lifetime, strategy, &mut edits)?;
     }
     Some(edits)
-}
-
-#[instrument(level = "trace", skip(ty))]
-fn is_scalar_copy_type(ty: &Type) -> bool {
-    let Type::Path(path) = ty else {
-        return false;
-    };
-    path.qself.is_none()
-        && path.path.segments.len() == 1
-        && path.path.segments.first().is_some_and(|segment| {
-            matches!(
-                segment.ident.to_string().as_str(),
-                "bool"
-                    | "char"
-                    | "u8"
-                    | "u16"
-                    | "u32"
-                    | "u64"
-                    | "u128"
-                    | "usize"
-                    | "i8"
-                    | "i16"
-                    | "i32"
-                    | "i64"
-                    | "i128"
-                    | "isize"
-                    | "f32"
-                    | "f64"
-            ) && matches!(segment.arguments, syn::PathArguments::None)
-        })
 }

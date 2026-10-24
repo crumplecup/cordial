@@ -1,14 +1,14 @@
 //! Constructor and impl edits for lifetime migration.
 
 use syn::spanned::Spanned;
-use syn::{FnArg, GenericParam, ImplItem, ItemImpl, Pat, ReturnType, Type};
+use syn::{FnArg, GenericParam, ImplItem, ItemImpl, ItemStruct, Pat, ReturnType, Type};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
 use super::super::{Edit, is_str_ref_with_lifetime, simple_type_name, span_range};
-use super::LifetimeFileIndex;
+use super::{LifetimeFileIndex, scalar_copy_name};
 
 #[instrument(level = "debug", skip(index))]
 pub(super) fn constructor_lifetime(
@@ -36,9 +36,10 @@ pub(super) fn constructor_lifetime(
     found
 }
 
-#[instrument(level = "debug", skip(method, strategy))]
+#[instrument(level = "debug", skip(method, item, strategy))]
 pub(super) fn constructor_signature(
     method: &syn::ImplItemFn,
+    item: &ItemStruct,
     field_name: &str,
     lifetime: &str,
     strategy: ErrorFieldStrategy,
@@ -48,7 +49,7 @@ pub(super) fn constructor_signature(
         || matches!(method.sig.safety, syn::Safety::Unsafe(_))
         || method.sig.constness.is_some()
         || method.sig.generics.where_clause.is_some()
-        || method.sig.inputs.len() != 1
+        || method.sig.inputs.is_empty()
         || !matches!(&method.sig.output, ReturnType::Type(_, ty) if matches!(&**ty, Type::Path(path) if path.path.is_ident("Self")))
     {
         return false;
@@ -61,10 +62,31 @@ pub(super) fn constructor_signature(
         }
         ErrorFieldStrategy::Owned => method.sig.generics.params.is_empty(),
     };
+    let syn::Fields::Named(fields) = &item.fields else {
+        return false;
+    };
     valid_generics
         && matches!(method.sig.inputs.first(), Some(FnArg::Typed(arg))
         if matches!(&*arg.pat, Pat::Ident(pat) if pat.ident == field_name && pat.subpat.is_none())
             && is_str_ref_with_lifetime(&arg.ty, lifetime))
+        && method.sig.inputs.iter().skip(1).all(|input| {
+            let FnArg::Typed(argument) = input else {
+                return false;
+            };
+            let Pat::Ident(pattern) = &*argument.pat else {
+                return false;
+            };
+            if pattern.subpat.is_some() || pattern.by_ref.is_some() || pattern.mutability.is_some()
+            {
+                return false;
+            }
+            fields.named.iter().any(|field| {
+                field.ident.as_ref() == Some(&pattern.ident)
+                    && pattern.ident != field_name
+                    && scalar_copy_name(&field.ty)
+                        .is_some_and(|name| scalar_copy_name(&argument.ty) == Some(name))
+            })
+        })
 }
 
 #[instrument(level = "debug", skip(file, implementation, strategy, edits))]
