@@ -1,6 +1,6 @@
 //! A closed single-field lifetime migration in either direction.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -16,18 +16,49 @@ use super::initializers::{FieldKind, InitializerVisitor};
 use super::inventory::{ErrorConversionSiteKind, ErrorConversionUnit};
 use super::{Edit, is_str_ref_with_lifetime, is_string, simple_type_name, span_range};
 
+/// Top-level syntax facts shared by every lifetime candidate in one file.
+pub(super) struct LifetimeFileIndex<'a> {
+    structs: HashMap<String, &'a ItemStruct>,
+    impls: HashMap<String, Vec<&'a ItemImpl>>,
+    functions: Vec<&'a ItemFn>,
+}
+
+impl<'a> LifetimeFileIndex<'a> {
+    #[instrument(level = "debug", skip(syntax))]
+    pub(super) fn new(syntax: &'a syn::File) -> Self {
+        let mut index = Self {
+            structs: HashMap::new(),
+            impls: HashMap::new(),
+            functions: Vec::new(),
+        };
+        for item in &syntax.items {
+            match item {
+                Item::Struct(item) => {
+                    index.structs.entry(item.ident.to_string()).or_insert(item);
+                }
+                Item::Impl(item) => {
+                    if let Some(name) = simple_type_name(&item.self_ty) {
+                        index.impls.entry(name).or_default().push(item);
+                    }
+                }
+                Item::Fn(item) => index.functions.push(item),
+                _ => {}
+            }
+        }
+        index
+    }
+}
+
 /// Collect a special lifetime migration from the shared parsed tree.
-#[instrument(level = "debug", skip(file, unit, strategy))]
+#[instrument(level = "debug", skip(file, index, unit, strategy))]
 pub(super) fn plan_for_unit(
     file: &SharedParsedFile,
+    index: &LifetimeFileIndex<'_>,
     unit: &ErrorConversionUnit,
     strategy: ErrorFieldStrategy,
 ) -> Option<Vec<Edit>> {
-    let item = file.syntax().items.iter().find_map(|item| match item {
-        Item::Struct(item) if item.ident == unit.type_name().as_str() => Some(item),
-        _ => None,
-    })?;
-    plan(file, item, unit.field_name(), unit, strategy)
+    let item = index.structs.get(unit.type_name())?;
+    plan(file, index, item, unit.field_name(), unit, strategy)
 }
 
 #[instrument(level = "trace", skip(item, field, kind, strategy))]
@@ -53,9 +84,10 @@ pub(super) fn is_candidate(
 /// This deliberately accepts only a single-field, single-constructor unit.
 /// Type mentions must be impl self types or direct forwarding function returns;
 /// inference-based direct calls are safe because their signatures remain unchanged.
-#[instrument(level = "debug", skip(file, item, unit, strategy))]
+#[instrument(level = "debug", skip(file, index, item, unit, strategy))]
 pub(super) fn plan(
     file: &SharedParsedFile,
+    index: &LifetimeFileIndex<'_>,
     item: &ItemStruct,
     field_name: &str,
     unit: &ErrorConversionUnit,
@@ -70,7 +102,7 @@ pub(super) fn plan(
     let field = fields.named.first()?;
     let lifetime = match strategy {
         ErrorFieldStrategy::Borrowed if is_string(&field.ty) && item.generics.params.is_empty() => {
-            constructor_lifetime(file, &item.ident.to_string())?
+            constructor_lifetime(index, &item.ident.to_string())?
         }
         ErrorFieldStrategy::Owned if item.generics.params.len() == 1 => {
             let GenericParam::Lifetime(param) = item.generics.params.first()? else {
@@ -97,13 +129,12 @@ pub(super) fn plan(
     let mut allowed_type_uses = BTreeSet::new();
     let mut constructors = 0;
     let mut constructor_name = None;
-    for syntax_item in &file.syntax().items {
-        let Item::Impl(implementation) = syntax_item else {
-            continue;
-        };
-        if simple_type_name(&implementation.self_ty).as_deref() != Some(&item.ident.to_string()) {
-            continue;
-        }
+    for &implementation in index
+        .impls
+        .get(&item.ident.to_string())
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+    {
         if !implementation.attrs.is_empty()
             || implementation.unsafety.is_some()
             || implementation.modifiers.defaultness.is_some()
@@ -153,10 +184,7 @@ pub(super) fn plan(
         return None;
     }
     let mut return_edits = Vec::new();
-    for syntax_item in &file.syntax().items {
-        let Item::Fn(function) = syntax_item else {
-            continue;
-        };
+    for &function in &index.functions {
         if let Some((position, edit)) = forwarding_return(
             file,
             function,
@@ -319,16 +347,11 @@ fn forwarding_return(
     ))
 }
 
-#[instrument(level = "debug", skip(file))]
-fn constructor_lifetime(file: &SharedParsedFile, type_name: &str) -> Option<String> {
+#[instrument(level = "debug", skip(index))]
+fn constructor_lifetime(index: &LifetimeFileIndex<'_>, type_name: &str) -> Option<String> {
     let mut found = None;
-    for item in &file.syntax().items {
-        let Item::Impl(implementation) = item else {
-            continue;
-        };
-        if implementation.trait_.is_some()
-            || simple_type_name(&implementation.self_ty).as_deref() != Some(type_name)
-        {
+    for &implementation in index.impls.get(type_name).map(Vec::as_slice).unwrap_or(&[]) {
+        if implementation.trait_.is_some() {
             continue;
         }
         let [ImplItem::Fn(method)] = implementation.items.as_slice() else {

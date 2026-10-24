@@ -219,9 +219,10 @@ borrowed and owned round trips plus no partial write on an unresolved edge.
 
 `quality --apply` now builds the same `SourceLoadView` as normal sessions and
 reads conversion units from the error IR. Its site collector identifies
-candidates first, then visits each shared syntax tree once per file to attach
-construction and use sites. The special lifetime collector still makes
-additional visits to that same shared tree for candidate units. Parsing patched
+  candidates first, then visits each shared syntax tree once per file to attach
+construction and use sites. The special lifetime collector indexes top-level
+items once per relevant file, though it still visits candidate initializer
+expressions separately. Parsing patched
 text is a separate validation step. Field declarations, storage shape,
 visibility, initializer choices, lifetime edits, field-use blockers, and
 ambiguous-name decisions now travel in typed conversion-unit IR records. Apply
@@ -278,7 +279,8 @@ Implementation checkpoints:
   facts. The ordinary field planner now reads declaration and initializer
   facts from each conversion unit. The special lifetime planner now runs during
   collection and serializes its proven edits into the unit. Extract its
-  signature, impl, and forwarding-return facts to avoid repeated tree walks.
+  signature, impl, and forwarding-return facts to avoid repeated inner tree
+  walks. A per-file top-level index now serves every lifetime candidate.
   Apply now receives `SourceEditView`, which exposes text and digest but no
   `syntax()` method.
 - [ ] Add source-digest checks and whole-unit writes before allowing cross-file

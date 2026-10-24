@@ -95,6 +95,21 @@ pub(super) fn collect_conversion_units(
         .collect();
     let files_by_path: HashMap<&Path, &SharedParsedFile> =
         files.iter().map(|file| (file.path(), file)).collect();
+    let lifetime_paths: HashSet<&Path> = units
+        .iter()
+        .filter(|(unit, _)| {
+            unit.lifetime_candidate(unit.lifetime.target)
+                && !unit.name_ambiguous
+                && unit.field.private
+                && unit.sites.iter().all(|site| site.path == unit.declaration)
+        })
+        .map(|(unit, _)| unit.declaration.as_path())
+        .collect();
+    let lifetime_indexes: HashMap<_, _> = files
+        .iter()
+        .filter(|file| lifetime_paths.contains(file.path()))
+        .map(|file| (file.path(), lifetime::LifetimeFileIndex::new(file.syntax())))
+        .collect();
     for (unit, _) in &mut units {
         if !unit.lifetime_candidate(unit.lifetime.target)
             || unit.name_ambiguous
@@ -103,8 +118,11 @@ pub(super) fn collect_conversion_units(
         {
             continue;
         }
-        if let Some(file) = files_by_path.get(unit.declaration.as_path()) {
-            unit.lifetime.edits = lifetime::plan_for_unit(file, unit, unit.lifetime.target);
+        if let (Some(file), Some(index)) = (
+            files_by_path.get(unit.declaration.as_path()),
+            lifetime_indexes.get(unit.declaration.as_path()),
+        ) {
+            unit.lifetime.edits = lifetime::plan_for_unit(file, index, unit, unit.lifetime.target);
         }
     }
     units
