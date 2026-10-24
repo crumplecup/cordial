@@ -38,8 +38,9 @@ It recognizes `to_string`, `to_owned`, `into`, and selected `String::from` forms
 It mirrors those conversions back to owned `String`. A private error type with
 one existing named lifetime and a separate non-string lifetime-bearing field
 can also borrow constructor parameters and typed local aliases tied to that
-same lifetime. A closed private single-field error can move an explicit
-constructor lifetime onto its type and back. It uses a shared parsed file view
+same lifetime. A closed private error with one string field and optional scalar
+context can move an explicit constructor lifetime onto its type and back. It
+uses a shared parsed file view
 while scanning and checks that edited source parses. It leaves unrelated
 dynamic constructor parameters, wider lifetime propagation, `source` and `kind`,
 public types, and cross-file uses untouched. See
@@ -189,7 +190,8 @@ unresolved. Broader conversion planners must require a closed unit, plan every
 field, constructor, caller, signature, and error edge together, validate the
 whole unit, and write its files atomically before extending slices 2 and 3.
 
-The first lifetime planner handles a closed, private, single-field error whose
+The first lifetime planner handles a closed, private error with one migrated
+string field and optional scalar `Copy` context fields, whose
 one constructor has an explicit named lifetime on its `&str` parameter. It
 moves that lifetime from the constructor method to the error type and its
 `Display`/`Error` impls, and reverses the move under owned strategy. Direct
@@ -198,8 +200,9 @@ the same named input lifetime can forward that input directly to the one
 constructor; its explicit return type changes with the error type in both
 directions. Other explicit type uses still block the edit until their containing
 signatures and callers can be planned together. Compile-checked fixtures cover
-the round trip, dry run, repeat apply, and that blocker. Multiple fields,
-constructors, files, and typed source/Kind edges remain outside this planner.
+the round trip, dry run, repeat apply, and that blocker. Additional owned or
+borrowed fields, multiple constructors or files, and typed source/Kind edges
+remain outside this planner.
 
 ### Next boundary: Kind and source graph
 
