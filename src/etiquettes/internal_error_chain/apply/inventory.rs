@@ -7,9 +7,11 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use tracing::instrument;
+mod batch;
+mod collection;
 mod graph;
 mod helpers;
-mod visitor;
 
 pub(crate) use graph::{conversion_units_from_ir, enrich_conversion_units};
 
@@ -65,4 +67,43 @@ pub struct ErrorConversionUnit {
     type_name: String,
     field_name: String,
     sites: Vec<ErrorConversionSite>,
+}
+
+/// A field identified once from its declaration before site collection.
+struct ConversionCandidate {
+    declaration: PathBuf,
+    type_name: String,
+    field_name: String,
+    line: u32,
+    name_ambiguous: bool,
+}
+
+impl ErrorConversionUnit {
+    /// Whether every recorded path is understood well enough to plan a unit.
+    #[instrument(level = "trace", skip(self))]
+    pub fn is_closed(&self) -> bool {
+        self.sites.iter().all(|site| site.resolved)
+            && self
+                .sites
+                .iter()
+                .any(|site| site.kind == ErrorConversionSiteKind::Constructor)
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn blocks_existing_field_edit(&self) -> bool {
+        self.sites.iter().any(|site| {
+            (!site.resolved && site.path != self.declaration)
+                || (!site.resolved
+                    && matches!(
+                        site.kind,
+                        ErrorConversionSiteKind::FieldUse
+                            | ErrorConversionSiteKind::FieldPattern
+                            | ErrorConversionSiteKind::Alias
+                            | ErrorConversionSiteKind::Macro
+                            | ErrorConversionSiteKind::CrossFileReference
+                            | ErrorConversionSiteKind::Constructor
+                            | ErrorConversionSiteKind::GeneratedConstructor
+                    ))
+        })
+    }
 }

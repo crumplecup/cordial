@@ -209,21 +209,15 @@ borrowed and owned round trips plus no partial write on an unresolved edge.
 
 ### Pipeline contract for broader apply
 
-Today `quality --apply` bypasses the normal load/enrich/probe route and starts
-its own source pass. Within that command, `SourceLoadView` parses each original
-file once and reuses the snapshot; parsing patched text is a separate validation
-step. The duplication is architectural: apply has its own scan and builds
-`ErrorConversionUnit` while visiting each candidate field, instead of consuming
-facts collected for the normal error pipeline. The normal pipeline already
-loads `SharedParsedFile` snapshots and scans error facts, but its materialized
-IR contains findings and a coarse type graph, not the evidence needed to edit
-a complete conversion unit. First route apply through shared collection and
-enrichment; then move candidate discovery upstream: collect file-local facts
-once per parsed file and resolve and connect them in the shared IR. Apply must
-query that IR for the complete conversion unit. It may read source text for
-located edits, but it must not scan the syntax tree or reconstruct semantic
-facts in a parallel inventory. A missing fact belongs in collection or
-enrichment, not in an apply-specific fallback.
+`quality --apply` now builds the same `SourceLoadView` as normal sessions and
+reads conversion units from the error IR. Its site collector identifies
+candidates first, then visits each shared syntax tree once per file to attach
+construction and use sites. Parsing patched text is a separate validation step.
+The remaining duplication is in the edit planner: it still reads the syntax
+tree for initializer, field-use, and lifetime decisions. Those facts need to
+move into typed IR records so apply can query a complete conversion unit and
+read source text only for located edits. A missing fact belongs in collection
+or enrichment, not in an apply-specific fallback.
 
 | Stage | Facts or responsibility |
 | --- | --- |
@@ -264,9 +258,12 @@ Implementation checkpoints:
 - [x] Build apply's source view with the same loader as normal sessions, and
   materialize conversion units as typed graph facts in the error IR enricher.
   Apply now reads those units through `IrView` and fails if one is missing.
-- [ ] Collect conversion sites once per file. The current collector still
-  visits each source tree once per candidate field, though it reuses the parsed
-  tree and stores the resulting unit in the graph.
+- [x] Collect conversion sites once per file. Candidate declarations are
+  identified first; a single visitor per shared source tree dispatches located
+  sites to every relevant field, then the units are materialized in the graph.
+  The collector still checks candidate names against each file's text before
+  walking it, and name-resolution work inside selected hooks remains a possible
+  optimization target.
 - [ ] Move initializer, field-use, and lifetime-planning evidence into typed IR
   facts. The current edit planner still reads `SharedParsedFile::syntax()`;
   replace that access with `IrView` plus a source-text-only edit view.

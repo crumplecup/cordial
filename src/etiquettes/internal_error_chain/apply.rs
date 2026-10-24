@@ -292,10 +292,3 @@ fn span_range(source: &str, span: proc_macro2::Span) -> Option<(usize, usize)> {
         offset(span.end().line, span.end().column)?,
     ))
 }
-
-#[instrument(level = "debug", skip(source))]
-fn source_has_ident(source: &str, name: &str) -> bool {
-    source
-        .split(|ch: char| !ch.is_alphanumeric() && ch != '_')
-        .any(|part| part == name)
-}

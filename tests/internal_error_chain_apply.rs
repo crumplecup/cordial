@@ -67,6 +67,7 @@ struct MessageError { message: String }
 impl std::fmt::Display for MessageError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
 }
+
 impl std::error::Error for MessageError {}
 impl MessageError { fn new() -> Self { Self { message: "fixed".to_owned() } } }
 macro_rules! hidden { () => { MessageError { message: "hidden".to_owned() } }; }
@@ -103,6 +104,55 @@ mod sibling;
     Ok(())
 }
 
+#[test]
+fn one_file_visit_keeps_sites_separate_for_multiple_error_fields() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+struct MessageError { message: String }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError { fn new() -> Self { Self { message: "message".to_owned() } } }
+
+#[derive(Debug)]
+struct DetailError { detail: String }
+impl std::fmt::Display for DetailError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.detail) }
+}
+impl std::error::Error for DetailError {}
+impl DetailError { fn new() -> Self { Self { detail: "detail".to_owned() } } }
+
+fn callers() { let _ = MessageError::new(); let _ = DetailError::new(); }
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let summary =
+        run_error_file_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
+    assert_eq!(summary.conversion_units().len(), 2);
+    for (type_name, field_name) in [("MessageError", "message"), ("DetailError", "detail")] {
+        let unit = summary
+            .conversion_units()
+            .iter()
+            .find(|unit| unit.type_name() == type_name && unit.field_name() == field_name)
+            .wrap_err("candidate conversion unit")?;
+        assert_eq!(
+            unit.sites()
+                .iter()
+                .filter(|site| site.kind() == ErrorConversionSiteKind::Constructor)
+                .count(),
+            1
+        );
+        assert_eq!(
+            unit.sites()
+                .iter()
+                .filter(|site| site.kind() == ErrorConversionSiteKind::Caller)
+                .count(),
+            1
+        );
+    }
+    assert_eq!(source(fixture.path())?, original);
+    Ok(())
+}
 #[test]
 fn generated_default_constructor_is_inventory_blocker() -> miette::Result<()> {
     cordial::init_tracing();
