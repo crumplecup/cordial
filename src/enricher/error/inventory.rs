@@ -56,6 +56,19 @@ impl SourceEnricher for ErrorIrScanEnricher {
             field_strategy,
         )?;
         materialize_error_ir(ir, &crate_root, &report)?;
+        #[cfg(feature = "internal_error_chain")]
+        if error_config.internal_error_chain().enabled() {
+            let mut files = Vec::new();
+            crate::etiquettes::internal_error_chain::for_each_shared_src_rust_file(
+                source,
+                &crate_root,
+                |path, _| {
+                    files.push(source.parsed_file(path, "error-conversion-ir")?);
+                    Ok(())
+                },
+            )?;
+            crate::etiquettes::internal_error_chain::enrich_conversion_units(ir, &files)?;
+        }
         Ok(())
     }
 }

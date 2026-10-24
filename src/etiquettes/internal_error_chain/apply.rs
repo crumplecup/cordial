@@ -3,29 +3,35 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use syn::spanned::Spanned;
-use syn::visit::Visit;
-use syn::{GenericParam, Item, ItemStruct, Type, Visibility};
+use syn::{GenericParam, Item, ItemStruct, Type};
 use tracing::instrument;
 
-use crate::config::{ErrorFieldStrategy, load_cordial_config};
+use crate::config::load_cordial_config;
 use crate::error::CordialResult;
-use crate::loader::{SharedParsedFile, SourceLoadView};
+use crate::ir::CrateIr;
+use crate::loader::SourceLoadView;
 use crate::session::RunAll;
 use crate::targets::discover_crate_targets;
 
-use super::type_graph::{for_each_shared_src_rust_file, item_derives_error, trait_is_std_error};
+use super::type_graph::{for_each_shared_src_rust_file, trait_is_std_error};
 
 mod initializers;
 mod inventory;
 mod lifetime;
 mod names;
+mod patch;
 mod uses;
 
-use self::initializers::{FieldKind, InitializerVisitor};
 pub use self::inventory::{ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit};
-use self::names::audit_names;
-use self::uses::has_unhandled_field_use;
+pub(crate) use self::inventory::{conversion_units_from_ir, enrich_conversion_units};
+use self::patch::patch_file;
+
+#[derive(Clone)]
+struct Edit {
+    start: usize,
+    end: usize,
+    replacement: String,
+}
 
 /// Why an error field could not be converted safely.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -128,17 +134,19 @@ pub fn run_error_field_apply(
         if only_crate.is_some_and(|name| name != target.crate_name()) {
             continue;
         }
-        // One view keeps each source file parsed once while discovering the
-        // reachable tree and inspecting its declarations and constructors.
-        let source = SourceLoadView::for_standalone_scan();
+        let source = SourceLoadView::for_target(&target)?;
+        let mut ir = CrateIr::new(target.crate_name());
+        source.populate_ir(&mut ir)?;
         let mut files = Vec::new();
         for_each_shared_src_rust_file(&source, target.crate_root(), |path, _| {
             files.push(source.parsed_file(path, "error-file-apply")?);
             Ok(())
         })?;
+        enrich_conversion_units(&mut ir, &files)?;
+        let units = conversion_units_from_ir(&ir)?;
         for file in &files {
             let (patched, converted, blockers, units) =
-                patch_file(file, policy.field_strategy(), &files, dry_run);
+                patch_file(file, policy.field_strategy(), &units, dry_run)?;
             summary.conversion_units.extend(units);
             summary.converted_fields += converted;
             summary.unresolved += blockers.len();
@@ -162,216 +170,12 @@ pub fn run_error_field_apply(
 /// Compatibility name for the original file-only apply operation.
 pub use run_error_field_apply as run_error_file_apply;
 
-#[derive(Clone)]
-struct Edit {
-    start: usize,
-    end: usize,
-    replacement: String,
-}
-
-#[instrument(level = "debug", skip(file, strategy, files))]
-fn patch_file(
-    file: &SharedParsedFile,
-    strategy: ErrorFieldStrategy,
-    files: &[SharedParsedFile],
-    dry_run: bool,
-) -> (
-    Option<String>,
-    usize,
-    Vec<ErrorFieldApplyBlocker>,
-    Vec<ErrorConversionUnit>,
-) {
-    let syntax = file.syntax();
-    let error_impls = known_error_impls(syntax);
-    let static_strings = known_static_strings(syntax);
-    let mut edits = Vec::new();
-    let name_audit = audit_names(syntax);
-    let mut converted = 0;
-    let mut blockers = Vec::new();
-    let mut pending = Vec::new();
-    let mut units = Vec::new();
-    for item in &syntax.items {
-        let Item::Struct(item) = item else { continue };
-        let name = item.ident.to_string();
-        if !error_impls.contains(&name) && !item_derives_error(&item.attrs) {
-            continue;
-        }
-        let syn::Fields::Named(fields) = &item.fields else {
-            continue;
-        };
-        for field in &fields.named {
-            let Some(field_name) = field.ident.as_ref().map(ToString::to_string) else {
-                continue;
-            };
-            let kind = match field_name.as_str() {
-                "file" => FieldKind::CallSiteFile,
-                "source" | "kind" => continue,
-                _ => FieldKind::StaticString,
-            };
-            let struct_lifetime = single_struct_lifetime(item);
-            let unit = ErrorConversionUnit::collect(
-                files,
-                file.path(),
-                &name,
-                &field_name,
-                name_audit.blocks(&name),
-            );
-            let has_cross_file_reference =
-                unit.sites().iter().any(|site| site.path() != file.path());
-            let has_unknown_field_use = unit.blocks_existing_field_edit();
-            let lifetime_candidate =
-                lifetime::is_candidate(item, field, kind, struct_lifetime.as_deref(), strategy);
-            if lifetime_candidate
-                && !has_cross_file_reference
-                && !name_audit.blocks(&name)
-                && matches!(item.vis, Visibility::Inherited)
-                && matches!(field.vis, Visibility::Inherited)
-            {
-                if let Some(mut planned) = lifetime::plan(file, item, &field_name, &unit, strategy)
-                {
-                    edits.append(&mut planned);
-                    pending.push((name.clone(), field_name));
-                    converted += 1;
-                    units.push(unit);
-                    continue;
-                }
-            }
-            if lifetime_candidate && strategy == ErrorFieldStrategy::Owned {
-                blockers.push(ErrorFieldApplyBlocker::new(
-                    file.path(),
-                    &name,
-                    &field_name,
-                    ErrorFieldApplyBlockerReason::Initializer,
-                ));
-                units.push(unit);
-                continue;
-            }
-            let (source_type, dynamic_lifetime) = match strategy {
-                ErrorFieldStrategy::Borrowed if is_string(&field.ty) => {
-                    let lifetime = struct_lifetime.as_deref();
-                    (format!("&'{} str", lifetime.unwrap_or("static")), lifetime)
-                }
-                ErrorFieldStrategy::Owned if is_static_str(&field.ty) => {
-                    ("String".to_string(), None)
-                }
-                ErrorFieldStrategy::Owned
-                    if struct_lifetime
-                        .as_deref()
-                        .is_some_and(|lifetime| is_str_ref_with_lifetime(&field.ty, lifetime)) =>
-                {
-                    ("String".to_string(), struct_lifetime.as_deref())
-                }
-                _ => continue,
-            };
-            units.push(unit);
-            if !matches!(item.vis, Visibility::Inherited)
-                || !matches!(field.vis, Visibility::Inherited)
-                || syntax.items.iter().filter(|candidate| matches!(candidate, Item::Struct(other) if other.ident == item.ident)).count() != 1
-                || has_cross_file_reference
-            {
-                blockers.push(ErrorFieldApplyBlocker::new(file.path(), &name, &field_name, ErrorFieldApplyBlockerReason::OutsideFile));
-                continue;
-            }
-            if name_audit.blocks(&name) {
-                blockers.push(ErrorFieldApplyBlocker::new(
-                    file.path(),
-                    &name,
-                    &field_name,
-                    ErrorFieldApplyBlockerReason::AmbiguousName,
-                ));
-                continue;
-            }
-            let mut visitor = InitializerVisitor::new(
-                &name,
-                &field_name,
-                kind,
-                strategy,
-                file.source(),
-                &static_strings,
-                dynamic_lifetime,
-                false,
-            );
-            visitor.visit_file(syntax);
-            let Some(mut initializers) = visitor.finish() else {
-                blockers.push(ErrorFieldApplyBlocker::new(
-                    file.path(),
-                    &name,
-                    &field_name,
-                    ErrorFieldApplyBlockerReason::Initializer,
-                ));
-                continue;
-            };
-            if has_unknown_field_use || has_unhandled_field_use(syntax, &name, &field_name) {
-                blockers.push(ErrorFieldApplyBlocker::new(
-                    file.path(),
-                    &name,
-                    &field_name,
-                    ErrorFieldApplyBlockerReason::FieldUse,
-                ));
-                continue;
-            }
-            let Some(field_span) = span_range(file.source(), field.ty.span()) else {
-                blockers.push(ErrorFieldApplyBlocker::new(
-                    file.path(),
-                    &name,
-                    &field_name,
-                    ErrorFieldApplyBlockerReason::InvalidEdit,
-                ));
-                continue;
-            };
-            edits.push(Edit {
-                start: field_span.0,
-                end: field_span.1,
-                replacement: source_type,
-            });
-            edits.append(&mut initializers);
-            pending.push((name.clone(), field_name));
-            converted += 1;
-        }
-    }
-    if edits.is_empty() {
-        return (None, converted, blockers, units);
-    }
-    edits.sort_by_key(|edit| std::cmp::Reverse(edit.start));
-    let mut patched = file.source().to_string();
-    let mut limit = patched.len();
-    for edit in &edits {
-        if edit.end > limit || edit.start > edit.end {
-            blockers.extend(pending.iter().map(|(type_name, field_name)| {
-                ErrorFieldApplyBlocker::new(
-                    file.path(),
-                    type_name,
-                    field_name,
-                    ErrorFieldApplyBlockerReason::InvalidEdit,
-                )
-            }));
-            return (None, 0, blockers, units);
-        }
-        patched.replace_range(edit.start..edit.end, &edit.replacement);
-        limit = edit.start;
-    }
-    if syn::parse_file(&patched).is_err() {
-        blockers.extend(pending.iter().map(|(type_name, field_name)| {
-            ErrorFieldApplyBlocker::new(
-                file.path(),
-                type_name,
-                field_name,
-                ErrorFieldApplyBlockerReason::InvalidEdit,
-            )
-        }));
-        return (None, 0, blockers, units);
-    }
-    if dry_run {
-        for edit in &edits {
-            tracing::info!(
-                path = %file.path().display(),
-                from = %&file.source()[edit.start..edit.end],
-                to = %edit.replacement,
-                "dry run: error field edit"
-            );
-        }
-    }
-    (Some(patched), converted, blockers, units)
+/// Storage shapes that either error-field strategy can transform.
+#[instrument(level = "trace", skip(ty))]
+fn is_error_string_field(ty: &Type) -> bool {
+    is_string(ty)
+        || matches!(ty, Type::Reference(reference)
+            if matches!(&*reference.elem, Type::Path(path) if path.path.is_ident("str")))
 }
 
 #[instrument(level = "debug", skip(syntax))]

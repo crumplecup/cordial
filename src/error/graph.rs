@@ -8,9 +8,9 @@ use std::panic::Location;
 use tracing::instrument;
 
 use super::graph_sources::{
-    CrateMustExistSource, EdgeReferencesMissingNodeSource, NoLoadViewAvailableForEnricherSource,
-    NoLoadViewForEnricherSource, SetAttrOnMissingNodeSource, SnapshotEdgeFromInvalidSource,
-    SnapshotEdgeMissingEndpointsSource, SnapshotEdgeToInvalidSource,
+    CrateMustExistSource, EdgeReferencesMissingNodeSource, MissingConversionUnitSource,
+    NoLoadViewAvailableForEnricherSource, NoLoadViewForEnricherSource, SetAttrOnMissingNodeSource,
+    SnapshotEdgeFromInvalidSource, SnapshotEdgeMissingEndpointsSource, SnapshotEdgeToInvalidSource,
     SourceEnricherWrongLoaderSource,
 };
 
@@ -27,6 +27,7 @@ pub enum GraphErrorKind {
     NoLoadViewForEnricher(NoLoadViewForEnricherSource),
     NoLoadViewAvailableForEnricher(NoLoadViewAvailableForEnricherSource),
     SourceEnricherWrongLoader(SourceEnricherWrongLoaderSource),
+    MissingConversionUnit(MissingConversionUnitSource),
 }
 
 #[derive(Debug)]
@@ -63,6 +64,7 @@ impl std::fmt::Display for GraphError {
             GraphErrorKind::NoLoadViewForEnricher(source) => source.fmt(formatter),
             GraphErrorKind::NoLoadViewAvailableForEnricher(source) => source.fmt(formatter),
             GraphErrorKind::SourceEnricherWrongLoader(source) => source.fmt(formatter),
+            GraphErrorKind::MissingConversionUnit(source) => source.fmt(formatter),
         }
     }
 }
@@ -80,11 +82,27 @@ impl std::error::Error for GraphError {
             GraphErrorKind::NoLoadViewForEnricher(source) => Some(source),
             GraphErrorKind::NoLoadViewAvailableForEnricher(source) => Some(source),
             GraphErrorKind::SourceEnricherWrongLoader(source) => Some(source),
+            GraphErrorKind::MissingConversionUnit(source) => Some(source),
         }
     }
 }
 
 impl super::CordialError {
+    /// A conversion candidate was absent from the shared IR.
+    #[track_caller]
+    #[instrument(level = "debug", skip(path, type_name, field_name))]
+    pub fn missing_conversion_unit(
+        path: &std::path::Path,
+        type_name: &str,
+        field_name: &str,
+    ) -> Self {
+        Self::from_kind(super::CordialErrorKind::Graph(GraphError::new(
+            GraphErrorKind::MissingConversionUnit(MissingConversionUnitSource::new(
+                path, type_name, field_name,
+            )),
+        )))
+    }
+
     /// No load view was found for an enricher on a crate.
     #[track_caller]
     #[instrument(level = "debug", skip(enricher_id, crate_name))]

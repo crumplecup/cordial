@@ -34,8 +34,14 @@ impl Loader for SourceLoader {
 
     #[instrument(level = "trace", skip(self, view))]
     fn load(&self, view: LoadContext<'_>) -> CordialResult<Box<dyn LoadView>> {
-        let target = view.target();
+        Ok(Box::new(SourceLoadView::for_target(view.target())?))
+    }
+}
 
+impl SourceLoadView {
+    /// Load the same source view used by the session for a crate target.
+    #[instrument(level = "debug", skip(target), err(level = "warn"))]
+    pub(crate) fn for_target(target: &super::CrateTarget) -> CordialResult<Self> {
         let mut files = Vec::new();
         let src_root = target.crate_root().join("src");
         if src_root.is_dir() {
@@ -48,17 +54,17 @@ impl Loader for SourceLoader {
                 if path.extension().is_none_or(|ext| ext != "rs") {
                     continue;
                 }
-                let source = super::source_work::read(path, Self::ID)?;
+                let source = super::source_work::read(path, SourceLoader::ID)?;
                 files.push(SourceFile::new(path.to_path_buf(), source));
             }
         }
 
-        Ok(Box::new(SourceLoadView::new(
+        Ok(Self::new(
             target.crate_name().clone(),
             src_root,
             files,
             target.kinds().clone(),
-        )))
+        ))
     }
 }
 

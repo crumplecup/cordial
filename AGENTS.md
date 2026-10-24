@@ -76,6 +76,12 @@ Useful routing ids:
 - Keep generated cordial artifacts under the configured store
   (`~/.cordial/{project}/` by default); do not commit them.
 - Prefer narrow, etiquette-driven changes over broad cleanup.
+- For pipeline analysis and `--apply`, collect source facts through the shared
+  loader and enrich the shared IR. When a needed fact is missing, extend the IR
+  and its collection/enrichment path. Probes, assessors, reporters, and apply
+  must consume those facts from `IrView`; do not add a standalone source scan
+  to reconstruct them. Apply may read source text to make located edits and
+  parse proposed edits for validation.
 - For Rust projects, put tests under `tests/` unless an existing local pattern
   requires otherwise.
 - Before finishing code changes, run the focused Cargo checks needed for the

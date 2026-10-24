@@ -41,6 +41,7 @@ mod source_shape;
 mod type_graph;
 mod types;
 
+pub(crate) use apply::enrich_conversion_units;
 pub use apply::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorFieldApplyBlocker,
     ErrorFieldApplyBlockerReason, ErrorFieldApplySummary, ErrorFileApplySummary,
@@ -59,7 +60,8 @@ pub use scan::{
 pub(crate) use signature_chain::SignatureChainIndex;
 pub use signature_chain::{SignatureChainCheck, SignatureChainStatus};
 pub(crate) use type_graph::{
-    RawTypeNode, finalize_type_graph, scan_error_rust_syntax_raw, type_path_is_error_related,
+    RawTypeNode, finalize_type_graph, for_each_shared_src_rust_file, scan_error_rust_syntax_raw,
+    type_path_is_error_related,
 };
 pub use types::{
     InternalErrorChainScanReport, InternalErrorComplianceFinding, InternalErrorComplianceId,

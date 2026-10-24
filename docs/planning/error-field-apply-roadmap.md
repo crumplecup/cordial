@@ -206,3 +206,69 @@ who owns the `io::Error`; the syntax of `?` alone cannot prove the caller can
 hold it long enough. The first graph fixture should include a parent, Kind,
 native source, `Error::source()`, a `From` path, and a `?` caller, then prove
 borrowed and owned round trips plus no partial write on an unresolved edge.
+
+### Pipeline contract for broader apply
+
+Today `quality --apply` bypasses the normal load/enrich/probe route and starts
+its own source pass. Within that command, `SourceLoadView` parses each original
+file once and reuses the snapshot; parsing patched text is a separate validation
+step. The duplication is architectural: apply has its own scan and builds
+`ErrorConversionUnit` while visiting each candidate field, instead of consuming
+facts collected for the normal error pipeline. The normal pipeline already
+loads `SharedParsedFile` snapshots and scans error facts, but its materialized
+IR contains findings and a coarse type graph, not the evidence needed to edit
+a complete conversion unit. First route apply through shared collection and
+enrichment; then move candidate discovery upstream: collect file-local facts
+once per parsed file and resolve and connect them in the shared IR. Apply must
+query that IR for the complete conversion unit. It may read source text for
+located edits, but it must not scan the syntax tree or reconstruct semantic
+facts in a parallel inventory. A missing fact belongs in collection or
+enrichment, not in an apply-specific fallback.
+
+| Stage | Facts or responsibility |
+| --- | --- |
+| Source load | Retain the exact text, shared syntax tree, file identity, and content digest for every in-scope Rust file. Collection and enrichment use the tree; apply receives text and digest for located edits. |
+| File-local collection | Record module-qualified declarations and visibility; field names, types, lifetimes, and spans; enum variants; impls and derives; imports, aliases, bindings, shadowing, and cfg; constructors with each field's initializer and value origin; calls, explicit type uses, field reads/writes/patterns, return signatures, `From` impls, `?` sites, and `Error::source()` bodies. Mark macro-generated or otherwise hidden paths explicitly. Collect these once per file, rather than revisiting every file for every field. |
+| Cross-file enrichment | Resolve references to declaration identities and connect type, constructor, caller, field-use, Kind, source, `From`, and `?` edges. Classify each value's provenance (`'static` literal/binding, borrowed parameter with a named lifetime, owned runtime value, foreign source, or unknown). Record the lifetime and ownership constraints imposed by each edge, including `Error::source()`'s trait-object lifetime. Preserve an explicit unresolved reason where name resolution, inference, cfg, or macro expansion prevents proof. |
+| IR conversion-unit query | For each candidate, query the shared graph for the closed dependency component: every declaration, initializer, caller, signature, field use, and error edge affected by changing its storage. Include exact source ranges and snapshot digests. A unit is ready only when every required edge is resolved and each use is either unchanged by the new type or has a planned companion edit. No separate unit database. |
+| Apply | Select the owned or borrowed transform against that view, calculate all edits in memory, reject conflicting or stale spans, validate the complete patched unit, and write all its files together. Dry run uses the same plan and reports edits and blockers. |
+
+The first collection addition should cover the existing private string-field
+patterns, so the old apply path and the new view can be compared on the same
+fixtures. Next add explicit constructor and forwarding-signature edges for the
+current lifetime planner. Only then add Kind variants and typed source edges
+for the first graph fixture. The collector records syntax and provenance; the
+enricher establishes relationships and their limits; the transform decides
+whether a requested strategy is possible. Keep these facts independent of the
+chosen strategy so an owned → borrowed → owned round trip can reuse the same
+model after reloading changed files.
+
+The serializable IR should hold compact, typed facts and stable declaration/site
+identities, not duplicate source text or a second syntax tree. Give the planner
+an `IrView` and a source-text-only edit view with no `syntax()` method; make
+the richer `SharedParsedFile` available only to collection and enrichment.
+This API boundary should make bypassing the graph harder than extending it.
+A cached IR is usable for apply only when its source digests match the files
+being edited; otherwise rebuild it. `syn` does not provide full Rust name or
+type resolution, so an unknown edge is a blocker, not evidence that no edge
+exists.
+
+Validate this boundary with a fixture in which a second file adds a constructor
+or type use: collection must find it, enrichment must attach it to the correct
+type, and apply must either edit the entire unit or write nothing. Add an
+ambiguous-name/macro fixture that remains blocked, a stale-snapshot fixture,
+and a graph round trip that checks source traversal and caller location.
+
+Implementation checkpoints:
+
+- [x] Build apply's source view with the same loader as normal sessions, and
+  materialize conversion units as typed graph facts in the error IR enricher.
+  Apply now reads those units through `IrView` and fails if one is missing.
+- [ ] Collect conversion sites once per file. The current collector still
+  visits each source tree once per candidate field, though it reuses the parsed
+  tree and stores the resulting unit in the graph.
+- [ ] Move initializer, field-use, and lifetime-planning evidence into typed IR
+  facts. The current edit planner still reads `SharedParsedFile::syntax()`;
+  replace that access with `IrView` plus a source-text-only edit view.
+- [ ] Add source-digest checks and whole-unit writes before allowing cross-file
+  conversions. Keep unknown name, cfg, or macro edges as explicit blockers.
