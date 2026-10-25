@@ -231,9 +231,13 @@ set. An external field read, shadowed declaration, hidden macro use, or
 unknown path blocks the whole graph. The patch pass withholds every file in
 the component if final validation rejects one member. A compiling dry-run and
 owned-to-borrowed-to-owned fixture exercises a parent error with a native
-source and a constructor in a child module. Kind and source declarations in
-different files, and cross-file lifetime introduction, remain open parts of
-this slice. Inventory and graph planning share one crate type index during
+source and a constructor in a child module. A closed graph with an existing
+named lifetime can now also include Kind and source declarations in different
+files. The shared declaration index locates each member, and one component
+contains its declaration, constructors, and source-sensitive reads. A four-file
+fixture checks dry run, both storage strategies, compilation, and an atomic
+blocker. Introducing a new lifetime across files remains open. Inventory and
+graph planning share one crate type index during
 apply. The inventory also records the
 syntactic storage shape and type path of direct, boxed, and explicitly borrowed
 `source`/`kind` fields as typed IR facts. Enrichment links a unique private
@@ -242,7 +246,7 @@ File-local references and explicit module paths or `use` aliases can link
 across active external modules in the same crate target. The shared IR holds
 dependency edges from conversion units to those declarations. These are
 candidate links, not proof that every conversion graph is closed;
-the supported cross-file constructor requires a separate whole-graph check.
+the supported cross-file conversion requires a separate whole-graph check.
 Public, ambiguous, macro-attributed,
 cfg-gated, glob-imported, and unrecognized module paths stay unresolved. The
 same shared-tree visit records the written input and output type
@@ -341,15 +345,18 @@ Implementation checkpoints:
   every planned file in its source directory, checks all snapshots before
   replacement, checks each again at replacement time, and restores earlier
   files when a later replacement fails. A two-file fixture exercises the write
-  path. Add deterministic failure tests for rollback and concurrent changes
-  before extending conversion to cross-file Kind/source declarations. This is
+  path. Add deterministic failure tests for rollback and concurrent changes.
+  This is
   a rollback-capable whole-target write, not crash-atomic across files.
   Unknown name, cfg, or macro edges remain explicit blockers until the planner
   can account for them. A private parent error and native source declared in
   one file, with a constructor in another, now convert together when every
   external type name resolves uniquely. The patch pass treats those files as
   one component.
-  Cross-file Kind/source declarations and lifetime propagation are still open.
+  Closed Kind/source declarations across active external modules now convert
+  together when the parent already has a named lifetime; a four-file fixture
+  checks both directions. Cross-file lifetime introduction and more complex
+  caller constraints remain open.
 - [x] Connect conversion evidence across validated external module boundaries
   in the shared IR. A private declaration has a path, line, column, and digest identity;
   source/Kind edges and path-based constructor, caller, and type-use sites link

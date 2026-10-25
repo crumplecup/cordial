@@ -212,7 +212,7 @@ impl<'ast> Visit<'ast> for GraphExprPlanner<'_> {
                 .iter()
                 .map(|segment| segment.ident.to_string())
                 .collect();
-            if let [owner, variant] = names.as_slice() {
+            if let [.., owner, variant] = names.as_slice() {
                 if let Some(change) = self.variants.get(&(owner.clone(), variant.clone())) {
                     self.constructed_variants
                         .insert((owner.clone(), variant.clone()));

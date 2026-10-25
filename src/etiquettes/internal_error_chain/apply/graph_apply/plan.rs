@@ -101,6 +101,7 @@ pub(super) fn plan_file(
         &names,
         graph_lifetime,
         &changing_generics,
+        false,
     );
     fields.extend(field_plan.fields);
     edits.extend(field_plan.edits);
@@ -278,18 +279,32 @@ fn discover_graph<'a>(
     (names, fields, edits, variants, valid)
 }
 
-struct FieldPlan {
+pub(super) struct FieldPlan {
     fields: Vec<(String, String)>,
     edits: Vec<Edit>,
     changes: BTreeMap<(String, String), Change>,
     valid: bool,
 }
 
+impl FieldPlan {
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn into_parts(
+        self,
+    ) -> (
+        Vec<(String, String)>,
+        Vec<Edit>,
+        BTreeMap<(String, String), Change>,
+        bool,
+    ) {
+        (self.fields, self.edits, self.changes, self.valid)
+    }
+}
+
 #[instrument(
     level = "debug",
     skip(file, strategy, index, structs, names, changing_generics)
 )]
-fn plan_struct_fields(
+pub(super) fn plan_struct_fields(
     file: &SharedParsedFile,
     strategy: ErrorFieldStrategy,
     index: &CrateTypeIndex,
@@ -297,6 +312,7 @@ fn plan_struct_fields(
     names: &BTreeSet<String>,
     graph_lifetime: Option<&str>,
     changing_generics: &BTreeSet<String>,
+    allow_external: bool,
 ) -> FieldPlan {
     let mut fields = Vec::new();
     let mut edits = Vec::new();
@@ -318,7 +334,9 @@ fn plan_struct_fields(
                 continue;
             };
             match index.resolve(file, edge.type_path()) {
-                Some(target) if target.declaration() != file.path() => valid = false,
+                Some(target) if !allow_external && target.declaration() != file.path() => {
+                    valid = false;
+                }
                 None if edge_field == ErrorEdgeField::Kind
                     || !edge
                         .type_path()
@@ -336,7 +354,9 @@ fn plan_struct_fields(
         let Some(item) = structs.get(name) else {
             continue;
         };
-        if !matches!(item.vis, Visibility::Inherited) {
+        if matches!(item.vis, Visibility::Public(_))
+            || (!allow_external && !matches!(item.vis, Visibility::Inherited))
+        {
             valid = false;
             continue;
         }
@@ -353,7 +373,9 @@ fn plan_struct_fields(
                 valid = false;
                 continue;
             };
-            if !matches!(field.vis, Visibility::Inherited) {
+            if matches!(field.vis, Visibility::Public(_))
+                || (!allow_external && !matches!(field.vis, Visibility::Inherited))
+            {
                 valid = false;
                 continue;
             }

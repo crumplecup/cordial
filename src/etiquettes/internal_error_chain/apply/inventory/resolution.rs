@@ -19,6 +19,7 @@ use super::helpers::derive_is_builtin;
 pub(in crate::etiquettes::internal_error_chain::apply) struct CrateTypeIndex {
     declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>>,
     local: HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>>,
+    positions: HashMap<(PathBuf, usize, usize), (usize, usize)>,
     active_modules: HashMap<PathBuf, Vec<String>>,
     imports: HashMap<PathBuf, Vec<(String, Vec<String>)>>,
 }
@@ -30,11 +31,12 @@ impl CrateTypeIndex {
     ) -> Self {
         let mut declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
         let mut local: HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
+        let mut positions = HashMap::new();
         let active_modules = active_modules(files);
         let mut imports = HashMap::new();
-        for file in files {
+        for (file_index, file) in files.iter().enumerate() {
             let mut file_imports = Vec::new();
-            for item in &file.syntax().items {
+            for (item_index, item) in file.syntax().items.iter().enumerate() {
                 if let Item::Use(item) = item {
                     use_paths(&item.tree, Vec::new(), &mut file_imports);
                 }
@@ -55,11 +57,17 @@ impl CrateTypeIndex {
                     ),
                     _ => continue,
                 };
-                let target = (matches!(visibility, Visibility::Inherited)
+                let target = (!matches!(visibility, Visibility::Public(_))
                     && attrs.iter().all(derive_is_builtin))
                 .then(|| {
                     ErrorEdgeTarget::from_shared_file(file, location.line, location.column, kind)
                 });
+                if target.is_some() {
+                    positions.insert(
+                        (file.path().to_path_buf(), location.line, location.column),
+                        (file_index, item_index),
+                    );
+                }
                 local
                     .entry((file.path().to_path_buf(), name.to_string()))
                     .or_default()
@@ -75,8 +83,31 @@ impl CrateTypeIndex {
         Self {
             declarations,
             local,
+            positions,
             active_modules,
             imports,
+        }
+    }
+
+    #[instrument(level = "trace", skip(self, files, target))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn declaration<'a>(
+        &self,
+        files: &'a [SharedParsedFile],
+        target: &ErrorEdgeTarget,
+    ) -> Option<(&'a SharedParsedFile, &'a Item)> {
+        let (file_index, item_index) =
+            *self
+                .positions
+                .get(&(target.declaration().clone(), target.line(), target.column()))?;
+        let file = files.get(file_index)?;
+        if file.source_digest() != target.source_digest() {
+            return None;
+        }
+        let item = file.syntax().items.get(item_index)?;
+        match (target.kind(), item) {
+            (ErrorEdgeTargetKind::Struct, Item::Struct(_))
+            | (ErrorEdgeTargetKind::Enum, Item::Enum(_)) => Some((file, item)),
+            _ => None,
         }
     }
 

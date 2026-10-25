@@ -101,9 +101,174 @@ fn same_named_external_declaration_blocks_entire_graph() -> miette::Result<()> {
     let blocked_child = fs::read_to_string(&child).into_diagnostic()?;
     let summary = run_error_file_apply(root.path(), root.path(), None, false).into_diagnostic()?;
     assert_eq!(summary.changed_files(), 0, "{:?}", summary.blockers());
-    assert_eq!(fs::read_to_string(&library).into_diagnostic()?, original_library);
+    assert_eq!(
+        fs::read_to_string(&library).into_diagnostic()?,
+        original_library
+    );
     assert_eq!(fs::read_to_string(&child).into_diagnostic()?, blocked_child);
     Ok(())
+}
+
+#[test]
+fn distributed_kind_and_source_declarations_round_trip() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = distributed_fixture()?;
+    check(root.path())?;
+    let original: Vec<_> = ["lib.rs", "cause.rs", "kind.rs", "build.rs"]
+        .into_iter()
+        .map(|name| fs::read_to_string(root.path().join("src").join(name)))
+        .collect::<Result<_, _>>()
+        .into_diagnostic()?;
+
+    let preview = run_error_file_apply(root.path(), root.path(), None, true).into_diagnostic()?;
+    assert_eq!(preview.changed_files(), 4, "{:?}", preview.blockers());
+    for (name, content) in ["lib.rs", "cause.rs", "kind.rs", "build.rs"]
+        .into_iter()
+        .zip(&original)
+    {
+        assert_eq!(
+            fs::read_to_string(root.path().join("src").join(name)).into_diagnostic()?,
+            *content
+        );
+    }
+
+    let borrowed = run_error_file_apply(root.path(), root.path(), None, false).into_diagnostic()?;
+    assert_eq!(borrowed.changed_files(), 4, "{:?}", borrowed.blockers());
+    let library = fs::read_to_string(root.path().join("src/lib.rs")).into_diagnostic()?;
+    let cause = fs::read_to_string(root.path().join("src/cause.rs")).into_diagnostic()?;
+    let kind = fs::read_to_string(root.path().join("src/kind.rs")).into_diagnostic()?;
+    assert!(library.contains("source: &'a cause::Cause"), "{library}");
+    assert!(library.contains("kind: &'a kind::Kind<'a>"), "{library}");
+    assert!(cause.contains("file: &'static str"), "{cause}");
+    assert!(kind.contains("Wrapped(&'a super::cause::Cause)"), "{kind}");
+    check(root.path())?;
+
+    fs::write(
+        root.path().join("cordial.toml"),
+        "[internal_error_chain]\nfield_strategy = \"owned\"\n",
+    )
+    .into_diagnostic()?;
+    let owned = run_error_file_apply(root.path(), root.path(), None, false).into_diagnostic()?;
+    assert_eq!(owned.changed_files(), 4, "{:?}", owned.blockers());
+    check(root.path())?;
+    Ok(())
+}
+
+#[test]
+fn hidden_use_blocks_all_distributed_declarations() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = distributed_fixture()?;
+    let files = ["lib.rs", "cause.rs", "kind.rs", "build.rs"];
+    let build = root.path().join("src/build.rs");
+    let original_build = fs::read_to_string(&build).into_diagnostic()?;
+    fs::write(
+        &build,
+        format!("{original_build}\nmacro_rules! hidden {{ () => {{ super::Parent }}; }}\n"),
+    )
+    .into_diagnostic()?;
+    let before: Vec<_> = files
+        .iter()
+        .map(|name| fs::read_to_string(root.path().join("src").join(name)))
+        .collect::<Result<_, _>>()
+        .into_diagnostic()?;
+    let result = run_error_file_apply(root.path(), root.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.changed_files(), 0, "{:?}", result.blockers());
+    for (name, content) in files.into_iter().zip(before) {
+        assert_eq!(
+            fs::read_to_string(root.path().join("src").join(name)).into_diagnostic()?,
+            content
+        );
+    }
+    Ok(())
+}
+
+fn distributed_fixture() -> miette::Result<tempfile::TempDir> {
+    let root = tempfile::tempdir().into_diagnostic()?;
+    fs::create_dir_all(root.path().join("src")).into_diagnostic()?;
+    fs::write(
+        root.path().join("Cargo.toml"),
+        "[package]\nname = \"apply-distributed-error-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
+        root.path().join("cordial.toml"),
+        "[internal_error_chain]\nfield_strategy = \"borrowed\"\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
+        root.path().join("src/lib.rs"),
+        r#"mod cause;
+mod kind;
+mod build;
+
+#[derive(Debug, Clone)]
+struct Parent<'a> {
+    source: cause::Cause,
+    kind: Box<kind::Kind<'a>>,
+    file: String,
+    anchor: &'a (),
+}
+impl std::fmt::Display for Parent<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.file) }
+}
+impl std::error::Error for Parent<'_> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> { Some(&self.source) }
+}
+"#,
+    )
+    .into_diagnostic()?;
+    fs::write(
+        root.path().join("src/cause.rs"),
+        r#"use std::panic::Location;
+#[derive(Debug, Clone)]
+pub(super) struct Cause { file: String }
+impl std::fmt::Display for Cause {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.file) }
+}
+impl std::error::Error for Cause {}
+impl Cause {
+    #[track_caller]
+    pub(super) fn new() -> Self { Self { file: Location::caller().file().to_string() } }
+}
+"#,
+    )
+    .into_diagnostic()?;
+    fs::write(
+        root.path().join("src/kind.rs"),
+        r#"#[derive(Debug, Clone)]
+pub(super) enum Kind<'a> {
+    Wrapped(Box<super::cause::Cause>),
+    Marker(&'a ()),
+}
+"#,
+    )
+    .into_diagnostic()?;
+    fs::write(
+        root.path().join("src/build.rs"),
+        r#"use std::panic::Location;
+
+pub(super) fn kind<'a>(source: &'a super::cause::Cause, anchor: &'a ()) -> super::kind::Kind<'a> {
+    let _ = anchor;
+    super::kind::Kind::Wrapped(Box::new(source.clone()))
+}
+
+#[track_caller]
+pub(super) fn parent<'a>(
+    source: &'a super::cause::Cause,
+    kind: &'a super::kind::Kind<'a>,
+    anchor: &'a (),
+) -> super::Parent<'a> {
+    super::Parent {
+        source: source.clone(),
+        kind: Box::new(kind.clone()),
+        file: Location::caller().file().to_string(),
+        anchor,
+    }
+}
+"#,
+    )
+    .into_diagnostic()?;
+    Ok(root)
 }
 
 fn fixture() -> miette::Result<tempfile::TempDir> {

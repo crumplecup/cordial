@@ -20,6 +20,7 @@ use super::Edit;
 use super::inventory::{CrateTypeIndex, ErrorEdgeTarget};
 use super::names::audit_names;
 
+mod distributed;
 mod expressions;
 mod external;
 mod lifetimes;
@@ -77,6 +78,17 @@ pub(super) fn enrich_conversion_graphs(
         .filter_map(|file| plan_file(file, strategy, index))
         .collect();
     let mut plans = Vec::new();
+    let mut distributed_paths = BTreeSet::new();
+    for file in files {
+        if distributed_paths.contains(file.path()) {
+            continue;
+        }
+        if let Some(group) = distributed::plan(file, files, strategy, index) {
+            distributed_paths.extend(group.iter().map(|plan| plan.path.clone()));
+            plans.extend(group);
+        }
+    }
+    candidates.retain(|candidate| !distributed_paths.contains(candidate.plan.path()));
     if !candidates.is_empty() {
         let identifiers: Vec<_> = files
             .iter()

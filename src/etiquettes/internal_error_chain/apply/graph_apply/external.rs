@@ -42,6 +42,18 @@ struct PathAudit<'a> {
 
 impl<'ast> Visit<'ast> for PathAudit<'_> {
     #[instrument(level = "debug", skip(self, item))]
+    fn visit_item_struct(&mut self, item: &'ast syn::ItemStruct) {
+        self.allow_declaration(&item.ident);
+        syn::visit::visit_item_struct(self, item);
+    }
+
+    #[instrument(level = "debug", skip(self, item))]
+    fn visit_item_enum(&mut self, item: &'ast syn::ItemEnum) {
+        self.allow_declaration(&item.ident);
+        syn::visit::visit_item_enum(self, item);
+    }
+
+    #[instrument(level = "debug", skip(self, item))]
     fn visit_attribute(&mut self, item: &'ast syn::Attribute) {
         if item.path().is_ident("cfg") || item.path().is_ident("cfg_attr") {
             self.hidden_name = true;
@@ -89,5 +101,20 @@ impl<'ast> Visit<'ast> for PathAudit<'_> {
         super::collect_token_idents(&item.tokens, &mut names);
         self.hidden_name |= names.iter().any(|name| self.expected.contains_key(name));
         syn::visit::visit_macro(self, item);
+    }
+}
+
+impl PathAudit<'_> {
+    #[instrument(level = "trace", skip(self, ident))]
+    fn allow_declaration(&mut self, ident: &proc_macro2::Ident) {
+        let start = ident.span().start();
+        if self.expected.get(&ident.to_string()).is_some_and(|target| {
+            target.declaration() == self.file.path()
+                && target.line() == start.line
+                && target.column() == start.column
+        }) {
+            self.allowed
+                .insert((ident.to_string(), start.line, start.column));
+        }
     }
 }
