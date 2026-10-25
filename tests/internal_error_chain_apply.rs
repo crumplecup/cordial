@@ -4,7 +4,7 @@ use std::process::Command;
 
 use cordial::{
     ErrorConversionSiteKind, ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTargetKind,
-    ErrorFieldApplyBlockerReason, run_error_file_apply,
+    ErrorFieldApplyBlockerReason, ErrorTryScope, run_error_file_apply,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -31,6 +31,19 @@ impl From<std::io::Error> for MessageError {
 }
 fn caller() -> Result<(), MessageError> {
     std::fs::read("missing")?;
+    let explicit = || -> Result<(), std::io::Error> {
+        std::fs::read("missing")?;
+        Ok(())
+    };
+    let inferred = || {
+        std::fs::read("missing")?;
+        Ok::<(), MessageError>(())
+    };
+    let pending = async {
+        std::fs::read("missing")?;
+        Ok::<(), MessageError>(())
+    };
+    let _ = (explicit, inferred, pending);
     let _ = MessageError::new(std::io::Error::other("x"));
     Ok(())
 }
@@ -56,6 +69,39 @@ fn caller() -> Result<(), MessageError> {
     }
     assert!(!unit.is_closed(), "the `?` conversion is not resolved");
     assert!(unit.sites().iter().all(|site| site.line() > 0));
+    let try_sites: Vec<_> = unit
+        .sites()
+        .iter()
+        .filter(|site| site.kind() == ErrorConversionSiteKind::TryConversion)
+        .collect();
+    assert_eq!(
+        try_sites.len(),
+        3,
+        "explicit closure returns a different error"
+    );
+    assert!(try_sites.iter().any(|site| {
+        !site.resolved()
+            && site.try_conversion().as_ref().is_some_and(|evidence| {
+                evidence.scope() == ErrorTryScope::Function
+                    && evidence
+                        .return_type_path()
+                        .as_ref()
+                        .is_some_and(|path| path == &["Result"])
+                    && evidence
+                        .error_type_path()
+                        .as_ref()
+                        .is_some_and(|path| path == &["MessageError"])
+            })
+    }));
+    for scope in [ErrorTryScope::InferredClosure, ErrorTryScope::AsyncBlock] {
+        assert!(try_sites.iter().any(|site| {
+            site.try_conversion().as_ref().is_some_and(|evidence| {
+                evidence.scope() == scope
+                    && evidence.return_type_path().is_none()
+                    && evidence.error_type_path().is_none()
+            })
+        }));
+    }
     assert!(unit.sites().iter().any(|site| {
         site.kind() == ErrorConversionSiteKind::FromConversion
             && !site.resolved()

@@ -16,6 +16,7 @@ use super::helpers::{
     derive_is_nonconstructing, path_mentions, return_type_mentions, type_mentions,
     use_tree_mentions,
 };
+use super::try_conversion::{ErrorTryEvidence, ErrorTryScope};
 use super::{ConversionCandidate, ErrorConversionSite, ErrorConversionSiteKind, ErrorEdgeField};
 use crate::etiquettes::internal_error_chain::apply::simple_type_name;
 use crate::etiquettes::internal_error_chain::apply::uses::{
@@ -29,6 +30,7 @@ pub(super) struct BatchInventoryVisitor<'a> {
     module_depth: usize,
     current_impl: Option<String>,
     returning_error: Vec<bool>,
+    try_evidence: Option<ErrorTryEvidence>,
     sites: Vec<Vec<ErrorConversionSite>>,
 }
 
@@ -46,6 +48,7 @@ impl<'a> BatchInventoryVisitor<'a> {
             module_depth: 0,
             current_impl: None,
             returning_error: vec![false; candidates.len()],
+            try_evidence: None,
             sites: vec![Vec::new(); candidates.len()],
         };
         visitor.visit_file(file.syntax());
@@ -68,6 +71,7 @@ impl<'a> BatchInventoryVisitor<'a> {
             kind,
             edge: None,
             from_conversion: None,
+            try_conversion: None,
             resolved: resolved
                 && self.file.path() == self.candidates[index].declaration
                 && self.module_depth == 0,
@@ -95,6 +99,37 @@ impl<'a> BatchInventoryVisitor<'a> {
                 part.ident == *name
                     || (part.ident == "Self" && self.current_impl.as_ref() == Some(name))
             })
+    }
+
+    #[instrument(level = "debug", skip(self, output, scope))]
+    fn enter_return_scope(
+        &mut self,
+        output: Option<&syn::ReturnType>,
+        scope: ErrorTryScope,
+    ) -> (Vec<bool>, Option<ErrorTryEvidence>) {
+        let previous = (
+            std::mem::replace(
+                &mut self.returning_error,
+                vec![false; self.candidates.len()],
+            ),
+            self.try_evidence.take(),
+        );
+        for &index in self.relevant {
+            let name = &self.candidates[index].type_name;
+            self.returning_error[index] = output.is_none_or(|output| {
+                return_type_mentions(output, name)
+                    || (self.current_impl.as_ref() == Some(name)
+                        && return_type_mentions(output, "Self"))
+            });
+        }
+        self.try_evidence = Some(ErrorTryEvidence::for_scope(output, scope));
+        previous
+    }
+
+    #[instrument(level = "trace", skip(self, previous))]
+    fn leave_return_scope(&mut self, previous: (Vec<bool>, Option<ErrorTryEvidence>)) {
+        self.returning_error = previous.0;
+        self.try_evidence = previous.1;
     }
 }
 
@@ -135,25 +170,41 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
 
     #[instrument(level = "debug", skip(self, item))]
     fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
-        let previous = self.returning_error.clone();
-        for &index in self.relevant {
-            let name = &self.candidates[index].type_name;
-            self.returning_error[index] = self.current_impl.as_ref() == Some(name)
-                || return_type_mentions(&item.sig.output, name);
-        }
+        let previous = self.enter_return_scope(Some(&item.sig.output), ErrorTryScope::Function);
         syn::visit::visit_impl_item_fn(self, item);
-        self.returning_error = previous;
+        self.leave_return_scope(previous);
     }
 
     #[instrument(level = "debug", skip(self, item))]
     fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
-        let previous = self.returning_error.clone();
-        for &index in self.relevant {
-            self.returning_error[index] =
-                return_type_mentions(&item.sig.output, &self.candidates[index].type_name);
-        }
+        let previous = self.enter_return_scope(Some(&item.sig.output), ErrorTryScope::Function);
         syn::visit::visit_item_fn(self, item);
-        self.returning_error = previous;
+        self.leave_return_scope(previous);
+    }
+
+    #[instrument(level = "debug", skip(self, item))]
+    fn visit_expr_closure(&mut self, item: &'ast syn::ExprClosure) {
+        let (output, scope) = match &item.output {
+            syn::ReturnType::Default => (None, ErrorTryScope::InferredClosure),
+            output => (Some(output), ErrorTryScope::Closure),
+        };
+        let previous = self.enter_return_scope(output, scope);
+        syn::visit::visit_expr_closure(self, item);
+        self.leave_return_scope(previous);
+    }
+
+    #[instrument(level = "debug", skip(self, item))]
+    fn visit_expr_async(&mut self, item: &'ast syn::ExprAsync) {
+        let previous = self.enter_return_scope(None, ErrorTryScope::AsyncBlock);
+        syn::visit::visit_expr_async(self, item);
+        self.leave_return_scope(previous);
+    }
+
+    #[instrument(level = "debug", skip(self, item))]
+    fn visit_expr_try_block(&mut self, item: &'ast syn::ExprTryBlock) {
+        let previous = self.enter_return_scope(None, ErrorTryScope::TryBlock);
+        syn::visit::visit_expr_try_block(self, item);
+        self.leave_return_scope(previous);
     }
 
     #[instrument(level = "debug", skip(self, item))]
@@ -253,6 +304,9 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
                     item.span(),
                     false,
                 );
+                if let Some(site) = self.sites[index].last_mut() {
+                    site.try_conversion = self.try_evidence.clone();
+                }
             }
         }
         syn::visit::visit_expr_try(self, item);

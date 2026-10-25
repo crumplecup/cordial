@@ -17,12 +17,14 @@ mod edges;
 mod from;
 mod graph;
 mod helpers;
+mod try_conversion;
 
 pub use edges::{
     ErrorEdgeEvidence, ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind,
 };
 pub use from::ErrorFromEvidence;
 pub(crate) use graph::{conversion_units_from_ir, enrich_conversion_units};
+pub use try_conversion::{ErrorTryEvidence, ErrorTryScope};
 
 /// A source construct that may participate in converting an error field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,6 +69,8 @@ pub struct ErrorConversionSite {
     edge: Option<ErrorEdgeEvidence>,
     /// Written type paths on a `From` implementation; not name-resolved.
     from_conversion: Option<ErrorFromEvidence>,
+    /// Lexical return signature at a `?` site; not type-resolved.
+    try_conversion: Option<ErrorTryEvidence>,
     #[getter(copy)]
     resolved: bool,
 }
