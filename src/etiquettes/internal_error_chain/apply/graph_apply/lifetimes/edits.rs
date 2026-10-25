@@ -17,6 +17,7 @@ pub(super) fn collect(
     file: &SharedParsedFile,
     strategy: ErrorFieldStrategy,
     storage_edits: &[Edit],
+    allow_qualified: bool,
 ) -> Option<Vec<Edit>> {
     let mut visitor = LifetimeEdits {
         file,
@@ -29,6 +30,7 @@ pub(super) fn collect(
         target_impl: false,
         impl_moves_lifetime: false,
         module_depth: 0,
+        allow_qualified,
     };
     visitor.visit_file(file.syntax());
     visitor.valid.then_some(visitor.edits)
@@ -45,6 +47,7 @@ struct LifetimeEdits<'a> {
     target_impl: bool,
     impl_moves_lifetime: bool,
     module_depth: usize,
+    allow_qualified: bool,
 }
 
 impl LifetimeEdits<'_> {
@@ -263,7 +266,10 @@ impl<'ast> Visit<'ast> for LifetimeEdits<'_> {
         if let Some(segment) = segment {
             if self.plan.names.contains(&segment.ident.to_string()) && !self.is_covered(item.span())
             {
-                if !self.scope || item.qself.is_some() || item.path.segments.len() != 1 {
+                if !self.scope
+                    || item.qself.is_some()
+                    || (!self.allow_qualified && item.path.segments.len() != 1)
+                {
                     self.valid = false;
                 } else {
                     match (&self.strategy, &segment.arguments) {

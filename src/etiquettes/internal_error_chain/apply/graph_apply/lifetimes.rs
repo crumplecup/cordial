@@ -15,6 +15,8 @@ use super::types::{is_copy_shape, storage_shape, type_name};
 mod edits;
 mod provenance;
 
+pub(super) use provenance::{anchored_parameters, constructor_origin};
+
 #[derive(derive_getters::Getters)]
 pub(super) struct GraphLifetimePlan {
     lifetime: String,
@@ -29,13 +31,34 @@ impl GraphLifetimePlan {
         strategy: ErrorFieldStrategy,
         storage_edits: &[Edit],
     ) -> Option<Vec<Edit>> {
-        edits::collect(self, file, strategy, storage_edits)
+        edits::collect(self, file, strategy, storage_edits, false)
+    }
+
+    #[instrument(level = "trace", skip(self, file, strategy, storage_edits))]
+    pub(super) fn distributed_edits(
+        &self,
+        file: &SharedParsedFile,
+        strategy: ErrorFieldStrategy,
+        storage_edits: &[Edit],
+    ) -> Option<Vec<Edit>> {
+        edits::collect(self, file, strategy, storage_edits, true)
     }
 }
 
 #[instrument(level = "debug", skip(file, strategy, names, structs, enums))]
 pub(super) fn select(
     file: &SharedParsedFile,
+    strategy: ErrorFieldStrategy,
+    names: &BTreeSet<String>,
+    structs: &BTreeMap<String, &ItemStruct>,
+    enums: &BTreeMap<String, &ItemEnum>,
+) -> Option<GraphLifetimePlan> {
+    select_across(std::slice::from_ref(file), strategy, names, structs, enums)
+}
+
+#[instrument(level = "debug", skip(files, strategy, names, structs, enums))]
+pub(super) fn select_across(
+    files: &[SharedParsedFile],
     strategy: ErrorFieldStrategy,
     names: &BTreeSet<String>,
     structs: &BTreeMap<String, &ItemStruct>,
@@ -63,7 +86,7 @@ pub(super) fn select(
                 return None;
             }
             let mut anchors = BTreeSet::new();
-            for item in &file.syntax().items {
+            for item in files.iter().flat_map(|file| &file.syntax().items) {
                 let Item::Impl(implementation) = item else {
                     continue;
                 };

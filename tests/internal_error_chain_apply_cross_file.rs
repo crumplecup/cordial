@@ -182,6 +182,145 @@ fn hidden_use_blocks_all_distributed_declarations() -> miette::Result<()> {
     Ok(())
 }
 
+#[test]
+fn distributed_graph_introduces_and_removes_one_lifetime() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = lifetime_free_distributed_fixture()?;
+    let names = ["lib.rs", "cause.rs", "kind.rs", "build.rs"];
+    check(root.path())?;
+    let original: Vec<_> = names
+        .iter()
+        .map(|name| fs::read_to_string(root.path().join("src").join(name)))
+        .collect::<Result<_, _>>()
+        .into_diagnostic()?;
+
+    let preview = run_error_file_apply(root.path(), root.path(), None, true).into_diagnostic()?;
+    assert_eq!(preview.changed_files(), 4, "{:?}", preview.blockers());
+    for (name, before) in names.iter().zip(&original) {
+        assert_eq!(
+            fs::read_to_string(root.path().join("src").join(name)).into_diagnostic()?,
+            *before
+        );
+    }
+
+    let borrowed = run_error_file_apply(root.path(), root.path(), None, false).into_diagnostic()?;
+    assert_eq!(borrowed.changed_files(), 4, "{:?}", borrowed.blockers());
+    let library = fs::read_to_string(root.path().join("src/lib.rs")).into_diagnostic()?;
+    let kind = fs::read_to_string(root.path().join("src/kind.rs")).into_diagnostic()?;
+    let build = fs::read_to_string(root.path().join("src/build.rs")).into_diagnostic()?;
+    assert!(library.contains("struct Parent<'a>"), "{library}");
+    assert!(kind.contains("enum Kind<'a>"), "{kind}");
+    assert!(build.contains("super::Parent<'a>"), "{build}");
+    check(root.path())?;
+    assert_eq!(
+        run_error_file_apply(root.path(), root.path(), None, false)
+            .into_diagnostic()?
+            .changed_files(),
+        0
+    );
+
+    fs::write(
+        root.path().join("cordial.toml"),
+        "[internal_error_chain]\nfield_strategy = \"owned\"\n",
+    )
+    .into_diagnostic()?;
+    let owned = run_error_file_apply(root.path(), root.path(), None, false).into_diagnostic()?;
+    assert_eq!(owned.changed_files(), 4, "{:?}", owned.blockers());
+    check(root.path())?;
+    assert_eq!(
+        run_error_file_apply(root.path(), root.path(), None, false)
+            .into_diagnostic()?
+            .changed_files(),
+        0
+    );
+    Ok(())
+}
+
+#[test]
+fn distributed_lifetime_rejects_unanchored_constructor() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = lifetime_free_distributed_fixture()?;
+    let path = root.path().join("src/lib.rs");
+    let source = fs::read_to_string(&path).into_diagnostic()?;
+    fs::write(
+        &path,
+        source.replace(
+            "let kind = kind::make(&cause);",
+            "let kind = kind::Kind::Wrapped(Box::new(cause.clone()));",
+        ),
+    )
+    .into_diagnostic()?;
+    check(root.path())?;
+    let names = ["lib.rs", "cause.rs", "kind.rs", "build.rs"];
+    let before: Vec<_> = names
+        .iter()
+        .map(|name| fs::read_to_string(root.path().join("src").join(name)))
+        .collect::<Result<_, _>>()
+        .into_diagnostic()?;
+    let result = run_error_file_apply(root.path(), root.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.changed_files(), 0, "{:?}", result.blockers());
+    for (name, expected) in names.iter().zip(before) {
+        assert_eq!(
+            fs::read_to_string(root.path().join("src").join(name)).into_diagnostic()?,
+            expected
+        );
+    }
+    Ok(())
+}
+
+fn lifetime_free_distributed_fixture() -> miette::Result<tempfile::TempDir> {
+    let root = distributed_fixture()?;
+    fs::write(root.path().join("src/lib.rs"), r#"mod cause;
+mod kind;
+mod build;
+use std::panic::Location;
+
+#[derive(Debug, Clone)]
+struct Parent { source: cause::Cause, kind: Box<kind::Kind>, file: String }
+impl Parent {
+    #[track_caller]
+    fn new<'a>(source: &'a cause::Cause, kind: &'a kind::Kind) -> Self {
+        Self { source: source.clone(), kind: Box::new(kind.clone()), file: Location::caller().file().to_string() }
+    }
+}
+impl std::fmt::Display for Parent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.file) }
+}
+impl std::error::Error for Parent {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> { Some(&self.source) }
+}
+impl<'a> From<(&'a cause::Cause, &'a kind::Kind)> for Parent {
+    fn from((source, kind): (&'a cause::Cause, &'a kind::Kind)) -> Self { Self::new(source, kind) }
+}
+#[test]
+fn preserves_source_and_location() {
+    use std::error::Error;
+    let cause = cause::Cause::new();
+    let kind = kind::make(&cause);
+    let error = build::via_try(&cause, &kind).unwrap_err();
+    assert!(error.source().unwrap().to_string().contains("lib.rs"));
+    assert!(error.to_string().contains("lib.rs"));
+}
+"#).into_diagnostic()?;
+    fs::write(
+        root.path().join("src/kind.rs"),
+        r#"#[derive(Debug, Clone)]
+pub(super) enum Kind { Wrapped(Box<super::cause::Cause>) }
+pub(super) fn make<'a>(source: &'a super::cause::Cause) -> Kind {
+    Kind::Wrapped(Box::new(source.clone()))
+}
+"#,
+    )
+    .into_diagnostic()?;
+    fs::write(root.path().join("src/build.rs"), r#"pub(super) fn via_try<'a>(source: &'a super::cause::Cause, kind: &'a super::kind::Kind) -> Result<(), super::Parent> {
+    let input: Result<(), (&super::cause::Cause, &super::kind::Kind)> = Err((source, kind));
+    input?;
+    Ok(())
+}
+"#).into_diagnostic()?;
+    Ok(root)
+}
+
 fn distributed_fixture() -> miette::Result<tempfile::TempDir> {
     let root = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(root.path().join("src")).into_diagnostic()?;

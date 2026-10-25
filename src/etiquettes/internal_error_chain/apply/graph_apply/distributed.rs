@@ -22,6 +22,7 @@ use super::super::names::audit_names;
 use super::super::{Edit, known_error_impls, span_range};
 use super::expressions::GraphExprPlanner;
 use super::external::paths_resolve_to_graph;
+use super::lifetimes;
 use super::plan::plan_struct_fields;
 use super::types::{allowed_attrs, desired_type, is_copy_shape, storage_shape, wants_change};
 use super::{CrossFileNames, ErrorGraphPlan, VariantChange};
@@ -40,6 +41,27 @@ pub(super) fn plan(
         .iter()
         .map(|(name, (_, _, target))| (name.clone(), target.clone()))
         .collect();
+    let names: BTreeSet<_> = declarations.keys().cloned().collect();
+    let structs: BTreeMap<_, _> = declarations
+        .iter()
+        .filter_map(|(name, (_, item, _))| match item {
+            Item::Struct(item) => Some((name.clone(), item)),
+            _ => None,
+        })
+        .collect();
+    let enums: BTreeMap<_, _> = declarations
+        .iter()
+        .filter_map(|(name, (_, item, _))| match item {
+            Item::Enum(item) => Some((name.clone(), item)),
+            _ => None,
+        })
+        .collect();
+    let lifetime = lifetimes::select_across(files, strategy, &names, &structs, &enums);
+    let changing_generics = lifetime
+        .as_ref()
+        .map(|plan| plan.names().clone())
+        .unwrap_or_default();
+    let graph_lifetime = lifetime.as_ref().map(|plan| plan.lifetime().as_str());
     if has_incoming_edge_outside_graph(files, index, &expected) {
         return None;
     }
@@ -80,8 +102,8 @@ pub(super) fn plan(
                         strategy,
                         item,
                         None,
-                        None,
-                        &BTreeSet::new(),
+                        graph_lifetime,
+                        &changing_generics,
                     ) {
                         let (start, end) = span_range(file.source(), field.ty.span())?;
                         edits_by_path
@@ -117,8 +139,8 @@ pub(super) fn plan(
             index,
             structs,
             &names,
-            None,
-            &BTreeSet::new(),
+            graph_lifetime,
+            &changing_generics,
             true,
         );
         let (fields, edits, field_changes, valid) = fields.into_parts();
@@ -148,15 +170,22 @@ pub(super) fn plan(
         }
         let mut visitor =
             GraphExprPlanner::new(file, strategy, &changes, &variants).strict_external();
+        if strategy == ErrorFieldStrategy::Borrowed {
+            if let Some(lifetime) = &lifetime {
+                visitor = visitor.require_anchored(lifetime.lifetime());
+            }
+        }
         visitor.visit_file(file.syntax());
         let (edits, complete, found, found_variants) = visitor.finish();
         if !complete {
             return None;
         }
-        edits_by_path
-            .entry(file.path().to_path_buf())
-            .or_default()
-            .extend(edits);
+        let file_edits = edits_by_path.entry(file.path().to_path_buf()).or_default();
+        file_edits.extend(edits);
+        if let Some(lifetime) = &lifetime {
+            let signature_edits = lifetime.distributed_edits(file, strategy, file_edits)?;
+            file_edits.extend(signature_edits);
+        }
         constructed.extend(found);
         constructed_variants.extend(found_variants);
     }

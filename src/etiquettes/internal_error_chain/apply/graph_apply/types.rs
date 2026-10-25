@@ -203,7 +203,16 @@ pub(super) fn desired_type<T: HasGenerics>(
                 {
                     return None;
                 }
-                segment.ident.to_string()
+                let (args_start, args_end) = span_range(file.source(), arguments.span())?;
+                let (type_start, type_end) = span_range(file.source(), reference.elem.span())?;
+                if args_start < type_start || args_end > type_end {
+                    return None;
+                }
+                format!(
+                    "{}{}",
+                    &file.source()[type_start..args_start],
+                    &file.source()[args_end..type_end]
+                )
             } else {
                 referent.to_string()
             };

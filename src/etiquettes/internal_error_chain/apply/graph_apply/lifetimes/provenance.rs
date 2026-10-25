@@ -31,7 +31,10 @@ pub(super) fn returns_graph_type(output: &syn::ReturnType, names: &BTreeSet<Stri
 }
 
 #[instrument(level = "debug", skip(signature))]
-fn anchored_parameters(signature: &syn::Signature, lifetime: &str) -> BTreeSet<String> {
+pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn anchored_parameters(
+    signature: &syn::Signature,
+    lifetime: &str,
+) -> BTreeSet<String> {
     fn collect(pat: &syn::Pat, ty: &Type, lifetime: &str, names: &mut BTreeSet<String>) {
         match (pat, ty) {
             (syn::Pat::Ident(ident), ty) if contains_lifetime_type(ty, lifetime) => {
@@ -70,6 +73,17 @@ fn anchored_expr(expr: &syn::Expr, parameters: &BTreeSet<String>) -> bool {
         {
             anchored_expr(&call.receiver, parameters)
         }
+        syn::Expr::Call(call)
+            if matches!(&*call.func, syn::Expr::Path(path)
+                if path.path.segments.len() == 2
+                    && path.path.segments[0].ident == "Box"
+                    && path.path.segments[1].ident == "new")
+                && call.args.len() == 1 =>
+        {
+            call.args
+                .first()
+                .is_some_and(|arg| anchored_expr(arg, parameters))
+        }
         _ => false,
     }
 }
@@ -86,13 +100,22 @@ fn direct_graph_return(
     let syn::Expr::Path(path) = &*call.func else {
         return false;
     };
-    path.path.segments.len() == 2
-        && names.contains(&path.path.segments[0].ident.to_string())
+    path.path.segments.len() >= 2
+        && path
+            .path
+            .segments
+            .iter()
+            .rev()
+            .nth(1)
+            .is_some_and(|segment| names.contains(&segment.ident.to_string()))
         && call.args.iter().all(|arg| anchored_expr(arg, parameters))
 }
 
 #[instrument(level = "debug", skip(expr, parameters))]
-fn constructor_origin(expr: &syn::Expr, parameters: &BTreeSet<String>) -> bool {
+pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn constructor_origin(
+    expr: &syn::Expr,
+    parameters: &BTreeSet<String>,
+) -> bool {
     if anchored_expr(expr, parameters) {
         return true;
     }

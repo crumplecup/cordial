@@ -21,7 +21,7 @@ other policy choices, such as test error handling with `miette`, `anyhow`, or a
 boxed error. The chosen strategy controls the transformation; the collected
 facts and unresolved edges remain independent of that choice.
 
-The current apply pass changes private, same-file error struct fields with
+The apply pass changes private error struct fields with
 recognized constructors. It handles `file: String` built from
 `Location::caller().file()` and other `String` fields built from string literals,
 or explicitly qualified same-module `const` and immutable `static` bindings
@@ -40,11 +40,12 @@ one existing named lifetime and a separate non-string lifetime-bearing field
 can also borrow constructor parameters and typed local aliases tied to that
 same lifetime. A closed private error with one string field and optional scalar
 context can move an explicit constructor lifetime onto its type and back. It
-can also introduce and remove a named lifetime across a closed file-local
-private parent, Kind, and native source graph. It uses a shared parsed file
-view while scanning and checks that edited source parses. It leaves unrelated
-dynamic constructor parameters, unresolved graph callers, public types, and
-cross-file uses untouched. See
+can also introduce and remove a named lifetime across a closed private parent,
+Kind, and native source graph spanning files. The cross-file planner requires
+one constructor-anchored lifetime and proven borrowed origins at changed
+constructors. It uses shared parsed files and validates patched source. It
+leaves unrelated dynamic constructor parameters, unresolved graph callers,
+public types, and ambiguous cross-file uses untouched. See
 [`apply.rs`](../../src/etiquettes/internal_error_chain/apply.rs) and its
 [`initializers.rs`](../../src/etiquettes/internal_error_chain/apply/initializers.rs).
 
@@ -236,8 +237,9 @@ named lifetime can now also include Kind and source declarations in different
 files. The shared declaration index locates each member, and one component
 contains its declaration, constructors, and source-sensitive reads. A four-file
 fixture checks dry run, both storage strategies, compilation, and an atomic
-blocker. Introducing a new lifetime across files remains open. Inventory and
-graph planning share one crate type index during
+blocker. The planner can now introduce that lifetime across four files and
+remove it on the owned round trip. An unanchored constructor blocks the whole
+graph. Inventory and graph planning share one crate type index during
 apply. The inventory also records the
 syntactic storage shape and type path of direct, boxed, and explicitly borrowed
 `source`/`kind` fields as typed IR facts. Enrichment links a unique private
@@ -320,8 +322,8 @@ Implementation checkpoints:
 - [x] Plan a private file-local Kind/source graph as one IR-backed edit set,
   with source-digest validation, conservative blockers, and a compiling
   owned-to-borrowed-to-owned fixture. A constructor-anchored lifetime can now
-  be introduced across a closed same-file graph; cross-file graphs need a
-  staged multi-file writer with rollback.
+  be introduced across a closed same-file graph and across supported closed
+  cross-file graphs. The multi-file writer stages edits with rollback.
 
 - [x] Build apply's source view with the same loader as normal sessions, and
   materialize conversion units as typed graph facts in the error IR enricher.
@@ -355,8 +357,9 @@ Implementation checkpoints:
   one component.
   Closed Kind/source declarations across active external modules now convert
   together when the parent already has a named lifetime; a four-file fixture
-  checks both directions. Cross-file lifetime introduction and more complex
-  caller constraints remain open.
+  checks both directions. Cross-file lifetime introduction now covers a closed
+  four-file graph with a named constructor anchor and proven constructor
+  origins; more complex caller constraints remain open.
 - [x] Connect conversion evidence across validated external module boundaries
   in the shared IR. A private declaration has a path, line, column, and digest identity;
   source/Kind edges and path-based constructor, caller, and type-use sites link

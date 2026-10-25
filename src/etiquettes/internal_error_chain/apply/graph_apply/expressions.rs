@@ -10,6 +10,7 @@ use crate::loader::SharedParsedFile;
 
 use super::super::uses::{macro_has_unhandled_field_use, tokens_construct_type};
 use super::super::{Edit, span_range};
+use super::lifetimes::{anchored_parameters, constructor_origin};
 use super::types::type_name;
 use super::{Change, Shape, VariantChange};
 
@@ -26,6 +27,8 @@ pub(super) struct GraphExprPlanner<'a> {
     constructed_variants: BTreeSet<(String, String)>,
     allowed_uses: BTreeSet<(usize, usize)>,
     strict_external: bool,
+    anchor_lifetime: Option<String>,
+    anchor_params: BTreeSet<String>,
 }
 
 impl<'a> GraphExprPlanner<'a> {
@@ -65,12 +68,23 @@ impl<'a> GraphExprPlanner<'a> {
             constructed_variants: BTreeSet::new(),
             allowed_uses: BTreeSet::new(),
             strict_external: false,
+            anchor_lifetime: None,
+            anchor_params: BTreeSet::new(),
         }
     }
     #[instrument(level = "debug", skip(self))]
     pub(super) fn strict_external(mut self) -> Self {
         self.strict_external = true;
         self
+    }
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn require_anchored(mut self, lifetime: &str) -> Self {
+        self.anchor_lifetime = Some(lifetime.to_owned());
+        self
+    }
+    #[instrument(level = "trace", skip(self, expr))]
+    fn anchored(&self, expr: &Expr) -> bool {
+        self.anchor_lifetime.is_none() || constructor_origin(expr, &self.anchor_params)
     }
     #[instrument(level = "trace", skip(self, span))]
     fn source(&self, span: proc_macro2::Span) -> Option<&str> {
@@ -193,7 +207,9 @@ impl<'ast> Visit<'ast> for GraphExprPlanner<'_> {
                 let key = (name.clone(), member.to_string());
                 if let Some(change) = self.changes.get(&key) {
                     self.constructed.insert(key);
-                    if let Some(replacement) = self.expression(&field.expr, change.shape) {
+                    if member != "file" && !self.anchored(&field.expr) {
+                        self.valid = false;
+                    } else if let Some(replacement) = self.expression(&field.expr, change.shape) {
                         self.edit(field.expr.span(), replacement);
                     } else {
                         self.valid = false;
@@ -219,7 +235,9 @@ impl<'ast> Visit<'ast> for GraphExprPlanner<'_> {
                     if item.args.len() != 1 {
                         self.valid = false;
                     } else if let Some(arg) = item.args.first() {
-                        if let Some(replacement) = self.expression(arg, change.shape) {
+                        if !self.anchored(arg) {
+                            self.valid = false;
+                        } else if let Some(replacement) = self.expression(arg, change.shape) {
                             self.edit(arg.span(), replacement);
                         } else {
                             self.valid = false;
@@ -232,6 +250,13 @@ impl<'ast> Visit<'ast> for GraphExprPlanner<'_> {
     }
     #[instrument(level = "debug", skip(self, item))]
     fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
+        let previous_params = std::mem::replace(
+            &mut self.anchor_params,
+            self.anchor_lifetime
+                .as_deref()
+                .map(|lifetime| anchored_parameters(&item.sig, lifetime))
+                .unwrap_or_default(),
+        );
         if self.current_error_trait && item.sig.ident == "source" {
             let source_field = self
                 .current_impl
@@ -267,6 +292,19 @@ impl<'ast> Visit<'ast> for GraphExprPlanner<'_> {
             }
         }
         syn::visit::visit_impl_item_fn(self, item);
+        self.anchor_params = previous_params;
+    }
+    #[instrument(level = "debug", skip(self, item))]
+    fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
+        let previous_params = std::mem::replace(
+            &mut self.anchor_params,
+            self.anchor_lifetime
+                .as_deref()
+                .map(|lifetime| anchored_parameters(&item.sig, lifetime))
+                .unwrap_or_default(),
+        );
+        syn::visit::visit_item_fn(self, item);
+        self.anchor_params = previous_params;
     }
     #[instrument(level = "debug", skip(self, item))]
     fn visit_expr_method_call(&mut self, item: &'ast syn::ExprMethodCall) {
