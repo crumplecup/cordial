@@ -8,7 +8,7 @@ use syn::{GenericParam, Item, ItemStruct, Type};
 use tracing::instrument;
 
 use crate::config::load_cordial_config;
-use crate::error::{CordialError, CordialResult};
+use crate::error::CordialResult;
 use crate::ir::CrateIr;
 use crate::loader::SourceLoadView;
 use crate::session::RunAll;
@@ -23,6 +23,7 @@ mod lifetime;
 mod names;
 mod patch;
 mod uses;
+mod write;
 
 use self::graph_apply::{conversion_graphs_from_ir, enrich_conversion_graphs};
 pub use self::inventory::{
@@ -32,6 +33,7 @@ pub use self::inventory::{
 };
 pub(crate) use self::inventory::{conversion_units_from_ir, enrich_conversion_units};
 use self::patch::patch_file;
+use self::write::write_planned_files;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Edit {
@@ -171,19 +173,8 @@ pub fn run_error_field_apply(
                 planned.push((file, patched, converted));
             }
         }
-        for (file, _, _) in &planned {
-            if !file.matches_disk()? {
-                return Err(CordialError::stale_source_snapshot(file.path()));
-            }
-        }
-        for (file, patched, converted) in planned {
-            if dry_run {
-                tracing::info!(path = %file.path().display(), converted, "dry run: would update error field storage");
-            } else {
-                std::fs::write(file.path(), patched)?;
-            }
-            summary.changed_files += 1;
-        }
+        write_planned_files(&planned, dry_run)?;
+        summary.changed_files += planned.len();
     }
     Ok(summary)
 }

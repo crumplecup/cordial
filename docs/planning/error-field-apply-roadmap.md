@@ -323,11 +323,15 @@ Implementation checkpoints:
   walks. A per-file top-level index now serves every lifetime candidate.
   Apply now receives `SourceEditView`, which exposes text and digest but no
   `syntax()` method.
-- [ ] Add source-digest checks and whole-unit writes before allowing cross-file
-  conversions. Shared source snapshots and conversion units now carry digests;
-  apply rejects mismatched IR facts and checks every planned file against disk
-  before writing a crate target. Multi-file writes are not yet atomic. Keep
-  unknown name, cfg, or macro edges as explicit blockers.
+- [ ] Allow cross-file conversions only after the planner proves a closed unit.
+  Shared source snapshots and conversion units carry digests. Apply now stages
+  every planned file in its source directory, checks all snapshots before
+  replacement, checks each again at replacement time, and restores earlier
+  files when a later replacement fails. A two-file fixture exercises the write
+  path. Add deterministic failure tests for rollback and concurrent changes
+  before authorizing a cross-file conversion. This is a rollback-capable
+  whole-target write, not crash-atomic across files. Unknown name, cfg, or macro
+  edges remain explicit blockers until the planner can account for them.
 - [x] Connect conversion evidence across validated external module boundaries
   in the shared IR. A private declaration has a path, line, column, and digest identity;
   source/Kind edges and path-based constructor, caller, and type-use sites link
