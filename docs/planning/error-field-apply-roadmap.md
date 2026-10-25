@@ -232,6 +232,11 @@ hold it long enough. The first graph fixture should include a parent, Kind,
 native source, `Error::source()`, a `From` path, and a `?` caller, then prove
 borrowed and owned round trips plus no partial write on an unresolved edge.
 
+The same inventory walk records the written return type and direct `self` field
+uses of each `Error::source()` override. These are syntax facts, not proof that
+the method returns that field on every path or that the trait name resolves to
+`std::error::Error`; the conversion edge remains unresolved.
+
 ### Pipeline contract for broader apply
 
 `quality --apply` now builds the same `SourceLoadView` as normal sessions and

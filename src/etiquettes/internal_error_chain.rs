@@ -46,7 +46,8 @@ pub use apply::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
     ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind, ErrorFieldApplyBlocker,
     ErrorFieldApplyBlockerReason, ErrorFieldApplySummary, ErrorFileApplySummary, ErrorFromEvidence,
-    ErrorTryEvidence, ErrorTryScope, run_error_field_apply, run_error_file_apply,
+    ErrorSourceMethodEvidence, ErrorTryEvidence, ErrorTryScope, run_error_field_apply,
+    run_error_file_apply,
 };
 pub(crate) use architecture::scan_crate_error_architecture_with_source;
 pub use assessor::InternalErrorChainAssessor;

@@ -20,7 +20,11 @@ impl std::fmt::Display for MessageError {
         write!(f, "{}", self.message)
     }
 }
-impl std::error::Error for MessageError {}
+impl std::error::Error for MessageError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
 impl MessageError {
     fn new(source: std::io::Error) -> Self {
         Self { message: "fixed".to_owned(), source, kind: Box::new(Kind::Basic) }
@@ -62,6 +66,7 @@ fn caller() -> Result<(), MessageError> {
         ErrorConversionSiteKind::Caller,
         ErrorConversionSiteKind::TypeUse,
         ErrorConversionSiteKind::FromConversion,
+        ErrorConversionSiteKind::SourceMethod,
         ErrorConversionSiteKind::TryConversion,
         ErrorConversionSiteKind::ErrorEdge,
     ] {
@@ -114,6 +119,16 @@ fn caller() -> Result<(), MessageError> {
                         .output_type_path()
                         .as_ref()
                         .is_some_and(|path| path.iter().map(String::as_str).eq(["MessageError"]))
+            })
+    }));
+    assert!(unit.sites().iter().any(|site| {
+        site.kind() == ErrorConversionSiteKind::SourceMethod
+            && !site.resolved()
+            && site.source_method().as_ref().is_some_and(|evidence| {
+                evidence.trait_path() == &["std", "error", "Error"]
+                    && evidence.return_type_text().as_deref()
+                        == Some("Option<&(dyn std::error::Error + 'static)>")
+                    && evidence.self_field_uses().contains("source")
             })
     }));
     assert!(unit.sites().iter().any(|site| {

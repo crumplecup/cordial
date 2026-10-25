@@ -16,12 +16,14 @@ use super::helpers::{
     derive_is_nonconstructing, path_mentions, return_type_mentions, type_mentions,
     use_tree_mentions,
 };
+use super::source_method::ErrorSourceMethodEvidence;
 use super::try_conversion::{ErrorTryEvidence, ErrorTryScope};
 use super::{ConversionCandidate, ErrorConversionSite, ErrorConversionSiteKind, ErrorEdgeField};
 use crate::etiquettes::internal_error_chain::apply::simple_type_name;
 use crate::etiquettes::internal_error_chain::apply::uses::{
     macro_has_unhandled_field_use, tokens_access_field, tokens_construct_type,
 };
+use crate::etiquettes::internal_error_chain::type_graph::trait_is_std_error;
 
 pub(super) struct BatchInventoryVisitor<'a> {
     file: &'a SharedParsedFile,
@@ -29,6 +31,8 @@ pub(super) struct BatchInventoryVisitor<'a> {
     relevant: &'a [usize],
     module_depth: usize,
     current_impl: Option<String>,
+    current_error_trait: Option<syn::Path>,
+    current_source_sites: Vec<(usize, usize)>,
     returning_error: Vec<bool>,
     try_evidence: Option<ErrorTryEvidence>,
     sites: Vec<Vec<ErrorConversionSite>>,
@@ -47,6 +51,8 @@ impl<'a> BatchInventoryVisitor<'a> {
             relevant,
             module_depth: 0,
             current_impl: None,
+            current_error_trait: None,
+            current_source_sites: Vec::new(),
             returning_error: vec![false; candidates.len()],
             try_evidence: None,
             sites: vec![Vec::new(); candidates.len()],
@@ -71,6 +77,7 @@ impl<'a> BatchInventoryVisitor<'a> {
             kind,
             edge: None,
             from_conversion: None,
+            source_method: None,
             try_conversion: None,
             resolved: resolved
                 && self.file.path() == self.candidates[index].declaration
@@ -144,6 +151,14 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
     #[instrument(level = "debug", skip(self, item))]
     fn visit_item_impl(&mut self, item: &'ast ItemImpl) {
         let previous = std::mem::replace(&mut self.current_impl, simple_type_name(&item.self_ty));
+        let previous_trait = std::mem::replace(
+            &mut self.current_error_trait,
+            item.trait_
+                .as_ref()
+                .map(|(path, _)| path)
+                .filter(|path| trait_is_std_error(path))
+                .cloned(),
+        );
         if let Some((path, _)) = &item.trait_ {
             if let Some(evidence) = ErrorFromEvidence::from_impl(item) {
                 for offset in 0..self.relevant.len() {
@@ -166,13 +181,39 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
         }
         syn::visit::visit_item_impl(self, item);
         self.current_impl = previous;
+        self.current_error_trait = previous_trait;
     }
 
     #[instrument(level = "debug", skip(self, item))]
     fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
+        let previous_source_sites = std::mem::take(&mut self.current_source_sites);
+        if item.sig.ident == "source" {
+            if let (Some(name), Some(trait_path)) = (
+                self.current_impl.as_ref(),
+                self.current_error_trait.as_ref(),
+            ) {
+                let name = name.clone();
+                let evidence = ErrorSourceMethodEvidence::from_method(self.file, item, trait_path);
+                for offset in 0..self.relevant.len() {
+                    let index = self.relevant[offset];
+                    if self.candidates[index].type_name == name {
+                        self.record(
+                            index,
+                            ErrorConversionSiteKind::SourceMethod,
+                            item.span(),
+                            false,
+                        );
+                        let site_index = self.sites[index].len() - 1;
+                        self.sites[index][site_index].source_method = Some(evidence.clone());
+                        self.current_source_sites.push((index, site_index));
+                    }
+                }
+            }
+        }
         let previous = self.enter_return_scope(Some(&item.sig.output), ErrorTryScope::Function);
         syn::visit::visit_impl_item_fn(self, item);
         self.leave_return_scope(previous);
+        self.current_source_sites = previous_source_sites;
     }
 
     #[instrument(level = "debug", skip(self, item))]
@@ -270,6 +311,14 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
     #[instrument(level = "debug", skip(self, item))]
     fn visit_expr_field(&mut self, item: &'ast ExprField) {
         if let Member::Named(name) = &item.member {
+            if matches!(&*item.base, Expr::Path(path) if path.qself.is_none() && path.path.is_ident("self"))
+            {
+                for &(index, site_index) in &self.current_source_sites {
+                    if let Some(evidence) = self.sites[index][site_index].source_method.as_mut() {
+                        evidence.record_self_field(name);
+                    }
+                }
+            }
             for offset in 0..self.relevant.len() {
                 let index = self.relevant[offset];
                 if name == self.candidates[index].field_name.as_str() {

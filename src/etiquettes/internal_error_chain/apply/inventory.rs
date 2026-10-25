@@ -17,6 +17,7 @@ mod edges;
 mod from;
 mod graph;
 mod helpers;
+mod source_method;
 mod try_conversion;
 
 pub use edges::{
@@ -24,6 +25,7 @@ pub use edges::{
 };
 pub use from::ErrorFromEvidence;
 pub(crate) use graph::{conversion_units_from_ir, enrich_conversion_units};
+pub use source_method::ErrorSourceMethodEvidence;
 pub use try_conversion::{ErrorTryEvidence, ErrorTryScope};
 
 /// A source construct that may participate in converting an error field.
@@ -43,6 +45,8 @@ pub enum ErrorConversionSiteKind {
     FieldPattern,
     /// A `From` implementation involving the error type.
     FromConversion,
+    /// An override of the error trait's `source` method.
+    SourceMethod,
     /// A `?` expression in a function returning the error type.
     TryConversion,
     /// A `source` or `kind` field in the error declaration.
@@ -69,6 +73,8 @@ pub struct ErrorConversionSite {
     edge: Option<ErrorEdgeEvidence>,
     /// Written type paths on a `From` implementation; not name-resolved.
     from_conversion: Option<ErrorFromEvidence>,
+    /// Written signature and self-field uses in an error source override.
+    source_method: Option<ErrorSourceMethodEvidence>,
     /// Lexical return signature at a `?` site; not type-resolved.
     try_conversion: Option<ErrorTryEvidence>,
     #[getter(copy)]
