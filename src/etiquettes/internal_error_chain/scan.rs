@@ -6,7 +6,9 @@ use crate::error::CordialResult;
 
 use super::types::InternalErrorChainScanReport;
 
-pub use super::compliance::scan_compliance_rust_source;
+pub use super::compliance::{
+    scan_compliance_rust_source, scan_compliance_rust_source_with_crate_kind,
+};
 pub use super::type_graph::scan_error_rust_source;
 use tracing::instrument;
 

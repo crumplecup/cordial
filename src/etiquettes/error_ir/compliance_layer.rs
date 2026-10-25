@@ -11,6 +11,7 @@ use syn::{Expr, ExprCall, ExprIf, ExprMatch, ExprPath, Pat, Stmt};
 use super::stringified_binding::{
     discards_stringified_binding, map_err_discards_stringified_binding,
 };
+use super::syn_error_terminus::builds_syn_error;
 use super::visitor::expr::{pat_is_err, raw_expr_snippet, truncate_snippet};
 use super::visitor::{ErrorIrScanLayers, ErrorIrScanLayersBuilder, SiteCtx};
 use crate::error::CordialResult;
@@ -21,18 +22,23 @@ use crate::etiquettes::internal_error_chain::{
 
 use tracing::instrument;
 /// Per-file accumulator for the `internal_error_chain` compliance layer.
-#[derive(Default)]
+#[derive(derive_new::new)]
 pub(super) struct ComplianceLayer {
+    #[new(default)]
     findings: Vec<InternalErrorComplianceFinding>,
+    #[new(default)]
     error: Option<crate::error::CordialError>,
+    /// Whether this crate builds as a `proc-macro = true` library. A
+    /// proc-macro's own `expand_*` boundary returns `syn::Result<_>`;
+    /// `syn::Error` is that boundary's real terminus (it becomes
+    /// `.to_compile_error()`, a `compile_error!` token stream rendered for
+    /// a human at macro-expansion time), not an intermediate carrier with
+    /// a caller downstream to hand a typed source to. `syn::Error` also
+    /// has no slot to hold one -- it's a span plus a message.
+    is_proc_macro_crate: bool,
 }
 
 impl ComplianceLayer {
-    #[instrument(level = "debug")]
-    pub(super) fn new() -> Self {
-        Self::default()
-    }
-
     #[instrument(level = "debug", skip(self, rule_id, ctx))]
     fn push(
         &mut self,
@@ -86,6 +92,9 @@ impl ComplianceLayer {
             return;
         }
         if map_err_discards_stringified_binding(converter) {
+            if self.is_proc_macro_crate && builds_syn_error(converter) {
+                return;
+            }
             self.push(
                 InternalErrorComplianceId::StringifyForeign001,
                 line,
@@ -101,6 +110,9 @@ impl ComplianceLayer {
         }
 
         if compliance_map_err_stringifies(converter) {
+            if self.is_proc_macro_crate && builds_syn_error(converter) {
+                return;
+            }
             self.push(
                 InternalErrorComplianceId::StringifyForeign001,
                 line,
@@ -147,6 +159,9 @@ impl ComplianceLayer {
             .as_deref()
             .is_some_and(|name| discards_stringified_binding(payload, name))
         {
+            if self.is_proc_macro_crate && builds_syn_error(payload) {
+                return;
+            }
             self.push(
                 InternalErrorComplianceId::StringifyForeign001,
                 line,
@@ -161,6 +176,9 @@ impl ComplianceLayer {
             return;
         }
         if compliance_expr_contains_to_string(payload) {
+            if self.is_proc_macro_crate && builds_syn_error(payload) {
+                return;
+            }
             self.push(
                 InternalErrorComplianceId::StringifyForeign001,
                 line,
@@ -453,9 +471,13 @@ fn path_is_err(path: &ExprPath) -> bool {
 }
 
 impl ErrorIrScanLayers {
-    /// Scan only the internal error-chain compliance layer.
+    /// Scan only the internal error-chain compliance layer. `is_proc_macro_crate`
+    /// -- see [`ComplianceLayer`]'s field doc.
     #[instrument(level = "debug", err(level = "warn"))]
-    pub fn compliance_only() -> CordialResult<Self> {
-        ErrorIrScanLayersBuilder::default().compliance(true).build()
+    pub fn compliance_only(is_proc_macro_crate: bool) -> CordialResult<Self> {
+        ErrorIrScanLayersBuilder::default()
+            .compliance(true)
+            .is_proc_macro_crate(is_proc_macro_crate)
+            .build()
     }
 }

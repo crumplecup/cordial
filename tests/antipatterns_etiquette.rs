@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use cordial::{
     ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, ErrorFieldStrategy, RunAll, Session, SessionBuilder,
     StaticRefStrategy, scan_antipatterns_rust_source,
+    scan_antipatterns_rust_source_with_skip_paths,
     scan_antipatterns_rust_source_with_static_ref_strategy,
     scan_antipatterns_rust_source_with_strategies, scan_crate_antipatterns,
 };
@@ -56,6 +57,64 @@ struct UnrelatedKind { file: &'static str }
         owned
             .iter()
             .any(|finding| finding.context().contains("ErrorType"))
+    );
+    Ok(())
+}
+
+#[test]
+fn skip_paths_exempt_one_rule_on_a_matched_path_only() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+struct Gallery { value: &'static str }
+fn gallery_proof(_context: &str) {}
+"#;
+    let root = Path::new("/fixture/src");
+    let file = root.join("gallery.rs");
+
+    let mut skip_paths = std::collections::HashMap::new();
+    skip_paths.insert(
+        AntipatternRuleId::StructStaticRef001.as_str().to_string(),
+        vec!["gallery.rs".to_string()],
+    );
+    let scoped = scan_antipatterns_rust_source_with_skip_paths(
+        source,
+        &file,
+        root,
+        root,
+        StaticRefStrategy::String,
+        ErrorFieldStrategy::Owned,
+        &skip_paths,
+    )
+    .into_diagnostic()?;
+    assert!(
+        !scoped
+            .iter()
+            .any(|finding| finding.rule_id() == AntipatternRuleId::StructStaticRef001),
+        "{scoped:?}"
+    );
+    assert!(
+        scoped
+            .iter()
+            .any(|finding| finding.rule_id() == AntipatternRuleId::UnusedUnderscoreArg001),
+        "skip_paths must not exempt a different rule on the same file: {scoped:?}"
+    );
+
+    let other_file = root.join("elsewhere.rs");
+    let unscoped = scan_antipatterns_rust_source_with_skip_paths(
+        source,
+        &other_file,
+        root,
+        root,
+        StaticRefStrategy::String,
+        ErrorFieldStrategy::Owned,
+        &skip_paths,
+    )
+    .into_diagnostic()?;
+    assert!(
+        unscoped
+            .iter()
+            .any(|finding| finding.rule_id() == AntipatternRuleId::StructStaticRef001),
+        "skip_paths must not exempt an unmatched path: {unscoped:?}"
     );
     Ok(())
 }

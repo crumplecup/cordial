@@ -103,6 +103,7 @@ pub use etiquettes::antipatterns::{
     scan_crate_antipatterns_with_static_ref_strategy, scan_crate_contract_bounds,
     scan_creusot_contract_bounds_source, scan_kani_contract_bounds_source,
     scan_rust_source as scan_antipatterns_rust_source,
+    scan_rust_source_with_skip_paths as scan_antipatterns_rust_source_with_skip_paths,
     scan_rust_source_with_static_ref_strategy as scan_antipatterns_rust_source_with_static_ref_strategy,
     scan_rust_source_with_strategies as scan_antipatterns_rust_source_with_strategies,
     scan_verus_contract_bounds_source,
@@ -187,7 +188,8 @@ pub use etiquettes::internal_error_chain::{
     InternalErrorNodeClass, InternalErrorTypeNode, InternalErrorTypeProbeId, SignatureChainCheck,
     SignatureChainStatus, WorkspaceInternalErrorChainSummary,
     build_workspace_internal_error_chain_summary, run_error_field_apply, run_error_file_apply,
-    scan_compliance_rust_source, scan_crate_internal_error_chain, scan_error_rust_source,
+    scan_compliance_rust_source, scan_compliance_rust_source_with_crate_kind,
+    scan_crate_internal_error_chain, scan_error_rust_source,
 };
 #[cfg(feature = "modularity")]
 pub use etiquettes::modularity::{

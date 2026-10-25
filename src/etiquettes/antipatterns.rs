@@ -23,8 +23,14 @@
 //!
 //! **Config.** `[antipatterns] enabled = false` opts out in `cordial.toml`.
 //! `[antipatterns.static_refs] strategy = "string" | "cow" | "const"`
-//! chooses the remediation guidance for `&'static str` fields. Register
-//! [`ANTIPATTERNS_ETIQUETTE`].
+//! chooses the remediation guidance for `&'static str` fields.
+//! `[antipatterns] skip_paths` maps a rule id to crate-relative path
+//! prefixes exempt from that one rule specifically, the same
+//! folder-or-file idiom `[modularity] generated_files` and `[visibility]
+//! mod_thin_skip` use -- for an idiom that recurs by construction in a
+//! known location (a verifier gallery fixture deliberately exercising
+//! the exact shape a rule flags), not a one-off (see `cordial exceptions
+//! add`). Register [`ANTIPATTERNS_ETIQUETTE`].
 
 mod assessor;
 mod contract_bounds;
@@ -49,7 +55,8 @@ pub use reporter::{
     AntipatternChecklistReporter, AntipatternCsvReporter, AntipatternSummaryReporter,
 };
 pub use scan::{
-    scan_rust_source, scan_rust_source_with_static_ref_strategy, scan_rust_source_with_strategies,
+    scan_rust_source, scan_rust_source_with_skip_paths, scan_rust_source_with_static_ref_strategy,
+    scan_rust_source_with_strategies,
 };
 pub use scan_crate::{scan_crate_antipatterns, scan_crate_antipatterns_with_static_ref_strategy};
 pub use types::{AntipatternRuleId, AntipatternSiteRecord};
@@ -108,7 +115,7 @@ pub static ANTIPATTERNS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::
                 "Untyped error carriers and related source smells?",
                 "These are quality problems adjacent to error handling that are not site/chain/foreign layers: they erase types, hide unused work, or fight workspace versioning.",
                 "Flags Box<dyn Error>, Result<_, String>, unused _arg (except on impls of foreign traits), struct &'static fields where an owned type or configured static-ref strategy would do, unnamed contract bounds (Kani/Creusot/Verus), and workspace members that pin a version. Some Box<dyn Error> / unused-arg rows feed the Error handling quality-report area.",
-                "`[antipatterns] enabled = false` in cordial.toml. `[antipatterns.static_refs] strategy = \"string\" | \"cow\" | \"const\"` changes the static-ref remediation guidance; `const` falls back to `Cow<'static, str>` for runtime string fields. `[internal_error_chain] field_strategy = \"borrowed\"` exempts Error types and their Kind enums; the internal error chain etiquette checks their field storage instead.",
+                "`[antipatterns] enabled = false` in cordial.toml. `[antipatterns.static_refs] strategy = \"string\" | \"cow\" | \"const\"` changes the static-ref remediation guidance; `const` falls back to `Cow<'static, str>` for runtime string fields. `[antipatterns] skip_paths = { \"<RULE-ID>\" = [\"<path>\"] }` exempts one rule on matched crate-relative paths (exact file or prefix), for an idiom that recurs by construction in a known location rather than a one-off exception. `[internal_error_chain] field_strategy = \"borrowed\"` exempts Error types and their Kind enums; the internal error chain etiquette checks their field storage instead.",
                 vec![
                     EtiquetteRuleExplain::new(
                         "ANTIPATTERN-BOX-DYN-ERROR-001",

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -13,6 +15,20 @@ pub struct AntipatternsConfig {
     /// Strategy knobs for `ANTIPATTERN-STRUCT-STATIC-REF-001`.
     #[serde(default)]
     static_refs: StaticRefPolicy,
+    /// Rule id to a list of crate-relative path prefixes (exact file or
+    /// directory) exempt from that one rule specifically -- every other
+    /// antipattern rule still applies normally to the same files. A path
+    /// matches when a finding's own file equals the entry exactly or has
+    /// the entry as a path-prefix component, the same folder-or-file
+    /// idiom `[modularity] generated_files` and `[visibility]
+    /// mod_thin_skip` already use. For an idiom that recurs by
+    /// construction in a known location -- a Kani/Creusot/Verus gallery
+    /// fixture deliberately exercising the exact shape a rule flags, not
+    /// a one-off -- not a documented per-finding exception (see `cordial
+    /// exceptions add`). Replacing this map in `cordial.toml` replaces
+    /// the default (empty), it does not union with it.
+    #[serde(default)]
+    skip_paths: HashMap<String, Vec<String>>,
 }
 
 impl Default for AntipatternsConfig {
@@ -21,6 +37,7 @@ impl Default for AntipatternsConfig {
         Self {
             enabled: true,
             static_refs: StaticRefPolicy::default(),
+            skip_paths: HashMap::new(),
         }
     }
 }

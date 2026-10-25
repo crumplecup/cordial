@@ -35,6 +35,7 @@ impl SourceEnricher for AntipatternInventoryEnricher {
             session.store_root(),
             config.antipatterns().static_refs().strategy(),
             config.internal_error_chain().field_strategy(),
+            config.antipatterns().skip_paths(),
         )?;
 
         for record in records {

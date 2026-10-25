@@ -5,7 +5,8 @@ use std::path::Path;
 use cordial::{
     INTERNAL_ERROR_CHAIN_ETIQUETTE, InternalErrorComplianceId, InternalErrorNodeClass,
     InternalErrorTypeProbeId, RunAll, Session, SessionBuilder, SignatureChainStatus,
-    scan_compliance_rust_source, scan_crate_internal_error_chain, scan_error_rust_source,
+    scan_compliance_rust_source, scan_compliance_rust_source_with_crate_kind,
+    scan_crate_internal_error_chain, scan_error_rust_source,
 };
 
 #[test]
@@ -539,6 +540,77 @@ fn preserved(builder: Builder) -> Result<Value, TemporalError> {
         !findings
             .iter()
             .any(|finding| finding.context().ends_with("preserved"))
+    );
+    Ok(())
+}
+
+#[test]
+fn proc_macro_crate_may_terminate_the_chain_at_syn_error() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = r#"
+use syn::Error;
+
+fn qualified_new(item_fn: &ItemFn) -> syn::Result<String> {
+    predicate_body(item_fn).map_err(|reason| {
+        syn::Error::new(item_fn.span(), format!("predicate {reason}"))
+    })
+}
+
+fn bare_new_spanned(input: &DeriveInput) -> syn::Result<TokenStream> {
+    ProofTypeContextBuilder::default()
+        .build()
+        .map_err(|error| Error::new_spanned(input, error.to_string()))
+}
+
+fn unrelated_local_error(builder: Builder) -> Result<Value, TemporalError> {
+    builder.build().map_err(|err| {
+        TemporalError::new(TemporalErrorKind::InvalidDescriptor(
+            InvalidDescriptorSource::new(format!("could not build: {err}")),
+        ))
+    })
+}
+"#;
+    let root = Path::new("tests/fixtures/internal_error_chain");
+    let file = root.join("syn_error_terminus.rs");
+
+    let lib_findings =
+        scan_compliance_rust_source_with_crate_kind(source, &file, root, "a_derive_crate", true)
+            .into_diagnostic()?;
+    assert!(
+        !lib_findings
+            .iter()
+            .any(|finding| finding.context().ends_with("qualified_new")),
+        "{lib_findings:?}"
+    );
+    assert!(
+        !lib_findings
+            .iter()
+            .any(|finding| finding.context().ends_with("bare_new_spanned")),
+        "{lib_findings:?}"
+    );
+    assert!(
+        lib_findings.iter().any(
+            |finding| finding.context().ends_with("unrelated_local_error")
+                && finding.rule_id() == InternalErrorComplianceId::StringifyForeign001
+        ),
+        "a non-syn::Error site must still be caught in a proc-macro crate: {lib_findings:?}"
+    );
+
+    let non_proc_macro_findings =
+        scan_compliance_rust_source_with_crate_kind(source, &file, root, "a_derive_crate", false)
+            .into_diagnostic()?;
+    assert!(
+        non_proc_macro_findings
+            .iter()
+            .any(|finding| finding.context().ends_with("qualified_new")
+                && finding.rule_id() == InternalErrorComplianceId::StringifyForeign001),
+        "outside a proc-macro crate, building a syn::Error is not exempt: {non_proc_macro_findings:?}"
+    );
+    assert!(
+        non_proc_macro_findings
+            .iter()
+            .any(|finding| finding.context().ends_with("bare_new_spanned")
+                && finding.rule_id() == InternalErrorComplianceId::StringifyForeign001)
     );
     Ok(())
 }

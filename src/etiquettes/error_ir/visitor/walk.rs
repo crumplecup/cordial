@@ -61,7 +61,7 @@ impl ErrorIrUnifiedVisitor {
             #[cfg(feature = "error_chain")]
             chain_layer: ChainLayer::new(),
             #[cfg(feature = "internal_error_chain")]
-            compliance_layer: ComplianceLayer::new(),
+            compliance_layer: ComplianceLayer::new(layers.is_proc_macro_crate()),
             error: None,
         }
     }

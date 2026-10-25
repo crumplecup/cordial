@@ -57,7 +57,8 @@ pub use reporter::{
     InternalErrorComplianceCsvReporter, InternalErrorTypeGraphCsvReporter,
 };
 pub use scan::{
-    scan_compliance_rust_source, scan_crate_internal_error_chain, scan_error_rust_source,
+    scan_compliance_rust_source, scan_compliance_rust_source_with_crate_kind,
+    scan_crate_internal_error_chain, scan_error_rust_source,
 };
 pub(crate) use signature_chain::SignatureChainIndex;
 pub use signature_chain::{SignatureChainCheck, SignatureChainStatus};

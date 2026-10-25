@@ -5,6 +5,7 @@ use std::path::Path;
 use crate::error::CordialResult;
 use crate::etiquettes::error_sites::ErrorSiteRecord;
 use crate::etiquettes::{ErrorIrScanLayers, scan_rust_file_syntax};
+use crate::ir::CrateKind;
 use crate::loader::{SourceLoadView, path_has_fixtures, quality_scan_trees};
 
 #[cfg(feature = "error_chain")]
@@ -99,6 +100,7 @@ fn scan_crate_error_ir_impl(
     #[cfg(not(feature = "internal_error_chain"))]
     let _ = field_strategy;
     let src_root = crate_root.join("src");
+    let is_proc_macro_crate = source.crate_kinds().contains(&CrateKind::ProcMacro);
     let mut report = ErrorIrScanReport::default();
 
     #[cfg(feature = "internal_error_chain")]
@@ -140,7 +142,7 @@ fn scan_crate_error_ir_impl(
                         &src_root,
                         crate_root,
                         crate_name,
-                        ErrorIrScanLayers::for_unified_file(under_src),
+                        ErrorIrScanLayers::for_unified_file(under_src, is_proc_macro_crate),
                     )
                 })
             };

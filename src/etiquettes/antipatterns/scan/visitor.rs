@@ -37,6 +37,9 @@ pub(super) struct AntipatternScanVisitor<'a> {
     const_placed_types: &'a HashSet<String>,
     static_ref_strategy: StaticRefStrategy,
     error_field_strategy: ErrorFieldStrategy,
+    /// `[antipatterns] skip_paths`: rule id to crate-relative path
+    /// prefixes exempt from that rule. See [`path_is_skipped`].
+    skip_paths: &'a HashMap<String, Vec<String>>,
     cfg_sibling_real_params: HashMap<String, HashSet<String>>,
     findings: Vec<AntipatternSiteRecord>,
     error: Option<crate::error::CordialError>,
@@ -51,7 +54,8 @@ impl<'a> AntipatternScanVisitor<'a> {
             error_type_names,
             const_placed_types,
             static_ref_strategy,
-            error_field_strategy
+            error_field_strategy,
+            skip_paths
         )
     )]
     pub(super) fn new(
@@ -63,6 +67,7 @@ impl<'a> AntipatternScanVisitor<'a> {
         const_placed_types: &'a HashSet<String>,
         static_ref_strategy: StaticRefStrategy,
         error_field_strategy: ErrorFieldStrategy,
+        skip_paths: &'a HashMap<String, Vec<String>>,
     ) -> Self {
         Self {
             file,
@@ -77,6 +82,7 @@ impl<'a> AntipatternScanVisitor<'a> {
             const_placed_types,
             static_ref_strategy,
             error_field_strategy,
+            skip_paths,
             cfg_sibling_real_params: HashMap::new(),
             findings: Vec::new(),
             error: None,
@@ -118,10 +124,14 @@ impl AntipatternScanVisitor<'_> {
         if self.error.is_some() {
             return;
         }
+        let rel_file = self.rel_file();
+        if path_is_skipped(self.skip_paths, rule_id, &rel_file) {
+            return;
+        }
         match AntipatternSiteRecord::builder()
             .rule_id(rule_id)
             .context(context)
-            .file(self.rel_file())
+            .file(rel_file)
             .line(line)
             .snippet(snippet)
             .build()
@@ -261,4 +271,23 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor<'_> {
         self.check_string_error_type(node);
         syn::visit::visit_type(self, node);
     }
+}
+
+/// Whether `rel_file` is exempt from `rule_id` under `[antipatterns]
+/// skip_paths`. Matched as an exact file or a path prefix -- the same
+/// folder-or-file idiom `ModularityThresholds::is_generated_file` and
+/// `mod_thin_skip_matches` already use.
+#[instrument(level = "debug", skip(skip_paths, rule_id), ret)]
+fn path_is_skipped(
+    skip_paths: &HashMap<String, Vec<String>>,
+    rule_id: AntipatternRuleId,
+    rel_file: &Path,
+) -> bool {
+    let Some(entries) = skip_paths.get(rule_id.as_str()) else {
+        return false;
+    };
+    entries.iter().any(|entry| {
+        let prefix = Path::new(entry);
+        rel_file == prefix || rel_file.starts_with(prefix)
+    })
 }

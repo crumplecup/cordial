@@ -30,5 +30,7 @@ mod chain_layer;
 mod compliance_layer;
 #[cfg(feature = "internal_error_chain")]
 mod stringified_binding;
+#[cfg(feature = "internal_error_chain")]
+mod syn_error_terminus;
 
 pub use visitor::{ErrorIrScanLayers, scan_rust_file_syntax};

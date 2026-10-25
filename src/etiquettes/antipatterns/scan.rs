@@ -1,6 +1,6 @@
 //! syn-based scan for antipattern probes (`Box<dyn Error>`, `Result<_, String>`, `&'static` struct fields except crate-local `dyn Trait` and const/static-only tables, …).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use syn::visit::Visit;
@@ -29,7 +29,7 @@ pub(crate) use preds::truncate_snippet;
 
 #[instrument(
     level = "debug",
-    skip(source, static_ref_strategy, error_field_strategy),
+    skip(source, static_ref_strategy, error_field_strategy, skip_paths),
     err(level = "warn")
 )]
 pub(super) fn scan_shared_crate_trees(
@@ -37,6 +37,7 @@ pub(super) fn scan_shared_crate_trees(
     crate_root: &Path,
     static_ref_strategy: StaticRefStrategy,
     error_field_strategy: ErrorFieldStrategy,
+    skip_paths: &HashMap<String, Vec<String>>,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let mut parsed: Vec<(SharedParsedFile, PathBuf)> = Vec::new();
     let mut local_trait_names = HashSet::new();
@@ -75,6 +76,7 @@ pub(super) fn scan_shared_crate_trees(
             &const_placed_types,
             static_ref_strategy,
             error_field_strategy,
+            skip_paths,
         )?);
     }
     Ok(findings)
@@ -88,7 +90,8 @@ pub(super) fn scan_shared_crate_trees(
         error_type_names,
         const_placed_types,
         static_ref_strategy,
-        error_field_strategy
+        error_field_strategy,
+        skip_paths
     ),
     err(level = "warn")
 )]
@@ -101,6 +104,7 @@ fn scan_shared_file(
     const_placed_types: &HashSet<String>,
     static_ref_strategy: StaticRefStrategy,
     error_field_strategy: ErrorFieldStrategy,
+    skip_paths: &HashMap<String, Vec<String>>,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     scan_parsed(
         file.syntax(),
@@ -112,6 +116,7 @@ fn scan_shared_file(
         const_placed_types,
         static_ref_strategy,
         error_field_strategy,
+        skip_paths,
     )
 }
 
@@ -164,6 +169,33 @@ pub fn scan_rust_source_with_strategies(
     static_ref_strategy: StaticRefStrategy,
     error_field_strategy: ErrorFieldStrategy,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
+    scan_rust_source_with_skip_paths(
+        source,
+        file,
+        src_root,
+        crate_root,
+        static_ref_strategy,
+        error_field_strategy,
+        &HashMap::new(),
+    )
+}
+
+/// Like [`scan_rust_source_with_strategies`], but `skip_paths` is
+/// `[antipatterns] skip_paths`: rule id to crate-relative path prefixes
+/// exempt from that rule.
+#[instrument(
+    level = "debug",
+    skip(source, file, static_ref_strategy, error_field_strategy, skip_paths)
+)]
+pub fn scan_rust_source_with_skip_paths(
+    source: &str,
+    file: &Path,
+    src_root: &Path,
+    crate_root: &Path,
+    static_ref_strategy: StaticRefStrategy,
+    error_field_strategy: ErrorFieldStrategy,
+    skip_paths: &HashMap<String, Vec<String>>,
+) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
     let local_trait_names = collect_local_trait_names(&syntax);
@@ -185,6 +217,7 @@ pub fn scan_rust_source_with_strategies(
         &const_placed_types,
         static_ref_strategy,
         error_field_strategy,
+        skip_paths,
     )
 }
 
@@ -197,7 +230,8 @@ pub fn scan_rust_source_with_strategies(
         error_type_names,
         const_placed_types,
         static_ref_strategy,
-        error_field_strategy
+        error_field_strategy,
+        skip_paths
     )
 )]
 fn scan_parsed(
@@ -210,6 +244,7 @@ fn scan_parsed(
     const_placed_types: &HashSet<String>,
     static_ref_strategy: StaticRefStrategy,
     error_field_strategy: ErrorFieldStrategy,
+    skip_paths: &HashMap<String, Vec<String>>,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut visitor = AntipatternScanVisitor::new(
@@ -221,6 +256,7 @@ fn scan_parsed(
         const_placed_types,
         static_ref_strategy,
         error_field_strategy,
+        skip_paths,
     );
     visitor.visit_file(syntax);
     visitor.into_findings()

@@ -44,6 +44,12 @@ pub struct ErrorIrScanLayers {
     compliance: bool,
     #[getter(copy)]
     type_graph: bool,
+    /// Whether the crate being scanned builds as a `proc-macro = true`
+    /// library. Only meaningful to the `compliance` layer, which uses it
+    /// to recognize `syn::Error` as that kind of crate's real diagnostic
+    /// terminus rather than a dropped error chain.
+    #[getter(copy)]
+    is_proc_macro_crate: bool,
 }
 
 impl ErrorIrScanLayers {
@@ -52,15 +58,17 @@ impl ErrorIrScanLayers {
         chain: false,
         compliance: false,
         type_graph: false,
+        is_proc_macro_crate: false,
     };
 
     #[instrument(level = "debug")]
-    pub fn for_unified_file(under_src: bool) -> Self {
+    pub fn for_unified_file(under_src: bool, is_proc_macro_crate: bool) -> Self {
         Self {
             sites: true,
             chain: under_src,
             compliance: under_src,
             type_graph: under_src,
+            is_proc_macro_crate,
         }
     }
 }

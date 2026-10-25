@@ -1,5 +1,6 @@
 //! Merge per-crate antipattern scans (syn, contract bounds, version-in-member).
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::config::{ErrorFieldStrategy, StaticRefStrategy};
@@ -29,6 +30,7 @@ pub fn scan_crate_antipatterns(
         store_root,
         StaticRefStrategy::default(),
         ErrorFieldStrategy::default(),
+        &HashMap::new(),
     )
 }
 
@@ -50,12 +52,13 @@ pub fn scan_crate_antipatterns_with_static_ref_strategy(
         store_root,
         static_ref_strategy,
         ErrorFieldStrategy::default(),
+        &HashMap::new(),
     )
 }
 
 #[instrument(
     level = "debug",
-    skip(source, static_ref_strategy, error_field_strategy),
+    skip(source, static_ref_strategy, error_field_strategy, skip_paths),
     err(level = "warn")
 )]
 pub(super) fn scan_shared_crate_antipatterns(
@@ -66,12 +69,14 @@ pub(super) fn scan_shared_crate_antipatterns(
     store_root: &Path,
     static_ref_strategy: StaticRefStrategy,
     error_field_strategy: ErrorFieldStrategy,
+    skip_paths: &HashMap<String, Vec<String>>,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
     let findings = scan_shared_crate_trees(
         source,
         crate_root,
         static_ref_strategy,
         error_field_strategy,
+        skip_paths,
     )?;
     finish_crate_antipattern_scan(
         findings,

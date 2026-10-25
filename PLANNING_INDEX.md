@@ -37,6 +37,7 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 | [amenable-ext targets in cordial.toml](docs/planning/amenable-ext-targets-config.md) | **Complete** | Config-driven `[[amenable_ext.target]]` list, owned `Arc<dyn Etiquette>` registration. Steps 0-2 landed |
 | [amenable-ext generic instantiations](docs/planning/amenable-ext-generic-instantiations.md) | **Active** | Per-instantiation coverage rows for generic types (chrono `DateTime`/`Date`), adapting to amenable's CHRONO_SUPPORT_PLAN; canonical type identity; aggregate parent rows. Phase 0 (registry read side) done |
 | [Error handling as plugin](docs/planning/error-handling-as-plugin.md) | **Reference** | Unified `ErrorHandling` plugin; parent / Kind / native-source architecture lints |
+| [Proc-macro crates terminate at syn::Error](docs/planning/error-chain-proc-macro-syn-error.md) | **Active** | Exempt `ERROR-CHAIN-COMPLIANCE-STRINGIFY-001`/`DISCARD-TYPED-001` when a proc-macro crate flattens a foreign error into `syn::Error::new`/`new_spanned` -- a real terminus, not a dropped chain |
 | [Error field apply roadmap](docs/planning/error-field-apply-roadmap.md) | **Active** | Safe owned/borrowed `--apply` expansion: use-site guards, static expressions, constructor parameters, and private Kind/source graphs |
 | [One crate, CLI in the library](docs/planning/one-crate-cli-layout.md) | **Reference** | One `CordialError`; `cli_layout` etiquette; clap dispatch in the library |
 
@@ -44,6 +45,7 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 
 | Document | Status | Summary |
 | --- | --- | --- |
+| [Antipatterns per-file skip](docs/planning/antipatterns-path-skip.md) | **Active** | `[antipatterns] skip_paths` keyed by rule id, reusing the `generated_files`/`mod_thin_skip`/`skip_folders` path-prefix idiom; motivated by Kani gallery fixtures that deliberately exercise the flagged shape |
 | [cfg_hygiene etiquette](docs/planning/cfg-hygiene-etiquette.md) | **Reference** | Static lint for misplaced verifier cfg names hidden by workspace-wide `--check-cfg` unions |
 | [cfg_scatter etiquette](docs/planning/cfg-scatter-etiquette.md) | **Reference** | Static lint for `#[cfg(feature = "...")]` scattered across item kinds instead of module gates |
 | [Crate attributes](docs/planning/crate-attrs-etiquette.md) | **Reference** | `#![forbid(unsafe_code)]` and `#![warn(missing_docs)]` on each library root |
