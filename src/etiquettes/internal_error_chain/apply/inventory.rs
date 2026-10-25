@@ -17,6 +17,7 @@ mod edges;
 mod from;
 mod graph;
 mod helpers;
+mod resolution;
 mod source_method;
 mod try_conversion;
 
@@ -77,6 +78,10 @@ pub struct ErrorConversionSite {
     source_method: Option<ErrorSourceMethodEvidence>,
     /// Lexical return signature at a `?` site; not type-resolved.
     try_conversion: Option<ErrorTryEvidence>,
+    /// Written path to a candidate declaration, before module resolution.
+    reference_path: Option<Vec<String>>,
+    /// Unique declaration reached by the written path, when proven.
+    target: Option<ErrorEdgeTarget>,
     #[getter(copy)]
     resolved: bool,
 }

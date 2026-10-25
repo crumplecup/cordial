@@ -225,11 +225,14 @@ round-trip fixture covers both directions and the blocker. Graphs that span
 files remain open parts of this slice. The inventory also records the
 syntactic storage shape and type path of direct, boxed, and explicitly borrowed
 `source`/`kind` fields as typed IR facts. Enrichment links a unique private
-top-level struct or enum in the same file to its declaration identity and
-snapshot digest. This is a candidate edge, not proof of Rust name resolution;
-all such edges remain unresolved for conversion. Public, ambiguous,
-macro-attributed, cfg-gated, imported, and cross-file targets have no candidate
-link. The same shared-tree visit records the written input and output type
+top-level struct or enum to its declaration identity and snapshot digest.
+File-local references and explicit module paths or `use` aliases can link
+across active external modules in the same crate target. The shared IR holds
+dependency edges from conversion units to those declarations. These are
+candidate links, not proof that the whole conversion graph is closed;
+conversion still blocks cross-file graphs. Public, ambiguous, macro-attributed,
+cfg-gated, glob-imported, and unrecognized module paths stay unresolved. The
+same shared-tree visit records the written input and output type
 paths of `From` impls. Each `?` site also records its lexical function,
 closure, async block, or try block scope and any written return and `Result`
 error paths. Explicit closures with a different return error are kept separate
@@ -325,3 +328,8 @@ Implementation checkpoints:
   apply rejects mismatched IR facts and checks every planned file against disk
   before writing a crate target. Multi-file writes are not yet atomic. Keep
   unknown name, cfg, or macro edges as explicit blockers.
+- [x] Connect conversion evidence across validated external module boundaries
+  in the shared IR. A private declaration has a path, line, and digest identity;
+  source/Kind edges and path-based constructor, caller, and type-use sites link
+  to it when module and import resolution are unambiguous. These links do not
+  yet authorize cross-file conversion.

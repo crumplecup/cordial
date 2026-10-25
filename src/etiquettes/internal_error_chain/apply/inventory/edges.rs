@@ -43,7 +43,7 @@ pub enum ErrorEdgeTargetKind {
     Enum,
 }
 
-/// Identity and source snapshot of a private same-file declaration candidate.
+/// Identity and source snapshot of a private crate-local declaration candidate.
 #[derive(
     Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_getters::Getters,
 )]
@@ -93,7 +93,7 @@ pub struct ErrorEdgeEvidence {
     type_path: Vec<String>,
     /// Exact spelling of the declared type for diagnostics.
     type_text: String,
-    /// Unique, private top-level declaration candidate in the same source file.
+    /// Unique, private top-level declaration candidate in the crate target.
     #[setters(generate, rename = "set_target", strip_option)]
     target: Option<ErrorEdgeTarget>,
 }

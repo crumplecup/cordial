@@ -629,16 +629,146 @@ mod sibling;
             .iter()
             .any(|site| site.kind() == ErrorConversionSiteKind::Macro && !site.resolved())
     );
-    assert!(
-        unit.sites()
-            .iter()
-            .any(|site| site.kind() == ErrorConversionSiteKind::Caller
-                && site.path().ends_with("sibling.rs")
-                && !site.resolved())
-    );
+    assert!(unit.sites().iter().any(|site| {
+        site.kind() == ErrorConversionSiteKind::Caller
+            && site.path().ends_with("sibling.rs")
+            && site
+                .target()
+                .as_ref()
+                .is_some_and(|target| target.declaration() == &fixture.path().join("src/lib.rs"))
+            && !site.resolved()
+    }));
     assert!(!unit.is_closed());
     assert_eq!(summary.changed_files(), 0);
     assert_eq!(source(fixture.path())?, original);
+    Ok(())
+}
+
+#[test]
+fn conversion_unit_links_cross_file_error_edges_by_declaration() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = "#[derive(Debug)]\nstruct Kind;\nmod child;\n";
+    let fixture = fixture(original, "borrowed")?;
+    fs::write(
+        fixture.path().join("src/child.rs"),
+        r#"use crate::Kind as ImportedKind;
+#[derive(Debug)]
+struct MessageError { message: String, kind: ImportedKind }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new() -> Self { Self { message: "fixed".to_owned(), kind: ImportedKind } }
+}
+"#,
+    )
+    .into_diagnostic()?;
+    let summary =
+        run_error_file_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
+    let unit = summary
+        .conversion_units()
+        .iter()
+        .find(|unit| unit.type_name() == "MessageError")
+        .wrap_err("cross-file conversion unit")?;
+    assert!(unit.sites().iter().any(|site| {
+        site.kind() == ErrorConversionSiteKind::ErrorEdge
+            && site.edge().as_ref().is_some_and(|edge| {
+                edge.target().as_ref().is_some_and(|target| {
+                    target.declaration() == &fixture.path().join("src/lib.rs")
+                })
+            })
+            && !site.resolved()
+    }));
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn conversion_unit_keeps_same_named_declarations_in_their_modules() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = fixture("mod a;\nmod b;\n", "borrowed")?;
+    fs::create_dir_all(fixture.path().join("src/a")).into_diagnostic()?;
+    fs::write(
+        fixture.path().join("src/a/mod.rs"),
+        "#[derive(Debug)]\nstruct Kind;\nmod child;\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
+        fixture.path().join("src/b.rs"),
+        "#[derive(Debug)]\nstruct Kind;\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
+        fixture.path().join("src/a/child.rs"),
+        r#"#[derive(Debug)]
+struct MessageError { message: String, kind: super::Kind }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new() -> Self { Self { message: "fixed".to_owned(), kind: super::Kind } }
+}
+"#,
+    )
+    .into_diagnostic()?;
+    let summary =
+        run_error_file_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
+    let unit = summary
+        .conversion_units()
+        .iter()
+        .find(|unit| unit.type_name() == "MessageError")
+        .wrap_err("nested conversion unit")?;
+    assert!(unit.sites().iter().any(|site| {
+        site.kind() == ErrorConversionSiteKind::ErrorEdge
+            && site.edge().as_ref().is_some_and(|edge| {
+                edge.target().as_ref().is_some_and(|target| {
+                    target.declaration() == &fixture.path().join("src/a/mod.rs")
+                })
+            })
+    }));
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn custom_module_path_does_not_create_a_speculative_cross_file_link() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = fixture(
+        "#[derive(Debug)]\nstruct Kind;\n#[path = \"dormant.rs\"] mod other;\n",
+        "borrowed",
+    )?;
+    fs::write(
+        fixture.path().join("src/dormant.rs"),
+        r#"#[derive(Debug)]
+struct MessageError { message: String, kind: crate::Kind }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new() -> Self { Self { message: "fixed".to_owned(), kind: crate::Kind } }
+}
+"#,
+    )
+    .into_diagnostic()?;
+    let summary =
+        run_error_file_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
+    let unit = summary
+        .conversion_units()
+        .iter()
+        .find(|unit| unit.type_name() == "MessageError")
+        .wrap_err("custom-path conversion unit")?;
+    assert!(unit.sites().iter().any(|site| {
+        site.kind() == ErrorConversionSiteKind::ErrorEdge
+            && site
+                .edge()
+                .as_ref()
+                .is_some_and(|edge| edge.target().is_none())
+    }));
     Ok(())
 }
 
