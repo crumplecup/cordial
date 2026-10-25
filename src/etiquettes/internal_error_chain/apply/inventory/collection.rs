@@ -1,7 +1,7 @@
 //! Identify conversion candidates and visit each shared file once for sites.
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use syn::spanned::Spanned;
 use syn::{Item, Type, Visibility};
@@ -11,6 +11,8 @@ use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
 use super::batch::BatchInventoryVisitor;
+use super::edges::{ErrorEdgeTarget, ErrorEdgeTargetKind};
+use super::helpers::derive_is_builtin;
 use super::{
     ConversionCandidate, ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit,
     FieldEvidence, InitializerEvidence, LifetimeEvidence, StringStorage,
@@ -29,7 +31,7 @@ use crate::etiquettes::internal_error_chain::type_graph::item_derives_error;
 pub(super) fn collect_conversion_units(
     files: &[SharedParsedFile],
 ) -> Vec<(ErrorConversionUnit, u32)> {
-    let candidates = find_candidates(files);
+    let (candidates, local_types) = find_candidates(files);
     let mut all_sites = vec![Vec::new(); candidates.len()];
     for file in files {
         let identifiers: HashSet<&str> = file
@@ -93,6 +95,32 @@ pub(super) fn collect_conversion_units(
             )
         })
         .collect();
+    for (unit, _) in &mut units {
+        for site in &mut unit.sites {
+            if site.kind != ErrorConversionSiteKind::ErrorEdge || site.path != unit.declaration {
+                continue;
+            }
+            let Some(edge) = &mut site.edge else {
+                continue;
+            };
+            let path = edge.type_path();
+            let target = match path.as_slice() {
+                [name] => local_types
+                    .get(&(unit.declaration.clone(), name.clone()))
+                    .and_then(|targets| match targets.as_slice() {
+                        [Some(target)] => Some(target.clone()),
+                        _ => None,
+                    }),
+                _ => None,
+            };
+            if let Some(target) = target {
+                edge.set_target(target);
+            }
+            // Matching spelling is a graph candidate, not type resolution.
+            // Imports, macros, and cfg can still affect the true target.
+            site.resolved = false;
+        }
+    }
     let files_by_path: HashMap<&Path, &SharedParsedFile> =
         files.iter().map(|file| (file.path(), file)).collect();
     let lifetime_paths: HashSet<&Path> = units
@@ -129,8 +157,9 @@ pub(super) fn collect_conversion_units(
 }
 
 #[instrument(level = "debug", skip(files))]
-fn find_candidates(files: &[SharedParsedFile]) -> Vec<ConversionCandidate> {
+fn find_candidates(files: &[SharedParsedFile]) -> (Vec<ConversionCandidate>, LocalTypeIndex) {
     let mut candidates = Vec::new();
+    let mut local_types: LocalTypeIndex = HashMap::new();
     for file in files {
         let start = candidates.len();
         let syntax = file.syntax();
@@ -138,11 +167,35 @@ fn find_candidates(files: &[SharedParsedFile]) -> Vec<ConversionCandidate> {
         let name_audit = audit_names(syntax);
         let mut struct_counts = HashMap::new();
         for item in &syntax.items {
-            if let Item::Struct(item) = item {
-                *struct_counts
-                    .entry(item.ident.to_string())
-                    .or_insert(0usize) += 1;
-            }
+            let (name, visibility, attrs, kind, line) = match item {
+                Item::Struct(item) => {
+                    *struct_counts
+                        .entry(item.ident.to_string())
+                        .or_insert(0usize) += 1;
+                    (
+                        &item.ident,
+                        &item.vis,
+                        &item.attrs,
+                        ErrorEdgeTargetKind::Struct,
+                        item.ident.span().start().line,
+                    )
+                }
+                Item::Enum(item) => (
+                    &item.ident,
+                    &item.vis,
+                    &item.attrs,
+                    ErrorEdgeTargetKind::Enum,
+                    item.ident.span().start().line,
+                ),
+                _ => continue,
+            };
+            let target = (matches!(visibility, Visibility::Inherited)
+                && attrs.iter().all(derive_is_builtin))
+            .then(|| ErrorEdgeTarget::from_shared_file(file, line, kind));
+            local_types
+                .entry((file.path().to_path_buf(), name.to_string()))
+                .or_default()
+                .push(target);
         }
         for item in &syntax.items {
             let Item::Struct(item) = item else { continue };
@@ -241,8 +294,10 @@ fn find_candidates(files: &[SharedParsedFile]) -> Vec<ConversionCandidate> {
             candidate.initializer.edits = initializer_edits;
         }
     }
-    candidates
+    (candidates, local_types)
 }
+
+type LocalTypeIndex = HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>>;
 
 #[instrument(level = "debug", skip(file, kind))]
 fn unresolved_site(file: &SharedParsedFile, kind: ErrorConversionSiteKind) -> ErrorConversionSite {

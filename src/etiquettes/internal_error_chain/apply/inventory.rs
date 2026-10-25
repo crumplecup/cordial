@@ -17,7 +17,9 @@ mod edges;
 mod graph;
 mod helpers;
 
-pub use edges::{ErrorEdgeEvidence, ErrorEdgeField, ErrorEdgeStorage};
+pub use edges::{
+    ErrorEdgeEvidence, ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind,
+};
 pub(crate) use graph::{conversion_units_from_ir, enrich_conversion_units};
 
 /// A source construct that may participate in converting an error field.

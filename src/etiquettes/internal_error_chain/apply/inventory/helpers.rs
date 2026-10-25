@@ -4,6 +4,38 @@ use syn::visit::Visit;
 use syn::{TypePath, UseTree};
 use tracing::instrument;
 
+/// Only these familiar derives have no hidden constructor or alias path.
+#[instrument(level = "debug", skip(attr))]
+pub(super) fn derive_is_nonconstructing(attr: &syn::Attribute) -> bool {
+    derive_matches(attr, true)
+}
+
+/// Restrict declaration links to compiler-provided derives.
+#[instrument(level = "debug", skip(attr))]
+pub(super) fn derive_is_builtin(attr: &syn::Attribute) -> bool {
+    derive_matches(attr, false)
+}
+
+#[instrument(level = "trace", skip(attr))]
+fn derive_matches(attr: &syn::Attribute, allow_error: bool) -> bool {
+    if !attr.path().is_ident("derive") {
+        return false;
+    }
+    let mut known = true;
+    attr.parse_nested_meta(|meta| {
+        known &= meta.path.segments.len() == 1
+            && meta.path.segments.last().is_some_and(|part| {
+                matches!(
+                    part.ident.to_string().as_str(),
+                    "Debug" | "Clone" | "Copy" | "PartialEq" | "Eq" | "Hash" | "PartialOrd" | "Ord"
+                ) || (allow_error && part.ident == "Error")
+            });
+        Ok(())
+    })
+    .is_ok()
+        && known
+}
+
 #[instrument(level = "debug", skip(node))]
 pub(super) fn type_mentions(node: &syn::Type, type_name: &str) -> bool {
     let mut visitor = TypeMentionVisitor {

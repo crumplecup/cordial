@@ -3,8 +3,8 @@ use std::path::Path;
 use std::process::Command;
 
 use cordial::{
-    ErrorConversionSiteKind, ErrorEdgeField, ErrorEdgeStorage, ErrorFieldApplyBlockerReason,
-    run_error_file_apply,
+    ErrorConversionSiteKind, ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTargetKind,
+    ErrorFieldApplyBlockerReason, run_error_file_apply,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -12,7 +12,7 @@ use miette::{IntoDiagnostic, WrapErr};
 fn conversion_unit_records_constructors_callers_and_error_edges() -> miette::Result<()> {
     cordial::init_tracing();
     let original = r#"#[derive(Debug)]
-struct Kind;
+enum Kind { Basic }
 #[derive(Debug)]
 struct MessageError { message: String, source: std::io::Error, kind: Box<Kind> }
 impl std::fmt::Display for MessageError {
@@ -23,7 +23,7 @@ impl std::fmt::Display for MessageError {
 impl std::error::Error for MessageError {}
 impl MessageError {
     fn new(source: std::io::Error) -> Self {
-        Self { message: "fixed".to_owned(), source, kind: Box::new(Kind) }
+        Self { message: "fixed".to_owned(), source, kind: Box::new(Kind::Basic) }
     }
 }
 impl From<std::io::Error> for MessageError {
@@ -67,13 +67,54 @@ fn caller() -> Result<(), MessageError> {
     }));
     assert!(unit.sites().iter().any(|site| {
         site.kind() == ErrorConversionSiteKind::ErrorEdge
+            && !site.resolved()
             && site.edge().as_ref().is_some_and(|edge| {
                 edge.field() == ErrorEdgeField::Kind
                     && edge.storage() == &ErrorEdgeStorage::Boxed
                     && edge.type_path() == &["Kind"]
+                    && edge.target().as_ref().is_some_and(|target| {
+                        target.kind() == ErrorEdgeTargetKind::Enum
+                            && target.declaration().ends_with("src/lib.rs")
+                            && target.source_digest() == unit.source_digest()
+                    })
             })
     }));
     assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
+fn public_error_edge_target_does_not_close_the_unit() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug)]
+pub struct Kind;
+#[derive(Debug)]
+struct MessageError { message: String, kind: Kind }
+impl std::fmt::Display for MessageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for MessageError {}
+impl MessageError {
+    fn new() -> Self { Self { message: "fixed".to_owned(), kind: Kind } }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let summary =
+        run_error_file_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
+    let unit = summary
+        .conversion_units()
+        .first()
+        .wrap_err("conversion unit")?;
+    assert!(unit.sites().iter().any(|site| {
+        site.kind() == ErrorConversionSiteKind::ErrorEdge
+            && site
+                .edge()
+                .as_ref()
+                .is_some_and(|edge| edge.type_path() == &["Kind"] && edge.target().is_none())
+            && !site.resolved()
+    }));
+    assert!(!unit.is_closed());
     check_fixture(fixture.path())?;
     Ok(())
 }

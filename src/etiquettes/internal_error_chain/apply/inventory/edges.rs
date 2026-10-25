@@ -1,5 +1,7 @@
 //! Typed declaration facts for source and Kind edges.
 
+use std::path::PathBuf;
+
 use syn::spanned::Spanned;
 use syn::{GenericArgument, PathArguments, Type};
 use tracing::instrument;
@@ -31,10 +33,57 @@ pub enum ErrorEdgeStorage {
     },
 }
 
-/// Parsed edge facts from the shared source tree; the path is not yet resolved.
+/// The kind of top-level declaration reached by a local error edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ErrorEdgeTargetKind {
+    /// A struct declaration.
+    Struct,
+    /// An enum declaration.
+    Enum,
+}
+
+/// Identity and source snapshot of a private same-file declaration candidate.
 #[derive(
     Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_getters::Getters,
 )]
+pub struct ErrorEdgeTarget {
+    declaration: PathBuf,
+    #[getter(copy)]
+    line: usize,
+    #[getter(copy)]
+    source_digest: [u8; 32],
+    #[getter(copy)]
+    kind: ErrorEdgeTargetKind,
+}
+
+impl ErrorEdgeTarget {
+    #[instrument(level = "debug", skip(file, kind))]
+    pub(super) fn from_shared_file(
+        file: &SharedParsedFile,
+        line: usize,
+        kind: ErrorEdgeTargetKind,
+    ) -> Self {
+        Self {
+            declaration: file.path().to_path_buf(),
+            line,
+            source_digest: file.source_digest(),
+            kind,
+        }
+    }
+}
+
+/// Parsed edge facts from the shared source tree; the path is not yet resolved.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_getters::Getters,
+    derive_setters::Setters,
+)]
+#[setters(generate = false, borrow_self)]
 pub struct ErrorEdgeEvidence {
     #[getter(copy)]
     field: ErrorEdgeField,
@@ -43,6 +92,9 @@ pub struct ErrorEdgeEvidence {
     type_path: Vec<String>,
     /// Exact spelling of the declared type for diagnostics.
     type_text: String,
+    /// Unique, private top-level declaration candidate in the same source file.
+    #[setters(generate, rename = "set_target", strip_option)]
+    target: Option<ErrorEdgeTarget>,
 }
 
 #[instrument(level = "debug", skip(file, field, edge_field))]
@@ -78,6 +130,7 @@ pub(super) fn error_edge_evidence(
         storage,
         type_path,
         type_text: file.source()[start..end].to_string(),
+        target: None,
     })
 }
 

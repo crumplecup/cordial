@@ -11,7 +11,10 @@ use tracing::instrument;
 use crate::loader::SharedParsedFile;
 
 use super::edges::error_edge_evidence;
-use super::helpers::{path_mentions, return_type_mentions, type_mentions, use_tree_mentions};
+use super::helpers::{
+    derive_is_nonconstructing, path_mentions, return_type_mentions, type_mentions,
+    use_tree_mentions,
+};
 use super::{ConversionCandidate, ErrorConversionSite, ErrorConversionSiteKind, ErrorEdgeField};
 use crate::etiquettes::internal_error_chain::apply::simple_type_name;
 use crate::etiquettes::internal_error_chain::apply::uses::{
@@ -316,30 +319,7 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
             }
             for attr in &item.attrs {
                 if attr.path().is_ident("derive") {
-                    let mut opaque = false;
-                    if attr
-                        .parse_nested_meta(|meta| {
-                            opaque |= !meta.path.segments.last().is_some_and(|part| {
-                                matches!(
-                                    part.ident.to_string().as_str(),
-                                    "Debug"
-                                        | "Clone"
-                                        | "Copy"
-                                        | "PartialEq"
-                                        | "Eq"
-                                        | "Hash"
-                                        | "PartialOrd"
-                                        | "Ord"
-                                        | "Error"
-                                )
-                            });
-                            Ok(())
-                        })
-                        .is_err()
-                    {
-                        opaque = true;
-                    }
-                    if opaque {
+                    if !derive_is_nonconstructing(attr) {
                         self.record(
                             index,
                             ErrorConversionSiteKind::GeneratedConstructor,

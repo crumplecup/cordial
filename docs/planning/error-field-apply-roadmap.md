@@ -214,8 +214,12 @@ atomic, and conversion units remain field-local. A parent `Box<Kind>`, its Kind
 variants, and a native `source` field must be planned together and committed
 only after every file in that unit is ready. The inventory now records the
 syntactic storage shape and type path of direct, boxed, and explicitly borrowed
-`source`/`kind` fields as typed IR facts; it does not resolve those paths to
-declarations. The inventory currently locates `From` impls and
+`source`/`kind` fields as typed IR facts. Enrichment links a unique private
+top-level struct or enum in the same file to its declaration identity and
+snapshot digest. This is a candidate edge, not proof of Rust name resolution;
+all such edges remain unresolved for conversion. Public, ambiguous,
+macro-attributed, cfg-gated, imported, and cross-file targets have no candidate
+link. The inventory currently locates `From` impls and
 `?` expressions, but does not resolve their source and target types. For a
 `From<io::Error>` path, changing `source: io::Error` to a reference changes
 who owns the `io::Error`; the syntax of `?` alone cannot prove the caller can
