@@ -8,6 +8,7 @@ use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
 use super::super::{Edit, is_str_ref_with_lifetime, span_range};
+use super::scalar_copy_name;
 
 #[instrument(level = "debug", skip(file, function, strategy))]
 pub(super) fn forwarding_return(
@@ -26,7 +27,7 @@ pub(super) fn forwarding_return(
         || matches!(function.sig.safety, syn::Safety::Unsafe(_))
         || function.sig.generics.where_clause.is_some()
         || function.sig.generics.params.len() != 1
-        || function.sig.inputs.len() != 1
+        || function.sig.inputs.is_empty()
         || function.block.stmts.len() != 1
     {
         return None;
@@ -84,8 +85,26 @@ pub(super) fn forwarding_return(
         || !matches!(type_part.arguments, syn::PathArguments::None)
         || method_part.ident != constructor_name
         || !matches!(method_part.arguments, syn::PathArguments::None)
-        || call.args.len() != 1
+        || call.args.len() != function.sig.inputs.len()
         || !matches!(call.args.first(), Some(Expr::Path(path)) if path.path.is_ident(field_name))
+    {
+        return None;
+    }
+    if !function
+        .sig
+        .inputs
+        .iter()
+        .skip(1)
+        .zip(call.args.iter().skip(1))
+        .all(|(input, passed)| {
+            matches!((input, passed), (FnArg::Typed(argument), Expr::Path(path))
+                if matches!(&*argument.pat, Pat::Ident(pattern)
+                    if pattern.subpat.is_none()
+                        && pattern.by_ref.is_none()
+                        && pattern.mutability.is_none()
+                        && path.path.is_ident(&pattern.ident))
+                    && scalar_copy_name(&argument.ty).is_some())
+        })
     {
         return None;
     }

@@ -198,8 +198,9 @@ moves that lifetime from the constructor method to the error type and its
 `Display`/`Error` impls, and reverses the move under owned strategy. Direct
 associated constructor calls may keep type inference. A private function with
 the same named input lifetime can forward that input directly to the one
-constructor; its explicit return type changes with the error type in both
-directions. Other explicit type uses still block the edit until their containing
+constructor; matching scalar parameters can pass through unchanged. Its
+explicit return type changes with the error type in both directions. Other
+explicit type uses still block the edit until their containing
 signatures and callers can be planned together. Compile-checked fixtures cover
 the round trip, dry run, repeat apply, and that blocker. Additional owned or
 borrowed fields, multiple constructors or files, and typed source/Kind edges

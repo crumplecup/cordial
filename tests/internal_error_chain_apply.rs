@@ -297,6 +297,9 @@ impl MessageError {
 fn caller() {
     let _ = MessageError::new("hello", 7);
 }
+fn make<'a>(message: &'a str, line: u32) -> MessageError {
+    MessageError::new(message, line)
+}
 "#;
     let fixture = fixture(original, "borrowed")?;
     let root = fixture.path();
@@ -305,12 +308,14 @@ fn caller() {
     let changed = source(root)?;
     assert!(changed.contains("struct MessageError<'a> { message: &'a str, line: u32 }"));
     assert!(changed.contains("fn new(message: &'a str, line: u32)"));
+    assert!(changed.contains("fn make<'a>(message: &'a str, line: u32) -> MessageError<'a>"));
     check_fixture(root)?;
 
     set_strategy(root, "owned")?;
     let owned = run_error_file_apply(root, root, None, false).into_diagnostic()?;
     assert_eq!(owned.converted_fields(), 1);
     assert!(source(root)?.contains("struct MessageError { message: String, line: u32 }"));
+    assert!(source(root)?.contains("fn make<'a>(message: &'a str, line: u32) -> MessageError"));
     check_fixture(root)?;
     Ok(())
 }
