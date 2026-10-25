@@ -41,11 +41,11 @@ pub(super) fn plain_type_path(ty: &Type) -> Option<Vec<String>> {
     let Type::Path(path) = ty else { return None };
     if path.qself.is_some()
         || path.path.segments.is_empty()
-        || path
-            .path
-            .segments
-            .iter()
-            .any(|part| !matches!(part.arguments, PathArguments::None))
+        || path.path.segments.iter().any(|part| {
+            !matches!(&part.arguments, PathArguments::None)
+                && !matches!(&part.arguments, PathArguments::AngleBracketed(arguments)
+                    if arguments.args.iter().all(|argument| matches!(argument, syn::GenericArgument::Lifetime(_))))
+        })
     {
         return None;
     }

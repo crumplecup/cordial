@@ -16,7 +16,7 @@ use crate::loader::SharedParsedFile;
 use super::edges::{ErrorEdgeTarget, ErrorEdgeTargetKind};
 use super::helpers::derive_is_builtin;
 
-pub(super) struct CrateTypeIndex {
+pub(in crate::etiquettes::internal_error_chain::apply) struct CrateTypeIndex {
     declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>>,
     local: HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>>,
     active_modules: HashMap<PathBuf, Vec<String>>,
@@ -25,7 +25,9 @@ pub(super) struct CrateTypeIndex {
 
 impl CrateTypeIndex {
     #[instrument(level = "debug", skip(files))]
-    pub(super) fn new(files: &[SharedParsedFile]) -> Self {
+    pub(in crate::etiquettes::internal_error_chain::apply) fn new(
+        files: &[SharedParsedFile],
+    ) -> Self {
         let mut declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
         let mut local: HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
         let active_modules = active_modules(files);
@@ -79,7 +81,7 @@ impl CrateTypeIndex {
     }
 
     #[instrument(level = "trace", skip(self, file, written_path))]
-    pub(super) fn resolve(
+    pub(in crate::etiquettes::internal_error_chain::apply) fn resolve(
         &self,
         file: &SharedParsedFile,
         written_path: &[String],

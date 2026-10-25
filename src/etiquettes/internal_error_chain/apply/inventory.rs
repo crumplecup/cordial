@@ -21,11 +21,14 @@ mod resolution;
 mod source_method;
 mod try_conversion;
 
+pub(super) use edges::error_edge_evidence;
 pub use edges::{
     ErrorEdgeEvidence, ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind,
 };
 pub use from::ErrorFromEvidence;
+pub(super) use graph::enrich_conversion_units_with_index;
 pub(crate) use graph::{conversion_units_from_ir, enrich_conversion_units};
+pub(super) use resolution::CrateTypeIndex;
 pub use source_method::ErrorSourceMethodEvidence;
 pub use try_conversion::{ErrorTryEvidence, ErrorTryScope};
 

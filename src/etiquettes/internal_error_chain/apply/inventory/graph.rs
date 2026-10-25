@@ -11,6 +11,7 @@ use crate::loader::SharedParsedFile;
 use crate::objects::FileSpan;
 
 use super::collection::collect_conversion_units;
+use super::resolution::CrateTypeIndex;
 use super::{ErrorConversionUnit, ErrorEdgeTargetKind};
 
 const CONVERSION_UNIT_ATTR: &str = "error_conversion_unit";
@@ -22,9 +23,19 @@ pub(crate) fn enrich_conversion_units(
     ir: &mut dyn IrMut,
     files: &[SharedParsedFile],
 ) -> CordialResult<()> {
+    let index = CrateTypeIndex::new(files);
+    enrich_conversion_units_with_index(ir, files, &index)
+}
+
+#[instrument(level = "debug", skip(ir, files, index), err(level = "warn"))]
+pub(in crate::etiquettes::internal_error_chain::apply) fn enrich_conversion_units_with_index(
+    ir: &mut dyn IrMut,
+    files: &[SharedParsedFile],
+    index: &CrateTypeIndex,
+) -> CordialResult<()> {
     let root = ir.root()?;
     let mut declarations = HashMap::<(PathBuf, usize, usize), _>::new();
-    for (unit, line) in collect_conversion_units(files) {
+    for (unit, line) in collect_conversion_units(files, index) {
         let node = ir.insert_node(
             NodeWeight::new(NodeKind::Field)
                 .with_name(unit.field_name.clone())

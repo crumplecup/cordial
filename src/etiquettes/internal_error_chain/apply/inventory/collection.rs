@@ -26,12 +26,12 @@ use crate::etiquettes::internal_error_chain::apply::{
 use crate::etiquettes::internal_error_chain::type_graph::item_derives_error;
 
 /// Return one conversion unit and declaration line per candidate field.
-#[instrument(level = "debug", skip(files))]
+#[instrument(level = "debug", skip(files, declarations))]
 pub(super) fn collect_conversion_units(
     files: &[SharedParsedFile],
+    declarations: &CrateTypeIndex,
 ) -> Vec<(ErrorConversionUnit, u32)> {
     let candidates = find_candidates(files);
-    let declarations = CrateTypeIndex::new(files);
     let mut all_sites = vec![Vec::new(); candidates.len()];
     for file in files {
         let identifiers: HashSet<&str> = file

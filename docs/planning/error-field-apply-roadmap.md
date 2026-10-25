@@ -189,7 +189,8 @@ The inventory is syntactic: a direct path has a known target shape, while macro
 expansion, type inference for field receivers, and `?` conversion targets remain
 unresolved. Broader conversion planners must require a closed unit, plan every
 field, constructor, caller, signature, and error edge together, validate the
-whole unit, and write its files atomically before extending slices 2 and 3.
+whole unit, and stage all of its files before writing them with rollback on a
+later replacement failure before extending slices 2 and 3.
 
 The first lifetime planner handles a closed, private error with one migrated
 string field and optional scalar `Copy` context fields, whose
@@ -221,16 +222,28 @@ reports a graph-closure blocker. A compiling round-trip fixture exercises
 file-local graph can also acquire one constructor-anchored lifetime across its
 declarations, impls, and typed uses, then remove it on the owned round trip.
 A return that would borrow local values blocks the entire edit. A compiling
-round-trip fixture covers both directions and the blocker. Graphs that span
-files remain open parts of this slice. The inventory also records the
+round-trip fixture covers both directions and the blocker. A graph with an
+existing named lifetime can now convert a constructor in a different external
+module file. The planner resolves each graph type name to its declaration
+identity from the shared parsed tree, plans constructor edits in every
+relevant file, and requires construction coverage across the combined edit
+set. An external field read, shadowed declaration, hidden macro use, or
+unknown path blocks the whole graph. The patch pass withholds every file in
+the component if final validation rejects one member. A compiling dry-run and
+owned-to-borrowed-to-owned fixture exercises a parent error with a native
+source and a constructor in a child module. Kind and source declarations in
+different files, and cross-file lifetime introduction, remain open parts of
+this slice. Inventory and graph planning share one crate type index during
+apply. The inventory also records the
 syntactic storage shape and type path of direct, boxed, and explicitly borrowed
 `source`/`kind` fields as typed IR facts. Enrichment links a unique private
 top-level struct or enum to its declaration identity and snapshot digest.
 File-local references and explicit module paths or `use` aliases can link
 across active external modules in the same crate target. The shared IR holds
 dependency edges from conversion units to those declarations. These are
-candidate links, not proof that the whole conversion graph is closed;
-conversion still blocks cross-file graphs. Public, ambiguous, macro-attributed,
+candidate links, not proof that every conversion graph is closed;
+the supported cross-file constructor requires a separate whole-graph check.
+Public, ambiguous, macro-attributed,
 cfg-gated, glob-imported, and unrecognized module paths stay unresolved. The
 same shared-tree visit records the written input and output type
 paths of `From` impls. Each `?` site also records its lexical function,
@@ -303,8 +316,8 @@ Implementation checkpoints:
 - [x] Plan a private file-local Kind/source graph as one IR-backed edit set,
   with source-digest validation, conservative blockers, and a compiling
   owned-to-borrowed-to-owned fixture. A constructor-anchored lifetime can now
-  be introduced across a closed same-file graph; cross-file graphs still need
-  a multi-file atomic writer.
+  be introduced across a closed same-file graph; cross-file graphs need a
+  staged multi-file writer with rollback.
 
 - [x] Build apply's source view with the same loader as normal sessions, and
   materialize conversion units as typed graph facts in the error IR enricher.
@@ -331,7 +344,11 @@ Implementation checkpoints:
   path. Add deterministic failure tests for rollback and concurrent changes
   before authorizing a cross-file conversion. This is a rollback-capable
   whole-target write, not crash-atomic across files. Unknown name, cfg, or macro
-  edges remain explicit blockers until the planner can account for them.
+  edges remain explicit blockers until the planner can account for them. A
+  private parent error and native source declared together, with its
+  constructor in another file, now convert together when every external type
+  name resolves uniquely. The patch pass treats those files as one component.
+  Cross-file Kind/source declarations and lifetime propagation are still open.
 - [x] Connect conversion evidence across validated external module boundaries
   in the shared IR. A private declaration has a path, line, column, and digest identity;
   source/Kind edges and path-based constructor, caller, and type-use sites link

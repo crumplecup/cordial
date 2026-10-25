@@ -25,6 +25,7 @@ pub(super) struct GraphExprPlanner<'a> {
     constructed: BTreeSet<(String, String)>,
     constructed_variants: BTreeSet<(String, String)>,
     allowed_uses: BTreeSet<(usize, usize)>,
+    strict_external: bool,
 }
 
 impl<'a> GraphExprPlanner<'a> {
@@ -63,7 +64,13 @@ impl<'a> GraphExprPlanner<'a> {
             constructed: BTreeSet::new(),
             constructed_variants: BTreeSet::new(),
             allowed_uses: BTreeSet::new(),
+            strict_external: false,
         }
+    }
+    #[instrument(level = "debug", skip(self))]
+    pub(super) fn strict_external(mut self) -> Self {
+        self.strict_external = true;
+        self
     }
     #[instrument(level = "trace", skip(self, span))]
     fn source(&self, span: proc_macro2::Span) -> Option<&str> {
@@ -298,6 +305,13 @@ impl<'ast> Visit<'ast> for GraphExprPlanner<'_> {
     }
     #[instrument(level = "debug", skip(self, item))]
     fn visit_expr_field(&mut self, item: &'ast syn::ExprField) {
+        if self.strict_external
+            && matches!(&item.member, syn::Member::Named(name)
+                if self.changes.keys().any(|(_, field)| field == &name.to_string()))
+            && !matches!(&*item.base, Expr::Path(path) if path.path.is_ident("self"))
+        {
+            self.valid = false;
+        }
         if matches!(&*item.base, Expr::Path(path) if path.path.is_ident("self")) {
             if let syn::Member::Named(name) = &item.member {
                 let key = (

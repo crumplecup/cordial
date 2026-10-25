@@ -103,7 +103,7 @@ pub struct ErrorEdgeEvidence {
 }
 
 #[instrument(level = "debug", skip(file, field, edge_field))]
-pub(super) fn error_edge_evidence(
+pub(in crate::etiquettes::internal_error_chain::apply) fn error_edge_evidence(
     file: &SharedParsedFile,
     field: &syn::Field,
     edge_field: ErrorEdgeField,

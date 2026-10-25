@@ -26,6 +26,7 @@ mod uses;
 mod write;
 
 use self::graph_apply::{conversion_graphs_from_ir, enrich_conversion_graphs};
+use self::inventory::{CrateTypeIndex, enrich_conversion_units_with_index};
 pub use self::inventory::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
     ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind, ErrorFromEvidence,
@@ -113,15 +114,17 @@ pub use ErrorFieldApplySummary as ErrorFileApplySummary;
 
 /// Convert simple string fields to the configured owned or borrowed form.
 ///
-/// Only private error structs and private fields with recognized same-file
-/// initializers are patched: `file` from `Location::caller().file()`, and other
+/// Private error structs and fields with recognized initializers are patched:
+/// `file` from `Location::caller().file()`, and other
 /// string fields from literals, qualified same-module or block-scoped string
 /// constants and statics, qualified built-in static string macros, explicit
 /// static string constructor parameters, or typed static string local aliases.
 /// Parameters tied to an existing private error lifetime can also be borrowed.
 /// A closed single-field unit can move one constructor lifetime onto the error
 /// type and direct forwarding return types. Wider lifetime propagation and
-/// cross-file constructors are left for manual work.
+/// cross-file lifetime introduction remains manual work. A private graph with
+/// an existing named lifetime can also convert constructors in another file
+/// when its type paths resolve uniquely.
 #[instrument(level = "info", err(level = "warn"))]
 pub fn run_error_field_apply(
     project_root: &Path,
@@ -153,15 +156,59 @@ pub fn run_error_field_apply(
             files.push(source.parsed_file(path, "error-file-apply")?);
             Ok(())
         })?;
-        enrich_conversion_units(&mut ir, &files)?;
-        enrich_conversion_graphs(&mut ir, &files, policy.field_strategy())?;
+        let index = CrateTypeIndex::new(&files);
+        enrich_conversion_units_with_index(&mut ir, &files, &index)?;
+        enrich_conversion_graphs(&mut ir, &files, policy.field_strategy(), &index)?;
         let units = conversion_units_from_ir(&ir)?;
         let graphs = conversion_graphs_from_ir(&ir)?;
         let edit_files: Vec<_> = files.iter().map(|file| file.edit_view()).collect();
-        let mut planned = Vec::new();
+        let mut results = Vec::new();
         for file in &edit_files {
             let (patched, converted, blockers, units) =
                 patch_file(file, policy.field_strategy(), &units, &graphs, dry_run)?;
+            results.push((file, patched, converted, blockers, units));
+        }
+        let mut rejected = BTreeSet::new();
+        loop {
+            let before = rejected.len();
+            for graph in &graphs {
+                if graph.component_paths().is_empty() {
+                    continue;
+                }
+                let incomplete = graph.component_paths().iter().any(|path| {
+                    rejected.contains(path)
+                        || !results.iter().any(|(file, patched, _, _, _)| {
+                            file.path() == path && patched.is_some()
+                        })
+                });
+                if incomplete {
+                    rejected.extend(graph.component_paths().iter().cloned());
+                }
+            }
+            if rejected.len() == before {
+                break;
+            }
+        }
+        let mut planned = Vec::new();
+        for (file, mut patched, mut converted, mut blockers, units) in results {
+            if rejected.contains(file.path()) {
+                patched = None;
+                converted = 0;
+                if let Some(graph) = graphs.iter().find(|graph| graph.path() == file.path()) {
+                    for (type_name, field_name) in graph.fields() {
+                        if !blockers.iter().any(|blocker| {
+                            blocker.type_name() == type_name && blocker.field_name() == field_name
+                        }) {
+                            blockers.push(ErrorFieldApplyBlocker::new(
+                                file.path(),
+                                type_name,
+                                field_name,
+                                ErrorFieldApplyBlockerReason::GraphClosure,
+                            ));
+                        }
+                    }
+                }
+            }
             summary.conversion_units.extend(units);
             summary.converted_fields += converted;
             summary.unresolved += blockers.len();
