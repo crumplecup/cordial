@@ -14,12 +14,14 @@ use tracing::instrument;
 mod batch;
 mod collection;
 mod edges;
+mod from;
 mod graph;
 mod helpers;
 
 pub use edges::{
     ErrorEdgeEvidence, ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind,
 };
+pub use from::ErrorFromEvidence;
 pub(crate) use graph::{conversion_units_from_ir, enrich_conversion_units};
 
 /// A source construct that may participate in converting an error field.
@@ -63,6 +65,8 @@ pub struct ErrorConversionSite {
     kind: ErrorConversionSiteKind,
     /// Typed declaration facts for a supported `source` or `kind` edge.
     edge: Option<ErrorEdgeEvidence>,
+    /// Written type paths on a `From` implementation; not name-resolved.
+    from_conversion: Option<ErrorFromEvidence>,
     #[getter(copy)]
     resolved: bool,
 }

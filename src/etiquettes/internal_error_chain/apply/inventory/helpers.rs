@@ -1,7 +1,7 @@
 //! Name-use helpers for the conversion-site visitor.
 
 use syn::visit::Visit;
-use syn::{TypePath, UseTree};
+use syn::{PathArguments, Type, TypePath, UseTree};
 use tracing::instrument;
 
 /// Only these familiar derives have no hidden constructor or alias path.
@@ -34,6 +34,28 @@ fn derive_matches(attr: &syn::Attribute, allow_error: bool) -> bool {
     })
     .is_ok()
         && known
+}
+
+#[instrument(level = "trace", skip(ty))]
+pub(super) fn plain_type_path(ty: &Type) -> Option<Vec<String>> {
+    let Type::Path(path) = ty else { return None };
+    if path.qself.is_some()
+        || path.path.segments.is_empty()
+        || path
+            .path
+            .segments
+            .iter()
+            .any(|part| !matches!(part.arguments, PathArguments::None))
+    {
+        return None;
+    }
+    Some(
+        path.path
+            .segments
+            .iter()
+            .map(|part| part.ident.to_string())
+            .collect(),
+    )
 }
 
 #[instrument(level = "debug", skip(node))]

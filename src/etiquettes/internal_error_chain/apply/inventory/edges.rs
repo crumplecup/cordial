@@ -9,6 +9,7 @@ use tracing::instrument;
 use crate::loader::SharedParsedFile;
 
 use super::super::span_range;
+use super::helpers::plain_type_path;
 
 /// Which relationship a field on an error declaration represents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -132,28 +133,6 @@ pub(super) fn error_edge_evidence(
         type_text: file.source()[start..end].to_string(),
         target: None,
     })
-}
-
-#[instrument(level = "trace", skip(ty))]
-fn plain_type_path(ty: &Type) -> Option<Vec<String>> {
-    let Type::Path(path) = ty else { return None };
-    if path.qself.is_some()
-        || path.path.segments.is_empty()
-        || path
-            .path
-            .segments
-            .iter()
-            .any(|part| !matches!(part.arguments, PathArguments::None))
-    {
-        return None;
-    }
-    Some(
-        path.path
-            .segments
-            .iter()
-            .map(|part| part.ident.to_string())
-            .collect(),
-    )
 }
 
 #[instrument(level = "trace", skip(path))]

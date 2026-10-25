@@ -181,7 +181,7 @@ pub use etiquettes::inline_tests::{
 pub use etiquettes::internal_error_chain::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
     ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind, ErrorFieldApplyBlocker,
-    ErrorFieldApplyBlockerReason, ErrorFieldApplySummary, ErrorFileApplySummary,
+    ErrorFieldApplyBlockerReason, ErrorFieldApplySummary, ErrorFileApplySummary, ErrorFromEvidence,
     INTERNAL_ERROR_CHAIN_ETIQUETTE, InternalErrorChainScanReport, InternalErrorComplianceFinding,
     InternalErrorComplianceId, InternalErrorNodeClass, InternalErrorTypeNode,
     InternalErrorTypeProbeId, SignatureChainCheck, SignatureChainStatus,

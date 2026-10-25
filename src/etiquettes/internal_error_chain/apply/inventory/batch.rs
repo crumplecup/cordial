@@ -11,6 +11,7 @@ use tracing::instrument;
 use crate::loader::SharedParsedFile;
 
 use super::edges::error_edge_evidence;
+use super::from::ErrorFromEvidence;
 use super::helpers::{
     derive_is_nonconstructing, path_mentions, return_type_mentions, type_mentions,
     use_tree_mentions,
@@ -66,6 +67,7 @@ impl<'a> BatchInventoryVisitor<'a> {
             column: start.column,
             kind,
             edge: None,
+            from_conversion: None,
             resolved: resolved
                 && self.file.path() == self.candidates[index].declaration
                 && self.module_depth == 0,
@@ -108,11 +110,7 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
     fn visit_item_impl(&mut self, item: &'ast ItemImpl) {
         let previous = std::mem::replace(&mut self.current_impl, simple_type_name(&item.self_ty));
         if let Some((path, _)) = &item.trait_ {
-            if path
-                .segments
-                .last()
-                .is_some_and(|part| part.ident == "From")
-            {
+            if let Some(evidence) = ErrorFromEvidence::from_impl(item) {
                 for offset in 0..self.relevant.len() {
                     let index = self.relevant[offset];
                     let name = &self.candidates[index].type_name;
@@ -122,8 +120,11 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
                             index,
                             ErrorConversionSiteKind::FromConversion,
                             item.span(),
-                            own_impl,
+                            false,
                         );
+                        if let Some(site) = self.sites[index].last_mut() {
+                            site.from_conversion = Some(evidence.clone());
+                        }
                     }
                 }
             }

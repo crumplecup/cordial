@@ -25,7 +25,7 @@ mod uses;
 
 pub use self::inventory::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
-    ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind,
+    ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind, ErrorFromEvidence,
 };
 pub(crate) use self::inventory::{conversion_units_from_ir, enrich_conversion_units};
 use self::patch::patch_file;

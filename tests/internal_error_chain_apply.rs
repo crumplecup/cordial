@@ -57,6 +57,20 @@ fn caller() -> Result<(), MessageError> {
     assert!(!unit.is_closed(), "the `?` conversion is not resolved");
     assert!(unit.sites().iter().all(|site| site.line() > 0));
     assert!(unit.sites().iter().any(|site| {
+        site.kind() == ErrorConversionSiteKind::FromConversion
+            && !site.resolved()
+            && site.from_conversion().as_ref().is_some_and(|evidence| {
+                evidence.trait_path() == &["From"]
+                    && evidence.input_type_path().as_ref().is_some_and(|path| {
+                        path.iter().map(String::as_str).eq(["std", "io", "Error"])
+                    })
+                    && evidence
+                        .output_type_path()
+                        .as_ref()
+                        .is_some_and(|path| path.iter().map(String::as_str).eq(["MessageError"]))
+            })
+    }));
+    assert!(unit.sites().iter().any(|site| {
         site.kind() == ErrorConversionSiteKind::ErrorEdge
             && site.related_type().as_deref() == Some("std::io::Error")
             && site.edge().as_ref().is_some_and(|edge| {

@@ -219,8 +219,9 @@ top-level struct or enum in the same file to its declaration identity and
 snapshot digest. This is a candidate edge, not proof of Rust name resolution;
 all such edges remain unresolved for conversion. Public, ambiguous,
 macro-attributed, cfg-gated, imported, and cross-file targets have no candidate
-link. The inventory currently locates `From` impls and
-`?` expressions, but does not resolve their source and target types. For a
+link. The same shared-tree visit records the written input and output type
+paths of `From` impls. Those paths remain unresolved, as do the input and
+conversion target types of `?` expressions. For a
 `From<io::Error>` path, changing `source: io::Error` to a reference changes
 who owns the `io::Error`; the syntax of `?` alone cannot prove the caller can
 hold it long enough. The first graph fixture should include a parent, Kind,
