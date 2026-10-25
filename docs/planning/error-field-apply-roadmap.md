@@ -208,11 +208,14 @@ remain outside this planner.
 
 ### Next boundary: Kind and source graph
 
-The next slice cannot use the current per-file writer: it writes a patched file
-inside the scan loop, before the other files in a conversion unit have been
-planned or validated. A parent `Box<Kind>`, its Kind variants, and a native
-`source` field must instead be planned together and committed only after every
-file in that unit is ready. The inventory currently locates `From` impls and
+The writer now plans every file in a crate target and checks all planned
+source snapshots against disk before writing. Multi-file writes are still not
+atomic, and conversion units remain field-local. A parent `Box<Kind>`, its Kind
+variants, and a native `source` field must be planned together and committed
+only after every file in that unit is ready. The inventory now records the
+syntactic storage shape and type path of direct, boxed, and explicitly borrowed
+`source`/`kind` fields as typed IR facts; it does not resolve those paths to
+declarations. The inventory currently locates `From` impls and
 `?` expressions, but does not resolve their source and target types. For a
 `From<io::Error>` path, changing `source: io::Error` to a reference changes
 who owns the `io::Error`; the syntax of `?` alone cannot prove the caller can

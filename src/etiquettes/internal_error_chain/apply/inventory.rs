@@ -13,9 +13,11 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 mod batch;
 mod collection;
+mod edges;
 mod graph;
 mod helpers;
 
+pub use edges::{ErrorEdgeEvidence, ErrorEdgeField, ErrorEdgeStorage};
 pub(crate) use graph::{conversion_units_from_ir, enrich_conversion_units};
 
 /// A source construct that may participate in converting an error field.
@@ -57,10 +59,18 @@ pub struct ErrorConversionSite {
     column: usize,
     #[getter(copy)]
     kind: ErrorConversionSiteKind,
-    /// Exact declared type text for a `source` or `kind` edge, when available.
-    related_type: Option<String>,
+    /// Typed declaration facts for a supported `source` or `kind` edge.
+    edge: Option<ErrorEdgeEvidence>,
     #[getter(copy)]
     resolved: bool,
+}
+
+impl ErrorConversionSite {
+    /// Exact declared type text for a supported `source` or `kind` edge.
+    #[instrument(level = "trace", skip(self))]
+    pub fn related_type(&self) -> Option<String> {
+        self.edge.as_ref().map(|edge| edge.type_text().clone())
+    }
 }
 
 /// All visible evidence for one private error field in a crate target.

@@ -10,12 +10,13 @@ use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
 
+use super::edges::error_edge_evidence;
 use super::helpers::{path_mentions, return_type_mentions, type_mentions, use_tree_mentions};
-use super::{ConversionCandidate, ErrorConversionSite, ErrorConversionSiteKind};
+use super::{ConversionCandidate, ErrorConversionSite, ErrorConversionSiteKind, ErrorEdgeField};
+use crate::etiquettes::internal_error_chain::apply::simple_type_name;
 use crate::etiquettes::internal_error_chain::apply::uses::{
     macro_has_unhandled_field_use, tokens_access_field, tokens_construct_type,
 };
-use crate::etiquettes::internal_error_chain::apply::{simple_type_name, span_range};
 
 pub(super) struct BatchInventoryVisitor<'a> {
     file: &'a SharedParsedFile,
@@ -61,7 +62,7 @@ impl<'a> BatchInventoryVisitor<'a> {
             line: start.line,
             column: start.column,
             kind,
-            related_type: None,
+            edge: None,
             resolved: resolved
                 && self.file.path() == self.candidates[index].declaration
                 && self.module_depth == 0,
@@ -359,20 +360,25 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
                 }
             }
             for field in &item.fields {
-                if field
-                    .ident
-                    .as_ref()
-                    .is_some_and(|name| name == "source" || name == "kind")
+                if let Some(edge_field) =
+                    field
+                        .ident
+                        .as_ref()
+                        .and_then(|name| match name.to_string().as_str() {
+                            "source" => Some(ErrorEdgeField::Source),
+                            "kind" => Some(ErrorEdgeField::Kind),
+                            _ => None,
+                        })
                 {
+                    let edge = error_edge_evidence(self.file, field, edge_field);
                     self.record(
                         index,
                         ErrorConversionSiteKind::ErrorEdge,
                         field.span(),
-                        true,
+                        edge.is_some(),
                     );
                     if let Some(site) = self.sites[index].last_mut() {
-                        site.related_type = span_range(self.file.source(), field.ty.span())
-                            .map(|(start, end)| self.file.source()[start..end].to_string());
+                        site.edge = edge;
                     }
                 }
             }

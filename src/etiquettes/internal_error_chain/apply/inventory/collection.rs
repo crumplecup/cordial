@@ -251,7 +251,7 @@ fn unresolved_site(file: &SharedParsedFile, kind: ErrorConversionSiteKind) -> Er
         line: 0,
         column: 0,
         kind,
-        related_type: None,
+        edge: None,
         resolved: false,
     }
 }
