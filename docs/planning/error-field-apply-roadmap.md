@@ -329,7 +329,7 @@ Implementation checkpoints:
   before writing a crate target. Multi-file writes are not yet atomic. Keep
   unknown name, cfg, or macro edges as explicit blockers.
 - [x] Connect conversion evidence across validated external module boundaries
-  in the shared IR. A private declaration has a path, line, and digest identity;
+  in the shared IR. A private declaration has a path, line, column, and digest identity;
   source/Kind edges and path-based constructor, caller, and type-use sites link
   to it when module and import resolution are unambiguous. These links do not
   yet authorize cross-file conversion.

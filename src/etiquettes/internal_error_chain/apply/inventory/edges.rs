@@ -52,6 +52,8 @@ pub struct ErrorEdgeTarget {
     #[getter(copy)]
     line: usize,
     #[getter(copy)]
+    column: usize,
+    #[getter(copy)]
     source_digest: [u8; 32],
     #[getter(copy)]
     kind: ErrorEdgeTargetKind,
@@ -62,11 +64,13 @@ impl ErrorEdgeTarget {
     pub(super) fn from_shared_file(
         file: &SharedParsedFile,
         line: usize,
+        column: usize,
         kind: ErrorEdgeTargetKind,
     ) -> Self {
         Self {
             declaration: file.path().to_path_buf(),
             line,
+            column,
             source_digest: file.source_digest(),
             kind,
         }

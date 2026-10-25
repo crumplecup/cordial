@@ -23,7 +23,7 @@ pub(crate) fn enrich_conversion_units(
     files: &[SharedParsedFile],
 ) -> CordialResult<()> {
     let root = ir.root()?;
-    let mut declarations = HashMap::<(PathBuf, usize), _>::new();
+    let mut declarations = HashMap::<(PathBuf, usize, usize), _>::new();
     for (unit, line) in collect_conversion_units(files) {
         let node = ir.insert_node(
             NodeWeight::new(NodeKind::Field)
@@ -36,28 +36,30 @@ pub(crate) fn enrich_conversion_units(
                 .as_ref()
                 .or_else(|| site.edge().as_ref()?.target().as_ref())
         }) {
-            let key = (target.declaration().clone(), target.line());
-            let declaration =
-                if let Some(existing) = declarations.get(&key) {
-                    *existing
-                } else {
-                    let kind = match target.kind() {
-                        ErrorEdgeTargetKind::Struct => ItemKind::Struct,
-                        ErrorEdgeTargetKind::Enum => ItemKind::Enum,
-                    };
-                    let declaration =
-                        ir.insert_node(NodeWeight::new(NodeKind::Item(kind)).with_span(
-                            FileSpan::new(target.declaration(), target.line() as u32, 1),
-                        ))?;
-                    ir.set_attr(
-                        declaration,
-                        ERROR_DECLARATION_ATTR,
-                        serde_json::to_value(target)?,
-                    )?;
-                    ir.insert_edge(root, declaration, EdgeKind::Contains)?;
-                    declarations.insert(key.clone(), declaration);
-                    declaration
+            let key = (target.declaration().clone(), target.line(), target.column());
+            let declaration = if let Some(existing) = declarations.get(&key) {
+                *existing
+            } else {
+                let kind = match target.kind() {
+                    ErrorEdgeTargetKind::Struct => ItemKind::Struct,
+                    ErrorEdgeTargetKind::Enum => ItemKind::Enum,
                 };
+                let declaration = ir.insert_node(
+                    NodeWeight::new(NodeKind::Item(kind)).with_span(FileSpan::new(
+                        target.declaration(),
+                        target.line() as u32,
+                        target.column() as u32 + 1,
+                    )),
+                )?;
+                ir.set_attr(
+                    declaration,
+                    ERROR_DECLARATION_ATTR,
+                    serde_json::to_value(target)?,
+                )?;
+                ir.insert_edge(root, declaration, EdgeKind::Contains)?;
+                declarations.insert(key.clone(), declaration);
+                declaration
+            };
             if dependencies.insert(key) {
                 ir.insert_edge(node, declaration, EdgeKind::Depends)?;
             }

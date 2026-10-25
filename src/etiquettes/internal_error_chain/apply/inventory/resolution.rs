@@ -36,26 +36,28 @@ impl CrateTypeIndex {
                 if let Item::Use(item) = item {
                     use_paths(&item.tree, Vec::new(), &mut file_imports);
                 }
-                let (name, visibility, attrs, kind, line) = match item {
+                let (name, visibility, attrs, kind, location) = match item {
                     Item::Struct(item) => (
                         &item.ident,
                         &item.vis,
                         &item.attrs,
                         ErrorEdgeTargetKind::Struct,
-                        item.ident.span().start().line,
+                        item.ident.span().start(),
                     ),
                     Item::Enum(item) => (
                         &item.ident,
                         &item.vis,
                         &item.attrs,
                         ErrorEdgeTargetKind::Enum,
-                        item.ident.span().start().line,
+                        item.ident.span().start(),
                     ),
                     _ => continue,
                 };
                 let target = (matches!(visibility, Visibility::Inherited)
                     && attrs.iter().all(derive_is_builtin))
-                .then(|| ErrorEdgeTarget::from_shared_file(file, line, kind));
+                .then(|| {
+                    ErrorEdgeTarget::from_shared_file(file, location.line, location.column, kind)
+                });
                 local
                     .entry((file.path().to_path_buf(), name.to_string()))
                     .or_default()

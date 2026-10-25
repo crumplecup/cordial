@@ -735,6 +735,43 @@ impl MessageError {
 }
 
 #[test]
+fn conversion_targets_on_one_line_have_distinct_identities() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = fixture(
+        r#"#[derive(Debug)] struct Kind; #[derive(Debug)] struct Other;
+#[derive(Debug)] struct First { message: String, kind: Kind }
+#[derive(Debug)] struct Second { message: String, kind: Other }
+impl std::fmt::Display for First {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::fmt::Display for Second {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for First {}
+impl std::error::Error for Second {}
+impl First { fn new() -> Self { Self { message: "first".to_owned(), kind: Kind } } }
+impl Second { fn new() -> Self { Self { message: "second".to_owned(), kind: Other } } }
+"#,
+        "borrowed",
+    )?;
+    let summary =
+        run_error_file_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
+    let targets: Vec<_> = summary
+        .conversion_units()
+        .iter()
+        .filter(|unit| matches!(unit.type_name().as_str(), "First" | "Second"))
+        .flat_map(|unit| unit.sites())
+        .filter(|site| site.kind() == ErrorConversionSiteKind::ErrorEdge)
+        .filter_map(|site| site.edge().as_ref()?.target().as_ref())
+        .collect();
+    assert_eq!(targets.len(), 2);
+    assert_eq!(targets[0].line(), targets[1].line());
+    assert_ne!(targets[0].column(), targets[1].column());
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
 fn custom_module_path_does_not_create_a_speculative_cross_file_link() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = fixture(
