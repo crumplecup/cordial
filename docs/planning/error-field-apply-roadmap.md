@@ -342,12 +342,13 @@ Implementation checkpoints:
   replacement, checks each again at replacement time, and restores earlier
   files when a later replacement fails. A two-file fixture exercises the write
   path. Add deterministic failure tests for rollback and concurrent changes
-  before authorizing a cross-file conversion. This is a rollback-capable
-  whole-target write, not crash-atomic across files. Unknown name, cfg, or macro
-  edges remain explicit blockers until the planner can account for them. A
-  private parent error and native source declared together, with its
-  constructor in another file, now convert together when every external type
-  name resolves uniquely. The patch pass treats those files as one component.
+  before extending conversion to cross-file Kind/source declarations. This is
+  a rollback-capable whole-target write, not crash-atomic across files.
+  Unknown name, cfg, or macro edges remain explicit blockers until the planner
+  can account for them. A private parent error and native source declared in
+  one file, with a constructor in another, now convert together when every
+  external type name resolves uniquely. The patch pass treats those files as
+  one component.
   Cross-file Kind/source declarations and lifetime propagation are still open.
 - [x] Connect conversion evidence across validated external module boundaries
   in the shared IR. A private declaration has a path, line, column, and digest identity;
