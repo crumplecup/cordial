@@ -16,6 +16,7 @@ use crate::targets::discover_crate_targets;
 
 use super::type_graph::{for_each_shared_src_rust_file, trait_is_std_error};
 
+mod graph_apply;
 mod initializers;
 mod inventory;
 mod lifetime;
@@ -23,6 +24,7 @@ mod names;
 mod patch;
 mod uses;
 
+use self::graph_apply::{conversion_graphs_from_ir, enrich_conversion_graphs};
 pub use self::inventory::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
     ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind, ErrorFromEvidence,
@@ -51,6 +53,8 @@ pub enum ErrorFieldApplyBlockerReason {
     FieldUse,
     /// Source spans or planned edits could not be used safely.
     InvalidEdit,
+    /// The connected parent, Kind, source, constructor, and use graph is incomplete.
+    GraphClosure,
 }
 
 /// A candidate left untouched by the error field apply pass.
@@ -148,12 +152,14 @@ pub fn run_error_field_apply(
             Ok(())
         })?;
         enrich_conversion_units(&mut ir, &files)?;
+        enrich_conversion_graphs(&mut ir, &files, policy.field_strategy())?;
         let units = conversion_units_from_ir(&ir)?;
+        let graphs = conversion_graphs_from_ir(&ir)?;
         let edit_files: Vec<_> = files.iter().map(|file| file.edit_view()).collect();
         let mut planned = Vec::new();
         for file in &edit_files {
             let (patched, converted, blockers, units) =
-                patch_file(file, policy.field_strategy(), &units, dry_run)?;
+                patch_file(file, policy.field_strategy(), &units, &graphs, dry_run)?;
             summary.conversion_units.extend(units);
             summary.converted_fields += converted;
             summary.unresolved += blockers.len();

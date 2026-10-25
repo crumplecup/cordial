@@ -6,14 +6,16 @@ use crate::config::ErrorFieldStrategy;
 use crate::error::{CordialError, CordialResult};
 use crate::loader::SourceEditView;
 
+use super::graph_apply::ErrorGraphPlan;
 use super::inventory::StringStorage;
 use super::{Edit, ErrorConversionUnit, ErrorFieldApplyBlocker, ErrorFieldApplyBlockerReason};
 
-#[instrument(level = "debug", skip(file, strategy, ir_units))]
+#[instrument(level = "debug", skip(file, strategy, ir_units, graphs))]
 pub(super) fn patch_file(
     file: &SourceEditView,
     strategy: ErrorFieldStrategy,
     ir_units: &[ErrorConversionUnit],
+    graphs: &[ErrorGraphPlan],
     dry_run: bool,
 ) -> CordialResult<(
     Option<String>,
@@ -26,10 +28,35 @@ pub(super) fn patch_file(
     let mut blockers = Vec::new();
     let mut pending = Vec::new();
     let mut units = Vec::new();
+    let graph = graphs.iter().find(|graph| graph.path() == file.path());
+    if let Some(graph) = graph {
+        if graph.source_digest() != file.source_digest() {
+            return Err(CordialError::stale_source_snapshot(file.path()));
+        }
+        for (type_name, field_name) in graph.fields() {
+            if graph.edits().is_none() {
+                blockers.push(ErrorFieldApplyBlocker::new(
+                    file.path(),
+                    type_name,
+                    field_name,
+                    ErrorFieldApplyBlockerReason::GraphClosure,
+                ));
+            }
+        }
+        if let Some(graph_edits) = graph.edits() {
+            edits.extend(graph_edits.iter().cloned());
+            converted += graph.fields().len();
+            pending.extend(graph.fields().iter().cloned());
+        }
+    }
     for unit in ir_units
         .iter()
         .filter(|unit| unit.declaration() == file.path())
     {
+        if graph.is_some_and(|graph| graph.covers(unit.type_name())) {
+            units.push(unit.clone());
+            continue;
+        }
         if unit.source_digest() != file.source_digest() {
             return Err(CordialError::stale_source_snapshot(file.path()));
         }

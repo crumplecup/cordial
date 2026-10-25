@@ -9,6 +9,152 @@ use cordial::{
 use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
+fn private_error_graph_round_trips_as_one_unit() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"use std::panic::Location;
+#[derive(Debug, Clone)]
+struct Cause;
+impl std::fmt::Display for Cause {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "cause") }
+}
+impl std::error::Error for Cause {}
+
+#[derive(Debug, Clone)]
+struct Leaf<'a> { source: Cause, file: String, anchor: &'a () }
+impl<'a> Leaf<'a> {
+    #[track_caller]
+    fn new(source: &'a Cause, anchor: &'a ()) -> Self {
+        Self { source: source.clone(), file: Location::caller().file().to_string(), anchor }
+    }
+}
+impl std::fmt::Display for Leaf<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.file) }
+}
+impl std::error::Error for Leaf<'_> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> { Some(&self.source) }
+}
+
+#[derive(Debug, Clone)]
+enum Kind<'a> { Leaf(Leaf<'a>) }
+fn make_kind<'a>(leaf: &'a Leaf<'a>) -> Kind<'a> { Kind::Leaf(leaf.clone()) }
+
+#[derive(Debug)]
+struct Parent<'a> { kind: Box<Kind<'a>>, source: Cause, file: String, anchor: &'a () }
+impl<'a> Parent<'a> {
+    #[track_caller]
+    fn new(kind: &'a Kind<'a>, source: &'a Cause, anchor: &'a ()) -> Self {
+        Self { kind: Box::new(kind.clone()), source: source.clone(), file: Location::caller().file().to_string(), anchor }
+    }
+    fn kind_label(&self) -> &'static str {
+        match self.kind.as_ref() { Kind::Leaf(_) => "leaf" }
+    }
+}
+impl std::fmt::Display for Parent<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.file) }
+}
+impl std::error::Error for Parent<'_> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> { Some(&self.source) }
+}
+impl<'a> From<(&'a Kind<'a>, &'a Cause, &'a ())> for Parent<'a> {
+    fn from((kind, source, anchor): (&'a Kind<'a>, &'a Cause, &'a ())) -> Self {
+        Self::new(kind, source, anchor)
+    }
+}
+fn via_try<'a>(kind: &'a Kind<'a>, source: &'a Cause, anchor: &'a ()) -> Result<(), Parent<'a>> {
+    let input: Result<(), (&Kind<'a>, &Cause, &())> = Err((kind, source, anchor));
+    input?;
+    Ok(())
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::error::Error;
+    #[test]
+    fn keeps_source_and_location() {
+        let cause = Cause;
+        let anchor = ();
+        let leaf = Leaf::new(&cause, &anchor);
+        let kind = make_kind(&leaf);
+        let error = via_try(&kind, &cause, &anchor).unwrap_err();
+        assert_eq!(error.source().unwrap().to_string(), "cause");
+        assert_eq!(error.kind_label(), "leaf");
+        assert!(error.to_string().contains("lib.rs"));
+    }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    test_fixture(fixture.path())?;
+    let dry_run =
+        run_error_file_apply(fixture.path(), fixture.path(), None, true).into_diagnostic()?;
+    assert_eq!(dry_run.changed_files(), 1);
+    assert_eq!(source(fixture.path())?, original);
+    let borrowed =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(borrowed.changed_files(), 1);
+    let borrowed_source = source(fixture.path())?;
+    assert!(borrowed_source.contains("kind: &'a Kind<'a>"));
+    assert!(borrowed_source.contains("Leaf(&'a Leaf<'a>)"));
+    assert!(borrowed_source.contains("source: &'a Cause"));
+    test_fixture(fixture.path())?;
+    assert_eq!(
+        run_error_file_apply(fixture.path(), fixture.path(), None, false)
+            .into_diagnostic()?
+            .changed_files(),
+        0
+    );
+    set_strategy(fixture.path(), "owned")?;
+    let owned =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(owned.changed_files(), 1);
+    test_fixture(fixture.path())?;
+    assert_eq!(
+        run_error_file_apply(fixture.path(), fixture.path(), None, false)
+            .into_diagnostic()?
+            .changed_files(),
+        0
+    );
+    Ok(())
+}
+
+#[test]
+fn unresolved_source_graph_leaves_every_field_unchanged() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = r#"#[derive(Debug, Clone)]
+struct Cause;
+impl std::fmt::Display for Cause {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "cause") }
+}
+impl std::error::Error for Cause {}
+#[derive(Debug)]
+struct Parent<'a> { source: Cause, file: String, anchor: &'a () }
+impl<'a> Parent<'a> {
+    fn new(anchor: &'a ()) -> Self {
+        Self { source: Cause, file: "lib.rs".to_owned(), anchor }
+    }
+}
+impl std::fmt::Display for Parent<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.file) }
+}
+impl std::error::Error for Parent<'_> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> { Some(&self.source) }
+}
+"#;
+    let fixture = fixture(original, "borrowed")?;
+    let summary =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(summary.changed_files(), 0);
+    assert!(
+        summary
+            .blockers()
+            .iter()
+            .any(|blocker| blocker.reason() == ErrorFieldApplyBlockerReason::GraphClosure)
+    );
+    assert_eq!(source(fixture.path())?, original);
+    check_fixture(fixture.path())?;
+    Ok(())
+}
+
+#[test]
 fn conversion_unit_records_constructors_callers_and_error_edges() -> miette::Result<()> {
     cordial::init_tracing();
     let original = r#"#[derive(Debug)]
@@ -156,6 +302,16 @@ fn caller() -> Result<(), MessageError> {
     }));
     assert_eq!(source(fixture.path())?, original);
     check_fixture(fixture.path())?;
+    let blocked =
+        run_error_file_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(blocked.changed_files(), 0);
+    assert!(
+        blocked
+            .blockers()
+            .iter()
+            .any(|blocker| blocker.reason() == ErrorFieldApplyBlockerReason::GraphClosure)
+    );
+    assert_eq!(source(fixture.path())?, original);
     Ok(())
 }
 
@@ -613,6 +769,20 @@ fn source(root: &Path) -> miette::Result<String> {
 fn check_fixture(root: &Path) -> miette::Result<()> {
     let result = Command::new("cargo")
         .args(["check", "--offline", "--quiet"])
+        .current_dir(root)
+        .output()
+        .into_diagnostic()?;
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    Ok(())
+}
+
+fn test_fixture(root: &Path) -> miette::Result<()> {
+    let result = Command::new("cargo")
+        .args(["test", "--offline", "--quiet"])
         .current_dir(root)
         .output()
         .into_diagnostic()?;

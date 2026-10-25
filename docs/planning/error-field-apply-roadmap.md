@@ -206,13 +206,19 @@ the round trip, dry run, repeat apply, and that blocker. Additional owned or
 borrowed fields, multiple constructors or files, and typed source/Kind edges
 remain outside this planner.
 
-### Next boundary: Kind and source graph
+### Private Kind and source graph
 
-The writer now plans every file in a crate target and checks all planned
-source snapshots against disk before writing. Multi-file writes are still not
-atomic, and conversion units remain field-local. A parent `Box<Kind>`, its Kind
-variants, and a native `source` field must be planned together and committed
-only after every file in that unit is ready. The inventory now records the
+The writer plans every file in a crate target and checks all planned source
+snapshots against disk before writing. Multi-file writes are still not atomic.
+For a file-local private error with an existing named lifetime, apply now
+plans the parent, its Kind variants, nested native source types, constructors,
+storage-sensitive reads, and `Error::source()` as one edit set. It converts
+owned and borrowed storage in both directions. If a required constructor or
+use is unrecognized, it leaves the entire file-local graph unchanged and
+reports a graph-closure blocker. A compiling round-trip fixture exercises
+`From`/`?`, source traversal, Kind access, and caller location. Introducing a
+new lifetime across the graph and converting a graph that spans files remain
+open parts of this slice. The inventory also records the
 syntactic storage shape and type path of direct, boxed, and explicitly borrowed
 `source`/`kind` fields as typed IR facts. Enrichment links a unique private
 top-level struct or enum in the same file to its declaration identity and
@@ -228,9 +234,8 @@ The written paths remain unresolved, as do the operand error and conversion
 target types of `?` expressions. For a
 `From<io::Error>` path, changing `source: io::Error` to a reference changes
 who owns the `io::Error`; the syntax of `?` alone cannot prove the caller can
-hold it long enough. The first graph fixture should include a parent, Kind,
-native source, `Error::source()`, a `From` path, and a `?` caller, then prove
-borrowed and owned round trips plus no partial write on an unresolved edge.
+hold it long enough. The unresolved-constructor fixture checks that the entire
+graph stays unchanged.
 
 The same inventory walk records the written return type and direct `self` field
 uses of each `Error::source()` override. These are syntax facts, not proof that
@@ -287,6 +292,11 @@ ambiguous-name/macro fixture that remains blocked, a stale-snapshot fixture,
 and a graph round trip that checks source traversal and caller location.
 
 Implementation checkpoints:
+
+- [x] Plan a private file-local Kind/source graph as one IR-backed edit set,
+  with source-digest validation, conservative blockers, and a compiling
+  owned-to-borrowed-to-owned fixture. Existing named lifetimes are required;
+  cross-file graphs still need a multi-file atomic writer.
 
 - [x] Build apply's source view with the same loader as normal sessions, and
   materialize conversion units as typed graph facts in the error IR enricher.
