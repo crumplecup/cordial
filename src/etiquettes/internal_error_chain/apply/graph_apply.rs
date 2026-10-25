@@ -22,6 +22,7 @@ use super::names::audit_names;
 use super::{Edit, known_error_impls, span_range};
 
 mod expressions;
+mod lifetimes;
 mod types;
 
 use expressions::GraphExprPlanner;
@@ -181,8 +182,34 @@ fn plan_file(file: &SharedParsedFile, strategy: ErrorFieldStrategy) -> Option<Er
         return None;
     }
 
-    let (names, mut fields, mut edits, variants, mut valid) =
-        discover_graph(file, strategy, &structs, &enums, roots);
+    let initial = discover_graph(
+        file,
+        strategy,
+        &structs,
+        &enums,
+        roots.clone(),
+        None,
+        &BTreeSet::new(),
+    );
+    let lifetime = lifetimes::select(file, strategy, &initial.0, &structs, &enums);
+    let changing_generics = lifetime
+        .as_ref()
+        .map(|plan| plan.names().clone())
+        .unwrap_or_default();
+    let graph_lifetime = lifetime.as_ref().map(|plan| plan.lifetime().as_str());
+    let (names, mut fields, mut edits, variants, mut valid) = if lifetime.is_some() {
+        discover_graph(
+            file,
+            strategy,
+            &structs,
+            &enums,
+            roots,
+            graph_lifetime,
+            &changing_generics,
+        )
+    } else {
+        initial
+    };
     let mut changes = BTreeMap::new();
 
     for name in &names {
@@ -225,9 +252,15 @@ fn plan_file(file: &SharedParsedFile, strategy: ErrorFieldStrategy) -> Option<Er
                 }
                 continue;
             };
-            let Some(replacement) =
-                desired_type(file, &field.ty, strategy, *item, Some(&field_name))
-            else {
+            let Some(replacement) = desired_type(
+                file,
+                &field.ty,
+                strategy,
+                *item,
+                Some(&field_name),
+                graph_lifetime,
+                &changing_generics,
+            ) else {
                 if wants_change(&field.ty, strategy) {
                     valid = false;
                     fields.push((name.clone(), field_name.clone()));
@@ -269,6 +302,13 @@ fn plan_file(file: &SharedParsedFile, strategy: ErrorFieldStrategy) -> Option<Er
     valid &= names.iter().all(|name| !audit.blocks(name));
     valid &= !audit.blocks("Box");
     edits.extend(expr_edits);
+    if let Some(lifetime) = lifetime {
+        if let Some(mut lifetime_edits) = lifetime.edits(file, strategy, &edits) {
+            edits.append(&mut lifetime_edits);
+        } else {
+            valid = false;
+        }
+    }
     if fields.is_empty() {
         return None;
     }
@@ -281,13 +321,18 @@ fn plan_file(file: &SharedParsedFile, strategy: ErrorFieldStrategy) -> Option<Er
     })
 }
 
-#[instrument(level = "debug", skip(file, strategy, structs, enums, roots))]
+#[instrument(
+    level = "debug",
+    skip(file, strategy, structs, enums, roots, changing_generics)
+)]
 fn discover_graph<'a>(
     file: &SharedParsedFile,
     strategy: ErrorFieldStrategy,
     structs: &BTreeMap<String, &'a syn::ItemStruct>,
     enums: &BTreeMap<String, &'a syn::ItemEnum>,
     roots: Vec<String>,
+    graph_lifetime: Option<&str>,
+    changing_generics: &BTreeSet<String>,
 ) -> (
     BTreeSet<String>,
     Vec<(String, String)>,
@@ -377,7 +422,15 @@ fn discover_graph<'a>(
                         pending.push(payload.clone());
                     }
                 }
-                if let Some(replacement) = desired_type(file, &field.ty, strategy, *kind, None) {
+                if let Some(replacement) = desired_type(
+                    file,
+                    &field.ty,
+                    strategy,
+                    *kind,
+                    None,
+                    graph_lifetime,
+                    changing_generics,
+                ) {
                     if let Some((start, end)) = span_range(file.source(), field.ty.span()) {
                         edits.push(Edit {
                             start,

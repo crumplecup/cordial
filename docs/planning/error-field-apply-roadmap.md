@@ -40,10 +40,11 @@ one existing named lifetime and a separate non-string lifetime-bearing field
 can also borrow constructor parameters and typed local aliases tied to that
 same lifetime. A closed private error with one string field and optional scalar
 context can move an explicit constructor lifetime onto its type and back. It
-uses a shared parsed file view
-while scanning and checks that edited source parses. It leaves unrelated
-dynamic constructor parameters, wider lifetime propagation, `source` and `kind`,
-public types, and cross-file uses untouched. See
+can also introduce and remove a named lifetime across a closed file-local
+private parent, Kind, and native source graph. It uses a shared parsed file
+view while scanning and checks that edited source parses. It leaves unrelated
+dynamic constructor parameters, unresolved graph callers, public types, and
+cross-file uses untouched. See
 [`apply.rs`](../../src/etiquettes/internal_error_chain/apply.rs) and its
 [`initializers.rs`](../../src/etiquettes/internal_error_chain/apply/initializers.rs).
 
@@ -210,15 +211,18 @@ remain outside this planner.
 
 The writer plans every file in a crate target and checks all planned source
 snapshots against disk before writing. Multi-file writes are still not atomic.
-For a file-local private error with an existing named lifetime, apply now
+For a file-local private error with an existing named lifetime, apply
 plans the parent, its Kind variants, nested native source types, constructors,
 storage-sensitive reads, and `Error::source()` as one edit set. It converts
 owned and borrowed storage in both directions. If a required constructor or
 use is unrecognized, it leaves the entire file-local graph unchanged and
 reports a graph-closure blocker. A compiling round-trip fixture exercises
-`From`/`?`, source traversal, Kind access, and caller location. Introducing a
-new lifetime across the graph and converting a graph that spans files remain
-open parts of this slice. The inventory also records the
+`From`/`?`, source traversal, Kind access, and caller location. A closed
+file-local graph can also acquire one constructor-anchored lifetime across its
+declarations, impls, and typed uses, then remove it on the owned round trip.
+A return that would borrow local values blocks the entire edit. A compiling
+round-trip fixture covers both directions and the blocker. Graphs that span
+files remain open parts of this slice. The inventory also records the
 syntactic storage shape and type path of direct, boxed, and explicitly borrowed
 `source`/`kind` fields as typed IR facts. Enrichment links a unique private
 top-level struct or enum in the same file to its declaration identity and
@@ -295,8 +299,9 @@ Implementation checkpoints:
 
 - [x] Plan a private file-local Kind/source graph as one IR-backed edit set,
   with source-digest validation, conservative blockers, and a compiling
-  owned-to-borrowed-to-owned fixture. Existing named lifetimes are required;
-  cross-file graphs still need a multi-file atomic writer.
+  owned-to-borrowed-to-owned fixture. A constructor-anchored lifetime can now
+  be introduced across a closed same-file graph; cross-file graphs still need
+  a multi-file atomic writer.
 
 - [x] Build apply's source view with the same loader as normal sessions, and
   materialize conversion units as typed graph facts in the error IR enricher.
