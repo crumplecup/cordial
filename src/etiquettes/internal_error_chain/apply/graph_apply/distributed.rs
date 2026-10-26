@@ -39,21 +39,11 @@ pub(super) fn plan(
         .map(|(name, (_, _, target))| (name.clone(), target.clone()))
         .collect();
     let names: BTreeSet<_> = declarations.keys().cloned().collect();
-    let structs: BTreeMap<_, _> = declarations
+    let owners = declarations
         .iter()
-        .filter_map(|(name, (_, item, _))| match item {
-            Item::Struct(item) => Some((name.clone(), item)),
-            _ => None,
-        })
+        .map(|(name, (file, _, _))| (name.clone(), *file))
         .collect();
-    let enums: BTreeMap<_, _> = declarations
-        .iter()
-        .filter_map(|(name, (_, item, _))| match item {
-            Item::Enum(item) => Some((name.clone(), item)),
-            _ => None,
-        })
-        .collect();
-    let lifetime = lifetimes::select_across(strategy, &names, &structs, &enums, index);
+    let lifetime = lifetimes::select_across(strategy, &names, &owners, index);
     let changing_generics = lifetime
         .as_ref()
         .map(|plan| plan.names().clone())

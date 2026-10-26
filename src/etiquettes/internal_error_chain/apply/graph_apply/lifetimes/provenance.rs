@@ -1,9 +1,28 @@
 use std::collections::BTreeSet;
 
 use syn::Type;
+use syn::visit::Visit;
 use tracing::instrument;
 
-use super::contains_lifetime_type;
+#[instrument(level = "trace", skip(value, lifetime))]
+fn contains_lifetime_type(value: &Type, lifetime: &str) -> bool {
+    struct LifetimeUse<'a> {
+        lifetime: &'a str,
+        found: bool,
+    }
+    impl<'ast> Visit<'ast> for LifetimeUse<'_> {
+        #[instrument(level = "debug", skip(self, value))]
+        fn visit_lifetime(&mut self, value: &'ast syn::Lifetime) {
+            self.found |= value.ident == self.lifetime;
+        }
+    }
+    let mut visitor = LifetimeUse {
+        lifetime,
+        found: false,
+    };
+    visitor.visit_type(value);
+    visitor.found
+}
 
 #[instrument(level = "debug", skip(signature))]
 pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn anchored_parameters(

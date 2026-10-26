@@ -293,9 +293,10 @@ constructor, field-use, pattern, source-method, Kind, and macro sites now come
 from strategy-independent expression facts in that IR. The graph expression
 planner reads those facts and source text without walking the syntax tree.
 Lifetime declarations, impls, methods, return safety, type uses, and unsupported
-expression paths now come from typed IR facts too. Graph edit planning no longer
-launches a syntax visitor for each candidate. Declaration field and variant
-shapes are still read from the shared tree by the graph planner, and the older
+expression paths now come from typed IR facts too. Field lifetime requirements
+and retained lifetimes are collected there, so graph lifetime selection and edit
+planning no longer launch a syntax visitor for each candidate. Declaration field
+and variant shapes are still read from the shared tree by the graph planner, and the older
 initializer path still has collection-time syntax visitors; these are the next
 facts to move before planning can take only `IrView` and `SourceEditView`.
 

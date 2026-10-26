@@ -3,8 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use syn::visit::Visit;
-use syn::{GenericParam, ItemEnum, ItemStruct, Type};
+use syn::{GenericParam, Type};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
@@ -34,11 +33,16 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct GraphLifetimeFacts
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Declaration {
     name: String,
+    is_enum: bool,
     module_depth: usize,
     ident_end: Option<usize>,
     generics_empty: bool,
     one_lifetime: Option<String>,
     generics_range: Option<Range>,
+    where_clause: bool,
+    needs_borrowed: bool,
+    needs_owned: bool,
+    retained_lifetimes: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,25 +128,47 @@ impl GraphLifetimePlan {
     }
 }
 
-#[instrument(level = "debug", skip(file, strategy, names, structs, enums, index))]
+#[instrument(level = "debug", skip(file, strategy, names, index))]
 pub(super) fn select(
     file: &SharedParsedFile,
     strategy: ErrorFieldStrategy,
     names: &BTreeSet<String>,
-    structs: &BTreeMap<String, &ItemStruct>,
-    enums: &BTreeMap<String, &ItemEnum>,
     index: &CrateTypeIndex,
 ) -> Option<GraphLifetimePlan> {
-    let _ = file;
-    select_across(strategy, names, structs, enums, index)
+    let facts = index.lifetime_facts(file)?;
+    let sites = facts
+        .declarations
+        .iter()
+        .filter(|site| site.module_depth == 0)
+        .map(|site| (site.name.clone(), site))
+        .collect();
+    select_sites(strategy, names, &sites, index)
 }
 
-#[instrument(level = "debug", skip(strategy, names, structs, enums, index))]
+#[instrument(level = "debug", skip(strategy, names, owners, index))]
 pub(super) fn select_across(
     strategy: ErrorFieldStrategy,
     names: &BTreeSet<String>,
-    structs: &BTreeMap<String, &ItemStruct>,
-    enums: &BTreeMap<String, &ItemEnum>,
+    owners: &BTreeMap<String, &SharedParsedFile>,
+    index: &CrateTypeIndex,
+) -> Option<GraphLifetimePlan> {
+    let mut sites = BTreeMap::new();
+    for (name, file) in owners {
+        let site = index
+            .lifetime_facts(file)?
+            .declarations
+            .iter()
+            .find(|site| site.module_depth == 0 && &site.name == name)?;
+        sites.insert(name.clone(), site);
+    }
+    select_sites(strategy, names, &sites, index)
+}
+
+#[instrument(level = "debug", skip(strategy, names, sites, index))]
+fn select_sites(
+    strategy: ErrorFieldStrategy,
+    names: &BTreeSet<String>,
+    sites: &BTreeMap<String, &Declaration>,
     index: &CrateTypeIndex,
 ) -> Option<GraphLifetimePlan> {
     match strategy {
@@ -150,16 +176,9 @@ pub(super) fn select_across(
             let changing: BTreeSet<_> = names
                 .iter()
                 .filter(|name| {
-                    structs.get(*name).is_some_and(|item| {
-                        item.generics.params.is_empty()
-                            && fields_need_lifetime(&item.fields, strategy)
-                    }) || enums.get(*name).is_some_and(|item| {
-                        item.generics.params.is_empty()
-                            && item
-                                .variants
-                                .iter()
-                                .any(|variant| fields_need_lifetime(&variant.fields, strategy))
-                    })
+                    sites
+                        .get(*name)
+                        .is_some_and(|site| site.generics_empty && site.needs_borrowed)
                 })
                 .cloned()
                 .collect();
@@ -180,33 +199,20 @@ pub(super) fn select_across(
             let mut changing = BTreeSet::new();
             let mut lifetimes = BTreeSet::new();
             for name in names {
-                if let Some(item) = structs.get(name) {
-                    let Some(lifetime) = one_lifetime(&item.generics) else {
-                        continue;
-                    };
-                    if item.generics.where_clause.is_some()
-                        || !fields_need_lifetime(&item.fields, strategy)
-                        || has_retained_lifetime(&item.fields, &lifetime)
-                    {
-                        return None;
-                    }
-                    changing.insert(name.clone());
-                    lifetimes.insert(lifetime);
-                } else if let Some(item) = enums.get(name) {
-                    let Some(lifetime) = one_lifetime(&item.generics) else {
-                        continue;
-                    };
-                    if item.generics.where_clause.is_some()
-                        || item
-                            .variants
-                            .iter()
-                            .any(|variant| has_retained_lifetime(&variant.fields, &lifetime))
-                    {
-                        return None;
-                    }
-                    changing.insert(name.clone());
-                    lifetimes.insert(lifetime);
+                let Some(site) = sites.get(name) else {
+                    continue;
+                };
+                let Some(lifetime) = &site.one_lifetime else {
+                    continue;
+                };
+                if site.where_clause
+                    || (!site.is_enum && !site.needs_owned)
+                    || site.retained_lifetimes.contains(lifetime)
+                {
+                    return None;
                 }
+                changing.insert(name.clone());
+                lifetimes.insert(lifetime.clone());
             }
             if changing.is_empty() || lifetimes.len() != 1 {
                 return None;
@@ -217,13 +223,6 @@ pub(super) fn select_across(
             })
         }
     }
-}
-
-#[instrument(level = "trace", skip(fields, strategy))]
-fn fields_need_lifetime(fields: &syn::Fields, strategy: ErrorFieldStrategy) -> bool {
-    fields
-        .iter()
-        .any(|field| field_needs_lifetime(field, strategy))
 }
 
 #[instrument(level = "trace", skip(field, strategy))]
@@ -246,14 +245,6 @@ fn field_needs_lifetime(field: &syn::Field, strategy: ErrorFieldStrategy) -> boo
     }
 }
 
-#[instrument(level = "trace", skip(fields, lifetime))]
-fn has_retained_lifetime(fields: &syn::Fields, lifetime: &str) -> bool {
-    fields.iter().any(|field| {
-        contains_lifetime_type(&field.ty, lifetime)
-            && !field_needs_lifetime(field, ErrorFieldStrategy::Owned)
-    })
-}
-
 #[instrument(level = "trace", skip(generics))]
 fn one_lifetime(generics: &syn::Generics) -> Option<String> {
     let [GenericParam::Lifetime(parameter)] = generics.params.iter().collect::<Vec<_>>().as_slice()
@@ -262,26 +253,4 @@ fn one_lifetime(generics: &syn::Generics) -> Option<String> {
     };
     (parameter.attrs.is_empty() && parameter.bounds.is_empty())
         .then(|| parameter.lifetime.ident.to_string())
-}
-
-#[instrument(level = "trace", skip(value, lifetime))]
-fn contains_lifetime_type(value: &Type, lifetime: &str) -> bool {
-    let mut visitor = LifetimeUse {
-        lifetime,
-        found: false,
-    };
-    visitor.visit_type(value);
-    visitor.found
-}
-
-struct LifetimeUse<'a> {
-    lifetime: &'a str,
-    found: bool,
-}
-
-impl<'ast> Visit<'ast> for LifetimeUse<'_> {
-    #[instrument(level = "debug", skip(self, lifetime))]
-    fn visit_lifetime(&mut self, lifetime: &'ast syn::Lifetime) {
-        self.found |= lifetime.ident == self.lifetime;
-    }
 }

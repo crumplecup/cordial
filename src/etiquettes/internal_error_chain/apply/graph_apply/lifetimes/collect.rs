@@ -7,10 +7,12 @@ use syn::visit::Visit;
 use syn::{GenericParam, PathArguments, Type};
 use tracing::instrument;
 
+use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
 use super::super::super::span_range;
 use super::super::types::type_name;
+use super::field_needs_lifetime;
 use super::one_lifetime;
 use super::provenance::{safe_impl_constructor, safe_top_level_return};
 use super::{
@@ -76,11 +78,22 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         if self.tracked_names.contains(&name) {
             self.facts.declarations.push(Declaration {
                 name: name.clone(),
+                is_enum: false,
                 module_depth: self.module_depth,
                 ident_end: self.end(item.ident.span()),
                 generics_empty: item.generics.params.is_empty(),
                 one_lifetime: one_lifetime(&item.generics),
                 generics_range: self.range(item.generics.span()),
+                where_clause: item.generics.where_clause.is_some(),
+                needs_borrowed: item
+                    .fields
+                    .iter()
+                    .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Borrowed)),
+                needs_owned: item
+                    .fields
+                    .iter()
+                    .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Owned)),
+                retained_lifetimes: retained_lifetimes(item.fields.iter()),
             });
         }
         let previous = self.conditional_scope.replace(ConditionalScope {
@@ -97,11 +110,28 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         if self.tracked_names.contains(&name) {
             self.facts.declarations.push(Declaration {
                 name: name.clone(),
+                is_enum: true,
                 module_depth: self.module_depth,
                 ident_end: self.end(item.ident.span()),
                 generics_empty: item.generics.params.is_empty(),
                 one_lifetime: one_lifetime(&item.generics),
                 generics_range: self.range(item.generics.span()),
+                where_clause: item.generics.where_clause.is_some(),
+                needs_borrowed: item
+                    .variants
+                    .iter()
+                    .flat_map(|variant| variant.fields.iter())
+                    .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Borrowed)),
+                needs_owned: item
+                    .variants
+                    .iter()
+                    .flat_map(|variant| variant.fields.iter())
+                    .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Owned)),
+                retained_lifetimes: retained_lifetimes(
+                    item.variants
+                        .iter()
+                        .flat_map(|variant| variant.fields.iter()),
+                ),
             });
         }
         let previous = self.conditional_scope.replace(ConditionalScope {
@@ -281,6 +311,14 @@ fn all_lifetimes<'ast, T: VisitTarget<'ast>>(value: &'ast T) -> BTreeSet<String>
     names.0
 }
 
+#[instrument(level = "trace", skip(fields))]
+fn retained_lifetimes<'a>(fields: impl Iterator<Item = &'a syn::Field>) -> BTreeSet<String> {
+    fields
+        .filter(|field| !field_needs_lifetime(field, ErrorFieldStrategy::Owned))
+        .flat_map(|field| all_lifetimes(&field.ty))
+        .collect()
+}
+
 impl<'ast> VisitTarget<'ast> for syn::Signature {
     #[instrument(level = "trace", skip(self, visitor))]
     fn visit_with(&'ast self, visitor: &mut LifetimeNames) {
@@ -299,6 +337,13 @@ impl<'ast> VisitTarget<'ast> for syn::Path {
     #[instrument(level = "trace", skip(self, visitor))]
     fn visit_with(&'ast self, visitor: &mut LifetimeNames) {
         visitor.visit_path(self);
+    }
+}
+
+impl<'ast> VisitTarget<'ast> for syn::Type {
+    #[instrument(level = "trace", skip(self, visitor))]
+    fn visit_with(&'ast self, visitor: &mut LifetimeNames) {
+        visitor.visit_type(self);
     }
 }
 

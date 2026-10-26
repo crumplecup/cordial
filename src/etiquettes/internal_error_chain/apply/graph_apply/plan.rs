@@ -72,7 +72,7 @@ pub(super) fn plan_file(
         None,
         &BTreeSet::new(),
     );
-    let lifetime = lifetimes::select(file, strategy, &initial.0, &structs, &enums, index);
+    let lifetime = lifetimes::select(file, strategy, &initial.0, index);
     let changing_generics = lifetime
         .as_ref()
         .map(|plan| plan.names().clone())
