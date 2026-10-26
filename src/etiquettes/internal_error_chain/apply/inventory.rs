@@ -8,6 +8,7 @@ use std::path::PathBuf;
 
 use super::Edit;
 use super::initializers::{FieldKind, InitializerFacts};
+use super::lifetime::LifetimePlanFacts;
 use crate::config::ErrorFieldStrategy;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -123,11 +124,11 @@ struct InitializerEvidence {
     facts: InitializerFacts,
 }
 
-/// A closed same-file lifetime migration proven against the shared tree.
+/// A closed same-file lifetime migration represented by typed IR facts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct LifetimeEvidence {
     target: ErrorFieldStrategy,
-    edits: Option<Vec<Edit>>,
+    facts: Option<LifetimePlanFacts>,
 }
 
 /// Declaration facts that the edit planner needs without revisiting syntax.
@@ -191,10 +192,14 @@ impl ErrorConversionUnit {
             .then(|| self.initializer.facts.edits(source, strategy))
             .flatten()
     }
-    #[instrument(level = "trace", skip(self, strategy))]
-    pub(super) fn lifetime_edits(&self, strategy: ErrorFieldStrategy) -> Option<Vec<Edit>> {
+    #[instrument(level = "trace", skip(self, source, strategy))]
+    pub(super) fn lifetime_edits(
+        &self,
+        source: &str,
+        strategy: ErrorFieldStrategy,
+    ) -> Option<Vec<Edit>> {
         (self.lifetime.target == strategy)
-            .then(|| self.lifetime.edits.clone())
+            .then(|| self.lifetime.facts.as_ref()?.edits(source, strategy))
             .flatten()
     }
     /// Whether every recorded path is understood well enough to plan a unit.

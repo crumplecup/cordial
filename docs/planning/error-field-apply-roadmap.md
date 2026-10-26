@@ -299,7 +299,8 @@ planning no longer launch a syntax visitor for each candidate. Declaration and
 field shapes, candidate fields, and cross-file mentions also come from the IR.
 Graph planning receives `SourceEditView`, which has no syntax-tree access. The
 older initializer and file-local lifetime paths still visit the shared tree
-during collection and put their selected edits in conversion-unit IR records.
+during collection. They put typed initializer and lifetime ranges in conversion-unit
+IR records; apply constructs edits from those facts and the source snapshot.
 
 | Stage | Facts or responsibility |
 | --- | --- |
@@ -353,12 +354,15 @@ Implementation checkpoints:
   walking it, and name-resolution work inside selected hooks remains a possible
   optimization target.
 - [ ] Move initializer, field-use, and lifetime-planning evidence into typed IR
-  facts. The ordinary field planner now reads declaration and initializer
-  facts from each conversion unit. The special lifetime planner now runs during
-  collection and serializes its proven edits into the unit. Extract its
-  signature, impl, and forwarding-return facts now live in the shared IR, so
-  graph lifetime planning no longer walks the tree for each candidate. A
-  per-file top-level index serves every lifetime candidate.
+  facts. The ordinary field planner reads declaration and initializer facts
+  from each conversion unit and builds edits after reading the IR. The special
+  lifetime path stores typed ranges for the field, struct, impls, forwarding
+  returns, and constructor initializers; apply builds its edits from those facts.
+  Its eligibility checks still inspect the shared tree during collection, and
+  a per-file top-level index serves every lifetime candidate. Move those checks
+  to a typed IR view and eliminate the remaining syntax-dependent planner.
+  Graph lifetime facts already live in the shared IR, so graph lifetime
+  planning does not walk the tree for each candidate.
   Apply now receives `SourceEditView`, which exposes text and digest but no
   `syntax()` method.
 - [x] Put crate-wide declaration resolution, cross-file path and name checks,

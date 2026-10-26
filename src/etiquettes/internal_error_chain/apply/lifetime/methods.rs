@@ -7,8 +7,8 @@ use tracing::instrument;
 use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
-use super::super::{Edit, is_str_ref_with_lifetime, simple_type_name, span_range};
-use super::{LifetimeFileIndex, scalar_copy_name};
+use super::super::{is_str_ref_with_lifetime, span_range};
+use super::{ImplPlanFacts, LifetimeFileIndex, scalar_copy_name};
 
 #[instrument(level = "debug", skip(index))]
 pub(super) fn constructor_lifetime(
@@ -89,63 +89,41 @@ pub(super) fn constructor_signature(
         })
 }
 
-#[instrument(level = "debug", skip(file, implementation, strategy, edits))]
-pub(super) fn edit_impl(
+#[instrument(level = "debug", skip(file, implementation, strategy))]
+pub(super) fn impl_facts(
     file: &SharedParsedFile,
     implementation: &ItemImpl,
-    lifetime: &str,
     strategy: ErrorFieldStrategy,
-    edits: &mut Vec<Edit>,
-) -> Option<()> {
-    let (start, end) = span_range(file.source(), implementation.self_ty.span())?;
-    let name = simple_type_name(&implementation.self_ty)?;
-    edits.push(Edit {
-        start,
-        end,
-        replacement: match strategy {
-            ErrorFieldStrategy::Borrowed => format!("{name}<'{lifetime}>"),
-            ErrorFieldStrategy::Owned => name,
-        },
-    });
-    match strategy {
-        ErrorFieldStrategy::Borrowed => {
-            let (_, insert) = span_range(file.source(), implementation.impl_token.span())?;
-            edits.push(Edit {
-                start: insert,
-                end: insert,
-                replacement: format!("<'{lifetime}>"),
-            });
-            if implementation.trait_.is_none() {
-                let Some(ImplItem::Fn(method)) = implementation.items.first() else {
-                    return None;
-                };
-                let (start, end) = span_range(file.source(), method.sig.generics.span())?;
-                edits.push(Edit {
-                    start,
-                    end,
-                    replacement: String::new(),
-                });
-            }
+) -> Option<ImplPlanFacts> {
+    let self_type = span_range(file.source(), implementation.self_ty.span())?;
+    let impl_token_end = (strategy == ErrorFieldStrategy::Borrowed)
+        .then(|| span_range(file.source(), implementation.impl_token.span()).map(|(_, end)| end))
+        .flatten();
+    let generics = (strategy == ErrorFieldStrategy::Owned)
+        .then(|| span_range(file.source(), implementation.generics.span()))
+        .flatten();
+    let (constructor_generics, constructor_ident_end) = if implementation.trait_.is_none() {
+        let Some(ImplItem::Fn(method)) = implementation.items.first() else {
+            return None;
+        };
+        match strategy {
+            ErrorFieldStrategy::Borrowed => (
+                Some(span_range(file.source(), method.sig.generics.span())?),
+                None,
+            ),
+            ErrorFieldStrategy::Owned => (
+                None,
+                Some(span_range(file.source(), method.sig.ident.span())?.1),
+            ),
         }
-        ErrorFieldStrategy::Owned => {
-            let (start, end) = span_range(file.source(), implementation.generics.span())?;
-            edits.push(Edit {
-                start,
-                end,
-                replacement: String::new(),
-            });
-            if implementation.trait_.is_none() {
-                let Some(ImplItem::Fn(method)) = implementation.items.first() else {
-                    return None;
-                };
-                let (_, insert) = span_range(file.source(), method.sig.ident.span())?;
-                edits.push(Edit {
-                    start: insert,
-                    end: insert,
-                    replacement: format!("<'{lifetime}>"),
-                });
-            }
-        }
-    }
-    Some(())
+    } else {
+        (None, None)
+    };
+    Some(ImplPlanFacts {
+        self_type,
+        impl_token_end,
+        generics,
+        constructor_generics,
+        constructor_ident_end,
+    })
 }

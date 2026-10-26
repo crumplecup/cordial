@@ -11,10 +11,10 @@ use crate::loader::SharedParsedFile;
 
 use super::super::initializers::{InitializerFacts, impl_uses_lifetime};
 use super::super::inventory::{ErrorConversionSiteKind, ErrorConversionUnit};
-use super::super::{Edit, is_str_ref_with_lifetime, is_string, span_range};
+use super::super::{is_str_ref_with_lifetime, is_string, span_range};
 use super::forwarding::forwarding_return;
-use super::methods::{constructor_lifetime, constructor_signature, edit_impl};
-use super::{LifetimeFileIndex, scalar_copy_name};
+use super::methods::{constructor_lifetime, constructor_signature, impl_facts};
+use super::{LifetimeFileIndex, LifetimePlanFacts, scalar_copy_name};
 
 /// Move the one constructor lifetime onto the private error type, or undo it.
 ///
@@ -22,7 +22,7 @@ use super::{LifetimeFileIndex, scalar_copy_name};
 /// Type mentions must be impl self types or direct forwarding function returns;
 /// inference-based direct calls are safe because their signatures remain unchanged.
 #[instrument(
-    level = "info",
+    level = "debug",
     skip(file, index, item, unit, strategy, initializer_facts)
 )]
 pub(super) fn plan(
@@ -33,7 +33,7 @@ pub(super) fn plan(
     unit: &ErrorConversionUnit,
     strategy: ErrorFieldStrategy,
     initializer_facts: Option<InitializerFacts>,
-) -> Option<Vec<Edit>> {
+) -> Option<LifetimePlanFacts> {
     let syn::Fields::Named(fields) = &item.fields else {
         return None;
     };
@@ -132,9 +132,9 @@ pub(super) fn plan(
     if constructors != 1 {
         return None;
     }
-    let mut return_edits = Vec::new();
+    let mut return_facts = Vec::new();
     for &function in &index.functions {
-        if let Some((position, edit)) = forwarding_return(
+        if let Some(site) = forwarding_return(
             file,
             function,
             &item.ident.to_string(),
@@ -143,8 +143,8 @@ pub(super) fn plan(
             &lifetime,
             strategy,
         ) {
-            allowed_type_uses.insert(position);
-            return_edits.push(edit);
+            allowed_type_uses.insert(site.position);
+            return_facts.push(site);
         }
     }
     if unit.sites().iter().any(|site| {
@@ -153,37 +153,26 @@ pub(super) fn plan(
     }) {
         return None;
     }
-    let mut edits = initializer_facts?.edits(file.source(), strategy)?;
-    edits.append(&mut return_edits);
-    let (field_start, field_end) = span_range(file.source(), field.ty.span())?;
-    edits.push(Edit {
-        start: field_start,
-        end: field_end,
-        replacement: match strategy {
-            ErrorFieldStrategy::Borrowed => format!("&'{lifetime} str"),
-            ErrorFieldStrategy::Owned => "String".to_string(),
-        },
-    });
-    match strategy {
-        ErrorFieldStrategy::Borrowed => {
-            let (_, insert) = span_range(file.source(), item.ident.span())?;
-            edits.push(Edit {
-                start: insert,
-                end: insert,
-                replacement: format!("<'{lifetime}>"),
-            });
-        }
-        ErrorFieldStrategy::Owned => {
-            let (start, end) = span_range(file.source(), item.generics.span())?;
-            edits.push(Edit {
-                start,
-                end,
-                replacement: String::new(),
-            });
-        }
-    }
-    for implementation in impls {
-        edit_impl(file, implementation, &lifetime, strategy, &mut edits)?;
-    }
-    Some(edits)
+    let initializers = initializer_facts?;
+    let field_type = span_range(file.source(), field.ty.span())?;
+    let struct_ident_end = (strategy == ErrorFieldStrategy::Borrowed)
+        .then(|| span_range(file.source(), item.ident.span()).map(|(_, end)| end))
+        .flatten();
+    let struct_generics = (strategy == ErrorFieldStrategy::Owned)
+        .then(|| span_range(file.source(), item.generics.span()))
+        .flatten();
+    let impls = impls
+        .into_iter()
+        .map(|implementation| impl_facts(file, implementation, strategy))
+        .collect::<Option<Vec<_>>>()?;
+    Some(LifetimePlanFacts {
+        lifetime,
+        type_name: item.ident.to_string(),
+        field_type,
+        struct_ident_end,
+        struct_generics,
+        impls,
+        returns: return_facts,
+        initializers,
+    })
 }

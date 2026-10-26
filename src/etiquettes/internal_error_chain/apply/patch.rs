@@ -69,7 +69,7 @@ pub(super) fn patch_file(
         let name_ambiguous = unit.name_ambiguous();
         let lifetime_candidate = unit.lifetime_candidate(strategy);
         if lifetime_candidate && !has_cross_file_reference && !name_ambiguous && field.private() {
-            if let Some(mut planned) = unit.lifetime_edits(strategy) {
+            if let Some(mut planned) = unit.lifetime_edits(file.source(), strategy) {
                 edits.append(&mut planned);
                 pending.push((name.clone(), field_name));
                 converted += 1;

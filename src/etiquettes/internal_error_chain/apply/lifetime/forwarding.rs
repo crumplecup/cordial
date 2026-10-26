@@ -7,8 +7,8 @@ use tracing::instrument;
 use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
-use super::super::{Edit, is_str_ref_with_lifetime, span_range};
-use super::scalar_copy_name;
+use super::super::{is_str_ref_with_lifetime, span_range};
+use super::{ReturnPlanFacts, scalar_copy_name};
 
 #[instrument(level = "debug", skip(file, function, strategy))]
 pub(super) fn forwarding_return(
@@ -19,7 +19,7 @@ pub(super) fn forwarding_return(
     constructor_name: &str,
     lifetime: &str,
     strategy: ErrorFieldStrategy,
-) -> Option<((usize, usize), Edit)> {
+) -> Option<ReturnPlanFacts> {
     if !function.attrs.is_empty()
         || !matches!(function.vis, syn::Visibility::Inherited)
         || function.sig.asyncness.is_some()
@@ -110,15 +110,8 @@ pub(super) fn forwarding_return(
     }
     let start = return_ty.span().start();
     let (edit_start, edit_end) = span_range(file.source(), return_ty.span())?;
-    Some((
-        (start.line, start.column),
-        Edit {
-            start: edit_start,
-            end: edit_end,
-            replacement: match strategy {
-                ErrorFieldStrategy::Borrowed => format!("{type_name}<'{lifetime}>"),
-                ErrorFieldStrategy::Owned => type_name.to_string(),
-            },
-        },
-    ))
+    Some(ReturnPlanFacts {
+        position: (start.line, start.column),
+        range: (edit_start, edit_end),
+    })
 }

@@ -81,7 +81,7 @@ pub(super) fn collect_conversion_units(
                     field: candidate.field,
                     lifetime: LifetimeEvidence {
                         target: candidate.initializer.target,
-                        edits: None,
+                        facts: None,
                     },
                     initializer: candidate.initializer,
                     sites,
@@ -148,7 +148,7 @@ pub(super) fn collect_conversion_units(
             files_by_path.get(unit.declaration.as_path()),
             lifetime_indexes.get(unit.declaration.as_path()),
         ) {
-            unit.lifetime.edits =
+            unit.lifetime.facts =
                 lifetime::plan_for_unit(file, index, unit, unit.lifetime.target, initializer_facts);
         }
     }
