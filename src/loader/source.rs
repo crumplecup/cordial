@@ -15,6 +15,13 @@ use crate::ir::CrateKind;
 use super::LoadView;
 
 use tracing::instrument;
+
+/// Snapshot identity shared by collection and source-only planning views.
+pub(crate) trait SourceSnapshot {
+    fn path(&self) -> &Path;
+    fn source_digest(&self) -> [u8; 32];
+}
+
 /// Loads Rust source files into a [`SourceLoadView`].
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SourceLoader;
@@ -200,6 +207,42 @@ impl SourceEditView {
         let current = std::fs::read(&self.inner.path)?;
         let digest: [u8; 32] = Sha256::digest(current).into();
         Ok(digest == self.inner.digest)
+    }
+}
+
+impl SourceSnapshot for SharedParsedFile {
+    #[instrument(level = "trace", skip(self))]
+    fn path(&self) -> &Path {
+        self.path()
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn source_digest(&self) -> [u8; 32] {
+        self.source_digest()
+    }
+}
+
+impl SourceSnapshot for SourceEditView {
+    #[instrument(level = "trace", skip(self))]
+    fn path(&self) -> &Path {
+        self.path()
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn source_digest(&self) -> [u8; 32] {
+        self.source_digest()
+    }
+}
+
+impl<T: SourceSnapshot + ?Sized> SourceSnapshot for &T {
+    #[instrument(level = "trace", skip(self))]
+    fn path(&self) -> &Path {
+        (*self).path()
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn source_digest(&self) -> [u8; 32] {
+        (*self).source_digest()
     }
 }
 

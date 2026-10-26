@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
-use crate::loader::SharedParsedFile;
+use crate::loader::SourceEditView;
 
 use super::super::Edit;
 use super::super::inventory::{CrateTypeIndex, ErrorEdgeTarget, ErrorEdgeTargetKind};
@@ -24,8 +24,8 @@ use super::{ErrorGraphPlan, VariantChange};
 /// or source declaration and all connected edits can be proven together.
 #[instrument(level = "debug", skip(root_file, files, strategy, index))]
 pub(super) fn plan(
-    root_file: &SharedParsedFile,
-    files: &[SharedParsedFile],
+    root_file: &SourceEditView,
+    files: &[SourceEditView],
     strategy: ErrorFieldStrategy,
     index: &CrateTypeIndex,
 ) -> Option<Vec<ErrorGraphPlan>> {
@@ -200,10 +200,10 @@ pub(super) fn plan(
 
 #[instrument(level = "debug", skip(root_file, files, index))]
 fn discover_declarations<'a>(
-    root_file: &SharedParsedFile,
-    files: &'a [SharedParsedFile],
+    root_file: &SourceEditView,
+    files: &'a [SourceEditView],
     index: &'a CrateTypeIndex,
-) -> Option<BTreeMap<String, (&'a SharedParsedFile, &'a GraphDeclaration, ErrorEdgeTarget)>> {
+) -> Option<BTreeMap<String, (&'a SourceEditView, &'a GraphDeclaration, ErrorEdgeTarget)>> {
     let roots: Vec<_> = index
         .graph_declarations(root_file)?
         .all()
@@ -225,10 +225,8 @@ fn discover_declarations<'a>(
     let root = index.resolve(root_file, std::slice::from_ref(root_name))?;
     let mut pending = vec![root];
     let mut visited = BTreeSet::new();
-    let mut declarations: BTreeMap<
-        String,
-        (&SharedParsedFile, &GraphDeclaration, ErrorEdgeTarget),
-    > = BTreeMap::new();
+    let mut declarations: BTreeMap<String, (&SourceEditView, &GraphDeclaration, ErrorEdgeTarget)> =
+        BTreeMap::new();
     let mut has_external_declaration = false;
 
     while let Some(target) = pending.pop() {

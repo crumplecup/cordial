@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use tracing::instrument;
 
-use crate::loader::SharedParsedFile;
+use crate::loader::SourceSnapshot;
 
 use super::super::super::graph_apply::{GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts};
 use super::super::edges::ErrorEdgeTarget;
@@ -16,7 +16,7 @@ impl CrateTypeIndex {
     #[instrument(level = "trace", skip(self, file))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn graph_declarations(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
     ) -> Option<&GraphDeclarationFacts> {
         self.syntax_for(file)
             .map(FileSyntaxFacts::graph_declarations)
@@ -24,21 +24,21 @@ impl CrateTypeIndex {
     #[instrument(level = "trace", skip(self, file))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn expression_facts(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
     ) -> Option<&GraphExprFacts> {
         self.syntax_for(file).map(FileSyntaxFacts::expressions)
     }
     #[instrument(level = "trace", skip(self, file))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn lifetime_facts(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
     ) -> Option<&GraphLifetimeFacts> {
         self.syntax_for(file).map(FileSyntaxFacts::lifetimes)
     }
     #[instrument(level = "trace", skip(self, file, name))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn file_mentions(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
         name: &str,
     ) -> bool {
         self.syntax_for(file)
@@ -48,7 +48,7 @@ impl CrateTypeIndex {
     #[instrument(level = "trace", skip(self, file, name))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn source_mentions(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
         name: &str,
     ) -> bool {
         self.syntax_for(file)
@@ -58,7 +58,7 @@ impl CrateTypeIndex {
     #[instrument(level = "trace", skip(self, file, name))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn name_blocks(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
         name: &str,
     ) -> bool {
         self.syntax_for(file)
@@ -68,7 +68,7 @@ impl CrateTypeIndex {
     #[instrument(level = "debug", skip(self, file, expected))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn paths_resolve_to_graph(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
         expected: &BTreeMap<String, ErrorEdgeTarget>,
     ) -> bool {
         let Some(facts) = self.syntax_for(file) else {
@@ -115,7 +115,7 @@ impl CrateTypeIndex {
     }
 
     #[instrument(level = "trace", skip(self, file))]
-    fn syntax_for(&self, file: &SharedParsedFile) -> Option<&FileSyntaxFacts> {
+    fn syntax_for(&self, file: &impl SourceSnapshot) -> Option<&FileSyntaxFacts> {
         self.file_syntax
             .get(file.path())
             .filter(|facts| facts.source_digest() == file.source_digest())
@@ -124,7 +124,7 @@ impl CrateTypeIndex {
     #[instrument(level = "trace", skip(self, file, written_path))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn resolve(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
         written_path: &[String],
     ) -> Option<ErrorEdgeTarget> {
         if let [name] = written_path

@@ -14,7 +14,7 @@ use tracing::instrument;
 use crate::config::ErrorFieldStrategy;
 use crate::error::{CordialError, CordialResult};
 use crate::ir::{IrMut, IrView};
-use crate::loader::SharedParsedFile;
+use crate::loader::{SharedParsedFile, SourceEditView};
 
 use super::Edit;
 use super::inventory::{CrateTypeIndex, ErrorEdgeTarget};
@@ -74,17 +74,18 @@ pub(super) fn enrich_conversion_graphs(
     strategy: ErrorFieldStrategy,
 ) -> CordialResult<()> {
     let index = CrateTypeIndex::from_ir(ir)?;
+    let files: Vec<SourceEditView> = files.iter().map(SharedParsedFile::edit_view).collect();
     let mut candidates: Vec<_> = files
         .iter()
         .filter_map(|file| plan_file(file, strategy, &index))
         .collect();
     let mut plans = Vec::new();
     let mut distributed_paths = BTreeSet::new();
-    for file in files {
+    for file in &files {
         if distributed_paths.contains(file.path()) {
             continue;
         }
-        if let Some(group) = distributed::plan(file, files, strategy, &index) {
+        if let Some(group) = distributed::plan(file, &files, strategy, &index) {
             distributed_paths.extend(group.iter().map(|plan| plan.path.clone()));
             plans.extend(group);
         }
@@ -107,7 +108,7 @@ pub(super) fn enrich_conversion_graphs(
                 })
                 .collect();
             let mut valid = candidate.plan.edits.is_some();
-            for file in files {
+            for file in &files {
                 if file.path() == candidate.plan.path()
                     || !candidate
                         .plan

@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
-use crate::loader::SharedParsedFile;
+use crate::loader::SourceEditView;
 
 use super::super::Edit;
 use super::super::inventory::CrateTypeIndex;
@@ -16,7 +16,7 @@ use super::{Change, ErrorGraphPlan, GraphCandidate, Shape, VariantChange};
 
 #[instrument(level = "debug", skip(file, strategy, index))]
 pub(super) fn plan_file(
-    file: &SharedParsedFile,
+    file: &SourceEditView,
     strategy: ErrorFieldStrategy,
     index: &CrateTypeIndex,
 ) -> Option<GraphCandidate> {
@@ -294,7 +294,7 @@ impl FieldPlan {
     skip(file, strategy, index, structs, names, changing_generics)
 )]
 pub(super) fn plan_struct_fields(
-    file: &SharedParsedFile,
+    file: &SourceEditView,
     strategy: ErrorFieldStrategy,
     index: &CrateTypeIndex,
     structs: &BTreeMap<String, &GraphDeclaration>,

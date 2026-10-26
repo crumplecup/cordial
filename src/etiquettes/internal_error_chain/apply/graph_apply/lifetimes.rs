@@ -7,7 +7,7 @@ use syn::{GenericParam, Type};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
-use crate::loader::SharedParsedFile;
+use crate::loader::SourceEditView;
 
 use super::super::Edit;
 use super::super::inventory::CrateTypeIndex;
@@ -146,7 +146,7 @@ impl GraphLifetimeFacts {
 
 #[instrument(level = "debug", skip(file, strategy, names, index))]
 pub(super) fn select(
-    file: &SharedParsedFile,
+    file: &SourceEditView,
     strategy: ErrorFieldStrategy,
     names: &BTreeSet<String>,
     index: &CrateTypeIndex,
@@ -165,7 +165,7 @@ pub(super) fn select(
 pub(super) fn select_across(
     strategy: ErrorFieldStrategy,
     names: &BTreeSet<String>,
-    owners: &BTreeMap<String, &SharedParsedFile>,
+    owners: &BTreeMap<String, &SourceEditView>,
     index: &CrateTypeIndex,
 ) -> Option<GraphLifetimePlan> {
     let mut sites = BTreeMap::new();

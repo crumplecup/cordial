@@ -295,10 +295,11 @@ planner reads those facts and source text without walking the syntax tree.
 Lifetime declarations, impls, methods, return safety, type uses, and unsupported
 expression paths now come from typed IR facts too. Field lifetime requirements
 and retained lifetimes are collected there, so graph lifetime selection and edit
-planning no longer launch a syntax visitor for each candidate. Declaration field
-and variant shapes are still read from the shared tree by the graph planner, and the older
-initializer path still has collection-time syntax visitors; these are the next
-facts to move before planning can take only `IrView` and `SourceEditView`.
+planning no longer launch a syntax visitor for each candidate. Declaration and
+field shapes, candidate fields, and cross-file mentions also come from the IR.
+Graph planning receives `SourceEditView`, which has no syntax-tree access. The
+older initializer and file-local lifetime paths still visit the shared tree
+during collection and put their selected edits in conversion-unit IR records.
 
 | Stage | Facts or responsibility |
 | --- | --- |
