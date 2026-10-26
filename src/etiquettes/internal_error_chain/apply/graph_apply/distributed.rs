@@ -8,7 +8,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use syn::spanned::Spanned;
-use syn::visit::Visit;
 use syn::{Item, Type, Visibility};
 use tracing::instrument;
 
@@ -162,14 +161,20 @@ pub(super) fn plan(
         if !index.paths_resolve_to_graph(file, &expected) || index.name_blocks(file, "Box") {
             return None;
         }
-        let mut visitor =
-            GraphExprPlanner::new(file, strategy, &changes, &variants).strict_external();
+        let mut visitor = GraphExprPlanner::new(
+            file.source(),
+            index.expression_facts(file)?,
+            strategy,
+            &changes,
+            &variants,
+        )
+        .strict_external();
         if strategy == ErrorFieldStrategy::Borrowed {
             if let Some(lifetime) = &lifetime {
                 visitor = visitor.require_anchored(lifetime.lifetime());
             }
         }
-        visitor.visit_file(file.syntax());
+        visitor.run();
         let (edits, complete, found, found_variants) = visitor.finish();
         if !complete {
             return None;

@@ -8,7 +8,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-use syn::visit::Visit;
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
@@ -25,6 +24,7 @@ mod lifetimes;
 mod plan;
 mod types;
 
+pub(super) use expressions::GraphExprFacts;
 use expressions::GraphExprPlanner;
 use plan::plan_file;
 
@@ -121,10 +121,19 @@ pub(super) fn enrich_conversion_graphs(
                     valid = false;
                     break;
                 }
-                let mut visitor =
-                    GraphExprPlanner::new(file, strategy, &candidate.changes, &candidate.variants)
-                        .strict_external();
-                visitor.visit_file(file.syntax());
+                let Some(facts) = index.expression_facts(file) else {
+                    valid = false;
+                    break;
+                };
+                let mut visitor = GraphExprPlanner::new(
+                    file.source(),
+                    facts,
+                    strategy,
+                    &candidate.changes,
+                    &candidate.variants,
+                )
+                .strict_external();
+                visitor.run();
                 let (edits, complete, constructed, variants) = visitor.finish();
                 valid &= complete;
                 candidate.constructed.extend(constructed);

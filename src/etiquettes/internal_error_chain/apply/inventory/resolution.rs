@@ -46,10 +46,29 @@ impl CrateTypeIndex {
         let mut positions = HashMap::new();
         let active_modules = active_modules(files);
         let mut imports = HashMap::new();
+        let mut tracked_fields = BTreeSet::new();
         let mut constructor_anchors: HashMap<String, BTreeSet<String>> = HashMap::new();
         for (file_index, file) in files.iter().enumerate() {
             let mut file_imports = Vec::new();
             for (item_index, item) in file.syntax().items.iter().enumerate() {
+                match item {
+                    Item::Struct(declaration) => tracked_fields.extend(
+                        declaration
+                            .fields
+                            .iter()
+                            .filter_map(|field| field.ident.as_ref().map(ToString::to_string)),
+                    ),
+                    Item::Enum(declaration) => {
+                        for variant in &declaration.variants {
+                            tracked_fields.extend(
+                                variant.fields.iter().filter_map(|field| {
+                                    field.ident.as_ref().map(ToString::to_string)
+                                }),
+                            );
+                        }
+                    }
+                    _ => {}
+                }
                 if let Item::Use(item) = item {
                     use_paths(&item.tree, Vec::new(), &mut file_imports);
                 }
@@ -146,7 +165,7 @@ impl CrateTypeIndex {
                 .map(|file| {
                     (
                         file.path().to_path_buf(),
-                        FileSyntaxFacts::collect(file, &tracked_names),
+                        FileSyntaxFacts::collect(file, &tracked_names, &tracked_fields),
                     )
                 })
                 .collect(),

@@ -10,6 +10,7 @@ use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
 
+use super::super::graph_apply::GraphExprFacts;
 use super::super::names::{NameAudit, audit_names};
 
 pub(super) type LocatedName = (String, usize, usize);
@@ -26,11 +27,16 @@ pub(super) struct FileSyntaxFacts {
     #[getter(copy)]
     has_cfg: bool,
     name_audit: NameAudit,
+    expressions: GraphExprFacts,
 }
 
 impl FileSyntaxFacts {
-    #[instrument(level = "debug", skip(file, tracked_names))]
-    pub(super) fn collect(file: &SharedParsedFile, tracked_names: &BTreeSet<String>) -> Self {
+    #[instrument(level = "debug", skip(file, tracked_names, tracked_fields))]
+    pub(super) fn collect(
+        file: &SharedParsedFile,
+        tracked_names: &BTreeSet<String>,
+        tracked_fields: &BTreeSet<String>,
+    ) -> Self {
         let mut collector = Collector {
             facts: Self {
                 path: file.path().to_path_buf(),
@@ -41,6 +47,7 @@ impl FileSyntaxFacts {
                 macro_names: BTreeSet::new(),
                 has_cfg: false,
                 name_audit: audit_names(file.syntax()),
+                expressions: GraphExprFacts::collect(file, tracked_names, tracked_fields),
             },
             module_depth: 0,
             tracked_names,

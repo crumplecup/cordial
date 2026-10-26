@@ -6,12 +6,20 @@ use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
 
+use super::super::super::graph_apply::GraphExprFacts;
 use super::super::edges::ErrorEdgeTarget;
 use super::super::syntax_facts::FileSyntaxFacts;
 use super::CrateTypeIndex;
 use super::paths::absolute_path;
 
 impl CrateTypeIndex {
+    #[instrument(level = "trace", skip(self, file))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn expression_facts(
+        &self,
+        file: &SharedParsedFile,
+    ) -> Option<&GraphExprFacts> {
+        self.syntax_for(file).map(FileSyntaxFacts::expressions)
+    }
     #[instrument(level = "trace", skip(self, file, name))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn file_mentions(
         &self,

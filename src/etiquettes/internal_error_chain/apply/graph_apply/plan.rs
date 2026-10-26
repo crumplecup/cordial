@@ -3,7 +3,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use syn::spanned::Spanned;
-use syn::visit::Visit;
 use syn::{Item, Type, Visibility};
 use tracing::instrument;
 
@@ -107,8 +106,14 @@ pub(super) fn plan_file(
     valid &= field_plan.valid;
     let changes = field_plan.changes;
 
-    let mut visitor = GraphExprPlanner::new(file, strategy, &changes, &variants);
-    visitor.visit_file(syntax);
+    let mut visitor = GraphExprPlanner::new(
+        file.source(),
+        index.expression_facts(file)?,
+        strategy,
+        &changes,
+        &variants,
+    );
+    visitor.run();
     let (expr_edits, expr_valid, constructed, constructed_variants) = visitor.finish();
     valid &= expr_valid;
     valid &= names.iter().all(|name| !index.name_blocks(file, name));
