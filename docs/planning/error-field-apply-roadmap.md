@@ -292,9 +292,12 @@ its old per-candidate path, name, and incoming-edge visitors are gone. Graph
 constructor, field-use, pattern, source-method, Kind, and macro sites now come
 from strategy-independent expression facts in that IR. The graph expression
 planner reads those facts and source text without walking the syntax tree.
-Lifetime edits still inspect the shared tree during enrichment. Their located
-syntax and provenance must become typed IR sites before the graph planner can
-take only `IrView` and `SourceEditView`.
+Lifetime declarations, impls, methods, return safety, type uses, and unsupported
+expression paths now come from typed IR facts too. Graph edit planning no longer
+launches a syntax visitor for each candidate. Declaration field and variant
+shapes are still read from the shared tree by the graph planner, and the older
+initializer path still has collection-time syntax visitors; these are the next
+facts to move before planning can take only `IrView` and `SourceEditView`.
 
 | Stage | Facts or responsibility |
 | --- | --- |
@@ -351,16 +354,17 @@ Implementation checkpoints:
   facts. The ordinary field planner now reads declaration and initializer
   facts from each conversion unit. The special lifetime planner now runs during
   collection and serializes its proven edits into the unit. Extract its
-  signature, impl, and forwarding-return facts to avoid repeated inner tree
-  walks. A per-file top-level index now serves every lifetime candidate.
+  signature, impl, and forwarding-return facts now live in the shared IR, so
+  graph lifetime planning no longer walks the tree for each candidate. A
+  per-file top-level index serves every lifetime candidate.
   Apply now receives `SourceEditView`, which exposes text and digest but no
   `syntax()` method.
 - [x] Put crate-wide declaration resolution, cross-file path and name checks,
   incoming graph edges, and constructor lifetime anchors into the shared IR.
   Both normal scans and apply run the same enrichment entry point. The graph
   planner consumes these facts from IR, while its expression and lifetime edit
-  expression planner reads typed sites from IR. Lifetime edits still need the
-  typed site extraction above.
+  expression and lifetime planners read typed sites from IR. Declaration
+  shapes and older initializer evidence still need the typed extraction above.
 - [ ] Allow cross-file conversions only after the planner proves a closed unit.
   Shared source snapshots and conversion units carry digests. Apply now stages
   every planned file in its source directory, checks all snapshots before

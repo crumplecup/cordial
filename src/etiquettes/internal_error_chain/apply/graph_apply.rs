@@ -26,6 +26,7 @@ mod types;
 
 pub(super) use expressions::GraphExprFacts;
 use expressions::GraphExprPlanner;
+pub(super) use lifetimes::GraphLifetimeFacts;
 use plan::plan_file;
 
 const GRAPH_ATTR: &str = "error_apply_graph_plans";

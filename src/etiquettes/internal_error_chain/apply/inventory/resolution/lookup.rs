@@ -6,7 +6,7 @@ use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
 
-use super::super::super::graph_apply::GraphExprFacts;
+use super::super::super::graph_apply::{GraphExprFacts, GraphLifetimeFacts};
 use super::super::edges::ErrorEdgeTarget;
 use super::super::syntax_facts::FileSyntaxFacts;
 use super::CrateTypeIndex;
@@ -19,6 +19,13 @@ impl CrateTypeIndex {
         file: &SharedParsedFile,
     ) -> Option<&GraphExprFacts> {
         self.syntax_for(file).map(FileSyntaxFacts::expressions)
+    }
+    #[instrument(level = "trace", skip(self, file))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn lifetime_facts(
+        &self,
+        file: &SharedParsedFile,
+    ) -> Option<&GraphLifetimeFacts> {
+        self.syntax_for(file).map(FileSyntaxFacts::lifetimes)
     }
     #[instrument(level = "trace", skip(self, file, name))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn file_mentions(

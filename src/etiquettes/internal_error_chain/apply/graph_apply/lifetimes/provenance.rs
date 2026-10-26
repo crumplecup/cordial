@@ -1,34 +1,9 @@
 use std::collections::BTreeSet;
 
 use syn::Type;
-use syn::visit::Visit;
 use tracing::instrument;
 
 use super::contains_lifetime_type;
-
-#[instrument(level = "debug", skip(output, names))]
-pub(super) fn returns_graph_type(output: &syn::ReturnType, names: &BTreeSet<String>) -> bool {
-    struct GraphTypeUse<'a> {
-        names: &'a BTreeSet<String>,
-        found: bool,
-    }
-    impl<'ast> Visit<'ast> for GraphTypeUse<'_> {
-        fn visit_type_path(&mut self, path: &'ast syn::TypePath) {
-            self.found |= path
-                .path
-                .segments
-                .last()
-                .is_some_and(|segment| self.names.contains(&segment.ident.to_string()));
-            syn::visit::visit_type_path(self, path);
-        }
-    }
-    let mut visitor = GraphTypeUse {
-        names,
-        found: false,
-    };
-    visitor.visit_return_type(output);
-    visitor.found
-}
 
 #[instrument(level = "debug", skip(signature))]
 pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn anchored_parameters(

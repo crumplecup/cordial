@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
 use syn::visit::Visit;
 use syn::{GenericParam, ItemEnum, ItemStruct, Type};
 use tracing::instrument;
@@ -13,10 +14,87 @@ use super::super::Edit;
 use super::super::inventory::CrateTypeIndex;
 use super::types::{is_copy_shape, storage_shape, type_name};
 
-mod edits;
+mod collect;
+mod plan;
 mod provenance;
 
 pub(super) use provenance::{anchored_parameters, constructor_origin};
+
+type Range = (usize, usize);
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(in crate::etiquettes::internal_error_chain::apply) struct GraphLifetimeFacts {
+    declarations: Vec<Declaration>,
+    impls: Vec<ImplSite>,
+    functions: Vec<FunctionSite>,
+    type_paths: Vec<TypePathSite>,
+    expr_path_blockers: BTreeSet<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Declaration {
+    name: String,
+    module_depth: usize,
+    ident_end: Option<usize>,
+    generics_empty: bool,
+    one_lifetime: Option<String>,
+    generics_range: Option<Range>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ImplSite {
+    name: Option<String>,
+    module_depth: usize,
+    impl_token_end: Option<usize>,
+    generics_empty: bool,
+    one_lifetime: Option<String>,
+    generics_range: Option<Range>,
+    trait_lifetimes: BTreeSet<String>,
+    methods: Vec<MethodSite>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MethodSite {
+    output_self: bool,
+    all_inputs_typed: bool,
+    generics_empty: bool,
+    one_lifetime: Option<String>,
+    generics_range: Option<Range>,
+    ident_end: Option<usize>,
+    safe_constructor_lifetimes: BTreeSet<String>,
+    used_lifetimes: BTreeSet<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FunctionSite {
+    return_names: BTreeSet<String>,
+    safe_returns: BTreeMap<String, BTreeSet<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TypePathSite {
+    name: String,
+    range: Option<Range>,
+    ident_end: Option<usize>,
+    arguments: TypeArguments,
+    qself: bool,
+    path_len: usize,
+    scope_lifetimes: BTreeSet<String>,
+    conditional_scope: Option<ConditionalScope>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum TypeArguments {
+    None,
+    OneLifetime { name: String, range: Option<Range> },
+    Other,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ConditionalScope {
+    owner: String,
+    borrowed_only: bool,
+}
 
 #[derive(derive_getters::Getters)]
 pub(super) struct GraphLifetimePlan {
@@ -25,24 +103,24 @@ pub(super) struct GraphLifetimePlan {
 }
 
 impl GraphLifetimePlan {
-    #[instrument(level = "trace", skip(self, file, strategy, storage_edits))]
+    #[instrument(level = "trace", skip(self, facts, strategy, storage_edits))]
     pub(super) fn edits(
         &self,
-        file: &SharedParsedFile,
+        facts: &GraphLifetimeFacts,
         strategy: ErrorFieldStrategy,
         storage_edits: &[Edit],
     ) -> Option<Vec<Edit>> {
-        edits::collect(self, file, strategy, storage_edits, false)
+        facts.plan(self, strategy, storage_edits, false)
     }
 
-    #[instrument(level = "trace", skip(self, file, strategy, storage_edits))]
+    #[instrument(level = "trace", skip(self, facts, strategy, storage_edits))]
     pub(super) fn distributed_edits(
         &self,
-        file: &SharedParsedFile,
+        facts: &GraphLifetimeFacts,
         strategy: ErrorFieldStrategy,
         storage_edits: &[Edit],
     ) -> Option<Vec<Edit>> {
-        edits::collect(self, file, strategy, storage_edits, true)
+        facts.plan(self, strategy, storage_edits, true)
     }
 }
 

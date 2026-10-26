@@ -121,7 +121,9 @@ pub(super) fn plan_file(
     edits.extend(expr_edits);
     let lifetime_transition = lifetime.is_some();
     if let Some(lifetime) = lifetime {
-        if let Some(mut lifetime_edits) = lifetime.edits(file, strategy, &edits) {
+        if let Some(mut lifetime_edits) =
+            lifetime.edits(index.lifetime_facts(file)?, strategy, &edits)
+        {
             edits.append(&mut lifetime_edits);
         } else {
             valid = false;

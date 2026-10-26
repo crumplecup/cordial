@@ -182,7 +182,8 @@ pub(super) fn plan(
         let file_edits = edits_by_path.entry(file.path().to_path_buf()).or_default();
         file_edits.extend(edits);
         if let Some(lifetime) = &lifetime {
-            let signature_edits = lifetime.distributed_edits(file, strategy, file_edits)?;
+            let signature_edits =
+                lifetime.distributed_edits(index.lifetime_facts(file)?, strategy, file_edits)?;
             file_edits.extend(signature_edits);
         }
         constructed.extend(found);

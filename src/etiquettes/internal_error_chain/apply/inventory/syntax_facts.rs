@@ -10,7 +10,7 @@ use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
 
-use super::super::graph_apply::GraphExprFacts;
+use super::super::graph_apply::{GraphExprFacts, GraphLifetimeFacts};
 use super::super::names::{NameAudit, audit_names};
 
 pub(super) type LocatedName = (String, usize, usize);
@@ -28,6 +28,7 @@ pub(super) struct FileSyntaxFacts {
     has_cfg: bool,
     name_audit: NameAudit,
     expressions: GraphExprFacts,
+    lifetimes: GraphLifetimeFacts,
 }
 
 impl FileSyntaxFacts {
@@ -48,6 +49,7 @@ impl FileSyntaxFacts {
                 has_cfg: false,
                 name_audit: audit_names(file.syntax()),
                 expressions: GraphExprFacts::collect(file, tracked_names, tracked_fields),
+                lifetimes: GraphLifetimeFacts::collect(file, tracked_names),
             },
             module_depth: 0,
             tracked_names,
