@@ -1,6 +1,6 @@
 //! Conservative string field storage edits for the selected error strategy.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -255,31 +255,6 @@ fn known_error_impls(syntax: &syn::File) -> BTreeSet<String> {
             }
             _ => None,
         })
-        .collect()
-}
-
-#[instrument(level = "debug", skip(syntax))]
-fn known_static_strings(syntax: &syn::File) -> BTreeSet<String> {
-    let mut declarations: BTreeMap<String, Vec<bool>> = BTreeMap::new();
-    for item in &syntax.items {
-        let (name, ty, attrs, immutable) = match item {
-            Item::Const(item) => (&item.ident, &item.ty, &item.attrs, true),
-            Item::Static(item) => (
-                &item.ident,
-                &item.ty,
-                &item.attrs,
-                matches!(item.mutability, syn::StaticMutability::None),
-            ),
-            _ => continue,
-        };
-        declarations
-            .entry(name.to_string())
-            .or_default()
-            .push(immutable && attrs.is_empty() && is_static_str(ty));
-    }
-    declarations
-        .into_iter()
-        .filter_map(|(name, declarations)| (declarations.as_slice() == [true]).then_some(name))
         .collect()
 }
 

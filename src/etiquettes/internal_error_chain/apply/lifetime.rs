@@ -51,15 +51,24 @@ impl<'a> LifetimeFileIndex<'a> {
 }
 
 /// Collect a special lifetime migration from the shared parsed tree.
-#[instrument(level = "debug", skip(file, index, unit, strategy))]
+#[instrument(level = "debug", skip(file, index, unit, strategy, initializer_edits))]
 pub(super) fn plan_for_unit(
     file: &SharedParsedFile,
     index: &LifetimeFileIndex<'_>,
     unit: &ErrorConversionUnit,
     strategy: ErrorFieldStrategy,
+    initializer_edits: Option<Vec<Edit>>,
 ) -> Option<Vec<Edit>> {
     let item = index.structs.get(unit.type_name())?;
-    plan(file, index, item, unit.field_name(), unit, strategy)
+    plan(
+        file,
+        index,
+        item,
+        unit.field_name(),
+        unit,
+        strategy,
+        initializer_edits,
+    )
 }
 
 #[instrument(level = "trace", skip(ty))]

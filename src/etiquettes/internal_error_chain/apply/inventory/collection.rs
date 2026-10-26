@@ -1,6 +1,6 @@
 //! Identify conversion candidates and visit each shared file once for sites.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use tracing::instrument;
@@ -16,11 +16,10 @@ use super::{
     FieldEvidence, InitializerEvidence, LifetimeEvidence, StringStorage,
 };
 use crate::etiquettes::internal_error_chain::apply::graph_apply::{DeclarationKind, GraphFields};
-use crate::etiquettes::internal_error_chain::apply::lifetime;
-use crate::etiquettes::internal_error_chain::apply::{
-    initializers::{FieldKind, InitializerBatchInput, collect_initializer_edits},
-    known_static_strings,
+use crate::etiquettes::internal_error_chain::apply::initializers::{
+    FieldKind, InitializerBatchInput, collect_initializer_edits,
 };
+use crate::etiquettes::internal_error_chain::apply::lifetime;
 
 /// Return one conversion unit and declaration line per candidate field.
 #[instrument(level = "debug", skip(files, declarations))]
@@ -64,6 +63,10 @@ pub(super) fn collect_conversion_units(
             all_sites[index].append(&mut sites[index]);
         }
     }
+    let lifetime_initializers: Vec<_> = candidates
+        .iter()
+        .map(|candidate| candidate.lifetime_initializer_edits.clone())
+        .collect();
     let mut units: Vec<_> = candidates
         .into_iter()
         .zip(all_sites)
@@ -133,7 +136,7 @@ pub(super) fn collect_conversion_units(
         .filter(|file| lifetime_paths.contains(file.path()))
         .map(|file| (file.path(), lifetime::LifetimeFileIndex::new(file.syntax())))
         .collect();
-    for (unit, _) in &mut units {
+    for ((unit, _), initializer_edits) in units.iter_mut().zip(lifetime_initializers) {
         if !unit.lifetime_candidate(unit.lifetime.target)
             || unit.name_ambiguous
             || !unit.field.private
@@ -145,7 +148,8 @@ pub(super) fn collect_conversion_units(
             files_by_path.get(unit.declaration.as_path()),
             lifetime_indexes.get(unit.declaration.as_path()),
         ) {
-            unit.lifetime.edits = lifetime::plan_for_unit(file, index, unit, unit.lifetime.target);
+            unit.lifetime.edits =
+                lifetime::plan_for_unit(file, index, unit, unit.lifetime.target, initializer_edits);
         }
     }
     Ok(units)
@@ -240,30 +244,76 @@ fn find_candidates(
                     },
                     initializer_kind: kind,
                     initializer_lifetime: lifetime,
+                    lifetime_initializer_edits: None,
                 });
             }
         }
         if start == candidates.len() {
             continue;
         }
-        let static_strings = known_static_strings(file.syntax());
-        let edits = {
-            let inputs: Vec<_> = candidates[start..]
-                .iter()
-                .map(|candidate| {
-                    InitializerBatchInput::new(
-                        &candidate.type_name,
-                        &candidate.field_name,
-                        candidate.initializer_kind,
-                        candidate.initializer.target,
-                        candidate.initializer_lifetime.as_deref(),
-                    )
-                })
-                .collect();
-            collect_initializer_edits(file, &inputs, &static_strings)
-        };
-        for (candidate, initializer_edits) in candidates[start..].iter_mut().zip(edits) {
-            candidate.initializer.edits = initializer_edits;
+        let static_strings = index
+            .static_strings(file)
+            .ok_or_else(|| CordialError::stale_source_snapshot(file.path()))?;
+        let mut inputs: Vec<_> = candidates[start..]
+            .iter()
+            .map(|candidate| {
+                InitializerBatchInput::new(
+                    &candidate.type_name,
+                    &candidate.field_name,
+                    candidate.initializer_kind,
+                    candidate.initializer.target,
+                    candidate.initializer_lifetime.as_deref(),
+                    false,
+                )
+            })
+            .collect();
+        let ordinary_count = inputs.len();
+        let mut lifetime_inputs = Vec::new();
+        for (offset, candidate) in candidates[start..].iter().enumerate() {
+            let lifetime = match candidate.initializer.target {
+                ErrorFieldStrategy::Borrowed if candidate.field.lifetime_candidate => {
+                    let names = BTreeSet::from([candidate.type_name.clone()]);
+                    let anchors = index
+                        .lifetime_facts(file)
+                        .map(|facts| facts.anchors_for(&names))
+                        .unwrap_or_default();
+                    (anchors.len() == 1)
+                        .then(|| anchors.into_iter().next())
+                        .flatten()
+                }
+                ErrorFieldStrategy::Owned if candidate.field.lifetime_candidate => {
+                    match &candidate.field.storage {
+                        StringStorage::Borrowed {
+                            lifetime: Some(lifetime),
+                            ..
+                        } => Some(lifetime.clone()),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            };
+            if let Some(lifetime) = lifetime {
+                lifetime_inputs.push((offset, lifetime));
+            }
+        }
+        for (offset, lifetime) in &lifetime_inputs {
+            let candidate = &candidates[start + *offset];
+            inputs.push(InitializerBatchInput::new(
+                &candidate.type_name,
+                &candidate.field_name,
+                FieldKind::StaticString,
+                candidate.initializer.target,
+                Some(lifetime),
+                candidate.initializer.target == ErrorFieldStrategy::Borrowed,
+            ));
+        }
+        let edits = collect_initializer_edits(file, &inputs, static_strings);
+        let (ordinary, lifetime_edits) = edits.split_at(ordinary_count);
+        for (candidate, initializer_edits) in candidates[start..].iter_mut().zip(ordinary) {
+            candidate.initializer.edits = initializer_edits.clone();
+        }
+        for ((offset, _), edits) in lifetime_inputs.into_iter().zip(lifetime_edits) {
+            candidates[start + offset].lifetime_initializer_edits = edits.clone();
         }
     }
     Ok(candidates)

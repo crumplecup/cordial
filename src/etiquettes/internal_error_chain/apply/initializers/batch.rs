@@ -19,6 +19,7 @@ pub(crate) struct InitializerBatchInput<'a> {
     kind: FieldKind,
     strategy: ErrorFieldStrategy,
     lifetime: Option<&'a str>,
+    pending_lifetime: bool,
 }
 
 struct BatchInitializerVisitor<'a> {
@@ -43,7 +44,7 @@ pub(crate) fn collect_initializer_edits<'a>(
                     file.source(),
                     static_strings,
                     input.lifetime,
-                    false,
+                    input.pending_lifetime,
                 )
             })
             .collect(),

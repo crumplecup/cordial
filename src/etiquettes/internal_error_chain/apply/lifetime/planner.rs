@@ -3,14 +3,13 @@
 use std::collections::BTreeSet;
 
 use syn::spanned::Spanned;
-use syn::visit::Visit;
 use syn::{GenericParam, ImplItem, ItemStruct};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
-use super::super::initializers::{FieldKind, InitializerVisitor, impl_uses_lifetime};
+use super::super::initializers::impl_uses_lifetime;
 use super::super::inventory::{ErrorConversionSiteKind, ErrorConversionUnit};
 use super::super::{Edit, is_str_ref_with_lifetime, is_string, span_range};
 use super::forwarding::forwarding_return;
@@ -22,7 +21,7 @@ use super::{LifetimeFileIndex, scalar_copy_name};
 /// This accepts one migrated field, optional scalar context, and one constructor.
 /// Type mentions must be impl self types or direct forwarding function returns;
 /// inference-based direct calls are safe because their signatures remain unchanged.
-#[instrument(level = "debug", skip(file, index, item, unit, strategy))]
+#[instrument(level = "info", skip(file, index, item, unit, strategy, initializer_edits))]
 pub(super) fn plan(
     file: &SharedParsedFile,
     index: &LifetimeFileIndex<'_>,
@@ -30,6 +29,7 @@ pub(super) fn plan(
     field_name: &str,
     unit: &ErrorConversionUnit,
     strategy: ErrorFieldStrategy,
+    initializer_edits: Option<Vec<Edit>>,
 ) -> Option<Vec<Edit>> {
     let syn::Fields::Named(fields) = &item.fields else {
         return None;
@@ -150,20 +150,7 @@ pub(super) fn plan(
     }) {
         return None;
     }
-    let empty = BTreeSet::new();
-    let type_name = item.ident.to_string();
-    let mut initializer = InitializerVisitor::new(
-        &type_name,
-        field_name,
-        FieldKind::StaticString,
-        strategy,
-        file.source(),
-        &empty,
-        Some(&lifetime),
-        strategy == ErrorFieldStrategy::Borrowed,
-    );
-    initializer.visit_file(file.syntax());
-    let mut edits = initializer.finish()?;
+    let mut edits = initializer_edits?;
     edits.append(&mut return_edits);
     let (field_start, field_end) = span_range(file.source(), field.ty.span())?;
     edits.push(Edit {

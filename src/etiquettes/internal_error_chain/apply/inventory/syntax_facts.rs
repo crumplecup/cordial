@@ -2,7 +2,7 @@
 //! Graph closure uses these facts through the crate index instead of visiting
 //! each file again for every candidate graph.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use syn::visit::Visit;
@@ -11,6 +11,7 @@ use tracing::instrument;
 use crate::loader::SharedParsedFile;
 
 use super::super::graph_apply::{GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts};
+use super::super::is_static_str;
 use super::super::names::{NameAudit, audit_names};
 
 pub(super) type LocatedName = (String, usize, usize);
@@ -21,6 +22,7 @@ pub(super) struct FileSyntaxFacts {
     #[getter(copy)]
     source_digest: [u8; 32],
     source_identifiers: BTreeSet<String>,
+    static_strings: BTreeSet<String>,
     identifiers: BTreeSet<LocatedName>,
     declarations: BTreeSet<LocatedName>,
     paths: Vec<(LocatedName, Vec<String>)>,
@@ -50,6 +52,7 @@ impl FileSyntaxFacts {
                     .filter(|part| tracked_names.contains(*part))
                     .map(str::to_string)
                     .collect(),
+                static_strings: collect_static_strings(file.syntax()),
                 identifiers: BTreeSet::new(),
                 declarations: BTreeSet::new(),
                 paths: Vec::new(),
@@ -77,6 +80,33 @@ impl FileSyntaxFacts {
     pub(super) fn source_mentions(&self, name: &str) -> bool {
         self.source_identifiers.contains(name)
     }
+}
+
+/// Only unambiguous, immutable file-level string declarations are safe
+/// initializer sources. Record them with the other source facts in the IR.
+#[instrument(level = "debug", skip(syntax))]
+fn collect_static_strings(syntax: &syn::File) -> BTreeSet<String> {
+    let mut declarations: BTreeMap<String, Vec<bool>> = BTreeMap::new();
+    for item in &syntax.items {
+        let (name, ty, attrs, immutable) = match item {
+            syn::Item::Const(item) => (&item.ident, &item.ty, &item.attrs, true),
+            syn::Item::Static(item) => (
+                &item.ident,
+                &item.ty,
+                &item.attrs,
+                matches!(item.mutability, syn::StaticMutability::None),
+            ),
+            _ => continue,
+        };
+        declarations
+            .entry(name.to_string())
+            .or_default()
+            .push(immutable && attrs.is_empty() && is_static_str(ty));
+    }
+    declarations
+        .into_iter()
+        .filter_map(|(name, declarations)| (declarations.as_slice() == [true]).then_some(name))
+        .collect()
 }
 
 struct Collector<'a> {

@@ -169,6 +169,7 @@ struct ConversionCandidate {
     initializer: InitializerEvidence,
     initializer_kind: FieldKind,
     initializer_lifetime: Option<String>,
+    lifetime_initializer_edits: Option<Vec<Edit>>,
 }
 
 impl ErrorConversionUnit {

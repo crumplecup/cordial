@@ -14,6 +14,13 @@ use super::paths::absolute_path;
 
 impl CrateTypeIndex {
     #[instrument(level = "trace", skip(self, file))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn static_strings(
+        &self,
+        file: &impl SourceSnapshot,
+    ) -> Option<&BTreeSet<String>> {
+        self.syntax_for(file).map(FileSyntaxFacts::static_strings)
+    }
+    #[instrument(level = "trace", skip(self, file))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn graph_declarations(
         &self,
         file: &impl SourceSnapshot,
