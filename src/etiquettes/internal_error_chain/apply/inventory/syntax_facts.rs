@@ -20,6 +20,7 @@ pub(super) struct FileSyntaxFacts {
     path: std::path::PathBuf,
     #[getter(copy)]
     source_digest: [u8; 32],
+    source_identifiers: BTreeSet<String>,
     identifiers: BTreeSet<LocatedName>,
     declarations: BTreeSet<LocatedName>,
     paths: Vec<(LocatedName, Vec<String>)>,
@@ -43,6 +44,12 @@ impl FileSyntaxFacts {
             facts: Self {
                 path: file.path().to_path_buf(),
                 source_digest: file.source_digest(),
+                source_identifiers: file
+                    .source()
+                    .split(|ch: char| !ch.is_alphanumeric() && ch != '_')
+                    .filter(|part| tracked_names.contains(*part))
+                    .map(str::to_string)
+                    .collect(),
                 identifiers: BTreeSet::new(),
                 declarations: BTreeSet::new(),
                 paths: Vec::new(),
@@ -64,6 +71,11 @@ impl FileSyntaxFacts {
     pub(super) fn mentions(&self, name: &str) -> bool {
         self.identifiers.iter().any(|(ident, _, _)| ident == name)
             || self.macro_names.contains(name)
+    }
+
+    #[instrument(level = "trace", skip(self, name))]
+    pub(super) fn source_mentions(&self, name: &str) -> bool {
+        self.source_identifiers.contains(name)
     }
 }
 

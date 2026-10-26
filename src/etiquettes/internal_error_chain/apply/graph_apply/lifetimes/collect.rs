@@ -158,6 +158,28 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             })
             .map(|method| {
                 let lifetime_names = all_lifetimes(&method.sig);
+                let output_self = matches!(&method.sig.output, syn::ReturnType::Type(_, ty)
+                    if matches!(&**ty, Type::Path(path) if path.path.is_ident("Self")));
+                let all_inputs_typed = method
+                    .sig
+                    .inputs
+                    .iter()
+                    .all(|input| matches!(input, syn::FnArg::Typed(_)));
+                let one_method_lifetime = one_lifetime(&method.sig.generics);
+                let constructor_anchors = one_method_lifetime
+                    .as_ref()
+                    .filter(|lifetime| {
+                        output_self
+                            && all_inputs_typed
+                            && method
+                                .sig
+                                .inputs
+                                .iter()
+                                .any(|input| all_lifetimes(input).contains(*lifetime))
+                    })
+                    .cloned()
+                    .into_iter()
+                    .collect();
                 let safe_constructor_lifetimes = lifetime_names
                     .iter()
                     .filter(|lifetime| safe_impl_constructor(method, lifetime))
@@ -166,18 +188,14 @@ impl<'ast> Visit<'ast> for Collector<'_> {
                 let mut used_lifetimes = lifetime_names;
                 used_lifetimes.extend(all_lifetimes(&method.block));
                 MethodSite {
-                    output_self: matches!(&method.sig.output, syn::ReturnType::Type(_, ty)
-                        if matches!(&**ty, Type::Path(path) if path.path.is_ident("Self"))),
-                    all_inputs_typed: method
-                        .sig
-                        .inputs
-                        .iter()
-                        .all(|input| matches!(input, syn::FnArg::Typed(_))),
+                    output_self,
+                    all_inputs_typed,
                     generics_empty: method.sig.generics.params.is_empty(),
-                    one_lifetime: one_lifetime(&method.sig.generics),
+                    one_lifetime: one_method_lifetime,
                     generics_range: self.range(method.sig.generics.span()),
                     ident_end: self.end(method.sig.ident.span()),
                     safe_constructor_lifetimes,
+                    constructor_anchors,
                     used_lifetimes,
                 }
             })
@@ -344,6 +362,13 @@ impl<'ast> VisitTarget<'ast> for syn::Type {
     #[instrument(level = "trace", skip(self, visitor))]
     fn visit_with(&'ast self, visitor: &mut LifetimeNames) {
         visitor.visit_type(self);
+    }
+}
+
+impl<'ast> VisitTarget<'ast> for syn::FnArg {
+    #[instrument(level = "trace", skip(self, visitor))]
+    fn visit_with(&'ast self, visitor: &mut LifetimeNames) {
+        visitor.visit_fn_arg(self);
     }
 }
 

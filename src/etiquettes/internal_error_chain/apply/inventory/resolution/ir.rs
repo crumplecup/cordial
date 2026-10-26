@@ -1,6 +1,5 @@
 //! Serialize crate-wide error declaration evidence into the shared IR.
 
-use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use tracing::instrument;
@@ -22,7 +21,6 @@ struct CrateTypeIndexFacts {
     local: Vec<(PathBuf, String, Vec<Option<ErrorEdgeTarget>>)>,
     active_modules: Vec<(PathBuf, Vec<String>)>,
     imports: Vec<(PathBuf, Vec<(String, Vec<String>)>)>,
-    constructor_anchors: Vec<(String, BTreeSet<String>)>,
     file_syntax: Vec<FileSyntaxFacts>,
     incoming_edges: Vec<(String, ErrorEdgeTarget)>,
 }
@@ -54,11 +52,6 @@ impl CrateTypeIndex {
                 .iter()
                 .map(|(path, imports)| (path.clone(), imports.clone()))
                 .collect(),
-            constructor_anchors: self
-                .constructor_anchors
-                .iter()
-                .map(|(name, anchors)| (name.clone(), anchors.clone()))
-                .collect(),
             file_syntax: self.file_syntax.values().cloned().collect(),
             incoming_edges: self.incoming_edges.clone(),
         };
@@ -85,7 +78,6 @@ impl CrateTypeIndex {
                 .collect(),
             active_modules: facts.active_modules.into_iter().collect(),
             imports: facts.imports.into_iter().collect(),
-            constructor_anchors: facts.constructor_anchors.into_iter().collect(),
             file_syntax: facts
                 .file_syntax
                 .into_iter()

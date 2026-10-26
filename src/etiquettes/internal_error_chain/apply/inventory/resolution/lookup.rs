@@ -46,6 +46,16 @@ impl CrateTypeIndex {
     }
 
     #[instrument(level = "trace", skip(self, file, name))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn source_mentions(
+        &self,
+        file: &SharedParsedFile,
+        name: &str,
+    ) -> bool {
+        self.syntax_for(file)
+            .is_none_or(|facts| facts.source_mentions(name))
+    }
+
+    #[instrument(level = "trace", skip(self, file, name))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn name_blocks(
         &self,
         file: &SharedParsedFile,

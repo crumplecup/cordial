@@ -33,17 +33,12 @@ pub(super) fn collect_conversion_units(
     let candidates = find_candidates(files, declarations);
     let mut all_sites = vec![Vec::new(); candidates.len()];
     for file in files {
-        let identifiers: HashSet<&str> = file
-            .source()
-            .split(|ch: char| !ch.is_alphanumeric() && ch != '_')
-            .filter(|part| !part.is_empty())
-            .collect();
         let relevant: Vec<usize> = candidates
             .iter()
             .enumerate()
             .filter_map(|(index, candidate)| {
                 (file.path() == candidate.declaration
-                    || identifiers.contains(candidate.type_name.as_str()))
+                    || declarations.source_mentions(file, &candidate.type_name))
                 .then_some(index)
             })
             .collect();

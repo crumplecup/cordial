@@ -66,6 +66,7 @@ struct MethodSite {
     generics_range: Option<Range>,
     ident_end: Option<usize>,
     safe_constructor_lifetimes: BTreeSet<String>,
+    constructor_anchors: BTreeSet<String>,
     used_lifetimes: BTreeSet<String>,
 }
 
@@ -125,6 +126,21 @@ impl GraphLifetimePlan {
         storage_edits: &[Edit],
     ) -> Option<Vec<Edit>> {
         facts.plan(self, strategy, storage_edits, true)
+    }
+}
+
+impl GraphLifetimeFacts {
+    #[instrument(level = "trace", skip(self, names))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn anchors_for(
+        &self,
+        names: &BTreeSet<String>,
+    ) -> BTreeSet<String> {
+        self.impls
+            .iter()
+            .filter(|site| site.name.as_ref().is_some_and(|name| names.contains(name)))
+            .flat_map(|site| &site.methods)
+            .flat_map(|method| method.constructor_anchors.iter().cloned())
+            .collect()
     }
 }
 
