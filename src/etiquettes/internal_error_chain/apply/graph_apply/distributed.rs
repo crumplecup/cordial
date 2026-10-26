@@ -7,21 +7,17 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-use syn::spanned::Spanned;
-use syn::{Item, Type, Visibility};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
-use super::super::inventory::{
-    CrateTypeIndex, ErrorEdgeField, ErrorEdgeTarget, ErrorEdgeTargetKind, error_edge_evidence,
-};
-use super::super::{Edit, known_error_impls, span_range};
+use super::super::Edit;
+use super::super::inventory::{CrateTypeIndex, ErrorEdgeTarget, ErrorEdgeTargetKind};
+use super::declarations::{DeclarationKind, GraphDeclaration, GraphFields};
 use super::expressions::GraphExprPlanner;
 use super::lifetimes;
 use super::plan::plan_struct_fields;
-use super::types::{allowed_attrs, desired_type, is_copy_shape, storage_shape, wants_change};
 use super::{ErrorGraphPlan, VariantChange};
 
 /// Return complete per-file plans only when one root reaches an external Kind
@@ -58,41 +54,36 @@ pub(super) fn plan(
     let mut names_by_path: BTreeMap<PathBuf, BTreeSet<String>> = BTreeMap::new();
     let mut changes = BTreeMap::new();
     let mut variants = BTreeMap::new();
-    let mut structs_by_path: BTreeMap<PathBuf, BTreeMap<String, &syn::ItemStruct>> =
+    let mut structs_by_path: BTreeMap<PathBuf, BTreeMap<String, &GraphDeclaration>> =
         BTreeMap::new();
     for (name, (file, item, _)) in &declarations {
         names_by_path
             .entry(file.path().to_path_buf())
             .or_default()
             .insert(name.clone());
-        match item {
-            Item::Struct(item) => {
+        match item.kind() {
+            DeclarationKind::Struct => {
                 structs_by_path
                     .entry(file.path().to_path_buf())
                     .or_default()
                     .insert(name.clone(), item);
             }
-            Item::Enum(item) => {
-                for variant in &item.variants {
-                    let field = variant.fields.iter().next()?;
-                    if is_copy_shape(&field.ty)
-                        && (!matches!(field.ty, Type::Reference(_))
-                            || matches!(&field.ty, Type::Reference(reference)
-                                if matches!(&*reference.elem, Type::Tuple(tuple) if tuple.elems.is_empty())))
+            DeclarationKind::Enum => {
+                for variant in item.variants() {
+                    let field = variant.fields().iter().next()?;
+                    if field.is_copy_shape() && (!field.is_reference() || field.is_unit_reference())
                     {
                         continue;
                     }
-                    let (shape, _) = storage_shape(&field.ty)?;
-                    if let Some(replacement) = desired_type(
-                        file,
-                        &field.ty,
+                    let (shape, _) = field.storage()?;
+                    if let Some(replacement) = field.desired_type(
                         strategy,
-                        item,
+                        item.only_lifetime(),
                         None,
                         graph_lifetime,
                         &changing_generics,
                     ) {
-                        let (start, end) = span_range(file.source(), field.ty.span())?;
+                        let (start, end) = field.type_range()?;
                         edits_by_path
                             .entry(file.path().to_path_buf())
                             .or_default()
@@ -104,17 +95,16 @@ pub(super) fn plan(
                         fields_by_path
                             .entry(file.path().to_path_buf())
                             .or_default()
-                            .push((name.clone(), variant.ident.to_string()));
+                            .push((name.clone(), variant.name().to_string()));
                         variants.insert(
-                            (name.clone(), variant.ident.to_string()),
+                            (name.clone(), variant.name().to_string()),
                             VariantChange { shape },
                         );
-                    } else if wants_change(&field.ty, strategy) {
+                    } else if field.wants_change(strategy == ErrorFieldStrategy::Borrowed) {
                         return None;
                     }
                 }
             }
-            _ => return None,
         }
     }
     for (path, structs) in &structs_by_path {
@@ -212,27 +202,21 @@ pub(super) fn plan(
 fn discover_declarations<'a>(
     root_file: &SharedParsedFile,
     files: &'a [SharedParsedFile],
-    index: &CrateTypeIndex,
-) -> Option<BTreeMap<String, (&'a SharedParsedFile, &'a Item, ErrorEdgeTarget)>> {
-    let error_impls = known_error_impls(root_file.syntax());
-    let roots: Vec<_> = root_file
-        .syntax()
-        .items
+    index: &'a CrateTypeIndex,
+) -> Option<BTreeMap<String, (&'a SharedParsedFile, &'a GraphDeclaration, ErrorEdgeTarget)>> {
+    let roots: Vec<_> = index
+        .graph_declarations(root_file)?
+        .all()
         .iter()
-        .filter_map(|item| match item {
-            Item::Struct(item)
-                if error_impls.contains(&item.ident.to_string())
-                    && matches!(item.vis, Visibility::Inherited)
-                    && item.fields.iter().any(|field| {
-                        field
-                            .ident
-                            .as_ref()
-                            .is_some_and(|ident| ident == "kind" || ident == "source")
-                    }) =>
-            {
-                Some(item.ident.to_string())
-            }
-            _ => None,
+        .filter_map(|item| {
+            (item.kind() == DeclarationKind::Struct
+                && item.error_impl()
+                && item.is_inherited()
+                && item
+                    .fields()
+                    .iter()
+                    .any(|field| matches!(field.name(), Some("kind" | "source"))))
+            .then(|| item.name().to_string())
         })
         .collect();
     let [root_name] = roots.as_slice() else {
@@ -241,8 +225,10 @@ fn discover_declarations<'a>(
     let root = index.resolve(root_file, std::slice::from_ref(root_name))?;
     let mut pending = vec![root];
     let mut visited = BTreeSet::new();
-    let mut declarations: BTreeMap<String, (&SharedParsedFile, &Item, ErrorEdgeTarget)> =
-        BTreeMap::new();
+    let mut declarations: BTreeMap<
+        String,
+        (&SharedParsedFile, &GraphDeclaration, ErrorEdgeTarget),
+    > = BTreeMap::new();
     let mut has_external_declaration = false;
 
     while let Some(target) = pending.pop() {
@@ -250,44 +236,44 @@ fn discover_declarations<'a>(
         if !visited.insert(identity) {
             continue;
         }
-        let (file, item) = index.declaration(files, &target)?;
-        has_external_declaration |= file.path() != root_file.path();
-        let name = match item {
-            Item::Struct(item) => &item.ident,
-            Item::Enum(item) => &item.ident,
-            _ => return None,
+        let file = files.iter().find(|file| {
+            file.path() == target.declaration() && file.source_digest() == target.source_digest()
+        })?;
+        let kind = match target.kind() {
+            ErrorEdgeTargetKind::Struct => DeclarationKind::Struct,
+            ErrorEdgeTargetKind::Enum => DeclarationKind::Enum,
         };
+        let item = index
+            .graph_declarations(file)?
+            .at(target.line(), target.column(), kind)?;
+        has_external_declaration |= file.path() != root_file.path();
+        let name = item.name();
         if declarations
             .insert(name.to_string(), (file, item, target))
             .is_some()
         {
             return None;
         }
-        match item {
-            Item::Struct(item) => {
-                if !allowed_attrs(&item.attrs) || matches!(item.vis, Visibility::Public(_)) {
+        match item.kind() {
+            DeclarationKind::Struct => {
+                if !item.attrs_allowed() || item.is_public() {
                     return None;
                 }
-                for field in &item.fields {
-                    let edge_field = match field.ident.as_ref().map(ToString::to_string).as_deref()
-                    {
-                        Some("source") => ErrorEdgeField::Source,
-                        Some("kind") => ErrorEdgeField::Kind,
+                for field in item.fields().iter() {
+                    let source = match field.name() {
+                        Some("source") => true,
+                        Some("kind") => false,
                         _ => continue,
                     };
-                    let edge = error_edge_evidence(file, field, edge_field)?;
-                    match (edge_field, index.resolve(file, edge.type_path())) {
-                        (ErrorEdgeField::Kind, Some(next))
-                            if next.kind() == ErrorEdgeTargetKind::Enum =>
-                        {
+                    let edge = field.edge(source)?;
+                    match (source, index.resolve(file, edge.type_path())) {
+                        (false, Some(next)) if next.kind() == ErrorEdgeTargetKind::Enum => {
                             pending.push(next);
                         }
-                        (ErrorEdgeField::Source, Some(next))
-                            if next.kind() == ErrorEdgeTargetKind::Struct =>
-                        {
+                        (true, Some(next)) if next.kind() == ErrorEdgeTargetKind::Struct => {
                             pending.push(next);
                         }
-                        (ErrorEdgeField::Source, None)
+                        (true, None)
                             if edge.type_path().first().is_some_and(|root| {
                                 matches!(root.as_str(), "std" | "core" | "alloc")
                             }) => {}
@@ -295,29 +281,26 @@ fn discover_declarations<'a>(
                     }
                 }
             }
-            Item::Enum(item) => {
-                if !allowed_attrs(&item.attrs) || matches!(item.vis, Visibility::Public(_)) {
+            DeclarationKind::Enum => {
+                if !item.attrs_allowed() || item.is_public() {
                     return None;
                 }
-                for variant in &item.variants {
-                    let syn::Fields::Unnamed(fields) = &variant.fields else {
+                for variant in item.variants() {
+                    let GraphFields::Unnamed(fields) = variant.fields() else {
                         return None;
                     };
-                    if fields.unnamed.len() != 1 {
+                    if fields.len() != 1 {
                         return None;
                     }
-                    let field = fields.unnamed.first()?;
-                    if !allowed_attrs(&variant.attrs) || !allowed_attrs(&field.attrs) {
+                    let field = fields.first()?;
+                    if !variant.attrs_allowed() || !field.attrs_allowed() {
                         return None;
                     }
-                    if is_copy_shape(&field.ty)
-                        && (!matches!(field.ty, Type::Reference(_))
-                            || matches!(&field.ty, Type::Reference(reference)
-                                if matches!(&*reference.elem, Type::Tuple(tuple) if tuple.elems.is_empty())))
+                    if field.is_copy_shape() && (!field.is_reference() || field.is_unit_reference())
                     {
                         continue;
                     }
-                    let edge = error_edge_evidence(file, field, ErrorEdgeField::Source)?;
+                    let edge = field.edge(true)?;
                     if let Some(next) = index.resolve(file, edge.type_path()) {
                         if next.kind() == ErrorEdgeTargetKind::Struct {
                             pending.push(next);
@@ -329,7 +312,6 @@ fn discover_declarations<'a>(
                     }
                 }
             }
-            _ => return None,
         }
     }
     has_external_declaration.then_some(declarations)

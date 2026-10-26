@@ -2,20 +2,16 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use syn::spanned::Spanned;
-use syn::{Item, Type, Visibility};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
-use super::super::inventory::{CrateTypeIndex, ErrorEdgeField, error_edge_evidence};
-use super::super::{Edit, known_error_impls, span_range};
+use super::super::Edit;
+use super::super::inventory::CrateTypeIndex;
+use super::declarations::{DeclarationKind, GraphDeclaration, GraphFields};
 use super::expressions::GraphExprPlanner;
 use super::lifetimes;
-use super::types::{
-    allowed_attrs, desired_type, is_copy_shape, storage_shape, type_name, wants_change,
-};
 use super::{Change, ErrorGraphPlan, GraphCandidate, Shape, VariantChange};
 
 #[instrument(level = "debug", skip(file, strategy, index))]
@@ -24,38 +20,31 @@ pub(super) fn plan_file(
     strategy: ErrorFieldStrategy,
     index: &CrateTypeIndex,
 ) -> Option<GraphCandidate> {
-    let syntax = file.syntax();
-    let impls = known_error_impls(syntax);
-    let structs: BTreeMap<_, _> = syntax
-        .items
+    let declarations = index.graph_declarations(file)?;
+    let structs: BTreeMap<_, _> = declarations
+        .all()
         .iter()
-        .filter_map(|item| match item {
-            Item::Struct(item) => Some((item.ident.to_string(), item)),
-            _ => None,
-        })
+        .filter(|item| item.kind() == DeclarationKind::Struct)
+        .map(|item| (item.name().to_string(), item))
         .collect();
-    let enums: BTreeMap<_, _> = syntax
-        .items
+    let enums: BTreeMap<_, _> = declarations
+        .all()
         .iter()
-        .filter_map(|item| match item {
-            Item::Enum(item) => Some((item.ident.to_string(), item)),
-            _ => None,
-        })
+        .filter(|item| item.kind() == DeclarationKind::Enum)
+        .map(|item| (item.name().to_string(), item))
         .collect();
     let mut roots = Vec::new();
     for (name, item) in &structs {
-        if !impls.contains(name) || !matches!(item.vis, Visibility::Inherited) {
+        if !item.error_impl() || !item.is_inherited() {
             continue;
         }
-        let syn::Fields::Named(fields) = &item.fields else {
+        let GraphFields::Named(fields) = item.fields() else {
             continue;
         };
-        if fields.named.iter().any(|field| {
-            field
-                .ident
-                .as_ref()
-                .is_some_and(|id| id == "kind" || id == "source")
-        }) {
+        if fields
+            .iter()
+            .any(|field| matches!(field.name(), Some("kind" | "source")))
+        {
             roots.push(name.clone());
         }
     }
@@ -64,7 +53,6 @@ pub(super) fn plan_file(
     }
 
     let initial = discover_graph(
-        file,
         strategy,
         &structs,
         &enums,
@@ -80,7 +68,6 @@ pub(super) fn plan_file(
     let graph_lifetime = lifetime.as_ref().map(|plan| plan.lifetime().as_str());
     let (names, mut fields, mut edits, variants, mut valid) = if lifetime.is_some() {
         discover_graph(
-            file,
             strategy,
             &structs,
             &enums,
@@ -151,13 +138,12 @@ pub(super) fn plan_file(
 
 #[instrument(
     level = "debug",
-    skip(file, strategy, structs, enums, roots, changing_generics)
+    skip(strategy, structs, enums, roots, changing_generics)
 )]
 fn discover_graph<'a>(
-    file: &SharedParsedFile,
     strategy: ErrorFieldStrategy,
-    structs: &BTreeMap<String, &'a syn::ItemStruct>,
-    enums: &BTreeMap<String, &'a syn::ItemEnum>,
+    structs: &BTreeMap<String, &'a GraphDeclaration>,
+    enums: &BTreeMap<String, &'a GraphDeclaration>,
     roots: Vec<String>,
     graph_lifetime: Option<&str>,
     changing_generics: &BTreeSet<String>,
@@ -183,99 +169,97 @@ fn discover_graph<'a>(
             valid = false;
             continue;
         };
-        if !allowed_attrs(&item.attrs) {
+        if !item.attrs_allowed() {
             valid = false;
         }
-        let named = match &item.fields {
-            syn::Fields::Named(named) => named,
-            syn::Fields::Unit => continue,
-            syn::Fields::Unnamed(_) => {
+        let named = match item.fields() {
+            GraphFields::Named(named) => named,
+            GraphFields::Unit => continue,
+            GraphFields::Unnamed(_) => {
                 valid = false;
                 continue;
             }
         };
-        for field in &named.named {
-            let field_name = field.ident.as_ref().map(ToString::to_string);
+        for field in named {
+            let field_name = field.name();
             if field_name.as_deref() == Some("source") {
-                if let Some(target) = type_name(&field.ty) {
-                    if structs.contains_key(&target) {
-                        pending.push(target);
+                if let Some(target) = field.type_name() {
+                    if structs.contains_key(target) {
+                        pending.push(target.to_string());
                     }
                 }
             }
-            if field_name.as_deref() != Some("kind") {
+            if field_name != Some("kind") {
                 continue;
             }
-            let Some(kind_name) = type_name(&field.ty) else {
+            let Some(kind_name) = field.type_name() else {
                 valid = false;
                 continue;
             };
-            let Some(kind) = enums.get(&kind_name) else {
+            let Some(kind) = enums.get(kind_name) else {
                 valid = false;
                 continue;
             };
-            if !matches!(kind.vis, Visibility::Inherited) {
+            if !kind.is_inherited() {
                 valid = false;
                 continue;
             }
-            if !allowed_attrs(&kind.attrs) {
+            if !kind.attrs_allowed() {
                 valid = false;
             }
-            names.insert(kind_name.clone());
-            if !visited_enums.insert(kind_name.clone()) {
+            names.insert(kind_name.to_string());
+            if !visited_enums.insert(kind_name.to_string()) {
                 continue;
             }
-            for variant in &kind.variants {
-                let syn::Fields::Unnamed(fields_in_variant) = &variant.fields else {
+            for variant in kind.variants() {
+                let GraphFields::Unnamed(fields_in_variant) = variant.fields() else {
                     valid = false;
                     continue;
                 };
-                if fields_in_variant.unnamed.len() != 1 {
+                if fields_in_variant.len() != 1 {
                     valid = false;
                     continue;
                 }
-                let field = &fields_in_variant.unnamed[0];
-                if !allowed_attrs(&variant.attrs) || !allowed_attrs(&field.attrs) {
+                let field = &fields_in_variant[0];
+                if !variant.attrs_allowed() || !field.attrs_allowed() {
                     valid = false;
                 }
-                if is_copy_shape(&field.ty) && !matches!(field.ty, Type::Reference(_)) {
+                if field.is_copy_shape() && !field.is_reference() {
                     continue;
                 }
-                let Some((shape, payload)) = storage_shape(&field.ty) else {
+                let Some((shape, payload)) = field.storage() else {
                     valid = false;
                     continue;
                 };
-                if let Some(source) = structs.get(&payload) {
-                    if matches!(source.vis, Visibility::Inherited) {
-                        pending.push(payload.clone());
+                if let Some(source) = structs.get(payload) {
+                    if source.is_inherited() {
+                        pending.push(payload.to_string());
                     }
                 }
-                if let Some(replacement) = desired_type(
-                    file,
-                    &field.ty,
+                if let Some(replacement) = field.desired_type(
                     strategy,
-                    *kind,
+                    kind.only_lifetime(),
                     None,
                     graph_lifetime,
                     changing_generics,
                 ) {
-                    if let Some((start, end)) = span_range(file.source(), field.ty.span()) {
+                    if let Some((start, end)) = field.type_range() {
                         edits.push(Edit {
                             start,
                             end,
                             replacement,
                         });
                         variants.insert(
-                            (kind_name.clone(), variant.ident.to_string()),
+                            (kind_name.to_string(), variant.name().to_string()),
                             VariantChange { shape },
                         );
-                        fields.push((kind_name.clone(), variant.ident.to_string()));
+                        fields.push((kind_name.to_string(), variant.name().to_string()));
                     } else {
                         valid = false;
                     }
-                } else if wants_change(&field.ty, strategy) {
+                } else if field.wants_change(strategy == ErrorFieldStrategy::Borrowed) {
                     valid = false;
-                    fields.push((kind_name.clone(), variant.ident.to_string()));
+                    fields.push((kind_name.to_string(), variant.name().to_string()));
                 }
             }
         }
@@ -313,7 +297,7 @@ pub(super) fn plan_struct_fields(
     file: &SharedParsedFile,
     strategy: ErrorFieldStrategy,
     index: &CrateTypeIndex,
-    structs: &BTreeMap<String, &syn::ItemStruct>,
+    structs: &BTreeMap<String, &GraphDeclaration>,
     names: &BTreeSet<String>,
     graph_lifetime: Option<&str>,
     changing_generics: &BTreeSet<String>,
@@ -328,13 +312,13 @@ pub(super) fn plan_struct_fields(
         let Some(item) = structs.get(name) else {
             continue;
         };
-        for field in &item.fields {
-            let edge_field = match field.ident.as_ref().map(ToString::to_string).as_deref() {
-                Some("source") => ErrorEdgeField::Source,
-                Some("kind") => ErrorEdgeField::Kind,
+        for field in item.fields().iter() {
+            let source = match field.name() {
+                Some("source") => true,
+                Some("kind") => false,
                 _ => continue,
             };
-            let Some(edge) = error_edge_evidence(file, field, edge_field) else {
+            let Some(edge) = field.edge(source) else {
                 valid = false;
                 continue;
             };
@@ -342,7 +326,7 @@ pub(super) fn plan_struct_fields(
                 Some(target) if !allow_external && target.declaration() != file.path() => {
                     valid = false;
                 }
-                None if edge_field == ErrorEdgeField::Kind
+                None if !source
                     || !edge
                         .type_path()
                         .first()
@@ -359,69 +343,65 @@ pub(super) fn plan_struct_fields(
         let Some(item) = structs.get(name) else {
             continue;
         };
-        if matches!(item.vis, Visibility::Public(_))
-            || (!allow_external && !matches!(item.vis, Visibility::Inherited))
-        {
+        if item.is_public() || (!allow_external && !item.is_inherited()) {
             valid = false;
             continue;
         }
-        let named = match &item.fields {
-            syn::Fields::Named(named) => named,
-            syn::Fields::Unit => continue,
-            syn::Fields::Unnamed(_) => {
+        let named = match item.fields() {
+            GraphFields::Named(named) => named,
+            GraphFields::Unit => continue,
+            GraphFields::Unnamed(_) => {
                 valid = false;
                 continue;
             }
         };
-        for field in &named.named {
-            let Some(field_name) = field.ident.as_ref().map(ToString::to_string) else {
+        for field in named {
+            let Some(field_name) = field.name() else {
                 valid = false;
                 continue;
             };
-            if matches!(field.vis, Visibility::Public(_))
-                || (!allow_external && !matches!(field.vis, Visibility::Inherited))
-            {
+            if field.is_public() || (!allow_external && !field.is_inherited()) {
                 valid = false;
                 continue;
             }
-            if !allowed_attrs(&field.attrs) {
+            if !field.attrs_allowed() {
                 valid = false;
             }
-            if is_copy_shape(&field.ty)
-                && !matches!(&field.ty, Type::Reference(reference)
-                if field_name == "source" || field_name == "kind" || type_name(&reference.elem).as_deref() == Some("str"))
+            if field.is_copy_shape()
+                && !(field.is_reference()
+                    && (field_name == "source"
+                        || field_name == "kind"
+                        || field.type_name() == Some("str")))
             {
                 continue;
             }
-            let Some((shape, _inner)) = storage_shape(&field.ty) else {
-                if !is_copy_shape(&field.ty) {
+            let Some((shape, _inner)) = field.storage() else {
+                if !field.is_copy_shape() {
                     valid = false;
                 }
                 continue;
             };
-            let Some(replacement) = desired_type(
-                file,
-                &field.ty,
+            let Some(replacement) = field.desired_type(
                 strategy,
-                *item,
-                Some(&field_name),
+                item.only_lifetime(),
+                Some(field_name),
                 graph_lifetime,
                 &changing_generics,
             ) else {
-                if wants_change(&field.ty, strategy) {
+                if field.wants_change(strategy == ErrorFieldStrategy::Borrowed) {
                     valid = false;
-                    fields.push((name.clone(), field_name.clone()));
+                    fields.push((name.clone(), field_name.to_string()));
                 }
                 continue;
             };
-            if let Some((start, end)) = span_range(file.source(), field.ty.span()) {
+            if let Some((start, end)) = field.type_range() {
                 edits.push(Edit {
                     start,
                     end,
                     replacement,
                 });
                 changes.insert(
-                    (name.clone(), field_name.clone()),
+                    (name.clone(), field_name.to_string()),
                     Change {
                         shape: if field_name == "kind" && strategy == ErrorFieldStrategy::Owned {
                             Shape::Boxed
@@ -430,7 +410,7 @@ pub(super) fn plan_struct_fields(
                         },
                     },
                 );
-                fields.push((name.clone(), field_name));
+                fields.push((name.clone(), field_name.to_string()));
             } else {
                 valid = false;
             }

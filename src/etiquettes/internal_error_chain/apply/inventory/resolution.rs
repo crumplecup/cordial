@@ -17,7 +17,6 @@ use crate::loader::SharedParsedFile;
 use super::edges::{ErrorEdgeTarget, ErrorEdgeTargetKind};
 use super::helpers::derive_is_builtin;
 use super::syntax_facts::FileSyntaxFacts;
-use super::{ErrorEdgeField, error_edge_evidence};
 
 mod ir;
 mod lookup;
@@ -28,7 +27,6 @@ use paths::{active_modules, use_paths};
 pub(in crate::etiquettes::internal_error_chain::apply) struct CrateTypeIndex {
     declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>>,
     local: HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>>,
-    positions: HashMap<(PathBuf, usize, usize), (usize, usize)>,
     active_modules: HashMap<PathBuf, Vec<String>>,
     imports: HashMap<PathBuf, Vec<(String, Vec<String>)>>,
     constructor_anchors: HashMap<String, BTreeSet<String>>,
@@ -43,14 +41,13 @@ impl CrateTypeIndex {
     ) -> Self {
         let mut declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
         let mut local: HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
-        let mut positions = HashMap::new();
         let active_modules = active_modules(files);
         let mut imports = HashMap::new();
         let mut tracked_fields = BTreeSet::new();
         let mut constructor_anchors: HashMap<String, BTreeSet<String>> = HashMap::new();
-        for (file_index, file) in files.iter().enumerate() {
+        for file in files {
             let mut file_imports = Vec::new();
-            for (item_index, item) in file.syntax().items.iter().enumerate() {
+            for item in &file.syntax().items {
                 match item {
                     Item::Struct(declaration) => tracked_fields.extend(
                         declaration
@@ -134,12 +131,6 @@ impl CrateTypeIndex {
                 .then(|| {
                     ErrorEdgeTarget::from_shared_file(file, location.line, location.column, kind)
                 });
-                if target.is_some() {
-                    positions.insert(
-                        (file.path().to_path_buf(), location.line, location.column),
-                        (file_index, item_index),
-                    );
-                }
                 local
                     .entry((file.path().to_path_buf(), name.to_string()))
                     .or_default()
@@ -156,7 +147,6 @@ impl CrateTypeIndex {
         let mut index = Self {
             declarations,
             local,
-            positions,
             active_modules,
             imports,
             constructor_anchors,
@@ -179,22 +169,8 @@ impl CrateTypeIndex {
     fn collect_incoming_edges(&self, files: &[SharedParsedFile]) -> Vec<(String, ErrorEdgeTarget)> {
         let mut incoming = Vec::new();
         for file in files {
-            for item in &file.syntax().items {
-                let Item::Struct(item) = item else { continue };
-                for field in &item.fields {
-                    let edge_field = match field.ident.as_ref().map(ToString::to_string).as_deref()
-                    {
-                        Some("source") => ErrorEdgeField::Source,
-                        Some("kind") => ErrorEdgeField::Kind,
-                        _ => continue,
-                    };
-                    let Some(edge) = error_edge_evidence(file, field, edge_field) else {
-                        continue;
-                    };
-                    if let Some(target) = self.resolve(file, edge.type_path()) {
-                        incoming.push((item.ident.to_string(), target));
-                    }
-                }
+            if let Some(facts) = self.graph_declarations(file) {
+                incoming.extend(facts.resolved_incoming_edges(|path| self.resolve(file, path)));
             }
         }
         incoming
@@ -210,28 +186,6 @@ impl CrateTypeIndex {
             .filter_map(|name| self.constructor_anchors.get(name))
             .flat_map(|anchors| anchors.iter().cloned())
             .collect()
-    }
-
-    #[instrument(level = "trace", skip(self, files, target))]
-    pub(in crate::etiquettes::internal_error_chain::apply) fn declaration<'a>(
-        &self,
-        files: &'a [SharedParsedFile],
-        target: &ErrorEdgeTarget,
-    ) -> Option<(&'a SharedParsedFile, &'a Item)> {
-        let (file_index, item_index) =
-            *self
-                .positions
-                .get(&(target.declaration().clone(), target.line(), target.column()))?;
-        let file = files.get(file_index)?;
-        if file.source_digest() != target.source_digest() {
-            return None;
-        }
-        let item = file.syntax().items.get(item_index)?;
-        match (target.kind(), item) {
-            (ErrorEdgeTargetKind::Struct, Item::Struct(_))
-            | (ErrorEdgeTargetKind::Enum, Item::Enum(_)) => Some((file, item)),
-            _ => None,
-        }
     }
 }
 

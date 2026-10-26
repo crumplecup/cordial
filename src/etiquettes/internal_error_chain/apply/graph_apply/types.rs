@@ -1,13 +1,6 @@
-use std::collections::BTreeSet;
-
 use syn::Type;
-use syn::spanned::Spanned;
 use tracing::instrument;
 
-use crate::config::ErrorFieldStrategy;
-use crate::loader::SharedParsedFile;
-
-use super::super::span_range;
 use super::Shape;
 
 pub(super) trait HasGenerics {
@@ -122,110 +115,6 @@ pub(super) fn is_copy_shape(ty: &Type) -> bool {
             )
         }),
         _ => false,
-    }
-}
-
-#[instrument(level = "debug", skip(ty, strategy))]
-pub(super) fn wants_change(ty: &Type, strategy: ErrorFieldStrategy) -> bool {
-    match strategy {
-        ErrorFieldStrategy::Borrowed => !matches!(ty, Type::Reference(_)),
-        ErrorFieldStrategy::Owned => matches!(ty, Type::Reference(_)),
-    }
-}
-
-#[instrument(level = "debug", skip(file, ty, strategy, owner, changing_generics))]
-pub(super) fn desired_type<T: HasGenerics>(
-    file: &SharedParsedFile,
-    ty: &Type,
-    strategy: ErrorFieldStrategy,
-    owner: &T,
-    field_name: Option<&str>,
-    graph_lifetime: Option<&str>,
-    changing_generics: &BTreeSet<String>,
-) -> Option<String> {
-    let (shape, inner) = storage_shape(ty)?;
-    let borrowed = matches!(ty, Type::Reference(_));
-    match strategy {
-        ErrorFieldStrategy::Borrowed if !borrowed => {
-            let lifetime = if field_name == Some("file") {
-                "static".to_string()
-            } else {
-                owner
-                    .only_lifetime()
-                    .or_else(|| graph_lifetime.map(str::to_string))?
-            };
-            let referent = match ty {
-                Type::Path(path) if path.path.is_ident("String") => "str".to_string(),
-                Type::Path(path)
-                    if path.path.segments.len() == 1 && path.path.segments[0].ident == "Box" =>
-                {
-                    let syn::PathArguments::AngleBracketed(args) =
-                        &path.path.segments.last()?.arguments
-                    else {
-                        return None;
-                    };
-                    let syn::GenericArgument::Type(inner) = args.args.first()? else {
-                        return None;
-                    };
-                    let (start, end) = span_range(file.source(), inner.span())?;
-                    file.source()[start..end].to_string()
-                }
-                _ => {
-                    let (start, end) = span_range(file.source(), ty.span())?;
-                    file.source()[start..end].to_string()
-                }
-            };
-            let referent = if changing_generics.contains(&inner) {
-                format!("{referent}<'{lifetime}>")
-            } else {
-                referent
-            };
-            Some(format!("&'{lifetime} {referent}"))
-        }
-        ErrorFieldStrategy::Owned if borrowed && inner == "str" => Some("String".into()),
-        ErrorFieldStrategy::Owned if borrowed => {
-            let Type::Reference(reference) = ty else {
-                return None;
-            };
-            let (start, end) = span_range(file.source(), reference.elem.span())?;
-            let referent = &file.source()[start..end];
-            let referent = if changing_generics.contains(&inner) {
-                let Type::Path(path) = &*reference.elem else {
-                    return None;
-                };
-                let segment = path.path.segments.last()?;
-                let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments else {
-                    return None;
-                };
-                if arguments.args.len() != 1
-                    || !matches!(arguments.args.first(), Some(syn::GenericArgument::Lifetime(named))
-                        if graph_lifetime.is_some_and(|lifetime| named.ident == lifetime))
-                {
-                    return None;
-                }
-                let (args_start, args_end) = span_range(file.source(), arguments.span())?;
-                let (type_start, type_end) = span_range(file.source(), reference.elem.span())?;
-                if args_start < type_start || args_end > type_end {
-                    return None;
-                }
-                format!(
-                    "{}{}",
-                    &file.source()[type_start..args_start],
-                    &file.source()[args_end..type_end]
-                )
-            } else {
-                referent.to_string()
-            };
-            if field_name == Some("kind") {
-                Some(format!("Box<{referent}>"))
-            } else {
-                Some(referent)
-            }
-        }
-        _ => {
-            let _ = shape;
-            None
-        }
     }
 }
 

@@ -1,6 +1,7 @@
 //! Whole-file plans for a private error, its Kind, and native source fields.
 //!
-//! The planner uses the shared parsed tree. A graph is edited only when its
+//! Collection records declaration and expression evidence from the shared tree
+//! in the IR. A graph is edited only when its
 //! declarations, construction expressions, and storage-sensitive reads all
 //! have a supported rewrite.
 
@@ -18,12 +19,14 @@ use crate::loader::SharedParsedFile;
 use super::Edit;
 use super::inventory::{CrateTypeIndex, ErrorEdgeTarget};
 
+mod declarations;
 mod distributed;
 mod expressions;
 mod lifetimes;
 mod plan;
 mod types;
 
+pub(super) use declarations::GraphDeclarationFacts;
 pub(super) use expressions::GraphExprFacts;
 use expressions::GraphExprPlanner;
 pub(super) use lifetimes::GraphLifetimeFacts;
@@ -210,7 +213,7 @@ pub(super) fn conversion_graphs_from_ir(ir: &dyn IrView) -> CordialResult<Vec<Er
     Ok(serde_json::from_value(value)?)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum Shape {
     String,
     Value,

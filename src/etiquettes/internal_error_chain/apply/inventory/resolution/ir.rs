@@ -20,7 +20,6 @@ const TYPE_INDEX_ATTR: &str = "error_apply_type_index";
 struct CrateTypeIndexFacts {
     declarations: Vec<(Vec<String>, Vec<Option<ErrorEdgeTarget>>)>,
     local: Vec<(PathBuf, String, Vec<Option<ErrorEdgeTarget>>)>,
-    positions: Vec<(PathBuf, usize, usize, usize, usize)>,
     active_modules: Vec<(PathBuf, Vec<String>)>,
     imports: Vec<(PathBuf, Vec<(String, Vec<String>)>)>,
     constructor_anchors: Vec<(String, BTreeSet<String>)>,
@@ -44,13 +43,6 @@ impl CrateTypeIndex {
                 .local
                 .iter()
                 .map(|((path, name), targets)| (path.clone(), name.clone(), targets.clone()))
-                .collect(),
-            positions: self
-                .positions
-                .iter()
-                .map(|((path, line, column), (file, item))| {
-                    (path.clone(), *line, *column, *file, *item)
-                })
                 .collect(),
             active_modules: self
                 .active_modules
@@ -90,11 +82,6 @@ impl CrateTypeIndex {
                 .local
                 .into_iter()
                 .map(|(path, name, targets)| ((path, name), targets))
-                .collect(),
-            positions: facts
-                .positions
-                .into_iter()
-                .map(|(path, line, column, file, item)| ((path, line, column), (file, item)))
                 .collect(),
             active_modules: facts.active_modules.into_iter().collect(),
             imports: facts.imports.into_iter().collect(),
