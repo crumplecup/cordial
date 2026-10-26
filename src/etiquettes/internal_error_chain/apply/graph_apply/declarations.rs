@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::super::inventory::{ErrorEdgeEvidence, ErrorEdgeTarget};
+use super::super::inventory::{ErrorEdgeEvidence, ErrorEdgeTarget, StringStorage};
 use super::Shape;
 
 mod collect;
@@ -16,7 +16,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct GraphDeclarationFa
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
-pub(super) struct GraphDeclaration {
+pub(in crate::etiquettes::internal_error_chain::apply) struct GraphDeclaration {
     name: String,
     #[getter(skip)]
     line: usize,
@@ -30,6 +30,12 @@ pub(super) struct GraphDeclaration {
     allowed_attrs: bool,
     #[getter(copy)]
     error_impl: bool,
+    #[getter(copy)]
+    derives_error: bool,
+    #[getter(copy)]
+    generics_empty: bool,
+    #[getter(skip)]
+    single_struct_lifetime: Option<String>,
     #[getter(skip)]
     only_lifetime: Option<String>,
     fields: GraphFields,
@@ -37,7 +43,7 @@ pub(super) struct GraphDeclaration {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) enum DeclarationKind {
+pub(in crate::etiquettes::internal_error_chain::apply) enum DeclarationKind {
     Struct,
     Enum,
 }
@@ -50,7 +56,7 @@ enum Visibility {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) enum GraphFields {
+pub(in crate::etiquettes::internal_error_chain::apply) enum GraphFields {
     Named(Vec<GraphField>),
     Unnamed(Vec<GraphField>),
     Unit,
@@ -65,9 +71,11 @@ pub(super) struct GraphVariant {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
-pub(super) struct GraphField {
+pub(in crate::etiquettes::internal_error_chain::apply) struct GraphField {
     #[getter(skip)]
     name: Option<String>,
+    #[getter(copy)]
+    line: usize,
     #[getter(skip)]
     visibility: Visibility,
     #[getter(skip)]
@@ -94,6 +102,8 @@ pub(super) struct GraphField {
     source_edge: Option<ErrorEdgeEvidence>,
     #[getter(skip)]
     kind_edge: Option<ErrorEdgeEvidence>,
+    #[getter(skip)]
+    candidate_storage: Option<StringStorage>,
 }
 
 impl GraphDeclarationFacts {
@@ -122,7 +132,7 @@ impl GraphDeclarationFacts {
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
-    pub(super) fn all(&self) -> &[GraphDeclaration] {
+    pub(in crate::etiquettes::internal_error_chain::apply) fn all(&self) -> &[GraphDeclaration] {
         &self.declarations
     }
 
@@ -141,7 +151,7 @@ impl GraphDeclarationFacts {
 
 impl GraphDeclaration {
     #[tracing::instrument(level = "trace", skip(self))]
-    pub(super) fn is_inherited(&self) -> bool {
+    pub(in crate::etiquettes::internal_error_chain::apply) fn is_inherited(&self) -> bool {
         self.visibility == Visibility::Inherited
     }
     #[tracing::instrument(level = "trace", skip(self))]
@@ -156,6 +166,12 @@ impl GraphDeclaration {
     pub(super) fn only_lifetime(&self) -> Option<&str> {
         self.only_lifetime.as_deref()
     }
+    #[tracing::instrument(level = "trace", skip(self))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn single_struct_lifetime(
+        &self,
+    ) -> Option<&str> {
+        self.single_struct_lifetime.as_deref()
+    }
 }
 
 impl GraphVariant {
@@ -167,11 +183,17 @@ impl GraphVariant {
 
 impl GraphField {
     #[tracing::instrument(level = "trace", skip(self))]
-    pub(super) fn name(&self) -> Option<&str> {
+    pub(in crate::etiquettes::internal_error_chain::apply) fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
     #[tracing::instrument(level = "trace", skip(self))]
-    pub(super) fn is_inherited(&self) -> bool {
+    pub(in crate::etiquettes::internal_error_chain::apply) fn candidate_storage(
+        &self,
+    ) -> Option<&StringStorage> {
+        self.candidate_storage.as_ref()
+    }
+    #[tracing::instrument(level = "trace", skip(self))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn is_inherited(&self) -> bool {
         self.visibility == Visibility::Inherited
     }
     #[tracing::instrument(level = "trace", skip(self))]

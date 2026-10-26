@@ -6,15 +6,16 @@ use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
 
-use super::super::super::{known_error_impls, span_range};
+use super::super::super::{is_string, known_error_impls, single_struct_lifetime, span_range};
 use super::super::types::{HasGenerics, allowed_attrs, is_copy_shape, storage_shape, type_name};
 use super::{
     DeclarationKind, GraphDeclaration, GraphDeclarationFacts, GraphField, GraphFields,
     GraphVariant, Visibility,
 };
 use crate::etiquettes::internal_error_chain::apply::inventory::{
-    ErrorEdgeField, error_edge_evidence,
+    ErrorEdgeField, StringStorage, error_edge_evidence,
 };
+use crate::etiquettes::internal_error_chain::type_graph::item_derives_error;
 
 impl GraphDeclarationFacts {
     #[instrument(level = "debug", skip(file))]
@@ -37,6 +38,9 @@ impl GraphDeclarationFacts {
                         visibility: visibility(&item.vis),
                         allowed_attrs: allowed_attrs(&item.attrs),
                         error_impl: error_impls.contains(&item.ident.to_string()),
+                        derives_error: item_derives_error(&item.attrs),
+                        generics_empty: item.generics.params.is_empty(),
+                        single_struct_lifetime: single_struct_lifetime(item),
                         only_lifetime: item.only_lifetime(),
                         fields: fields(file, &item.fields),
                         variants: Vec::new(),
@@ -52,6 +56,9 @@ impl GraphDeclarationFacts {
                         visibility: visibility(&item.vis),
                         allowed_attrs: allowed_attrs(&item.attrs),
                         error_impl: false,
+                        derives_error: false,
+                        generics_empty: item.generics.params.is_empty(),
+                        single_struct_lifetime: None,
                         only_lifetime: item.only_lifetime(),
                         fields: GraphFields::Unit,
                         variants: item
@@ -134,6 +141,7 @@ fn graph_field(file: &SharedParsedFile, field: &syn::Field) -> GraphField {
     let stripped_lifetime = stripped_lifetime(file, &field.ty);
     GraphField {
         name: field.ident.as_ref().map(ToString::to_string),
+        line: field.span().start().line,
         visibility: visibility(&field.vis),
         allowed_attrs: allowed_attrs(&field.attrs),
         type_name: type_name(&field.ty),
@@ -153,6 +161,21 @@ fn graph_field(file: &SharedParsedFile, field: &syn::Field) -> GraphField {
         kind_edge: (field.ident.as_ref().is_some_and(|name| name == "kind"))
             .then(|| error_edge_evidence(file, field, ErrorEdgeField::Kind))
             .flatten(),
+        candidate_storage: if is_string(&field.ty) {
+            Some(StringStorage::Owned)
+        } else if let Type::Reference(reference) = &field.ty {
+            matches!(&*reference.elem, Type::Path(path) if path.path.is_ident("str")).then(|| {
+                StringStorage::Borrowed {
+                    lifetime: reference
+                        .lifetime
+                        .as_ref()
+                        .map(|value| value.ident.to_string()),
+                    mutable: reference.mutability.is_some(),
+                }
+            })
+        } else {
+            None
+        },
     }
 }
 

@@ -8,9 +8,8 @@ use tracing::instrument;
 use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
-use super::initializers::FieldKind;
 use super::inventory::ErrorConversionUnit;
-use super::{Edit, is_string, simple_type_name};
+use super::{Edit, simple_type_name};
 
 mod forwarding;
 mod methods;
@@ -61,24 +60,6 @@ pub(super) fn plan_for_unit(
 ) -> Option<Vec<Edit>> {
     let item = index.structs.get(unit.type_name())?;
     plan(file, index, item, unit.field_name(), unit, strategy)
-}
-
-#[instrument(level = "trace", skip(item, field, kind, strategy))]
-pub(super) fn is_candidate(
-    item: &ItemStruct,
-    field: &syn::Field,
-    kind: FieldKind,
-    struct_lifetime: Option<&str>,
-    strategy: ErrorFieldStrategy,
-) -> bool {
-    matches!(kind, FieldKind::StaticString)
-        && struct_lifetime.is_none()
-        && match strategy {
-            ErrorFieldStrategy::Borrowed => is_string(&field.ty) && item.generics.params.is_empty(),
-            ErrorFieldStrategy::Owned => matches!(&field.ty, Type::Reference(reference)
-                if reference.lifetime.as_ref().is_some_and(|named| named.ident != "static")
-                    && matches!(&*reference.elem, Type::Path(path) if path.path.is_ident("str"))),
-        }
 }
 
 #[instrument(level = "trace", skip(ty))]

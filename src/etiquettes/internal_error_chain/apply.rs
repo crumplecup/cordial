@@ -239,14 +239,6 @@ pub fn run_error_field_apply(
 /// Compatibility name for the original file-only apply operation.
 pub use run_error_field_apply as run_error_file_apply;
 
-/// Storage shapes that either error-field strategy can transform.
-#[instrument(level = "trace", skip(ty))]
-fn is_error_string_field(ty: &Type) -> bool {
-    is_string(ty)
-        || matches!(ty, Type::Reference(reference)
-            if matches!(&*reference.elem, Type::Path(path) if path.path.is_ident("str")))
-}
-
 #[instrument(level = "debug", skip(syntax))]
 fn known_error_impls(syntax: &syn::File) -> BTreeSet<String> {
     syntax
