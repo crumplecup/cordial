@@ -1,117 +1,160 @@
-//! Proven expression rewrites for error field initializers.
+//! Typed initializer shapes collected from the shared tree and planned later.
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
 use syn::Expr;
 use syn::spanned::Spanned;
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
 
-use super::super::span_range;
+use super::super::{Edit, span_range};
+use super::FieldKind;
 
-#[instrument(level = "debug", skip(source, expr, strategy, aliases))]
-pub(super) fn file_initializer_replacement(
-    source: &str,
-    expr: &Expr,
-    strategy: ErrorFieldStrategy,
-    aliases: &BTreeSet<String>,
-) -> Option<String> {
-    let expr = without_parens(expr);
-    let file_call = match strategy {
-        ErrorFieldStrategy::Borrowed => match expr {
-            Expr::MethodCall(method)
-                if matches!(
-                    method.method.to_string().as_str(),
-                    "to_string" | "to_owned" | "into"
-                ) && method.args.is_empty() =>
-            {
-                &*method.receiver
-            }
-            _ => string_from_argument(expr)?,
-        },
-        ErrorFieldStrategy::Owned => expr,
-    };
-    let file_call = without_parens(file_call);
-    let Expr::MethodCall(file_method) = file_call else {
-        return None;
-    };
-    if file_method.method != "file" || !file_method.args.is_empty() {
-        return None;
+type Range = (usize, usize);
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+enum StorageForm {
+    Bare,
+    Method,
+    StringFrom,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+enum ValueSource {
+    CallSiteFile,
+    StaticString { local_binding: bool },
+}
+
+/// One expression and the provenance needed to rewrite either storage form.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct InitializerExpressionFact {
+    whole: Range,
+    value: Range,
+    form: StorageForm,
+    source: ValueSource,
+    field_name: String,
+    shorthand: bool,
+}
+
+impl InitializerExpressionFact {
+    #[instrument(level = "trace", skip(self, source, strategy))]
+    pub(super) fn edit(&self, source: &str, strategy: ErrorFieldStrategy) -> Option<Edit> {
+        match strategy {
+            ErrorFieldStrategy::Borrowed if self.form == StorageForm::Bare => return None,
+            ErrorFieldStrategy::Owned if self.form != StorageForm::Bare => return None,
+            _ => {}
+        }
+        let value = source.get(self.value.0..self.value.1)?;
+        let replacement = match strategy {
+            ErrorFieldStrategy::Borrowed => value.to_string(),
+            ErrorFieldStrategy::Owned => match self.source {
+                ValueSource::StaticString {
+                    local_binding: true,
+                } => format!("String::from({value})"),
+                _ => format!("{value}.to_string()"),
+            },
+        };
+        Some(Edit {
+            start: self.whole.0,
+            end: self.whole.1,
+            replacement: if self.shorthand {
+                format!("{}: {replacement}", self.field_name)
+            } else {
+                replacement
+            },
+        })
     }
-    let valid_receiver = match without_parens(&file_method.receiver) {
-        Expr::Path(path) => path
-            .path
-            .get_ident()
-            .is_some_and(|name| aliases.contains(&name.to_string())),
-        Expr::Call(call) => is_location_caller(call),
-        _ => false,
-    };
-    if !valid_receiver {
-        return None;
-    }
-    let (start, end) = span_range(source, file_call.span())?;
-    let file_text = source.get(start..end)?;
-    Some(match strategy {
-        ErrorFieldStrategy::Borrowed => file_text.to_string(),
-        ErrorFieldStrategy::Owned => format!("{file_text}.to_string()"),
-    })
 }
 
 #[instrument(
     level = "debug",
-    skip(source, expr, strategy, static_strings, static_params, static_locals)
+    skip(
+        source,
+        expr,
+        kind,
+        aliases,
+        static_strings,
+        static_params,
+        static_locals
+    )
 )]
-pub(super) fn static_string_initializer_replacement(
+pub(super) fn inspect_initializer(
     source: &str,
     expr: &Expr,
-    strategy: ErrorFieldStrategy,
+    field_name: &str,
+    shorthand: bool,
+    kind: FieldKind,
+    aliases: &BTreeSet<String>,
     static_strings: &BTreeSet<String>,
     static_params: &BTreeSet<String>,
     static_locals: &BTreeMap<String, usize>,
-) -> Option<String> {
+) -> Option<InitializerExpressionFact> {
+    let whole = span_range(source, expr.span())?;
     let expr = without_parens(expr);
-    let value = match strategy {
-        ErrorFieldStrategy::Borrowed => match expr {
-            Expr::MethodCall(method)
-                if matches!(
-                    method.method.to_string().as_str(),
-                    "to_string" | "to_owned" | "into"
-                ) && method.args.is_empty() =>
-            {
-                &*method.receiver
-            }
-            Expr::Call(_) => string_from_argument(expr)?,
-            _ => return None,
-        },
-        ErrorFieldStrategy::Owned => expr,
+    let (form, value) = match expr {
+        Expr::MethodCall(method)
+            if matches!(
+                method.method.to_string().as_str(),
+                "to_string" | "to_owned" | "into"
+            ) && method.args.is_empty() =>
+        {
+            (StorageForm::Method, &*method.receiver)
+        }
+        _ if string_from_argument(expr).is_some() => {
+            (StorageForm::StringFrom, string_from_argument(expr)?)
+        }
+        _ => (StorageForm::Bare, expr),
     };
     let value = without_parens(value);
-    let (start, end) = span_range(source, value.span())?;
-    let local_static_source = matches!(value, Expr::Path(path)
-    if path.qself.is_none()
-        && path.path.get_ident().is_some_and(|name| {
-            let name = name.to_string();
-            static_params.contains(&name)
-                || static_locals.get(&name).is_some_and(|declaration_end| *declaration_end <= start)
-        }));
-    let literal = matches!(value, Expr::Lit(lit) if matches!(&lit.lit, syn::Lit::Str(_)));
-    let qualified_const = matches!(value, Expr::Path(path)
-        if path.qself.is_none()
-            && matches!(path.path.segments.iter().map(|part| part.ident.to_string()).collect::<Vec<_>>().as_slice(), [scope, name]
-                if scope == "self" && static_strings.contains(name)));
-    let qualified_builtin_macro = matches!(value, Expr::Macro(macro_expr)
-        if macro_expr.mac.path.leading_colon.is_some()
-            && matches!(macro_expr.mac.path.segments.iter().map(|part| part.ident.to_string()).collect::<Vec<_>>().as_slice(), [root, name]
-                if (root == "core" || root == "std") && (name == "concat" || name == "include_str")));
-    if !literal && !qualified_const && !qualified_builtin_macro && !local_static_source {
-        return None;
-    }
-    let value_text = source.get(start..end)?;
-    Some(match strategy {
-        ErrorFieldStrategy::Borrowed => value_text.to_string(),
-        ErrorFieldStrategy::Owned if local_static_source => format!("String::from({value_text})"),
-        ErrorFieldStrategy::Owned => format!("{value_text}.to_string()"),
+    let value_range = span_range(source, value.span())?;
+    let source_kind = match kind {
+        FieldKind::CallSiteFile => {
+            let Expr::MethodCall(file_method) = value else {
+                return None;
+            };
+            if file_method.method != "file" || !file_method.args.is_empty() {
+                return None;
+            }
+            let valid_receiver = match without_parens(&file_method.receiver) {
+                Expr::Path(path) => path
+                    .path
+                    .get_ident()
+                    .is_some_and(|name| aliases.contains(&name.to_string())),
+                Expr::Call(call) => is_location_caller(call),
+                _ => false,
+            };
+            valid_receiver.then_some(ValueSource::CallSiteFile)?
+        }
+        FieldKind::StaticString => {
+            let local_binding = matches!(value, Expr::Path(path)
+            if path.qself.is_none()
+                && path.path.get_ident().is_some_and(|name| {
+                    let name = name.to_string();
+                    static_params.contains(&name)
+                        || static_locals.get(&name).is_some_and(|end| *end <= value_range.0)
+                }));
+            let literal = matches!(value, Expr::Lit(lit) if matches!(&lit.lit, syn::Lit::Str(_)));
+            let qualified_const = matches!(value, Expr::Path(path)
+                if path.qself.is_none()
+                    && matches!(path.path.segments.iter().map(|part| part.ident.to_string()).collect::<Vec<_>>().as_slice(), [scope, name]
+                        if scope == "self" && static_strings.contains(name)));
+            let qualified_builtin_macro = matches!(value, Expr::Macro(macro_expr)
+                if macro_expr.mac.path.leading_colon.is_some()
+                    && matches!(macro_expr.mac.path.segments.iter().map(|part| part.ident.to_string()).collect::<Vec<_>>().as_slice(), [root, name]
+                        if (root == "core" || root == "std") && (name == "concat" || name == "include_str")));
+            (local_binding || literal || qualified_const || qualified_builtin_macro)
+                .then_some(ValueSource::StaticString { local_binding })?
+        }
+    };
+    Some(InitializerExpressionFact {
+        whole,
+        value: value_range,
+        form,
+        source: source_kind,
+        field_name: field_name.to_string(),
+        shorthand,
     })
 }
 

@@ -100,7 +100,7 @@ pub(super) fn patch_file(
             }
             _ => continue,
         };
-        let initializer_edits = unit.initializer_edits(strategy);
+        let initializer_edits = unit.initializer_edits(file.source(), strategy);
         units.push(unit.clone());
         if !field.private() || !field.unique_struct() || has_cross_file_reference {
             blockers.push(ErrorFieldApplyBlocker::new(

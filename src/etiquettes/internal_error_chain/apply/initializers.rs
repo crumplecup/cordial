@@ -2,29 +2,49 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{ExprStruct, ImplItemFn, ItemFn, ItemImpl, Member, Signature};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
 
-use super::{Edit, simple_type_name, span_range};
+use super::{Edit, simple_type_name};
 
 mod batch;
 mod bindings;
 mod replacements;
 
-pub(super) use batch::{InitializerBatchInput, collect_initializer_edits};
+pub(super) use batch::{InitializerBatchInput, collect_initializer_facts};
 pub(super) use bindings::impl_uses_lifetime;
 use bindings::{BindingCounts, caller_aliases, static_string_locals, static_string_params};
-use replacements::{file_initializer_replacement, static_string_initializer_replacement};
+use replacements::{InitializerExpressionFact, inspect_initializer};
+
+/// Constructor sites and provenance recorded in the shared IR before apply.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) struct InitializerFacts {
+    sites: Vec<Option<InitializerExpressionFact>>,
+    found: usize,
+    unresolved: bool,
+}
+
+impl InitializerFacts {
+    #[instrument(level = "trace", skip(self, source, strategy))]
+    pub(super) fn edits(&self, source: &str, strategy: ErrorFieldStrategy) -> Option<Vec<Edit>> {
+        (self.found > 0 && !self.unresolved)
+            .then(|| {
+                self.sites
+                    .iter()
+                    .map(|site| site.as_ref()?.edit(source, strategy))
+                    .collect()
+            })
+            .flatten()
+    }
+}
 
 pub(super) struct InitializerVisitor<'a> {
     type_name: &'a str,
     field_name: &'a str,
     kind: FieldKind,
-    strategy: ErrorFieldStrategy,
     source: &'a str,
     static_strings: &'a BTreeSet<String>,
     target_lifetime: Option<&'a str>,
@@ -34,9 +54,7 @@ pub(super) struct InitializerVisitor<'a> {
     caller_aliases: BTreeSet<String>,
     static_params: BTreeSet<String>,
     static_locals: BTreeMap<String, usize>,
-    edits: Vec<Edit>,
-    found: usize,
-    unresolved: bool,
+    facts: InitializerFacts,
 }
 
 struct ConstructorContext {
@@ -52,12 +70,11 @@ pub(super) enum FieldKind {
 }
 
 impl<'a> InitializerVisitor<'a> {
-    #[instrument(level = "debug", skip(kind, strategy, source, static_strings))]
+    #[instrument(level = "debug", skip(kind, source, static_strings))]
     pub(super) fn new(
         type_name: &'a str,
         field_name: &'a str,
         kind: FieldKind,
-        strategy: ErrorFieldStrategy,
         source: &'a str,
         static_strings: &'a BTreeSet<String>,
         target_lifetime: Option<&'a str>,
@@ -67,7 +84,6 @@ impl<'a> InitializerVisitor<'a> {
             type_name,
             field_name,
             kind,
-            strategy,
             source,
             static_strings,
             target_lifetime,
@@ -77,15 +93,13 @@ impl<'a> InitializerVisitor<'a> {
             caller_aliases: BTreeSet::new(),
             static_params: BTreeSet::new(),
             static_locals: BTreeMap::new(),
-            edits: Vec::new(),
-            found: 0,
-            unresolved: false,
+            facts: InitializerFacts::default(),
         }
     }
 
     #[instrument(level = "debug", skip(self))]
-    pub(super) fn finish(self) -> Option<Vec<Edit>> {
-        (self.found > 0 && !self.unresolved).then_some(self.edits)
+    pub(super) fn finish(self) -> InitializerFacts {
+        self.facts
     }
 
     #[instrument(level = "debug", skip(self, signature, block))]
@@ -152,49 +166,28 @@ impl<'a> InitializerVisitor<'a> {
                 .last()
                 .is_some_and(|segment| segment.ident == self.type_name)
         {
-            self.unresolved = true;
+            self.facts.unresolved = true;
         }
         if target {
-            self.found += 1;
+            self.facts.found += 1;
             if item.rest.is_some() {
-                self.unresolved = true;
+                self.facts.unresolved = true;
             } else if let Some(field) = item.fields.iter().find(
                 |field| matches!(&field.member, Member::Named(name) if name == self.field_name),
             ) {
-                let replacement = match self.kind {
-                    FieldKind::CallSiteFile => file_initializer_replacement(
-                        self.source,
-                        &field.expr,
-                        self.strategy,
-                        &self.caller_aliases,
-                    ),
-                    FieldKind::StaticString => static_string_initializer_replacement(
-                        self.source,
-                        &field.expr,
-                        self.strategy,
-                        self.static_strings,
-                        &self.static_params,
-                        &self.static_locals,
-                    ),
-                };
-                if let (Some((start, end)), Some(replacement)) =
-                    (span_range(self.source, field.expr.span()), replacement)
-                {
-                    let replacement = if field.colon_token.is_none() {
-                        format!("{}: {replacement}", self.field_name)
-                    } else {
-                        replacement
-                    };
-                    self.edits.push(Edit {
-                        start,
-                        end,
-                        replacement,
-                    });
-                } else {
-                    self.unresolved = true;
-                }
+                self.facts.sites.push(inspect_initializer(
+                    self.source,
+                    &field.expr,
+                    self.field_name,
+                    field.colon_token.is_none(),
+                    self.kind,
+                    &self.caller_aliases,
+                    self.static_strings,
+                    &self.static_params,
+                    &self.static_locals,
+                ));
             } else {
-                self.unresolved = true;
+                self.facts.unresolved = true;
             }
         }
     }

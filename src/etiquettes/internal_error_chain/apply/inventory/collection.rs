@@ -17,7 +17,7 @@ use super::{
 };
 use crate::etiquettes::internal_error_chain::apply::graph_apply::{DeclarationKind, GraphFields};
 use crate::etiquettes::internal_error_chain::apply::initializers::{
-    FieldKind, InitializerBatchInput, collect_initializer_edits,
+    FieldKind, InitializerBatchInput, InitializerFacts, collect_initializer_facts,
 };
 use crate::etiquettes::internal_error_chain::apply::lifetime;
 
@@ -65,7 +65,7 @@ pub(super) fn collect_conversion_units(
     }
     let lifetime_initializers: Vec<_> = candidates
         .iter()
-        .map(|candidate| candidate.lifetime_initializer_edits.clone())
+        .map(|candidate| candidate.lifetime_initializer_facts.clone())
         .collect();
     let mut units: Vec<_> = candidates
         .into_iter()
@@ -136,7 +136,7 @@ pub(super) fn collect_conversion_units(
         .filter(|file| lifetime_paths.contains(file.path()))
         .map(|file| (file.path(), lifetime::LifetimeFileIndex::new(file.syntax())))
         .collect();
-    for ((unit, _), initializer_edits) in units.iter_mut().zip(lifetime_initializers) {
+    for ((unit, _), initializer_facts) in units.iter_mut().zip(lifetime_initializers) {
         if !unit.lifetime_candidate(unit.lifetime.target)
             || unit.name_ambiguous
             || !unit.field.private
@@ -149,7 +149,7 @@ pub(super) fn collect_conversion_units(
             lifetime_indexes.get(unit.declaration.as_path()),
         ) {
             unit.lifetime.edits =
-                lifetime::plan_for_unit(file, index, unit, unit.lifetime.target, initializer_edits);
+                lifetime::plan_for_unit(file, index, unit, unit.lifetime.target, initializer_facts);
         }
     }
     Ok(units)
@@ -240,11 +240,11 @@ fn find_candidates(
                     },
                     initializer: InitializerEvidence {
                         target: strategy,
-                        edits: None,
+                        facts: InitializerFacts::default(),
                     },
                     initializer_kind: kind,
                     initializer_lifetime: lifetime,
-                    lifetime_initializer_edits: None,
+                    lifetime_initializer_facts: None,
                 });
             }
         }
@@ -261,7 +261,6 @@ fn find_candidates(
                     &candidate.type_name,
                     &candidate.field_name,
                     candidate.initializer_kind,
-                    candidate.initializer.target,
                     candidate.initializer_lifetime.as_deref(),
                     false,
                 )
@@ -302,18 +301,17 @@ fn find_candidates(
                 &candidate.type_name,
                 &candidate.field_name,
                 FieldKind::StaticString,
-                candidate.initializer.target,
                 Some(lifetime),
                 candidate.initializer.target == ErrorFieldStrategy::Borrowed,
             ));
         }
-        let edits = collect_initializer_edits(file, &inputs, static_strings);
-        let (ordinary, lifetime_edits) = edits.split_at(ordinary_count);
-        for (candidate, initializer_edits) in candidates[start..].iter_mut().zip(ordinary) {
-            candidate.initializer.edits = initializer_edits.clone();
+        let facts = collect_initializer_facts(file, &inputs, static_strings);
+        let (ordinary, lifetime_facts) = facts.split_at(ordinary_count);
+        for (candidate, initializer_facts) in candidates[start..].iter_mut().zip(ordinary) {
+            candidate.initializer.facts = initializer_facts.clone();
         }
-        for ((offset, _), edits) in lifetime_inputs.into_iter().zip(lifetime_edits) {
-            candidates[start + offset].lifetime_initializer_edits = edits.clone();
+        for ((offset, _), facts) in lifetime_inputs.into_iter().zip(lifetime_facts) {
+            candidates[start + offset].lifetime_initializer_facts = Some(facts.clone());
         }
     }
     Ok(candidates)

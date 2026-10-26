@@ -9,7 +9,7 @@ use tracing::instrument;
 use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
-use super::super::initializers::impl_uses_lifetime;
+use super::super::initializers::{InitializerFacts, impl_uses_lifetime};
 use super::super::inventory::{ErrorConversionSiteKind, ErrorConversionUnit};
 use super::super::{Edit, is_str_ref_with_lifetime, is_string, span_range};
 use super::forwarding::forwarding_return;
@@ -21,7 +21,10 @@ use super::{LifetimeFileIndex, scalar_copy_name};
 /// This accepts one migrated field, optional scalar context, and one constructor.
 /// Type mentions must be impl self types or direct forwarding function returns;
 /// inference-based direct calls are safe because their signatures remain unchanged.
-#[instrument(level = "info", skip(file, index, item, unit, strategy, initializer_edits))]
+#[instrument(
+    level = "info",
+    skip(file, index, item, unit, strategy, initializer_facts)
+)]
 pub(super) fn plan(
     file: &SharedParsedFile,
     index: &LifetimeFileIndex<'_>,
@@ -29,7 +32,7 @@ pub(super) fn plan(
     field_name: &str,
     unit: &ErrorConversionUnit,
     strategy: ErrorFieldStrategy,
-    initializer_edits: Option<Vec<Edit>>,
+    initializer_facts: Option<InitializerFacts>,
 ) -> Option<Vec<Edit>> {
     let syn::Fields::Named(fields) = &item.fields else {
         return None;
@@ -150,7 +153,7 @@ pub(super) fn plan(
     }) {
         return None;
     }
-    let mut edits = initializer_edits?;
+    let mut edits = initializer_facts?.edits(file.source(), strategy)?;
     edits.append(&mut return_edits);
     let (field_start, field_end) = span_range(file.source(), field.ty.span())?;
     edits.push(Edit {

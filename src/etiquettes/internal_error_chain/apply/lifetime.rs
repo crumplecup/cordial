@@ -8,6 +8,7 @@ use tracing::instrument;
 use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
+use super::initializers::InitializerFacts;
 use super::inventory::ErrorConversionUnit;
 use super::{Edit, simple_type_name};
 
@@ -51,13 +52,13 @@ impl<'a> LifetimeFileIndex<'a> {
 }
 
 /// Collect a special lifetime migration from the shared parsed tree.
-#[instrument(level = "debug", skip(file, index, unit, strategy, initializer_edits))]
+#[instrument(level = "debug", skip(file, index, unit, strategy, initializer_facts))]
 pub(super) fn plan_for_unit(
     file: &SharedParsedFile,
     index: &LifetimeFileIndex<'_>,
     unit: &ErrorConversionUnit,
     strategy: ErrorFieldStrategy,
-    initializer_edits: Option<Vec<Edit>>,
+    initializer_facts: Option<InitializerFacts>,
 ) -> Option<Vec<Edit>> {
     let item = index.structs.get(unit.type_name())?;
     plan(
@@ -67,7 +68,7 @@ pub(super) fn plan_for_unit(
         unit.field_name(),
         unit,
         strategy,
-        initializer_edits,
+        initializer_facts,
     )
 }
 

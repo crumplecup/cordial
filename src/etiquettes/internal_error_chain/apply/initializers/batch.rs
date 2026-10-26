@@ -6,18 +6,18 @@ use syn::visit::Visit;
 use syn::{ExprStruct, ImplItemFn, ItemFn, ItemImpl, Signature};
 use tracing::instrument;
 
-use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
 use super::bindings::{BindingCounts, caller_aliases, impl_uses_lifetime};
-use super::{ConstructorContext, Edit, FieldKind, InitializerVisitor, simple_type_name};
+use super::{
+    ConstructorContext, FieldKind, InitializerFacts, InitializerVisitor, simple_type_name,
+};
 
 #[derive(derive_new::new)]
 pub(crate) struct InitializerBatchInput<'a> {
     type_name: &'a str,
     field_name: &'a str,
     kind: FieldKind,
-    strategy: ErrorFieldStrategy,
     lifetime: Option<&'a str>,
     pending_lifetime: bool,
 }
@@ -27,11 +27,11 @@ struct BatchInitializerVisitor<'a> {
 }
 
 #[instrument(level = "debug", skip(file, inputs, static_strings))]
-pub(crate) fn collect_initializer_edits<'a>(
+pub(crate) fn collect_initializer_facts<'a>(
     file: &'a SharedParsedFile,
     inputs: &[InitializerBatchInput<'a>],
     static_strings: &'a BTreeSet<String>,
-) -> Vec<Option<Vec<Edit>>> {
+) -> Vec<InitializerFacts> {
     let mut visitor = BatchInitializerVisitor {
         candidates: inputs
             .iter()
@@ -40,7 +40,6 @@ pub(crate) fn collect_initializer_edits<'a>(
                     input.type_name,
                     input.field_name,
                     input.kind,
-                    input.strategy,
                     file.source(),
                     static_strings,
                     input.lifetime,

@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 
 use super::Edit;
-use super::initializers::FieldKind;
+use super::initializers::{FieldKind, InitializerFacts};
 use crate::config::ErrorFieldStrategy;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -120,7 +120,7 @@ pub struct ErrorConversionUnit {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct InitializerEvidence {
     target: ErrorFieldStrategy,
-    edits: Option<Vec<Edit>>,
+    facts: InitializerFacts,
 }
 
 /// A closed same-file lifetime migration proven against the shared tree.
@@ -169,7 +169,7 @@ struct ConversionCandidate {
     initializer: InitializerEvidence,
     initializer_kind: FieldKind,
     initializer_lifetime: Option<String>,
-    lifetime_initializer_edits: Option<Vec<Edit>>,
+    lifetime_initializer_facts: Option<InitializerFacts>,
 }
 
 impl ErrorConversionUnit {
@@ -181,10 +181,14 @@ impl ErrorConversionUnit {
     pub(super) fn lifetime_candidate(&self, strategy: ErrorFieldStrategy) -> bool {
         self.field.lifetime_candidate && self.initializer.target == strategy
     }
-    #[instrument(level = "trace", skip(self, strategy))]
-    pub(super) fn initializer_edits(&self, strategy: ErrorFieldStrategy) -> Option<Vec<Edit>> {
+    #[instrument(level = "trace", skip(self, source, strategy))]
+    pub(super) fn initializer_edits(
+        &self,
+        source: &str,
+        strategy: ErrorFieldStrategy,
+    ) -> Option<Vec<Edit>> {
         (self.initializer.target == strategy)
-            .then(|| self.initializer.edits.clone())
+            .then(|| self.initializer.facts.edits(source, strategy))
             .flatten()
     }
     #[instrument(level = "trace", skip(self, strategy))]
