@@ -283,6 +283,16 @@ reads only source text and digests through `SourceEditView`. These records still
 need to become a complete unit query. A missing fact belongs in collection or
 enrichment, not in an apply-specific fallback.
 
+The crate-wide declaration resolver, constructor lifetime anchors, incoming
+Kind/source edges, cross-file identifier and path locations, cfg and macro
+markers, and name ambiguity audit now live in the shared IR. The normal error
+enricher and apply build these facts and the selected graph plans through the
+same enrichment entry point. Graph planning reads the resolver back from IR;
+its old per-candidate path, name, and incoming-edge visitors are gone. The
+remaining expression and lifetime edit visitors still inspect the shared tree
+during enrichment. Their located syntax and provenance must become typed IR
+sites before the graph planner can take only `IrView` and `SourceEditView`.
+
 | Stage | Facts or responsibility |
 | --- | --- |
 | Source load | Retain the exact text, shared syntax tree, file identity, and content digest for every in-scope Rust file. Collection and enrichment use the tree; apply receives text and digest for located edits. |
@@ -342,6 +352,11 @@ Implementation checkpoints:
   walks. A per-file top-level index now serves every lifetime candidate.
   Apply now receives `SourceEditView`, which exposes text and digest but no
   `syntax()` method.
+- [x] Put crate-wide declaration resolution, cross-file path and name checks,
+  incoming graph edges, and constructor lifetime anchors into the shared IR.
+  Both normal scans and apply run the same enrichment entry point. The graph
+  planner consumes these facts from IR, while its expression and lifetime edit
+  visitors still need the typed site extraction above.
 - [ ] Allow cross-file conversions only after the planner proves a closed unit.
   Shared source snapshots and conversion units carry digests. Apply now stages
   every planned file in its source directory, checks all snapshots before

@@ -3,13 +3,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use syn::visit::Visit;
-use syn::{GenericParam, Item, ItemEnum, ItemStruct, Type};
+use syn::{GenericParam, ItemEnum, ItemStruct, Type};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
 use super::super::Edit;
+use super::super::inventory::CrateTypeIndex;
 use super::types::{is_copy_shape, storage_shape, type_name};
 
 mod edits;
@@ -45,24 +46,26 @@ impl GraphLifetimePlan {
     }
 }
 
-#[instrument(level = "debug", skip(file, strategy, names, structs, enums))]
+#[instrument(level = "debug", skip(file, strategy, names, structs, enums, index))]
 pub(super) fn select(
     file: &SharedParsedFile,
     strategy: ErrorFieldStrategy,
     names: &BTreeSet<String>,
     structs: &BTreeMap<String, &ItemStruct>,
     enums: &BTreeMap<String, &ItemEnum>,
+    index: &CrateTypeIndex,
 ) -> Option<GraphLifetimePlan> {
-    select_across(std::slice::from_ref(file), strategy, names, structs, enums)
+    let _ = file;
+    select_across(strategy, names, structs, enums, index)
 }
 
-#[instrument(level = "debug", skip(files, strategy, names, structs, enums))]
+#[instrument(level = "debug", skip(strategy, names, structs, enums, index))]
 pub(super) fn select_across(
-    files: &[SharedParsedFile],
     strategy: ErrorFieldStrategy,
     names: &BTreeSet<String>,
     structs: &BTreeMap<String, &ItemStruct>,
     enums: &BTreeMap<String, &ItemEnum>,
+    index: &CrateTypeIndex,
 ) -> Option<GraphLifetimePlan> {
     match strategy {
         ErrorFieldStrategy::Borrowed => {
@@ -85,49 +88,7 @@ pub(super) fn select_across(
             if changing.is_empty() {
                 return None;
             }
-            let mut anchors = BTreeSet::new();
-            for item in files.iter().flat_map(|file| &file.syntax().items) {
-                let Item::Impl(implementation) = item else {
-                    continue;
-                };
-                if !type_name(&implementation.self_ty).is_some_and(|name| changing.contains(&name))
-                {
-                    continue;
-                }
-                for member in &implementation.items {
-                    let syn::ImplItem::Fn(method) = member else {
-                        continue;
-                    };
-                    let [GenericParam::Lifetime(parameter)] = method
-                        .sig
-                        .generics
-                        .params
-                        .iter()
-                        .collect::<Vec<_>>()
-                        .as_slice()
-                    else {
-                        continue;
-                    };
-                    let lifetime = parameter.lifetime.ident.to_string();
-                    if parameter.attrs.is_empty()
-                        && parameter.bounds.is_empty()
-                        && matches!(&method.sig.output, syn::ReturnType::Type(_, ty)
-                            if matches!(&**ty, Type::Path(path) if path.path.is_ident("Self")))
-                        && method
-                            .sig
-                            .inputs
-                            .iter()
-                            .all(|input| matches!(input, syn::FnArg::Typed(_)))
-                        && method
-                            .sig
-                            .inputs
-                            .iter()
-                            .any(|input| contains_lifetime_arg(input, &lifetime))
-                    {
-                        anchors.insert(lifetime);
-                    }
-                }
-            }
+            let anchors = index.anchors_for(&changing);
             if anchors.len() != 1 {
                 return None;
             }
@@ -232,16 +193,6 @@ fn contains_lifetime_type(value: &Type, lifetime: &str) -> bool {
         found: false,
     };
     visitor.visit_type(value);
-    visitor.found
-}
-
-#[instrument(level = "trace", skip(value, lifetime))]
-fn contains_lifetime_arg(value: &syn::FnArg, lifetime: &str) -> bool {
-    let mut visitor = LifetimeUse {
-        lifetime,
-        found: false,
-    };
-    visitor.visit_fn_arg(value);
     visitor.found
 }
 

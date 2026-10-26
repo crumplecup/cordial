@@ -15,7 +15,7 @@ pub(super) fn audit_names(syntax: &File) -> NameAudit {
     visitor.audit
 }
 
-#[derive(Default)]
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct NameAudit {
     ambiguous: bool,
     aliased_types: BTreeSet<String>,

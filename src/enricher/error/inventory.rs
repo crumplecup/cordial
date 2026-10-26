@@ -67,7 +67,11 @@ impl SourceEnricher for ErrorIrScanEnricher {
                     Ok(())
                 },
             )?;
-            crate::etiquettes::internal_error_chain::enrich_conversion_units(ir, &files)?;
+            crate::etiquettes::internal_error_chain::enrich_error_apply_evidence(
+                ir,
+                &files,
+                field_strategy,
+            )?;
         }
         Ok(())
     }

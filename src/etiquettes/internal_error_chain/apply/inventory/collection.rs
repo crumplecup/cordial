@@ -20,7 +20,6 @@ use crate::etiquettes::internal_error_chain::apply::lifetime;
 use crate::etiquettes::internal_error_chain::apply::{
     initializers::{FieldKind, InitializerBatchInput, collect_initializer_edits},
     is_error_string_field, is_string, known_error_impls, known_static_strings,
-    names::audit_names,
     single_struct_lifetime, span_range,
 };
 use crate::etiquettes::internal_error_chain::type_graph::item_derives_error;
@@ -31,7 +30,7 @@ pub(super) fn collect_conversion_units(
     files: &[SharedParsedFile],
     declarations: &CrateTypeIndex,
 ) -> Vec<(ErrorConversionUnit, u32)> {
-    let candidates = find_candidates(files);
+    let candidates = find_candidates(files, declarations);
     let mut all_sites = vec![Vec::new(); candidates.len()];
     for file in files {
         let identifiers: HashSet<&str> = file
@@ -159,14 +158,13 @@ pub(super) fn collect_conversion_units(
     units
 }
 
-#[instrument(level = "debug", skip(files))]
-fn find_candidates(files: &[SharedParsedFile]) -> Vec<ConversionCandidate> {
+#[instrument(level = "debug", skip(files, index))]
+fn find_candidates(files: &[SharedParsedFile], index: &CrateTypeIndex) -> Vec<ConversionCandidate> {
     let mut candidates = Vec::new();
     for file in files {
         let start = candidates.len();
         let syntax = file.syntax();
         let error_impls = known_error_impls(syntax);
-        let name_audit = audit_names(syntax);
         let mut struct_counts = HashMap::new();
         for item in &syntax.items {
             if let Item::Struct(item) = item {
@@ -223,7 +221,7 @@ fn find_candidates(files: &[SharedParsedFile]) -> Vec<ConversionCandidate> {
                     type_name: type_name.clone(),
                     field_name,
                     line: field.span().start().line as u32,
-                    name_ambiguous: name_audit.blocks(&type_name),
+                    name_ambiguous: index.name_blocks(file, &type_name),
                     field: FieldEvidence {
                         kind,
                         storage,

@@ -18,17 +18,14 @@ use crate::loader::SharedParsedFile;
 
 use super::Edit;
 use super::inventory::{CrateTypeIndex, ErrorEdgeTarget};
-use super::names::audit_names;
 
 mod distributed;
 mod expressions;
-mod external;
 mod lifetimes;
 mod plan;
 mod types;
 
 use expressions::GraphExprPlanner;
-use external::paths_resolve_to_graph;
 use plan::plan_file;
 
 const GRAPH_ATTR: &str = "error_apply_graph_plans";
@@ -66,16 +63,16 @@ impl ErrorGraphPlan {
     }
 }
 
-#[instrument(level = "debug", skip(ir, files, strategy, index))]
+#[instrument(level = "debug", skip(ir, files, strategy))]
 pub(super) fn enrich_conversion_graphs(
     ir: &mut dyn IrMut,
     files: &[SharedParsedFile],
     strategy: ErrorFieldStrategy,
-    index: &CrateTypeIndex,
 ) -> CordialResult<()> {
+    let index = CrateTypeIndex::from_ir(ir)?;
     let mut candidates: Vec<_> = files
         .iter()
-        .filter_map(|file| plan_file(file, strategy, index))
+        .filter_map(|file| plan_file(file, strategy, &index))
         .collect();
     let mut plans = Vec::new();
     let mut distributed_paths = BTreeSet::new();
@@ -83,21 +80,13 @@ pub(super) fn enrich_conversion_graphs(
         if distributed_paths.contains(file.path()) {
             continue;
         }
-        if let Some(group) = distributed::plan(file, files, strategy, index) {
+        if let Some(group) = distributed::plan(file, files, strategy, &index) {
             distributed_paths.extend(group.iter().map(|plan| plan.path.clone()));
             plans.extend(group);
         }
     }
     candidates.retain(|candidate| !distributed_paths.contains(candidate.plan.path()));
     if !candidates.is_empty() {
-        let identifiers: Vec<_> = files
-            .iter()
-            .map(|file| {
-                let mut names = CrossFileNames::default();
-                names.visit_file(file.syntax());
-                names.0
-            })
-            .collect();
         for mut candidate in candidates.drain(..) {
             let mut external = Vec::new();
             let expected: BTreeMap<_, ErrorEdgeTarget> = candidate
@@ -114,16 +103,20 @@ pub(super) fn enrich_conversion_graphs(
                 })
                 .collect();
             let mut valid = candidate.plan.edits.is_some();
-            for (file, names) in files.iter().zip(&identifiers) {
+            for file in files {
                 if file.path() == candidate.plan.path()
-                    || !candidate.plan.names.iter().any(|name| names.contains(name))
+                    || !candidate
+                        .plan
+                        .names
+                        .iter()
+                        .any(|name| index.file_mentions(file, name))
                 {
                     continue;
                 }
                 if candidate.lifetime_transition
                     || expected.len() != candidate.plan.names.len()
-                    || !paths_resolve_to_graph(file, index, &expected)
-                    || audit_names(file.syntax()).blocks("Box")
+                    || !index.paths_resolve_to_graph(file, &expected)
+                    || index.name_blocks(file, "Box")
                 {
                     valid = false;
                     break;
@@ -195,34 +188,6 @@ pub(super) fn enrich_conversion_graphs(
         serde_json::to_value(by_path.into_values().collect::<Vec<_>>())?,
     )?;
     Ok(())
-}
-
-#[derive(Default)]
-struct CrossFileNames(BTreeSet<String>);
-
-impl<'ast> Visit<'ast> for CrossFileNames {
-    #[instrument(level = "debug", skip(self, ident))]
-    fn visit_ident(&mut self, ident: &'ast proc_macro2::Ident) {
-        self.0.insert(ident.to_string());
-    }
-
-    #[instrument(level = "debug", skip(self, item))]
-    fn visit_macro(&mut self, item: &'ast syn::Macro) {
-        collect_token_idents(&item.tokens, &mut self.0);
-    }
-}
-
-#[instrument(level = "debug", skip(tokens, names))]
-fn collect_token_idents(tokens: &proc_macro2::TokenStream, names: &mut BTreeSet<String>) {
-    for tree in tokens.clone() {
-        match tree {
-            proc_macro2::TokenTree::Ident(ident) => {
-                names.insert(ident.to_string());
-            }
-            proc_macro2::TokenTree::Group(group) => collect_token_idents(&group.stream(), names),
-            _ => {}
-        }
-    }
 }
 
 #[instrument(level = "debug", skip(ir))]

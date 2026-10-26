@@ -11,7 +11,6 @@ use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
 use super::super::inventory::{CrateTypeIndex, ErrorEdgeField, error_edge_evidence};
-use super::super::names::audit_names;
 use super::super::{Edit, known_error_impls, span_range};
 use super::expressions::GraphExprPlanner;
 use super::lifetimes;
@@ -74,7 +73,7 @@ pub(super) fn plan_file(
         None,
         &BTreeSet::new(),
     );
-    let lifetime = lifetimes::select(file, strategy, &initial.0, &structs, &enums);
+    let lifetime = lifetimes::select(file, strategy, &initial.0, &structs, &enums, index);
     let changing_generics = lifetime
         .as_ref()
         .map(|plan| plan.names().clone())
@@ -112,9 +111,8 @@ pub(super) fn plan_file(
     visitor.visit_file(syntax);
     let (expr_edits, expr_valid, constructed, constructed_variants) = visitor.finish();
     valid &= expr_valid;
-    let audit = audit_names(syntax);
-    valid &= names.iter().all(|name| !audit.blocks(name));
-    valid &= !audit.blocks("Box");
+    valid &= names.iter().all(|name| !index.name_blocks(file, name));
+    valid &= !index.name_blocks(file, "Box");
     edits.extend(expr_edits);
     let lifetime_transition = lifetime.is_some();
     if let Some(lifetime) = lifetime {

@@ -41,7 +41,7 @@ mod source_shape;
 mod type_graph;
 mod types;
 
-pub(crate) use apply::enrich_conversion_units;
+pub(crate) use apply::enrich_error_apply_evidence;
 pub use apply::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
     ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind, ErrorFieldApplyBlocker,

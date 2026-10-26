@@ -7,10 +7,11 @@ use serde::{Deserialize, Serialize};
 use syn::{GenericParam, Item, ItemStruct, Type};
 use tracing::instrument;
 
+use crate::config::ErrorFieldStrategy;
 use crate::config::load_cordial_config;
 use crate::error::CordialResult;
-use crate::ir::CrateIr;
-use crate::loader::SourceLoadView;
+use crate::ir::{CrateIr, IrMut};
+use crate::loader::{SharedParsedFile, SourceLoadView};
 use crate::session::RunAll;
 use crate::targets::discover_crate_targets;
 
@@ -26,7 +27,6 @@ mod uses;
 mod write;
 
 use self::graph_apply::{conversion_graphs_from_ir, enrich_conversion_graphs};
-use self::inventory::{CrateTypeIndex, enrich_conversion_units_with_index};
 pub use self::inventory::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
     ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind, ErrorFromEvidence,
@@ -112,6 +112,18 @@ pub struct ErrorFieldApplySummary {
 /// Compatibility name for the original file-only apply result.
 pub use ErrorFieldApplySummary as ErrorFileApplySummary;
 
+/// Add the strategy-independent conversion facts and the selected graph plan
+/// to the same crate IR used by the normal error scan and by apply.
+#[instrument(level = "debug", skip(ir, files, strategy), err(level = "warn"))]
+pub(crate) fn enrich_error_apply_evidence(
+    ir: &mut dyn IrMut,
+    files: &[SharedParsedFile],
+    strategy: ErrorFieldStrategy,
+) -> CordialResult<()> {
+    enrich_conversion_units(ir, files)?;
+    enrich_conversion_graphs(ir, files, strategy)
+}
+
 /// Convert simple string fields to the configured owned or borrowed form.
 ///
 /// Private error structs and fields with recognized initializers are patched:
@@ -122,9 +134,9 @@ pub use ErrorFieldApplySummary as ErrorFileApplySummary;
 /// Parameters tied to an existing private error lifetime can also be borrowed.
 /// A closed single-field unit can move one constructor lifetime onto the error
 /// type and direct forwarding return types. Wider lifetime propagation and
-/// cross-file lifetime introduction remains manual work. A private graph with
-/// an existing named lifetime can also convert constructors in another file
-/// when its type paths resolve uniquely.
+/// cross-file lifetime introduction is supported for a closed private graph
+/// with a named constructor anchor and proven origins. More complex caller
+/// constraints remain manual work.
 #[instrument(level = "info", err(level = "warn"))]
 pub fn run_error_field_apply(
     project_root: &Path,
@@ -156,9 +168,7 @@ pub fn run_error_field_apply(
             files.push(source.parsed_file(path, "error-file-apply")?);
             Ok(())
         })?;
-        let index = CrateTypeIndex::new(&files);
-        enrich_conversion_units_with_index(&mut ir, &files, &index)?;
-        enrich_conversion_graphs(&mut ir, &files, policy.field_strategy(), &index)?;
+        enrich_error_apply_evidence(&mut ir, &files, policy.field_strategy())?;
         let units = conversion_units_from_ir(&ir)?;
         let graphs = conversion_graphs_from_ir(&ir)?;
         let edit_files: Vec<_> = files.iter().map(|file| file.edit_view()).collect();

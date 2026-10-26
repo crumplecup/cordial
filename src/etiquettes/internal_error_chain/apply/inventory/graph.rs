@@ -33,6 +33,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) fn enrich_conversion_unit
     files: &[SharedParsedFile],
     index: &CrateTypeIndex,
 ) -> CordialResult<()> {
+    index.write_to_ir(ir)?;
     let root = ir.root()?;
     let mut declarations = HashMap::<(PathBuf, usize, usize), _>::new();
     for (unit, line) in collect_conversion_units(files, index) {

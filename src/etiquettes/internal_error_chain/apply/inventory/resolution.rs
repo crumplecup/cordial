@@ -5,16 +5,25 @@
 //! private top-level declaration. Unknown imports and ambiguous names stay
 //! unresolved for the conversion planner.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::collections::{BTreeSet, HashMap};
+use std::path::PathBuf;
 
-use syn::{Item, UseTree, Visibility};
+use syn::visit::Visit;
+use syn::{Item, Visibility};
 use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
 
 use super::edges::{ErrorEdgeTarget, ErrorEdgeTargetKind};
 use super::helpers::derive_is_builtin;
+use super::syntax_facts::FileSyntaxFacts;
+use super::{ErrorEdgeField, error_edge_evidence};
+
+mod ir;
+mod lookup;
+mod paths;
+
+use paths::{active_modules, use_paths};
 
 pub(in crate::etiquettes::internal_error_chain::apply) struct CrateTypeIndex {
     declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>>,
@@ -22,6 +31,9 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct CrateTypeIndex {
     positions: HashMap<(PathBuf, usize, usize), (usize, usize)>,
     active_modules: HashMap<PathBuf, Vec<String>>,
     imports: HashMap<PathBuf, Vec<(String, Vec<String>)>>,
+    constructor_anchors: HashMap<String, BTreeSet<String>>,
+    file_syntax: HashMap<PathBuf, FileSyntaxFacts>,
+    incoming_edges: Vec<(String, ErrorEdgeTarget)>,
 }
 
 impl CrateTypeIndex {
@@ -34,11 +46,52 @@ impl CrateTypeIndex {
         let mut positions = HashMap::new();
         let active_modules = active_modules(files);
         let mut imports = HashMap::new();
+        let mut constructor_anchors: HashMap<String, BTreeSet<String>> = HashMap::new();
         for (file_index, file) in files.iter().enumerate() {
             let mut file_imports = Vec::new();
             for (item_index, item) in file.syntax().items.iter().enumerate() {
                 if let Item::Use(item) = item {
                     use_paths(&item.tree, Vec::new(), &mut file_imports);
+                }
+                if let Item::Impl(item) = item {
+                    if let Some(name) = super::super::simple_type_name(&item.self_ty) {
+                        for member in &item.items {
+                            let syn::ImplItem::Fn(method) = member else {
+                                continue;
+                            };
+                            let [syn::GenericParam::Lifetime(parameter)] = method
+                                .sig
+                                .generics
+                                .params
+                                .iter()
+                                .collect::<Vec<_>>()
+                                .as_slice()
+                            else {
+                                continue;
+                            };
+                            let lifetime = parameter.lifetime.ident.to_string();
+                            if parameter.attrs.is_empty()
+                                && parameter.bounds.is_empty()
+                                && matches!(&method.sig.output, syn::ReturnType::Type(_, ty)
+                                    if matches!(&**ty, syn::Type::Path(path) if path.path.is_ident("Self")))
+                                && method
+                                    .sig
+                                    .inputs
+                                    .iter()
+                                    .all(|input| matches!(input, syn::FnArg::Typed(_)))
+                                && method
+                                    .sig
+                                    .inputs
+                                    .iter()
+                                    .any(|input| contains_lifetime_arg(input, &lifetime))
+                            {
+                                constructor_anchors
+                                    .entry(name.clone())
+                                    .or_default()
+                                    .insert(lifetime);
+                            }
+                        }
+                    }
                 }
                 let (name, visibility, attrs, kind, location) = match item {
                     Item::Struct(item) => (
@@ -80,13 +133,64 @@ impl CrateTypeIndex {
             }
             imports.insert(file.path().to_path_buf(), file_imports);
         }
-        Self {
+        let tracked_names: BTreeSet<_> = local.keys().map(|(_, name)| name.clone()).collect();
+        let mut index = Self {
             declarations,
             local,
             positions,
             active_modules,
             imports,
+            constructor_anchors,
+            file_syntax: files
+                .iter()
+                .map(|file| {
+                    (
+                        file.path().to_path_buf(),
+                        FileSyntaxFacts::collect(file, &tracked_names),
+                    )
+                })
+                .collect(),
+            incoming_edges: Vec::new(),
+        };
+        index.incoming_edges = index.collect_incoming_edges(files);
+        index
+    }
+
+    #[instrument(level = "debug", skip(self, files))]
+    fn collect_incoming_edges(&self, files: &[SharedParsedFile]) -> Vec<(String, ErrorEdgeTarget)> {
+        let mut incoming = Vec::new();
+        for file in files {
+            for item in &file.syntax().items {
+                let Item::Struct(item) = item else { continue };
+                for field in &item.fields {
+                    let edge_field = match field.ident.as_ref().map(ToString::to_string).as_deref()
+                    {
+                        Some("source") => ErrorEdgeField::Source,
+                        Some("kind") => ErrorEdgeField::Kind,
+                        _ => continue,
+                    };
+                    let Some(edge) = error_edge_evidence(file, field, edge_field) else {
+                        continue;
+                    };
+                    if let Some(target) = self.resolve(file, edge.type_path()) {
+                        incoming.push((item.ident.to_string(), target));
+                    }
+                }
+            }
         }
+        incoming
+    }
+
+    #[instrument(level = "trace", skip(self, names))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn anchors_for(
+        &self,
+        names: &BTreeSet<String>,
+    ) -> BTreeSet<String> {
+        names
+            .iter()
+            .filter_map(|name| self.constructor_anchors.get(name))
+            .flat_map(|anchors| anchors.iter().cloned())
+            .collect()
     }
 
     #[instrument(level = "trace", skip(self, files, target))]
@@ -110,148 +214,23 @@ impl CrateTypeIndex {
             _ => None,
         }
     }
-
-    #[instrument(level = "trace", skip(self, file, written_path))]
-    pub(in crate::etiquettes::internal_error_chain::apply) fn resolve(
-        &self,
-        file: &SharedParsedFile,
-        written_path: &[String],
-    ) -> Option<ErrorEdgeTarget> {
-        if let [name] = written_path
-            && let Some(candidates) = self.local.get(&(file.path().to_path_buf(), name.clone()))
-        {
-            return match candidates.as_slice() {
-                [Some(target)] => Some(target.clone()),
-                _ => None,
-            };
-        }
-        let module = self.active_modules.get(file.path())?;
-        let absolute = absolute_path(&module, written_path)?;
-        if let Some(target) = self.unique(&absolute) {
-            return Some(target);
-        }
-        if written_path.len() != 1 {
-            return None;
-        }
-        let name = &written_path[0];
-        let matches: Vec<_> = self
-            .imports
-            .get(file.path())?
-            .iter()
-            .filter(|(alias, _)| alias == name)
-            .collect();
-        let [(_, path)] = matches.as_slice() else {
-            return None;
-        };
-        if !path
-            .first()
-            .is_some_and(|part| matches!(part.as_str(), "crate" | "self" | "super"))
-        {
-            return None;
-        }
-        self.unique(&absolute_path(&module, path)?)
-    }
-
-    #[instrument(level = "trace", skip(self, path))]
-    fn unique(&self, path: &[String]) -> Option<ErrorEdgeTarget> {
-        let [Some(target)] = self.declarations.get(path)?.as_slice() else {
-            return None;
-        };
-        Some(target.clone())
-    }
 }
 
-#[instrument(level = "debug", skip(files))]
-fn active_modules(files: &[SharedParsedFile]) -> HashMap<PathBuf, Vec<String>> {
-    let mut by_module: HashMap<Vec<String>, Vec<&SharedParsedFile>> = HashMap::new();
-    for file in files {
-        if let Some(module) = module_path(file.path()) {
-            by_module.entry(module).or_default().push(file);
+#[instrument(level = "trace", skip(input, lifetime))]
+fn contains_lifetime_arg(input: &syn::FnArg, lifetime: &str) -> bool {
+    struct LifetimeUse<'a> {
+        lifetime: &'a str,
+        found: bool,
+    }
+    impl<'ast> Visit<'ast> for LifetimeUse<'_> {
+        fn visit_lifetime(&mut self, value: &'ast syn::Lifetime) {
+            self.found |= value.ident == self.lifetime;
         }
     }
-    let mut active = HashMap::new();
-    let mut pending = vec![Vec::new()];
-    while let Some(module) = pending.pop() {
-        let Some([file]) = by_module.get(&module).map(Vec::as_slice) else {
-            continue;
-        };
-        active.insert(file.path().to_path_buf(), module.clone());
-        for item in &file.syntax().items {
-            let Item::Mod(item) = item else { continue };
-            if item.content.is_some() || !item.attrs.is_empty() {
-                continue;
-            }
-            let mut child = module.clone();
-            child.push(item.ident.to_string());
-            if by_module.get(&child).is_some_and(|files| files.len() == 1) {
-                pending.push(child);
-            }
-        }
-    }
-    active
-}
-
-#[instrument(level = "debug", skip(path))]
-fn module_path(path: &Path) -> Option<Vec<String>> {
-    let src = path
-        .ancestors()
-        .find(|part| part.file_name().is_some_and(|name| name == "src"))?;
-    let relative = path.strip_prefix(src).ok()?;
-    let mut parts: Vec<String> = relative
-        .iter()
-        .map(|part| part.to_str().map(str::to_string))
-        .collect::<Option<_>>()?;
-    let file = parts.pop()?;
-    let stem = file.strip_suffix(".rs")?;
-    if !matches!(stem, "lib" | "main" | "mod") {
-        parts.push(stem.to_string());
-    }
-    Some(parts)
-}
-
-#[instrument(level = "debug")]
-fn absolute_path(module: &[String], written: &[String]) -> Option<Vec<String>> {
-    let (mut base, mut rest) = if written.first().is_some_and(|name| name == "crate") {
-        (Vec::new(), &written[1..])
-    } else if written.first().is_some_and(|name| name == "self") {
-        (module.to_vec(), &written[1..])
-    } else {
-        (module.to_vec(), written)
+    let mut use_ = LifetimeUse {
+        lifetime,
+        found: false,
     };
-    while rest.first().is_some_and(|name| name == "super") {
-        base.pop()?;
-        rest = &rest[1..];
-    }
-    if rest.is_empty() {
-        return None;
-    }
-    base.extend(rest.iter().cloned());
-    Some(base)
-}
-
-#[instrument(level = "debug", skip(tree))]
-fn use_paths(tree: &UseTree, prefix: Vec<String>, paths: &mut Vec<(String, Vec<String>)>) {
-    match tree {
-        UseTree::Path(path) => {
-            let mut prefix = prefix;
-            prefix.push(path.ident.to_string());
-            use_paths(&path.tree, prefix, paths);
-        }
-        UseTree::Name(name) => {
-            let mut path = prefix;
-            path.push(name.ident.to_string());
-            paths.push((name.ident.to_string(), path));
-        }
-        UseTree::Rename(rename) => {
-            let mut path = prefix;
-            path.push(rename.ident.to_string());
-            paths.push((rename.rename.to_string(), path));
-        }
-        UseTree::Group(group) => {
-            for tree in &group.items {
-                use_paths(tree, prefix.clone(), paths);
-            }
-        }
-        UseTree::Glob(_) => {}
-    }
+    use_.visit_fn_arg(input);
+    use_.found
 }

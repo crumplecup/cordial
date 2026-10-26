@@ -18,14 +18,12 @@ use crate::loader::SharedParsedFile;
 use super::super::inventory::{
     CrateTypeIndex, ErrorEdgeField, ErrorEdgeTarget, ErrorEdgeTargetKind, error_edge_evidence,
 };
-use super::super::names::audit_names;
 use super::super::{Edit, known_error_impls, span_range};
 use super::expressions::GraphExprPlanner;
-use super::external::paths_resolve_to_graph;
 use super::lifetimes;
 use super::plan::plan_struct_fields;
 use super::types::{allowed_attrs, desired_type, is_copy_shape, storage_shape, wants_change};
-use super::{CrossFileNames, ErrorGraphPlan, VariantChange};
+use super::{ErrorGraphPlan, VariantChange};
 
 /// Return complete per-file plans only when one root reaches an external Kind
 /// or source declaration and all connected edits can be proven together.
@@ -56,13 +54,13 @@ pub(super) fn plan(
             _ => None,
         })
         .collect();
-    let lifetime = lifetimes::select_across(files, strategy, &names, &structs, &enums);
+    let lifetime = lifetimes::select_across(strategy, &names, &structs, &enums, index);
     let changing_generics = lifetime
         .as_ref()
         .map(|plan| plan.names().clone())
         .unwrap_or_default();
     let graph_lifetime = lifetime.as_ref().map(|plan| plan.lifetime().as_str());
-    if has_incoming_edge_outside_graph(files, index, &expected) {
+    if index.has_incoming_edge_outside_graph(&expected) {
         return None;
     }
 
@@ -158,14 +156,10 @@ pub(super) fn plan(
     let mut constructed = BTreeSet::new();
     let mut constructed_variants = BTreeSet::new();
     for file in files {
-        let mut identifiers = CrossFileNames::default();
-        identifiers.visit_file(file.syntax());
-        if !expected.keys().any(|name| identifiers.0.contains(name)) {
+        if !expected.keys().any(|name| index.file_mentions(file, name)) {
             continue;
         }
-        if !paths_resolve_to_graph(file, index, &expected)
-            || audit_names(file.syntax()).blocks("Box")
-        {
+        if !index.paths_resolve_to_graph(file, &expected) || index.name_blocks(file, "Box") {
             return None;
         }
         let mut visitor =
@@ -343,37 +337,4 @@ fn discover_declarations<'a>(
         }
     }
     has_external_declaration.then_some(declarations)
-}
-
-#[instrument(level = "trace", skip(files, index, expected))]
-fn has_incoming_edge_outside_graph(
-    files: &[SharedParsedFile],
-    index: &CrateTypeIndex,
-    expected: &BTreeMap<String, ErrorEdgeTarget>,
-) -> bool {
-    for file in files {
-        for item in &file.syntax().items {
-            let Item::Struct(item) = item else { continue };
-            if expected.contains_key(&item.ident.to_string()) {
-                continue;
-            }
-            for field in &item.fields {
-                let edge_field = match field.ident.as_ref().map(ToString::to_string).as_deref() {
-                    Some("source") => ErrorEdgeField::Source,
-                    Some("kind") => ErrorEdgeField::Kind,
-                    _ => continue,
-                };
-                let Some(edge) = error_edge_evidence(file, field, edge_field) else {
-                    continue;
-                };
-                if index
-                    .resolve(file, edge.type_path())
-                    .is_some_and(|target| expected.values().any(|member| member == &target))
-                {
-                    return true;
-                }
-            }
-        }
-    }
-    false
 }
