@@ -298,9 +298,11 @@ and retained lifetimes are collected there, so graph lifetime selection and edit
 planning no longer launch a syntax visitor for each candidate. Declaration and
 field shapes, candidate fields, and cross-file mentions also come from the IR.
 Graph planning receives `SourceEditView`, which has no syntax-tree access. The
-older initializer and file-local lifetime paths still visit the shared tree
-during collection. They put typed initializer and lifetime ranges in conversion-unit
-IR records; apply constructs edits from those facts and the source snapshot.
+older initializer and file-local lifetime collectors visit the shared tree
+during collection. File-local lifetime syntax evidence enters the crate index
+in the shared IR. Conversion-unit assembly reads that index back from `IrView`,
+checks closure and type uses, and stores the selected ranges in each unit.
+Apply constructs edits from those facts and the source snapshot.
 
 | Stage | Facts or responsibility |
 | --- | --- |
@@ -353,14 +355,14 @@ Implementation checkpoints:
   The collector still checks candidate names against each file's text before
   walking it, and name-resolution work inside selected hooks remains a possible
   optimization target.
-- [ ] Move initializer, field-use, and lifetime-planning evidence into typed IR
+- [x] Move initializer, field-use, and lifetime-planning evidence into typed IR
   facts. The ordinary field planner reads declaration and initializer facts
   from each conversion unit and builds edits after reading the IR. The special
   lifetime path stores typed ranges for the field, struct, impls, forwarding
   returns, and constructor initializers; apply builds its edits from those facts.
-  Its eligibility checks still inspect the shared tree during collection, and
-  a per-file top-level index serves every lifetime candidate. Move those checks
-  to a typed IR view and eliminate the remaining syntax-dependent planner.
+  Syntax checks now produce lifetime site facts in the shared crate index; the
+  unit pass reads that index from `IrView` to check closure and type uses. A
+  per-file top-level index serves every lifetime candidate during collection.
   Graph lifetime facts already live in the shared IR, so graph lifetime
   planning does not walk the tree for each candidate.
   Apply now receives `SourceEditView`, which exposes text and digest but no

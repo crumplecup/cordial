@@ -1,6 +1,6 @@
 //! Identify conversion candidates and visit each shared file once for sites.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 
 use tracing::instrument;
@@ -19,7 +19,6 @@ use crate::etiquettes::internal_error_chain::apply::graph_apply::{DeclarationKin
 use crate::etiquettes::internal_error_chain::apply::initializers::{
     FieldKind, InitializerBatchInput, InitializerFacts, collect_initializer_facts,
 };
-use crate::etiquettes::internal_error_chain::apply::lifetime;
 
 /// Return one conversion unit and declaration line per candidate field.
 #[instrument(level = "debug", skip(files, declarations))]
@@ -121,35 +120,29 @@ pub(super) fn collect_conversion_units(
             site.resolved = false;
         }
     }
-    let lifetime_paths: HashSet<&Path> = units
-        .iter()
-        .filter(|(unit, _)| {
-            unit.lifetime_candidate(unit.lifetime.target)
-                && !unit.name_ambiguous
-                && unit.field.private
-                && unit.sites.iter().all(|site| site.path == unit.declaration)
-        })
-        .map(|(unit, _)| unit.declaration.as_path())
-        .collect();
-    let lifetime_indexes: HashMap<_, _> = files
-        .iter()
-        .filter(|file| lifetime_paths.contains(file.path()))
-        .map(|file| (file.path(), lifetime::LifetimeFileIndex::new(file.syntax())))
-        .collect();
     for ((unit, _), initializer_facts) in units.iter_mut().zip(lifetime_initializers) {
         if !unit.lifetime_candidate(unit.lifetime.target)
             || unit.name_ambiguous
             || !unit.field.private
             || unit.sites.iter().any(|site| site.path != unit.declaration)
+            || !unit.is_closed()
+            || unit.blocks_existing_field_edit()
         {
             continue;
         }
-        if let (Some(file), Some(index)) = (
+        if let (Some(file), Some(initializers)) = (
             files_by_path.get(unit.declaration.as_path()),
-            lifetime_indexes.get(unit.declaration.as_path()),
+            initializer_facts,
         ) {
-            unit.lifetime.facts =
-                lifetime::plan_for_unit(file, index, unit, unit.lifetime.target, initializer_facts);
+            unit.lifetime.facts = declarations.local_lifetime_facts(*file).and_then(|facts| {
+                facts.plan_for_unit(
+                    unit.type_name(),
+                    unit.field_name(),
+                    unit.lifetime.target,
+                    unit.sites(),
+                    initializers,
+                )
+            });
         }
     }
     Ok(units)

@@ -1,6 +1,6 @@
 //! A closed lifetime migration for one dynamic field and scalar context.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use serde::{Deserialize, Serialize};
 use syn::{Item, ItemFn, ItemImpl, ItemStruct, Type};
@@ -10,8 +10,7 @@ use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
 use super::initializers::InitializerFacts;
-use super::inventory::ErrorConversionUnit;
-use super::{Edit, simple_type_name};
+use super::{Edit, is_string, simple_type_name};
 
 mod forwarding;
 mod methods;
@@ -32,6 +31,80 @@ pub(super) struct LifetimePlanFacts {
     impls: Vec<ImplPlanFacts>,
     returns: Vec<ReturnPlanFacts>,
     initializers: InitializerFacts,
+}
+
+/// Syntax evidence collected into the crate index before conversion units are
+/// assembled. Closure and type-use checks are made against the IR unit later.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) struct LifetimeSiteFacts {
+    field_name: String,
+    strategy: ErrorFieldStrategy,
+    plan: LifetimePlanFacts,
+    allowed_type_uses: BTreeSet<(usize, usize)>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(super) struct LifetimeFileFacts {
+    sites: Vec<LifetimeSiteFacts>,
+}
+
+impl LifetimeFileFacts {
+    #[instrument(level = "debug", skip(file, tracked_names))]
+    pub(super) fn collect(file: &SharedParsedFile, tracked_names: &BTreeSet<String>) -> Self {
+        let index = LifetimeFileIndex::new(file.syntax());
+        let mut sites = Vec::new();
+        for (name, item) in &index.structs {
+            if !tracked_names.contains(name) {
+                continue;
+            }
+            let syn::Fields::Named(fields) = &item.fields else {
+                continue;
+            };
+            for field in &fields.named {
+                let Some(field_name) = field.ident.as_ref().map(ToString::to_string) else {
+                    continue;
+                };
+                let strategy = if is_string(&field.ty) {
+                    ErrorFieldStrategy::Borrowed
+                } else {
+                    ErrorFieldStrategy::Owned
+                };
+                if let Some(mut facts) = plan(file, &index, item, &field_name, strategy) {
+                    facts.field_name = field_name;
+                    sites.push(facts);
+                }
+            }
+        }
+        Self { sites }
+    }
+
+    #[instrument(level = "debug", skip(self, strategy, sites, initializers))]
+    pub(super) fn plan_for_unit(
+        &self,
+        type_name: &str,
+        field_name: &str,
+        strategy: ErrorFieldStrategy,
+        sites: &[super::inventory::ErrorConversionSite],
+        initializers: InitializerFacts,
+    ) -> Option<LifetimePlanFacts> {
+        use super::inventory::ErrorConversionSiteKind;
+        let facts = self.sites.iter().find(|facts| {
+            facts.plan.type_name == type_name
+                && facts.field_name == field_name
+                && facts.strategy == strategy
+        })?;
+        if sites.iter().any(|site| {
+            site.kind() == ErrorConversionSiteKind::TypeUse
+                && !facts
+                    .allowed_type_uses
+                    .contains(&(site.line(), site.column()))
+        }) {
+            return None;
+        }
+        let mut plan = facts.plan.clone();
+        plan.initializers = initializers;
+        Some(plan)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,27 +241,6 @@ impl<'a> LifetimeFileIndex<'a> {
         }
         index
     }
-}
-
-/// Collect a special lifetime migration from the shared parsed tree.
-#[instrument(level = "debug", skip(file, index, unit, strategy, initializer_facts))]
-pub(super) fn plan_for_unit(
-    file: &SharedParsedFile,
-    index: &LifetimeFileIndex<'_>,
-    unit: &ErrorConversionUnit,
-    strategy: ErrorFieldStrategy,
-    initializer_facts: Option<InitializerFacts>,
-) -> Option<LifetimePlanFacts> {
-    let item = index.structs.get(unit.type_name())?;
-    plan(
-        file,
-        index,
-        item,
-        unit.field_name(),
-        unit,
-        strategy,
-        initializer_facts,
-    )
 }
 
 #[instrument(level = "trace", skip(ty))]

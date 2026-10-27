@@ -34,9 +34,12 @@ pub(in crate::etiquettes::internal_error_chain::apply) fn enrich_conversion_unit
     index: &CrateTypeIndex,
 ) -> CordialResult<()> {
     index.write_to_ir(ir)?;
+    // Build units from the same serialized evidence that apply later reads.
+    // This keeps in-memory collection state from becoming a second channel.
+    let indexed_facts = CrateTypeIndex::from_ir(ir)?;
     let root = ir.root()?;
     let mut declarations = HashMap::<(PathBuf, usize, usize), _>::new();
-    for (unit, line) in collect_conversion_units(files, index)? {
+    for (unit, line) in collect_conversion_units(files, &indexed_facts)? {
         let node = ir.insert_node(
             NodeWeight::new(NodeKind::Field)
                 .with_name(unit.field_name.clone())

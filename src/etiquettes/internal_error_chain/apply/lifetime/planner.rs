@@ -9,37 +9,28 @@ use tracing::instrument;
 use crate::config::ErrorFieldStrategy;
 use crate::loader::SharedParsedFile;
 
-use super::super::initializers::{InitializerFacts, impl_uses_lifetime};
-use super::super::inventory::{ErrorConversionSiteKind, ErrorConversionUnit};
+use super::super::initializers::impl_uses_lifetime;
 use super::super::{is_str_ref_with_lifetime, is_string, span_range};
 use super::forwarding::forwarding_return;
 use super::methods::{constructor_lifetime, constructor_signature, impl_facts};
-use super::{LifetimeFileIndex, LifetimePlanFacts, scalar_copy_name};
+use super::{LifetimeFileIndex, LifetimePlanFacts, LifetimeSiteFacts, scalar_copy_name};
 
 /// Move the one constructor lifetime onto the private error type, or undo it.
 ///
 /// This accepts one migrated field, optional scalar context, and one constructor.
 /// Type mentions must be impl self types or direct forwarding function returns;
 /// inference-based direct calls are safe because their signatures remain unchanged.
-#[instrument(
-    level = "debug",
-    skip(file, index, item, unit, strategy, initializer_facts)
-)]
+#[instrument(level = "debug", skip(file, index, item, strategy))]
 pub(super) fn plan(
     file: &SharedParsedFile,
     index: &LifetimeFileIndex<'_>,
     item: &ItemStruct,
     field_name: &str,
-    unit: &ErrorConversionUnit,
     strategy: ErrorFieldStrategy,
-    initializer_facts: Option<InitializerFacts>,
-) -> Option<LifetimePlanFacts> {
+) -> Option<LifetimeSiteFacts> {
     let syn::Fields::Named(fields) = &item.fields else {
         return None;
     };
-    if !unit.is_closed() || unit.blocks_existing_field_edit() {
-        return None;
-    }
     let field = fields
         .named
         .iter()
@@ -147,13 +138,6 @@ pub(super) fn plan(
             return_facts.push(site);
         }
     }
-    if unit.sites().iter().any(|site| {
-        site.kind() == ErrorConversionSiteKind::TypeUse
-            && !allowed_type_uses.contains(&(site.line(), site.column()))
-    }) {
-        return None;
-    }
-    let initializers = initializer_facts?;
     let field_type = span_range(file.source(), field.ty.span())?;
     let struct_ident_end = (strategy == ErrorFieldStrategy::Borrowed)
         .then(|| span_range(file.source(), item.ident.span()).map(|(_, end)| end))
@@ -165,14 +149,19 @@ pub(super) fn plan(
         .into_iter()
         .map(|implementation| impl_facts(file, implementation, strategy))
         .collect::<Option<Vec<_>>>()?;
-    Some(LifetimePlanFacts {
-        lifetime,
-        type_name: item.ident.to_string(),
-        field_type,
-        struct_ident_end,
-        struct_generics,
-        impls,
-        returns: return_facts,
-        initializers,
+    Some(LifetimeSiteFacts {
+        field_name: field_name.to_owned(),
+        strategy,
+        allowed_type_uses,
+        plan: LifetimePlanFacts {
+            lifetime,
+            type_name: item.ident.to_string(),
+            field_type,
+            struct_ident_end,
+            struct_generics,
+            impls,
+            returns: return_facts,
+            initializers: Default::default(),
+        },
     })
 }
