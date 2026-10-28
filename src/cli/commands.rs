@@ -146,9 +146,8 @@ pub enum Commands {
         /// Log apply changes without writing source files.
         #[arg(long)]
         dry_run: bool,
-        /// Tracing instrument checklist (default:
-        /// `{store}/findings/tracing-instrument.checklist.md`). Crate-attrs
-        /// and error-field apply scan source directly and do not use this path.
+        /// Explicit tracing instrument checklist. By default, tracing apply
+        /// selects current open findings from the shared source IR.
         #[arg(long)]
         checklist: Option<PathBuf>,
         /// Exit with failure when unresolved open findings remain.

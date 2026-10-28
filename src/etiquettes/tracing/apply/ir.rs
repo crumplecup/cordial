@@ -5,12 +5,16 @@ use std::path::{Path, PathBuf};
 
 use crate::enricher::ScopeEnricher;
 use crate::error::{CordialError, CordialResult};
-use crate::hooks::{EnrichView, IrEnricher};
+use crate::hooks::{AssessView, Assessor, EnrichView, IrEnricher, Probe, ProbeView};
 use crate::ir::{BasicQuery, CrateIr, CrateView, CrateViewMut, IrView, WorkspaceIr};
 use crate::loader::{CrateTarget, SourceLoadView};
+use crate::objects::{Disposition, Marker};
 use crate::session::SessionBuilder;
+use crate::store::StoreLayout;
 
+use super::super::assessor::TracingAssessor;
 use super::super::enricher::FunctionInventoryEnricher;
+use super::super::probe::{ForbiddenInstrumentProbe, MissingInstrumentProbe, RecipeDeltaProbe};
 use super::super::types::{InstrumentLevel, InstrumentRecipe};
 use super::InstrumentGap;
 use super::instrument::{ApplyRecipeRecord, file_matches};
@@ -21,11 +25,12 @@ use super::instrument::{ApplyRecipeRecord, file_matches};
 #[tracing::instrument(level = "debug", skip(targets, by_file), err(level = "warn"))]
 pub(super) fn build_apply_ir(
     project_root: &Path,
+    store_home: &Path,
     targets: &[CrateTarget],
-    by_file: &BTreeMap<(String, PathBuf), Vec<InstrumentGap>>,
+    by_file: Option<&BTreeMap<(String, PathBuf), Vec<InstrumentGap>>>,
 ) -> CordialResult<WorkspaceIr> {
     let session = SessionBuilder::new(project_root)
-        .with_store_home(project_root)
+        .with_store_home(store_home)
         .build();
     let scope = ScopeEnricher;
     let inventory = FunctionInventoryEnricher;
@@ -33,7 +38,7 @@ pub(super) fn build_apply_ir(
     let mut workspace = WorkspaceIr::default();
 
     for target in targets {
-        if !by_file.keys().any(|(name, _)| name == target.crate_name()) {
+        if by_file.is_some_and(|files| !files.keys().any(|(name, _)| name == target.crate_name())) {
             continue;
         }
         let source = SourceLoadView::for_target(target)?;
@@ -52,6 +57,66 @@ pub(super) fn build_apply_ir(
         }
     }
     Ok(workspace)
+}
+
+/// Select apply targets from the same probes and assessor used by quality.
+/// Exception suppression is applied before targets reach the edit pass.
+#[tracing::instrument(level = "debug", skip(workspace, targets, store), err(level = "warn"))]
+pub(super) fn gaps_from_ir(
+    project_root: &Path,
+    store_home: &Path,
+    workspace: &WorkspaceIr,
+    targets: &[CrateTarget],
+    store: &StoreLayout,
+) -> CordialResult<Vec<InstrumentGap>> {
+    let session = SessionBuilder::new(project_root)
+        .with_store_root(store.root().clone())
+        .with_store_home(store_home)
+        .build();
+    let probes: [&dyn Probe; 3] = [
+        &MissingInstrumentProbe,
+        &RecipeDeltaProbe,
+        &ForbiddenInstrumentProbe,
+    ];
+    let assessor = TracingAssessor;
+    let mut gaps = Vec::new();
+
+    for target in targets {
+        let view = CrateView::new(workspace, target.crate_name().clone());
+        let mut markers: Vec<Box<dyn Marker>> = Vec::new();
+        for probe in probes {
+            markers.extend(probe.probe(ProbeView::new(&view, &session))?);
+        }
+        let marker_refs: Vec<&dyn Marker> = markers.iter().map(|marker| marker.as_ref()).collect();
+        let findings = assessor.assess(AssessView::new(&marker_refs, &view, &session))?;
+        let exceptions =
+            crate::exceptions::load_exception_sets(store, &["tracing"], target.crate_name())?;
+        let findings = crate::exceptions::apply_exception_sets(findings, &exceptions);
+        for finding in findings {
+            if finding.disposition() != Disposition::Open {
+                continue;
+            }
+            let node = view
+                .node(finding.anchor().node_id())
+                .ok_or_else(missing_recipe_fact)?;
+            let file = required_text(&node, "file")?;
+            let name = required_text(&node, "qualified_path")?;
+            let line = node
+                .attr("line")
+                .and_then(|value| value.as_u64())
+                .and_then(|value| u32::try_from(value).ok())
+                .ok_or_else(missing_recipe_fact)?;
+            gaps.push(
+                InstrumentGap::builder()
+                    .crate_name(target.crate_name().clone())
+                    .qualified_name(name.to_string())
+                    .rel_path(PathBuf::from(file))
+                    .line(line)
+                    .build()?,
+            );
+        }
+    }
+    Ok(gaps)
 }
 
 /// Recover only the recipes for one checklist file from the enriched IR.

@@ -1,6 +1,8 @@
 use miette::{IntoDiagnostic, WrapErr};
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(feature = "cli")]
+use std::process::Command;
 
 use cordial::{parse_tracing_instrument_checklist_text, run_tracing_instrument_apply};
 
@@ -59,6 +61,93 @@ fn checklist_for_crate(crate_name: &str, items: &[(&str, u32)]) -> String {
         ));
     }
     body
+}
+
+#[cfg(feature = "cli")]
+#[test]
+fn default_apply_selects_current_ir_instead_of_stale_checklist() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = write_apply_fixture("pub fn run() {}\n", "")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store home")?;
+    let store = store_home
+        .path()
+        .join(cordial::project_slug_from_path(&fixture.workspace))
+        .join("findings");
+    fs::create_dir_all(&store)
+        .into_diagnostic()
+        .wrap_err("findings dir")?;
+    fs::write(
+        store.join("tracing-instrument.checklist.md"),
+        checklist_for(&[("fixture_crate::stale", 1)]),
+    )
+    .into_diagnostic()
+    .wrap_err("stale checklist")?;
+
+    let output = Command::new(env!("CARGO_BIN_EXE_cordial"))
+        .arg("--project")
+        .arg(&fixture.workspace)
+        .arg("--store-home")
+        .arg(store_home.path())
+        .args(["quality", "--apply", "--etiquette", "tracing"])
+        .output()
+        .into_diagnostic()
+        .wrap_err("default tracing apply")?;
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let applied = fs::read_to_string(&fixture.src)
+        .into_diagnostic()
+        .wrap_err("applied source")?;
+    assert!(applied.contains("#[tracing::instrument") || applied.contains("#[instrument"));
+    Ok(())
+}
+
+#[cfg(feature = "cli")]
+#[test]
+fn default_apply_respects_tracing_exception() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = "pub fn run() {}\n";
+    let fixture = write_apply_fixture(source, "")?;
+    let store_home = tempfile::tempdir()
+        .into_diagnostic()
+        .wrap_err("store home")?;
+    let exception_dir = store_home
+        .path()
+        .join(cordial::project_slug_from_path(&fixture.workspace))
+        .join("exceptions/tracing");
+    fs::create_dir_all(&exception_dir)
+        .into_diagnostic()
+        .wrap_err("exception dir")?;
+    fs::write(
+        exception_dir.join("fixture_crate.json"),
+        r#"[{"file":"src/lib.rs","rule_id":"TRACING-MISSING-INSTRUMENT","reason":"fixture exception"}]"#,
+    )
+    .into_diagnostic()
+    .wrap_err("tracing exception")?;
+
+    let output = Command::new(env!("CARGO_BIN_EXE_cordial"))
+        .arg("--project")
+        .arg(&fixture.workspace)
+        .arg("--store-home")
+        .arg(store_home.path())
+        .args(["quality", "--apply", "--etiquette", "tracing"])
+        .output()
+        .into_diagnostic()
+        .wrap_err("default tracing apply")?;
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let applied = fs::read_to_string(&fixture.src)
+        .into_diagnostic()
+        .wrap_err("applied source")?;
+    assert_eq!(applied, source);
+    Ok(())
 }
 
 /// A workspace with one or more crates, its own `cordial.toml`, and a

@@ -358,9 +358,10 @@ one-file APIs still parse their caller-supplied text once. No production crate
 scanner now calls `source_work::read` or `syn::parse_file` directly for an
 outer Rust file.
 
-Tracing apply still chooses targets from a generated Markdown checklist by
-default, or from an explicit `--checklist` path. Its classification and recipe
-facts come from IR, but default target selection is a report-derived side
-channel. Closing this requires making default apply select targets from fresh
-tracing findings, while preserving the explicit checklist as a user-provided
-selection. Until then, the claim that all side channels are closed is false.
+Tracing apply now selects default targets from the same tracing probes and
+assessor that quality uses on its fresh source IR, then applies the central
+exception sets before editing. The recipe lookup and edit pass reuse that IR
+and its parsed-source session. An explicit `--checklist` remains a user-provided
+target selection, not a cache of source facts. A regression fixture plants a
+stale generated checklist and verifies that default apply patches the current
+function instead.

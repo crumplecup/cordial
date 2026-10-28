@@ -11,7 +11,6 @@ use crate::{
     CordialError, CordialResult, CrateIr, Disposition, Etiquette, Finding, NamedRunFilter, Plugin,
     ProgressSink, RunAll, RunFilter, RunOutcome, Session, SessionBuilder, StoreLayout,
     SurrealGraphExport, all_plugins, default_store_home, etiquettes_from_plugins, lookup_etiquette,
-    run_tracing_instrument_apply,
 };
 use tracing::instrument;
 
@@ -158,24 +157,16 @@ pub(super) fn execute_quality_apply(
 
     #[cfg(feature = "tracing")]
     if only_etiquette.is_none_or(|name| name == "tracing") {
-        let checklist_path = checklist
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| store.findings_dir().join("tracing-instrument.checklist.md"));
-        if checklist_path.is_file() {
-            let task = progress.spinner("Applying tracing instrumentation".to_string());
-            execute_tracing_apply(
-                project_root,
-                store,
-                crate_name,
-                Some(&checklist_path),
-                dry_run,
-            )?;
-            task.finish("Tracing instrumentation apply complete".to_string());
-        } else {
+        let home = store_home.clone().unwrap_or_else(default_store_home);
+        if let Some(path) = checklist.filter(|path| !path.is_file()) {
             tracing::warn!(
-                path = %checklist_path.display(),
+                path = %path.display(),
                 "tracing apply: no checklist, skipped"
             );
+        } else {
+            let task = progress.spinner("Applying tracing instrumentation".to_string());
+            execute_tracing_apply(project_root, store, &home, crate_name, checklist, dry_run)?;
+            task.finish("Tracing instrumentation apply complete".to_string());
         }
     }
 
@@ -203,14 +194,28 @@ pub(super) fn execute_quality_apply(
 pub(super) fn execute_tracing_apply(
     project_root: &Path,
     store: &StoreLayout,
+    store_home: &Path,
     crate_name: Option<&str>,
     checklist: Option<&Path>,
     dry_run: bool,
 ) -> CordialResult<()> {
-    let checklist_path = checklist
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| store.findings_dir().join("tracing-instrument.checklist.md"));
-    let summary = run_tracing_instrument_apply(project_root, &checklist_path, crate_name, dry_run)?;
+    let summary = if let Some(path) = checklist {
+        crate::etiquettes::tracing::run_tracing_instrument_apply_with_home(
+            project_root,
+            store_home,
+            path,
+            crate_name,
+            dry_run,
+        )?
+    } else {
+        crate::etiquettes::tracing::run_tracing_instrument_apply_from_ir(
+            project_root,
+            store,
+            store_home,
+            crate_name,
+            dry_run,
+        )?
+    };
     tracing::info!(
         changed_functions = summary.changed_functions(),
         changed_files = summary.changed_files(),

@@ -1,7 +1,7 @@
-//! Apply `#[instrument]` attributes from a tracing instrument checklist.
+//! Apply `#[instrument]` attributes from current tracing findings or a checklist.
 //!
-//! Reads open rows from `{store}/findings/tracing-instrument.checklist.md`
-//! (or `--checklist`) and writes the classified recipe onto the named
+//! Selects open findings from the current source IR (or reads `--checklist`)
+//! and writes the classified recipe onto the named
 //! function. `cordial quality --apply` is the CLI; `--dry-run` logs without
 //! writing. Path-qualified forms (`#[tracing::instrument]`) are used when
 //! `instrument` would clash with a module name. Unrecordable parameters
@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 use crate::error::CordialResult;
 use crate::loader::{CrateTarget, SourceLoadView};
 use crate::session::RunAll;
+use crate::store::StoreLayout;
 use crate::targets::discover_crate_targets;
 
 mod instrument;
@@ -26,7 +27,7 @@ use instrument::{
     GapApplyOutcome, InstrumentAttrStyle, apply_gap, attr_style, ensure_use_instrument,
     recipe_for_gap, strip_instrument,
 };
-use ir::{build_apply_ir, recipes_for_file};
+use ir::{build_apply_ir, gaps_from_ir, recipes_for_file};
 
 pub use parse::{parse_tracing_instrument_checklist, parse_tracing_instrument_checklist_text};
 pub use verifier_policy::TracingApplyPolicy;
@@ -88,41 +89,90 @@ pub fn run_tracing_instrument_apply(
     only_crate: Option<&str>,
     dry_run: bool,
 ) -> CordialResult<InstrumentApplySummary> {
-    let gaps = parse_tracing_instrument_checklist(checklist_path)?;
-    if gaps.is_empty() {
-        tracing::info!("no open checklist items found in tracing instrument checklist");
-        return Ok(InstrumentApplySummary {
-            changed_functions: 0,
-            changed_files: 0,
-            skipped_existing: 0,
-            skipped_policy: 0,
-            unresolved: 0,
-        });
-    }
+    let store_home = crate::default_store_home();
+    run_apply(
+        project_root,
+        &store_home,
+        ApplyTargets::Checklist(checklist_path),
+        only_crate,
+        dry_run,
+    )
+}
 
+#[tracing::instrument(level = "info", skip(store_home), err(level = "warn"))]
+pub(crate) fn run_tracing_instrument_apply_with_home(
+    project_root: &Path,
+    store_home: &Path,
+    checklist_path: &Path,
+    only_crate: Option<&str>,
+    dry_run: bool,
+) -> CordialResult<InstrumentApplySummary> {
+    run_apply(
+        project_root,
+        store_home,
+        ApplyTargets::Checklist(checklist_path),
+        only_crate,
+        dry_run,
+    )
+}
+
+/// Select current open tracing findings from the shared IR for CLI apply.
+#[tracing::instrument(level = "info", skip(store), err(level = "warn"))]
+pub(crate) fn run_tracing_instrument_apply_from_ir(
+    project_root: &Path,
+    store: &StoreLayout,
+    store_home: &Path,
+    only_crate: Option<&str>,
+    dry_run: bool,
+) -> CordialResult<InstrumentApplySummary> {
+    run_apply(
+        project_root,
+        store_home,
+        ApplyTargets::CurrentIr(store),
+        only_crate,
+        dry_run,
+    )
+}
+
+#[derive(Clone, Copy)]
+enum ApplyTargets<'a> {
+    Checklist(&'a Path),
+    CurrentIr(&'a StoreLayout),
+}
+
+#[tracing::instrument(level = "debug", skip(targets_mode), err(level = "warn"))]
+fn run_apply(
+    project_root: &Path,
+    store_home: &Path,
+    targets_mode: ApplyTargets<'_>,
+    only_crate: Option<&str>,
+    dry_run: bool,
+) -> CordialResult<InstrumentApplySummary> {
     let filter = RunAll;
-    let targets = discover_crate_targets(project_root, &filter)?;
+    let mut targets = discover_crate_targets(project_root, &filter)?;
+    if let Some(name) = only_crate {
+        targets.retain(|target| target.crate_name() == name);
+    }
     let crate_roots: HashMap<String, PathBuf> = targets
         .iter()
         .map(|target: &CrateTarget| (target.crate_name().clone(), target.crate_root().clone()))
         .collect();
 
     let mut by_file: BTreeMap<(String, PathBuf), Vec<InstrumentGap>> = BTreeMap::new();
-    for gap in gaps {
-        if only_crate.is_some_and(|name| name != gap.crate_name()) {
-            continue;
+    if let ApplyTargets::Checklist(path) = targets_mode {
+        for gap in parse_tracing_instrument_checklist(path)? {
+            if !crate_roots.contains_key(gap.crate_name()) {
+                tracing::warn!(
+                    crate_name = %gap.crate_name(),
+                    "skipping gap for crate not in scan targets"
+                );
+                continue;
+            }
+            by_file
+                .entry((gap.crate_name().clone(), gap.rel_path().clone()))
+                .or_default()
+                .push(gap);
         }
-        if !crate_roots.contains_key(gap.crate_name()) {
-            tracing::warn!(
-                crate_name = %gap.crate_name(),
-                "skipping gap for crate not in scan targets"
-            );
-            continue;
-        }
-        by_file
-            .entry((gap.crate_name().clone(), gap.rel_path().clone()))
-            .or_default()
-            .push(gap);
     }
 
     let mut summary = InstrumentApplySummary {
@@ -132,11 +182,31 @@ pub fn run_tracing_instrument_apply(
         skipped_policy: 0,
         unresolved: 0,
     };
+    if matches!(targets_mode, ApplyTargets::Checklist(_)) && by_file.is_empty() {
+        tracing::info!("no open checklist items found in tracing instrument checklist");
+        return Ok(summary);
+    }
 
     let _parsed_source_session = crate::loader::ParsedSourceSession::begin();
     let source_view = SourceLoadView::for_standalone_scan();
-    let config = crate::config::load_cordial_config(project_root, project_root);
-    let workspace = build_apply_ir(project_root, &targets, &by_file)?;
+    let config = crate::config::load_cordial_config(project_root, store_home);
+    let selected_files = match targets_mode {
+        ApplyTargets::Checklist(_) => Some(&by_file),
+        ApplyTargets::CurrentIr(_) => None,
+    };
+    let workspace = build_apply_ir(project_root, store_home, &targets, selected_files)?;
+    if let ApplyTargets::CurrentIr(store) = targets_mode {
+        for gap in gaps_from_ir(project_root, store_home, &workspace, &targets, store)? {
+            by_file
+                .entry((gap.crate_name().clone(), gap.rel_path().clone()))
+                .or_default()
+                .push(gap);
+        }
+    }
+    if by_file.is_empty() {
+        tracing::info!("no open tracing items to apply");
+        return Ok(summary);
+    }
     let facts = workspace.path_inclusions().ok_or_else(|| {
         crate::error::CordialError::workspace_source_facts_missing("path inclusions")
     })?;

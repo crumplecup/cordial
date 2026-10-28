@@ -53,6 +53,9 @@ pub use apply::{
     InstrumentApplySummary, InstrumentGap, parse_tracing_instrument_checklist,
     parse_tracing_instrument_checklist_text, run_tracing_instrument_apply,
 };
+pub(crate) use apply::{
+    run_tracing_instrument_apply_from_ir, run_tracing_instrument_apply_with_home,
+};
 
 pub use assessor::TracingAssessor;
 pub use boundary::{BoundaryRuleId, BoundarySiteRecord, scan_crate_tracing_boundary};
