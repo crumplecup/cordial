@@ -29,7 +29,6 @@
 
 #[cfg(any(feature = "amenable_std", feature = "antipatterns"))]
 mod amenable_dump_registry;
-mod cache_digest;
 #[cfg(feature = "rustdoc")]
 mod cargo_rustdoc;
 mod clean;
@@ -236,7 +235,6 @@ pub use verus_ir::{
 };
 #[cfg(feature = "shadow")]
 mod shadow;
-pub use cache_digest::{IrCacheDigest, SourceFileDigest};
 #[cfg(feature = "cli")]
 pub use cli::{Cli, Commands};
 #[cfg(feature = "elicitation")]

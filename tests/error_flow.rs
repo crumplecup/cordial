@@ -46,12 +46,8 @@ fn error_flow_enricher_partitions_sites_and_links_origins() -> miette::Result<()
         .into_diagnostic()
         .wrap_err("session run")?;
 
-    // Not just any `.json` file: `cache/` also holds each crate's
-    // `{crate_name}.ir.digests.json` fingerprint cache (`IrCacheDigest`,
-    // a different shape entirely, no `root` field) alongside the real
-    // `{crate_name}.ir.json` snapshot -- `read_dir`'s order is not
-    // guaranteed, so a bare `.json` extension match can non-
-    // deterministically pick either one.
+    // Read the IR snapshot for this crate; other cache JSON formats may be
+    // present, and `read_dir` does not guarantee an order.
     let cache_dir = store.path().join("cache");
     let cache_path = fs::read_dir(&cache_dir)
         .into_diagnostic()

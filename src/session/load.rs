@@ -69,11 +69,6 @@ pub(super) fn load_and_probe(
     )?;
     let mut load_views: HashMap<String, Box<dyn LoadView>> = HashMap::new();
     let mut markers_by_crate: HashMap<String, Vec<Box<dyn Marker>>> = HashMap::new();
-    let enricher_ids: Vec<String> = enrichers
-        .iter()
-        .map(|enricher| enricher.id().to_string())
-        .collect();
-    let enricher_id_refs: Vec<&str> = enricher_ids.iter().map(String::as_str).collect();
 
     #[cfg(feature = "impl_coverage")]
     if enrichers
@@ -184,16 +179,7 @@ pub(super) fn load_and_probe(
             let cached = workspace
                 .crate_ir(target.crate_name())
                 .ok_or_else(|| CordialError::crate_ir_must_exist())?;
-            cached.write_cache(&store.ir_cache_path(target.crate_name()))?;
-            let digest = crate::cache_digest::IrCacheDigest::compute(
-                target,
-                &enricher_id_refs,
-                &load_views,
-            )?;
-            digest.write(&crate::cache_digest::IrCacheDigest::cache_path(
-                &store.cache_dir(),
-                target.crate_name(),
-            ))
+            cached.write_cache(&store.ir_cache_path(target.crate_name()))
         })?;
         progress.inc(1);
 

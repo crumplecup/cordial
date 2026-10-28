@@ -5,9 +5,9 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 
 use cordial::{
-    ATTR_IR_ORIGIN, BasicQuery, CordialError, CrateTarget, EtiquetteExplain, EtiquetteHooks,
-    IrCacheDigest, IrView, ORIGIN_RUSTDOC, ORIGIN_SOURCE, RunAll, RustdocLoader, Session,
-    SessionBuilder, SourceLoader, StaticEtiquette, nightly_available, syn_doc_peer,
+    ATTR_IR_ORIGIN, BasicQuery, CordialError, EtiquetteExplain, EtiquetteHooks, IrView,
+    ORIGIN_RUSTDOC, ORIGIN_SOURCE, RunAll, RustdocLoader, Session, SessionBuilder, SourceLoader,
+    StaticEtiquette, nightly_available, syn_doc_peer,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -156,17 +156,5 @@ path = "src/lib.rs"
             .is_file()
     );
     assert!(!fixture.path().join("doc/auto_rustdoc_cache.json").is_file());
-    Ok(())
-}
-
-#[test]
-fn ir_digest_tolerates_missing_optional_rustdoc_json() -> miette::Result<()> {
-    cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let target = CrateTarget::new("missing_crate", fixture.path());
-
-    let _digest = IrCacheDigest::compute(&target, &[], &Default::default())
-        .into_diagnostic()
-        .wrap_err("digest")?;
     Ok(())
 }

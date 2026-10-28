@@ -49,8 +49,6 @@ resolver = "2"
 
     assert!(store.path().join("cache/alpha.ir.json").is_file());
     assert!(store.path().join("cache/beta.ir.json").is_file());
-    assert!(store.path().join("cache/alpha.ir.digests.json").is_file());
-    assert!(store.path().join("cache/beta.ir.digests.json").is_file());
     assert!(store.path().join("findings/rollup-summary.md").is_file());
     Ok(())
 }

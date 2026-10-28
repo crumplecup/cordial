@@ -107,9 +107,7 @@ pub fn load_rustdoc_view(
             )
         {
             let inventory = parse_rustdoc_json(&path, target.crate_name())?;
-            return Ok(Box::new(RustdocLoadView::from_inventory_path(
-                inventory, path,
-            )));
+            return Ok(Box::new(RustdocLoadView::from_inventory(inventory)));
         }
 
         #[cfg(feature = "shadow")]
@@ -136,18 +134,14 @@ pub fn load_rustdoc_view(
                 shadow_dep_rustdoc_path(session.store_root(), shadow, target.crate_name())
             {
                 let inventory = parse_rustdoc_json(&path, target.crate_name())?;
-                return Ok(Box::new(RustdocLoadView::from_inventory_path(
-                    inventory, path,
-                )));
+                return Ok(Box::new(RustdocLoadView::from_inventory(inventory)));
             }
         }
     }
 
     let json_path = crate::rustdoc_loader::resolve_or_rebuild_rustdoc_json(session, target)?;
     let inventory = parse_rustdoc_json(&json_path, target.crate_name())?;
-    Ok(Box::new(RustdocLoadView::from_inventory_path(
-        inventory, json_path,
-    )))
+    Ok(Box::new(RustdocLoadView::from_inventory(inventory)))
 }
 
 #[instrument(level = "debug")]

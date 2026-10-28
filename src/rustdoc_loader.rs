@@ -40,9 +40,7 @@ impl Loader for RustdocLoader {
 
         let json_path = resolve_or_rebuild_rustdoc_json(session, target)?;
         let inventory = crate::rustdoc::parse_rustdoc_json(&json_path, target.crate_name())?;
-        Ok(Box::new(RustdocLoadView::from_inventory_path(
-            inventory, json_path,
-        )))
+        Ok(Box::new(RustdocLoadView::from_inventory(inventory)))
     }
 }
 
@@ -50,30 +48,12 @@ impl Loader for RustdocLoader {
 #[derive(Debug, Clone, derive_getters::Getters)]
 pub struct RustdocLoadView {
     inventory: RustdocInventory,
-    #[getter(skip)]
-    json_path: Option<PathBuf>,
 }
 
 impl RustdocLoadView {
     #[instrument(level = "debug", skip(inventory), ret)]
     pub(crate) fn from_inventory(inventory: RustdocInventory) -> Self {
-        Self {
-            inventory,
-            json_path: None,
-        }
-    }
-
-    #[instrument(level = "debug", skip(inventory, json_path), ret)]
-    pub(crate) fn from_inventory_path(inventory: RustdocInventory, json_path: PathBuf) -> Self {
-        Self {
-            inventory,
-            json_path: Some(json_path),
-        }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    pub(crate) fn json_path(&self) -> Option<&Path> {
-        self.json_path.as_deref()
+        Self { inventory }
     }
 }
 

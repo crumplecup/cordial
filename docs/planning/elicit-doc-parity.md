@@ -156,7 +156,7 @@ cargo test -p cordial --features full --test parity
 | --- | --- | --- |
 | `coverage/` | `findings/` (coverage etiquettes) | Different top-level name; map by filename |
 | `quality/` | `findings/` (quality etiquettes) | Cordial flattens; use etiquette prefix or subdirs later if needed |
-| `cache/builds/`, `inventories/`, `extracts/`, `assessed/` | `cache/{crate}.ir.json`, `{crate}.ir.digests.json` | Cordial IR cache replaces many intermediate JSONs; parity tests compare **derived reports**, not 1:1 cache files |
+| `cache/builds/`, `inventories/`, `extracts/`, `assessed/` | `cache/{crate}.ir.json` | Cordial IR cache replaces many intermediate JSONs; parity tests compare **derived reports**, not 1:1 cache files |
 | `cache/quality/{crate}.*.scan.json` | _(future)_ `{crate}.{etiquette}.scan.json` | Optional scan cache per etiquette |
 | `patches/`, `quality/patches/` | `exceptions/`, `quality/patches/`, `patches/` | Load/backup copies all three; elicit_doc registries load without renaming |
 | `snapshots/` | _(not yet)_ | Drift digests — defer or port as `cordial snapshot` |
@@ -296,7 +296,7 @@ When comparing cache JSON:
 | `inventories/member-{crate}.inventory.json` | `cache/{crate}.ir.json` Item nodes | Type path set + `Implements` edges |
 | `assessed/impl-gaps.json` | impl-coverage findings export | Gap kind + type_path + missing traits |
 | `extracts/proof-harness.json` | _(planned enricher output)_ | Test status per type path |
-| `manifest.json` + build artifacts | `{crate}.ir.digests.json` | Fingerprint fields present; incremental skip behavior tested separately |
+| `manifest.json` + build artifacts | _(no equivalent)_ | Cordial currently rebuilds IR instead of using persisted fingerprints for incremental skips |
 | `cache/rustdoc/shadow-dep-{shadow}-{upstream}.json` | same path under store | Inventory type-path set for upstream built with shadow dep features |
 
 ---
