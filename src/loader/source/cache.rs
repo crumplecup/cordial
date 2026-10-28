@@ -74,7 +74,10 @@ impl SourceLoadView {
         feature = "tracing",
         feature = "visibility",
         feature = "internal_error_chain",
-        feature = "error_sites"
+        feature = "error_sites",
+        feature = "glob_imports",
+        feature = "inline_tests",
+        feature = "pageantry"
     ))]
     #[instrument(level = "debug")]
     pub(crate) fn for_standalone_scan() -> Self {

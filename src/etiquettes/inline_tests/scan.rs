@@ -18,7 +18,8 @@ use tracing::instrument;
 /// Scan one crate for inline tests.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_inline_tests(crate_root: &Path) -> CordialResult<Vec<InlineTestSiteRecord>> {
-    scan_source_tree(&crate_root.join("src"), crate_root)
+    let source = SourceLoadView::for_standalone_scan();
+    scan_shared_crate_inline_tests(&source, crate_root)
 }
 
 #[instrument(level = "debug", skip(source), err(level = "warn"))]
@@ -27,18 +28,28 @@ pub(super) fn scan_shared_crate_inline_tests(
     crate_root: &Path,
 ) -> CordialResult<Vec<InlineTestSiteRecord>> {
     let src_root = crate_root.join("src");
-    let mut findings = Vec::new();
-    for file in source.parsed_rust_files_under(&src_root, "inline-test-inventory", |path| {
-        !path_has_fixtures(path, crate_root)
-    })? {
-        findings.extend(scan_shared_file(&file, &src_root, crate_root)?);
-    }
+    let mut findings = scan_shared_source_tree(source, &src_root, crate_root)?;
     findings.sort_by(|a, b| {
         a.file()
             .cmp(b.file())
             .then(a.line().cmp(&b.line()))
             .then(a.snippet().cmp(b.snippet()))
     });
+    Ok(findings)
+}
+
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+fn scan_shared_source_tree(
+    source: &SourceLoadView,
+    src_root: &Path,
+    crate_root: &Path,
+) -> CordialResult<Vec<InlineTestSiteRecord>> {
+    let mut findings = Vec::new();
+    for file in source.parsed_rust_files_under(src_root, "inline-test-inventory", |path| {
+        !path_has_fixtures(path, crate_root)
+    })? {
+        findings.extend(scan_shared_file(&file, src_root, crate_root)?);
+    }
     Ok(findings)
 }
 
@@ -49,42 +60,6 @@ fn scan_shared_file(
     crate_root: &Path,
 ) -> CordialResult<Vec<InlineTestSiteRecord>> {
     scan_syntax(file.syntax(), file.path(), src_root, crate_root)
-}
-
-#[instrument(level = "debug", err(level = "warn"))]
-pub fn scan_source_tree(
-    src_root: &Path,
-    crate_root: &Path,
-) -> CordialResult<Vec<InlineTestSiteRecord>> {
-    let mut findings = Vec::new();
-    if !src_root.is_dir() {
-        return Ok(findings);
-    }
-
-    for entry in walkdir::WalkDir::new(src_root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-    {
-        let path = entry.path();
-        if path.extension().is_none_or(|ext| ext != "rs") {
-            continue;
-        }
-        if path_has_fixtures(path, crate_root) {
-            continue;
-        }
-        let source = std::fs::read_to_string(path)?;
-        findings.extend(scan_rust_source(&source, path, src_root, crate_root)?);
-    }
-
-    findings.sort_by(|a, b| {
-        a.file()
-            .cmp(b.file())
-            .then(a.line().cmp(&b.line()))
-            .then(a.snippet().cmp(b.snippet()))
-    });
-
-    Ok(findings)
 }
 
 /// Scan one Rust source file and return records.

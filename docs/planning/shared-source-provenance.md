@@ -307,6 +307,11 @@ source-derived side channels are concrete follow-up work:
 - CLI layout's standalone crate scan now shares parsed trees across module
   discovery, cataloging, and entry-point inspection. Its redundant direct
   file parsers are removed.
+- The standalone crate scanners for pageantry, glob imports, inline tests,
+  tracing print, and error sites now enter through a short-lived shared source
+  view; unused direct tree scanners were removed. Their raw-source fixture
+  helpers still parse the supplied text once because they have no file snapshot
+  to reuse.
 - Public standalone scan helpers still accept raw source or read files and may
   parse outer files directly. These cannot feed a production source hook today,
   but they remain an exception to a literal repo-wide one-parse policy. Move
