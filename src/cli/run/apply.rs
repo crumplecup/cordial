@@ -84,23 +84,14 @@ fn execute_tracing_apply(
     checklist: Option<&Path>,
     dry_run: bool,
 ) -> CordialResult<()> {
-    let summary = if let Some(path) = checklist {
-        crate::etiquettes::tracing::run_tracing_instrument_apply_with_home(
-            project_root,
-            store_home,
-            path,
-            crate_name,
-            dry_run,
-        )?
+    use crate::etiquettes::tracing::{ApplyTargets, run_apply};
+
+    let targets = if let Some(path) = checklist {
+        ApplyTargets::Checklist(path)
     } else {
-        crate::etiquettes::tracing::run_tracing_instrument_apply_from_ir(
-            project_root,
-            store,
-            store_home,
-            crate_name,
-            dry_run,
-        )?
+        ApplyTargets::CurrentIr(store)
     };
+    let summary = run_apply(project_root, store_home, targets, crate_name, dry_run)?;
     tracing::info!(
         changed_functions = summary.changed_functions(),
         changed_files = summary.changed_files(),

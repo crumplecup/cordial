@@ -5,16 +5,12 @@ use std::path::{Path, PathBuf};
 
 use crate::enricher::ScopeEnricher;
 use crate::error::{CordialError, CordialResult};
-use crate::hooks::{AssessView, Assessor, EnrichView, IrEnricher, Probe, ProbeView};
+use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{BasicQuery, CrateIr, CrateView, CrateViewMut, IrView, WorkspaceIr};
 use crate::loader::{CrateTarget, SourceLoadView};
-use crate::objects::{Disposition, Marker};
 use crate::session::SessionBuilder;
-use crate::store::StoreLayout;
 
-use super::super::assessor::TracingAssessor;
 use super::super::enricher::FunctionInventoryEnricher;
-use super::super::probe::{ForbiddenInstrumentProbe, MissingInstrumentProbe, RecipeDeltaProbe};
 use super::super::types::{InstrumentLevel, InstrumentRecipe};
 use super::InstrumentGap;
 use super::instrument::{ApplyRecipeRecord, file_matches};
@@ -61,14 +57,20 @@ pub(super) fn build_apply_ir(
 
 /// Select apply targets from the same probes and assessor used by quality.
 /// Exception suppression is applied before targets reach the edit pass.
+#[cfg(feature = "cli")]
 #[tracing::instrument(level = "debug", skip(workspace, targets, store), err(level = "warn"))]
 pub(super) fn gaps_from_ir(
     project_root: &Path,
     store_home: &Path,
     workspace: &WorkspaceIr,
     targets: &[CrateTarget],
-    store: &StoreLayout,
+    store: &crate::store::StoreLayout,
 ) -> CordialResult<Vec<InstrumentGap>> {
+    use super::super::assessor::TracingAssessor;
+    use super::super::probe::{ForbiddenInstrumentProbe, MissingInstrumentProbe, RecipeDeltaProbe};
+    use crate::hooks::{AssessView, Assessor, Probe, ProbeView};
+    use crate::objects::{Disposition, Marker};
+
     let session = SessionBuilder::new(project_root)
         .with_store_root(store.root().clone())
         .with_store_home(store_home)
