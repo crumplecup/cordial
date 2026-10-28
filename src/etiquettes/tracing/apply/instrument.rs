@@ -4,7 +4,7 @@ use tracing::instrument;
 
 use crate::error::{CordialError, CordialResult};
 
-use super::super::types::{FunctionRecord, InstrumentRecipe};
+use super::super::types::InstrumentRecipe;
 use super::InstrumentGap;
 use super::verifier_policy::{TracingApplyPolicy, gate_attr, gate_predicate};
 
@@ -25,6 +25,16 @@ pub(super) enum InstrumentAttrStyle {
     Short,
     Path,
     CratePath,
+}
+
+/// A recipe read from the function inventory in the shared IR.
+#[derive(Debug, derive_new::new, derive_getters::Getters)]
+pub(super) struct ApplyRecipeRecord {
+    qualified_name: String,
+    file: String,
+    #[getter(copy)]
+    line: u32,
+    recipe: InstrumentRecipe,
 }
 
 #[instrument(level = "debug")]
@@ -134,7 +144,7 @@ fn recipe_attr(recipe: &InstrumentRecipe, style: InstrumentAttrStyle) -> String 
 
 #[instrument(level = "debug", skip(records, gap))]
 pub(super) fn recipe_for_gap<'a>(
-    records: &'a [FunctionRecord],
+    records: &'a [ApplyRecipeRecord],
     gap: &InstrumentGap,
 ) -> Option<&'a InstrumentRecipe> {
     let rel = gap.rel_path().to_string_lossy().replace('\\', "/");
@@ -166,7 +176,7 @@ pub(super) fn recipe_for_gap<'a>(
 }
 
 #[instrument(level = "debug")]
-fn file_matches(record_file: &str, gap_file: &str) -> bool {
+pub(super) fn file_matches(record_file: &str, gap_file: &str) -> bool {
     record_file == gap_file || record_file.ends_with(gap_file) || gap_file.ends_with(record_file)
 }
 

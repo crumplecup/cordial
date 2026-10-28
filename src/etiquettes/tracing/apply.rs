@@ -18,15 +18,15 @@ use crate::session::RunAll;
 use crate::targets::discover_crate_targets;
 
 mod instrument;
+mod ir;
 mod parse;
 mod verifier_policy;
 
-use super::call_graph::workspace_call_graph_with_source;
-use super::scan::scan_shared_file;
 use instrument::{
     GapApplyOutcome, InstrumentAttrStyle, apply_gap, attr_style, ensure_use_instrument,
     recipe_for_gap, strip_instrument,
 };
+use ir::{build_apply_ir, recipes_for_file};
 
 pub use parse::{parse_tracing_instrument_checklist, parse_tracing_instrument_checklist_text};
 pub use verifier_policy::TracingApplyPolicy;
@@ -34,8 +34,6 @@ pub use verifier_policy::TracingApplyPolicy;
 pub(super) use verifier_policy::{
     crate_gate_cfgs, gate_attr, gate_predicate, resolve_tracing_apply_policy,
 };
-
-use crate::PathInclusionFacts;
 
 /// One open checklist row targeting a function or method.
 #[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
@@ -105,8 +103,8 @@ pub fn run_tracing_instrument_apply(
     let filter = RunAll;
     let targets = discover_crate_targets(project_root, &filter)?;
     let crate_roots: HashMap<String, PathBuf> = targets
-        .into_iter()
-        .map(|target: CrateTarget| (target.crate_name().clone(), target.crate_root().clone()))
+        .iter()
+        .map(|target: &CrateTarget| (target.crate_name().clone(), target.crate_root().clone()))
         .collect();
 
     let mut by_file: BTreeMap<(String, PathBuf), Vec<InstrumentGap>> = BTreeMap::new();
@@ -135,14 +133,16 @@ pub fn run_tracing_instrument_apply(
         unresolved: 0,
     };
 
+    let _parsed_source_session = crate::loader::ParsedSourceSession::begin();
     let source_view = SourceLoadView::for_standalone_scan();
-    let facts: PathInclusionFacts =
-        crate::etiquettes::derives::workspace_path_inclusions_with_source(
-            project_root,
-            &source_view,
-        );
     let config = crate::config::load_cordial_config(project_root, project_root);
-    let call_graph = workspace_call_graph_with_source(config.tracing(), &facts, &source_view);
+    let workspace = build_apply_ir(project_root, &targets, &by_file)?;
+    let facts = workspace.path_inclusions().ok_or_else(|| {
+        crate::error::CordialError::workspace_source_facts_missing("path inclusions")
+    })?;
+    let call_graph = workspace
+        .call_graph()
+        .ok_or_else(|| crate::error::CordialError::workspace_source_facts_missing("call graph"))?;
 
     for ((crate_name, rel_path), mut file_gaps) in by_file {
         let Some(crate_root) = crate_roots.get(&crate_name) else {
@@ -161,24 +161,8 @@ pub fn run_tracing_instrument_apply(
 
         let parsed = source_view.parsed_file(&path, "tracing-instrument-apply")?;
         let source = parsed.source();
-        let src_root = {
-            let src = crate_root.join("src");
-            if src.is_dir() {
-                src
-            } else {
-                crate_root.clone()
-            }
-        };
-        let extra_skip = config.tracing().extra_skip();
         let never_instrument = call_graph.never_instrument(&crate_name);
-        let records = match scan_shared_file(
-            &parsed,
-            &src_root,
-            crate_root,
-            &crate_name,
-            extra_skip,
-            never_instrument,
-        ) {
+        let records = match recipes_for_file(&workspace, &crate_name, &rel_path) {
             Ok(records) => records,
             Err(error) => {
                 tracing::warn!(

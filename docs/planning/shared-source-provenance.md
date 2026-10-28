@@ -294,9 +294,12 @@ source-derived side channels are concrete follow-up work:
   `WorkspaceIr` for a run. The source enrichers read them through typed IR
   accessors; the process-global facts caches are gone. The public standalone
   path-inclusion API also obtains trees from a short-lived shared source view.
-- Tracing apply still builds path-inclusion and call-graph facts in its own
-  short-lived source view and classifies checklist rows directly. It must join
-  the shared IR path for its decisions before the apply invariant is complete.
+- Tracing apply now builds the source IR and runs the same scope and function
+  enrichers as quality within one parsed-source session. Its recipe lookup
+  reads function nodes, while path-inclusion and call-graph decisions come
+  from `WorkspaceIr`. The edit pass reuses the source snapshot and only reads
+  its text to locate and change the requested attribute. The lookup rejects
+  incomplete recipe attributes instead of writing a default recipe.
 - Public standalone scan helpers still accept raw source or read files and may
   parse outer files directly. These cannot feed a production source hook today,
   but they remain an exception to a literal repo-wide one-parse policy. Move
