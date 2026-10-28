@@ -12,7 +12,7 @@ use crate::loader::{SourceLoadView, path_has_fixtures};
 use tracing::instrument;
 #[instrument(level = "debug", skip(source, file, files), err(level = "warn"))]
 pub(super) fn collect_mod_tree(
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
     file: &Path,
     crate_root: &Path,
     files: &mut BTreeSet<PathBuf>,
@@ -23,28 +23,13 @@ pub(super) fn collect_mod_tree(
     if !files.insert(file.to_path_buf()) {
         return Ok(());
     }
-    if let Some(source) = source {
-        let parsed = source.parsed_file(file, "cli-layout-inventory")?;
-        walk_mod_items(
-            Some(source),
-            file,
-            &parsed.syntax().items,
-            &[],
-            crate_root,
-            files,
-        )
-    } else {
-        let text = std::fs::read_to_string(file)?;
-        let syntax = syn::parse_file(&text).map_err(|err| {
-            crate::error::CordialError::syn_parse(file.display().to_string(), err)
-        })?;
-        walk_mod_items(None, file, &syntax.items, &[], crate_root, files)
-    }
+    let parsed = source.parsed_file(file, "cli-layout-inventory")?;
+    walk_mod_items(source, file, &parsed.syntax().items, &[], crate_root, files)
 }
 
 #[instrument(level = "debug", skip(source, items, files), err(level = "warn"))]
 fn walk_mod_items(
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
     current_file: &Path,
     items: &[syn::Item],
     inline_path: &[String],

@@ -167,7 +167,7 @@ digest hashes the same source snapshots used by the inventory.
 
 The CLI-layout production scan now reuses each shared tree across module
 discovery, clap/error type cataloging, and thin-main inspection. The public
-standalone scan retains its direct parser for callers outside a source session.
+standalone scan uses a short-lived source view for those same passes.
 
 ## Eleventh slice
 
@@ -304,6 +304,9 @@ source-derived side channels are concrete follow-up work:
 - Visibility's standalone scan now uses the shared source view. Its cache
   digest reads each parsed file's snapshot through that view, so an intervening
   disk change cannot make the cache key disagree with the scan result.
+- CLI layout's standalone crate scan now shares parsed trees across module
+  discovery, cataloging, and entry-point inspection. Its redundant direct
+  file parsers are removed.
 - Public standalone scan helpers still accept raw source or read files and may
   parse outer files directly. These cannot feed a production source hook today,
   but they remain an exception to a literal repo-wide one-parse policy. Move

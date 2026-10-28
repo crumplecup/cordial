@@ -121,18 +121,6 @@ impl LayoutCatalog {
 }
 
 #[instrument(level = "info", skip(catalog, file), err(level = "warn"))]
-pub(crate) fn load_file(
-    catalog: &mut LayoutCatalog,
-    file: &Path,
-    in_library: bool,
-) -> CordialResult<()> {
-    let source = std::fs::read_to_string(file)?;
-    let syntax = syn::parse_file(&source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    load_syntax(catalog, file, &syntax, in_library)
-}
-
-#[instrument(level = "info", skip(catalog, file), err(level = "warn"))]
 pub(super) fn load_shared_file(
     catalog: &mut LayoutCatalog,
     file: &SharedParsedFile,

@@ -19,7 +19,7 @@ pub(super) mod catalog;
 mod idents;
 
 use super::hunt::{finalize_acts, nested_clap_types};
-use catalog::{LayoutCatalog, TypeRec, load_file, load_shared_file};
+use catalog::{LayoutCatalog, TypeRec, load_shared_file};
 
 use tracing::instrument;
 
@@ -29,7 +29,8 @@ pub fn scan_crate_cli_layout(
     crate_root: &Path,
     crate_name: &str,
 ) -> CordialResult<Vec<CliLayoutRecord>> {
-    scan_crate_cli_layout_impl(None, crate_root, crate_name)
+    let source = SourceLoadView::for_standalone_scan();
+    scan_crate_cli_layout_impl(&source, crate_root, crate_name)
 }
 
 #[instrument(level = "debug", skip(source), err(level = "warn"))]
@@ -38,12 +39,12 @@ pub(super) fn scan_shared_crate_cli_layout(
     crate_root: &Path,
     crate_name: &str,
 ) -> CordialResult<Vec<CliLayoutRecord>> {
-    scan_crate_cli_layout_impl(Some(source), crate_root, crate_name)
+    scan_crate_cli_layout_impl(source, crate_root, crate_name)
 }
 
 #[instrument(level = "debug", skip(source), err(level = "warn"))]
 fn scan_crate_cli_layout_impl(
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
     crate_root: &Path,
     crate_name: &str,
 ) -> CordialResult<Vec<CliLayoutRecord>> {
@@ -77,15 +78,11 @@ fn scan_crate_cli_layout_impl(
 
     let mut catalog = LayoutCatalog::new(crate_name.to_string());
     for path in lib_files.iter().chain(bin_only.iter()) {
-        if let Some(source) = source {
-            load_shared_file(
-                &mut catalog,
-                &source.parsed_file(path, "cli-layout-inventory")?,
-                lib_files.contains(path),
-            )?;
-        } else {
-            load_file(&mut catalog, path, lib_files.contains(path))?;
-        }
+        load_shared_file(
+            &mut catalog,
+            &source.parsed_file(path, "cli-layout-inventory")?,
+            lib_files.contains(path),
+        )?;
     }
     finalize_acts(&mut catalog);
 
@@ -143,12 +140,8 @@ fn scan_crate_cli_layout_impl(
             }
         }
         for path in &entry_files {
-            if let Some(source) = source {
-                let file = source.parsed_file(path, "cli-layout-inventory")?;
-                lint_thin_syntax(crate_name, file.path(), file.syntax(), &mut findings)?;
-            } else {
-                lint_thin_main(crate_name, path, &mut findings)?;
-            }
+            let file = source.parsed_file(path, "cli-layout-inventory")?;
+            lint_thin_syntax(crate_name, file.path(), file.syntax(), &mut findings)?;
         }
     }
 
@@ -206,7 +199,7 @@ fn lint_act(
 
 #[instrument(level = "debug", skip(source), err(level = "warn"))]
 fn collect_tree(
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
     crate_root: &Path,
     root: &Path,
 ) -> CordialResult<BTreeSet<PathBuf>> {
@@ -234,18 +227,6 @@ fn rust_files_in(dir: &Path, crate_root: &Path) -> CordialResult<Vec<PathBuf>> {
     }
     Ok(files)
 }
-#[instrument(level = "debug", skip(file, findings), err(level = "warn"))]
-fn lint_thin_main(
-    crate_name: &str,
-    file: &Path,
-    findings: &mut Vec<CliLayoutRecord>,
-) -> CordialResult<()> {
-    let source = std::fs::read_to_string(file)?;
-    let syntax = syn::parse_file(&source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    lint_thin_syntax(crate_name, file, &syntax, findings)
-}
-
 #[instrument(level = "debug", skip(file, syntax, findings), err(level = "warn"))]
 fn lint_thin_syntax(
     crate_name: &str,

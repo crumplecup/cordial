@@ -69,6 +69,7 @@ impl SourceLoadView {
     /// Its caller must drop the view before rescanning files it has edited.
     #[cfg(any(
         feature = "antipatterns",
+        feature = "cli_layout",
         feature = "derives",
         feature = "tracing",
         feature = "visibility",
