@@ -64,7 +64,7 @@ mod objects;
 mod plugin;
 mod plugins;
 mod progress;
-#[cfg(feature = "impl_coverage")]
+#[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
 mod proof_harness;
 mod reporter;
 /// Rustdoc JSON inventory helpers used by coverage etiquettes.
@@ -223,8 +223,7 @@ pub use etiquettes::verus_warnings::{
 };
 #[cfg(feature = "visibility")]
 pub use etiquettes::visibility::{
-    BranchingCache, VISIBILITY_ETIQUETTE, VisibilityRecord, VisibilityRuleId,
-    scan_crate_visibility, scan_crate_visibility_with_cache,
+    VISIBILITY_ETIQUETTE, VisibilityRecord, VisibilityRuleId, scan_crate_visibility,
 };
 #[cfg(feature = "cfg_scatter")]
 pub use etiquettes::{CFG_SCATTER_ETIQUETTE, CfgSiteKind, scan_cfg_scatter_rust_source};

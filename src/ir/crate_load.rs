@@ -27,6 +27,8 @@ pub fn load_crate_ir_if_missing(
     }
 
     let target = resolve_crate_target(session.project_root(), crate_name);
+    #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
+    crate::session::prepare_workspace_proof_harness(workspace, session, enrichers, &[])?;
     let mut crate_ir = CrateIr::new(crate_name);
     let mut load_views: HashMap<String, Box<dyn LoadView>> = HashMap::new();
 
@@ -55,12 +57,23 @@ pub fn load_crate_ir_if_missing(
 
     workspace.insert_crate(crate_ir);
 
-    #[cfg(feature = "derives")]
+    #[cfg(any(
+        feature = "derives",
+        feature = "antipatterns",
+        all(
+            feature = "verus_ir",
+            any(
+                feature = "panics",
+                feature = "proof_patterns",
+                feature = "verus_warnings"
+            )
+        )
+    ))]
     if let Some(source) = load_views
         .get(&format!("{crate_name}:{}", SourceLoader::ID))
         .and_then(|view| view.as_any().downcast_ref::<SourceLoadView>())
     {
-        crate::session::prepare_workspace_source_facts(workspace, source, session, enrichers);
+        crate::session::prepare_workspace_source_facts(workspace, source, session, enrichers)?;
     }
 
     for enricher in enrichers {

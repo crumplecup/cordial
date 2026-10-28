@@ -27,12 +27,14 @@ impl SourceEnricher for AntipatternInventoryEnricher {
 
         let crate_root = member_crate_root(source, session);
         let config = crate::load_session_config(session);
+        let facts = ir.workspace_antipattern_facts().ok_or_else(|| {
+            crate::error::CordialError::workspace_source_facts_missing("antipatterns")
+        })?;
         let records = scan_shared_crate_antipatterns(
             source,
             &crate_root,
             ir.crate_name(),
-            session.project_root(),
-            session.store_root(),
+            &facts,
             config.antipatterns().static_refs().strategy(),
             config.internal_error_chain().field_strategy(),
             config.antipatterns().skip_paths(),

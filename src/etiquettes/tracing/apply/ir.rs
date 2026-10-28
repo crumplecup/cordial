@@ -45,7 +45,7 @@ pub(super) fn build_apply_ir(
             &source,
             &session,
             &enrichers,
-        );
+        )?;
         for enricher in enrichers {
             let mut view = CrateViewMut::new(&mut workspace, target.crate_name().clone());
             enricher.enrich(EnrichView::new(&mut view, &source, &session))?;

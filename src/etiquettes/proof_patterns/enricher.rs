@@ -4,7 +4,7 @@ use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
 
-use super::scan::scan_crate_proof_patterns_with_source;
+use super::scan::scan_crate_proof_patterns_with_ir;
 
 use tracing::instrument;
 
@@ -27,7 +27,10 @@ impl SourceEnricher for ProofPatternInventoryEnricher {
         let (ir, source, session) = view.into_parts();
 
         let crate_root = member_crate_root(source, session);
-        let records = scan_crate_proof_patterns_with_source(&crate_root, source)?;
+        let verus = ir.verus_facts().ok_or_else(|| {
+            crate::error::CordialError::workspace_source_facts_missing("Verus macro facts")
+        })?;
+        let records = scan_crate_proof_patterns_with_ir(&crate_root, &verus)?;
 
         for record in records {
             let parent = resolve_parent(ir, record.context())?;

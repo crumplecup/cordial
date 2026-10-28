@@ -37,8 +37,8 @@ Set `"prefer_root": false` to peel the largest undersized public modules
 until remaining root is under the max (e.g. keep 9, 7, 7, 6). The scanner
 enters **branching** mode: a floor that starts at `min_module_names` and
 drops with each peel, so those kept modules do not fire thin. The floor is
-cached under `{store}/cache/{crate}-visibility-branching.json` keyed by a
-source digest; a code change invalidates it and re-peels. That is a
+derived from the shared module tree on each scan. A source change changes
+the tree and the next scan re-peels. That is a
 two-pass analysis (peel, then apply the lowered floor), not a permanent
 exception.
 

@@ -61,6 +61,13 @@ pub(super) fn load_and_probe(
         probes,
     } = hooks;
     let mut workspace = WorkspaceIr::default();
+    #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
+    crate::session::prepare_workspace_proof_harness(
+        &mut workspace,
+        session,
+        enrichers,
+        &probes.iter().map(|probe| probe.id()).collect::<Vec<_>>(),
+    )?;
     let mut load_views: HashMap<String, Box<dyn LoadView>> = HashMap::new();
     let mut markers_by_crate: HashMap<String, Vec<Box<dyn Marker>>> = HashMap::new();
     let enricher_ids: Vec<String> = enrichers
@@ -135,7 +142,18 @@ pub(super) fn load_and_probe(
             workspace.insert_crate(crate_ir);
         }
 
-        #[cfg(feature = "derives")]
+        #[cfg(any(
+            feature = "derives",
+            feature = "antipatterns",
+            all(
+                feature = "verus_ir",
+                any(
+                    feature = "panics",
+                    feature = "proof_patterns",
+                    feature = "verus_warnings"
+                )
+            )
+        ))]
         if let Some(source) = load_views
             .get(&format!("{}:{}", target.crate_name(), SourceLoader::ID))
             .and_then(|view| view.as_any().downcast_ref::<SourceLoadView>())
@@ -145,7 +163,7 @@ pub(super) fn load_and_probe(
                 source,
                 session,
                 enrichers,
-            );
+            )?;
         }
 
         for enricher in enrichers {

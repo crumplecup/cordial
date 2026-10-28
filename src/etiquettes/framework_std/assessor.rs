@@ -79,8 +79,8 @@ mod amenable {
     use crate::error::CordialResult;
     use crate::framework_std::{
         AMENABLE_IMPL_CRATE, AMENABLE_PATCH_SET, AmenableStdOptions, ClassifyRowArgs,
-        amenable_gap_fields, classify_amenable_std_row, collect_proof_chain_subjects,
-        ensure_registry_dump_for_assessor, load_merged_std_inventory, load_verifier_skip_map,
+        amenable_gap_fields, classify_amenable_std_row, ensure_registry_dump_for_assessor,
+        load_merged_std_inventory, load_verifier_skip_map,
     };
     use crate::hooks::{AssessView, Assessor};
     use crate::objects::{Finding, NodeAnchor};
@@ -128,7 +128,10 @@ mod amenable {
             let registry =
                 ensure_registry_dump_for_assessor(&store, session.project_root(), &options)?;
             let skip_map = load_verifier_skip_map(&store, AMENABLE_PATCH_SET);
-            let proof_chain_subjects = collect_proof_chain_subjects(session.project_root())?;
+            let harness = ir.workspace_proof_harness().ok_or_else(|| {
+                crate::error::CordialError::workspace_source_facts_missing("proof harness")
+            })?;
+            let proof_chain_subjects = harness.proof_chain_subjects();
             let anchor = NodeAnchor::new(ir.root()?);
 
             let mut findings = Vec::new();

@@ -85,9 +85,10 @@ IR evidence contract; their remaining exceptions are tracked below. See
 - A source audit finds no direct outer-file `syn::parse_file` use in production
   scanners. Any remaining direct parse has an explicit embedded-source or
   standalone-test purpose.
-- Apply consumes source-derived decisions and edit locations from IR and never
-  reparses a proposed file. Standalone production entry points use the shared
-  loader and materialize their evidence in IR as well.
+- Apply consumes source-derived decisions and edit locations from IR. It may
+  read source text for located edits and parse proposed edits for validation.
+  Standalone production entry points use the shared loader and materialize
+  reusable evidence in IR.
 
 ## First slice decision
 
@@ -160,8 +161,8 @@ share those parsed trees safely.
 
 The visibility inventory now follows the crate's module tree through shared
 parsed files, including out-of-line modules and `#[path]` modules. Its public
-standalone scanner uses a short-lived source view, and the branching-cache
-digest hashes the same source snapshots used by the inventory.
+standalone scanner uses a short-lived source view. The branching-cache digest
+used to hash those snapshots; a later audit removed this separate cache.
 
 ## Tenth slice
 
@@ -301,9 +302,8 @@ source-derived side channels are concrete follow-up work:
   from `WorkspaceIr`. The edit pass reuses the source snapshot and only reads
   its text to locate and change the requested attribute. The lookup rejects
   incomplete recipe attributes instead of writing a default recipe.
-- Visibility's standalone scan now uses the shared source view. Its cache
-  digest reads each parsed file's snapshot through that view, so an intervening
-  disk change cannot make the cache key disagree with the scan result.
+- Visibility's standalone scan now uses the shared source view. The branching
+  floor is computed from that view's module tree, with no separate disk cache.
 - CLI layout's standalone crate scan now shares parsed trees across module
   discovery, cataloging, and entry-point inspection. Its redundant direct
   file parsers are removed.
@@ -312,8 +312,40 @@ source-derived side channels are concrete follow-up work:
   view; unused direct tree scanners were removed. Their raw-source fixture
   helpers still parse the supplied text once because they have no file snapshot
   to reuse.
-- Public standalone scan helpers still accept raw source or read files and may
-  parse outer files directly. These cannot feed a production source hook today,
-  but they remain an exception to a literal repo-wide one-parse policy. Move
-  each standalone workflow onto the shared loader and IR before claiming the
-  stronger invariant.
+- Raw-source fixture helpers still parse their supplied text once. Standalone
+  file scanners now obtain their outer Rust syntax from `SourceLoadView`.
+
+## Follow-up audit of process caches and proof harnesses
+
+The source audit was extended to process-wide caches, build scripts, Verus
+facts, and proof harness tests. Antipattern workspace facts and Verus IR now
+live on `WorkspaceIr` for a run. Path-keyed process caches for version findings,
+contract records, and Verus facts were removed. The visibility branching floor
+is derived from the shared module tree without a disk cache. The proof harness
+collector and both framework assessors use one run-scoped `ProofHarness` in
+`WorkspaceIr`; standalone report helpers obtain the same facts through a
+short-lived source view. Cfg hygiene reads `build.rs` through that view.
+
+The `CrateTypeIndex` used by error-graph apply is a temporary collection
+structure built from `SharedParsedFile`; it writes its evidence into the IR,
+then the planner reconstructs the index from the IR. The remaining direct
+`syn::parse_file` calls in etiquette scanners accept caller-supplied strings
+for fixture and public one-file APIs, parse embedded Rust strings, or parse
+macro-specific grammars. The canonical outer-file parser is
+`loader/source_work.rs`. Direct reads outside that path are for manifests,
+rustdoc JSON, reports, and configuration, plus apply's source snapshot check.
+
+This source-level audit does not prove that every possible plugin or public
+API uses one parse. The stronger runtime acceptance check remains an
+instrumented combined run showing at most one parse for every `(session,
+path)` and a finding comparison for all migrated etiquettes.
+
+The cache inventory distinguishes source evidence from other inputs. The
+thread-local `SourceLoadView` cache is the one shared outer-Rust parse cache;
+its entries are scoped to a parsed-source session. The persisted crate IR
+cache serializes that graph between runs. `CrateIndex` owns three lazy indexes
+over its own rustdoc JSON object for external type resolution, and dependency
+freshness can read an explicit observation override under the store. Neither
+supplies an alternate Rust source tree to a production hook. These remain
+separate data products, so the literal claim that every cache in Cordial lives
+inside `WorkspaceIr` would be false.

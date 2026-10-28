@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::error::CordialResult;
-use crate::loader::SourceLoadView;
 
 use super::types::{VerusWarningRecord, VerusWarningRuleId};
 
@@ -15,26 +14,34 @@ use tracing::instrument;
 /// compiler is on `PATH`.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_verus_warnings(crate_root: &Path) -> CordialResult<Vec<VerusWarningRecord>> {
-    scan_crate_verus_warnings_impl(crate_root, None)
+    scan_crate_verus_warnings_impl(
+        crate_root,
+        #[cfg(feature = "verus_ir")]
+        None,
+    )
 }
 
-#[instrument(level = "debug", skip(source), err(level = "warn"))]
-pub(super) fn scan_crate_verus_warnings_with_source(
+#[instrument(level = "debug", skip(verus), err(level = "warn"))]
+pub(super) fn scan_crate_verus_warnings_with_ir(
     crate_root: &Path,
-    source: &SourceLoadView,
+    #[cfg(feature = "verus_ir")] verus: &crate::VerusCrateIr,
 ) -> CordialResult<Vec<VerusWarningRecord>> {
-    scan_crate_verus_warnings_impl(crate_root, Some(source))
+    scan_crate_verus_warnings_impl(
+        crate_root,
+        #[cfg(feature = "verus_ir")]
+        Some(verus),
+    )
 }
 
-#[instrument(level = "debug", skip(source), err(level = "warn"))]
+#[instrument(level = "debug", skip(verus), err(level = "warn"))]
 fn scan_crate_verus_warnings_impl(
     crate_root: &Path,
-    source: Option<&SourceLoadView>,
+    #[cfg(feature = "verus_ir")] verus: Option<&crate::VerusCrateIr>,
 ) -> CordialResult<Vec<VerusWarningRecord>> {
     if !crate_is_verus_target(crate_root) {
         return Ok(Vec::new());
     }
-    let Some(verus) = resolve_verus_binary() else {
+    let Some(verus_binary) = resolve_verus_binary() else {
         tracing::debug!(
             crate_root = %crate_root.display(),
             "verus binary not found; skipping Verus warning scan"
@@ -44,19 +51,22 @@ fn scan_crate_verus_warnings_impl(
     let Some(entry) = verus_crate_entry(crate_root) else {
         return Ok(Vec::new());
     };
-    let output = run_verus(&verus, crate_root, &entry)?;
+    let output = run_verus(&verus_binary, crate_root, &entry)?;
     let records = parse_verus_compiler_output(&output, crate_root)?;
-    warning_filter::retain_real_warnings(records, crate_root, source)
+    warning_filter::retain_real_warnings(
+        records,
+        crate_root,
+        #[cfg(feature = "verus_ir")]
+        verus,
+    )
 }
 
 #[cfg(feature = "verus_ir")]
 mod warning_filter {
     use std::path::Path;
 
-    use crate::error::CordialResult;
-    use crate::loader::SourceLoadView;
-
     use super::VerusWarningRecord;
+    use crate::error::CordialResult;
     use tracing::instrument;
 
     /// Drop a "missing documentation for a method" warning that lands
@@ -67,22 +77,24 @@ mod warning_filter {
     /// confirmed, real reason. A no-op when the `verus_ir` feature isn't
     /// compiled in (kept independently toggleable, matching every other
     /// cross-etiquette signal reuse in this codebase).
-    #[instrument(level = "debug", skip(records, source), err(level = "warn"))]
+    #[instrument(level = "debug", skip(records, verus), err(level = "warn"))]
     pub(super) fn retain_real_warnings(
         records: Vec<VerusWarningRecord>,
         crate_root: &Path,
-        source: Option<&SourceLoadView>,
+        verus: Option<&crate::VerusCrateIr>,
     ) -> CordialResult<Vec<VerusWarningRecord>> {
-        let ir = if let Some(source) = source {
-            crate::verus_ir::scan_crate_verus_ir_with_source(crate_root, source)?
+        let standalone;
+        let verus = if let Some(verus) = verus {
+            verus
         } else {
-            crate::verus_ir::scan_crate_verus_ir(crate_root)?
+            standalone = crate::verus_ir::scan_crate_verus_ir(crate_root)?;
+            &standalone
         };
         Ok(records
             .into_iter()
             .filter(|record| {
                 !(record.snippet() == "missing documentation for a method"
-                    && ir.is_documented_pattern_projection_enum(record.file(), record.line()))
+                    && verus.is_documented_pattern_projection_enum(record.file(), record.line()))
             })
             .collect())
     }
@@ -93,19 +105,16 @@ mod warning_filter {
     use std::path::Path;
 
     use crate::error::CordialResult;
-    use crate::loader::SourceLoadView;
 
     use super::VerusWarningRecord;
     use tracing::instrument;
 
-    #[instrument(level = "debug", skip(records, source))]
+    #[instrument(level = "debug", skip(records))]
     pub(super) fn retain_real_warnings(
         records: Vec<VerusWarningRecord>,
         crate_root: &Path,
-        source: Option<&SourceLoadView>,
     ) -> CordialResult<Vec<VerusWarningRecord>> {
         let _ = crate_root;
-        let _ = source;
         Ok(records)
     }
 }

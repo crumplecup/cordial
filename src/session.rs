@@ -32,9 +32,35 @@ mod load;
 mod render;
 mod resolve;
 mod run;
-#[cfg(feature = "derives")]
+#[cfg(any(
+    feature = "derives",
+    feature = "antipatterns",
+    all(
+        feature = "verus_ir",
+        any(
+            feature = "panics",
+            feature = "proof_patterns",
+            feature = "verus_warnings"
+        )
+    ),
+    feature = "impl_coverage",
+    feature = "amenable_std"
+))]
 mod source_facts;
-#[cfg(feature = "derives")]
+#[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
+pub(crate) use source_facts::prepare_workspace_proof_harness;
+#[cfg(any(
+    feature = "derives",
+    feature = "antipatterns",
+    all(
+        feature = "verus_ir",
+        any(
+            feature = "panics",
+            feature = "proof_patterns",
+            feature = "verus_warnings"
+        )
+    )
+))]
 pub(crate) use source_facts::prepare_workspace_source_facts;
 
 /// Read-only paths and run context shared with hooks.

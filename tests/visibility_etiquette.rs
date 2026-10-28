@@ -4,7 +4,6 @@ use std::fs;
 use cordial::{
     RunAll, Session, SessionBuilder, VISIBILITY_ETIQUETTE, VisibilityRecord, VisibilityRuleId,
     VisibilityThresholds, load_visibility_thresholds, scan_crate_visibility,
-    scan_crate_visibility_with_cache,
 };
 
 fn write_crate(root: &std::path::Path, lib: &str, extra: &[(&str, &str)]) -> miette::Result<()> {
@@ -348,33 +347,25 @@ fn prefer_root_false_peels_until_root_is_under_max() -> miette::Result<()> {
 }
 
 #[test]
-fn branching_cache_reuses_floor_until_sources_change() -> miette::Result<()> {
+fn branching_floor_tracks_source_changes() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_thin_overflow_crate(fixture.path(), 40)?;
     let thresholds = VisibilityThresholds::default().with_prefer_root(false);
-    let (first, cache) = scan_crate_visibility_with_cache(fixture.path(), thresholds.clone(), None)
+    let first = scan_crate_visibility(fixture.path(), thresholds.clone())
         .into_diagnostic()
         .wrap_err("scan")?;
-    let cache = cache.ok_or_else(|| miette::miette!("branching writes a cache"))?;
-    assert_eq!(cache.floor(), 7);
-    let (second, reused) =
-        scan_crate_visibility_with_cache(fixture.path(), thresholds.clone(), Some(cache.clone()))
-            .into_diagnostic()
-            .wrap_err("cached scan")?;
-    let reused = reused.ok_or_else(|| miette::miette!("cache hit"))?;
-    assert_eq!(reused.digest(), cache.digest());
+    let second = scan_crate_visibility(fixture.path(), thresholds.clone())
+        .into_diagnostic()
+        .wrap_err("second scan")?;
     assert_eq!(thin_paths(&second), thin_paths(&first));
 
     std::fs::write(fixture.path().join("src/d.rs"), pub_fns("d", 8))
         .into_diagnostic()
         .wrap_err("edit")?;
-    let (third, recomputed) =
-        scan_crate_visibility_with_cache(fixture.path(), thresholds, Some(cache))
-            .into_diagnostic()
-            .wrap_err("re-peel")?;
-    let recomputed = recomputed.ok_or_else(|| miette::miette!("digest mismatch recomputes"))?;
-    assert_ne!(recomputed.digest(), reused.digest());
+    let third = scan_crate_visibility(fixture.path(), thresholds)
+        .into_diagnostic()
+        .wrap_err("re-peel")?;
     assert!(
         thin_paths(&third).is_empty(),
         "after edit, 8 >= floor 7 so d is no longer thin: {third:?}"

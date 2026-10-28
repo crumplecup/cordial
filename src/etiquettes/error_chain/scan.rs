@@ -1,7 +1,7 @@
 //! syn-based scan for preserved foreign error chains.
 
+use crate::loader::SourceLoadView;
 use std::path::Path;
-use walkdir::WalkDir;
 
 use crate::error::CordialResult;
 use crate::etiquettes::error_chain::ErrorChainRecord;
@@ -10,22 +10,16 @@ use tracing::instrument;
 /// Scan every `src/**/*.rs` file under `crate_root`.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_error_chain(crate_root: &Path) -> CordialResult<Vec<ErrorChainRecord>> {
+    let source = SourceLoadView::for_standalone_scan();
     let src_root = crate_root.join("src");
-    if !src_root.is_dir() {
-        return Ok(Vec::new());
-    }
-
     let mut findings = Vec::new();
-    for entry in WalkDir::new(&src_root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-    {
-        let path = entry.path();
-        if path.extension().is_none_or(|ext| ext != "rs") {
-            continue;
-        }
-        findings.extend(scan_rust_file(path, &src_root, crate_root)?);
+    for file in source.parsed_rust_files_under(&src_root, "error-chain-standalone", |_| true)? {
+        findings.extend(scan_rust_syntax(
+            file.syntax(),
+            file.path(),
+            &src_root,
+            crate_root,
+        )?);
     }
 
     findings.sort_by(|a, b| {
@@ -70,14 +64,4 @@ pub(crate) fn scan_rust_syntax(
     )?
     .chain()
     .clone())
-}
-
-#[instrument(level = "debug", skip(file), err(level = "warn"))]
-fn scan_rust_file(
-    file: &Path,
-    src_root: &Path,
-    crate_root: &Path,
-) -> CordialResult<Vec<ErrorChainRecord>> {
-    let source = std::fs::read_to_string(file)?;
-    scan_rust_source(&source, file, src_root, crate_root)
 }

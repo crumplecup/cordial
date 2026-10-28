@@ -58,6 +58,7 @@ pub use scan::{
     scan_rust_source, scan_rust_source_with_skip_paths, scan_rust_source_with_static_ref_strategy,
     scan_rust_source_with_strategies,
 };
+pub use scan_crate::AntipatternWorkspaceFacts;
 pub use scan_crate::{scan_crate_antipatterns, scan_crate_antipatterns_with_static_ref_strategy};
 pub use types::{AntipatternRuleId, AntipatternSiteRecord};
 pub use version_reporter::{

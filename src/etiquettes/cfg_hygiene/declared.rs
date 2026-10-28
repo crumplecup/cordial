@@ -14,6 +14,8 @@ use std::path::Path;
 use toml::Value;
 
 use crate::config::CfgHygieneThresholds;
+use crate::error::CordialResult;
+use crate::loader::SourceLoadView;
 
 use tracing::instrument;
 /// rustc's own fixed, versioned built-in `--check-cfg` vocabulary: always
@@ -83,12 +85,13 @@ const CARGO_INJECTED_NAMES: &[&str] = &["test", "feature", "docsrs"];
 /// manifest sets `[lints] workspace = true`), this crate's own
 /// `build.rs`-emitted `cargo::rustc-check-cfg=cfg(...)` lines, and
 /// `thresholds`' `extra_known_names` escape hatch.
-#[instrument(level = "debug", skip(thresholds))]
+#[instrument(level = "debug", skip(source, thresholds))]
 pub fn declared_names_for_crate(
+    source: &SourceLoadView,
     crate_root: &Path,
     workspace_root: &Path,
     thresholds: &CfgHygieneThresholds,
-) -> HashSet<String> {
+) -> CordialResult<HashSet<String>> {
     let mut names: HashSet<String> = RUSTC_BUILTIN_NAMES
         .iter()
         .chain(CARGO_INJECTED_NAMES.iter())
@@ -114,11 +117,12 @@ pub fn declared_names_for_crate(
     }
 
     let build_script = crate_root.join("build.rs");
-    if let Ok(content) = std::fs::read_to_string(&build_script) {
-        names.extend(check_cfg_names_from_build_script(&content));
+    if build_script.is_file() {
+        let parsed = source.parsed_file(&build_script, "cfg-hygiene-build-script")?;
+        names.extend(check_cfg_names_from_build_script(parsed.source()));
     }
 
-    names
+    Ok(names)
 }
 
 #[instrument(level = "debug", skip(table))]

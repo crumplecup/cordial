@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::error::CordialResult;
+use crate::loader::SourceLoadView;
 use crate::plugin::{WorkspaceHub, discover_workspace_hub};
 
 /// Scanned contents of the proof harness test files.
@@ -62,31 +63,53 @@ pub fn proof_harness_paths(hub: WorkspaceHub, workspace: &Path) -> Vec<PathBuf> 
 }
 
 /// Load and merge proof harness scans for the workspace at `project_root`.
+#[cfg(feature = "impl_coverage")]
 #[instrument(level = "info", skip(filter), err(level = "warn"))]
 pub fn load_workspace_proof_harness(
     project_root: &Path,
     filter: &dyn crate::session::RunFilter,
 ) -> CordialResult<ProofHarness> {
+    let source = SourceLoadView::for_standalone_scan();
+    load_workspace_proof_harness_with_source(project_root, filter, &source)
+}
+
+/// Collect proof evidence from the run's shared source snapshot.
+#[instrument(level = "info", skip(filter, source), err(level = "warn"))]
+pub(crate) fn load_workspace_proof_harness_with_source(
+    project_root: &Path,
+    filter: &dyn crate::session::RunFilter,
+    source: &SourceLoadView,
+) -> CordialResult<ProofHarness> {
     let hub = discover_workspace_hub(project_root, filter)?;
     let mut harness = ProofHarness::default();
     for path in proof_harness_paths(hub, project_root) {
         if path.is_file() {
-            harness.merge(collect_proof_harness(&path)?);
+            harness.merge(collect_proof_harness_with_source(&path, source)?);
         }
     }
     Ok(harness)
 }
 
 /// Scan a proof harness test file.
+#[cfg(feature = "impl_coverage")]
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
 pub fn collect_proof_harness(path: &Path) -> CordialResult<ProofHarness> {
-    let source = std::fs::read_to_string(path)?;
+    let source = SourceLoadView::for_standalone_scan();
+    collect_proof_harness_with_source(path, &source)
+}
+
+#[instrument(level = "debug", skip(path, source), err(level = "warn"))]
+pub(crate) fn collect_proof_harness_with_source(
+    path: &Path,
+    source: &SourceLoadView,
+) -> CordialResult<ProofHarness> {
+    let parsed = source.parsed_file(path, "proof-harness")?;
 
     let mut non_empty_types: HashSet<String> = HashSet::new();
     let mut composition_pairs: Vec<(String, String)> = Vec::new();
     let mut proof_chain_subjects: HashSet<String> = HashSet::new();
 
-    for line in source.lines() {
+    for line in parsed.source().lines() {
         let trimmed = line.trim();
 
         if let Some(ty) = extract_turbofish_arg(trimmed, "assert_proofs_non_empty") {
@@ -96,14 +119,13 @@ pub fn collect_proof_harness(path: &Path) -> CordialResult<ProofHarness> {
         if let Some((outer, inner)) = extract_kani_contains(trimmed) {
             composition_pairs.push((outer, inner));
         }
-
-        if let Some(subject) = extract_string_arg(trimmed, "proof_chain") {
-            proof_chain_subjects.insert(subject);
-        }
-        if let Some(subject) = extract_string_arg(trimmed, "proof_chain_for_verifiers") {
-            proof_chain_subjects.insert(subject);
-        }
     }
+    collect_string_args(parsed.source(), "proof_chain", &mut proof_chain_subjects);
+    collect_string_args(
+        parsed.source(),
+        "proof_chain_for_verifiers",
+        &mut proof_chain_subjects,
+    );
 
     Ok(ProofHarness::new(
         non_empty_types,
@@ -122,17 +144,20 @@ fn extract_turbofish_arg(line: &str, fn_name: &str) -> Option<String> {
     if ty.is_empty() { None } else { Some(ty) }
 }
 
-#[instrument(level = "debug")]
-fn extract_string_arg(line: &str, fn_name: &str) -> Option<String> {
-    let prefix = format!("{fn_name}(\"");
-    let start = line.find(&prefix)? + prefix.len();
-    let rest = &line[start..];
-    let end = rest.find('"')?;
-    let subject = rest[..end].trim();
-    if subject.is_empty() {
-        None
-    } else {
-        Some(subject.to_string())
+#[instrument(level = "debug", skip(source, subjects))]
+fn collect_string_args(source: &str, fn_name: &str, subjects: &mut HashSet<String>) {
+    let prefix = format!("{fn_name}(");
+    let mut rest = source;
+    while let Some(index) = rest.find(&prefix) {
+        rest = &rest[index + prefix.len()..];
+        if let Some(quoted) = rest.trim_start().strip_prefix('"')
+            && let Some(end) = quoted.find('"')
+        {
+            let subject = quoted[..end].trim();
+            if !subject.is_empty() {
+                subjects.insert(subject.to_string());
+            }
+        }
     }
 }
 

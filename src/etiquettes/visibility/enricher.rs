@@ -4,7 +4,7 @@ use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
 
-use super::scan::{BranchingCache, scan_shared_crate_visibility_with_cache};
+use super::scan::scan_shared_crate_visibility;
 use super::types::VisibilityRuleId;
 use crate::config::VisibilityThresholds;
 
@@ -31,24 +31,7 @@ impl SourceEnricher for VisibilityInventoryEnricher {
         let thresholds = crate::config::load_session_config(session)
             .visibility()
             .clone();
-        let cache_path = session
-            .store_root()
-            .join("cache")
-            .join(format!("{}-visibility-branching.json", ir.crate_name()));
-        let cached = if thresholds.prefer_root() {
-            None
-        } else {
-            BranchingCache::load(&cache_path)
-        };
-        let (records, new_cache) = scan_shared_crate_visibility_with_cache(
-            source,
-            &crate_root,
-            thresholds.clone(),
-            cached,
-        )?;
-        if let Some(cache) = new_cache {
-            cache.write(&cache_path)?;
-        }
+        let records = scan_shared_crate_visibility(source, &crate_root, thresholds.clone())?;
 
         for record in records {
             if record.rule_id() == VisibilityRuleId::ModThin001

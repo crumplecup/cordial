@@ -30,7 +30,7 @@ pub use assessor::VisibilityAssessor;
 pub use enricher::VisibilityInventoryEnricher;
 pub use probe::VisibilitySiteProbe;
 pub use reporter::{VisibilityChecklistReporter, VisibilityCsvReporter, VisibilitySummaryReporter};
-pub use scan::{BranchingCache, scan_crate_visibility, scan_crate_visibility_with_cache};
+pub use scan::scan_crate_visibility;
 pub use types::{VisibilityRecord, VisibilityRuleId};
 
 use std::sync::LazyLock;

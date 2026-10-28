@@ -42,17 +42,14 @@ pub fn scan_crate_tracing_subscriber(
     policy: &TracingSubscriberPolicy,
     skip_program_lints: bool,
 ) -> CordialResult<Vec<SubscriberSiteRecord>> {
-    let mut sites = Vec::new();
-    for tree_root in quality_scan_trees(crate_root) {
-        sites.extend(collect_tree(
-            &tree_root,
-            crate_root,
-            crate_name,
-            policy.known_helper_paths(),
-        )?);
-    }
-
-    findings_for_sites(&sites, crate_root, policy, skip_program_lints)
+    let source = SourceLoadView::for_standalone_scan();
+    scan_shared_crate_tracing_subscriber(
+        &source,
+        crate_root,
+        crate_name,
+        policy,
+        skip_program_lints,
+    )
 }
 
 #[instrument(level = "debug", skip(source, policy), err(level = "warn"))]
@@ -197,60 +194,6 @@ fn record(
         .line(site.line)
         .snippet(snippet.to_string())
         .build()
-}
-
-#[instrument(level = "debug", skip(known_helper_paths), err(level = "warn"))]
-fn collect_tree(
-    tree_root: &Path,
-    crate_root: &Path,
-    crate_name: &str,
-    known_helper_paths: &[String],
-) -> CordialResult<Vec<FnSite>> {
-    let mut sites = Vec::new();
-    if !tree_root.is_dir() {
-        return Ok(sites);
-    }
-    for entry in walkdir::WalkDir::new(tree_root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-    {
-        let path = entry.path();
-        if path.extension().is_none_or(|ext| ext != "rs") {
-            continue;
-        }
-        if path_has_fixtures(path, crate_root) {
-            continue;
-        }
-        let source = std::fs::read_to_string(path)?;
-        sites.extend(scan_file(
-            &source,
-            path,
-            crate_root,
-            crate_name,
-            known_helper_paths,
-        )?);
-    }
-    Ok(sites)
-}
-
-#[instrument(level = "debug", skip(source, file))]
-fn scan_file(
-    source: &str,
-    file: &Path,
-    crate_root: &Path,
-    crate_name: &str,
-    known_helper_paths: &[String],
-) -> CordialResult<Vec<FnSite>> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    Ok(scan_syntax(
-        &syntax,
-        file,
-        crate_root,
-        crate_name,
-        known_helper_paths,
-    ))
 }
 
 #[instrument(level = "debug", skip(file))]

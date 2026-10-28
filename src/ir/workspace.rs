@@ -12,6 +12,19 @@ pub struct WorkspaceIr {
     crates: HashMap<String, CrateIr>,
     /// Edges that connect nodes in different crates.
     cross_crate_edges: Vec<(String, NodeId, String, NodeId, EdgeWeight)>,
+    /// Proof harness evidence shared by coverage enrichers and assessors.
+    #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
+    #[getter(skip)]
+    proof_harness: Option<std::sync::Arc<crate::proof_harness::ProofHarness>>,
+    /// Parsed Verus macro facts for each crate in this run.
+    #[cfg(feature = "verus_ir")]
+    #[getter(skip)]
+    verus_facts: HashMap<String, std::sync::Arc<crate::VerusCrateIr>>,
+    /// Workspace manifest and contract evidence used by the antipattern enricher.
+    #[cfg(feature = "antipatterns")]
+    #[getter(skip)]
+    antipattern_facts:
+        Option<std::sync::Arc<crate::etiquettes::antipatterns::AntipatternWorkspaceFacts>>,
     /// Workspace source facts shared by derive and tracing enrichers.
     #[cfg(feature = "derives")]
     #[getter(skip)]
@@ -28,6 +41,59 @@ pub struct WorkspaceIr {
 }
 
 impl WorkspaceIr {
+    #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
+    #[instrument(level = "trace", skip(self, harness))]
+    pub(crate) fn set_proof_harness(&mut self, harness: crate::proof_harness::ProofHarness) {
+        self.proof_harness = Some(std::sync::Arc::new(harness));
+    }
+
+    #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn proof_harness(
+        &self,
+    ) -> Option<std::sync::Arc<crate::proof_harness::ProofHarness>> {
+        self.proof_harness.clone()
+    }
+
+    #[cfg(all(
+        feature = "verus_ir",
+        any(
+            feature = "panics",
+            feature = "proof_patterns",
+            feature = "verus_warnings"
+        )
+    ))]
+    #[instrument(level = "trace", skip(self, facts))]
+    pub(crate) fn set_verus_facts(&mut self, crate_name: String, facts: crate::VerusCrateIr) {
+        self.verus_facts
+            .insert(crate_name, std::sync::Arc::new(facts));
+    }
+
+    #[cfg(feature = "verus_ir")]
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn verus_facts(
+        &self,
+        crate_name: &str,
+    ) -> Option<std::sync::Arc<crate::VerusCrateIr>> {
+        self.verus_facts.get(crate_name).cloned()
+    }
+
+    #[cfg(feature = "antipatterns")]
+    #[instrument(level = "trace", skip(self, facts))]
+    pub(crate) fn set_antipattern_facts(
+        &mut self,
+        facts: crate::etiquettes::antipatterns::AntipatternWorkspaceFacts,
+    ) {
+        self.antipattern_facts = Some(std::sync::Arc::new(facts));
+    }
+
+    #[cfg(feature = "antipatterns")]
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn antipattern_facts(
+        &self,
+    ) -> Option<&crate::etiquettes::antipatterns::AntipatternWorkspaceFacts> {
+        self.antipattern_facts.as_deref()
+    }
     #[cfg(feature = "derives")]
     #[instrument(level = "trace", skip(self, facts))]
     pub(crate) fn set_path_inclusions(&mut self, facts: crate::PathInclusionFacts) {
@@ -144,6 +210,31 @@ impl IrView for CrateView<'_> {
         &self.crate_name
     }
 
+    #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
+    #[instrument(level = "trace", skip(self))]
+    fn workspace_proof_harness(
+        &self,
+    ) -> Option<std::sync::Arc<crate::proof_harness::ProofHarness>> {
+        self.workspace.proof_harness()
+    }
+
+    #[cfg(feature = "verus_ir")]
+    #[instrument(level = "trace", skip(self))]
+    fn verus_facts(&self) -> Option<std::sync::Arc<crate::VerusCrateIr>> {
+        self.workspace.verus_facts(&self.crate_name)
+    }
+
+    #[cfg(feature = "antipatterns")]
+    #[instrument(level = "trace", skip(self))]
+    fn workspace_antipattern_facts(
+        &self,
+    ) -> Option<std::sync::Arc<crate::etiquettes::antipatterns::AntipatternWorkspaceFacts>> {
+        self.workspace
+            .antipattern_facts
+            .as_ref()
+            .map(std::sync::Arc::clone)
+    }
+
     #[cfg(feature = "derives")]
     #[instrument(level = "trace", skip(self))]
     fn workspace_path_inclusions(&self) -> Option<std::sync::Arc<crate::PathInclusionFacts>> {
@@ -219,6 +310,31 @@ impl IrView for CrateViewMut<'_> {
     #[instrument(level = "trace", skip(self))]
     fn crate_name(&self) -> &str {
         &self.crate_name
+    }
+
+    #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
+    #[instrument(level = "trace", skip(self))]
+    fn workspace_proof_harness(
+        &self,
+    ) -> Option<std::sync::Arc<crate::proof_harness::ProofHarness>> {
+        self.workspace.proof_harness()
+    }
+
+    #[cfg(feature = "verus_ir")]
+    #[instrument(level = "trace", skip(self))]
+    fn verus_facts(&self) -> Option<std::sync::Arc<crate::VerusCrateIr>> {
+        self.workspace.verus_facts(&self.crate_name)
+    }
+
+    #[cfg(feature = "antipatterns")]
+    #[instrument(level = "trace", skip(self))]
+    fn workspace_antipattern_facts(
+        &self,
+    ) -> Option<std::sync::Arc<crate::etiquettes::antipatterns::AntipatternWorkspaceFacts>> {
+        self.workspace
+            .antipattern_facts
+            .as_ref()
+            .map(std::sync::Arc::clone)
     }
 
     #[cfg(feature = "derives")]

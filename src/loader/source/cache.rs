@@ -53,8 +53,6 @@ impl ParsedSourceSession {
 impl Drop for ParsedSourceSession {
     #[tracing::instrument(level = "trace", skip(self))]
     fn drop(&mut self) {
-        #[cfg(feature = "verus_ir")]
-        crate::verus_ir::release_shared_ir(self.token.0);
         PARSED.with(|parsed| {
             parsed.borrow_mut().remove(&self.token.0);
         });
@@ -77,7 +75,11 @@ impl SourceLoadView {
         feature = "error_sites",
         feature = "glob_imports",
         feature = "inline_tests",
-        feature = "pageantry"
+        feature = "pageantry",
+        feature = "cfg_hygiene",
+        feature = "verus_ir",
+        feature = "impl_coverage",
+        feature = "amenable_std"
     ))]
     #[instrument(level = "debug")]
     pub(crate) fn for_standalone_scan() -> Self {
@@ -167,19 +169,5 @@ impl SourceLoadView {
             }
         }
         Ok(files)
-    }
-
-    /// Identity of the run that issued this parsed-file view.
-    #[cfg(any(all(
-        feature = "verus_ir",
-        any(
-            feature = "panics",
-            feature = "proof_patterns",
-            feature = "verus_warnings"
-        )
-    )))]
-    #[tracing::instrument(level = "trace", skip(self))]
-    pub(crate) fn session_id(&self) -> u64 {
-        self.cache_token.0
     }
 }

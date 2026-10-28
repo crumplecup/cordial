@@ -2,7 +2,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use toml::Value;
 use tracing::instrument;
@@ -13,27 +12,11 @@ use super::types::{AntipatternRuleId, AntipatternSiteRecord};
 
 const DEP_SECTIONS: &[&str] = &["dependencies", "dev-dependencies", "build-dependencies"];
 
-type VersionFindingsByCrate = HashMap<String, Vec<AntipatternSiteRecord>>;
-type VersionFindingsCache = Mutex<Option<(PathBuf, VersionFindingsByCrate)>>;
-
-static VERSION_FINDINGS_CACHE: VersionFindingsCache = Mutex::new(None);
-
-/// Cached workspace scan grouped by crate name.
+/// Workspace scan grouped by crate name. The run-scoped result lives in `WorkspaceIr`.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_workspace_version_in_member(
     workspace_root: &Path,
 ) -> CordialResult<HashMap<String, Vec<AntipatternSiteRecord>>> {
-    let cache_key = workspace_root
-        .canonicalize()
-        .unwrap_or_else(|_| workspace_root.to_path_buf());
-
-    if let Ok(cache) = VERSION_FINDINGS_CACHE.lock()
-        && let Some((key, findings)) = cache.as_ref()
-        && *key == cache_key
-    {
-        return Ok(findings.clone());
-    }
-
     let meta = match cargo_metadata::MetadataCommand::new()
         .current_dir(workspace_root)
         .exec()
@@ -83,9 +66,6 @@ pub fn scan_workspace_version_in_member(
         }
     }
 
-    if let Ok(mut cache) = VERSION_FINDINGS_CACHE.lock() {
-        *cache = Some((cache_key, by_crate.clone()));
-    }
     Ok(by_crate)
 }
 

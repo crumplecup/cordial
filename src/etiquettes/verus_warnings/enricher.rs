@@ -4,7 +4,7 @@ use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
 
-use super::scan::scan_crate_verus_warnings_with_source;
+use super::scan::scan_crate_verus_warnings_with_ir;
 
 use tracing::instrument;
 
@@ -27,7 +27,15 @@ impl SourceEnricher for VerusWarningInventoryEnricher {
         let (ir, source, session) = view.into_parts();
 
         let crate_root = member_crate_root(source, session);
-        let records = scan_crate_verus_warnings_with_source(&crate_root, source)?;
+        #[cfg(feature = "verus_ir")]
+        let verus = ir.verus_facts().ok_or_else(|| {
+            crate::error::CordialError::workspace_source_facts_missing("Verus macro facts")
+        })?;
+        let records = scan_crate_verus_warnings_with_ir(
+            &crate_root,
+            #[cfg(feature = "verus_ir")]
+            &verus,
+        )?;
 
         for record in records {
             let parent = resolve_parent(ir, record.context())?;

@@ -2,8 +2,6 @@
 
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
-
 use crate::error::CordialResult;
 use crate::loader::SourceLoadView;
 
@@ -20,38 +18,6 @@ use findings::collect_findings;
 use tree::scan_shared_module_file;
 use vis::VisKind;
 
-/// Cached branching floor from a previous peel. Digest is a hash of the
-/// scanned crate files; a source edit invalidates it and forces a re-peel.
-#[derive(
-    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
-)]
-pub struct BranchingCache {
-    /// Visibility digest of names in this module.
-    digest: String,
-    /// Minimum leaf-name count for a visible module.
-    #[getter(copy)]
-    floor: usize,
-}
-
-impl BranchingCache {
-    /// Read raw material for this crate and return a load view.
-    #[instrument(level = "debug", skip(path))]
-    pub fn load(path: &Path) -> Option<Self> {
-        let bytes = std::fs::read(path).ok()?;
-        serde_json::from_slice(&bytes).ok()
-    }
-
-    /// Serialize this value to `path`.
-    #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
-    pub fn write(&self, path: &Path) -> CordialResult<()> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::write(path, serde_json::to_vec_pretty(self)?)?;
-        Ok(())
-    }
-}
-
 /// Walk the crate's root module tree (`src/lib.rs` or `src/main.rs`) and
 /// apply `thresholds`. The scanner never picks thresholds itself.
 #[instrument(level = "debug", skip(thresholds), err(level = "warn"))]
@@ -59,45 +25,18 @@ pub fn scan_crate_visibility(
     crate_root: &Path,
     thresholds: VisibilityThresholds,
 ) -> CordialResult<Vec<VisibilityRecord>> {
-    Ok(scan_crate_visibility_with_cache(crate_root, thresholds, None)?.0)
-}
-
-/// Same as [`scan_crate_visibility`], but reuses a branching floor when the
-/// crate-file digest still matches. On mismatch (or first run) this peels,
-/// writes a new cache payload, then applies the lowered floor — a two-pass
-/// analysis so undersized peeled modules do not fire `VIS-MOD-THIN-001`.
-#[instrument(level = "debug", skip(thresholds, cached), err(level = "warn"))]
-pub fn scan_crate_visibility_with_cache(
-    crate_root: &Path,
-    thresholds: VisibilityThresholds,
-    cached: Option<BranchingCache>,
-) -> CordialResult<(Vec<VisibilityRecord>, Option<BranchingCache>)> {
-    let Some(root_file) = crate_root_file(crate_root) else {
-        return Ok((Vec::new(), None));
-    };
     let source = SourceLoadView::for_standalone_scan();
-    let root = scan_shared_module_file(
-        &source,
-        &root_file,
-        "crate".to_string(),
-        VisKind::Pub,
-        true,
-        true,
-        true,
-    )?;
-    let (eval, new_cache) = resolve_eval(&source, &root, thresholds.clone(), cached)?;
-    Ok((collect_findings(&root, thresholds, eval)?, new_cache))
+    scan_shared_crate_visibility(&source, crate_root, thresholds)
 }
 
-#[instrument(level = "debug", skip(source, thresholds, cached), err(level = "warn"))]
-pub(super) fn scan_shared_crate_visibility_with_cache(
+#[instrument(level = "debug", skip(source, thresholds), err(level = "warn"))]
+pub(super) fn scan_shared_crate_visibility(
     source: &SourceLoadView,
     crate_root: &Path,
     thresholds: VisibilityThresholds,
-    cached: Option<BranchingCache>,
-) -> CordialResult<(Vec<VisibilityRecord>, Option<BranchingCache>)> {
+) -> CordialResult<Vec<VisibilityRecord>> {
     let Some(root_file) = crate_root_file(crate_root) else {
-        return Ok((Vec::new(), None));
+        return Ok(Vec::new());
     };
     let root = scan_shared_module_file(
         source,
@@ -108,8 +47,8 @@ pub(super) fn scan_shared_crate_visibility_with_cache(
         true,
         true,
     )?;
-    let (eval, new_cache) = resolve_eval(source, &root, thresholds.clone(), cached)?;
-    Ok((collect_findings(&root, thresholds, eval)?, new_cache))
+    let eval = resolve_eval(&root, thresholds.clone());
+    collect_findings(&root, thresholds, eval)
 }
 
 #[instrument(level = "debug")]

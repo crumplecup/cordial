@@ -10,6 +10,47 @@ use cordial::{
 };
 
 #[test]
+fn workspace_version_findings_refresh_after_manifest_edit() -> miette::Result<()> {
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir().into_diagnostic()?;
+    let member = workspace.path().join("member");
+    fs::create_dir_all(member.join("src")).into_diagnostic()?;
+    fs::write(member.join("src/lib.rs"), "pub struct Example;\n").into_diagnostic()?;
+    fs::write(
+        workspace.path().join("Cargo.toml"),
+        "[workspace]\nmembers = [\"member\"]\n[workspace.package]\nversion = \"0.1.0\"\n",
+    )
+    .into_diagnostic()?;
+    let manifest = member.join("Cargo.toml");
+    fs::write(
+        &manifest,
+        "[package]\nname = \"member\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+    )
+    .into_diagnostic()?;
+    let first = scan_crate_antipatterns(&member, "member", workspace.path(), workspace.path())
+        .into_diagnostic()?;
+    assert!(
+        first
+            .iter()
+            .any(|item| item.rule_id() == AntipatternRuleId::VersionInMember001)
+    );
+
+    fs::write(
+        &manifest,
+        "[package]\nname = \"member\"\nversion.workspace = true\nedition = \"2024\"\n",
+    )
+    .into_diagnostic()?;
+    let second = scan_crate_antipatterns(&member, "member", workspace.path(), workspace.path())
+        .into_diagnostic()?;
+    assert!(
+        second
+            .iter()
+            .all(|item| item.rule_id() != AntipatternRuleId::VersionInMember001)
+    );
+    Ok(())
+}
+
+#[test]
 fn borrowed_error_fields_do_not_disable_general_static_ref_rule() -> miette::Result<()> {
     cordial::init_tracing();
     let source = r#"

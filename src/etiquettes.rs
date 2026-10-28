@@ -138,6 +138,8 @@ pub(crate) use framework_ext::{KNOWN_TARGETS, build_ext_etiquette};
 #[cfg(feature = "impl_coverage")]
 pub use impl_coverage::{IMPL_COVERAGE_ETIQUETTE, ImplGapAssessment, ImplGapKind, assess_impl_gap};
 #[cfg(feature = "proof_patterns")]
+pub(crate) use proof_patterns::ProofPatternInventoryEnricher;
+#[cfg(feature = "proof_patterns")]
 pub use proof_patterns::{PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, scan_crate_proof_patterns};
 #[cfg(feature = "shadow")]
 pub use shadow::SHADOW_ETIQUETTE;

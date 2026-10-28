@@ -16,8 +16,10 @@ fn collect_proof_harness_parses_non_empty_and_kani_contains() -> miette::Result<
     fs::write(
         &path,
         r#"
-            assert_proofs_non_empty::<Widget>();
-            assert_kani_contains::<Widget, bool>();
+            fn proof_harness() {
+                assert_proofs_non_empty::<Widget>();
+                assert_kani_contains::<Widget, bool>();
+            }
         "#,
     )
     .into_diagnostic()
@@ -39,9 +41,12 @@ fn collect_proof_harness_parses_qualified_non_empty_types() -> miette::Result<()
     cordial::init_tracing();
     let dir = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let path = dir.path().join("harness.rs");
-    fs::write(&path, "assert_proofs_non_empty::<url::Widget>();\n")
-        .into_diagnostic()
-        .wrap_err("write harness")?;
+    fs::write(
+        &path,
+        "fn proof_harness() { assert_proofs_non_empty::<url::Widget>(); }\n",
+    )
+    .into_diagnostic()
+    .wrap_err("write harness")?;
 
     let harness = collect_proof_harness(&path)
         .into_diagnostic()

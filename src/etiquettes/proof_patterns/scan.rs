@@ -3,7 +3,6 @@
 use std::path::Path;
 
 use crate::error::CordialResult;
-use crate::loader::SourceLoadView;
 use crate::objects::SourceSpan;
 use crate::verus_ir::{VerusCrateIr, VerusFnFacts, VerusFnMode, VerusPublish};
 
@@ -23,13 +22,12 @@ pub fn scan_crate_proof_patterns(crate_root: &Path) -> CordialResult<Vec<ProofPa
     proof_pattern_records(&ir, crate_root)
 }
 
-#[instrument(level = "debug", skip(source), err(level = "warn"))]
-pub(super) fn scan_crate_proof_patterns_with_source(
+#[instrument(level = "debug", skip(ir), err(level = "warn"))]
+pub(super) fn scan_crate_proof_patterns_with_ir(
     crate_root: &Path,
-    source: &SourceLoadView,
+    ir: &VerusCrateIr,
 ) -> CordialResult<Vec<ProofPatternRecord>> {
-    let ir = crate::verus_ir::scan_crate_verus_ir_with_source(crate_root, source)?;
-    proof_pattern_records(&ir, crate_root)
+    proof_pattern_records(ir, crate_root)
 }
 
 /// Convert every real proof-pattern signal `ir` carries into this

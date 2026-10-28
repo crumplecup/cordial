@@ -12,6 +12,25 @@ use super::query::Query;
 pub trait IrView {
     /// Cargo package name this crate IR belongs to.
     fn crate_name(&self) -> &str;
+    /// Proof harness facts retained for the current workspace run.
+    #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
+    fn workspace_proof_harness(
+        &self,
+    ) -> Option<std::sync::Arc<crate::proof_harness::ProofHarness>> {
+        None
+    }
+    /// Verus macro facts collected once for this crate's source snapshot.
+    #[cfg(feature = "verus_ir")]
+    fn verus_facts(&self) -> Option<std::sync::Arc<crate::VerusCrateIr>> {
+        None
+    }
+    /// Workspace antipattern evidence collected once per run.
+    #[cfg(feature = "antipatterns")]
+    fn workspace_antipattern_facts(
+        &self,
+    ) -> Option<std::sync::Arc<crate::etiquettes::antipatterns::AntipatternWorkspaceFacts>> {
+        None
+    }
     /// Workspace path-splice and dependency facts, when collected.
     #[cfg(feature = "derives")]
     fn workspace_path_inclusions(&self) -> Option<std::sync::Arc<crate::PathInclusionFacts>> {

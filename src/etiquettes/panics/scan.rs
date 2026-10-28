@@ -39,21 +39,33 @@ use tracing::instrument;
 /// `"panic!"` do not parse as a file and are not flagged.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_panics(crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord>> {
-    scan_crate_panics_impl(crate_root, None)
+    scan_crate_panics_impl(
+        crate_root,
+        None,
+        #[cfg(feature = "verus_ir")]
+        None,
+    )
 }
 
-#[instrument(level = "debug", skip(source))]
+#[instrument(level = "debug", skip(source, verus))]
 pub(super) fn scan_crate_panics_with_source(
     crate_root: &Path,
     source: &SourceLoadView,
+    #[cfg(feature = "verus_ir")] verus: &crate::VerusCrateIr,
 ) -> CordialResult<Vec<PanicSiteRecord>> {
-    scan_crate_panics_impl(crate_root, Some(source))
+    scan_crate_panics_impl(
+        crate_root,
+        Some(source),
+        #[cfg(feature = "verus_ir")]
+        Some(verus),
+    )
 }
 
-#[instrument(level = "debug", skip(source))]
+#[instrument(level = "debug", skip(source, verus))]
 fn scan_crate_panics_impl(
     crate_root: &Path,
     source: Option<&SourceLoadView>,
+    #[cfg(feature = "verus_ir")] verus: Option<&crate::VerusCrateIr>,
 ) -> CordialResult<Vec<PanicSiteRecord>> {
     let mut parsed = Vec::new();
     for tree_root in quality_scan_trees(crate_root) {
@@ -67,12 +79,14 @@ fn scan_crate_panics_impl(
     }
     #[cfg(feature = "verus_ir")]
     {
-        let verus_ir = if let Some(source) = source {
-            crate::verus_ir::scan_crate_verus_ir_with_source(crate_root, source)?
+        let standalone;
+        let verus = if let Some(verus) = verus {
+            verus
         } else {
-            crate::verus_ir::scan_crate_verus_ir(crate_root)?
+            standalone = crate::verus_ir::scan_crate_verus_ir(crate_root)?;
+            &standalone
         };
-        findings.extend(verus_panics::findings(&verus_ir, crate_root)?);
+        findings.extend(verus_panics::findings(verus, crate_root)?);
     }
     findings.sort_by(|a, b| {
         a.file()

@@ -1,12 +1,7 @@
 //! Branching-floor evaluation and crate-file digest.
 
-use sha2::{Digest, Sha256};
-
-use super::BranchingCache;
-use super::tree::{ModuleNode, collect_files, external_name_count, public_path_mods};
-use crate::error::CordialResult;
+use super::tree::{ModuleNode, external_name_count, public_path_mods};
 use crate::etiquettes::visibility::types::VisibilityThresholds;
-use crate::loader::SourceLoadView;
 
 use tracing::instrument;
 /// How the scanner applies [`VisibilityThresholds::min_module_names`].
@@ -31,32 +26,13 @@ impl VisibilityEval {
     }
 }
 
-#[instrument(
-    level = "debug",
-    skip(source, root, thresholds, cached),
-    err(level = "warn")
-)]
-pub(super) fn resolve_eval(
-    source: &SourceLoadView,
-    root: &ModuleNode,
-    thresholds: VisibilityThresholds,
-    cached: Option<BranchingCache>,
-) -> CordialResult<(VisibilityEval, Option<BranchingCache>)> {
+#[instrument(level = "debug", skip(root, thresholds))]
+pub(super) fn resolve_eval(root: &ModuleNode, thresholds: VisibilityThresholds) -> VisibilityEval {
     if thresholds.prefer_root() {
-        return Ok((VisibilityEval::Normal, None));
-    }
-    let digest = tree_digest(source, root)?;
-    if let Some(cache) = cached.filter(|cache| cache.digest() == &digest) {
-        return Ok((
-            VisibilityEval::Branching {
-                floor: cache.floor(),
-            },
-            Some(cache),
-        ));
+        return VisibilityEval::Normal;
     }
     let floor = peel_branching_floor(root, thresholds);
-    let cache = BranchingCache::new(digest, floor);
-    Ok((VisibilityEval::Branching { floor }, Some(cache)))
+    VisibilityEval::Branching { floor }
 }
 
 /// Peel the largest undersized public-path modules off a conceptually
@@ -124,20 +100,4 @@ fn peel_branching_floor(root: &ModuleNode, thresholds: VisibilityThresholds) -> 
 #[instrument(level = "trace", skip(path), ret)]
 fn is_path_under(path: &str, parent: &str) -> bool {
     path == parent || path.starts_with(&format!("{parent}::"))
-}
-
-#[instrument(level = "debug", skip(source, root), err(level = "warn"))]
-fn tree_digest(source: &SourceLoadView, root: &ModuleNode) -> CordialResult<String> {
-    let mut files = Vec::new();
-    collect_files(root, &mut files);
-    files.sort();
-    files.dedup();
-    let mut hasher = Sha256::new();
-    for file in files {
-        hasher.update(file.to_string_lossy().as_bytes());
-        let parsed = source.parsed_file(&file, "visibility-digest")?;
-        hasher.update(parsed.source().as_bytes());
-    }
-    let digest = hasher.finalize();
-    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }

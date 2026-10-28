@@ -1,7 +1,6 @@
 //! Load `amenable dump-registry` contract records for the unnamed-bound rule.
 
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::path::Path;
 
 use crate::amenable_dump_registry::{registry_dump_path, run_amenable_dump_registry};
 use crate::error::{CordialError, CordialResult};
@@ -11,22 +10,9 @@ use super::index::{ContractRecordDump, RegistryDump};
 
 use tracing::instrument;
 
-static CONTRACT_RECORDS_CACHE: Mutex<Option<(PathBuf, Vec<ContractRecordDump>)>> = Mutex::new(None);
-
 /// Load contract records for the unnamed-contract-bound rule.
 #[instrument(level = "info")]
 pub fn fetch_contract_records(workspace_root: &Path, store_root: &Path) -> Vec<ContractRecordDump> {
-    let cache_key = workspace_root
-        .canonicalize()
-        .unwrap_or_else(|_| workspace_root.to_path_buf());
-
-    if let Ok(cache) = CONTRACT_RECORDS_CACHE.lock()
-        && let Some((key, records)) = cache.as_ref()
-        && *key == cache_key
-    {
-        return records.clone();
-    }
-
     let slug = crate::store::project_slug_from_path(workspace_root);
     let store = StoreLayout::from_root(store_root, slug);
     let dump_path = registry_dump_path(&store);
@@ -42,8 +28,7 @@ pub fn fetch_contract_records(workspace_root: &Path, store_root: &Path) -> Vec<C
     // (952/548) until the stale file was deleted by hand. `cargo run`'s
     // own incremental build keeps a no-op re-run cheap, so there's no
     // real cost to paying this correctly every time -- the per-process
-    // `CONTRACT_RECORDS_CACHE` above still avoids repeat work within one
-    // scan run.
+    // The run-scoped workspace IR retains the result for all member crates.
     let records = if workspace_has_amenable(workspace_root) {
         if run_amenable_dump_registry(workspace_root, &dump_path).is_ok() {
             load_registry_dump(&dump_path).unwrap_or_default()
@@ -59,9 +44,6 @@ pub fn fetch_contract_records(workspace_root: &Path, store_root: &Path) -> Vec<C
         Vec::new()
     };
 
-    if let Ok(mut cache) = CONTRACT_RECORDS_CACHE.lock() {
-        *cache = Some((cache_key, records.clone()));
-    }
     records
 }
 

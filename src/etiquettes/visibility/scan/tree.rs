@@ -277,14 +277,6 @@ fn path_attr(attrs: &[Attribute]) -> Option<String> {
 }
 
 #[instrument(level = "debug", skip(node))]
-pub(super) fn collect_files(node: &ModuleNode, files: &mut Vec<PathBuf>) {
-    files.push(node.file.clone());
-    for child in &node.children {
-        collect_files(child, files);
-    }
-}
-
-#[instrument(level = "debug", skip(node))]
 pub(super) fn external_name_count(node: &ModuleNode) -> usize {
     let mut n = node.leaf_pub;
     for child in &node.children {

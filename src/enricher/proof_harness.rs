@@ -1,8 +1,7 @@
-use crate::NamedRunFilter;
 use crate::error::CordialResult;
 use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{BasicQuery, NodeKind};
-use crate::proof_harness::{load_workspace_proof_harness, test_status_for_type_path};
+use crate::proof_harness::test_status_for_type_path;
 
 use tracing::instrument;
 /// Attaches proof harness test status attrs on type nodes.
@@ -37,10 +36,10 @@ impl IrEnricher for ProofHarnessEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let (ir, _, session) = view.into_parts();
-
-        let filter = NamedRunFilter::all_etiquettes();
-        let harness = load_workspace_proof_harness(session.project_root(), &filter)?;
+        let (ir, _, _) = view.into_parts();
+        let harness = ir.workspace_proof_harness().ok_or_else(|| {
+            crate::error::CordialError::workspace_source_facts_missing("proof harness")
+        })?;
 
         let type_nodes: Vec<_> = ir
             .nodes_matching(&BasicQuery::all_nodes())

@@ -9,7 +9,7 @@ use crate::error::CordialResult;
 use crate::loader::SourceLoadView;
 
 use super::declared::{all_verifier_names, declared_names_for_crate, expected_verifier_for};
-use super::scan::{CfgNameOccurrence, scan_rust_source, scan_shared_file};
+use super::scan::{CfgNameOccurrence, scan_shared_file};
 use super::types::{CfgHygieneRuleId, CfgHygieneSiteRecord};
 
 use tracing::instrument;
@@ -21,16 +21,8 @@ pub fn scan_crate_cfg_hygiene(
     workspace_root: &Path,
     thresholds: &CfgHygieneThresholds,
 ) -> CordialResult<Vec<CfgHygieneSiteRecord>> {
-    let src_root = crate_root.join("src");
-    let occurrences = scan_source_tree(&src_root, crate_root)?;
-
-    records_for_occurrences(
-        &occurrences,
-        crate_root,
-        crate_name,
-        workspace_root,
-        thresholds,
-    )
+    let source = SourceLoadView::for_standalone_scan();
+    scan_shared_crate_cfg_hygiene(&source, crate_root, crate_name, workspace_root, thresholds)
 }
 
 #[instrument(level = "debug", skip(source, thresholds), err(level = "warn"))]
@@ -48,6 +40,7 @@ pub(super) fn scan_shared_crate_cfg_hygiene(
     }
     records_for_occurrences(
         &occurrences,
+        source,
         crate_root,
         crate_name,
         workspace_root,
@@ -55,15 +48,20 @@ pub(super) fn scan_shared_crate_cfg_hygiene(
     )
 }
 
-#[instrument(level = "debug", skip(occurrences, thresholds), err(level = "warn"))]
+#[instrument(
+    level = "debug",
+    skip(occurrences, source, thresholds),
+    err(level = "warn")
+)]
 fn records_for_occurrences(
     occurrences: &[CfgNameOccurrence],
+    source: &SourceLoadView,
     crate_root: &Path,
     crate_name: &str,
     workspace_root: &Path,
     thresholds: &CfgHygieneThresholds,
 ) -> CordialResult<Vec<CfgHygieneSiteRecord>> {
-    let declared = declared_names_for_crate(crate_root, workspace_root, thresholds);
+    let declared = declared_names_for_crate(source, crate_root, workspace_root, thresholds)?;
     let expected_verifier = expected_verifier_for(thresholds, crate_name);
     let verifier_names = all_verifier_names(thresholds);
 
@@ -106,27 +104,4 @@ fn record_for(
         .line(occurrence.line())
         .snippet(occurrence.snippet().clone())
         .build()
-}
-
-#[instrument(level = "debug", err(level = "warn"))]
-fn scan_source_tree(src_root: &Path, crate_root: &Path) -> CordialResult<Vec<CfgNameOccurrence>> {
-    let mut occurrences = Vec::new();
-    if !src_root.is_dir() {
-        return Ok(occurrences);
-    }
-
-    for entry in walkdir::WalkDir::new(src_root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-    {
-        let path = entry.path();
-        if path.extension().is_none_or(|ext| ext != "rs") {
-            continue;
-        }
-        let source = std::fs::read_to_string(path)?;
-        occurrences.extend(scan_rust_source(&source, path, src_root, crate_root)?);
-    }
-
-    Ok(occurrences)
 }

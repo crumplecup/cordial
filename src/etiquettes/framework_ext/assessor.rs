@@ -5,9 +5,9 @@
 use crate::error::CordialResult;
 use crate::framework_std::{
     AMENABLE_EXT_IMPL_CRATE, AmenableExtOptions, ClassifyRowArgs, ExtExpansionInputs,
-    amenable_ext_gap_fields, classify_amenable_ext_row, collect_proof_chain_subjects,
-    ensure_registry_dump_for_assessor, expand_ext_entries, load_ext_inventory_from_shadow_dep,
-    load_ext_resolver, load_verifier_skip_map, resolver_crates,
+    amenable_ext_gap_fields, classify_amenable_ext_row, ensure_registry_dump_for_assessor,
+    expand_ext_entries, load_ext_inventory_from_shadow_dep, load_ext_resolver,
+    load_verifier_skip_map, resolver_crates,
 };
 use crate::hooks::{AssessView, Assessor};
 use crate::objects::{Finding, NodeAnchor};
@@ -76,7 +76,10 @@ impl Assessor for ExtAssessor {
         let registry =
             ensure_registry_dump_for_assessor(&store, session.project_root(), &registry_options)?;
         let skip_map = load_verifier_skip_map(&store, &self.patch_set);
-        let proof_chain_subjects = collect_proof_chain_subjects(session.project_root())?;
+        let harness = ir.workspace_proof_harness().ok_or_else(|| {
+            crate::error::CordialError::workspace_source_facts_missing("proof harness")
+        })?;
+        let proof_chain_subjects = harness.proof_chain_subjects();
         let anchor = NodeAnchor::new(ir.root()?);
 
         let mut classified = Vec::new();

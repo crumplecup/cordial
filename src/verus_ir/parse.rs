@@ -78,7 +78,8 @@ impl VerusBlock {
 pub(super) fn collect_verus_blocks(
     crate_root: &Path,
 ) -> crate::error::CordialResult<Vec<VerusBlock>> {
-    collect_verus_blocks_impl(crate_root, None)
+    let source = SourceLoadView::for_standalone_scan();
+    collect_verus_blocks_impl(crate_root, &source)
 }
 
 #[cfg(any(
@@ -91,13 +92,13 @@ pub(super) fn collect_verus_blocks_with_source(
     crate_root: &Path,
     source: &SourceLoadView,
 ) -> crate::error::CordialResult<Vec<VerusBlock>> {
-    collect_verus_blocks_impl(crate_root, Some(source))
+    collect_verus_blocks_impl(crate_root, source)
 }
 
 #[instrument(level = "debug", skip(source), err(level = "warn"))]
 fn collect_verus_blocks_impl(
     crate_root: &Path,
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
 ) -> crate::error::CordialResult<Vec<VerusBlock>> {
     let mut blocks = Vec::new();
     for src_root in quality_scan_trees(crate_root) {
@@ -115,13 +116,8 @@ fn collect_verus_blocks_impl(
                 continue;
             }
             let module_path = module_path_from_src_file(&src_root, path).join("::");
-            if let Some(source) = source {
-                let parsed = source.parsed_file(path, "verus-ir")?;
-                blocks.extend(blocks_in_syntax(parsed.syntax(), path, &module_path));
-            } else {
-                let text = std::fs::read_to_string(path)?;
-                blocks.extend(blocks_in_source(&text, path, &module_path));
-            }
+            let parsed = source.parsed_file(path, "verus-ir")?;
+            blocks.extend(blocks_in_syntax(parsed.syntax(), path, &module_path));
         }
     }
     Ok(blocks)
