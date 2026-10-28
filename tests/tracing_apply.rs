@@ -99,6 +99,8 @@ fn default_apply_selects_current_ir_instead_of_stale_checklist() -> miette::Resu
         "stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+    #[cfg(feature = "quality")]
+    assert!(String::from_utf8_lossy(&output.stdout).contains("no current worklist"));
     let applied = fs::read_to_string(&fixture.src)
         .into_diagnostic()
         .wrap_err("applied source")?;
@@ -147,6 +149,114 @@ fn default_apply_respects_tracing_exception() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("applied source")?;
     assert_eq!(applied, source);
+    Ok(())
+}
+
+#[cfg(all(feature = "cli", feature = "quality"))]
+#[test]
+fn apply_checks_off_written_tracing_findings_but_not_dry_runs() -> miette::Result<()> {
+    cordial::init_tracing();
+    let source = "pub fn run() { println!(\"hello\"); }\n";
+    let fixture = write_apply_fixture(source, "")?;
+    let store_home = tempfile::tempdir().into_diagnostic()?;
+    let slug = cordial::project_slug_from_path(&fixture.workspace);
+    let store = cordial::StoreLayout::from_root(store_home.path().join(&slug), slug);
+    let run = |args: &[&str]| -> miette::Result<std::process::Output> {
+        Command::new(env!("CARGO_BIN_EXE_cordial"))
+            .arg("--project")
+            .arg(&fixture.workspace)
+            .arg("--store-home")
+            .arg(store_home.path())
+            .args(args)
+            .env("CORDIAL_NO_PROGRESS", "1")
+            .output()
+            .into_diagnostic()
+    };
+
+    let gate = run(&["quality", "--etiquette", "tracing"])?;
+    assert!(
+        gate.status.success(),
+        "{}",
+        String::from_utf8_lossy(&gate.stderr)
+    );
+    let explain = run(&["explain", "tracing"])?;
+    assert!(explain.status.success());
+    assert!(
+        String::from_utf8_lossy(&explain.stdout)
+            .contains("cordial quality --apply --etiquette tracing")
+    );
+    let before = cordial::Worklist::read(&store)
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("missing worklist"))?;
+    let instrument_ids: Vec<_> = before
+        .items()
+        .iter()
+        .filter(|item| item.checklist() == "tracing-instrument.checklist.md")
+        .map(|item| item.id().as_str().to_string())
+        .collect();
+    assert!(!instrument_ids.is_empty());
+    let manual_ids: Vec<_> = before
+        .items()
+        .iter()
+        .filter(|item| item.checklist() == "tracing-print.checklist.md")
+        .map(|item| item.id().as_str().to_string())
+        .collect();
+    assert!(!manual_ids.is_empty());
+
+    let dry = run(&["quality", "--apply", "--etiquette", "tracing", "--dry-run"])?;
+    assert!(
+        dry.status.success(),
+        "{}",
+        String::from_utf8_lossy(&dry.stderr)
+    );
+    assert!(String::from_utf8_lossy(&dry.stdout).contains("0 worklist item(s) checked off"));
+    assert_eq!(fs::read_to_string(&fixture.src).into_diagnostic()?, source);
+    assert_eq!(
+        cordial::Worklist::read(&store).into_diagnostic()?,
+        Some(before.clone())
+    );
+
+    let applied = run(&["quality", "--apply", "--etiquette", "tracing"])?;
+    assert!(
+        applied.status.success(),
+        "{}",
+        String::from_utf8_lossy(&applied.stderr)
+    );
+    let after = cordial::Worklist::read(&store)
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("missing updated worklist"))?;
+    for id in &instrument_ids {
+        let item = after.items().iter().find(|item| item.id().as_str() == id);
+        assert_eq!(
+            item.map(|item| item.state()),
+            Some(&cordial::ItemState::Done)
+        );
+    }
+    for id in &manual_ids {
+        let item = after.items().iter().find(|item| item.id().as_str() == id);
+        assert_eq!(
+            item.map(|item| item.state()),
+            Some(&cordial::ItemState::Open)
+        );
+    }
+    let remaining = after
+        .items()
+        .iter()
+        .filter(|item| item.checklist().starts_with("tracing-"))
+        .filter(|item| *item.state() == cordial::ItemState::Open)
+        .count();
+    let output = String::from_utf8_lossy(&applied.stdout);
+    assert!(
+        output.contains(&format!(
+            "{} worklist item(s) checked off",
+            instrument_ids.len()
+        )),
+        "{output}"
+    );
+    assert!(
+        output.contains(&format!("{remaining} tracing item(s) remain open")),
+        "{output}"
+    );
     Ok(())
 }
 

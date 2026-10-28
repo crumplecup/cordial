@@ -79,6 +79,8 @@ pub struct InstrumentApplySummary {
     /// Checklist rows that could not be matched in source.
     #[getter(copy)]
     unresolved: usize,
+    /// Functions whose source edits were successfully written.
+    applied_gaps: Vec<InstrumentGap>,
 }
 
 /// Patch source files listed in the tracing instrument checklist.
@@ -181,6 +183,7 @@ fn run_apply(
         skipped_existing: 0,
         skipped_policy: 0,
         unresolved: 0,
+        applied_gaps: Vec::new(),
     };
     if matches!(targets_mode, ApplyTargets::Checklist(_)) && by_file.is_empty() {
         tracing::info!("no open checklist items found in tracing instrument checklist");
@@ -260,6 +263,7 @@ fn run_apply(
         }
 
         let mut file_changed = false;
+        let mut file_applied = Vec::new();
         for gap in file_gaps {
             let strip = never_instrument.contains(gap.qualified_name())
                 || policy == TracingApplyPolicy::Skip;
@@ -268,6 +272,7 @@ fn run_apply(
                     GapApplyOutcome::Applied => {
                         summary.changed_functions += 1;
                         file_changed = true;
+                        file_applied.push(gap.clone());
                     }
                     GapApplyOutcome::AlreadyInstrumented => {
                         summary.skipped_existing += 1;
@@ -295,6 +300,7 @@ fn run_apply(
                 GapApplyOutcome::Applied => {
                     summary.changed_functions += 1;
                     file_changed = true;
+                    file_applied.push(gap.clone());
                 }
                 GapApplyOutcome::AlreadyInstrumented => {
                     summary.skipped_existing += 1;
@@ -321,6 +327,7 @@ fn run_apply(
                 tracing::info!(path = %path.display(), "dry run: would update file");
             } else {
                 std::fs::write(&path, format!("{}\n", lines.join("\n")))?;
+                summary.applied_gaps.extend(file_applied);
             }
             summary.changed_files += 1;
         }
