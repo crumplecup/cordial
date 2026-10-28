@@ -8,14 +8,15 @@
 
 use std::path::Path;
 
-use syn::spanned::Spanned;
-
 use crate::config::load_cordial_config;
 use crate::error::CordialResult;
+use crate::ir::CrateIr;
+use crate::loader::SourceLoadView;
 use crate::session::RunAll;
 use crate::targets::discover_crate_targets;
 
-use super::scan::{library_root_rs, scan_crate_attrs, scan_parsed_crate_attrs};
+use super::enricher::{crate_attrs_apply_evidence_from_ir, enrich_crate_attrs_evidence};
+use super::scan::{library_root_rs, scan_crate_attrs};
 use super::types::CrateAttrsRuleId;
 
 use tracing::instrument;
@@ -78,25 +79,29 @@ pub fn run_crate_attrs_apply(
             continue;
         }
 
-        let source = std::fs::read_to_string(&lib)?;
-        let syntax = syn::parse_file(&source)
-            .map_err(|err| crate::error::CordialError::syn_parse(lib.display().to_string(), err))?;
-        let records = scan_parsed_crate_attrs(crate_root, crate_name, &policy, &lib, &syntax)?;
-        if records.is_empty() {
+        let source_view = SourceLoadView::for_target(&target)?;
+        let mut ir = CrateIr::new(crate_name);
+        source_view.populate_ir(&mut ir)?;
+        enrich_crate_attrs_evidence(&mut ir, &source_view, crate_root, &policy)?;
+        let Some((records, insert_at)) = crate_attrs_apply_evidence_from_ir(&ir)? else {
             summary.skipped_existing += 1;
             continue;
-        }
+        };
         let to_insert = attr_lines_for(&records);
         if to_insert.is_empty() {
             summary.skipped_existing += 1;
             continue;
         }
-        let patched = insert_crate_attrs(&source, &syntax, &to_insert);
-        if patched == source {
+        let file = source_view.parsed_file(&lib, "crate-attrs-apply")?;
+        let patched = insert_crate_attrs(file.source(), insert_at, &to_insert);
+        if patched == file.source() {
             summary.skipped_existing += 1;
             continue;
         }
 
+        if !file.matches_disk()? {
+            return Err(crate::error::CordialError::stale_source_snapshot(&lib));
+        }
         if dry_run {
             tracing::info!(path = %lib.display(), "dry run: would update file");
         } else {
@@ -135,13 +140,10 @@ fn attr_lines_for(records: &[super::types::CrateAttrsSiteRecord]) -> Vec<String>
     lines
 }
 
-#[instrument(level = "debug", skip(source, syntax, to_insert))]
-fn insert_crate_attrs(source: &str, syntax: &syn::File, to_insert: &[String]) -> String {
+#[instrument(level = "debug", skip(source, to_insert))]
+fn insert_crate_attrs(source: &str, insert_at: usize, to_insert: &[String]) -> String {
     let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
-    let insert_at = match syntax.items.first() {
-        Some(item) => item.span().start().line.saturating_sub(1).min(lines.len()),
-        None => lines.len(),
-    };
+    let insert_at = insert_at.min(lines.len());
     for line in to_insert.iter().rev() {
         lines.insert(insert_at, line.clone());
     }

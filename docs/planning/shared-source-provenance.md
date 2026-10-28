@@ -15,8 +15,9 @@ data would permit the data and token to be mismatched.
 The cache now issues a `SharedParsedFile` that keeps those four facts together,
 and a `SourceEnricher` receives a typed source view. Production source
 enrichers have been migrated across the quality, error, tracing, and Verus
-families. Standalone scan and apply APIs retain direct parsing for callers
-outside a source session. See [`SourceLoadView`](../../src/loader/source.rs),
+families. Standalone APIs and apply still need the same source provenance and
+IR evidence contract; their remaining exceptions are tracked below. See
+[`SourceLoadView`](../../src/loader/source.rs),
 [`SourceEnricher`](../../src/hooks/enricher.rs), and the
 [`modularity` scanner](../../src/etiquettes/modularity/scan.rs) for this route.
 
@@ -84,6 +85,9 @@ outside a source session. See [`SourceLoadView`](../../src/loader/source.rs),
 - A source audit finds no direct outer-file `syn::parse_file` use in production
   scanners. Any remaining direct parse has an explicit embedded-source or
   standalone-test purpose.
+- Apply consumes source-derived decisions and edit locations from IR and never
+  reparses a proposed file. Standalone production entry points use the shared
+  loader and materialize their evidence in IR as well.
 
 ## First slice decision
 
@@ -270,3 +274,27 @@ a larger optimization candidate than the 0.59 s of shared parsing measured in
 the combined build-tier run. In an earlier all-tier Cordial run,
 feature-warning inventory occupied 662.0 of 667.1 wall seconds, so Cargo Hack
 still dominates that gate.
+
+## Current audit: apply and source-derived side channels
+
+The earlier production-scanner audit was too narrow. Error-field apply parsed
+the patched file a second time after planning edits. That parse is removed;
+source identity, UTF-8 boundaries, and nonoverlapping edit ranges are checked
+before writing, while apply fixtures compile representative output. Crate-attrs
+apply now obtains its original tree through `SourceLoadView` and reads its lint
+decision and insertion point from the crate IR. The historical descriptions
+above record the earlier state, not an exception to the current invariant.
+
+The remaining source-derived side channels are concrete follow-up work:
+
+- Tracing's workspace call graph and derives' path-inclusion graph are computed
+  from shared parsed files, but cached in process-global `FACTS_CACHE` values
+  and passed directly into source enrichers. Their authoritative facts need a
+  workspace IR home and typed IR reads before policy decisions are made.
+- Crate-attrs' Verus exemption searches Rust source with a separate text read.
+  It needs a shared source snapshot and an IR fact for the exemption decision.
+- Public standalone scan helpers still accept raw source or read files and may
+  parse outer files directly. These cannot feed a production source hook today,
+  but they remain an exception to a literal repo-wide one-parse policy. Move
+  each standalone workflow onto the shared loader and IR before claiming the
+  stronger invariant.

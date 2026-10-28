@@ -59,19 +59,6 @@ pub(super) fn scan_shared_crate_attrs(
     records_for_presence(crate_root, crate_name, policy, &lib, presence)
 }
 
-/// Inspect a library root that the caller has already parsed, such as an
-/// apply pass that also needs the syntax to choose an insertion point.
-#[instrument(level = "debug", skip(policy, syntax), err(level = "warn"))]
-pub(super) fn scan_parsed_crate_attrs(
-    crate_root: &Path,
-    crate_name: &str,
-    policy: &CrateAttrsThresholds,
-    lib: &Path,
-    syntax: &File,
-) -> CordialResult<Vec<CrateAttrsSiteRecord>> {
-    records_for_presence(crate_root, crate_name, policy, lib, inspect_file(syntax))
-}
-
 #[instrument(level = "debug", skip(policy, presence), err(level = "warn"))]
 fn records_for_presence(
     crate_root: &Path,

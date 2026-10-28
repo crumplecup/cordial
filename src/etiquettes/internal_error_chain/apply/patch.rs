@@ -181,7 +181,10 @@ fn apply_planned_edits(
     let mut patched = file.source().to_string();
     let mut limit = patched.len();
     for edit in &edits {
-        if edit.end > limit || edit.start > edit.end {
+        if edit.end > limit
+            || edit.start > edit.end
+            || file.source().get(edit.start..edit.end).is_none()
+        {
             blockers.extend(pending.iter().map(|(type_name, field_name)| {
                 ErrorFieldApplyBlocker::new(
                     file.path(),
@@ -194,17 +197,6 @@ fn apply_planned_edits(
         }
         patched.replace_range(edit.start..edit.end, &edit.replacement);
         limit = edit.start;
-    }
-    if syn::parse_file(&patched).is_err() {
-        blockers.extend(pending.iter().map(|(type_name, field_name)| {
-            ErrorFieldApplyBlocker::new(
-                file.path(),
-                type_name,
-                field_name,
-                ErrorFieldApplyBlockerReason::InvalidEdit,
-            )
-        }));
-        return Ok((None, 0, blockers, units));
     }
     if dry_run {
         for edit in &edits {

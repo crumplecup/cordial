@@ -151,7 +151,16 @@ impl Finding for CrateAttrsFinding {
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_builder::Builder,
+    derive_getters::Getters,
+)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct CrateAttrsSiteRecord {
     /// Stable probe rule identifier.

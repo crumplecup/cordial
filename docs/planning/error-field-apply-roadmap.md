@@ -275,8 +275,9 @@ reads conversion units from the error IR. Its site collector identifies
   candidates first, then visits each shared syntax tree once per file to attach
 construction and use sites. The special lifetime collector indexes top-level
 items once per relevant file, though it still visits candidate initializer
-expressions separately. Parsing patched
-text is a separate validation step. Field declarations, storage shape,
+expressions separately. Apply validates source identity and edit ranges without
+parsing the patched text; fixture tests compile the transformed code. Field
+declarations, storage shape,
 visibility, initializer choices, lifetime edits, field-use blockers, and
 ambiguous-name decisions now travel in typed conversion-unit IR records. Apply
 reads only source text and digests through `SourceEditView`. These records still
