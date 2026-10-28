@@ -349,3 +349,18 @@ freshness can read an explicit observation override under the store. Neither
 supplies an alternate Rust source tree to a production hook. These remain
 separate data products, so the literal claim that every cache in Cordial lives
 inside `WorkspaceIr` would be false.
+
+The follow-up standalone audit found two more outer-file fallbacks. Panic and
+allow crate scans now require a `SourceLoadView`; the panic scan passes that
+same view to its Verus pass. The panic one-file helper also passes its parsed
+syntax to Verus analysis instead of parsing the supplied string twice. Raw
+one-file APIs still parse their caller-supplied text once. No production crate
+scanner now calls `source_work::read` or `syn::parse_file` directly for an
+outer Rust file.
+
+Tracing apply still chooses targets from a generated Markdown checklist by
+default, or from an explicit `--checklist` path. Its classification and recipe
+facts come from IR, but default target selection is a report-derived side
+channel. Closing this requires making default apply select targets from fresh
+tracing findings, while preserving the explicit checklist as a user-provided
+selection. Until then, the claim that all side channels are closed is false.

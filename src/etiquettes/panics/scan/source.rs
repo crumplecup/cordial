@@ -53,7 +53,7 @@ impl ParsedFile {
 pub(super) fn parse_source_tree(
     src_root: &Path,
     crate_root: &Path,
-    loaded: Option<&SourceLoadView>,
+    loaded: &SourceLoadView,
 ) -> CordialResult<Vec<ParsedFile>> {
     let mut parsed = Vec::new();
     if !src_root.is_dir() {
@@ -69,24 +69,10 @@ pub(super) fn parse_source_tree(
         if path.extension().is_none_or(|ext| ext != "rs") || path_has_fixtures(path, crate_root) {
             continue;
         }
-        let file = if let Some(loaded) = loaded {
-            ParsedFile::shared(
-                src_root.to_path_buf(),
-                loaded.parsed_file(path, "panic-inventory")?,
-            )
-        } else {
-            let source = crate::loader::source_read(path, "panic-inventory")?;
-            ParsedFile::standalone(
-                path.to_path_buf(),
-                src_root.to_path_buf(),
-                Rc::new(crate::loader::source_parse(
-                    &source,
-                    path,
-                    "panic-inventory",
-                )?),
-            )
-        };
-        parsed.push(file);
+        parsed.push(ParsedFile::shared(
+            src_root.to_path_buf(),
+            loaded.parsed_file(path, "panic-inventory")?,
+        ));
     }
 
     Ok(parsed)

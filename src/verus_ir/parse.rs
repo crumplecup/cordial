@@ -136,7 +136,11 @@ pub(super) fn blocks_in_source(source: &str, file: &Path, module_path: &str) -> 
 }
 
 #[instrument(level = "debug", skip(syntax, file))]
-fn blocks_in_syntax(syntax: &syn::File, file: &Path, module_path: &str) -> Vec<VerusBlock> {
+pub(super) fn blocks_in_syntax(
+    syntax: &syn::File,
+    file: &Path,
+    module_path: &str,
+) -> Vec<VerusBlock> {
     let mut finder = VerusMacroFinder::default();
     finder.visit_file(syntax);
     finder

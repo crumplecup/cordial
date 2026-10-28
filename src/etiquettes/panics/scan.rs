@@ -39,9 +39,10 @@ use tracing::instrument;
 /// `"panic!"` do not parse as a file and are not flagged.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_panics(crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord>> {
+    let source = SourceLoadView::for_standalone_scan();
     scan_crate_panics_impl(
         crate_root,
-        None,
+        &source,
         #[cfg(feature = "verus_ir")]
         None,
     )
@@ -55,7 +56,7 @@ pub(super) fn scan_crate_panics_with_source(
 ) -> CordialResult<Vec<PanicSiteRecord>> {
     scan_crate_panics_impl(
         crate_root,
-        Some(source),
+        source,
         #[cfg(feature = "verus_ir")]
         Some(verus),
     )
@@ -64,7 +65,7 @@ pub(super) fn scan_crate_panics_with_source(
 #[instrument(level = "debug", skip(source, verus))]
 fn scan_crate_panics_impl(
     crate_root: &Path,
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
     #[cfg(feature = "verus_ir")] verus: Option<&crate::VerusCrateIr>,
 ) -> CordialResult<Vec<PanicSiteRecord>> {
     let mut parsed = Vec::new();
@@ -83,7 +84,7 @@ fn scan_crate_panics_impl(
         let verus = if let Some(verus) = verus {
             verus
         } else {
-            standalone = crate::verus_ir::scan_crate_verus_ir(crate_root)?;
+            standalone = crate::verus_ir::scan_crate_verus_ir_with_source(crate_root, source)?;
             &standalone
         };
         findings.extend(verus_panics::findings(verus, crate_root)?);
@@ -101,7 +102,8 @@ fn scan_crate_panics_impl(
 /// Scan a crate `src` tree for panic sites.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_source_tree(src_root: &Path, crate_root: &Path) -> CordialResult<Vec<PanicSiteRecord>> {
-    let parsed = parse_source_tree(src_root, crate_root, None)?;
+    let source = SourceLoadView::for_standalone_scan();
+    let parsed = parse_source_tree(src_root, crate_root, &source)?;
     let reachability = build_kani_reachability(parsed.iter().map(ParsedFile::syntax));
     let mut findings = Vec::new();
     for file in &parsed {
@@ -128,7 +130,8 @@ pub fn scan_rust_source(
     let findings = {
         let mut findings = findings;
         let module_path = module_path_from_src_file(src_root, file).join("::");
-        let verus_ir = crate::verus_ir::scan_verus_rust_source(source, file, &module_path)?;
+        let verus_ir =
+            crate::verus_ir::scan_verus_rust_syntax(parsed.syntax(), file, &module_path)?;
         findings.extend(verus_panics::findings(&verus_ir, crate_root)?);
         findings
     };

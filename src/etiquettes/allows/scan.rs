@@ -21,7 +21,8 @@ use tracing::instrument;
 /// Scan one crate for allows.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_allows(crate_root: &Path) -> CordialResult<Vec<AllowSiteRecord>> {
-    scan_crate_allows_impl(crate_root, None)
+    let source = SourceLoadView::for_standalone_scan();
+    scan_crate_allows_impl(crate_root, &source)
 }
 
 #[instrument(level = "debug", skip(source))]
@@ -29,13 +30,13 @@ pub(super) fn scan_crate_allows_with_source(
     crate_root: &Path,
     source: &SourceLoadView,
 ) -> CordialResult<Vec<AllowSiteRecord>> {
-    scan_crate_allows_impl(crate_root, Some(source))
+    scan_crate_allows_impl(crate_root, source)
 }
 
 #[instrument(level = "debug", skip(source))]
 fn scan_crate_allows_impl(
     crate_root: &Path,
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
 ) -> CordialResult<Vec<AllowSiteRecord>> {
     let mut findings = Vec::new();
     for tree_root in quality_scan_trees(crate_root) {
@@ -57,7 +58,7 @@ fn scan_crate_allows_impl(
 fn scan_source_tree_impl(
     tree_root: &Path,
     crate_root: &Path,
-    loaded: Option<&SourceLoadView>,
+    loaded: &SourceLoadView,
 ) -> CordialResult<Vec<AllowSiteRecord>> {
     let mut findings = Vec::new();
     if !tree_root.is_dir() {
@@ -76,18 +77,13 @@ fn scan_source_tree_impl(
         if path_has_fixtures(path, crate_root) {
             continue;
         }
-        if let Some(loaded) = loaded {
-            let unit = loaded.parsed_file(path, "allow-inventory")?;
-            findings.extend(scan_rust_syntax(
-                unit.syntax(),
-                path,
-                tree_root,
-                crate_root,
-            )?);
-        } else {
-            let source = crate::loader::source_read(path, "allow-inventory")?;
-            findings.extend(scan_rust_source(&source, path, tree_root, crate_root)?);
-        }
+        let unit = loaded.parsed_file(path, "allow-inventory")?;
+        findings.extend(scan_rust_syntax(
+            unit.syntax(),
+            path,
+            tree_root,
+            crate_root,
+        )?);
     }
 
     Ok(findings)

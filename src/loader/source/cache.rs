@@ -79,7 +79,9 @@ impl SourceLoadView {
         feature = "cfg_hygiene",
         feature = "verus_ir",
         feature = "impl_coverage",
-        feature = "amenable_std"
+        feature = "amenable_std",
+        feature = "allows",
+        feature = "panics"
     ))]
     #[instrument(level = "debug")]
     pub(crate) fn for_standalone_scan() -> Self {
