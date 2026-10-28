@@ -42,26 +42,6 @@ pub(super) struct ScanHeader<'a> {
     line: u32,
 }
 
-#[instrument(level = "debug", skip(file, path, declared_vis), err(level = "warn"))]
-pub(super) fn scan_module_file(
-    file: &Path,
-    path: String,
-    declared_vis: VisKind,
-    parent_declared_pub: bool,
-    ancestors_all_pub: bool,
-    is_crate_root: bool,
-) -> CordialResult<ModuleNode> {
-    scan_module_file_impl(
-        None,
-        file,
-        path,
-        declared_vis,
-        parent_declared_pub,
-        ancestors_all_pub,
-        is_crate_root,
-    )
-}
-
 #[instrument(
     level = "debug",
     skip(source, file, path, declared_vis),
@@ -77,7 +57,7 @@ pub(super) fn scan_shared_module_file(
     is_crate_root: bool,
 ) -> CordialResult<ModuleNode> {
     scan_module_file_impl(
-        Some(source),
+        source,
         file,
         path,
         declared_vis,
@@ -93,7 +73,7 @@ pub(super) fn scan_shared_module_file(
     err(level = "warn")
 )]
 fn scan_module_file_impl(
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
     file: &Path,
     path: String,
     declared_vis: VisKind,
@@ -110,23 +90,15 @@ fn scan_module_file_impl(
         is_crate_root,
         line: 1,
     };
-    if let Some(source) = source {
-        let shared = source.parsed_file(file, "visibility-inventory")?;
-        scan_items(&shared.syntax().items, header, Some(source))
-    } else {
-        let text = std::fs::read_to_string(file)?;
-        let syntax = syn::parse_file(&text).map_err(|err| {
-            crate::error::CordialError::syn_parse(file.display().to_string(), err)
-        })?;
-        scan_items(&syntax.items, header, None)
-    }
+    let shared = source.parsed_file(file, "visibility-inventory")?;
+    scan_items(&shared.syntax().items, header, source)
 }
 
 #[instrument(level = "debug", skip(items, header, source), err(level = "warn"))]
 fn scan_items(
     items: &[Item],
     header: ScanHeader<'_>,
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
 ) -> CordialResult<ModuleNode> {
     let ScanHeader {
         file,
@@ -211,7 +183,7 @@ fn scan_items(
 
 #[instrument(level = "debug", skip(source, item_mod, header), err(level = "warn"))]
 fn scan_child_mod(
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
     item_mod: &ItemMod,
     header: ScanHeader<'_>,
 ) -> CordialResult<ModuleNode> {

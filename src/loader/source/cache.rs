@@ -71,6 +71,7 @@ impl SourceLoadView {
         feature = "antipatterns",
         feature = "derives",
         feature = "tracing",
+        feature = "visibility",
         feature = "internal_error_chain",
         feature = "error_sites"
     ))]

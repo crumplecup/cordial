@@ -160,7 +160,8 @@ share those parsed trees safely.
 
 The visibility inventory now follows the crate's module tree through shared
 parsed files, including out-of-line modules and `#[path]` modules. Its public
-standalone scanner retains direct parsing for callers outside a source session.
+standalone scanner uses a short-lived source view, and the branching-cache
+digest hashes the same source snapshots used by the inventory.
 
 ## Tenth slice
 
@@ -300,6 +301,9 @@ source-derived side channels are concrete follow-up work:
   from `WorkspaceIr`. The edit pass reuses the source snapshot and only reads
   its text to locate and change the requested attribute. The lookup rejects
   incomplete recipe attributes instead of writing a default recipe.
+- Visibility's standalone scan now uses the shared source view. Its cache
+  digest reads each parsed file's snapshot through that view, so an intervening
+  disk change cannot make the cache key disagree with the scan result.
 - Public standalone scan helpers still accept raw source or read files and may
   parse outer files directly. These cannot feed a production source hook today,
   but they remain an exception to a literal repo-wide one-parse policy. Move
