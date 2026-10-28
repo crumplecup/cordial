@@ -1,8 +1,7 @@
 //! Inventory-oracle wrapper coverage (parity tests only).
 
 use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use tracing::instrument;
 
@@ -16,12 +15,6 @@ use crate::rustdoc::{
 use crate::rustdoc_loader::resolve_rustdoc_json;
 use crate::session::RunFilter;
 
-/// Cache path for the serialized wrapper coverage map.
-#[instrument(level = "debug")]
-pub fn wrapper_coverage_cache_path(store_root: &Path) -> PathBuf {
-    store_root.join("cache/wrapper-coverage.json")
-}
-
 /// Build wrapper coverage from hub trenchcoat pairs by re-parsing rustdoc JSON (oracle).
 #[instrument(level = "info", skip(filter), err(level = "warn"))]
 pub fn load_workspace_wrapper_coverage(
@@ -29,14 +22,6 @@ pub fn load_workspace_wrapper_coverage(
     store_root: &Path,
     filter: &dyn RunFilter,
 ) -> CordialResult<WrapperCoverageMap> {
-    let cache_path = wrapper_coverage_cache_path(store_root);
-    if cache_path.is_file() {
-        let body = fs::read_to_string(&cache_path)?;
-        if let Ok(map) = serde_json::from_str(&body) {
-            return Ok(map);
-        }
-    }
-
     let hub = discover_workspace_hub(project_root, filter)?;
     if hub != WorkspaceHub::Elicitation {
         return Ok(WrapperCoverageMap::new());
@@ -55,12 +40,9 @@ pub fn load_workspace_wrapper_coverage(
         .collect();
     let complete = collect_elicit_complete_from_inventory(&inventory);
     let wrapper_prereqs: HashMap<_, _> = collect_trait_prereqs_for_inventory(&inventory);
-    let map = build_wrapper_coverage_map(&pairs, &complete, &wrapper_prereqs);
-
-    if let Some(parent) = cache_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    fs::write(&cache_path, serde_json::to_string_pretty(&map)?)?;
-
-    Ok(map)
+    Ok(build_wrapper_coverage_map(
+        &pairs,
+        &complete,
+        &wrapper_prereqs,
+    ))
 }

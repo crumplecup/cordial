@@ -190,7 +190,7 @@ Status key: **done** = ported with parity tests · **partial** = simplified · *
 | --- | --- | --- | --- |
 | **Impl coverage** | `{crate}.csv`, `{crate}.checklist.md`, `gaps-impl.csv`, `impl-gaps.json`, per-crate assessed JSON | `impl-coverage.csv`, checklist | **partial** — `Serialize`/`Deserialize`/`Debug` only; no `ElicitComplete`, gap taxonomy, harness |
 | **Internal coverage** | `internal.csv` | — | planned |
-| **Trenchcoat** | `trenchcoats.csv`, `trenchcoats.report.json`, wrapper-coverage JSON | trenchcoat CSV + `cache/wrapper-coverage.json` | **done** — wrapper map feeds impl gap classification |
+| **Trenchcoat** | `trenchcoats.csv`, `trenchcoats.report.json`, wrapper-coverage JSON | trenchcoat CSV + wrapper coverage in workspace IR | **done** — wrapper map feeds impl gap classification |
 | **Shadow** | per-target CSV/checklist, `gaps-shadow.csv`, `shadow-gaps.json` | `shadow-{upstream}.csv`, `gaps-shadow.csv`, `shadow-{upstream}.checklist.md`, same-crate `shadow.csv` | **partial** — cross-crate mirror + method/trait diff checklists + shadow-dep build/cache; Tier A baselines |
 | **Framework std** | `std.csv`, `std.checklist.md`, `gaps-impl.csv`, amenable-specific reports | `std.csv`, checklist, gaps under `findings/` | **done** — Tier C dual-run green (homecoming + amenable `std.csv`, frozen gaps baselines) |
 | **Executive summary** | `coverage/summary.md` | `findings/summary.md` (coverage-only) / `coverage-summary.md` (with quality) | **done** — impl + shadow metric tables + target support digest |
