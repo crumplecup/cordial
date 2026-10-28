@@ -1,11 +1,11 @@
-//! File, function, packing, and module-hierarchy size.
+//! Code organization and readability, guided by size and hierarchy signals.
 //!
-//! **What.** Finds code mass and packing shapes that are split, extract, or
-//! collapse signals.
+//! **What.** Finds files, functions, and module hierarchies whose organization
+//! needs examination.
 //!
-//! **Why.** Visibility asks whether a `pub mod` path has earned its
-//! existence; this etiquette asks whether the mass in those modules should be
-//! peeled, split, or collapsed.
+//! **Why.** A human reader should be able to locate a responsibility, understand
+//! it with limited context, and follow its dependencies. Extractions should group
+//! coherent responsibilities behind meaningful names and preserve useful locality.
 //!
 //! **Flags.** Oversized files and function bodies, too many types per file,
 //! modules far from the crate mean, top-heavy parents, lopsided siblings, and
@@ -77,9 +77,9 @@ pub static MODULARITY_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::ne
             EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
             false,
             EtiquetteExplain::new(
-                "Which files, functions, and modules are too large or badly packed?",
-                "Size and packing problems are split/extract signals. Visibility asks whether a pub mod path has earned its existence; this etiquette asks whether the mass in those modules should be peeled, split, or collapsed.",
-                "Seven rules: oversized files and function bodies, too many types per file, modules far from the crate mean (σ), top-heavy parents, lopsided siblings, and unary child directories. Thresholds live under [modularity] in cordial.toml.",
+                "Is the code organized so a human reader can find and understand each responsibility?",
+                "Organize code so a human reader can locate a responsibility, understand it with limited context, and follow its dependencies.",
+                "Use size and hierarchy findings to identify places that need examination. Group closely related behavior behind meaningful module names, keep collaborating code together, and give each extraction a clear purpose. Before editing, consider the organization of the affected module as a whole; after editing, review whether the resulting structure makes the code easier to navigate and understand. Seven rules provide signals: oversized files and function bodies, too many types per file, modules far from the crate mean (σ), top-heavy parents, lopsided siblings, and unary child directories. Thresholds live under [modularity] in cordial.toml.",
                 "`[modularity] enabled = false` in cordial.toml.",
                 vec![
                     EtiquetteRuleExplain::new("MODULARITY-FILE", "File over the line threshold"),
