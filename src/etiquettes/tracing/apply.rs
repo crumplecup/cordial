@@ -142,7 +142,7 @@ pub fn run_tracing_instrument_apply(
             &source_view,
         );
     let config = crate::config::load_cordial_config(project_root, project_root);
-    let call_graph = workspace_call_graph_with_source(project_root, config.tracing(), &source_view);
+    let call_graph = workspace_call_graph_with_source(config.tracing(), &facts, &source_view);
 
     for ((crate_name, rel_path), mut file_gaps) in by_file {
         let Some(crate_root) = crate_roots.get(&crate_name) else {

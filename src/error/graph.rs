@@ -12,7 +12,7 @@ use super::graph_sources::{
     CrateMustExistSource, EdgeReferencesMissingNodeSource, NoLoadViewAvailableForEnricherSource,
     NoLoadViewForEnricherSource, SetAttrOnMissingNodeSource, SnapshotEdgeFromInvalidSource,
     SnapshotEdgeMissingEndpointsSource, SnapshotEdgeToInvalidSource,
-    SourceEnricherWrongLoaderSource,
+    SourceEnricherWrongLoaderSource, WorkspaceSourceFactsMissingSource,
 };
 
 /// Umbrella kind for IR graph/workspace/loader invariant violations,
@@ -28,6 +28,7 @@ pub enum GraphErrorKind {
     NoLoadViewForEnricher(NoLoadViewForEnricherSource),
     NoLoadViewAvailableForEnricher(NoLoadViewAvailableForEnricherSource),
     SourceEnricherWrongLoader(SourceEnricherWrongLoaderSource),
+    WorkspaceSourceFactsMissing(WorkspaceSourceFactsMissingSource),
     MissingConversionUnit(MissingConversionUnitSource),
     StaleSourceSnapshot(StaleSourceSnapshotSource),
 }
@@ -66,6 +67,7 @@ impl std::fmt::Display for GraphError {
             GraphErrorKind::NoLoadViewForEnricher(source) => source.fmt(formatter),
             GraphErrorKind::NoLoadViewAvailableForEnricher(source) => source.fmt(formatter),
             GraphErrorKind::SourceEnricherWrongLoader(source) => source.fmt(formatter),
+            GraphErrorKind::WorkspaceSourceFactsMissing(source) => source.fmt(formatter),
             GraphErrorKind::MissingConversionUnit(source) => source.fmt(formatter),
             GraphErrorKind::StaleSourceSnapshot(source) => source.fmt(formatter),
         }
@@ -85,6 +87,7 @@ impl std::error::Error for GraphError {
             GraphErrorKind::NoLoadViewForEnricher(source) => Some(source),
             GraphErrorKind::NoLoadViewAvailableForEnricher(source) => Some(source),
             GraphErrorKind::SourceEnricherWrongLoader(source) => Some(source),
+            GraphErrorKind::WorkspaceSourceFactsMissing(source) => Some(source),
             GraphErrorKind::MissingConversionUnit(source) => Some(source),
             GraphErrorKind::StaleSourceSnapshot(source) => Some(source),
         }
@@ -92,6 +95,16 @@ impl std::error::Error for GraphError {
 }
 
 impl super::CordialError {
+    /// A source enricher required facts absent from the workspace IR.
+    #[track_caller]
+    #[instrument(level = "debug")]
+    pub fn workspace_source_facts_missing(name: &'static str) -> Self {
+        Self::from_kind(super::CordialErrorKind::Graph(GraphError::new(
+            GraphErrorKind::WorkspaceSourceFactsMissing(WorkspaceSourceFactsMissingSource::new(
+                name,
+            )),
+        )))
+    }
     /// An apply plan no longer matches the source file it would overwrite.
     #[track_caller]
     #[instrument(level = "debug", skip(path))]

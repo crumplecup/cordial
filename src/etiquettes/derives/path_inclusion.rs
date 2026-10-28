@@ -34,7 +34,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use syn::Item;
 use tracing::instrument;
@@ -136,16 +135,11 @@ impl PathInclusionFacts {
     }
 }
 
-type FactsCache = Mutex<Option<(PathBuf, Option<u64>, PathInclusionFacts)>>;
-static FACTS_CACHE: FactsCache = Mutex::new(None);
-
-/// Cached, workspace-wide `#[path]`-splice + dependency facts. Cheap to
-/// call repeatedly (once per crate scanned in one session): computed once
-/// per `workspace_root`, matching `antipatterns::version_in_member`'s own
-/// cache shape.
+/// Workspace-wide `#[path]`-splice + dependency facts for standalone callers.
 #[instrument(level = "debug")]
 pub fn workspace_path_inclusions(workspace_root: &Path) -> PathInclusionFacts {
-    workspace_path_inclusions_impl(workspace_root, None)
+    let source = SourceLoadView::for_standalone_scan();
+    compute_path_inclusions(workspace_root, &source)
 }
 
 #[instrument(level = "debug", skip(source))]
@@ -153,36 +147,11 @@ pub(crate) fn workspace_path_inclusions_with_source(
     workspace_root: &Path,
     source: &SourceLoadView,
 ) -> PathInclusionFacts {
-    workspace_path_inclusions_impl(workspace_root, Some(source))
+    compute_path_inclusions(workspace_root, source)
 }
 
 #[instrument(level = "debug", skip(source))]
-fn workspace_path_inclusions_impl(
-    workspace_root: &Path,
-    source: Option<&SourceLoadView>,
-) -> PathInclusionFacts {
-    let cache_key = canonical_or(workspace_root);
-    let session_id = source.map(SourceLoadView::session_id);
-    if let Ok(cache) = FACTS_CACHE.lock()
-        && let Some((key, cached_session, facts)) = cache.as_ref()
-        && *key == cache_key
-        && *cached_session == session_id
-    {
-        return facts.clone();
-    }
-
-    let facts = compute_path_inclusions(workspace_root, source);
-    if let Ok(mut cache) = FACTS_CACHE.lock() {
-        *cache = Some((cache_key, session_id, facts.clone()));
-    }
-    facts
-}
-
-#[instrument(level = "debug", skip(source))]
-fn compute_path_inclusions(
-    workspace_root: &Path,
-    source: Option<&SourceLoadView>,
-) -> PathInclusionFacts {
+fn compute_path_inclusions(workspace_root: &Path, source: &SourceLoadView) -> PathInclusionFacts {
     let Ok(meta) = cargo_metadata::MetadataCommand::new()
         .current_dir(workspace_root)
         .exec()
@@ -228,7 +197,7 @@ fn compute_path_inclusions(
 #[instrument(level = "debug", skip(crate_roots, source))]
 fn discover_splices(
     crate_roots: &[(String, PathBuf)],
-    source: Option<&SourceLoadView>,
+    source: &SourceLoadView,
 ) -> HashMap<PathBuf, Vec<String>> {
     let mut included_by: HashMap<PathBuf, Vec<String>> = HashMap::new();
     for (crate_name, crate_root) in crate_roots {
@@ -245,20 +214,10 @@ fn discover_splices(
             if path.extension().is_none_or(|ext| ext != "rs") {
                 continue;
             }
-            let targets = if let Some(source) = source {
-                let Ok(parsed) = source.parsed_file(path, "path-inclusion") else {
-                    continue;
-                };
-                path_attr_targets(&parsed.syntax().items)
-            } else {
-                let Ok(text) = std::fs::read_to_string(path) else {
-                    continue;
-                };
-                let Ok(syntax) = syn::parse_file(&text) else {
-                    continue;
-                };
-                path_attr_targets(&syntax.items)
+            let Ok(parsed) = source.parsed_file(path, "path-inclusion") else {
+                continue;
             };
+            let targets = path_attr_targets(&parsed.syntax().items);
             let Some(file_dir) = path.parent() else {
                 continue;
             };

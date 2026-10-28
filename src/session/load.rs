@@ -135,6 +135,19 @@ pub(super) fn load_and_probe(
             workspace.insert_crate(crate_ir);
         }
 
+        #[cfg(feature = "derives")]
+        if let Some(source) = load_views
+            .get(&format!("{}:{}", target.crate_name(), SourceLoader::ID))
+            .and_then(|view| view.as_any().downcast_ref::<SourceLoadView>())
+        {
+            crate::session::prepare_workspace_source_facts(
+                &mut workspace,
+                source,
+                session,
+                enrichers,
+            );
+        }
+
         for enricher in enrichers {
             progress.set_message(format!(
                 "Enriching {} with {}",

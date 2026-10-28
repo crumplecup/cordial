@@ -33,11 +33,9 @@ impl SourceEnricher for FunctionInventoryEnricher {
         let crate_root = member_crate_root(source, session);
         let config = crate::config::load_session_config(session);
         let extra_skip = config.tracing().extra_skip();
-        let call_graph = super::call_graph::workspace_call_graph_with_source(
-            session.project_root(),
-            config.tracing(),
-            source,
-        );
+        let call_graph = ir.workspace_call_graph().ok_or_else(|| {
+            crate::error::CordialError::workspace_source_facts_missing("call graph")
+        })?;
         let never_instrument = call_graph.never_instrument(source.crate_name());
         let records = scan_shared_source_tree(
             source,
@@ -47,10 +45,9 @@ impl SourceEnricher for FunctionInventoryEnricher {
             extra_skip,
             never_instrument,
         )?;
-        let facts = crate::etiquettes::derives::workspace_path_inclusions_with_source(
-            session.project_root(),
-            source,
-        );
+        let facts = ir.workspace_path_inclusions().ok_or_else(|| {
+            crate::error::CordialError::workspace_source_facts_missing("path inclusions")
+        })?;
         // Value: (policy tag, `not(..)` predicate). The predicate is
         // empty unless the policy is `gated`; it lets the assessor render
         // a checklist recipe byte-identical to what `--apply` writes for

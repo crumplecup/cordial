@@ -12,6 +12,18 @@ use super::query::Query;
 pub trait IrView {
     /// Cargo package name this crate IR belongs to.
     fn crate_name(&self) -> &str;
+    /// Workspace path-splice and dependency facts, when collected.
+    #[cfg(feature = "derives")]
+    fn workspace_path_inclusions(&self) -> Option<std::sync::Arc<crate::PathInclusionFacts>> {
+        None
+    }
+    /// Workspace proof-only call reachability, when collected.
+    #[cfg(feature = "tracing")]
+    fn workspace_call_graph(
+        &self,
+    ) -> Option<std::sync::Arc<crate::etiquettes::tracing::CallGraphFacts>> {
+        None
+    }
     /// Root node of this crate graph.
     fn root(&self) -> CordialResult<NodeId>;
     /// Borrow the node with this id, if it exists in this crate graph.

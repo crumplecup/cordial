@@ -36,7 +36,6 @@ mod types;
 
 pub use assessor::DeriveAssessor;
 pub use enricher::DeriveInventoryEnricher;
-#[cfg(feature = "tracing")]
 pub(crate) use path_inclusion::workspace_path_inclusions_with_source;
 pub use path_inclusion::{PathInclusionFacts, workspace_path_inclusions};
 pub use probe::DeriveSiteProbe;

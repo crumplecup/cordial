@@ -69,6 +69,7 @@ impl SourceLoadView {
     /// Its caller must drop the view before rescanning files it has edited.
     #[cfg(any(
         feature = "antipatterns",
+        feature = "derives",
         feature = "tracing",
         feature = "internal_error_chain",
         feature = "error_sites"
@@ -164,17 +165,14 @@ impl SourceLoadView {
     }
 
     /// Identity of the run that issued this parsed-file view.
-    #[cfg(any(
-        feature = "derives",
-        all(
-            feature = "verus_ir",
-            any(
-                feature = "panics",
-                feature = "proof_patterns",
-                feature = "verus_warnings"
-            )
+    #[cfg(any(all(
+        feature = "verus_ir",
+        any(
+            feature = "panics",
+            feature = "proof_patterns",
+            feature = "verus_warnings"
         )
-    ))]
+    )))]
     #[tracing::instrument(level = "trace", skip(self))]
     pub(crate) fn session_id(&self) -> u64 {
         self.cache_token.0

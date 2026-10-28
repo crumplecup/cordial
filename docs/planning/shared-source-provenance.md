@@ -189,8 +189,8 @@ The parsed-file cache now lives for the whole load-and-probe run, so later
 crate views reuse trees opened by earlier workspace-wide scans. Path-inclusion
 discovery and the tracing call graph obtain their production syntax through
 that source view. Their standalone apply APIs retain direct parsing. The
-workspace facts caches distinguish sourced runs by session identity, so facts
-from a standalone call cannot bypass the shared-tree production path.
+workspace facts caches distinguished sourced runs by session identity at
+this stage; a later phase removed those process-global caches.
 
 ## Fourteenth slice
 
@@ -290,10 +290,13 @@ Crate-attrs' Verus exemption now checks source snapshots already loaded by
 Standalone crate-attrs scans use the same loader path. The remaining
 source-derived side channels are concrete follow-up work:
 
-- Tracing's workspace call graph and derives' path-inclusion graph are computed
-  from shared parsed files, but cached in process-global `FACTS_CACHE` values
-  and passed directly into source enrichers. Their authoritative facts need a
-  workspace IR home and typed IR reads before policy decisions are made.
+- Derive path inclusions and tracing call reachability now live once in
+  `WorkspaceIr` for a run. The source enrichers read them through typed IR
+  accessors; the process-global facts caches are gone. The public standalone
+  path-inclusion API also obtains trees from a short-lived shared source view.
+- Tracing apply still builds path-inclusion and call-graph facts in its own
+  short-lived source view and classifies checklist rows directly. It must join
+  the shared IR path for its decisions before the apply invariant is complete.
 - Public standalone scan helpers still accept raw source or read files and may
   parse outer files directly. These cannot feed a production source hook today,
   but they remain an exception to a literal repo-wide one-parse policy. Move

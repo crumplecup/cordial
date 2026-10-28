@@ -4,7 +4,6 @@ use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
 
-use super::path_inclusion::workspace_path_inclusions_with_source;
 use super::scan::scan_source_tree;
 
 use tracing::instrument;
@@ -28,7 +27,9 @@ impl SourceEnricher for DeriveInventoryEnricher {
 
         let crate_root = member_crate_root(source, session);
         let thresholds = *crate::config::load_session_config(session).derives();
-        let path_inclusions = workspace_path_inclusions_with_source(session.project_root(), source);
+        let path_inclusions = ir.workspace_path_inclusions().ok_or_else(|| {
+            crate::error::CordialError::workspace_source_facts_missing("path inclusions")
+        })?;
         let records = scan_source_tree(source, &crate_root, thresholds, &path_inclusions)?;
 
         for record in records {

@@ -37,8 +37,6 @@
 //! impls, called from its own proof harnesses) is intra-workspace.
 
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use crate::PathInclusionFacts;
 use crate::config::TracingThresholds;
@@ -52,8 +50,7 @@ mod resolve;
 use collect::collect_workspace_functions;
 use resolve::never_instrument_from_calls;
 
-/// Workspace-wide call-graph facts, computed once per session (cached
-/// like [`PathInclusionFacts`]).
+/// Workspace-wide call-graph facts retained by the session IR.
 #[derive(Debug, Default, Clone)]
 pub struct CallGraphFacts {
     /// Crate name -> qualified names never worth recording as needing
@@ -75,34 +72,13 @@ impl CallGraphFacts {
     }
 }
 
-type FactsCache = Mutex<Option<(PathBuf, u64, CallGraphFacts)>>;
-static FACTS_CACHE: FactsCache = Mutex::new(None);
-
-#[instrument(level = "debug", skip(config, source))]
-pub(super) fn workspace_call_graph_with_source(
-    workspace_root: &Path,
+#[instrument(level = "debug", skip(config, path_facts, source))]
+pub(crate) fn workspace_call_graph_with_source(
     config: &TracingThresholds,
+    path_facts: &PathInclusionFacts,
     source: &SourceLoadView,
 ) -> CallGraphFacts {
-    let cache_key = workspace_root
-        .canonicalize()
-        .unwrap_or_else(|_| workspace_root.to_path_buf());
-    let session_id = source.session_id();
-    if let Ok(cache) = FACTS_CACHE.lock()
-        && let Some((key, cached_session, facts)) = cache.as_ref()
-        && *key == cache_key
-        && *cached_session == session_id
-    {
-        return facts.clone();
-    }
-
-    let path_facts =
-        crate::etiquettes::derives::workspace_path_inclusions_with_source(workspace_root, source);
-    let facts = compute_call_graph(config, &path_facts, source);
-    if let Ok(mut cache) = FACTS_CACHE.lock() {
-        *cache = Some((cache_key, session_id, facts.clone()));
-    }
-    facts
+    compute_call_graph(config, path_facts, source)
 }
 
 #[instrument(level = "debug", skip(config, path_facts, source))]

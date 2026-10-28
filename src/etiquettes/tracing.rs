@@ -32,6 +32,8 @@ mod apply;
 mod assessor;
 mod boundary;
 mod call_graph;
+pub(crate) use call_graph::CallGraphFacts;
+pub(crate) use call_graph::workspace_call_graph_with_source;
 mod classify;
 mod delta;
 mod display_types;

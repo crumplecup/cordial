@@ -6,6 +6,41 @@ use std::panic::Location;
 
 use tracing::instrument;
 
+/// A required workspace fact was absent from the session IR.
+#[derive(Debug, derive_getters::Getters)]
+pub struct WorkspaceSourceFactsMissingSource {
+    name: std::borrow::Cow<'static, str>,
+    file: std::borrow::Cow<'static, str>,
+    #[getter(copy)]
+    line: u32,
+}
+
+impl WorkspaceSourceFactsMissingSource {
+    #[track_caller]
+    #[instrument(level = "debug", fields(name = name))]
+    pub fn new(name: &'static str) -> Self {
+        let loc = Location::caller();
+        Self {
+            name: name.into(),
+            file: loc.file().into(),
+            line: loc.line(),
+        }
+    }
+}
+
+impl std::fmt::Display for WorkspaceSourceFactsMissingSource {
+    #[instrument(level = "trace", skip(self, formatter))]
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "workspace source fact {} missing from IR ({}:{})",
+            self.name, self.file, self.line
+        )
+    }
+}
+
+impl std::error::Error for WorkspaceSourceFactsMissingSource {}
+
 #[derive(Debug, derive_getters::Getters)]
 pub struct EdgeReferencesMissingNodeSource {
     file: String,

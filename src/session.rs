@@ -32,6 +32,10 @@ mod load;
 mod render;
 mod resolve;
 mod run;
+#[cfg(feature = "derives")]
+mod source_facts;
+#[cfg(feature = "derives")]
+pub(crate) use source_facts::prepare_workspace_source_facts;
 
 /// Read-only paths and run context shared with hooks.
 ///

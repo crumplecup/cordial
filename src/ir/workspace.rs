@@ -12,6 +12,14 @@ pub struct WorkspaceIr {
     crates: HashMap<String, CrateIr>,
     /// Edges that connect nodes in different crates.
     cross_crate_edges: Vec<(String, NodeId, String, NodeId, EdgeWeight)>,
+    /// Workspace source facts shared by derive and tracing enrichers.
+    #[cfg(feature = "derives")]
+    #[getter(skip)]
+    path_inclusions: Option<std::sync::Arc<crate::PathInclusionFacts>>,
+    /// Proof-only call reachability shared by tracing enrichers.
+    #[cfg(feature = "tracing")]
+    #[getter(skip)]
+    call_graph: Option<std::sync::Arc<crate::etiquettes::tracing::CallGraphFacts>>,
     /// Foreign-type → elicitation wrapper coverage built from hub crate IR.
     #[cfg(feature = "impl_coverage")]
     #[getter(skip)]
@@ -20,6 +28,29 @@ pub struct WorkspaceIr {
 }
 
 impl WorkspaceIr {
+    #[cfg(feature = "derives")]
+    #[instrument(level = "trace", skip(self, facts))]
+    pub(crate) fn set_path_inclusions(&mut self, facts: crate::PathInclusionFacts) {
+        self.path_inclusions = Some(std::sync::Arc::new(facts));
+    }
+
+    #[cfg(feature = "tracing")]
+    #[instrument(level = "trace", skip(self, facts))]
+    pub(crate) fn set_call_graph(&mut self, facts: crate::etiquettes::tracing::CallGraphFacts) {
+        self.call_graph = Some(std::sync::Arc::new(facts));
+    }
+
+    #[cfg(feature = "derives")]
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn path_inclusions(&self) -> Option<&crate::PathInclusionFacts> {
+        self.path_inclusions.as_deref()
+    }
+
+    #[cfg(feature = "tracing")]
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn call_graph(&self) -> Option<&crate::etiquettes::tracing::CallGraphFacts> {
+        self.call_graph.as_deref()
+    }
     /// Workspace-level wrapper coverage from the elicitation hub, if recorded.
     #[instrument(level = "trace", skip(self))]
     #[cfg(feature = "impl_coverage")]
@@ -113,6 +144,26 @@ impl IrView for CrateView<'_> {
         &self.crate_name
     }
 
+    #[cfg(feature = "derives")]
+    #[instrument(level = "trace", skip(self))]
+    fn workspace_path_inclusions(&self) -> Option<std::sync::Arc<crate::PathInclusionFacts>> {
+        self.workspace
+            .path_inclusions
+            .as_ref()
+            .map(std::sync::Arc::clone)
+    }
+
+    #[cfg(feature = "tracing")]
+    #[instrument(level = "trace", skip(self))]
+    fn workspace_call_graph(
+        &self,
+    ) -> Option<std::sync::Arc<crate::etiquettes::tracing::CallGraphFacts>> {
+        self.workspace
+            .call_graph
+            .as_ref()
+            .map(std::sync::Arc::clone)
+    }
+
     #[instrument(level = "trace", skip(self))]
     fn root(&self) -> CordialResult<NodeId> {
         Ok(self.workspace.require_crate(&self.crate_name)?.root())
@@ -168,6 +219,26 @@ impl IrView for CrateViewMut<'_> {
     #[instrument(level = "trace", skip(self))]
     fn crate_name(&self) -> &str {
         &self.crate_name
+    }
+
+    #[cfg(feature = "derives")]
+    #[instrument(level = "trace", skip(self))]
+    fn workspace_path_inclusions(&self) -> Option<std::sync::Arc<crate::PathInclusionFacts>> {
+        self.workspace
+            .path_inclusions
+            .as_ref()
+            .map(std::sync::Arc::clone)
+    }
+
+    #[cfg(feature = "tracing")]
+    #[instrument(level = "trace", skip(self))]
+    fn workspace_call_graph(
+        &self,
+    ) -> Option<std::sync::Arc<crate::etiquettes::tracing::CallGraphFacts>> {
+        self.workspace
+            .call_graph
+            .as_ref()
+            .map(std::sync::Arc::clone)
     }
 
     #[instrument(level = "trace", skip(self))]
