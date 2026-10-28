@@ -1,8 +1,7 @@
-use crate::error::CordialResult;
+use crate::SourceLoader;
+use crate::error::{CordialError, CordialResult};
 use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
-
-use super::loader::{DependencyFreshnessLoadView, DependencyFreshnessLoader};
 
 use tracing::instrument;
 
@@ -25,17 +24,20 @@ impl IrEnricher for DependencyFreshnessSurveyEnricher {
 
     #[instrument(level = "trace", skip(self))]
     fn required_loader(&self) -> &str {
-        DependencyFreshnessLoader::ID
+        SourceLoader::ID
     }
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
-        let (ir, load, _) = view.into_parts();
-        let Some(load) = load.as_any().downcast_ref::<DependencyFreshnessLoadView>() else {
-            return Ok(());
-        };
+        let (ir, _, _) = view.into_parts();
+        let records = ir
+            .workspace_dependency_freshness_records()
+            .ok_or_else(|| {
+                CordialError::workspace_source_facts_missing("dependency freshness survey")
+            })?
+            .to_vec();
         let root = ir.root()?;
-        for record in load.records() {
+        for record in &records {
             let node = ir.insert_node(
                 NodeWeight::new(NodeKind::Plugin("dependency_freshness".to_string()))
                     .with_name(record.dependency_name().clone()),

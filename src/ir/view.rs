@@ -12,6 +12,13 @@ use super::query::Query;
 pub trait IrView {
     /// Cargo package name this crate IR belongs to.
     fn crate_name(&self) -> &str;
+    /// Dependency survey facts collected once for the current workspace run.
+    #[cfg(feature = "dependency_freshness")]
+    fn workspace_dependency_freshness_records(
+        &self,
+    ) -> Option<&[crate::etiquettes::DependencySurveyRecord]> {
+        None
+    }
     /// Merged std/core/alloc inventory retained for the current workspace run.
     #[cfg(feature = "homecoming_std")]
     fn workspace_framework_std_inventory(
@@ -60,6 +67,11 @@ pub trait IrView {
     /// cheap prefilter, then calls [`Query::matches_node`] for the final
     /// predicate.
     fn nodes_matching(&self, query: &dyn Query) -> Vec<NodeRef<'_>>;
+    /// Matching nodes across all crate graphs in this workspace.
+    /// Standalone crate views return their own matching nodes.
+    fn workspace_nodes_matching(&self, query: &dyn Query) -> Vec<NodeRef<'_>> {
+        self.nodes_matching(query)
+    }
     /// Parent node ids along incoming edges of `kind`.
     fn parents(&self, id: NodeId, kind: EdgeKind) -> Vec<NodeId>;
     /// Child node ids along outgoing edges of `kind`.

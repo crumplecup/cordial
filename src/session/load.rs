@@ -60,6 +60,24 @@ pub(super) fn load_and_probe(
         probes,
     } = hooks;
     let mut workspace = WorkspaceIr::default();
+    #[cfg(feature = "dependency_freshness")]
+    if enrichers
+        .iter()
+        .any(|enricher| enricher.id() == crate::etiquettes::SurveyEnricher::ID)
+    {
+        let task = session
+            .progress()
+            .spinner("Preparing dependency freshness survey".to_string());
+        let records = timings.measure("pipeline", "dependency_freshness_survey", || {
+            crate::etiquettes::survey_workspace_dependency_freshness(
+                session.project_root(),
+                targets,
+                Some(session.store_root()),
+            )
+        });
+        task.finish("Prepared dependency freshness survey".to_string());
+        workspace.set_dependency_freshness_records(records?);
+    }
     #[cfg(feature = "homecoming_std")]
     {
         let needs_std_inventory = probes.iter().any(|probe| {

@@ -64,7 +64,7 @@ fn survey_rows(view: RenderView<'_>) -> Vec<DependencyFreshnessSurveyRow> {
         .build();
     let mut rows: Vec<_> = view
         .ir()
-        .nodes_matching(&query)
+        .workspace_nodes_matching(&query)
         .into_iter()
         .map(DependencyFreshnessSurveyRow::from_node)
         .collect();

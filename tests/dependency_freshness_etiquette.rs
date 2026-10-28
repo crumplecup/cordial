@@ -92,11 +92,7 @@ version = "2.3.4"
         .build();
 
     let outcome = session
-        .run(
-            &NamedRunFilter::all_etiquettes()
-                .with_crate("app")
-                .with_tiers(["deep"]),
-        )
+        .run(&NamedRunFilter::all_etiquettes().with_tiers(["deep"]))
         .into_diagnostic()
         .wrap_err("session run")?;
     assert_eq!(outcome.findings().count(), 4);

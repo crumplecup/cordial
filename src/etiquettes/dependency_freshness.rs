@@ -24,7 +24,6 @@
 
 mod assessor;
 mod enricher;
-mod loader;
 mod probe;
 mod reporter;
 mod scan;
@@ -34,7 +33,6 @@ use std::sync::LazyLock;
 
 use assessor::DependencyFreshnessAssessor;
 use enricher::DependencyFreshnessSurveyEnricher;
-use loader::DependencyFreshnessLoader;
 use probe::DependencyFreshnessSiteProbe;
 use reporter::{
     DependencyFreshnessChecklistReporter, DependencyFreshnessCsvReporter,
@@ -51,7 +49,6 @@ use crate::objects::Finding;
 use tracing::instrument;
 
 static SOURCE_LOADER: SourceLoader = SourceLoader;
-static DEPENDENCY_FRESHNESS_LOADER: DependencyFreshnessLoader = DependencyFreshnessLoader;
 static DEPENDENCY_FRESHNESS_ENRICHER: DependencyFreshnessSurveyEnricher =
     DependencyFreshnessSurveyEnricher;
 static DEPENDENCY_FRESHNESS_PROBE: DependencyFreshnessSiteProbe = DependencyFreshnessSiteProbe;
@@ -64,7 +61,11 @@ static DEPENDENCY_FRESHNESS_CHECKLIST: DependencyFreshnessChecklistReporter =
 static DEPENDENCY_FRESHNESS_SUMMARY: DependencyFreshnessSummaryReporter =
     DependencyFreshnessSummaryReporter;
 
-static LOADERS: &[&'static dyn crate::Loader] = &[&SOURCE_LOADER, &DEPENDENCY_FRESHNESS_LOADER];
+static LOADERS: &[&'static dyn crate::Loader] = &[&SOURCE_LOADER];
+
+pub(crate) use enricher::DependencyFreshnessSurveyEnricher as SurveyEnricher;
+pub(crate) use scan::survey_workspace_dependency_freshness;
+pub(crate) use types::DependencySurveyRecord;
 static ENRICHERS: &[&'static dyn crate::IrEnricher] = &[&DEPENDENCY_FRESHNESS_ENRICHER];
 static PROBES: &[&'static dyn crate::Probe] = &[&DEPENDENCY_FRESHNESS_PROBE];
 static ASSESSORS: &[&'static dyn crate::Assessor] = &[&DEPENDENCY_FRESHNESS_ASSESSOR];

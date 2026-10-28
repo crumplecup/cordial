@@ -1,13 +1,7 @@
-use std::collections::BTreeMap;
-use std::fs;
-use std::path::Path;
-
-use crate::error::CordialResult;
-
-use super::parse_table;
 use crate::etiquettes::dependency_freshness::types::{
     DependencyFreshnessIndicator, DependencySection, DependencySourceKind, ManifestVersionSpec,
 };
+use std::collections::BTreeMap;
 
 use tracing::instrument;
 
@@ -23,35 +17,30 @@ pub(super) struct DependencyEntry {
     indicators: Vec<DependencyFreshnessIndicator>,
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", skip(manifest, table))]
 pub(super) fn workspace_dependencies(
-    project_root: &Path,
-) -> CordialResult<BTreeMap<String, DependencyEntry>> {
-    let manifest_path = project_root.join("Cargo.toml");
-    if !manifest_path.is_file() {
-        return Ok(BTreeMap::new());
-    }
-    let manifest = fs::read_to_string(&manifest_path)?;
-    let table = parse_table(&manifest, &manifest_path)?;
+    manifest: &str,
+    table: &toml::Table,
+) -> BTreeMap<String, DependencyEntry> {
     let Some(workspace) = table.get("workspace").and_then(toml::Value::as_table) else {
-        return Ok(BTreeMap::new());
+        return BTreeMap::new();
     };
     let Some(dependencies) = workspace
         .get("dependencies")
         .and_then(toml::Value::as_table)
     else {
-        return Ok(BTreeMap::new());
+        return BTreeMap::new();
     };
     let entries = parse_dependency_table(
-        &manifest,
+        manifest,
         DependencySection::Workspace,
         dependencies,
         &BTreeMap::new(),
     );
-    Ok(entries
+    entries
         .into_iter()
         .map(|entry| (entry.dependency_name.clone(), entry))
-        .collect())
+        .collect()
 }
 
 #[instrument(level = "debug", skip(manifest, table, workspace_dependencies))]

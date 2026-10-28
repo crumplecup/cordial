@@ -128,6 +128,10 @@ pub use cfg_scatter::{
 };
 #[cfg(feature = "dependency_freshness")]
 pub use dependency_freshness::DEPENDENCY_FRESHNESS_ETIQUETTE;
+#[cfg(feature = "dependency_freshness")]
+pub(crate) use dependency_freshness::{
+    DependencySurveyRecord, SurveyEnricher, survey_workspace_dependency_freshness,
+};
 #[cfg(feature = "amenable_ext")]
 pub use framework_ext::{
     AMENABLE_EXT_JIFF_ETIQUETTE, ExtReporter, ExtRowFinding, ExtRowRule, ext_gaps_from_findings,
