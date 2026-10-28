@@ -121,27 +121,75 @@ leave a finding for manual design, not a reason to force an apply rewrite.
 
 ### Coverage from real projects
 
-Use the target project's configured strategy and default store:
+Exercise a strategy change in an isolated copy, using that copy's default store:
 
 ```sh
 cordial --project /path/to/project quality --apply --etiquette internal_error_chain --dry-run
 ```
 
-Start with Amenable. Record the strategy, proposed repairs, and blockers before
-selecting the next implementation pattern. Reduce a real blocked case to a
-compiling regression fixture, then add its missing evidence to collection and
+Start with Amenable in `~/repos/amenable_copy`, with an independent Git repository
+and a tested owned baseline. Switch `[internal_error_chain] field_strategy` to
+`"borrowed"`, preview and apply supported repairs, and compile/test the changed
+crates and their consumers. Commit benchmark transforms so a failed rewrite can
+be preserved and reverted to a known checkpoint. Switch back to `"owned"` and
+exercise the reverse direction on the successfully converted subset; full
+forward coverage is not required for a partial round trip. Keep the original
+project untouched and periodically clean accumulated build artifacts in the copy.
+
+Record the strategy, proposed repairs, blockers, missed candidates, validation,
+and checkpoint commits before selecting the next pattern. A no-op scan under the
+project's existing policy does not measure migration coverage. Reduce a real
+blocked case to a compiling regression fixture, then add its missing evidence to collection and
 enrichment in the shared IR. Keep expected limitations (public API changes,
 runtime-owned values, unresolved macro or lifetime edges) distinct from missing
 support for a provable private conversion. Counts of blocked candidate fields
 are not counts of all unsupported error-handling patterns: apply's inventory
 still defines which candidates it can see.
 
-Initial Amenable dry run (2026-10-28), using its existing configuration and
-default store: 0 proposed field conversions, 0 blocked candidate fields,
-0 proposed worklist closures, and 1 error handling item remaining for manual
-repair. No source, configuration, or worklist changes were made. This establishes
-a baseline for the configured policy; it does not exercise a strategy change
-or demonstrate coverage of unsupported migration patterns.
+#### First strategy-flip benchmark (2026-10-28)
+
+The independent Amenable snapshot includes its original working tree changes
+at HEAD `32b5960`. Copy baseline `a071ad0` (tag `baseline-owned`) passed
+`cargo test --workspace --locked`, including compile-fail tests and ordinary
+Rust doctests. Borrowed configuration checkpoint: `1bc987a`. Cordial: `fd349cc`.
+Detailed benchmark notes are tracked in the copy at commit `5b0b527` in
+`docs/error-strategy-benchmark.md`; reports stay in its default store.
+
+The borrowed dry run and write pass both found **0 convertible fields** and
+**155 blocked candidate fields**. The write pass changed no source, checked off
+0 items, and left all **336 error handling items open**. No converted subset
+exists to reverse yet; this is not round-trip evidence.
+
+| Borrowed field-strategy finding | Count | Apply inventory |
+| --- | ---: | --- |
+| Call-site `file: String` | 118 | Blocked |
+| Other `String` fields | 37 | Blocked |
+| Kind tuple payloads | 113 | Absent |
+| Other non-Copy fields | 62 | Absent |
+| Total | 330 | 155 represented; 175 absent |
+
+The comparison joins findings and blockers by declaration file, type name, and
+field name. Five additional parent Kind storage findings and one caller-tracking
+finding account for the remaining six items. The 155 blockers comprise 143
+`OutsideFile`, 10 `FieldUse`, and 2 `Initializer` results. These coarse reasons
+combine distinct causes: `OutsideFile` includes public containing types even
+when the candidate field is private; `FieldUse` includes unresolved derives and
+attributes, such as Amenable's `derive_more` errors, as well as actual field uses.
+
+Next implementation targets, grounded in this sweep:
+
+- [ ] Expose missing storage repairs and distinguish blocker causes from the
+  existing shared-IR evidence, including public visibility, external references,
+  generated code, and missing borrowing origins.
+- [ ] Support safe call-site file conversion on public containing types and
+  derive-based errors while preserving private field use contracts and rejecting
+  unknown generated accessors or constructors. This targets 118 real fields
+  without adding lifetimes to their enclosing types.
+- [ ] Run both strategy directions on that converted subset, checking compilation,
+  behavior, source traversal, caller location, worklist claims, and repeat apply.
+- [ ] Extend caller-owned lifetime origins and connected source/Kind migrations
+  from the remaining cases. Never manufacture references to constructor-local
+  temporaries, leak allocations, or weaken source-chain behavior to force a plan.
 
 ## First implementation decision
 
