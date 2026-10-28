@@ -44,16 +44,12 @@ a temporary file. Set `RUST_LOG=info` to see the chosen path on stderr.
 The report stays separate from Cordial's JSON stdout. The hotpath feature is
 opt-in; ordinary builds keep its instrumentation disabled.
 
-Set `CORDIAL_SOURCE_WORK_PATH` to a file in the project's default Cordial
-store when measuring repeated Rust source work in a combined run (for
-example, `~/.cordial/cordial/source-work.json`). The JSON array has one row
-per file, hook, and operation (`read`, `parse`, `walk`, or `reuse`), with a
-count and elapsed nanoseconds. `reuse` means the hook consumed a parsed tree
-from the current run's source cache, including a tree opened by another crate
-view. The cache is released after the load-and-probe run. The source-work file
-is a diagnostic artifact;
-normal runs do not create it. The hotpath report and source-work file measure
-the parent Cordial process, not work inside a Cargo subprocess.
+Source loading and parsing have hotpath markers. Source reads, parses, walks,
+and cache reuse have tracing events with the file path and hook. Set
+`RUST_LOG=cordial::loader::source_work=trace` to inspect per-hook source work
+in a combined run. The cache is released after the load-and-probe run.
+Hotpath and tracing measure the parent Cordial process, not work inside a
+Cargo subprocess.
 
 The feature-warning scan has separate hotpath markers for checking whether
 `cargo hack` is available, collecting private features, waiting for the

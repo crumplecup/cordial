@@ -53,7 +53,6 @@ pub(super) fn load_and_probe(
     hooks: LoadingHooks<'_>,
     timings: &mut HookTimings,
 ) -> CordialResult<LoadedWorkspace> {
-    crate::loader::reset_source_work();
     let _parsed_source_session = ParsedSourceSession::begin();
     let LoadingHooks {
         loaders,
@@ -217,6 +216,5 @@ pub(super) fn load_and_probe(
     }
     progress.finish(format!("Analyzed {} crate(s)", targets.len()));
 
-    crate::loader::write_source_work()?;
     Ok(LoadedWorkspace::new(workspace, markers_by_crate))
 }

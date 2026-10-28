@@ -19,7 +19,6 @@ pub(crate) use source::{SourceEditView, SourceSnapshot};
 pub(crate) use source_work::parse as source_parse;
 #[cfg(feature = "_attribute_scan")]
 pub(crate) use source_work::walk as source_walk;
-pub(crate) use source_work::{reset as reset_source_work, write as write_source_work};
 
 /// Opaque bundle produced by a loader.
 pub trait LoadView: Send + Sync {
