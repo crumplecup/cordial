@@ -7,6 +7,7 @@ use super::Shape;
 
 mod collect;
 mod desired;
+mod repairs;
 
 type Range = (usize, usize);
 
@@ -20,6 +21,8 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct GraphDeclaration {
     name: String,
     #[getter(skip)]
     line: usize,
+    #[getter(skip)]
+    declaration_line: usize,
     #[getter(skip)]
     column: usize,
     #[getter(copy)]
@@ -76,6 +79,8 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct GraphField {
     name: Option<String>,
     #[getter(copy)]
     line: usize,
+    #[getter(skip)]
+    type_line: usize,
     #[getter(skip)]
     visibility: Visibility,
     #[getter(skip)]

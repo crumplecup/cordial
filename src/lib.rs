@@ -181,14 +181,15 @@ pub use etiquettes::inline_tests::{
 pub use etiquettes::internal_error_chain::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
     ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind, ErrorFieldApplyBlocker,
-    ErrorFieldApplyBlockerReason, ErrorFieldApplySummary, ErrorFileApplySummary, ErrorFromEvidence,
-    ErrorSourceMethodEvidence, ErrorTryEvidence, ErrorTryScope, INTERNAL_ERROR_CHAIN_ETIQUETTE,
-    InternalErrorChainScanReport, InternalErrorComplianceFinding, InternalErrorComplianceId,
-    InternalErrorNodeClass, InternalErrorTypeNode, InternalErrorTypeProbeId, SignatureChainCheck,
-    SignatureChainStatus, WorkspaceInternalErrorChainSummary,
-    build_workspace_internal_error_chain_summary, run_error_field_apply, run_error_file_apply,
-    scan_compliance_rust_source, scan_compliance_rust_source_with_crate_kind,
-    scan_crate_internal_error_chain, scan_error_rust_source,
+    ErrorFieldApplyBlockerReason, ErrorFieldApplyRepair, ErrorFieldApplySummary,
+    ErrorFileApplySummary, ErrorFromEvidence, ErrorSourceMethodEvidence, ErrorTryEvidence,
+    ErrorTryScope, INTERNAL_ERROR_CHAIN_ETIQUETTE, InternalErrorChainScanReport,
+    InternalErrorComplianceFinding, InternalErrorComplianceId, InternalErrorNodeClass,
+    InternalErrorTypeNode, InternalErrorTypeProbeId, SignatureChainCheck, SignatureChainStatus,
+    WorkspaceInternalErrorChainSummary, build_workspace_internal_error_chain_summary,
+    run_error_field_apply, run_error_file_apply, scan_compliance_rust_source,
+    scan_compliance_rust_source_with_crate_kind, scan_crate_internal_error_chain,
+    scan_error_rust_source,
 };
 #[cfg(feature = "modularity")]
 pub use etiquettes::modularity::{

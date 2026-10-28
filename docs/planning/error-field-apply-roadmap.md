@@ -96,11 +96,19 @@ leave a finding for manual design, not a reason to force an apply rewrite.
 
 ## Reporting and validation
 
-- Extend the apply summary from `converted_fields`/`unresolved` to explain
-  candidate identity and blocker reason. Dry run should present the exact
-  planned edits and blockers without writing. Keep machine-readable output in
-  view as the summary grows, so an agent can act on blockers without parsing
-  tracing logs.
+- Apply now reports converted fields, exact compliance sites, and named blockers
+  on stdout. After successful writes, it checks off only matching field-storage
+  and Kind-storage findings in the current worklist. Matching includes crate,
+  file, original line, qualified context, and rule; unrelated findings on the
+  same type or line stay open. `cordial submit` verifies the claims. Missing or
+  invalid worklists are reported and left unchanged.
+- Dry run uses the same plan and reports proposed worklist closures and the
+  remaining manual items, without changing source or worklist state. Repair
+  locations come from declaration facts collected into the shared IR, rather
+  than a source scan in the reporting path.
+- Remaining reporting work: expose exact planned edits and machine-readable
+  candidate evidence, so an agent can inspect a complete conversion plan
+  without parsing tracing logs.
 - For each new form, test owned → borrowed → owned, dry run, repeat apply,
   unsupported lookalikes, and a compiling fixture that exercises the changed
   constructors and uses. Add behavior checks for source traversal and caller
@@ -110,6 +118,30 @@ leave a finding for manual design, not a reason to force an apply rewrite.
   `cordial submit --tier build --deny-open` with zero open items before each
   phase commit. Save the expensive all-tier gate for the end of the roadmap,
   consistent with the current tier cadence.
+
+### Coverage from real projects
+
+Use the target project's configured strategy and default store:
+
+```sh
+cordial --project /path/to/project quality --apply --etiquette internal_error_chain --dry-run
+```
+
+Start with Amenable. Record the strategy, proposed repairs, and blockers before
+selecting the next implementation pattern. Reduce a real blocked case to a
+compiling regression fixture, then add its missing evidence to collection and
+enrichment in the shared IR. Keep expected limitations (public API changes,
+runtime-owned values, unresolved macro or lifetime edges) distinct from missing
+support for a provable private conversion. Counts of blocked candidate fields
+are not counts of all unsupported error-handling patterns: apply's inventory
+still defines which candidates it can see.
+
+Initial Amenable dry run (2026-10-28), using its existing configuration and
+default store: 0 proposed field conversions, 0 blocked candidate fields,
+0 proposed worklist closures, and 1 error handling item remaining for manual
+repair. No source, configuration, or worklist changes were made. This establishes
+a baseline for the configured policy; it does not exercise a strategy change
+or demonstrate coverage of unsupported migration patterns.
 
 ## First implementation decision
 

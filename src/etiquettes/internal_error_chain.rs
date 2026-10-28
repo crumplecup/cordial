@@ -45,9 +45,9 @@ pub(crate) use apply::enrich_error_apply_evidence;
 pub use apply::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
     ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind, ErrorFieldApplyBlocker,
-    ErrorFieldApplyBlockerReason, ErrorFieldApplySummary, ErrorFileApplySummary, ErrorFromEvidence,
-    ErrorSourceMethodEvidence, ErrorTryEvidence, ErrorTryScope, run_error_field_apply,
-    run_error_file_apply,
+    ErrorFieldApplyBlockerReason, ErrorFieldApplyRepair, ErrorFieldApplySummary,
+    ErrorFileApplySummary, ErrorFromEvidence, ErrorSourceMethodEvidence, ErrorTryEvidence,
+    ErrorTryScope, run_error_field_apply, run_error_file_apply,
 };
 pub(crate) use architecture::scan_crate_error_architecture_with_source;
 pub use assessor::InternalErrorChainAssessor;
@@ -115,7 +115,7 @@ pub static INTERNAL_ERROR_CHAIN_ETIQUETTE: LazyLock<StaticQualityEtiquette> = La
             EtiquetteExplain::new(
                 "Do this crate's error types form the parent / Kind / native-source architecture?",
                 "Foreign-error etiquettes ask what leaks in. This one asks whether our error types are a place those leaks can land.",
-                "Catalogs every type that implements Error under src/. By default a parent boxes an umbrella *Kind enum; every Kind variant holds a native source; native sources that wrap a foreign error keep it in source with owned file/line from Location::caller() and #[track_caller]. With [internal_error_chain] field_strategy = \"borrowed\", the parent holds &'a Kind, and every non-Copy field in an error type or its Kind is borrowed, including source and file (`&'static str`). Passing a caller-tracking constructor as a map_err function item loses the caller location; use ? or a closure. Feeds the hand-composed Error handling quality-report area.",
+                "Catalogs every type that implements Error under src/. By default a parent boxes an umbrella *Kind enum; every Kind variant holds a native source; native sources that wrap a foreign error keep it in source with owned file/line from Location::caller() and #[track_caller]. With [internal_error_chain] field_strategy = \"borrowed\", the parent holds &'a Kind, and every non-Copy field in an error type or its Kind is borrowed, including source and file (`&'static str`). Preview supported storage migrations with `cordial quality --apply --etiquette internal_error_chain --dry-run`, then omit --dry-run to write them. Apply reports blockers and checks off matching worklist items after successful writes; use `cordial submit` to verify those claims. Other architecture and source-chain repairs remain manual. Passing a caller-tracking constructor as a map_err function item loses the caller location; use ? or a closure. Feeds the hand-composed Error handling quality-report area.",
                 "`[internal_error_chain] enabled = false` in cordial.toml opts out. `field_strategy = \"owned\" | \"borrowed\"` selects error field storage independently of `[antipatterns.static_refs]` (default owned).",
                 vec![
                     EtiquetteRuleExplain::new(

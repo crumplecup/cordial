@@ -36,11 +36,31 @@ pub(crate) use self::inventory::{conversion_units_from_ir, enrich_conversion_uni
 use self::patch::patch_file;
 use self::write::write_planned_files;
 
+/// A compliance site repaired by a written edit, or proposed by a dry run.
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
+pub struct ErrorFieldApplyRepair {
+    crate_name: String,
+    file: PathBuf,
+    context: String,
+    #[getter(copy)]
+    line: u32,
+    #[getter(copy)]
+    rule_id: super::InternalErrorComplianceId,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Edit {
     start: usize,
     end: usize,
     replacement: String,
+}
+
+struct FilePlan {
+    patched: Option<String>,
+    converted: usize,
+    blockers: Vec<ErrorFieldApplyBlocker>,
+    units: Vec<ErrorConversionUnit>,
+    edits: Vec<Edit>,
 }
 
 /// Why an error field could not be converted safely.
@@ -107,6 +127,9 @@ pub struct ErrorFieldApplySummary {
     blockers: Vec<ErrorFieldApplyBlocker>,
     /// Construction, use, and unresolved paths for each candidate field.
     conversion_units: Vec<ErrorConversionUnit>,
+    /// Exact original compliance sites covered by successfully planned edits.
+    /// Dry runs propose these repairs without claiming them on the worklist.
+    repairs: Vec<ErrorFieldApplyRepair>,
 }
 
 /// Compatibility name for the original file-only apply result.
@@ -152,6 +175,7 @@ pub fn run_error_field_apply(
         unresolved: 0,
         blockers: Vec::new(),
         conversion_units: Vec::new(),
+        repairs: Vec::new(),
     };
     if !policy.enabled() {
         return Ok(summary);
@@ -171,12 +195,12 @@ pub fn run_error_field_apply(
         enrich_error_apply_evidence(&mut ir, &files, policy.field_strategy())?;
         let units = conversion_units_from_ir(&ir)?;
         let graphs = conversion_graphs_from_ir(&ir)?;
+        let index = inventory::CrateTypeIndex::from_ir(&ir)?;
         let edit_files: Vec<_> = files.iter().map(|file| file.edit_view()).collect();
         let mut results = Vec::new();
         for file in &edit_files {
-            let (patched, converted, blockers, units) =
-                patch_file(file, policy.field_strategy(), &units, &graphs, dry_run)?;
-            results.push((file, patched, converted, blockers, units));
+            let plan = patch_file(file, policy.field_strategy(), &units, &graphs, dry_run)?;
+            results.push((file, plan));
         }
         let mut rejected = BTreeSet::new();
         loop {
@@ -187,9 +211,9 @@ pub fn run_error_field_apply(
                 }
                 let incomplete = graph.component_paths().iter().any(|path| {
                     rejected.contains(path)
-                        || !results.iter().any(|(file, patched, _, _, _)| {
-                            file.path() == path && patched.is_some()
-                        })
+                        || !results
+                            .iter()
+                            .any(|(file, plan)| file.path() == path && plan.patched.is_some())
                 });
                 if incomplete {
                     rejected.extend(graph.component_paths().iter().cloned());
@@ -200,7 +224,15 @@ pub fn run_error_field_apply(
             }
         }
         let mut planned = Vec::new();
-        for (file, mut patched, mut converted, mut blockers, units) in results {
+        let mut repairs = Vec::new();
+        for (file, plan) in results {
+            let FilePlan {
+                mut patched,
+                mut converted,
+                mut blockers,
+                units,
+                edits,
+            } = plan;
             if rejected.contains(file.path()) {
                 patched = None;
                 converted = 0;
@@ -227,11 +259,22 @@ pub fn run_error_field_apply(
             }
             summary.blockers.extend(blockers);
             if let Some(patched) = patched {
+                let facts = index
+                    .graph_declarations(file)
+                    .ok_or_else(|| crate::CordialError::stale_source_snapshot(file.path()))?;
+                repairs.extend(facts.repairs(
+                    target.crate_name(),
+                    target.crate_root(),
+                    file,
+                    &edits,
+                    policy.field_strategy(),
+                ));
                 planned.push((file, patched, converted));
             }
         }
         write_planned_files(&planned, dry_run)?;
         summary.changed_files += planned.len();
+        summary.repairs.extend(repairs);
     }
     Ok(summary)
 }

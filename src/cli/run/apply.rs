@@ -6,6 +6,11 @@ use std::sync::Arc;
 use crate::{CordialResult, ProgressSink, StoreLayout, default_store_home};
 use tracing::instrument;
 
+#[cfg(feature = "internal_error_chain")]
+mod error_fields;
+#[cfg(feature = "quality")]
+mod worklist;
+
 #[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
 pub(in crate::cli) fn execute_quality_apply(
     project_root: &Path,
@@ -60,6 +65,9 @@ pub(in crate::cli) fn execute_quality_apply(
         let home = store_home.clone().unwrap_or_else(default_store_home);
         let task = progress.spinner("Applying error field storage policy".to_string());
         let summary = crate::run_error_field_apply(project_root, &home, crate_name, dry_run)?;
+        error_fields::report(project_root, &summary, dry_run)?;
+        #[cfg(feature = "quality")]
+        error_fields::report_worklist(project_root, store, &home, &summary, dry_run)?;
         task.finish(format!(
             "Error field storage converted for {} field(s)",
             summary.converted_fields()
@@ -68,7 +76,7 @@ pub(in crate::cli) fn execute_quality_apply(
             changed_files = summary.changed_files(),
             converted_fields = summary.converted_fields(),
             unresolved = summary.unresolved(),
-            "error file apply"
+            "error field apply"
         );
     }
 
@@ -114,58 +122,22 @@ fn report_tracing_apply_worklist(
     summary: &crate::etiquettes::tracing::InstrumentApplySummary,
     dry_run: bool,
 ) -> CordialResult<()> {
-    use std::io::{self, Write};
-
-    let Some(mut list) = crate::Worklist::read(store)? else {
-        writeln!(
-            io::stdout(),
-            "Tracing apply: no current worklist; run `cordial open` to track remaining items."
-        )?;
-        return Ok(());
-    };
-    let config = crate::load_cordial_config(project_root, store_home);
-    if list.validity(&config)? != crate::Validity::Current {
-        writeln!(
-            io::stdout(),
-            "Tracing apply: worklist is out of date; run `cordial open` to track remaining items."
-        )?;
-        return Ok(());
-    }
-
-    let ids: Vec<String> = list
-        .items()
-        .iter()
-        .filter(|item| *item.state() != crate::ItemState::Done)
-        .filter(|item| item.checklist() == "tracing-instrument.checklist.md")
-        .filter(|item| {
-            summary.applied_gaps().iter().any(|gap| {
-                item.crate_name().as_deref() == Some(gap.crate_name())
-                    && item.file().as_deref() == gap.rel_path().to_str()
-                    && item.line().as_ref() == Some(&gap.line())
-                    && item.item_line().split('`').nth(1) == Some(gap.qualified_name())
-            })
-        })
-        .map(|item| item.id().as_str().to_string())
-        .collect();
-    if !dry_run && !ids.is_empty() {
-        list.done(&ids)?;
-        list.write(store)?;
-    }
-    let remaining = list
-        .items()
-        .iter()
-        .filter(|item| item.checklist().starts_with("tracing-"))
-        .filter(|item| *item.state() == crate::ItemState::Open)
-        .count();
-    writeln!(
-        io::stdout(),
-        "Tracing apply: {} worklist item(s) checked off; {remaining} tracing item(s) remain open for manual repair.{}",
-        if dry_run { 0 } else { ids.len() },
-        if dry_run {
-            " Dry run: no worklist changes."
-        } else {
-            ""
-        }
-    )?;
-    Ok(())
+    worklist::report(
+        project_root,
+        store,
+        store_home,
+        "Tracing",
+        |item| item.checklist().starts_with("tracing-"),
+        dry_run,
+        |item| {
+            item.checklist() == "tracing-instrument.checklist.md" && {
+                summary.applied_gaps().iter().any(|gap| {
+                    item.crate_name().as_deref() == Some(gap.crate_name())
+                        && item.file().as_deref() == gap.rel_path().to_str()
+                        && item.line().as_ref() == Some(&gap.line())
+                        && item.item_line().split('`').nth(1) == Some(gap.qualified_name())
+                })
+            }
+        },
+    )
 }

@@ -187,6 +187,10 @@ name = "tracing_apply"
 required-features = ["tracing"]
 
 [[test]]
+name = "error_apply_worklist"
+required-features = ["cli", "quality"]
+
+[[test]]
 name = "tracing_subscriber"
 required-features = ["tracing"]
 

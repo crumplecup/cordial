@@ -33,6 +33,7 @@ impl GraphDeclarationFacts {
                     Some(GraphDeclaration {
                         name: item.ident.to_string(),
                         line: location.line,
+                        declaration_line: item.span().start().line,
                         column: location.column,
                         kind: DeclarationKind::Struct,
                         visibility: visibility(&item.vis),
@@ -51,6 +52,7 @@ impl GraphDeclarationFacts {
                     Some(GraphDeclaration {
                         name: item.ident.to_string(),
                         line: location.line,
+                        declaration_line: item.span().start().line,
                         column: location.column,
                         kind: DeclarationKind::Enum,
                         visibility: visibility(&item.vis),
@@ -142,6 +144,7 @@ fn graph_field(file: &SharedParsedFile, field: &syn::Field) -> GraphField {
     GraphField {
         name: field.ident.as_ref().map(ToString::to_string),
         line: field.span().start().line,
+        type_line: field.ty.span().start().line,
         visibility: visibility(&field.vis),
         allowed_attrs: allowed_attrs(&field.attrs),
         type_name: type_name(&field.ty),

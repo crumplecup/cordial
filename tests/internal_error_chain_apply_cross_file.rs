@@ -5,6 +5,85 @@ use std::process::Command;
 use cordial::run_error_file_apply;
 use miette::IntoDiagnostic;
 
+#[cfg(all(feature = "cli", feature = "quality"))]
+#[test]
+fn distributed_apply_claims_exact_findings_in_both_strategies() -> miette::Result<()> {
+    cordial::init_tracing();
+    use cordial::{ItemState, Worklist};
+
+    let root = distributed_fixture()?;
+    let home = tempfile::tempdir().into_diagnostic()?;
+    let slug = cordial::project_slug_from_path(root.path());
+    let store = cordial::StoreLayout::from_root(home.path().join(&slug), slug);
+    let run = |apply: bool| -> miette::Result<String> {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_cordial"));
+        command
+            .arg("--project")
+            .arg(root.path())
+            .arg("--store-home")
+            .arg(home.path())
+            .args(["quality", "--etiquette", "internal_error_chain"]);
+        if apply {
+            command.arg("--apply");
+        }
+        let result = command
+            .env("CORDIAL_NO_PROGRESS", "1")
+            .output()
+            .into_diagnostic()?;
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        Ok(String::from_utf8_lossy(&result.stdout).into_owned())
+    };
+    for (strategy, expected) in [("borrowed", 5), ("owned", 1)] {
+        fs::write(
+            root.path().join("cordial.toml"),
+            format!("[internal_error_chain]\nfield_strategy = \"{strategy}\"\n"),
+        )
+        .into_diagnostic()?;
+        run(false)?;
+        let before = Worklist::read(&store)
+            .into_diagnostic()?
+            .ok_or_else(|| miette::miette!("missing worklist"))?;
+        let matching: Vec<_> = before
+            .items()
+            .iter()
+            .filter(|item| {
+                item.rule_id().as_deref() == Some("ERROR-CHAIN-COMPLIANCE-ARCH-KIND-BOX-001")
+                    || (strategy == "borrowed"
+                        && item.rule_id().as_deref()
+                            == Some("ERROR-CHAIN-COMPLIANCE-FIELD-STRATEGY-001"))
+            })
+            .collect();
+        assert_eq!(matching.len(), expected, "{matching:?}");
+        let output = run(true)?;
+        assert!(
+            output.contains(&format!("{expected} worklist item(s) checked off")),
+            "{strategy}: {output}"
+        );
+        let after = Worklist::read(&store)
+            .into_diagnostic()?
+            .ok_or_else(|| miette::miette!("missing updated worklist"))?;
+        for original in before.items() {
+            let claimed = matching.iter().any(|item| item.id() == original.id());
+            let item = after.items().iter().find(|item| item.id() == original.id());
+            assert_eq!(
+                item.map(|item| item.state()),
+                Some(if claimed {
+                    &ItemState::Done
+                } else {
+                    original.state()
+                }),
+                "{strategy}: {}",
+                original.item_line()
+            );
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn private_error_graph_across_files_round_trips() -> miette::Result<()> {
     cordial::init_tracing();

@@ -8,7 +8,9 @@ use crate::loader::SourceEditView;
 
 use super::graph_apply::ErrorGraphPlan;
 use super::inventory::StringStorage;
-use super::{Edit, ErrorConversionUnit, ErrorFieldApplyBlocker, ErrorFieldApplyBlockerReason};
+use super::{
+    Edit, ErrorConversionUnit, ErrorFieldApplyBlocker, ErrorFieldApplyBlockerReason, FilePlan,
+};
 
 #[instrument(level = "debug", skip(file, strategy, ir_units, graphs))]
 pub(super) fn patch_file(
@@ -17,12 +19,7 @@ pub(super) fn patch_file(
     ir_units: &[ErrorConversionUnit],
     graphs: &[ErrorGraphPlan],
     dry_run: bool,
-) -> CordialResult<(
-    Option<String>,
-    usize,
-    Vec<ErrorFieldApplyBlocker>,
-    Vec<ErrorConversionUnit>,
-)> {
+) -> CordialResult<FilePlan> {
     let mut edits = Vec::new();
     let mut converted = 0;
     let mut blockers = Vec::new();
@@ -168,14 +165,15 @@ fn apply_planned_edits(
     pending: Vec<(String, String)>,
     units: Vec<ErrorConversionUnit>,
     dry_run: bool,
-) -> CordialResult<(
-    Option<String>,
-    usize,
-    Vec<ErrorFieldApplyBlocker>,
-    Vec<ErrorConversionUnit>,
-)> {
+) -> CordialResult<FilePlan> {
     if edits.is_empty() {
-        return Ok((None, converted, blockers, units));
+        return Ok(FilePlan {
+            patched: None,
+            converted,
+            blockers,
+            units,
+            edits,
+        });
     }
     edits.sort_by_key(|edit| std::cmp::Reverse(edit.start));
     let mut patched = file.source().to_string();
@@ -193,7 +191,13 @@ fn apply_planned_edits(
                     ErrorFieldApplyBlockerReason::InvalidEdit,
                 )
             }));
-            return Ok((None, 0, blockers, units));
+            return Ok(FilePlan {
+                patched: None,
+                converted: 0,
+                blockers,
+                units,
+                edits: Vec::new(),
+            });
         }
         patched.replace_range(edit.start..edit.end, &edit.replacement);
         limit = edit.start;
@@ -208,5 +212,11 @@ fn apply_planned_edits(
             );
         }
     }
-    Ok((Some(patched), converted, blockers, units))
+    Ok(FilePlan {
+        patched: Some(patched),
+        converted,
+        blockers,
+        units,
+        edits,
+    })
 }
