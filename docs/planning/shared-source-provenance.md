@@ -358,6 +358,10 @@ one-file APIs still parse their caller-supplied text once. No production crate
 scanner now calls `source_work::read` or `syn::parse_file` directly for an
 outer Rust file.
 
+The embedded-source panic path also passes its one parsed string-literal tree
+to both the syn visitor and Verus analysis. Previously the Verus pass parsed
+the same embedded string a second time.
+
 Tracing apply now selects default targets from the same tracing probes and
 assessor that quality uses on its fresh source IR, then applies the central
 exception sets before editing. The recipe lookup and edit pass reuse that IR

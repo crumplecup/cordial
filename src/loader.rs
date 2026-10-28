@@ -15,7 +15,7 @@ pub(crate) use source::ParsedSourceSession;
 pub use source::{SharedParsedFile, SourceFile, SourceLoadView, SourceLoader};
 #[cfg(feature = "internal_error_chain")]
 pub(crate) use source::{SourceEditView, SourceSnapshot};
-#[cfg(any(feature = "allows", feature = "panics"))]
+#[cfg(feature = "allows")]
 pub(crate) use source_work::parse as source_parse;
 #[cfg(feature = "_attribute_scan")]
 pub(crate) use source_work::walk as source_walk;

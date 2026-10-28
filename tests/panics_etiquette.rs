@@ -268,6 +268,25 @@ fn scan_rust_source_finds_abort_sites_inside_a_string_that_parses_as_rust() -> m
     Ok(())
 }
 
+#[cfg(feature = "verus_ir")]
+#[test]
+fn scan_rust_source_finds_verus_abort_sites_inside_embedded_rust() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let file = fixture.path().join("host.rs");
+    let source = format!(
+        "fn host() {{ let _ = r####\"{}\"####; }}",
+        include_str!("fixtures/panics/sample_02.rs")
+    );
+    let findings = cordial::scan_rust_source(&source, &file, fixture.path(), fixture.path())
+        .into_diagnostic()
+        .wrap_err("scan")?;
+
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].kind(), PanicKind::Unreachable);
+    Ok(())
+}
+
 #[test]
 fn scan_rust_source_does_not_flag_panic_in_an_assertion_message() -> miette::Result<()> {
     cordial::init_tracing();

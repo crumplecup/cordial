@@ -22,15 +22,15 @@ impl PanicScanVisitor<'_> {
         }
         let origin = lit.span().start().line as u32;
         if let Ok(syntax) = syn::parse_file(&value) {
-            self.scan_embedded_syn_file(origin, syntax);
+            self.scan_embedded_syn_file(origin, &syntax);
+            #[cfg(feature = "verus_ir")]
+            self.scan_embedded_verus_syntax(origin, &syntax);
         }
-        #[cfg(feature = "verus_ir")]
-        self.scan_embedded_verus_source(origin, &value);
     }
 
     #[instrument(level = "debug", skip(self, syntax))]
-    fn scan_embedded_syn_file(&mut self, origin: u32, syntax: syn::File) {
-        let inner_reach = build_kani_reachability(std::iter::once(&syntax));
+    fn scan_embedded_syn_file(&mut self, origin: u32, syntax: &syn::File) {
+        let inner_reach = build_kani_reachability(std::iter::once(syntax));
         let mut nested = PanicScanVisitor {
             file: self.file.clone(),
             crate_root: self.crate_root.clone(),
@@ -45,7 +45,7 @@ impl PanicScanVisitor<'_> {
             in_embedded_source: true,
             error: None,
         };
-        nested.visit_file(&syntax);
+        nested.visit_file(syntax);
         if let Some(error) = nested.error {
             self.error = Some(error);
             return;
@@ -57,10 +57,10 @@ impl PanicScanVisitor<'_> {
     }
 
     #[cfg(feature = "verus_ir")]
-    #[instrument(level = "debug", skip(self, value))]
-    fn scan_embedded_verus_source(&mut self, origin: u32, value: &str) {
+    #[instrument(level = "debug", skip(self, syntax))]
+    fn scan_embedded_verus_syntax(&mut self, origin: u32, syntax: &syn::File) {
         let module_path = self.site_context();
-        let ir = match crate::verus_ir::scan_verus_rust_source(value, &self.file, &module_path) {
+        let ir = match crate::verus_ir::scan_verus_rust_syntax(syntax, &self.file, &module_path) {
             Ok(ir) => ir,
             Err(error) => {
                 self.error = Some(error);
