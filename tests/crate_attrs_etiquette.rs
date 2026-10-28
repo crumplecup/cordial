@@ -291,6 +291,33 @@ fn verus_target_with_assume_specification_skips_forbid_unsafe() -> miette::Resul
     Ok(())
 }
 
+#[test]
+fn session_uses_loaded_verus_source_for_crate_attrs_exemption() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    let crate_root = fixture.path().join("fixture_verus");
+    fs::create_dir_all(&crate_root).into_diagnostic()?;
+    write_package(&crate_root, "fixture_verus", "pub fn ready() {}\n")?;
+    fs::write(
+        crate_root.join("src/carrier.rs"),
+        "verus! { pub assume_specification [char::from_str] (s: &str) -> (result: Result<char, ()>); }\n",
+    )
+    .into_diagnostic()?;
+    let store = tempfile::tempdir().into_diagnostic().wrap_err("store")?;
+    let session = SessionBuilder::new(&crate_root)
+        .with_store_root(store.path())
+        .register(&*CRATE_ATTRS_ETIQUETTE)
+        .build();
+    let outcome = session.run(&RunAll).into_diagnostic()?;
+    let ids: Vec<_> = outcome
+        .findings()
+        .map(|finding| finding.rule().id())
+        .collect();
+    assert!(!ids.contains(&"CRATE-FORBID-UNSAFE-001"), "{ids:?}");
+    assert!(ids.contains(&"CRATE-MISSING-DOCS-001"), "{ids:?}");
+    Ok(())
+}
+
 /// Both signals are required: a verus-target crate that never actually
 /// states an `assume_specification` claim has no reason to be exempt.
 #[test]

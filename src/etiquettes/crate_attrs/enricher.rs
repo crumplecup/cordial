@@ -11,6 +11,7 @@ use super::types::CrateAttrsSiteRecord;
 
 const RECORD_ATTR: &str = "crate_attrs_record";
 const INSERT_AT_ATTR: &str = "crate_attrs_insert_at";
+const VERUS_EXEMPT_ATTR: &str = "crate_attrs_verus_exempt";
 
 use tracing::instrument;
 
@@ -48,7 +49,10 @@ pub(super) fn enrich_crate_attrs_evidence(
     crate_root: &std::path::Path,
     policy: &crate::config::CrateAttrsThresholds,
 ) -> CordialResult<()> {
-    let records = scan_shared_crate_attrs(source, crate_root, ir.crate_name(), policy)?;
+    let (records, verus_exempt) =
+        scan_shared_crate_attrs(source, crate_root, ir.crate_name(), policy)?;
+    let root = ir.root()?;
+    ir.set_attr(root, VERUS_EXEMPT_ATTR, serde_json::json!(verus_exempt))?;
     let insert_at = if let Some(lib) = library_root_rs(crate_root)
         && lib.is_file()
     {

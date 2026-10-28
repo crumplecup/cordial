@@ -285,14 +285,15 @@ apply now obtains its original tree through `SourceLoadView` and reads its lint
 decision and insertion point from the crate IR. The historical descriptions
 above record the earlier state, not an exception to the current invariant.
 
-The remaining source-derived side channels are concrete follow-up work:
+Crate-attrs' Verus exemption now checks source snapshots already loaded by
+`SourceLoadView`; the exemption decision is stored on the crate IR root.
+Standalone crate-attrs scans use the same loader path. The remaining
+source-derived side channels are concrete follow-up work:
 
 - Tracing's workspace call graph and derives' path-inclusion graph are computed
   from shared parsed files, but cached in process-global `FACTS_CACHE` values
   and passed directly into source enrichers. Their authoritative facts need a
   workspace IR home and typed IR reads before policy decisions are made.
-- Crate-attrs' Verus exemption searches Rust source with a separate text read.
-  It needs a shared source snapshot and an IR fact for the exemption decision.
 - Public standalone scan helpers still accept raw source or read files and may
   parse outer files directly. These cannot feed a production source hook today,
   but they remain an exception to a literal repo-wide one-parse policy. Move

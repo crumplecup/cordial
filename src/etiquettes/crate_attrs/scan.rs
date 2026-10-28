@@ -30,14 +30,16 @@ pub fn scan_crate_attrs(
         return Ok(Vec::new());
     };
 
+    let source = SourceLoadView::for_crate_root(crate_root, crate_name)?;
     let presence = if lib.is_file() {
-        let source = std::fs::read_to_string(&lib)?;
-        inspect_source(&source, &lib)?
+        let file = source.parsed_file(&lib, "crate-attrs-standalone")?;
+        inspect_file(file.syntax())
     } else {
         CrateLintPresence::default()
     };
 
-    records_for_presence(crate_root, crate_name, policy, &lib, presence)
+    let verus_exempt = verus_exemption::is_unsafe_forbid_exempt_verus_target(crate_root, &source);
+    records_for_presence(crate_root, crate_name, policy, &lib, presence, verus_exempt)
 }
 
 #[instrument(level = "debug", skip(source, policy), err(level = "warn"))]
@@ -46,9 +48,9 @@ pub(super) fn scan_shared_crate_attrs(
     crate_root: &Path,
     crate_name: &str,
     policy: &CrateAttrsThresholds,
-) -> CordialResult<Vec<CrateAttrsSiteRecord>> {
+) -> CordialResult<(Vec<CrateAttrsSiteRecord>, bool)> {
     let Some(lib) = library_root_rs(crate_root) else {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), false));
     };
     let presence = if lib.is_file() {
         let file = source.parsed_file(&lib, "crate-attrs-inventory")?;
@@ -56,7 +58,10 @@ pub(super) fn scan_shared_crate_attrs(
     } else {
         CrateLintPresence::default()
     };
-    records_for_presence(crate_root, crate_name, policy, &lib, presence)
+    let verus_exempt = verus_exemption::is_unsafe_forbid_exempt_verus_target(crate_root, source);
+    let records =
+        records_for_presence(crate_root, crate_name, policy, &lib, presence, verus_exempt)?;
+    Ok((records, verus_exempt))
 }
 
 #[instrument(level = "debug", skip(policy, presence), err(level = "warn"))]
@@ -66,6 +71,7 @@ fn records_for_presence(
     policy: &CrateAttrsThresholds,
     lib: &Path,
     presence: CrateLintPresence,
+    verus_exempt: bool,
 ) -> CordialResult<Vec<CrateAttrsSiteRecord>> {
     let mut file = lib.to_path_buf();
     if let Ok(rel) = file.strip_prefix(crate_root) {
@@ -73,10 +79,7 @@ fn records_for_presence(
     }
     let line = 1;
     let mut records = Vec::new();
-    if !policy.skip_unsafe(crate_name)
-        && !presence.forbid_unsafe_code
-        && !verus_exemption::is_unsafe_forbid_exempt_verus_target(crate_root)
-    {
+    if !policy.skip_unsafe(crate_name) && !presence.forbid_unsafe_code && !verus_exempt {
         records.push(
             CrateAttrsSiteRecord::builder()
                 .rule_id(CrateAttrsRuleId::ForbidUnsafe001)
@@ -117,12 +120,16 @@ fn records_for_presence(
 mod verus_exemption {
     use std::path::Path;
 
+    use crate::loader::SourceLoadView;
     use tracing::instrument;
 
-    #[instrument(level = "debug")]
-    pub(super) fn is_unsafe_forbid_exempt_verus_target(crate_root: &Path) -> bool {
+    #[instrument(level = "debug", skip(source))]
+    pub(super) fn is_unsafe_forbid_exempt_verus_target(
+        crate_root: &Path,
+        source: &SourceLoadView,
+    ) -> bool {
         crate::etiquettes::verus_warnings::crate_is_verus_target(crate_root)
-            && crate_uses_assume_specification(crate_root)
+            && crate_uses_assume_specification(source)
     }
 
     /// Whether any `.rs` file under `crate_root/src` literally mentions
@@ -131,21 +138,12 @@ mod verus_exemption {
     /// extended grammar (`verus_syn`), which this scanner has no reason to
     /// depend on just to recognize the one keyword that triggers the
     /// `forbid(unsafe_code)` conflict this exemption exists for.
-    #[instrument(level = "debug")]
-    fn crate_uses_assume_specification(crate_root: &Path) -> bool {
-        let src_root = crate_root.join("src");
-        if !src_root.is_dir() {
-            return false;
-        }
-        walkdir::WalkDir::new(&src_root)
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(|entry| entry.file_type().is_file())
-            .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "rs"))
-            .any(|entry| {
-                std::fs::read_to_string(entry.path())
-                    .is_ok_and(|source| source.contains("assume_specification"))
-            })
+    #[instrument(level = "debug", skip(source))]
+    fn crate_uses_assume_specification(source: &SourceLoadView) -> bool {
+        source
+            .files()
+            .iter()
+            .any(|file| file.source().contains("assume_specification"))
     }
 }
 
@@ -153,11 +151,15 @@ mod verus_exemption {
 mod verus_exemption {
     use std::path::Path;
 
+    use crate::loader::SourceLoadView;
     use tracing::instrument;
 
-    #[instrument(level = "trace", ret)]
-    pub(super) fn is_unsafe_forbid_exempt_verus_target(crate_root: &Path) -> bool {
-        let _ = crate_root;
+    #[instrument(level = "trace", skip(source), ret)]
+    pub(super) fn is_unsafe_forbid_exempt_verus_target(
+        crate_root: &Path,
+        source: &SourceLoadView,
+    ) -> bool {
+        let _ = (crate_root, source);
         false
     }
 }
@@ -183,13 +185,6 @@ pub fn library_root_rs(crate_root: &Path) -> Option<PathBuf> {
         }
     }
     default.is_file().then_some(default)
-}
-
-#[instrument(level = "debug", skip(source, file))]
-fn inspect_source(source: &str, file: &Path) -> CordialResult<CrateLintPresence> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    Ok(inspect_file(&syntax))
 }
 
 #[instrument(level = "debug", skip(file))]
