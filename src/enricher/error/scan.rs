@@ -58,12 +58,16 @@ pub fn scan_crate_error_ir(
     crate_name: &str,
 ) -> CordialResult<ErrorIrScanReport> {
     let source = SourceLoadView::for_standalone_scan();
+    #[cfg(feature = "internal_error_chain")]
+    let kind_fanout_max_call_sites =
+        crate::config::InternalErrorChainThresholds::default().kind_fanout_max_call_sites();
+    #[cfg(not(feature = "internal_error_chain"))]
+    let kind_fanout_max_call_sites = 0;
     scan_crate_error_ir_impl(
         crate_root,
         crate_name,
         &source,
-        #[cfg(feature = "internal_error_chain")]
-        crate::config::InternalErrorChainThresholds::default().kind_fanout_max_call_sites(),
+        kind_fanout_max_call_sites,
         crate::config::ErrorFieldStrategy::default(),
         true,
     )
@@ -74,14 +78,13 @@ pub(super) fn scan_crate_error_ir_with_source(
     crate_root: &Path,
     crate_name: &str,
     source: &SourceLoadView,
-    #[cfg(feature = "internal_error_chain")] kind_fanout_max_call_sites: usize,
+    kind_fanout_max_call_sites: usize,
     field_strategy: crate::config::ErrorFieldStrategy,
 ) -> CordialResult<ErrorIrScanReport> {
     scan_crate_error_ir_impl(
         crate_root,
         crate_name,
         source,
-        #[cfg(feature = "internal_error_chain")]
         kind_fanout_max_call_sites,
         field_strategy,
         true,
@@ -93,12 +96,12 @@ fn scan_crate_error_ir_impl(
     crate_root: &Path,
     crate_name: &str,
     source: &SourceLoadView,
-    #[cfg(feature = "internal_error_chain")] kind_fanout_max_call_sites: usize,
+    kind_fanout_max_call_sites: usize,
     field_strategy: crate::config::ErrorFieldStrategy,
     relative_paths: bool,
 ) -> CordialResult<ErrorIrScanReport> {
     #[cfg(not(feature = "internal_error_chain"))]
-    let _ = field_strategy;
+    let _ = (field_strategy, kind_fanout_max_call_sites);
     let src_root = crate_root.join("src");
     let is_proc_macro_crate = source.crate_kinds().contains(&CrateKind::ProcMacro);
     let mut report = ErrorIrScanReport::default();
@@ -129,25 +132,22 @@ fn scan_crate_error_ir_impl(
             }
 
             let under_src = path.starts_with(&src_root);
-            let mut scan = |syntax: &syn::File| {
-                #[cfg(feature = "internal_error_chain")]
-                if under_src {
-                    signature_chain.collect(syntax, path, &src_root);
-                }
-                crate::loader::source_walk(path, "error-ir-scan", || {
-                    scan_rust_file_syntax(
-                        syntax,
-                        path,
-                        &tree_root,
-                        &src_root,
-                        crate_root,
-                        crate_name,
-                        ErrorIrScanLayers::for_unified_file(under_src, is_proc_macro_crate),
-                    )
-                })
-            };
             let unit = source.parsed_file(path, "error-ir-scan")?;
-            let file_scan = scan(unit.syntax())?;
+            #[cfg(feature = "internal_error_chain")]
+            if under_src {
+                signature_chain.collect(unit.syntax(), path, &src_root);
+            }
+            let file_scan = crate::loader::source_walk(path, "error-ir-scan", || {
+                scan_rust_file_syntax(
+                    unit.syntax(),
+                    path,
+                    &tree_root,
+                    &src_root,
+                    crate_root,
+                    crate_name,
+                    ErrorIrScanLayers::for_unified_file(under_src, is_proc_macro_crate),
+                )
+            })?;
 
             report.sites.extend(file_scan.sites().iter().cloned());
             #[cfg(feature = "error_chain")]

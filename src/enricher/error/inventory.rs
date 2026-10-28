@@ -43,6 +43,8 @@ impl SourceEnricher for ErrorIrScanEnricher {
         let kind_fanout_max_call_sites = error_config
             .internal_error_chain()
             .kind_fanout_max_call_sites();
+        #[cfg(not(feature = "internal_error_chain"))]
+        let kind_fanout_max_call_sites = 0;
         #[cfg(feature = "internal_error_chain")]
         let field_strategy = error_config.internal_error_chain().field_strategy();
         #[cfg(not(feature = "internal_error_chain"))]
@@ -51,7 +53,6 @@ impl SourceEnricher for ErrorIrScanEnricher {
             &crate_root,
             ir.crate_name(),
             source,
-            #[cfg(feature = "internal_error_chain")]
             kind_fanout_max_call_sites,
             field_strategy,
         )?;
