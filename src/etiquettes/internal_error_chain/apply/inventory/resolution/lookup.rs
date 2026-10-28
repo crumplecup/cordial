@@ -14,6 +14,23 @@ use super::CrateTypeIndex;
 use super::paths::absolute_path;
 
 impl CrateTypeIndex {
+    /// Private fields are visible in the declaring module and its descendants.
+    /// An unknown module stays inside the audit rather than being assumed safe.
+    #[instrument(level = "trace", skip(self, declaration, usage))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn field_accessible_from(
+        &self,
+        declaration: &std::path::Path,
+        usage: &std::path::Path,
+    ) -> bool {
+        match (
+            self.active_modules.get(declaration),
+            self.active_modules.get(usage),
+        ) {
+            (Some(owner), Some(module)) => module.starts_with(owner),
+            _ => true,
+        }
+    }
+
     #[instrument(level = "trace", skip(self, file))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn static_strings(
         &self,

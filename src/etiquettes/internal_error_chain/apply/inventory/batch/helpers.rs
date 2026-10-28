@@ -28,6 +28,7 @@ impl BatchInventoryVisitor<'_> {
             try_conversion: None,
             reference_path: None,
             target: None,
+            field_accessible: true,
             resolved: resolved
                 && self.file.path() == self.candidates[index].declaration
                 && self.module_depth == 0,

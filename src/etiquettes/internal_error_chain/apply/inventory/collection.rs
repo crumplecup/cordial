@@ -34,6 +34,8 @@ pub(super) fn collect_conversion_units(
             .enumerate()
             .filter_map(|(index, candidate)| {
                 (file.path() == candidate.declaration
+                    || (candidate.field.kind == FieldKind::CallSiteFile
+                        && declarations.field_accessible_from(&candidate.declaration, file.path()))
                     || declarations.source_mentions(file, &candidate.type_name))
                 .then_some(index)
             })
@@ -53,7 +55,10 @@ pub(super) fn collect_conversion_units(
             {
                 sites[index].push(unresolved_site(file, ErrorConversionSiteKind::Alias));
             }
-            if external && sites[index].is_empty() {
+            if external
+                && sites[index].is_empty()
+                && declarations.source_mentions(file, &candidate.type_name)
+            {
                 sites[index].push(unresolved_site(
                     file,
                     ErrorConversionSiteKind::CrossFileReference,
@@ -93,6 +98,8 @@ pub(super) fn collect_conversion_units(
         files.iter().map(|file| (file.path(), file)).collect();
     for (unit, _) in &mut units {
         for site in &mut unit.sites {
+            site.field_accessible =
+                declarations.field_accessible_from(&unit.declaration, &site.path);
             let Some(path) = site.reference_path.as_ref() else {
                 continue;
             };
@@ -227,6 +234,7 @@ fn find_candidates(
                         storage: storage.clone(),
                         struct_lifetime: lifetime.clone(),
                         private: item.is_inherited() && field.is_inherited(),
+                        private_field: field.is_inherited(),
                         unique_struct: struct_counts.get(&type_name) == Some(&1),
                         type_range: field.type_range(),
                         lifetime_candidate,
@@ -323,6 +331,7 @@ fn unresolved_site(file: &SharedParsedFile, kind: ErrorConversionSiteKind) -> Er
         try_conversion: None,
         reference_path: None,
         target: None,
+        field_accessible: true,
         resolved: false,
     }
 }

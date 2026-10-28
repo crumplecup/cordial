@@ -12,6 +12,7 @@ use super::lifetime::LifetimePlanFacts;
 use crate::config::ErrorFieldStrategy;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
+mod attributes;
 mod batch;
 mod collection;
 mod edges;
@@ -86,6 +87,9 @@ pub struct ErrorConversionSite {
     reference_path: Option<Vec<String>>,
     /// Unique declaration reached by the written path, when proven.
     target: Option<ErrorEdgeTarget>,
+    /// Whether Rust privacy permits this file to access the candidate field.
+    #[getter(copy)]
+    field_accessible: bool,
     #[getter(copy)]
     resolved: bool,
 }
@@ -140,6 +144,8 @@ pub(super) struct FieldEvidence {
     struct_lifetime: Option<String>,
     #[getter(copy)]
     private: bool,
+    #[getter(copy)]
+    private_field: bool,
     #[getter(copy)]
     unique_struct: bool,
     #[getter(copy)]
@@ -228,5 +234,30 @@ impl ErrorConversionUnit {
                             | ErrorConversionSiteKind::GeneratedConstructor
                     ))
         })
+    }
+
+    /// Static call-site storage leaves the containing type and its signatures
+    /// intact. Only code within the private field's visibility can depend on
+    /// its storage; a public type reference elsewhere is not such a use.
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn blocks_call_site_edit(&self) -> bool {
+        self.sites
+            .iter()
+            .filter(|site| site.field_accessible)
+            .any(|site| {
+                matches!(site.kind, ErrorConversionSiteKind::Constructor)
+                    && site.path != self.declaration
+                    || (!site.resolved
+                        && matches!(
+                            site.kind,
+                            ErrorConversionSiteKind::FieldUse
+                                | ErrorConversionSiteKind::FieldPattern
+                                | ErrorConversionSiteKind::Alias
+                                | ErrorConversionSiteKind::Macro
+                                | ErrorConversionSiteKind::CrossFileReference
+                                | ErrorConversionSiteKind::Constructor
+                                | ErrorConversionSiteKind::GeneratedConstructor
+                        ))
+            })
     }
 }

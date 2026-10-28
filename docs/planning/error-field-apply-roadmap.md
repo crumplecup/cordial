@@ -45,7 +45,12 @@ Kind, and native source graph spanning files. The cross-file planner requires
 one constructor-anchored lifetime and proven borrowed origins at changed
 constructors. It uses shared parsed files and validates patched source. It
 leaves unrelated dynamic constructor parameters, unresolved graph callers,
-public types, and ambiguous cross-file uses untouched. See
+public types in lifetime-changing graphs, and ambiguous cross-file uses untouched. Private
+call-site `file` fields on public error types can change between `String` and
+`&'static str` without changing their constructors' signatures. Known
+`derive_more::Display` and `derive_more::Error` attributes qualify when their
+field uses preserve the storage contract; unknown generated code stays blocked.
+Public storage fields remain untouched. See
 [`apply.rs`](../../src/etiquettes/internal_error_chain/apply.rs) and its
 [`initializers.rs`](../../src/etiquettes/internal_error_chain/apply/initializers.rs).
 
@@ -181,15 +186,56 @@ Next implementation targets, grounded in this sweep:
 - [ ] Expose missing storage repairs and distinguish blocker causes from the
   existing shared-IR evidence, including public visibility, external references,
   generated code, and missing borrowing origins.
-- [ ] Support safe call-site file conversion on public containing types and
+- [x] Support safe call-site file conversion on public containing types and
   derive-based errors while preserving private field use contracts and rejecting
   unknown generated accessors or constructors. This targets 118 real fields
   without adding lifetimes to their enclosing types.
-- [ ] Run both strategy directions on that converted subset, checking compilation,
+- [x] Run both strategy directions on that converted subset, checking compilation,
   behavior, source traversal, caller location, worklist claims, and repeat apply.
 - [ ] Extend caller-owned lifetime origins and connected source/Kind migrations
   from the remaining cases. Never manufacture references to constructor-local
   temporaries, leak allocations, or weaken source-chain behavior to force a plan.
+
+#### Public errors and generated display contracts
+
+The shared-IR inventory now distinguishes a private field from a private
+containing type. Static call-site file storage can change inside a public type
+without changing its public signatures. The audit includes the declaring module
+and its descendants even when they do not spell the type name; unresolved module
+identity remains conservative. Public fields and storage-dependent private uses
+remain blocked.
+
+Collection recognizes `derive_more::Display` and `derive_more::Error` for this
+storage-only conversion. Display arguments that operate on the candidate field,
+unknown generated accessors, and unknown constructors still block it. The
+collected evidence and conversion plans live in the shared IR. Rejected connected
+graphs retain their membership so an individual field cannot bypass an atomic
+graph rejection through the local fallback.
+
+Compiling regression fixtures exercise both strategy directions, byte-for-byte
+source round trips, source-chain traversal, exact caller location, repeat apply,
+dry-run immutability, and exact worklist claims. A type's existing runtime lifetime
+does not replace the file field's proven `'static` lifetime.
+
+The next real-project sweep converted **64 fields in 17 files**, compared with
+zero before this change. Preview and write agreed; apply checked off exactly
+**64 items**, leaving **272 open**. The borrowed copy passed
+`cargo test --workspace --locked`, and a repeated preview proposed zero further
+edits. Benchmark checkpoint: `d7d0401` in `amenable_copy`.
+
+Switching the copy back to owned converted the same **64 fields in 17 files**
+with zero blocked candidates. Workspace tests passed again, a repeat preview
+proposed zero edits, and `git diff baseline-owned --exit-code -- crates`
+confirmed byte-for-byte source equality. Reverse checkpoint: `b099b13`.
+One pre-existing caller-tracking finding remains under owned policy; it is
+unrelated to these storage changes. Build artifacts were cleaned after the round.
+
+Of the original 118 file fields, **54 remain unsupported**. Temporal error
+constructors use cfg-gated tuple bindings for `(line, file)` and generated
+getters; wrapper and core errors have storage-dependent consumers. These need
+initializer, generated API, and consumer evidence in the shared IR. The 37 other
+String candidates and 175 required fields absent from the original inventory
+remain separate open work.
 
 ## First implementation decision
 

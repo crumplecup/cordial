@@ -8,6 +8,7 @@ use syn::{
 };
 use tracing::instrument;
 
+use super::super::attributes::call_site_attribute_is_stable;
 use super::super::edges::error_edge_evidence;
 use super::super::from::ErrorFromEvidence;
 use super::super::helpers::{
@@ -17,6 +18,7 @@ use super::super::source_method::ErrorSourceMethodEvidence;
 use super::super::try_conversion::ErrorTryScope;
 use super::super::{ErrorConversionSiteKind, ErrorEdgeField};
 use super::BatchInventoryVisitor;
+use crate::etiquettes::internal_error_chain::apply::initializers::FieldKind;
 use crate::etiquettes::internal_error_chain::apply::simple_type_name;
 use crate::etiquettes::internal_error_chain::apply::uses::{
     macro_has_unhandled_field_use, tokens_access_field, tokens_construct_type,
@@ -326,7 +328,13 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
             if item.ident != self.candidates[index].type_name {
                 continue;
             }
+            let candidate = &self.candidates[index];
+            let field_name = candidate.field_name.clone();
+            let call_site = candidate.field.kind == FieldKind::CallSiteFile;
             for attr in &item.attrs {
+                if call_site && call_site_attribute_is_stable(attr, &item.attrs, &field_name) {
+                    continue;
+                }
                 if attr.path().is_ident("derive") {
                     if !derive_is_nonconstructing(attr) {
                         self.record(

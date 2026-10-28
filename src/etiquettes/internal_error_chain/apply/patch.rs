@@ -7,6 +7,7 @@ use crate::error::{CordialError, CordialResult};
 use crate::loader::SourceEditView;
 
 use super::graph_apply::ErrorGraphPlan;
+use super::initializers::FieldKind;
 use super::inventory::StringStorage;
 use super::{
     Edit, ErrorConversionUnit, ErrorFieldApplyBlocker, ErrorFieldApplyBlockerReason, FilePlan,
@@ -61,8 +62,13 @@ pub(super) fn patch_file(
         let name = unit.type_name().clone();
         let field_name = unit.field_name().clone();
         let field = unit.field_evidence();
+        let call_site = field.kind() == FieldKind::CallSiteFile && field.private_field();
         let has_cross_file_reference = unit.sites().iter().any(|site| site.path() != file.path());
-        let has_unknown_field_use = unit.blocks_existing_field_edit();
+        let has_unknown_field_use = if call_site {
+            unit.blocks_call_site_edit()
+        } else {
+            unit.blocks_existing_field_edit()
+        };
         let name_ambiguous = unit.name_ambiguous();
         let lifetime_candidate = unit.lifetime_candidate(strategy);
         if lifetime_candidate && !has_cross_file_reference && !name_ambiguous && field.private() {
@@ -86,7 +92,11 @@ pub(super) fn patch_file(
         }
         let source_type = match strategy {
             ErrorFieldStrategy::Borrowed if matches!(field.storage(), StringStorage::Owned) => {
-                let lifetime = field.struct_lifetime().as_deref();
+                let lifetime = if call_site {
+                    None
+                } else {
+                    field.struct_lifetime().as_deref()
+                };
                 format!("&'{} str", lifetime.unwrap_or("static"))
             }
             ErrorFieldStrategy::Owned if matches!(field.storage(), StringStorage::Borrowed { lifetime: Some(lifetime), mutable: false } if lifetime == "static") => {
@@ -99,7 +109,8 @@ pub(super) fn patch_file(
         };
         let initializer_edits = unit.initializer_edits(file.source(), strategy);
         units.push(unit.clone());
-        if !field.private() || !field.unique_struct() || has_cross_file_reference {
+        if !field.unique_struct() || (!call_site && (!field.private() || has_cross_file_reference))
+        {
             blockers.push(ErrorFieldApplyBlocker::new(
                 file.path(),
                 &name,

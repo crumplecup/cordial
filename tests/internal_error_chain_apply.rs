@@ -2023,10 +2023,10 @@ impl SiteError {
 }
 
 #[test]
-fn public_error_type_is_not_rewritten() -> miette::Result<()> {
+fn public_error_field_is_not_rewritten() -> miette::Result<()> {
     cordial::init_tracing();
     let original = r#"use std::panic::Location;
-pub struct SiteError { file: String }
+pub struct SiteError { pub file: String }
 impl std::error::Error for SiteError {}
 impl SiteError { fn new() -> Self { Self { file: Location::caller().file().to_string() } } }
 "#;

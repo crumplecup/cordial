@@ -25,7 +25,8 @@ pub(super) fn active_modules(files: &[SharedParsedFile]) -> HashMap<PathBuf, Vec
         active.insert(file.path().to_path_buf(), module.clone());
         for item in &file.syntax().items {
             let Item::Mod(item) = item else { continue };
-            if item.content.is_some() || !item.attrs.is_empty() {
+            if item.content.is_some() || item.attrs.iter().any(|attr| !attr.path().is_ident("doc"))
+            {
                 continue;
             }
             let mut child = module.clone();
