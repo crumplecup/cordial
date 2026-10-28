@@ -1,10 +1,7 @@
 use crate::error::CordialResult;
-use crate::framework_std::{
-    FrameworkStdOptions, HOMECOMING_IMPL_CRATE, framework_std_type_items, load_merged_std_inventory,
-};
+use crate::framework_std::{FrameworkStdOptions, HOMECOMING_IMPL_CRATE, framework_std_type_items};
 use crate::hooks::{Probe, ProbeView};
 use crate::objects::Marker;
-use crate::store::SysrootCache;
 
 use super::homecoming::FrameworkStdScopeMarker;
 
@@ -31,8 +28,9 @@ impl Probe for HomecomingStdScopeProbe {
             return Ok(Vec::new());
         }
 
-        let sysroot = SysrootCache::default_cache();
-        let merged_items = load_merged_std_inventory(&sysroot)?;
+        let merged_items = ir.workspace_framework_std_inventory().ok_or_else(|| {
+            crate::error::CordialError::workspace_source_facts_missing("framework std inventory")
+        })?;
         let options = FrameworkStdOptions::default();
         let anchor = crate::objects::NodeAnchor::new(ir.root()?);
         let probe_id = Self::ID.to_string();
@@ -55,14 +53,10 @@ impl Probe for HomecomingStdScopeProbe {
 #[cfg(feature = "amenable_std")]
 mod amenable {
     use crate::error::CordialResult;
-    use crate::framework_std::{
-        AMENABLE_IMPL_CRATE, AmenableStdOptions, framework_std_type_items,
-        load_merged_std_inventory,
-    };
+    use crate::framework_std::{AMENABLE_IMPL_CRATE, AmenableStdOptions, framework_std_type_items};
     use crate::hooks::{Probe, ProbeView};
     use crate::objects::Marker;
 
-    use crate::store::SysrootCache;
     use tracing::instrument;
 
     use super::FrameworkStdScopeMarker;
@@ -88,8 +82,11 @@ mod amenable {
                 return Ok(Vec::new());
             }
 
-            let sysroot = SysrootCache::default_cache();
-            let merged_items = load_merged_std_inventory(&sysroot)?;
+            let merged_items = ir.workspace_framework_std_inventory().ok_or_else(|| {
+                crate::error::CordialError::workspace_source_facts_missing(
+                    "framework std inventory",
+                )
+            })?;
             let options = AmenableStdOptions::default();
             let anchor = crate::objects::NodeAnchor::new(ir.root()?);
             let probe_id = Self::ID.to_string();

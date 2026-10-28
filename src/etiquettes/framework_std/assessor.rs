@@ -80,11 +80,11 @@ mod amenable {
     use crate::framework_std::{
         AMENABLE_IMPL_CRATE, AMENABLE_PATCH_SET, AmenableStdOptions, ClassifyRowArgs,
         amenable_gap_fields, classify_amenable_std_row, ensure_registry_dump_for_assessor,
-        load_merged_std_inventory, load_verifier_skip_map,
+        load_verifier_skip_map,
     };
     use crate::hooks::{AssessView, Assessor};
     use crate::objects::{Finding, NodeAnchor};
-    use crate::store::{StoreLayout, SysrootCache};
+    use crate::store::StoreLayout;
 
     use super::super::amenable::{
         AmenableStdRowFinding, AmenableStdRule, amenable_row_disposition,
@@ -122,9 +122,12 @@ mod amenable {
                 session.store_root(),
                 crate::store::project_slug_from_path(session.project_root()),
             );
-            let sysroot = SysrootCache::default_cache();
             let options = AmenableStdOptions::default();
-            let merged_items = load_merged_std_inventory(&sysroot)?;
+            let merged_items = ir.workspace_framework_std_inventory().ok_or_else(|| {
+                crate::error::CordialError::workspace_source_facts_missing(
+                    "framework std inventory",
+                )
+            })?;
             let registry =
                 ensure_registry_dump_for_assessor(&store, session.project_root(), &options)?;
             let skip_map = load_verifier_skip_map(&store, AMENABLE_PATCH_SET);

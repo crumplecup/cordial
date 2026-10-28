@@ -38,9 +38,29 @@ pub struct WorkspaceIr {
     #[getter(skip)]
     #[setters(generate, rename = "set_wrapper_coverage_map", strip_option)]
     wrapper_coverage_map: Option<crate::rustdoc::WrapperCoverageMap>,
+    /// Merged std/core/alloc inventory shared by framework coverage hooks.
+    #[cfg(feature = "homecoming_std")]
+    #[getter(skip)]
+    framework_std_inventory: Option<Vec<crate::framework_std::StdInventoryItem>>,
 }
 
 impl WorkspaceIr {
+    #[cfg(feature = "homecoming_std")]
+    #[instrument(level = "trace", skip(self, items))]
+    pub(crate) fn set_framework_std_inventory(
+        &mut self,
+        items: Vec<crate::framework_std::StdInventoryItem>,
+    ) {
+        self.framework_std_inventory = Some(items);
+    }
+
+    #[cfg(feature = "homecoming_std")]
+    /// Merged standard-library inventory retained for the current run.
+    #[instrument(level = "trace", skip(self))]
+    pub fn framework_std_inventory(&self) -> Option<&[crate::framework_std::StdInventoryItem]> {
+        self.framework_std_inventory.as_deref()
+    }
+
     #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
     #[instrument(level = "trace", skip(self, harness))]
     pub(crate) fn set_proof_harness(&mut self, harness: crate::proof_harness::ProofHarness) {
@@ -210,6 +230,14 @@ impl IrView for CrateView<'_> {
         &self.crate_name
     }
 
+    #[cfg(feature = "homecoming_std")]
+    #[instrument(level = "trace", skip(self))]
+    fn workspace_framework_std_inventory(
+        &self,
+    ) -> Option<&[crate::framework_std::StdInventoryItem]> {
+        self.workspace.framework_std_inventory()
+    }
+
     #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
     #[instrument(level = "trace", skip(self))]
     fn workspace_proof_harness(
@@ -310,6 +338,14 @@ impl IrView for CrateViewMut<'_> {
     #[instrument(level = "trace", skip(self))]
     fn crate_name(&self) -> &str {
         &self.crate_name
+    }
+
+    #[cfg(feature = "homecoming_std")]
+    #[instrument(level = "trace", skip(self))]
+    fn workspace_framework_std_inventory(
+        &self,
+    ) -> Option<&[crate::framework_std::StdInventoryItem]> {
+        self.workspace.framework_std_inventory()
     }
 
     #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]

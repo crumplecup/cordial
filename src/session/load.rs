@@ -60,6 +60,34 @@ pub(super) fn load_and_probe(
         probes,
     } = hooks;
     let mut workspace = WorkspaceIr::default();
+    #[cfg(feature = "homecoming_std")]
+    {
+        let needs_std_inventory = probes.iter().any(|probe| {
+            let crate_name = match probe.id() {
+                crate::etiquettes::framework_std::HomecomingStdScopeProbe::ID => {
+                    Some(crate::framework_std::HOMECOMING_IMPL_CRATE)
+                }
+                #[cfg(feature = "amenable_std")]
+                crate::etiquettes::framework_std::AmenableStdScopeProbe::ID => {
+                    Some(crate::framework_std::AMENABLE_IMPL_CRATE)
+                }
+                _ => None,
+            };
+            crate_name.is_some_and(|name| targets.iter().any(|target| target.crate_name() == name))
+        });
+        if needs_std_inventory {
+            let task = session
+                .progress()
+                .spinner("Preparing framework std inventory".to_string());
+            let items = timings.measure("pipeline", "framework_std_inventory", || {
+                crate::framework_std::load_merged_std_inventory(
+                    &crate::store::SysrootCache::default_cache(),
+                )
+            });
+            task.finish("Prepared framework std inventory".to_string());
+            workspace.set_framework_std_inventory(items?);
+        }
+    }
     #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
     crate::session::prepare_workspace_proof_harness(
         &mut workspace,

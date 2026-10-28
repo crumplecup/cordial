@@ -12,6 +12,13 @@ use super::query::Query;
 pub trait IrView {
     /// Cargo package name this crate IR belongs to.
     fn crate_name(&self) -> &str;
+    /// Merged std/core/alloc inventory retained for the current workspace run.
+    #[cfg(feature = "homecoming_std")]
+    fn workspace_framework_std_inventory(
+        &self,
+    ) -> Option<&[crate::framework_std::StdInventoryItem]> {
+        None
+    }
     /// Proof harness facts retained for the current workspace run.
     #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
     fn workspace_proof_harness(
