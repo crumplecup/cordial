@@ -341,6 +341,43 @@ directions. The `amenable_time` test with `chrono-tz,jiff` enabled also passes i
 both directions. Repeat previews propose zero edits after each conversion.
 Reverse benchmark and coverage record: `048a32d` in `amenable_copy`.
 
+#### Complementary constructor configurations
+
+Constructor collection now records exhaustive complementary `#[cfg(P)]` and
+`#[cfg(not(P))]` tuple origins together. A zero-location branch may use
+`(0, String::new())`, while the other branch uses `Location::caller()` for its
+line and file. Borrowed mode converts both filename expressions as one field
+unit; owned mode restores the empty allocation and caller-file allocation.
+The source conditions, zero location, generated getter contract, and display
+behavior remain intact.
+
+Collection obtains these facts from the shared parsed tree and stores the
+located initializer edits in the shared IR. It requires immutable tuple
+bindings, complete provenance for every binding, exactly one file consumer,
+and either matching field configuration or a proven complementary pair.
+Overlapping or unrelated conditions, unsupported origins, mutable bindings,
+shadowing, and escaped values stay blocked.
+
+Regression fixtures compile both configurations in both strategy directions,
+check caller location and zero-location behavior, verify dry-run preservation
+and repeat-apply idempotence, and require byte-for-byte source restoration.
+
+The real Amenable borrowed preview remains **113 fields in 29 files**, with
+**42 blocked candidates**. All four Kani file candidates now pass initializer
+recognition and stop at `FieldUse`: the crate-wide getter-use guard encounters
+an unrelated associated `KaniFsNode::file` constructor, another type's
+`self.file()` call, and a filename call inside an opaque gallery macro. This
+phase adds proven constructor coverage, but **no additional real-project
+conversions**. No source transformation or repeat of the unchanged 113-field
+benchmark was needed; the copy's owned policy and baseline source are restored.
+
+Next, collect receiver identities, associated-function signatures, consumer
+contracts, and unresolved macro edges into the shared IR. Getter closure must
+use those facts to distinguish a candidate getter from unrelated methods and
+constructors. Do not remove the crate-wide guard or infer safety from a method
+name alone. Opaque macro cases need explicit collection evidence before they
+can stop blocking a migration.
+
 ## First implementation decision
 
 Start with slice 0. It sets the minimum evidence needed for the existing

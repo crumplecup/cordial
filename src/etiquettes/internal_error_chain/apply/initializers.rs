@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Expr, ExprStruct, ImplItemFn, ItemFn, ItemImpl, Member, Pat, Signature};
+use syn::{Expr, ExprStruct, ImplItemFn, ItemFn, ItemImpl, Member, Signature};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
@@ -15,12 +15,14 @@ mod batch;
 mod bindings;
 mod getter_uses;
 mod replacements;
+mod tuples;
 
 pub(super) use batch::{InitializerBatchInput, collect_initializer_facts};
 pub(super) use bindings::impl_uses_lifetime;
 use bindings::{BindingCounts, caller_aliases, static_string_locals, static_string_params};
 pub(super) use getter_uses::has_unresolved_getter_uses;
 use replacements::{InitializerExpressionFact, inspect_initializer};
+use tuples::{TupleFileOrigins, tuple_file_origins};
 
 /// Constructor sites and provenance recorded in the shared IR before apply.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -58,7 +60,7 @@ pub(super) struct InitializerVisitor<'a> {
     caller_aliases: BTreeSet<String>,
     static_params: BTreeSet<String>,
     static_locals: BTreeMap<String, usize>,
-    tuple_files: BTreeMap<String, TupleFileOrigin>,
+    tuple_files: TupleFileOrigins,
     facts: InitializerFacts,
 }
 
@@ -66,13 +68,7 @@ struct ConstructorContext {
     caller_aliases: BTreeSet<String>,
     static_params: BTreeSet<String>,
     static_locals: BTreeMap<String, usize>,
-    tuple_files: BTreeMap<String, TupleFileOrigin>,
-}
-
-#[derive(Clone, Debug)]
-struct TupleFileOrigin {
-    fact: InitializerExpressionFact,
-    cfg: Vec<String>,
+    tuple_files: TupleFileOrigins,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -107,7 +103,7 @@ impl<'a> InitializerVisitor<'a> {
             caller_aliases: BTreeSet::new(),
             static_params: BTreeSet::new(),
             static_locals: BTreeMap::new(),
-            tuple_files: BTreeMap::new(),
+            tuple_files: TupleFileOrigins::default(),
             facts: InitializerFacts::default(),
         }
     }
@@ -139,7 +135,7 @@ impl<'a> InitializerVisitor<'a> {
         block: &syn::Block,
         bindings: &BindingCounts,
         aliases: &BTreeSet<String>,
-        tuple_files: &BTreeMap<String, TupleFileOrigin>,
+        tuple_files: &TupleFileOrigins,
     ) -> ConstructorContext {
         let caller_aliases = std::mem::replace(&mut self.caller_aliases, aliases.clone());
         let static_params = std::mem::replace(
@@ -218,20 +214,20 @@ impl<'a> InitializerVisitor<'a> {
                     Expr::Path(path)
                         if self.kind == FieldKind::CallSiteFile && path.qself.is_none() =>
                     {
-                        let name = path.path.get_ident().map(ToString::to_string);
-                        name.and_then(|name| self.tuple_files.get(&name))
-                            .filter(|origin| {
-                                cfg_text(self.source, &field.attrs).as_ref() == Some(&origin.cfg)
-                            })
-                            .filter(|origin| {
-                                span_range(self.source, field.expr.span())
-                                    .is_some_and(|(start, _)| origin.fact.end() < start)
-                            })
-                            .map(|origin| origin.fact.clone())
+                        path.path
+                            .is_ident("file")
+                            .then(|| self.tuple_files.at(self.source, field))
+                            .flatten()
                     }
                     _ => None,
                 };
-                self.facts.sites.push(direct.or(tuple));
+                if let Some(direct) = direct {
+                    self.facts.sites.push(Some(direct));
+                } else if let Some(tuple) = tuple {
+                    self.facts.sites.extend(tuple.into_iter().map(Some));
+                } else {
+                    self.facts.sites.push(None);
+                }
             } else {
                 self.facts.unresolved = true;
             }
@@ -251,50 +247,6 @@ fn cfg_text(source: &str, attrs: &[syn::Attribute]) -> Option<Vec<String>> {
             Some(source.get(start..end)?.to_string())
         })
         .collect()
-}
-
-/// Provenance for a unique `(line, file)` binding in the constructor's shared tree.
-#[instrument(level = "debug", skip(source, block, bindings))]
-fn tuple_file_origins(
-    source: &str,
-    block: &syn::Block,
-    bindings: &BindingCounts,
-) -> BTreeMap<String, TupleFileOrigin> {
-    if bindings.opaque_local_names() {
-        return BTreeMap::new();
-    }
-    block.stmts.iter().filter_map(|stmt| {
-        let syn::Stmt::Local(local) = stmt else { return None };
-        let Pat::Tuple(pat) = &local.pat else { return None };
-        let mut elements = pat.elems.iter();
-        let (Some(Pat::Ident(line)), Some(Pat::Ident(file)), None) =
-            (elements.next(), elements.next(), elements.next()) else { return None };
-        if line.ident != "line" || file.ident != "file"
-            || line.mutability.is_some() || file.mutability.is_some()
-            || line.subpat.is_some() || file.subpat.is_some()
-            || bindings.names().get("file") != Some(&1)
-            || bindings.uses().get("file") != Some(&1)
-        { return None; }
-        let cfg = cfg_text(source, &local.attrs)?;
-        let Expr::Block(init) = &*local.init.as_ref()?.expr else { return None };
-        let Some(syn::Stmt::Expr(Expr::Tuple(tuple), None)) = init.block.stmts.last() else { return None };
-        let mut expressions = tuple.elems.iter();
-        let (Some(line_expr), Some(file_expr), None) =
-            (expressions.next(), expressions.next(), expressions.next()) else { return None };
-        let mut inner_bindings = BindingCounts::default();
-        inner_bindings.visit_block(&init.block);
-        let aliases = caller_aliases(&init.block, &inner_bindings);
-        let Expr::MethodCall(line_method) = line_expr else { return None };
-        if line_method.method != "line" || !line_method.args.is_empty()
-            || !matches!(&*line_method.receiver, Expr::Path(path)
-                if path.qself.is_none() && path.path.get_ident().is_some_and(|name| aliases.contains(&name.to_string())))
-        { return None; }
-        let fact = inspect_initializer(
-            source, file_expr, "file", false, FieldKind::CallSiteFile,
-            &aliases, &BTreeSet::new(), &BTreeSet::new(), &BTreeMap::new(),
-        )?;
-        Some(("file".to_string(), TupleFileOrigin { fact, cfg }))
-    }).collect()
 }
 
 impl<'ast> Visit<'ast> for InitializerVisitor<'_> {

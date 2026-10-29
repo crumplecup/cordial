@@ -19,12 +19,14 @@ enum StorageForm {
     Bare,
     Method,
     StringFrom,
+    EmptyString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum ValueSource {
     CallSiteFile,
     StaticString { local_binding: bool },
+    EmptyFile,
 }
 
 /// One expression and the provenance needed to rewrite either storage form.
@@ -52,9 +54,11 @@ impl InitializerExpressionFact {
             _ => {}
         }
         let value = source.get(self.value.0..self.value.1)?;
-        let replacement = match strategy {
-            ErrorFieldStrategy::Borrowed => value.to_string(),
-            ErrorFieldStrategy::Owned => match self.source {
+        let replacement = match (strategy, &self.source) {
+            (ErrorFieldStrategy::Borrowed, ValueSource::EmptyFile) => "\"\"".to_string(),
+            (ErrorFieldStrategy::Owned, ValueSource::EmptyFile) => "String::new()".to_string(),
+            (ErrorFieldStrategy::Borrowed, _) => value.to_string(),
+            (ErrorFieldStrategy::Owned, _) => match self.source {
                 ValueSource::StaticString {
                     local_binding: true,
                 } => format!("String::from({value})"),
@@ -71,6 +75,34 @@ impl InitializerExpressionFact {
             },
         })
     }
+}
+
+/// The zero-location branch owns no runtime data and has an exact reverse form.
+#[instrument(level = "trace", skip(source, expr))]
+pub(super) fn inspect_empty_file(source: &str, expr: &Expr) -> Option<InitializerExpressionFact> {
+    let form = match expr {
+        Expr::Lit(lit) if matches!(&lit.lit, syn::Lit::Str(value) if value.value().is_empty()) => {
+            StorageForm::Bare
+        }
+        Expr::Call(call)
+            if call.args.is_empty()
+                && matches!(&*call.func, Expr::Path(path) if path.qself.is_none()
+                && path.path.segments.iter().all(|part| part.arguments.is_empty())
+                && path.path.segments.iter().map(|part| part.ident.to_string()).eq(["String", "new"])) =>
+        {
+            StorageForm::EmptyString
+        }
+        _ => return None,
+    };
+    let whole = span_range(source, expr.span())?;
+    Some(InitializerExpressionFact {
+        whole,
+        value: whole,
+        form,
+        source: ValueSource::EmptyFile,
+        field_name: "file".to_string(),
+        shorthand: false,
+    })
 }
 
 #[instrument(
