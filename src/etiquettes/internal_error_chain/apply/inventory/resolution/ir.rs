@@ -10,6 +10,7 @@ use crate::ir::{IrMut, IrView};
 use super::super::edges::ErrorEdgeTarget;
 use super::super::syntax_facts::FileSyntaxFacts;
 use super::CrateTypeIndex;
+use super::paths::ModuleIdentity;
 
 const TYPE_INDEX_ATTR: &str = "error_apply_type_index";
 
@@ -19,7 +20,7 @@ const TYPE_INDEX_ATTR: &str = "error_apply_type_index";
 struct CrateTypeIndexFacts {
     declarations: Vec<(Vec<String>, Vec<Option<ErrorEdgeTarget>>)>,
     local: Vec<(PathBuf, String, Vec<Option<ErrorEdgeTarget>>)>,
-    active_modules: Vec<(PathBuf, Vec<String>)>,
+    modules: Vec<(PathBuf, ModuleIdentity)>,
     imports: Vec<(PathBuf, Vec<(String, Vec<String>)>)>,
     file_syntax: Vec<FileSyntaxFacts>,
     incoming_edges: Vec<(String, ErrorEdgeTarget)>,
@@ -42,8 +43,8 @@ impl CrateTypeIndex {
                 .iter()
                 .map(|((path, name), targets)| (path.clone(), name.clone(), targets.clone()))
                 .collect(),
-            active_modules: self
-                .active_modules
+            modules: self
+                .modules
                 .iter()
                 .map(|(path, module)| (path.clone(), module.clone()))
                 .collect(),
@@ -76,7 +77,7 @@ impl CrateTypeIndex {
                 .into_iter()
                 .map(|(path, name, targets)| ((path, name), targets))
                 .collect(),
-            active_modules: facts.active_modules.into_iter().collect(),
+            modules: facts.modules.into_iter().collect(),
             imports: facts.imports.into_iter().collect(),
             file_syntax: facts
                 .file_syntax

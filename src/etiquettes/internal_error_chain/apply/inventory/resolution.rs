@@ -21,12 +21,12 @@ mod ir;
 mod lookup;
 mod paths;
 
-use paths::{active_modules, use_paths};
+use paths::{ModuleIdentity, module_identities, use_paths};
 
 pub(in crate::etiquettes::internal_error_chain::apply) struct CrateTypeIndex {
     declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>>,
     local: HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>>,
-    active_modules: HashMap<PathBuf, Vec<String>>,
+    modules: HashMap<PathBuf, ModuleIdentity>,
     imports: HashMap<PathBuf, Vec<(String, Vec<String>)>>,
     file_syntax: HashMap<PathBuf, FileSyntaxFacts>,
     incoming_edges: Vec<(String, ErrorEdgeTarget)>,
@@ -40,7 +40,7 @@ impl CrateTypeIndex {
         let getters = super::super::getters::collect_getter_storage(files);
         let mut declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
         let mut local: HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
-        let active_modules = active_modules(files);
+        let modules = module_identities(files);
         let mut imports = HashMap::new();
         let mut tracked_fields = BTreeSet::new();
         for file in files {
@@ -93,8 +93,11 @@ impl CrateTypeIndex {
                     .entry((file.path().to_path_buf(), name.to_string()))
                     .or_default()
                     .push(target.clone());
-                if let Some(module) = active_modules.get(file.path()) {
-                    let mut key = module.clone();
+                if let Some(module) = modules
+                    .get(file.path())
+                    .filter(|module| module.unconditional())
+                {
+                    let mut key = module.path().clone();
                     key.push(name.to_string());
                     declarations.entry(key).or_default().push(target);
                 }
@@ -105,7 +108,7 @@ impl CrateTypeIndex {
         let mut index = Self {
             declarations,
             local,
-            active_modules,
+            modules,
             imports,
             file_syntax: files
                 .iter()

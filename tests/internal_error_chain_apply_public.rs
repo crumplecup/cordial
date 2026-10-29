@@ -162,6 +162,114 @@ fn borrows_tag_and_preserves_caller() {
 }
 
 #[test]
+fn conditional_modules_preserve_privacy_during_call_site_round_trip() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = fixture()?;
+    let manifest = root.path().join("Cargo.toml");
+    let cargo = fs::read_to_string(&manifest).into_diagnostic()?;
+    fs::write(
+        &manifest,
+        format!("{cargo}\n[features]\ndefault = [\"located\"]\nlocated = []\n"),
+    )
+    .into_diagnostic()?;
+    fs::write(
+        root.path().join("src/lib.rs"),
+        r#"#[cfg(feature = "located")]
+pub mod error;
+#[cfg(feature = "located")]
+pub use error::Envelope;
+#[cfg(feature = "located")]
+#[track_caller]
+pub fn make() -> Envelope { Envelope::new() }
+pub mod unrelated;
+"#,
+    )
+    .into_diagnostic()?;
+    fs::write(
+        root.path().join("src/unrelated.rs"),
+        r#"#[cfg(feature = "located")]
+use crate::Envelope as Alias;
+#[cfg(feature = "located")]
+pub fn make() -> Alias { Alias::new() }
+pub struct Unrelated {}
+macro_rules! construct_unrelated {
+    () => { impl Unrelated { pub fn new() -> Self { Self {} } } };
+}
+construct_unrelated!();
+"#,
+    )
+    .into_diagnostic()?;
+    let behavior_path = root.path().join("tests/behavior.rs");
+    let behavior = fs::read_to_string(&behavior_path).into_diagnostic()?;
+    fs::write(
+        behavior_path,
+        format!("#![cfg(feature = \"located\")]\n{behavior}"),
+    )
+    .into_diagnostic()?;
+    for strategy in ["borrowed", "owned"] {
+        set_strategy(root.path(), strategy)?;
+        let preview =
+            run_error_file_apply(root.path(), root.path(), None, true).into_diagnostic()?;
+        assert_eq!(preview.converted_fields(), 2, "{preview:?}");
+        let applied =
+            run_error_file_apply(root.path(), root.path(), None, false).into_diagnostic()?;
+        assert_eq!(applied.converted_fields(), 2, "{applied:?}");
+        test_fixture(root.path())?;
+        test_fixture_with_args(root.path(), &["--no-default-features"])?;
+    }
+    assert_eq!(
+        fs::read_to_string(root.path().join("src/error.rs")).into_diagnostic()?,
+        ERROR
+    );
+    Ok(())
+}
+
+#[test]
+fn conditional_descendants_and_remapped_modules_still_block_private_field_edits()
+-> miette::Result<()> {
+    cordial::init_tracing();
+    let root = fixture()?;
+    fs::create_dir_all(root.path().join("src/error")).into_diagnostic()?;
+    fs::write(
+        root.path().join("src/lib.rs"),
+        "#[cfg(feature = \"located\")]\npub mod error;\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
+        root.path().join("src/error/child.rs"),
+        "fn take() -> String { super::Envelope::new().file }\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
+        root.path().join("src/elsewhere.rs"),
+        "fn take() -> String { super::Envelope::new().file }\n",
+    )
+    .into_diagnostic()?;
+    for declaration in [
+        "#[cfg(feature = \"child\")] mod child;",
+        "#[path = \"elsewhere.rs\"] mod child;",
+        "#[cfg_attr(feature = \"child\", path = \"elsewhere.rs\")] mod child;",
+    ] {
+        let original = format!("{ERROR}\n{declaration}\n");
+        fs::write(root.path().join("src/error.rs"), &original).into_diagnostic()?;
+        let result =
+            run_error_file_apply(root.path(), root.path(), None, true).into_diagnostic()?;
+        assert!(
+            !result
+                .repairs()
+                .iter()
+                .any(|repair| repair.context().ends_with("Envelope::file")),
+            "{declaration}\n{result:?}"
+        );
+        assert_eq!(
+            fs::read_to_string(root.path().join("src/error.rs")).into_diagnostic()?,
+            original
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn unsafe_private_field_consumers_and_generated_code_stay_blocked() -> miette::Result<()> {
     cordial::init_tracing();
     let root = fixture()?;
@@ -264,8 +372,13 @@ fn set_strategy(root: &Path, strategy: &str) -> miette::Result<()> {
 }
 
 fn test_fixture(root: &Path) -> miette::Result<()> {
+    test_fixture_with_args(root, &[])
+}
+
+fn test_fixture_with_args(root: &Path, args: &[&str]) -> miette::Result<()> {
     let output = Command::new("cargo")
         .args(["test", "--offline", "--quiet"])
+        .args(args)
         .current_dir(root)
         .output()
         .into_diagnostic()?;

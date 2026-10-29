@@ -230,9 +230,9 @@ confirmed byte-for-byte source equality. Reverse checkpoint: `b099b13`.
 One pre-existing caller-tracking finding remains under owned policy; it is
 unrelated to these storage changes. Build artifacts were cleaned after the round.
 
-Of the original 118 file fields, **54 remain unsupported**. Temporal error
-constructors use cfg-gated tuple bindings for `(line, file)` and generated
-getters; wrapper and core errors have storage-dependent consumers. These need
+At that checkpoint, of the original 118 file fields, **54 remained unsupported**.
+Temporal error constructors use cfg-gated tuple bindings for `(line, file)` and
+generated getters; wrapper and core errors have storage-dependent consumers. These need
 initializer, generated API, and consumer evidence in the shared IR. The 37 other
 String candidates and 175 required fields absent from the original inventory
 remain separate open work.
@@ -258,11 +258,50 @@ the marker as a policy exemption.
 Compiling fixtures exercise ordinary local getter calls, exact caller location,
 both strategy directions, exact source restoration, repeat apply, dry runs, and
 worklist claims followed by a fresh policy scan. Customized getters remain
-blocked: derive-getters 0.5.0 does not combine `rename` with `copy`. Unresolved
-getter consumers, conditional alias declarations, and cfg-gated tuple-binding
-initializers still need further evidence before conversion. These limits remain
-part of the real-project coverage backlog; fixture coverage is not a new
-Amenable coverage count.
+blocked: derive-getters 0.5.0 does not combine `rename` with `copy`.
+
+The next collection pass records cfg-gated tuple-binding caller origins and
+carries field conditions onto generated aliases. Real Amenable preview and
+apply then agreed on **90 fields in 23 files**, with **65 candidates blocked**.
+Both directions passed `cargo test --workspace --locked`; reverse apply restored
+all crate source and policy byte for byte. This adds 26 automated file fields,
+leaving 28 of the original 118 file candidates unsupported. Cordial checkpoint:
+`e9f8620`; benchmark record: `f232abf` in `amenable_copy`.
+
+Unresolved getter consumers and storage-dependent uses remain separate coverage
+work. The 37 other String candidates and 175 originally unrepresented fields
+remain outside this call-site file subset.
+
+#### Conditional privacy and ignored derive fields
+
+Module identities now retain their privacy boundary under `#[cfg]`, while
+conditional declarations remain unavailable as unconditional type-resolution
+proofs. Collection stores both facts in the shared IR. Unrelated module imports
+and macros no longer imply access to private fields in a conditional module.
+Descendant consumers and unknown or remapped module identities still block
+unsafe edits.
+
+Getter storage conversion also preserves exact `#[error(ignore)]` annotations
+when collection proves the owner uses `derive_more::Error`. Unknown derives and
+other field macro contracts remain blocked, including during alias reversal.
+Regression fixtures exercise both directions, feature enabled and disabled
+builds, exact restoration, and unsafe consumer and attribute rejection.
+
+The next Amenable sweep proposed and applied **99 fields in 27 files**, leaving
+**56 blocked candidates**; apply checked off 99 matching worklist items and left
+237 error-handling findings. A repeat borrowed preview proposed zero edits.
+Both the workspace test and the `amenable_time` test with `chrono-tz,jiff`
+enabled passed on the borrowed copy. Borrowed checkpoint: `5cf4fb7` in
+`amenable_copy`.
+
+Reverse preview and apply agreed on all 99 fields, with zero blocked candidates.
+Workspace and backend-enabled tests passed again, and a repeat owned preview
+proposed zero edits. All crate source returned byte for byte to `baseline-owned`;
+policy matched the pre-experiment owned checkpoint. The remaining file
+coverage gap is **19 of the original 118 fields**: four unproven initializers and
+15 unresolved field-use contracts. The other 37 String candidates and the
+original 175-field inventory gap remain separate work. Reverse benchmark and
+coverage record: `cb1591e` in `amenable_copy`.
 
 ## First implementation decision
 

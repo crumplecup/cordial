@@ -6,6 +6,7 @@ use tracing::instrument;
 use crate::loader::SharedParsedFile;
 
 use super::super::{Edit, is_static_str, span_range};
+use super::derives::known_derive;
 use super::names::Names;
 
 #[instrument(level = "trace")]
@@ -36,10 +37,7 @@ pub(super) fn forward(
         .attrs
         .iter()
         .any(|attr| attr.path().is_ident("cfg") || attr.path().is_ident("cfg_attr"))
-        || field
-            .attrs
-            .iter()
-            .any(|attr| !attr.path().is_ident("doc") && !attr.path().is_ident("cfg"))
+        || !field_attrs_stable(file, item, field, false)
     {
         return None;
     }
@@ -70,14 +68,16 @@ pub(super) fn forward(
     ])
 }
 
-#[instrument(level = "debug", skip(file, item, field, names))]
+#[instrument(level = "debug", skip(file, owner, item, field, names))]
 pub(super) fn reverse(
     file: &SharedParsedFile,
+    owner: &syn::ItemStruct,
     item: &syn::ItemType,
     field: &syn::Field,
     names: &Names,
 ) -> Option<Vec<Edit>> {
-    if names.count(&item.ident.to_string()) != 2
+    if !field_attrs_stable(file, owner, field, true)
+        || names.count(&item.ident.to_string()) != 2
         || !matches!(item.vis, syn::Visibility::Inherited)
         || !item.generics.params.is_empty()
         || item
@@ -142,6 +142,44 @@ pub(super) fn reverse(
             replacement: String::new(),
         },
     ])
+}
+
+/// derive_more's ignored fields do not participate in its Error implementation.
+/// Preserve that annotation; other field macros still need an explicit contract.
+#[instrument(level = "debug", skip(file, owner, field))]
+fn field_attrs_stable(
+    file: &SharedParsedFile,
+    owner: &syn::ItemStruct,
+    field: &syn::Field,
+    generated: bool,
+) -> bool {
+    field.attrs.iter().all(|attr| {
+        if attr.path().is_ident("doc") || attr.path().is_ident("cfg") {
+            return true;
+        }
+        if generated && attr.path().is_ident("getter") {
+            return attr
+                .parse_args::<syn::Ident>()
+                .is_ok_and(|name| name == "copy");
+        }
+        attr.path().is_ident("error")
+            && attr
+                .parse_args::<syn::Ident>()
+                .is_ok_and(|name| name == "ignore")
+            && owner
+                .attrs
+                .iter()
+                .filter(|attr| attr.path().is_ident("derive"))
+                .any(|attr| {
+                    let mut found = false;
+                    attr.parse_nested_meta(|meta| {
+                        found |= known_derive(file.syntax(), &meta.path, "derive_more", "Error");
+                        Ok(())
+                    })
+                    .is_ok()
+                        && found
+                })
+    })
 }
 
 /// Copy only conditional compilation attributes that were present on the field.

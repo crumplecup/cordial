@@ -22,11 +22,8 @@ impl CrateTypeIndex {
         declaration: &std::path::Path,
         usage: &std::path::Path,
     ) -> bool {
-        match (
-            self.active_modules.get(declaration),
-            self.active_modules.get(usage),
-        ) {
-            (Some(owner), Some(module)) => module.starts_with(owner),
+        match (self.modules.get(declaration), self.modules.get(usage)) {
+            (Some(owner), Some(module)) => module.path().starts_with(owner.path()),
             _ => true,
         }
     }
@@ -167,8 +164,12 @@ impl CrateTypeIndex {
                 _ => None,
             };
         }
-        let module = self.active_modules.get(file.path())?;
-        let absolute = absolute_path(&module, written_path)?;
+        let module = self
+            .modules
+            .get(file.path())
+            .filter(|module| module.unconditional())?
+            .path();
+        let absolute = absolute_path(module, written_path)?;
         if let Some(target) = self.unique(&absolute) {
             return Some(target);
         }
@@ -191,7 +192,7 @@ impl CrateTypeIndex {
         {
             return None;
         }
-        self.unique(&absolute_path(&module, path)?)
+        self.unique(&absolute_path(module, path)?)
     }
 
     #[instrument(level = "trace", skip(self, path))]

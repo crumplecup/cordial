@@ -49,7 +49,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) fn collect_getter_storage
                     GetterStorageFacts {
                         alias: alias.ident.to_string(),
                         edits: (!unresolved_uses)
-                            .then(|| reverse(file, alias, field, &names))
+                            .then(|| reverse(file, item, alias, field, &names))
                             .flatten(),
                         target: ErrorFieldStrategy::Owned,
                     }

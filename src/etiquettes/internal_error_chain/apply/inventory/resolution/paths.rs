@@ -8,35 +8,57 @@ use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
 
+/// A cfg can remove a module without changing its privacy boundary when present.
+/// Conditional identities do not establish an unconditional type-resolution path.
+#[derive(Clone, serde::Serialize, serde::Deserialize, derive_getters::Getters)]
+pub(super) struct ModuleIdentity {
+    path: Vec<String>,
+    #[getter(copy)]
+    unconditional: bool,
+}
+
 #[instrument(level = "debug", skip(files))]
-pub(super) fn active_modules(files: &[SharedParsedFile]) -> HashMap<PathBuf, Vec<String>> {
+pub(super) fn module_identities(files: &[SharedParsedFile]) -> HashMap<PathBuf, ModuleIdentity> {
     let mut by_module: HashMap<Vec<String>, Vec<&SharedParsedFile>> = HashMap::new();
     for file in files {
         if let Some(module) = module_path(file.path()) {
             by_module.entry(module).or_default().push(file);
         }
     }
-    let mut active = HashMap::new();
-    let mut pending = vec![Vec::new()];
-    while let Some(module) = pending.pop() {
+    let mut identities = HashMap::new();
+    let mut pending = vec![(Vec::new(), true)];
+    while let Some((module, unconditional)) = pending.pop() {
         let Some([file]) = by_module.get(&module).map(Vec::as_slice) else {
             continue;
         };
-        active.insert(file.path().to_path_buf(), module.clone());
+        identities.insert(
+            file.path().to_path_buf(),
+            ModuleIdentity {
+                path: module.clone(),
+                unconditional,
+            },
+        );
         for item in &file.syntax().items {
             let Item::Mod(item) = item else { continue };
-            if item.content.is_some() || item.attrs.iter().any(|attr| !attr.path().is_ident("doc"))
+            if item.content.is_some()
+                || item
+                    .attrs
+                    .iter()
+                    .any(|attr| !attr.path().is_ident("doc") && !attr.path().is_ident("cfg"))
             {
                 continue;
             }
             let mut child = module.clone();
             child.push(item.ident.to_string());
             if by_module.get(&child).is_some_and(|files| files.len() == 1) {
-                pending.push(child);
+                pending.push((
+                    child,
+                    unconditional && item.attrs.iter().all(|attr| attr.path().is_ident("doc")),
+                ));
             }
         }
     }
-    active
+    identities
 }
 
 #[instrument(level = "debug", skip(path))]
