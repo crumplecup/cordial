@@ -1,4 +1,4 @@
-//! Resolve unconditional local aliases for field-storage assessment.
+//! Resolve local aliases for field-storage assessment.
 
 use std::collections::BTreeMap;
 use tracing::instrument;
@@ -24,7 +24,9 @@ pub(super) fn static_aliases(items: &[syn::Item]) -> BTreeMap<String, syn::Type>
             };
             let syn::Type::Reference(reference) = &*item.ty else { return None };
             (item.generics.params.is_empty()
-                && item.attrs.iter().all(|attr| attr.path().is_ident("doc"))
+                && item.attrs.iter().all(|attr| {
+                    attr.path().is_ident("doc") || attr.path().is_ident("cfg")
+                })
                 && reference.mutability.is_none()
                 && reference.lifetime.as_ref().is_some_and(|lifetime| lifetime.ident == "static")
                 && matches!(&*reference.elem, syn::Type::Path(path) if path.qself.is_none() && path.path.is_ident("str")))

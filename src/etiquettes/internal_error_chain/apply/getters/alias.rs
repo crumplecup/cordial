@@ -32,18 +32,14 @@ pub(super) fn forward(
     field: &syn::Field,
     name: &str,
 ) -> Option<Vec<Edit>> {
-    // Conditional fields need a matching conditional alias; leave them closed
-    // until that relationship is represented rather than copying cfg tokens.
     if item
         .attrs
         .iter()
         .any(|attr| attr.path().is_ident("cfg") || attr.path().is_ident("cfg_attr"))
-        || field.attrs.iter().any(|attr| {
-            !matches!(
-                attr.path().get_ident().map(ToString::to_string).as_deref(),
-                Some("doc")
-            )
-        })
+        || field
+            .attrs
+            .iter()
+            .any(|attr| !attr.path().is_ident("doc") && !attr.path().is_ident("cfg"))
     {
         return None;
     }
@@ -51,12 +47,18 @@ pub(super) fn forward(
     let field_name = field.ident.as_ref()?.to_string();
     let (start, _) = span_range(file.source(), item.span())?;
     let (field_start, _) = span_range(file.source(), field.span())?;
+    let cfg = cfg_attrs(file, &field.attrs)?.join("\n");
+    let cfg = if cfg.is_empty() {
+        cfg
+    } else {
+        format!("{cfg}\n")
+    };
     Some(vec![
         Edit {
             start,
             end: start,
             replacement: format!(
-                "\n/// {}\ntype {name} = &'static str;\n",
+                "\n/// {}\n{cfg}type {name} = &'static str;\n",
                 marker(&owner, &field_name)
             ),
         },
@@ -78,7 +80,16 @@ pub(super) fn reverse(
     if names.count(&item.ident.to_string()) != 2
         || !matches!(item.vis, syn::Visibility::Inherited)
         || !item.generics.params.is_empty()
-        || item.attrs.len() != 1
+        || item
+            .attrs
+            .iter()
+            .filter(|attr| attr.path().is_ident("doc"))
+            .count()
+            != 1
+        || item
+            .attrs
+            .iter()
+            .any(|attr| !attr.path().is_ident("doc") && !attr.path().is_ident("cfg"))
         || !is_static_str(&item.ty)
     {
         return None;
@@ -105,6 +116,11 @@ pub(super) fn reverse(
     {
         return None;
     }
+    let alias_cfg = cfg_attrs(file, &item.attrs)?;
+    let field_cfg = cfg_attrs(file, &field.attrs)?;
+    if alias_cfg != field_cfg {
+        return None;
+    }
     let (start, end) = span_range(file.source(), item.span())?;
     let (copy_start, copy_end) = span_range(file.source(), copy.span())?;
     let end = end + usize::from(file.source().as_bytes().get(end) == Some(&b'\n'));
@@ -126,4 +142,17 @@ pub(super) fn reverse(
             replacement: String::new(),
         },
     ])
+}
+
+/// Copy only conditional compilation attributes that were present on the field.
+#[instrument(level = "debug", skip(file, attrs))]
+fn cfg_attrs(file: &SharedParsedFile, attrs: &[syn::Attribute]) -> Option<Vec<String>> {
+    attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("cfg"))
+        .map(|attr| {
+            let (start, end) = span_range(file.source(), attr.span())?;
+            Some(file.source().get(start..end)?.to_string())
+        })
+        .collect()
 }

@@ -2,13 +2,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{ExprStruct, ImplItemFn, ItemFn, ItemImpl, Member, Signature};
+use syn::{Expr, ExprStruct, ImplItemFn, ItemFn, ItemImpl, Member, Pat, Signature};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
 
-use super::{Edit, simple_type_name};
+use super::{Edit, simple_type_name, span_range};
 
 mod batch;
 mod bindings;
@@ -51,11 +52,13 @@ pub(super) struct InitializerVisitor<'a> {
     static_strings: &'a BTreeSet<String>,
     target_lifetime: Option<&'a str>,
     pending_lifetime: bool,
+    cfg_attrs: &'a [String],
     current_impl: Option<String>,
     current_impl_lifetime_matches: bool,
     caller_aliases: BTreeSet<String>,
     static_params: BTreeSet<String>,
     static_locals: BTreeMap<String, usize>,
+    tuple_files: BTreeMap<String, TupleFileOrigin>,
     facts: InitializerFacts,
 }
 
@@ -63,6 +66,13 @@ struct ConstructorContext {
     caller_aliases: BTreeSet<String>,
     static_params: BTreeSet<String>,
     static_locals: BTreeMap<String, usize>,
+    tuple_files: BTreeMap<String, TupleFileOrigin>,
+}
+
+#[derive(Clone, Debug)]
+struct TupleFileOrigin {
+    fact: InitializerExpressionFact,
+    cfg: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -81,6 +91,7 @@ impl<'a> InitializerVisitor<'a> {
         static_strings: &'a BTreeSet<String>,
         target_lifetime: Option<&'a str>,
         pending_lifetime: bool,
+        cfg_attrs: &'a [String],
     ) -> Self {
         Self {
             type_name,
@@ -90,11 +101,13 @@ impl<'a> InitializerVisitor<'a> {
             static_strings,
             target_lifetime,
             pending_lifetime,
+            cfg_attrs,
             current_impl: None,
             current_impl_lifetime_matches: false,
             caller_aliases: BTreeSet::new(),
             static_params: BTreeSet::new(),
             static_locals: BTreeMap::new(),
+            tuple_files: BTreeMap::new(),
             facts: InitializerFacts::default(),
         }
     }
@@ -109,18 +122,24 @@ impl<'a> InitializerVisitor<'a> {
         let mut bindings = BindingCounts::default();
         bindings.visit_block(block);
         let aliases = caller_aliases(block, &bindings);
-        let previous = self.enter_constructor_block(signature, block, &bindings, &aliases);
+        let tuple_files = tuple_file_origins(self.source, block, &bindings);
+        let previous =
+            self.enter_constructor_block(signature, block, &bindings, &aliases, &tuple_files);
         syn::visit::visit_block(self, block);
         self.leave_constructor_block(previous);
     }
 
-    #[instrument(level = "debug", skip(self, signature, block, bindings, aliases))]
+    #[instrument(
+        level = "debug",
+        skip(self, signature, block, bindings, aliases, tuple_files)
+    )]
     fn enter_constructor_block(
         &mut self,
         signature: &Signature,
         block: &syn::Block,
         bindings: &BindingCounts,
         aliases: &BTreeSet<String>,
+        tuple_files: &BTreeMap<String, TupleFileOrigin>,
     ) -> ConstructorContext {
         let caller_aliases = std::mem::replace(&mut self.caller_aliases, aliases.clone());
         let static_params = std::mem::replace(
@@ -143,10 +162,12 @@ impl<'a> InitializerVisitor<'a> {
                 self.current_impl_lifetime_matches,
             ),
         );
+        let previous_tuple_files = std::mem::replace(&mut self.tuple_files, tuple_files.clone());
         ConstructorContext {
             caller_aliases,
             static_params,
             static_locals,
+            tuple_files: previous_tuple_files,
         }
     }
 
@@ -155,6 +176,7 @@ impl<'a> InitializerVisitor<'a> {
         self.caller_aliases = previous.caller_aliases;
         self.static_params = previous.static_params;
         self.static_locals = previous.static_locals;
+        self.tuple_files = previous.tuple_files;
     }
 
     #[instrument(level = "debug", skip(self, item))]
@@ -177,7 +199,11 @@ impl<'a> InitializerVisitor<'a> {
             } else if let Some(field) = item.fields.iter().find(
                 |field| matches!(&field.member, Member::Named(name) if name == self.field_name),
             ) {
-                self.facts.sites.push(inspect_initializer(
+                if cfg_text(self.source, &field.attrs).as_deref() != Some(self.cfg_attrs) {
+                    self.facts.unresolved = true;
+                    return;
+                }
+                let direct = inspect_initializer(
                     self.source,
                     &field.expr,
                     self.field_name,
@@ -187,12 +213,88 @@ impl<'a> InitializerVisitor<'a> {
                     self.static_strings,
                     &self.static_params,
                     &self.static_locals,
-                ));
+                );
+                let tuple = match &field.expr {
+                    Expr::Path(path)
+                        if self.kind == FieldKind::CallSiteFile && path.qself.is_none() =>
+                    {
+                        let name = path.path.get_ident().map(ToString::to_string);
+                        name.and_then(|name| self.tuple_files.get(&name))
+                            .filter(|origin| {
+                                cfg_text(self.source, &field.attrs).as_ref() == Some(&origin.cfg)
+                            })
+                            .filter(|origin| {
+                                span_range(self.source, field.expr.span())
+                                    .is_some_and(|(start, _)| origin.fact.end() < start)
+                            })
+                            .map(|origin| origin.fact.clone())
+                    }
+                    _ => None,
+                };
+                self.facts.sites.push(direct.or(tuple));
             } else {
                 self.facts.unresolved = true;
             }
         }
     }
+}
+
+#[instrument(level = "debug", skip(source, attrs))]
+fn cfg_text(source: &str, attrs: &[syn::Attribute]) -> Option<Vec<String>> {
+    attrs
+        .iter()
+        .map(|attr| {
+            if !attr.path().is_ident("cfg") {
+                return None;
+            }
+            let (start, end) = span_range(source, attr.span())?;
+            Some(source.get(start..end)?.to_string())
+        })
+        .collect()
+}
+
+/// Provenance for a unique `(line, file)` binding in the constructor's shared tree.
+#[instrument(level = "debug", skip(source, block, bindings))]
+fn tuple_file_origins(
+    source: &str,
+    block: &syn::Block,
+    bindings: &BindingCounts,
+) -> BTreeMap<String, TupleFileOrigin> {
+    if bindings.opaque_local_names() {
+        return BTreeMap::new();
+    }
+    block.stmts.iter().filter_map(|stmt| {
+        let syn::Stmt::Local(local) = stmt else { return None };
+        let Pat::Tuple(pat) = &local.pat else { return None };
+        let mut elements = pat.elems.iter();
+        let (Some(Pat::Ident(line)), Some(Pat::Ident(file)), None) =
+            (elements.next(), elements.next(), elements.next()) else { return None };
+        if line.ident != "line" || file.ident != "file"
+            || line.mutability.is_some() || file.mutability.is_some()
+            || line.subpat.is_some() || file.subpat.is_some()
+            || bindings.names().get("file") != Some(&1)
+            || bindings.uses().get("file") != Some(&1)
+        { return None; }
+        let cfg = cfg_text(source, &local.attrs)?;
+        let Expr::Block(init) = &*local.init.as_ref()?.expr else { return None };
+        let Some(syn::Stmt::Expr(Expr::Tuple(tuple), None)) = init.block.stmts.last() else { return None };
+        let mut expressions = tuple.elems.iter();
+        let (Some(line_expr), Some(file_expr), None) =
+            (expressions.next(), expressions.next(), expressions.next()) else { return None };
+        let mut inner_bindings = BindingCounts::default();
+        inner_bindings.visit_block(&init.block);
+        let aliases = caller_aliases(&init.block, &inner_bindings);
+        let Expr::MethodCall(line_method) = line_expr else { return None };
+        if line_method.method != "line" || !line_method.args.is_empty()
+            || !matches!(&*line_method.receiver, Expr::Path(path)
+                if path.qself.is_none() && path.path.get_ident().is_some_and(|name| aliases.contains(&name.to_string())))
+        { return None; }
+        let fact = inspect_initializer(
+            source, file_expr, "file", false, FieldKind::CallSiteFile,
+            &aliases, &BTreeSet::new(), &BTreeSet::new(), &BTreeMap::new(),
+        )?;
+        Some(("file".to_string(), TupleFileOrigin { fact, cfg }))
+    }).collect()
 }
 
 impl<'ast> Visit<'ast> for InitializerVisitor<'_> {

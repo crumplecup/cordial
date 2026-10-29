@@ -158,13 +158,24 @@ pub(super) fn caller_aliases(block: &syn::Block, bindings: &BindingCounts) -> BT
     aliases
 }
 
-#[derive(Default)]
+#[derive(Default, derive_getters::Getters)]
 pub(super) struct BindingCounts {
     names: BTreeMap<String, usize>,
+    uses: BTreeMap<String, usize>,
+    #[getter(copy)]
     opaque_local_names: bool,
 }
 
 impl<'ast> Visit<'ast> for BindingCounts {
+    #[instrument(level = "debug", skip(self, path))]
+    fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
+        if path.qself.is_none() {
+            if let Some(name) = path.path.get_ident() {
+                *self.uses.entry(name.to_string()).or_default() += 1;
+            }
+        }
+        syn::visit::visit_expr_path(self, path);
+    }
     #[instrument(level = "debug", skip(self, pat))]
     fn visit_pat_ident(&mut self, pat: &'ast syn::PatIdent) {
         *self.names.entry(pat.ident.to_string()).or_default() += 1;

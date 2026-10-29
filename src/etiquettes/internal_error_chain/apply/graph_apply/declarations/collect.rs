@@ -170,6 +170,16 @@ fn graph_field(
         type_line: field.ty.span().start().line,
         visibility: visibility(&field.vis),
         allowed_attrs: allowed_attrs(&field.attrs),
+        cfg_attrs: field
+            .attrs
+            .iter()
+            .filter(|attr| attr.path().is_ident("cfg"))
+            .filter_map(|attr| {
+                span_range(file.source(), attr.span())
+                    .and_then(|(start, end)| file.source().get(start..end))
+                    .map(ToString::to_string)
+            })
+            .collect(),
         type_name: type_name(&field.ty),
         storage: storage_shape(&field.ty),
         copy_shape: is_copy_shape(&field.ty),

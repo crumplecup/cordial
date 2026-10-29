@@ -52,6 +52,11 @@ impl GetterUses {
 }
 
 impl<'ast> Visit<'ast> for GetterUses {
+    #[instrument(level = "debug", skip(self, item))]
+    fn visit_expr_block(&mut self, item: &'ast syn::ExprBlock) {
+        self.body(&item.block);
+    }
+
     #[instrument(level = "trace", skip(self, item))]
     fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
         self.body(&item.block);

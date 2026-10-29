@@ -238,6 +238,7 @@ fn find_candidates(
                         unique_struct: struct_counts.get(&type_name) == Some(&1),
                         type_range: field.type_range(),
                         lifetime_candidate,
+                        cfg_attrs: field.cfg_attrs().clone(),
                         getter_storage: field.getter_storage().clone(),
                     },
                     initializer: InitializerEvidence {
@@ -265,6 +266,7 @@ fn find_candidates(
                     candidate.initializer_kind,
                     candidate.initializer_lifetime.as_deref(),
                     false,
+                    &candidate.field.cfg_attrs,
                 )
             })
             .collect();
@@ -305,6 +307,7 @@ fn find_candidates(
                 FieldKind::StaticString,
                 Some(lifetime),
                 candidate.initializer.target == ErrorFieldStrategy::Borrowed,
+                &candidate.field.cfg_attrs,
             ));
         }
         let facts = collect_initializer_facts(file, &inputs, static_strings);

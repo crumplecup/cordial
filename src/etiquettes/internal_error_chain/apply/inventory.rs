@@ -152,6 +152,7 @@ pub(super) struct FieldEvidence {
     type_range: Option<(usize, usize)>,
     #[getter(copy)]
     lifetime_candidate: bool,
+    cfg_attrs: Vec<String>,
     getter_storage: Option<super::getters::GetterStorageFacts>,
 }
 

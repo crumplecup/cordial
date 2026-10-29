@@ -11,6 +11,7 @@ use crate::loader::SharedParsedFile;
 use super::bindings::{BindingCounts, caller_aliases, impl_uses_lifetime};
 use super::{
     ConstructorContext, FieldKind, InitializerFacts, InitializerVisitor, simple_type_name,
+    tuple_file_origins,
 };
 
 #[derive(derive_new::new)]
@@ -20,6 +21,7 @@ pub(crate) struct InitializerBatchInput<'a> {
     kind: FieldKind,
     lifetime: Option<&'a str>,
     pending_lifetime: bool,
+    cfg_attrs: &'a [String],
 }
 
 struct BatchInitializerVisitor<'a> {
@@ -44,6 +46,7 @@ pub(crate) fn collect_initializer_facts<'a>(
                     static_strings,
                     input.lifetime,
                     input.pending_lifetime,
+                    input.cfg_attrs,
                 )
             })
             .collect(),
@@ -62,11 +65,22 @@ impl BatchInitializerVisitor<'_> {
         let mut bindings = BindingCounts::default();
         bindings.visit_block(block);
         let aliases = caller_aliases(block, &bindings);
+        let tuple_files = self
+            .candidates
+            .first()
+            .map(|candidate| tuple_file_origins(candidate.source, block, &bindings))
+            .unwrap_or_default();
         let previous: Vec<ConstructorContext> = self
             .candidates
             .iter_mut()
             .map(|candidate| {
-                candidate.enter_constructor_block(signature, block, &bindings, &aliases)
+                candidate.enter_constructor_block(
+                    signature,
+                    block,
+                    &bindings,
+                    &aliases,
+                    &tuple_files,
+                )
             })
             .collect();
         syn::visit::visit_block(self, block);

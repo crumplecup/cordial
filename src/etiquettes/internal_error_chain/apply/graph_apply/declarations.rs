@@ -85,6 +85,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct GraphField {
     visibility: Visibility,
     #[getter(skip)]
     allowed_attrs: bool,
+    cfg_attrs: Vec<String>,
     #[getter(skip)]
     type_name: Option<String>,
     #[getter(skip)]

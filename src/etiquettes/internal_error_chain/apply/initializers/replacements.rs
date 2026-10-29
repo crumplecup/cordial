@@ -39,6 +39,11 @@ pub(super) struct InitializerExpressionFact {
 }
 
 impl InitializerExpressionFact {
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn end(&self) -> usize {
+        self.whole.1
+    }
+
     #[instrument(level = "trace", skip(self, source, strategy))]
     pub(super) fn edit(&self, source: &str, strategy: ErrorFieldStrategy) -> Option<Edit> {
         match strategy {

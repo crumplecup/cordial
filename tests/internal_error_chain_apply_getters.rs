@@ -26,6 +26,66 @@ impl Failure {
 }
 "#;
 
+const CONDITIONAL_TUPLE: &str = r#"use derive_getters::Getters;
+use derive_more::{Display, Error};
+/// A located failure.
+#[derive(Debug, Display, Error, Getters)]
+#[display("failure at {file}:{line}")]
+pub struct Failure {
+    /// Source file.
+    #[cfg(not(kani))]
+    file: String,
+    #[cfg(not(kani))]
+    line: u32,
+}
+impl Failure {
+    #[track_caller]
+    pub fn new() -> Self {
+        #[cfg(not(kani))]
+        let (line, file) = {
+            let loc = std::panic::Location::caller();
+            (loc.line(), loc.file().to_string())
+        };
+        Self {
+            #[cfg(not(kani))]
+            file,
+            #[cfg(not(kani))]
+            line,
+        }
+    }
+}
+"#;
+
+#[test]
+fn conditional_tuple_getter_round_trip_compiles_and_restores_source() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = fixture()?;
+    let path = root.path().join("src/lib.rs");
+    fs::write(&path, CONDITIONAL_TUPLE).into_diagnostic()?;
+    check(root.path())?;
+    for strategy in ["borrowed", "owned"] {
+        configure(root.path(), strategy)?;
+        let preview =
+            run_error_file_apply(root.path(), root.path(), None, true).into_diagnostic()?;
+        assert_eq!(preview.converted_fields(), 1, "{preview:?}");
+        let applied =
+            run_error_file_apply(root.path(), root.path(), None, false).into_diagnostic()?;
+        assert_eq!(applied.converted_fields(), 1, "{applied:?}");
+        let patched = fs::read_to_string(&path).into_diagnostic()?;
+        if strategy == "borrowed" {
+            assert!(patched.contains("#[cfg(not(kani))]\ntype CordialFailureFileStorage"));
+            assert!(patched.contains("(loc.line(), loc.file())"));
+            assert!(patched.contains("#[getter(copy)]"));
+        }
+        check(root.path())?;
+    }
+    assert_eq!(
+        fs::read_to_string(&path).into_diagnostic()?,
+        CONDITIONAL_TUPLE
+    );
+    Ok(())
+}
+
 #[test]
 fn derived_getter_alias_round_trip_compiles_and_restores_source() -> miette::Result<()> {
     cordial::init_tracing();
@@ -265,6 +325,8 @@ edition = "2024"
 [dependencies]
 derive-getters = "=0.5.0"
 derive_more = { version = "2", features = ["display", "error"] }
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(kani)"] }
 "#,
     )
     .into_diagnostic()?;
