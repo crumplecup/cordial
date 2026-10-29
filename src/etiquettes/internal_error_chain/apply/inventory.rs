@@ -20,10 +20,12 @@ mod from;
 mod graph;
 mod helpers;
 mod resolution;
+mod result_alias;
 mod source_method;
 mod syntax_facts;
 mod try_conversion;
 
+pub(super) use attributes::call_site_attribute_is_stable;
 pub(super) use edges::error_edge_evidence;
 pub use edges::{
     ErrorEdgeEvidence, ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind,

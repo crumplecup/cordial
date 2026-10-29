@@ -45,6 +45,59 @@ impl Envelope {
 "#;
 
 #[test]
+fn standard_result_aliases_preserve_public_call_site_round_trip() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = fixture()?;
+    let path = root.path().join("src/error.rs");
+    let original = format!(
+        "{ERROR}\npub type LocalResult<T> = Result<T, Envelope>;\npub type QualifiedResult<T> = std::result::Result<T, IoSource>;\npub type CoreResult<T> = ::core::result::Result<T, Envelope>;\n"
+    );
+    fs::write(&path, &original).into_diagnostic()?;
+    for strategy in ["borrowed", "owned"] {
+        set_strategy(root.path(), strategy)?;
+        let result =
+            run_error_file_apply(root.path(), root.path(), None, false).into_diagnostic()?;
+        assert_eq!(result.converted_fields(), 2, "{result:?}");
+        test_fixture(root.path())?;
+    }
+    assert_eq!(fs::read_to_string(&path).into_diagnostic()?, original);
+    Ok(())
+}
+
+#[test]
+fn direct_and_shadowed_result_aliases_do_not_prove_storage_independence() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = fixture()?;
+    let path = root.path().join("src/error.rs");
+    for aliases in [
+        "type Alias = Envelope;",
+        "type Result<T, E> = E; type Alias<T> = Result<T, Envelope>;",
+        "use custom::Result; type Alias<T> = Result<T, Envelope>;",
+        "use custom::*; type Alias<T> = Result<T, Envelope>;",
+        "type Alias<Result> = Result<u32, Envelope>;",
+        "mod std {} type Alias<T> = std::result::Result<T, Envelope>;",
+        "generate_types!(); type Alias<T> = Result<T, Envelope>;",
+        "type Alias<T> = unknown::Result<T, Envelope>;",
+    ] {
+        let original = format!("{ERROR}\n{aliases}\n");
+        fs::write(&path, &original).into_diagnostic()?;
+        set_strategy(root.path(), "borrowed")?;
+        let result =
+            run_error_file_apply(root.path(), root.path(), None, false).into_diagnostic()?;
+        assert!(
+            result
+                .blockers()
+                .iter()
+                .any(|blocker| blocker.type_name() == "Envelope" && blocker.field_name() == "file"),
+            "{aliases}\n{result:?}"
+        );
+        let patched = fs::read_to_string(&path).into_diagnostic()?;
+        assert!(patched.contains("file: String"), "{aliases}\n{patched}");
+    }
+    Ok(())
+}
+
+#[test]
 fn public_derive_errors_round_trip_with_exact_worklist_claims() -> miette::Result<()> {
     cordial::init_tracing();
     let root = fixture()?;

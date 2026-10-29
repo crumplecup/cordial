@@ -5,6 +5,7 @@ use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
 
+use super::super::inventory::call_site_attribute_is_stable;
 use super::super::{Edit, is_static_str, span_range};
 use super::derives::known_derive;
 use super::names::Names;
@@ -33,11 +34,11 @@ pub(super) fn forward(
     field: &syn::Field,
     name: &str,
 ) -> Option<Vec<Edit>> {
-    if item
-        .attrs
-        .iter()
-        .any(|attr| attr.path().is_ident("cfg") || attr.path().is_ident("cfg_attr"))
-        || !field_attrs_stable(file, item, field, false)
+    if item.attrs.iter().any(|attr| {
+        attr.path().is_ident("cfg")
+            || (attr.path().is_ident("cfg_attr")
+                && !call_site_attribute_is_stable(attr, &item.attrs, "file", file.syntax()))
+    }) || !field_attrs_stable(file, item, field, false)
     {
         return None;
     }

@@ -2,7 +2,7 @@
 
 use syn::punctuated::Punctuated;
 use syn::visit::Visit;
-use syn::{Attribute, Expr, Token};
+use syn::{Attribute, Expr, Meta, Token};
 use tracing::instrument;
 
 use super::super::getters::known_derive;
@@ -11,14 +11,33 @@ use super::helpers::derive_is_nonconstructing;
 /// Display and Error derive no constructors. Display arguments may still
 /// depend on String operations, so accept only direct uses of this field.
 #[instrument(level = "debug", skip(attr, attrs, syntax))]
-pub(super) fn call_site_attribute_is_stable(
+pub(in crate::etiquettes::internal_error_chain::apply) fn call_site_attribute_is_stable(
     attr: &Attribute,
     attrs: &[Attribute],
     field_name: &str,
     syntax: &syn::File,
 ) -> bool {
-    if attr.path().is_ident("derive") {
-        return attr
+    stable_meta(&attr.meta, attrs, field_name, syntax)
+}
+
+/// Every possible conditional Display expansion must be storage independent.
+/// Presence changes and conditional derives need their own contracts.
+#[instrument(level = "trace", skip(meta, attrs, syntax))]
+fn stable_meta(meta: &Meta, attrs: &[Attribute], field_name: &str, syntax: &syn::File) -> bool {
+    if meta.path().is_ident("cfg_attr") {
+        let Meta::List(list) = meta else { return false };
+        let Ok(args) = list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated) else {
+            return false;
+        };
+        return args.len() >= 2
+            && args.iter().skip(1).all(|nested| {
+                (nested.path().is_ident("display") || nested.path().is_ident("cfg_attr"))
+                    && stable_meta(nested, attrs, field_name, syntax)
+            });
+    }
+    if meta.path().is_ident("derive") {
+        let Meta::List(list) = meta else { return false };
+        return list
             .parse_nested_meta(|meta| {
                 let path = &meta.path;
                 let known = path.segments.len() == 1
@@ -48,10 +67,11 @@ pub(super) fn call_site_attribute_is_stable(
             })
             .is_ok();
     }
-    if !attr.path().is_ident("display") || !has_display_derive(attrs, syntax) {
+    if !meta.path().is_ident("display") || !has_display_derive(attrs, syntax) {
         return false;
     }
-    let Ok(args) = attr.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated) else {
+    let Meta::List(list) = meta else { return false };
+    let Ok(args) = list.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated) else {
         return false;
     };
     if !matches!(args.first(), Some(Expr::Lit(lit)) if matches!(lit.lit, syn::Lit::Str(_))) {

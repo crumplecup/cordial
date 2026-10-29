@@ -14,6 +14,7 @@ use super::super::from::ErrorFromEvidence;
 use super::super::helpers::{
     derive_is_nonconstructing, path_mentions, type_mentions, use_tree_mentions,
 };
+use super::super::result_alias::stable_result_alias;
 use super::super::source_method::ErrorSourceMethodEvidence;
 use super::super::try_conversion::ErrorTryScope;
 use super::super::{ErrorConversionSiteKind, ErrorEdgeField};
@@ -290,7 +291,10 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
             let index = self.relevant[offset];
             let name = &self.candidates[index].type_name;
             if type_mentions(&item.ty, name) || item.ident == *name {
-                self.record(index, ErrorConversionSiteKind::Alias, item.span(), false);
+                let resolved = self.module_depth == 0
+                    && self.candidates[index].field.kind == FieldKind::CallSiteFile
+                    && stable_result_alias(item, self.file.syntax(), name);
+                self.record(index, ErrorConversionSiteKind::Alias, item.span(), resolved);
             }
         }
         syn::visit::visit_item_type(self, item);

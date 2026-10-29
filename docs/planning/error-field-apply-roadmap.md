@@ -303,6 +303,44 @@ coverage gap is **19 of the original 118 fields**: four unproven initializers an
 original 175-field inventory gap remain separate work. Reverse benchmark and
 coverage record: `cb1591e` in `amenable_copy`.
 
+#### Conditional Display and standard Result aliases
+
+Collection now proves storage independence for conditional `derive_more::Display`
+attributes, including nested `cfg_attr`. Every possible attribute branch must
+have a known Display contract; conditional derives, presence changes, unknown
+attributes, and String-dependent expressions remain blocked. Getter alias
+generation consumes the same proof, preserving its reversible marker contract.
+
+Standard `Result<T, Error>` aliases no longer block conversion of private,
+static call-site file storage. Collection accepts only direct error arguments
+and rejects shadowed Result paths, unknown imports and macro expansions.
+Direct aliases to the error itself still require stronger constructor evidence.
+Both contracts are collected from the shared parsed tree and recorded in the
+shared IR; apply does not reconstruct them with a separate source scan.
+
+Regression fixtures compile both Display configurations and both strategy
+directions, assert exact source restoration, and reject unsupported conditional
+contracts and shadowed aliases.
+
+The Amenable preview and apply now agree on **113 fields in 29 files**, with
+**42 blocked candidates**. This adds 14 supported file fields over the previous
+round trip. Apply checked off 113 matching worklist items and left 223
+error-handling findings. A repeat borrowed preview proposed zero edits.
+Borrowed recovery checkpoint: `1889233` in `amenable_copy`.
+
+Reverse preview and apply also agree on all 113 fields, with zero blocked
+candidates. All crate source returns byte for byte to `baseline-owned`, and
+policy matches the pre-experiment owned checkpoint. Of the original 118 file
+fields, **five remain blocked**: four conditional initializer contracts and
+`AmenableError::file`, whose macro and alias evidence is still unresolved.
+The other 37 String candidates and original 175-field inventory gap remain
+separate work; this phase does not claim complete error-graph migration.
+
+Workspace tests, including compile-fail fixtures and doc tests, pass in both
+directions. The `amenable_time` test with `chrono-tz,jiff` enabled also passes in
+both directions. Repeat previews propose zero edits after each conversion.
+Reverse benchmark and coverage record: `048a32d` in `amenable_copy`.
+
 ## First implementation decision
 
 Start with slice 0. It sets the minimum evidence needed for the existing
