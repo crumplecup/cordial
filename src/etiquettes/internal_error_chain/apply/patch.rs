@@ -90,7 +90,7 @@ pub(super) fn patch_file(
             units.push(unit);
             continue;
         }
-        let source_type = match strategy {
+        let mut source_type = match strategy {
             ErrorFieldStrategy::Borrowed if matches!(field.storage(), StringStorage::Owned) => {
                 let lifetime = if call_site {
                     None
@@ -145,6 +145,19 @@ pub(super) fn patch_file(
                 ErrorFieldApplyBlockerReason::FieldUse,
             ));
             continue;
+        }
+        if let Some(getter) = field.getter_storage() {
+            let Some((replacement, getter_edits)) = getter.plan(strategy) else {
+                blockers.push(ErrorFieldApplyBlocker::new(
+                    file.path(),
+                    &name,
+                    &field_name,
+                    ErrorFieldApplyBlockerReason::FieldUse,
+                ));
+                continue;
+            };
+            source_type = replacement.to_string();
+            initializers.extend_from_slice(getter_edits);
         }
         let Some(field_span) = field.type_range() else {
             blockers.push(ErrorFieldApplyBlocker::new(

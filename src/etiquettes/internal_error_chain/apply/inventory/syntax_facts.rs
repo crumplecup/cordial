@@ -38,11 +38,12 @@ pub(super) struct FileSyntaxFacts {
 }
 
 impl FileSyntaxFacts {
-    #[instrument(level = "debug", skip(file, tracked_names, tracked_fields))]
+    #[instrument(level = "debug", skip(file, tracked_names, tracked_fields, getters))]
     pub(super) fn collect(
         file: &SharedParsedFile,
         tracked_names: &BTreeSet<String>,
         tracked_fields: &BTreeSet<String>,
+        getters: Option<&super::super::getters::GetterFields>,
     ) -> Self {
         let mut collector = Collector {
             facts: Self {
@@ -64,7 +65,7 @@ impl FileSyntaxFacts {
                 expressions: GraphExprFacts::collect(file, tracked_names, tracked_fields),
                 lifetimes: GraphLifetimeFacts::collect(file, tracked_names),
                 local_lifetimes: LifetimeFileFacts::collect(file, tracked_names),
-                graph_declarations: GraphDeclarationFacts::collect(file),
+                graph_declarations: GraphDeclarationFacts::collect(file, getters),
             },
             module_depth: 0,
             tracked_names,

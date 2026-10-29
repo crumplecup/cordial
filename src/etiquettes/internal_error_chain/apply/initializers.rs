@@ -12,11 +12,13 @@ use super::{Edit, simple_type_name};
 
 mod batch;
 mod bindings;
+mod getter_uses;
 mod replacements;
 
 pub(super) use batch::{InitializerBatchInput, collect_initializer_facts};
 pub(super) use bindings::impl_uses_lifetime;
 use bindings::{BindingCounts, caller_aliases, static_string_locals, static_string_params};
+pub(super) use getter_uses::has_unresolved_getter_uses;
 use replacements::{InitializerExpressionFact, inspect_initializer};
 
 /// Constructor sites and provenance recorded in the shared IR before apply.

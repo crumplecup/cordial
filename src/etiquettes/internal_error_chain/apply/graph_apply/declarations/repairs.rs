@@ -55,8 +55,13 @@ impl GraphDeclarationFacts {
                             item.declaration_line,
                         )
                     } else if strategy == ErrorFieldStrategy::Borrowed
-                        && edit.replacement.starts_with('&')
-                        && (name != "file" || edit.replacement == "&'static str")
+                        && ((edit.replacement.starts_with('&')
+                            && (name != "file" || edit.replacement == "&'static str"))
+                            || field.getter_storage.as_ref().is_some_and(|getter| {
+                                getter
+                                    .plan(strategy)
+                                    .is_some_and(|(replacement, _)| replacement == edit.replacement)
+                            }))
                     {
                         let context = match variant {
                             Some(variant) => format!("{context}::{variant}::{name}"),

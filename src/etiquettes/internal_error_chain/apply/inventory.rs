@@ -152,6 +152,7 @@ pub(super) struct FieldEvidence {
     type_range: Option<(usize, usize)>,
     #[getter(copy)]
     lifetime_candidate: bool,
+    getter_storage: Option<super::getters::GetterStorageFacts>,
 }
 
 /// The source storage shape, independent of the configured target strategy.

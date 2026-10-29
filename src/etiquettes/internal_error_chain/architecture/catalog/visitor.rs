@@ -13,6 +13,7 @@ use super::fanout::{
 };
 use super::{Catalog, FanoutCall, FanoutWrapper, MapErrSite};
 
+mod aliases;
 mod record;
 
 #[derive(derive_builder::Builder, derive_setters::Setters)]
@@ -28,6 +29,8 @@ pub(in crate::etiquettes::internal_error_chain::architecture) struct CatalogVisi
     catalog: &'a mut Catalog,
     #[builder(default)]
     inside_kind_call: bool,
+    #[builder(default)]
+    static_aliases: std::collections::BTreeMap<String, syn::Type>,
 }
 
 impl<'a> CatalogVisitor<'a> {
@@ -48,6 +51,12 @@ impl<'a> CatalogVisitorBuilder<'a> {
 }
 
 impl<'ast> Visit<'ast> for CatalogVisitor<'_> {
+    #[instrument(level = "debug", skip(self, node))]
+    fn visit_file(&mut self, node: &'ast syn::File) {
+        self.static_aliases = aliases::static_aliases(&node.items);
+        syn::visit::visit_file(self, node);
+    }
+
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         if is_cfg_test(&node.attrs) {
@@ -141,10 +150,12 @@ impl<'ast> Visit<'ast> for CatalogVisitor<'_> {
         nested.push(node.ident.to_string());
         let prev = self.module_prefix.clone();
         self.module_prefix = nested;
+        let aliases = std::mem::replace(&mut self.static_aliases, aliases::static_aliases(items));
         for item in items {
             syn::visit::visit_item(self, item);
         }
         self.module_prefix = prev;
+        self.static_aliases = aliases;
     }
 
     #[instrument(level = "debug", skip(self, node))]

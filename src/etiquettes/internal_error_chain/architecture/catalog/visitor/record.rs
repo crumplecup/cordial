@@ -40,8 +40,14 @@ fn item_derives_copy(attrs: &[Attribute]) -> bool {
 }
 
 impl CatalogVisitor<'_> {
-    #[instrument(level = "debug", skip(self, fields))]
-    pub(super) fn record_fields(&mut self, owner: &str, variant: Option<&str>, fields: &Fields) {
+    #[instrument(level = "debug", skip(self, fields, generics))]
+    pub(super) fn record_fields(
+        &mut self,
+        owner: &str,
+        variant: Option<&str>,
+        fields: &Fields,
+        generics: &syn::Generics,
+    ) {
         for (index, field) in fields.iter().enumerate() {
             let name = field
                 .ident
@@ -61,7 +67,16 @@ impl CatalogVisitor<'_> {
                 context,
                 file: self.file.clone(),
                 line: field.ty.span().start().line as u32,
-                ty: field.ty.clone(),
+                ty: match &field.ty {
+                    Type::Path(path) if path.qself.is_none() => path
+                        .path
+                        .get_ident()
+                        .filter(|name| !generics.type_params().any(|param| param.ident == **name))
+                        .and_then(|name| self.static_aliases.get(&name.to_string()))
+                        .unwrap_or(&field.ty)
+                        .clone(),
+                    _ => field.ty.clone(),
+                },
             });
         }
     }
@@ -87,7 +102,7 @@ impl CatalogVisitor<'_> {
         if item_derives_copy(&item.attrs) {
             self.catalog.copy_impls.insert(ident.clone());
         }
-        self.record_fields(&ident, None, &item.fields);
+        self.record_fields(&ident, None, &item.fields, &item.generics);
         let mut info = StructInfo {
             ident: ident.clone(),
             type_path: self.qualified(&ident),
@@ -169,7 +184,12 @@ impl CatalogVisitor<'_> {
         }
         let mut variants = Vec::new();
         for variant in &item.variants {
-            self.record_fields(&ident, Some(&variant.ident.to_string()), &variant.fields);
+            self.record_fields(
+                &ident,
+                Some(&variant.ident.to_string()),
+                &variant.fields,
+                &item.generics,
+            );
             let payloads = variant_payloads(&variant.fields);
             variants.push(VariantInfo {
                 name: variant.ident.to_string(),

@@ -5,15 +5,17 @@ use syn::visit::Visit;
 use syn::{Attribute, Expr, Token};
 use tracing::instrument;
 
+use super::super::getters::known_derive;
 use super::helpers::derive_is_nonconstructing;
 
 /// Display and Error derive no constructors. Display arguments may still
 /// depend on String operations, so accept only direct uses of this field.
-#[instrument(level = "debug", skip(attr, attrs))]
+#[instrument(level = "debug", skip(attr, attrs, syntax))]
 pub(super) fn call_site_attribute_is_stable(
     attr: &Attribute,
     attrs: &[Attribute],
     field_name: &str,
+    syntax: &syn::File,
 ) -> bool {
     if attr.path().is_ident("derive") {
         return attr
@@ -35,7 +37,9 @@ pub(super) fn call_site_attribute_is_stable(
                         )
                     })
                     || is_derive_more(path, "Display")
-                    || is_derive_more(path, "Error");
+                    || is_derive_more(path, "Error")
+                    || known_derive(syntax, path, "derive_getters", "Getters")
+                    || known_derive(syntax, path, "derive_more", "Display");
                 if known {
                     Ok(())
                 } else {
@@ -44,7 +48,7 @@ pub(super) fn call_site_attribute_is_stable(
             })
             .is_ok();
     }
-    if !attr.path().is_ident("display") || !has_display_derive(attrs) {
+    if !attr.path().is_ident("display") || !has_display_derive(attrs, syntax) {
         return false;
     }
     let Ok(args) = attr.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated) else {
@@ -66,15 +70,16 @@ fn is_derive_more(path: &syn::Path, name: &str) -> bool {
         && path.segments[1].ident == name
 }
 
-#[instrument(level = "trace", skip(attrs))]
-fn has_display_derive(attrs: &[Attribute]) -> bool {
+#[instrument(level = "trace", skip(attrs, syntax))]
+fn has_display_derive(attrs: &[Attribute], syntax: &syn::File) -> bool {
     attrs.iter().any(|attr| {
         if !attr.path().is_ident("derive") || derive_is_nonconstructing(attr) {
             return false;
         }
         let mut found = false;
         attr.parse_nested_meta(|meta| {
-            found |= is_derive_more(&meta.path, "Display");
+            found |= is_derive_more(&meta.path, "Display")
+                || known_derive(syntax, &meta.path, "derive_more", "Display");
             Ok(())
         })
         .is_ok()

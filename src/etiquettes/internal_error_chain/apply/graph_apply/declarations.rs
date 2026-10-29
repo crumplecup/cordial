@@ -109,6 +109,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct GraphField {
     kind_edge: Option<ErrorEdgeEvidence>,
     #[getter(skip)]
     candidate_storage: Option<StringStorage>,
+    getter_storage: Option<super::super::getters::GetterStorageFacts>,
 }
 
 impl GraphDeclarationFacts {

@@ -37,6 +37,7 @@ impl CrateTypeIndex {
     pub(in crate::etiquettes::internal_error_chain::apply) fn new(
         files: &[SharedParsedFile],
     ) -> Self {
+        let getters = super::super::getters::collect_getter_storage(files);
         let mut declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
         let mut local: HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
         let active_modules = active_modules(files);
@@ -111,7 +112,12 @@ impl CrateTypeIndex {
                 .map(|file| {
                     (
                         file.path().to_path_buf(),
-                        FileSyntaxFacts::collect(file, &tracked_names, &tracked_fields),
+                        FileSyntaxFacts::collect(
+                            file,
+                            &tracked_names,
+                            &tracked_fields,
+                            getters.get(file.path()),
+                        ),
                     )
                 })
                 .collect(),

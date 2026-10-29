@@ -18,9 +18,10 @@ use crate::etiquettes::internal_error_chain::apply::inventory::{
 use crate::etiquettes::internal_error_chain::type_graph::item_derives_error;
 
 impl GraphDeclarationFacts {
-    #[instrument(level = "debug", skip(file))]
+    #[instrument(level = "debug", skip(file, getters))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn collect(
         file: &SharedParsedFile,
+        getters: Option<&super::super::super::getters::GetterFields>,
     ) -> Self {
         let error_impls = known_error_impls(file.syntax());
         let declarations = file
@@ -43,7 +44,7 @@ impl GraphDeclarationFacts {
                         generics_empty: item.generics.params.is_empty(),
                         single_struct_lifetime: single_struct_lifetime(item),
                         only_lifetime: item.only_lifetime(),
-                        fields: fields(file, &item.fields),
+                        fields: fields(file, &item.fields, getters, &item.ident.to_string()),
                         variants: Vec::new(),
                     })
                 }
@@ -69,7 +70,12 @@ impl GraphDeclarationFacts {
                             .map(|variant| GraphVariant {
                                 name: variant.ident.to_string(),
                                 allowed_attrs: allowed_attrs(&variant.attrs),
-                                fields: fields(file, &variant.fields),
+                                fields: fields(
+                                    file,
+                                    &variant.fields,
+                                    None,
+                                    &item.ident.to_string(),
+                                ),
                             })
                             .collect(),
                     })
@@ -90,29 +96,46 @@ fn visibility(value: &syn::Visibility) -> Visibility {
     }
 }
 
-#[instrument(level = "trace", skip(file, value))]
-fn fields(file: &SharedParsedFile, value: &syn::Fields) -> GraphFields {
+#[instrument(level = "trace", skip(file, value, getters))]
+fn fields(
+    file: &SharedParsedFile,
+    value: &syn::Fields,
+    getters: Option<&super::super::super::getters::GetterFields>,
+    owner: &str,
+) -> GraphFields {
     match value {
         syn::Fields::Named(fields) => GraphFields::Named(
             fields
                 .named
                 .iter()
-                .map(|field| graph_field(file, field))
+                .map(|field| {
+                    graph_field(
+                        file,
+                        field,
+                        getters.and_then(|getters| {
+                            getters.get(&(owner.to_string(), field.ident.as_ref()?.to_string()))
+                        }),
+                    )
+                })
                 .collect(),
         ),
         syn::Fields::Unnamed(fields) => GraphFields::Unnamed(
             fields
                 .unnamed
                 .iter()
-                .map(|field| graph_field(file, field))
+                .map(|field| graph_field(file, field, None))
                 .collect(),
         ),
         syn::Fields::Unit => GraphFields::Unit,
     }
 }
 
-#[instrument(level = "trace", skip(file, field))]
-fn graph_field(file: &SharedParsedFile, field: &syn::Field) -> GraphField {
+#[instrument(level = "trace", skip(file, field, getter))]
+fn graph_field(
+    file: &SharedParsedFile,
+    field: &syn::Field,
+    getter: Option<&super::super::super::getters::GetterStorageFacts>,
+) -> GraphField {
     let type_range = span_range(file.source(), field.ty.span());
     let type_text = type_range.map(|(start, end)| file.source()[start..end].to_string());
     let borrowed_referent = match &field.ty {
@@ -176,9 +199,17 @@ fn graph_field(file: &SharedParsedFile, field: &syn::Field) -> GraphField {
                     mutable: reference.mutability.is_some(),
                 }
             })
+        } else if getter
+            .is_some_and(|getter| getter.target() == crate::config::ErrorFieldStrategy::Owned)
+        {
+            Some(StringStorage::Borrowed {
+                lifetime: Some("static".to_string()),
+                mutable: false,
+            })
         } else {
             None
         },
+        getter_storage: getter.cloned(),
     }
 }
 

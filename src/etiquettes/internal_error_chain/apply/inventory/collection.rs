@@ -238,6 +238,7 @@ fn find_candidates(
                         unique_struct: struct_counts.get(&type_name) == Some(&1),
                         type_range: field.type_range(),
                         lifetime_candidate,
+                        getter_storage: field.getter_storage().clone(),
                     },
                     initializer: InitializerEvidence {
                         target: strategy,

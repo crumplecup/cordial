@@ -237,6 +237,33 @@ initializer, generated API, and consumer evidence in the shared IR. The 37 other
 String candidates and 175 required fields absent from the original inventory
 remain separate open work.
 
+#### Reversible storage for derived getters
+
+Ordinary `derive_getters::Getters` file getters now retain their derive during
+storage conversion. Borrowed mode generates a collision-free local alias of
+`&'static str` and adds `#[getter(copy)]` to the field. This avoids derive-getters
+0.5.0 generating an `&'static self` receiver for a direct reference field.
+The alias carries a versioned doc marker naming its owner and the inserted
+attribute. Owned mode restores `String`, allocating initializers, and the
+original derive, removing only the generated alias and attribute.
+
+Collection records alias identity, edit ranges, derive provenance, and deletion
+eligibility in the shared IR. The marker alone grants no authority: reversal
+requires the expected private alias target and attribute, with no extra alias
+references anywhere in the collected crate, including opaque macro tokens.
+User aliases and customized or edited generated declarations remain untouched.
+Storage compliance resolves the actual local alias target rather than treating
+the marker as a policy exemption.
+
+Compiling fixtures exercise ordinary local getter calls, exact caller location,
+both strategy directions, exact source restoration, repeat apply, dry runs, and
+worklist claims followed by a fresh policy scan. Customized getters remain
+blocked: derive-getters 0.5.0 does not combine `rename` with `copy`. Unresolved
+getter consumers, conditional alias declarations, and cfg-gated tuple-binding
+initializers still need further evidence before conversion. These limits remain
+part of the real-project coverage backlog; fixture coverage is not a new
+Amenable coverage count.
+
 ## First implementation decision
 
 Start with slice 0. It sets the minimum evidence needed for the existing

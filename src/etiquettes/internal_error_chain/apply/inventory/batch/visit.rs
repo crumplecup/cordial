@@ -332,7 +332,14 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
             let field_name = candidate.field_name.clone();
             let call_site = candidate.field.kind == FieldKind::CallSiteFile;
             for attr in &item.attrs {
-                if call_site && call_site_attribute_is_stable(attr, &item.attrs, &field_name) {
+                if call_site
+                    && call_site_attribute_is_stable(
+                        attr,
+                        &item.attrs,
+                        &field_name,
+                        self.file.syntax(),
+                    )
+                {
                     continue;
                 }
                 if attr.path().is_ident("derive") {
