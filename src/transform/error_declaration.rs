@@ -1,18 +1,14 @@
 //! Construct an owned error chain from resolved source evidence.
 
-use std::ops::ControlFlow;
-
 use crate::error::CordialResult;
-use crate::ir::{
-    EdgeKind, FunctionSourceSyntax, FunctionUnwrapSyntax, IrView, ItemKind, NodeId, NodeKind,
-};
+use crate::ir::{EdgeKind, IrView, ItemKind, NodeId, NodeKind};
 use crate::objects::SourceSpan;
 
-use super::failure_propagation::resolved_callee;
-use super::{FailurePropagationBlocker, FunctionEdit, FunctionEditPlan};
+use super::{FailurePropagationBlocker, FunctionEdit, FunctionEditPlan, PanicSiteSelection};
 
 mod names;
-pub use names::GeneratedErrorNames;
+mod native;
+pub use names::{GeneratedErrorNames, GeneratedErrorSource};
 
 /// Result of constructing declarations independently of signature migration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,7 +26,7 @@ pub enum ErrorDeclarationDecision {
 pub enum ErrorDeclarationBlocker {
     /// The same receiver proof required for failure propagation is unavailable.
     FailureEvidence(FailurePropagationBlocker),
-    /// Only the known standard I/O error contract is currently supported.
+    /// The native type is not one of the supported concrete Error contracts.
     UnsupportedSourceType,
     /// Module insertion or naming evidence is absent or inconsistent.
     InvalidModuleEvidence,
@@ -48,7 +44,7 @@ pub struct OwnedErrorDeclaration {
     plan: FunctionEditPlan,
 }
 
-/// Generate a fresh owned error chain for one resolved standard I/O failure.
+/// Generate a fresh owned error chain for one supported native failure.
 ///
 /// This operation selects owned storage explicitly; it does not implement the
 /// borrowed policy or infer that any arbitrary Result error implements Error.
@@ -61,9 +57,34 @@ pub fn plan_owned_error_declaration(
     function: NodeId,
     site_index: usize,
 ) -> CordialResult<ErrorDeclarationDecision> {
+    plan_owned_error_group_declaration(ir, &[PanicSiteSelection::new(function, site_index)])
+}
+
+/// Construct one owned chain with a distinct wrapper per native source type.
+///
+/// Selections and native identities come from shared located call evidence.
+/// Standard I/O and integer parsing errors are supported, including the core
+/// ParseIntError reexport. Native alternatives are deduplicated and sorted.
+/// No signature edits or failure-site rewrites are part of this operation.
+#[tracing::instrument(level = "debug", skip(ir, sites), err(level = "warn"))]
+#[hotpath::measure]
+pub fn plan_owned_error_group_declaration(
+    ir: &dyn IrView,
+    sites: &[PanicSiteSelection],
+) -> CordialResult<ErrorDeclarationDecision> {
     use ErrorDeclarationBlocker as Blocker;
     use ErrorDeclarationDecision::{NoCandidate, Ready, Refused};
     let failure = |blocker| Refused(Blocker::FailureEvidence(blocker));
+    let mut sites = sites.to_vec();
+    sites.sort_by_key(|site| (site.function().value(), site.index()));
+    let Some(first) = sites.first() else {
+        return Ok(NoCandidate);
+    };
+    if sites.windows(2).any(|pair| pair[0] == pair[1]) {
+        return Ok(Refused(Blocker::InvalidModuleEvidence));
+    }
+    let function = first.function();
+    let site_index = first.index();
     let Some(node) = ir
         .node(function)
         .filter(|node| node.kind() == &NodeKind::Item(ItemKind::Fn))
@@ -74,23 +95,41 @@ pub fn plan_owned_error_declaration(
     else {
         return Ok(failure(FailurePropagationBlocker::MissingFunctionEvidence));
     };
-    let Some(site) = facts.unwraps().get(site_index) else {
+    let Some(_) = facts.unwraps().get(site_index) else {
         return Ok(NoCandidate);
-    };
-    if let Some(reason) = validate_source(ir, function, &facts, site)? {
-        return Ok(Refused(reason));
-    }
-    let Some(names) = node
-        .weight()
-        .name()
-        .as_deref()
-        .and_then(|name| GeneratedErrorNames::for_site(name, site_index))
-    else {
-        return Ok(Refused(Blocker::UnsupportedName));
     };
     let parents = ir.parents(function, EdgeKind::Contains);
     let [module] = parents.as_slice() else {
         return Ok(Refused(Blocker::InvalidModuleEvidence));
+    };
+    let mut natives = std::collections::BTreeSet::new();
+    for selection in &sites {
+        let Some(selected) = ir.function_source_syntax(selection.function())? else {
+            return Ok(failure(FailurePropagationBlocker::MissingFunctionEvidence));
+        };
+        if ir.parents(selection.function(), EdgeKind::Contains) != parents
+            || selected.source_digest() != facts.source_digest()
+        {
+            return Ok(Refused(Blocker::InvalidModuleEvidence));
+        }
+        let Some(site) = selected.unwraps().get(selection.index()) else {
+            return Ok(failure(FailurePropagationBlocker::InvalidEvidence));
+        };
+        match native::resolve(ir, selection.function(), &selected, site)? {
+            Ok(native) => {
+                natives.insert(native);
+            }
+            Err(reason) => return Ok(Refused(reason)),
+        }
+    }
+    let natives: Vec<_> = natives.into_iter().collect();
+    let Some(names) = node
+        .weight()
+        .name()
+        .as_deref()
+        .and_then(|name| GeneratedErrorNames::for_site(name, site_index, &natives))
+    else {
+        return Ok(Refused(Blocker::UnsupportedName));
     };
     let Some(scope) = ir.source_module_scope(*module)? else {
         return Ok(Refused(Blocker::InvalidModuleEvidence));
@@ -123,25 +162,4 @@ pub fn plan_owned_error_declaration(
             vec![FunctionEdit::new((offset..offset).into(), declaration)],
         ),
     )))
-}
-
-/// Require each grouped failure to share the generated native I/O contract.
-#[tracing::instrument(level = "trace", skip(ir, function, facts, site), err(level = "warn"))]
-pub(super) fn validate_source(
-    ir: &dyn IrView,
-    function: NodeId,
-    facts: &FunctionSourceSyntax,
-    site: &FunctionUnwrapSyntax,
-) -> CordialResult<Option<ErrorDeclarationBlocker>> {
-    let callee = match resolved_callee(ir, function, facts, site)? {
-        ControlFlow::Break(reason) => {
-            return Ok(Some(ErrorDeclarationBlocker::FailureEvidence(reason)));
-        }
-        ControlFlow::Continue(callee) => callee,
-    };
-    Ok((!callee
-        .result_contract()
-        .as_ref()
-        .is_some_and(|contract| contract.error_identity().as_deref() == Some("::std::io::Error")))
-    .then_some(ErrorDeclarationBlocker::UnsupportedSourceType))
 }

@@ -38,10 +38,16 @@ pub(super) fn report(
         )?;
         writeln!(
             io::stdout(),
-            "  Owned error: {}, {}, {}; Result signatures: {}",
+            "  Owned error: {}, {}; sources: {}; Result signatures: {}",
             repair.error_names().parent(),
             repair.error_names().kind(),
-            repair.error_names().source(),
+            repair
+                .error_names()
+                .sources()
+                .iter()
+                .map(|source| format!("{} [{}]", source.wrapper(), source.native_type()))
+                .collect::<Vec<_>>()
+                .join(", "),
             repair.functions().join(", ")
         )?;
         writeln!(

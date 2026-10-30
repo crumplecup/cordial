@@ -1,0 +1,33 @@
+
+
+#[derive(Debug)]
+struct $PARENT {
+    kind: ::std::boxed::Box<$KIND>,
+}
+
+#[derive(Debug)]
+enum $KIND {
+$VARIANTS
+}
+
+impl ::core::fmt::Display for $PARENT {
+    fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        ::core::fmt::Display::fmt(self.kind.as_ref(), formatter)
+    }
+}
+
+impl ::core::fmt::Display for $KIND {
+    fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+$DISPLAY
+        }
+    }
+}
+
+impl ::std::error::Error for $PARENT {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self.kind.as_ref() {
+$SOURCES
+        }
+    }
+}

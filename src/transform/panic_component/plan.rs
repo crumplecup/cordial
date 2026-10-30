@@ -2,7 +2,7 @@
 
 use super::super::{
     ErrorDeclarationDecision, FunctionEdit, FunctionEditPlan, ReturnLiftDecision,
-    plan_owned_error_declaration, plan_owned_error_return_lift,
+    plan_owned_error_group_declaration, plan_owned_error_return_lift,
 };
 use super::{
     PanicComponentBlocker, PanicComponentDecision, PanicComponentPreview, PanicSiteSelection,
@@ -12,7 +12,7 @@ use crate::error::CordialResult;
 use crate::ir::{IrView, NodeId};
 use std::ops::ControlFlow;
 
-/// Preview one resolved I/O panic migration through transitive known callers.
+/// Preview one resolved native panic migration through transitive known callers.
 ///
 /// Walk incoming edges to a fixed point, stopping at the explicit boundary.
 /// Recursive relationships and repeated sites share one signature lift. All
@@ -28,7 +28,7 @@ pub fn plan_owned_panic_component(
     plan_owned_panic_group(ir, &[PanicSiteSelection::new(leaf, site_index)], boundary)
 }
 
-/// Compose all selected I/O failures with one declaration and caller closure.
+/// Compose all selected native failures with one declaration and caller closure.
 ///
 /// Selection order does not affect names or edits. Each affected function must
 /// have every unwrap selected; duplicates and incompatible sources refuse the
@@ -51,7 +51,7 @@ pub fn plan_owned_panic_group(
         return Ok(Refused(Blocker::InvalidEvidence));
     }
     let leaf = first.function();
-    let declaration = match plan_owned_error_declaration(ir, leaf, first.index())? {
+    let declaration = match plan_owned_error_group_declaration(ir, &sites)? {
         ErrorDeclarationDecision::Ready(plan) => plan,
         ErrorDeclarationDecision::NoCandidate => return Ok(NoCandidate),
         ErrorDeclarationDecision::Refused(reason) => {
@@ -68,11 +68,6 @@ pub fn plan_owned_panic_group(
         let Some(site) = facts.unwraps().get(selected.index()) else {
             return Ok(Refused(Blocker::InvalidEvidence));
         };
-        if let Some(reason) =
-            super::super::error_declaration::validate_source(ir, selected.function(), &facts, site)?
-        {
-            return Ok(Refused(Blocker::Declaration(reason)));
-        }
         match callers::collect(ir, selected.function(), boundary) {
             ControlFlow::Continue(callers) => functions.extend(callers),
             ControlFlow::Break(reason) => return Ok(Refused(reason)),

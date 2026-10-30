@@ -7,6 +7,7 @@ support guarded dry run and writes through the shared source transaction and
 `quality --apply --etiquette panics`, with exact worklist claims. Broader use
 and target forms remain explicit refusals. Multiple selected standard-I/O
 unwraps now share one declaration, transitive caller adaptation, and write.
+Distinct I/O and integer-parsing sources have concrete generated alternatives.
 
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
@@ -185,6 +186,76 @@ analysis database. Reuse the existing IR/edit machinery rather than building
 parallel function, type, or ownership indexes.
 
 ## Reusable transformation operations
+
+### Error families and nested variants
+
+**Design direction; not implemented.** Derive the escaping error family at each
+function from the shared call and error-flow IR. Starting with locally produced
+failures, propagate the failures that can escape a callee through its callers.
+An error that is handled does not escape that boundary. Recursive components
+require a fixed point; they must not produce recursive error declarations.
+Unresolved calls or conversions leave an explicit incomplete family, rather
+than pretending that the known members exhaust it.
+
+Canonicalize complete families and count how many distinct function contracts
+share the exact set. A configurable TOML reuse threshold, initially envisioned
+as three functions, identifies families worth representing with a reusable
+nested enum. This threshold is separate from the existing
+`kind_fanout_max_call_sites` rule. Runtime frequency and repeated calls within
+one function must not inflate the family reuse count. Preserve the member
+identities and their producing sites; two domain failures that wrap the same
+foreign type need not have the same meaning.
+
+For example, functions that can return both I/O and integer-parsing failures
+can share a named family. A caller that also produces another failure can
+contain that family and its additional alternative. Its return type should
+describe its own reachable family, rather than always borrowing main's entire
+umbrella. Each generated declaration needs a consumer and must preserve the
+typed source chain and the configured Owned/Borrowed storage policy.
+
+Frequent sets can overlap: `{Io, ParseInt}` and `{Io, Utf8}` share a member
+without either set containing the other. Reuse therefore does not guarantee a
+balanced tree. Provide a TOML policy controlling whether one source identity
+may be reused in multiple generated family types:
+
+- **Reuse permitted:** overlapping named families may share the same source
+  type. Preserve precise caller contracts, without duplicating a member
+  ambiguously within one family or creating cycles.
+- **Reuse forbidden:** a source member has one containing family; choose
+  groupings that are disjoint or nested subsets. Crossing families such as
+  the two above cannot both be selected. Some functions may consequently need
+  a broader enclosing contract. Report the exact reachable set and the broader
+  represented set, with the policy reason; never claim that those sets match.
+
+The exact computed family remains shared IR evidence under both policies.
+Representation choices must not alter that evidence. Here reuse concerns a
+source type appearing in multiple family declarations, not copying an error
+value or declaring that unrelated domain failures are interchangeable. The
+configuration spelling and default remain to be selected before implementation.
+
+Conversions at call edges know the originating family; do not generate
+competing blanket `From<Io>` implementations for an umbrella containing both
+overlapping families. Structural clarity is the first objective; allocation,
+layout, and runtime improvements require measurement.
+
+The current generated component uses one flat native-source family. Existing
+Kind payload checks explicitly reject a nested Kind or parent error, so nested
+generation requires coordinated lint and explain changes with compliance and
+regression tests. Do not disable those checks or teach apply an architecture
+the selected strategy rejects.
+
+Implement this incrementally:
+
+1. Collect and enrich resolved failure identities, escaping/handled flow, and
+   per-function family completeness in shared IR; test chains, diamonds,
+   recursion, and unresolved boundaries before generating any new code.
+2. Test exact-family canonicalization, configurable reuse selection, and both
+   source-reuse policies in isolation, including overlap, reported contract
+   broadening, and same-foreign-type domain distinctions.
+3. Generate one supported nested family and its call-edge conversions, with
+   corresponding lint compliance and refusal tests.
+4. Compose that operation through a complete binary migration, then extend to
+   deeper and overlapping families while preserving exact worklist claims.
 
 Build concrete operations needed by the examples, then generalize their shared
 contracts. Candidate operations include:
@@ -422,8 +493,10 @@ compiled explanations with actual strategy support as it lands.
   - [x] Jointly compose multiple resolved standard-I/O failures, including
     several unwraps in one function and distinct leaves with shared callers.
     Validate all selections before generating one shared error chain and write.
-  - [ ] Construct alternatives for different native error types; repeated I/O
-    failures currently share one source variant rather than redundant variants.
+  - [x] Construct distinct alternatives for standard I/O and integer parsing
+    errors, retaining concrete native sources and their caller locations.
+    Repeated native identities share a wrapper and conversion. Broader source
+    types still require evidence of their Error contract before generation.
 - [ ] **Phase 4 — wider closure.** Extend to several callers,
   modules, existing Result surfaces, and recursive components. Add each fixed
   signature, macro, cfg, or async boundary only with collected evidence and
@@ -909,3 +982,41 @@ alternatives, testing each new declaration/conversion independently before
 composing it. Wider modules and call identities, Option absence, expect context,
 and reverse construction remain explicit coverage work, rather than implicit
 promises of the grouped I/O implementation.
+
+### Distinct native alternatives (sixteenth follow-up cycle)
+
+`plan_owned_error_group_declaration` is an isolated declaration operation. It
+resolves each selected receiver through shared function/call facts and gathers
+supported concrete native identities. It generates one parent and Kind with a
+separate wrapper and `From` conversion for each distinct native type. This
+operation does not lift any signature or rewrite any panic site. The component
+planner consumes the resulting declaration token using the existing return,
+propagation, caller, boundary, and transaction operations.
+
+The supported identities are `::std::io::Error` and
+`::std::num::ParseIntError` (including its `::core::num` reexport). This is an
+explicit set of known Error implementations, not a claim that every absolute
+standard-library type implements Error; String errors remain refused. Native
+alternatives are sorted and deduplicated before naming and generation. Every
+wrapper retains its original native type, owned file, and line. `From` and
+wrapper construction use `#[track_caller]`; propagation uses bare `?`.
+
+`GeneratedErrorNames::sources()` exposes every variant, wrapper name, and native
+identity for review. `source()` continues to identify the primary wrapper for
+single-source consumers. All generated names, including additional wrappers,
+are reserved against the shared module identifier inventory. The CLI preview
+now lists all native alternatives. Exact worklist claims still happen only
+after the whole group writes successfully.
+
+Tests first supply a conversion consumer around the isolated declarations and
+verify both source chains by downcasting, native error kinds, file/line and
+Display location. A separate executable specimen then composes the migration
+through leaf, caller, and binary main, preserving success and returning either
+typed failure. CLI coverage verifies both alternatives in dry run and both
+worklist claims after a warning-free compiling migration. Existing I/O-only
+declaration and grouped-migration regression tests remain passing.
+
+**Next:** Option absence and explicit panic construction need source-free Kind
+alternatives and collected failure/context evidence. Expect requires a policy
+for preserving its diagnostic context. Wider module/call identities, existing
+Result surfaces, and reverse construction remain separate composition work.

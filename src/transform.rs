@@ -24,8 +24,8 @@ pub use closed_panic::{
     apply_closed_panic_migration, plan_closed_owned_panic_component, plan_closed_owned_panic_group,
 };
 pub use error_declaration::{
-    ErrorDeclarationBlocker, ErrorDeclarationDecision, GeneratedErrorNames, OwnedErrorDeclaration,
-    plan_owned_error_declaration,
+    ErrorDeclarationBlocker, ErrorDeclarationDecision, GeneratedErrorNames, GeneratedErrorSource,
+    OwnedErrorDeclaration, plan_owned_error_declaration, plan_owned_error_group_declaration,
 };
 pub use failure_propagation::{
     FailurePropagationBlocker, FailurePropagationDecision, plan_result_unwrap_propagation,

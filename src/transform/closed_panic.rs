@@ -68,7 +68,7 @@ pub struct ClosedPanicMigration {
     source_root: PathBuf,
 }
 
-/// Close a fresh I/O panic migration through the selected unit main.
+/// Close a fresh native panic migration through the selected unit main.
 #[tracing::instrument(level = "debug", skip(ir, leaf, main), err(level = "warn"))]
 #[hotpath::measure]
 pub fn plan_closed_owned_panic_component(

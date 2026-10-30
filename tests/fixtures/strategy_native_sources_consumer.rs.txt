@@ -1,0 +1,33 @@
+fn converted(mode: u32, expected_line: &mut u32) -> Result<u32, $PARENT> {
+    *expected_line = line!() + 1;
+    let first = io_operation(mode == 1)?;
+    let input = if mode == 2 { "invalid" } else { "5" };
+    *expected_line = line!() + 1;
+    let second = parse_operation(input)?;
+    Ok(first + second)
+}
+
+fn main() {
+    let mut expected_line = 0;
+    assert_eq!(converted(0, &mut expected_line).unwrap(), entry(0));
+    for mode in [1, 2] {
+        let error = converted(mode, &mut expected_line).unwrap_err();
+        let wrapper = std::error::Error::source(&error).unwrap();
+        let source = std::error::Error::source(wrapper).unwrap();
+        if mode == 1 {
+            let wrapper = wrapper.downcast_ref::<$IO_SOURCE>().unwrap();
+            assert_eq!(wrapper.line, expected_line);
+            assert_eq!(wrapper.file, file!());
+            let source = source.downcast_ref::<std::io::Error>().unwrap();
+            assert_eq!(source.kind(), std::io::ErrorKind::PermissionDenied);
+        } else {
+            let wrapper = wrapper.downcast_ref::<$PARSE_SOURCE>().unwrap();
+            assert_eq!(wrapper.line, expected_line);
+            assert_eq!(wrapper.file, file!());
+            let source = source.downcast_ref::<std::num::ParseIntError>().unwrap();
+            assert_eq!(source.kind(), &std::num::IntErrorKind::InvalidDigit);
+        }
+        assert!(error.to_string().contains(&format!("{}:{expected_line}", file!())));
+    }
+    println!("both typed sources and caller locations preserved");
+}

@@ -244,6 +244,55 @@ fn one_unresolved_source_blocks_all_joint_claims_and_writes() -> miette::Result<
     Ok(())
 }
 
+#[test]
+fn different_native_sources_are_previewed_and_claimed_together() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = copy_specimen("apply_error_sources")?;
+    let home = tempfile::tempdir().into_diagnostic()?;
+    let store = store(root.path(), home.path());
+    let path = root.path().join("src/main.rs");
+    let original = fs::read(&path).into_diagnostic()?;
+    run(
+        root.path(),
+        home.path(),
+        &["quality", "--etiquette", "panics"],
+    )?;
+    assert_eq!(list(&store)?.items().len(), 2);
+    let mut dry_args = APPLY.to_vec();
+    dry_args.push("--dry-run");
+    let dry = run(root.path(), home.path(), &dry_args)?;
+    let output = String::from_utf8_lossy(&dry.stdout);
+    for description in [
+        "2 site(s) would be converted",
+        "CordialLeafSite0ErrorSource [::std::io::Error]",
+        "CordialLeafSite0ErrorSourceParseInt [::std::num::ParseIntError]",
+        "2 worklist item(s) would be checked off",
+    ] {
+        assert!(output.contains(description), "{output}");
+    }
+    assert_eq!(fs::read(&path).into_diagnostic()?, original);
+    let applied = run(root.path(), home.path(), APPLY)?;
+    let output = String::from_utf8_lossy(&applied.stdout);
+    assert!(
+        output.contains("2 worklist item(s) checked off"),
+        "{output}"
+    );
+    assert!(
+        list(&store)?
+            .items()
+            .iter()
+            .all(|item| *item.state() == ItemState::Done)
+    );
+    build(root.path())?;
+    assert_eq!(execute(root.path(), &[])?.stdout, b"success\n");
+    for (mode, native) in [("io", "PermissionDenied"), ("parse", "InvalidDigit")] {
+        let failure = execute(root.path(), &[mode])?;
+        assert_eq!(failure.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&failure.stderr).contains(native));
+    }
+    Ok(())
+}
+
 fn store(root: &Path, home: &Path) -> StoreLayout {
     let slug = cordial::project_slug_from_path(root);
     StoreLayout::from_root(home.join(&slug), slug)
