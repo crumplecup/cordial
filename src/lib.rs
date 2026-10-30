@@ -410,7 +410,8 @@ pub use transform::{
     ErrorDeclarationBlocker, ErrorDeclarationDecision, FailurePropagationBlocker,
     FailurePropagationDecision, FunctionEdit, FunctionEditPlan, GeneratedErrorNames,
     OwnedErrorDeclaration, ReturnLiftBlocker, ReturnLiftDecision, ReturnLiftEdit, ReturnLiftPlan,
-    plan_infallible_return_lift, plan_owned_error_declaration, plan_result_unwrap_propagation,
+    plan_infallible_return_lift, plan_owned_error_declaration, plan_owned_error_return_lift,
+    plan_result_unwrap_propagation,
 };
 #[cfg(feature = "quality")]
 pub use worklist::{

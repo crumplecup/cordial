@@ -666,3 +666,24 @@ signature migration: the production preview only appends declarations.
 one resolved caller adaptation independently. Compose only after both contracts
 pass. Function values, public/trait/extern boundaries, cross-module resolution,
 and unknown callers still prevent claiming a closed writable component.
+
+### Generated error return lifting (eighth follow-up cycle)
+
+`plan_owned_error_return_lift` lifts an infallible function's success paths to
+the error contract selected by `plan_owned_error_declaration`. Both operations
+consume the same shared IR snapshot. The declaration token carries its origin,
+names, path, and digest; scope and namespace evidence must establish that the
+consumer belongs to the same module. A caller cannot substitute an arbitrary
+error type string. Existing Result contracts require a separate operation.
+
+The shared success renderer now accepts the chosen error contract while
+preserving the existing Infallible operation. `apply_error_return` independently
+checks early and tail successes, then compiles and executes the lifted form with
+the generated declarations. The original unwrap is deliberately unchanged in
+this isolated test. Different modules, stale evidence, fixed signatures, and
+already fallible functions refuse planning. No writer or worklist claim is added.
+
+**Next:** prove adaptation of one resolved caller to a planned fallible callee,
+then compose declaration, success lifting, and failure propagation. Caller
+closure remains a separate obligation before connecting a complete migration
+to the atomic writer.

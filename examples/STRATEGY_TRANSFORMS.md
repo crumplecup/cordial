@@ -14,6 +14,7 @@ Run one with `cargo run --example apply_panic_result -- fail`.
 | `apply_unwrap_lookalike` | Refuse rewriting a user-defined same-spelling method as Result propagation | Prints `7`; its `unwrap` returns `u32`. |
 | `apply_result_propagation` | Preserve source evaluation and side-effect order while propagating a resolved failure | Prints `Ok(8)` with a trace; initially panics with `fail`. |
 | `apply_error_declaration` | Construct an owned parent / Kind / native source chain from a resolved I/O failure | Prints `8`; initially panics with `fail`. |
+| `apply_error_return` | Lift early and tail successes to a generated error contract independently of failure rewriting | Prints `8`, or `11` with `early`; initially panics with `fail`. |
 
 The integration harness in `tests/strategy_specimens.rs` copies each example's
 actual `main.rs` bytes into an isolated Cargo package at `src/main.rs`, with an
@@ -77,3 +78,12 @@ Names and the insertion anchor come from shared IR; collisions, unsupported
 source types, stale snapshots, and corrupt facts refuse generation. The planner
 only appends declarations; signature and caller migration remain independent
 operations before composition into a complete apply unit.
+
+`tests/strategy_error_return.rs` lifts an infallible function to the declaration
+planner's selected error type. The contract is bound to the same module and
+source snapshot; callers cannot supply an arbitrary type string. The test
+combines the two previews in its disposable specimen, compiles without warnings,
+and executes early and tail success paths. The original failure still panics:
+this isolates success lifting from the subsequent propagation operation. Stale
+contracts, different modules, existing Result contracts, and fixed signatures
+are refused before returning edits.

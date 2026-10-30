@@ -10,7 +10,7 @@ use crate::ir::{
 type EditDecision = ControlFlow<ReturnLiftBlocker, Vec<ReturnLiftEdit>>;
 
 #[tracing::instrument(level = "trace", skip(facts))]
-pub(super) fn edits_from_facts(facts: &FunctionSourceSyntax) -> EditDecision {
+pub(super) fn edits_from_facts(facts: &FunctionSourceSyntax, error_type: &str) -> EditDecision {
     let signature = facts.signature_range();
     let body = facts.body_range();
     if !contains(signature, facts.output_range())
@@ -19,21 +19,21 @@ pub(super) fn edits_from_facts(facts: &FunctionSourceSyntax) -> EditDecision {
     {
         return ControlFlow::Break(ReturnLiftBlocker::InvalidRanges);
     }
-    let mut edits = vec![signature_edit(facts)];
+    let mut edits = vec![signature_edit(facts, error_type)];
     edits.extend(success_edits(facts)?);
     edits.sort_by_key(|edit| (edit.range().start(), edit.range().end()));
     ControlFlow::Continue(edits)
 }
 
 #[tracing::instrument(level = "trace", skip(facts))]
-fn signature_edit(facts: &FunctionSourceSyntax) -> ReturnLiftEdit {
+fn signature_edit(facts: &FunctionSourceSyntax, error_type: &str) -> ReturnLiftEdit {
     let (prefix, original) = match facts.declared_output() {
         DeclaredFunctionOutput::ImplicitUnit => (" -> ", "()"),
         DeclaredFunctionOutput::Explicit(syntax) => ("", syntax.as_str()),
     };
     ReturnLiftEdit::new(
         facts.output_range().clone(),
-        format!("{prefix}::core::result::Result<{original}, ::core::convert::Infallible>"),
+        format!("{prefix}::core::result::Result<{original}, {error_type}>"),
     )
 }
 

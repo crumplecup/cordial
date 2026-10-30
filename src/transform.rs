@@ -6,6 +6,7 @@
 
 mod error_declaration;
 mod failure_propagation;
+mod generated_contract;
 mod preview;
 mod return_lift;
 mod success_edits;
@@ -20,5 +21,5 @@ pub use preview::{FunctionEdit, FunctionEditPlan};
 
 pub use return_lift::{
     ReturnLiftBlocker, ReturnLiftDecision, ReturnLiftEdit, ReturnLiftPlan,
-    plan_infallible_return_lift,
+    plan_infallible_return_lift, plan_owned_error_return_lift,
 };
