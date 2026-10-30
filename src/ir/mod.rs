@@ -40,6 +40,7 @@ pub use attrs::{
 };
 
 pub use crate_kind::{ATTR_BINARY_ENTRY_PATHS, ATTR_CRATE_KINDS, CrateKind};
+mod input_snapshot;
 #[cfg(feature = "rustdoc")]
 pub use crate_load::{load_crate_ir_if_missing, resolve_crate_root, shadow_dep_rustdoc_path};
 pub use edge::{EdgeKind, EdgeWeight};
@@ -51,6 +52,7 @@ pub use function_source::{
 };
 pub use graph::{CrateIr, CrateIrSnapshot};
 pub use indexes::{AttrKey, AttrValue, IrIndexes, QualifiedPath};
+pub use input_snapshot::{ATTR_CARGO_MANIFEST_SNAPSHOT, FileSnapshot};
 pub use node::{ItemKind, NodeId, NodeKind, NodeWeight};
 pub use origin::{ATTR_IR_ORIGIN, ATTR_SYN_DOC_PEER, ORIGIN_RUSTDOC, ORIGIN_SOURCE};
 pub use query::{BasicQuery, PanicSitesQuery, Query, QueryBuilder};

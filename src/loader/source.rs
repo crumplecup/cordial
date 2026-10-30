@@ -66,6 +66,9 @@ pub struct SourceLoadView {
     /// Binary entry paths supplied by the target's Cargo metadata.
     #[setters(generate)]
     binary_entries: Vec<PathBuf>,
+    /// Manifest bytes observed alongside Cargo target discovery.
+    #[setters(generate)]
+    manifest_snapshot: Option<crate::ir::FileSnapshot>,
     #[getter(skip)]
     cache_token: Arc<CacheToken>,
 }

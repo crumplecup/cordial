@@ -101,6 +101,7 @@ impl SourceLoadView {
             files,
             crate_kinds,
             binary_entries: Vec::new(),
+            manifest_snapshot: None,
             cache_token: SESSION_TOKEN.with(|current| {
                 current
                     .borrow()

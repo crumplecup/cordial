@@ -2,8 +2,9 @@
 
 **Status:** Shared-IR foundations, isolated operations, transitive composition,
 and closed single-module binary migrations through a unit-main adapter are
-implemented and tested against executable specimens. Writer and CLI apply
-integration remain ahead; broader use and target forms are explicit refusals.
+implemented and tested against executable specimens. Closed migrations now
+support guarded dry run and writes through the shared source transaction. CLI
+apply integration remains ahead; broader use and target forms are refusals.
 
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
@@ -799,3 +800,34 @@ operation through apply and worklist reporting. Keep the initial supported
 domain explicit: single-module private functions, one resolved I/O panic site,
 and one binary unit main. Broader source/error variants, cross-module identity
 resolution, and reverse transitions remain later work.
+
+### Guarded migration writes (thirteenth follow-up cycle)
+
+`apply_closed_panic_migration` accepts only the closed token, validates the
+original source and manifest snapshots, renders the located edits, and stages
+the complete single-file migration. Dry run performs the same checks without
+creating temporary source files. Both modes report planned files, written
+files, converted panic sites, and changed function contracts.
+
+The token retains every source file used to prove closure, including unchanged
+files, plus the manifest observed during Cargo target discovery. These inputs
+are shared IR facts. Before writing, their digests and source-directory Rust
+file membership must still agree. An untouched file edit, addition, removal,
+manifest change, symlink, or replayed token refuses before replacement. The
+directory walk checks membership only; it does not reconstruct source facts or
+parse Rust. Concurrent external writes cannot be made fully transactional;
+checks are repeated immediately before replacement.
+
+The existing error-field writer now delegates to the same staging and rollback
+implementation. Source permissions and original-file backups are preserved;
+the existing multi-file error-field test remains a regression check. The new
+writer tests compile and execute the actual written output, check failure
+source preservation and successful output, and exercise stale proof inputs,
+dry run, symlinks, and permissions. No CLI behavior or worklist claims have
+changed in this cycle.
+
+**Next:** route supported panic findings through this closed writer in the
+existing apply workflow, report refusals and effects, and claim only matching
+worklist items after real successful writes. Keep the initial single-module,
+one-I/O-site, private-function, binary-unit-main contract explicit. Wider
+closure, additional error alternatives, and reverse construction follow.

@@ -1,8 +1,8 @@
 //! Strategy operations planned from shared IR before composing a closed apply unit.
 //!
-//! These primitives deliberately have no disk writer or CLI entry point. A
-//! return signature change creates caller obligations; its preview is not a
-//! complete migration until a component planner has discharged them.
+//! A return signature change creates caller obligations; its preview is not a
+//! complete migration until a component planner has discharged them. Only a
+//! closed migration token can reach the source transaction writer.
 
 mod call_target;
 mod caller_adaptation;
@@ -20,8 +20,8 @@ pub use caller_adaptation::{
     plan_owned_caller_adaptation,
 };
 pub use closed_panic::{
-    ClosedPanicBlocker, ClosedPanicDecision, ClosedPanicMigration,
-    plan_closed_owned_panic_component,
+    ClosedPanicBlocker, ClosedPanicDecision, ClosedPanicMigration, PanicMigrationApplySummary,
+    apply_closed_panic_migration, plan_closed_owned_panic_component,
 };
 pub use error_declaration::{
     ErrorDeclarationBlocker, ErrorDeclarationDecision, GeneratedErrorNames, OwnedErrorDeclaration,

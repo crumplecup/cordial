@@ -21,7 +21,8 @@ impl SourceLoadView {
             read_source_files(&src_root)?,
             target.kinds().clone(),
         )
-        .with_binary_entries(target.binary_entries().clone());
+        .with_binary_entries(target.binary_entries().clone())
+        .with_manifest_snapshot(target.manifest_snapshot().clone());
         Ok(view)
     }
 
@@ -65,6 +66,13 @@ impl SourceLoadView {
     #[hotpath::measure(impl_type = "SourceLoadView")]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
         let root = ir.root();
+        if let Some(snapshot) = self.manifest_snapshot() {
+            ir.set_attr(
+                root,
+                crate::ir::ATTR_CARGO_MANIFEST_SNAPSHOT,
+                serde_json::to_value(snapshot)?,
+            )?;
+        }
         ir.set_attr(
             root,
             crate::ir::ATTR_BINARY_ENTRY_PATHS,

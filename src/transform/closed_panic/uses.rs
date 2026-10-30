@@ -7,8 +7,10 @@ use super::super::PanicComponentPreview;
 use super::ClosedPanicBlocker as Blocker;
 use crate::error::CordialResult;
 use crate::ir::{
-    BasicQuery, EdgeKind, IrView, NodeId, NodeKind, SourceCallResolution, SourcePathUse,
+    BasicQuery, EdgeKind, FileSnapshot, IrView, NodeId, NodeKind, SourceCallResolution,
+    SourcePathUse,
 };
+use crate::objects::SourceSpan;
 
 type CallSites = HashSet<(NodeId, usize, usize)>;
 
@@ -16,39 +18,48 @@ type CallSites = HashSet<(NodeId, usize, usize)>;
 pub(super) fn validate(
     ir: &dyn IrView,
     component: &PanicComponentPreview,
-) -> CordialResult<Option<Blocker>> {
+) -> CordialResult<ControlFlow<Blocker, Vec<FileSnapshot>>> {
     let mut names = HashMap::new();
     for function in component.functions() {
         let Some(name) = ir
             .node(*function)
             .and_then(|node| node.weight().name().clone())
         else {
-            return Ok(Some(Blocker::IncompleteUseEvidence(*function)));
+            return Ok(ControlFlow::Break(Blocker::IncompleteUseEvidence(
+                *function,
+            )));
         };
         if names
             .insert(name.trim_start_matches("r#").to_owned(), *function)
             .is_some()
         {
-            return Ok(Some(Blocker::IncompleteUseEvidence(*function)));
+            return Ok(ControlFlow::Break(Blocker::IncompleteUseEvidence(
+                *function,
+            )));
         }
     }
     let mut seen = CallSites::new();
+    let mut inputs = Vec::new();
     for module in ir
         .nodes_matching(&BasicQuery::all_nodes())
         .into_iter()
         .filter(|node| node.kind() == &NodeKind::Module)
     {
         let Some(scope) = ir.source_module_scope(module.id())? else {
-            return Ok(Some(Blocker::MissingUseInventory(module.id())));
+            return Ok(ControlFlow::Break(Blocker::MissingUseInventory(
+                module.id(),
+            )));
         };
         if scope.opaque() {
-            return Ok(Some(Blocker::UnresolvedScope(module.id())));
+            return Ok(ControlFlow::Break(Blocker::UnresolvedScope(module.id())));
         }
         let Some(inventory) = scope.uses() else {
-            return Ok(Some(Blocker::MissingUseInventory(module.id())));
+            return Ok(ControlFlow::Break(Blocker::MissingUseInventory(
+                module.id(),
+            )));
         };
         if let Some(range) = inventory.opaque_ranges().first() {
-            return Ok(Some(Blocker::OpaqueSyntax {
+            return Ok(ControlFlow::Break(Blocker::OpaqueSyntax {
                 module: module.id(),
                 range: range.clone(),
             }));
@@ -66,17 +77,33 @@ pub(super) fn validate(
                 component,
                 &mut seen,
             )? {
-                return Ok(Some(Blocker::UnresolvedUse {
+                return Ok(ControlFlow::Break(Blocker::UnresolvedUse {
                     module: module.id(),
                     range: usage.range().clone(),
                 }));
             }
         }
+        let Some(span) = module.weight().span() else {
+            return Ok(ControlFlow::Break(Blocker::IncompleteUseEvidence(
+                module.id(),
+            )));
+        };
+        inputs.push(FileSnapshot::new(
+            span.file().to_path_buf(),
+            scope.source_digest(),
+        ));
     }
-    coverage(ir, component, &seen)
+    if let Some(blocker) = coverage(ir, component, &seen)? {
+        return Ok(ControlFlow::Break(blocker));
+    }
+    Ok(ControlFlow::Continue(inputs))
 }
 
-#[tracing::instrument(level = "trace", skip(ir, module, usage, target, component, seen), err(level = "warn"))]
+#[tracing::instrument(
+    level = "trace",
+    skip(ir, module, usage, target, component, seen),
+    err(level = "warn")
+)]
 fn resolved_use(
     ir: &dyn IrView,
     module: NodeId,

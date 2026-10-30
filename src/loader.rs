@@ -49,6 +49,9 @@ pub struct CrateTarget {
     /// Binary entry paths supplied by Cargo metadata, not inferred from names.
     #[new(default)]
     binary_entries: Vec<PathBuf>,
+    /// Manifest identity observed alongside the target's Cargo metadata.
+    #[new(default)]
+    manifest_snapshot: Option<crate::ir::FileSnapshot>,
 }
 
 impl CrateTarget {

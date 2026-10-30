@@ -1,10 +1,11 @@
 #![cfg(feature = "panics")]
 
 use cordial::{
-    ATTR_BINARY_ENTRY_PATHS, ATTR_CRATE_KINDS, ATTR_FUNCTION_SOURCE_SYNTAX,
-    ATTR_SOURCE_MODULE_SCOPE, ClosedPanicBlocker as Blocker, ClosedPanicDecision as Decision,
-    EdgeKind, ErrorDeclarationDecision, IrView, ReturnLiftBlocker, ReturnLiftDecision,
-    plan_closed_owned_panic_component, plan_owned_error_declaration, plan_owned_main_return_lift,
+    ATTR_BINARY_ENTRY_PATHS, ATTR_CARGO_MANIFEST_SNAPSHOT, ATTR_CRATE_KINDS,
+    ATTR_FUNCTION_SOURCE_SYNTAX, ATTR_SOURCE_MODULE_SCOPE, ClosedPanicBlocker as Blocker,
+    ClosedPanicDecision as Decision, EdgeKind, ErrorDeclarationDecision, IrView, ReturnLiftBlocker,
+    ReturnLiftDecision, plan_closed_owned_panic_component, plan_owned_error_declaration,
+    plan_owned_main_return_lift,
 };
 use miette::IntoDiagnostic;
 use std::fs;
@@ -212,6 +213,24 @@ fn missing_and_inconsistent_inventory_never_establish_closure() -> miette::Resul
     let main = ir
         .node_by_path("main")
         .ok_or_else(|| miette::miette!("missing main"))?;
+    let root = ir.root();
+    let manifest = ir
+        .node(root)
+        .and_then(|node| node.attr(ATTR_CARGO_MANIFEST_SNAPSHOT).cloned())
+        .ok_or_else(|| miette::miette!("missing manifest snapshot"))?;
+    let mut wrong_manifest = manifest.clone();
+    wrong_manifest["path"] = serde_json::json!("/another/Cargo.toml");
+    ir.set_attr(root, ATTR_CARGO_MANIFEST_SNAPSHOT, wrong_manifest)
+        .into_diagnostic()?;
+    assert_eq!(
+        plan_closed_owned_panic_component(&ir, leaf, 0, main).into_diagnostic()?,
+        Decision::Refused(Blocker::MissingManifestSnapshot)
+    );
+    ir.set_attr(root, ATTR_CARGO_MANIFEST_SNAPSHOT, serde_json::Value::Null)
+        .into_diagnostic()?;
+    assert!(plan_closed_owned_panic_component(&ir, leaf, 0, main).is_err());
+    ir.set_attr(root, ATTR_CARGO_MANIFEST_SNAPSHOT, manifest)
+        .into_diagnostic()?;
     let module = ir.parents(leaf, EdgeKind::Contains)[0];
     let original = serde_json::to_value(ir.source_module_scope(module).into_diagnostic()?)
         .into_diagnostic()?;

@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use sha2::{Digest, Sha256};
 use tracing::instrument;
 
 use crate::error::{CordialError, CordialResult};
@@ -121,7 +122,11 @@ fn workspace_targets(project_root: &Path) -> CordialResult<Vec<CrateTarget>> {
                         .filter(|target| target.kind.contains(&cargo_metadata::TargetKind::Bin))
                         .map(|target| target.src_path.clone().into_std_path_buf())
                         .collect(),
-                ),
+                )
+                .with_manifest_snapshot(Some(crate::ir::FileSnapshot::new(
+                    package.manifest_path.clone().into_std_path_buf(),
+                    Sha256::digest(std::fs::read(&package.manifest_path)?).into(),
+                ))),
         );
     }
 

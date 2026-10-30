@@ -72,6 +72,7 @@ pub mod rustdoc;
 #[cfg(feature = "rustdoc")]
 mod rustdoc_loader;
 mod session;
+mod source_write;
 mod store;
 mod store_lock;
 mod targets;
@@ -355,16 +356,17 @@ pub use hooks::{
     RenderView, Reporter, SourceEnrichView, SourceEnricher, WorkspaceAssessView, WorkspaceAssessor,
 };
 pub use ir::{
-    ATTR_BINARY_ENTRY_PATHS, ATTR_CRATE_KINDS, ATTR_FUNCTION_CALL_FLOW,
-    ATTR_FUNCTION_SOURCE_SYNTAX, ATTR_IR_ORIGIN, ATTR_SOURCE_MODULE_SCOPE, ATTR_SYN_DOC_PEER,
-    AttrKey, AttrValue, BasicQuery, CallResolutionFailure, CrateIr, CrateIrSnapshot, CrateKind,
-    CrateView, CrateViewMut, DeclaredFunctionOutput, EdgeKind, EdgeWeight, FunctionBoundary,
-    FunctionCallFlow, FunctionCallSyntax, FunctionNestedScope, FunctionReturn, FunctionReturnFlow,
-    FunctionSourceSyntax, FunctionSuccessExit, FunctionTail, FunctionUnwrapSyntax, IrIndexes,
-    IrMut, IrView, ItemKind, NestedScopeKind, NodeId, NodeKind, NodeView, NodeWeight,
-    ORIGIN_RUSTDOC, ORIGIN_SOURCE, PanicSitesQuery, QualifiedPath, Query, QueryBuilder,
-    ResolvedFunctionCall, ReturnValue, SourceByteRange, SourceCallResolution, SourceEntryContract,
-    SourceModuleScope, SourcePathUse, SourceResultContract, SourceUseInventory, WorkspaceIr,
+    ATTR_BINARY_ENTRY_PATHS, ATTR_CARGO_MANIFEST_SNAPSHOT, ATTR_CRATE_KINDS,
+    ATTR_FUNCTION_CALL_FLOW, ATTR_FUNCTION_SOURCE_SYNTAX, ATTR_IR_ORIGIN, ATTR_SOURCE_MODULE_SCOPE,
+    ATTR_SYN_DOC_PEER, AttrKey, AttrValue, BasicQuery, CallResolutionFailure, CrateIr,
+    CrateIrSnapshot, CrateKind, CrateView, CrateViewMut, DeclaredFunctionOutput, EdgeKind,
+    EdgeWeight, FileSnapshot, FunctionBoundary, FunctionCallFlow, FunctionCallSyntax,
+    FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionSourceSyntax,
+    FunctionSuccessExit, FunctionTail, FunctionUnwrapSyntax, IrIndexes, IrMut, IrView, ItemKind,
+    NestedScopeKind, NodeId, NodeKind, NodeView, NodeWeight, ORIGIN_RUSTDOC, ORIGIN_SOURCE,
+    PanicSitesQuery, QualifiedPath, Query, QueryBuilder, ResolvedFunctionCall, ReturnValue,
+    SourceByteRange, SourceCallResolution, SourceEntryContract, SourceModuleScope, SourcePathUse,
+    SourceResultContract, SourceUseInventory, WorkspaceIr,
 };
 #[cfg(feature = "impl_coverage")]
 pub use ir::{
@@ -411,10 +413,11 @@ pub use transform::{
     ClosedPanicMigration, ErrorDeclarationBlocker, ErrorDeclarationDecision,
     FailurePropagationBlocker, FailurePropagationDecision, FunctionEdit, FunctionEditPlan,
     GeneratedErrorNames, OwnedCallerAdaptation, OwnedErrorDeclaration, PanicComponentBlocker,
-    PanicComponentDecision, PanicComponentPreview, ReturnLiftBlocker, ReturnLiftDecision,
-    ReturnLiftEdit, ReturnLiftPlan, plan_closed_owned_panic_component, plan_infallible_return_lift,
-    plan_owned_caller_adaptation, plan_owned_error_declaration, plan_owned_error_return_lift,
-    plan_owned_main_return_lift, plan_owned_panic_component, plan_result_unwrap_propagation,
+    PanicComponentDecision, PanicComponentPreview, PanicMigrationApplySummary, ReturnLiftBlocker,
+    ReturnLiftDecision, ReturnLiftEdit, ReturnLiftPlan, apply_closed_panic_migration,
+    plan_closed_owned_panic_component, plan_infallible_return_lift, plan_owned_caller_adaptation,
+    plan_owned_error_declaration, plan_owned_error_return_lift, plan_owned_main_return_lift,
+    plan_owned_panic_component, plan_result_unwrap_propagation,
 };
 #[cfg(feature = "quality")]
 pub use worklist::{
