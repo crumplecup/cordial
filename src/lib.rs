@@ -415,6 +415,7 @@ pub use transform::{
     CallerAdaptationBlocker, CallerAdaptationDecision, ClosedPanicBlocker, ClosedPanicDecision,
     ClosedPanicMigration, ErrorContractBroadening, ErrorDeclarationBlocker,
     ErrorDeclarationDecision, ErrorFamilyConflict, ErrorFamilyContract, ErrorFamilyDisposition,
+    ErrorFamilyLayoutDecision, ErrorFamilyLayoutNode, ErrorFamilyLayoutPlan,
     ErrorFamilyRepresentationBlocker, ErrorFamilyRepresentationPlan, ErrorFamilyReuseBlocker,
     ErrorFamilyReuseIssue, ErrorFamilyReusePlan, ErrorFamilyReusePolicy, FailurePropagationBlocker,
     FailurePropagationDecision, FunctionEdit, FunctionEditPlan, GeneratedErrorNames,
@@ -422,10 +423,11 @@ pub use transform::{
     PanicComponentDecision, PanicComponentPreview, PanicMigrationApplySummary, PanicSiteSelection,
     ReturnLiftBlocker, ReturnLiftDecision, ReturnLiftEdit, ReturnLiftPlan, ReusableErrorFamily,
     SourceErrorReuse, apply_closed_panic_migration, plan_closed_owned_panic_component,
-    plan_closed_owned_panic_group, plan_error_family_representation, plan_error_family_reuse,
-    plan_infallible_return_lift, plan_owned_caller_adaptation, plan_owned_error_declaration,
-    plan_owned_error_group_declaration, plan_owned_error_return_lift, plan_owned_main_return_lift,
-    plan_owned_panic_component, plan_owned_panic_group, plan_result_unwrap_propagation,
+    plan_closed_owned_panic_group, plan_error_family_layout, plan_error_family_representation,
+    plan_error_family_reuse, plan_infallible_return_lift, plan_owned_caller_adaptation,
+    plan_owned_error_declaration, plan_owned_error_group_declaration, plan_owned_error_return_lift,
+    plan_owned_main_return_lift, plan_owned_panic_component, plan_owned_panic_group,
+    plan_result_unwrap_propagation,
 };
 #[cfg(feature = "quality")]
 pub use worklist::{

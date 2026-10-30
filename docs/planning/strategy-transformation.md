@@ -12,8 +12,9 @@ Shared IR now also retains bounded per-function error-family summaries,
 including propagation through recursive callers and explicit analysis gaps.
 An isolated reuse preview counts exact contracts and compares source-reuse
 policies. A representation preview separates exact evidence from proposed
-contracts, with explicit broadening and refusal. Nested declaration generation
-remains unimplemented.
+contracts, with explicit broadening and refusal. A declaration-layout operation
+deduplicates represented sets and plans acyclic child families and direct
+alternatives. Rendering and applying nested declarations remain unimplemented.
 
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
@@ -195,8 +196,8 @@ parallel function, type, or ownership indexes.
 
 ### Error families and nested variants
 
-**Shared evidence and representation previews implemented; declaration nesting
-not implemented.** Derive the escaping error family at each
+**Shared evidence, representation and declaration layout implemented; nested
+declaration rendering not implemented.** Derive the escaping error family at each
 function from the shared call and error-flow IR. Starting with locally produced
 failures, propagate the failures that can escape a callee through its callers.
 An error that is handled does not escape that boundary. Recursive components
@@ -246,11 +247,14 @@ competing blanket `From<Io>` implementations for an umbrella containing both
 overlapping families. Structural clarity is the first objective; allocation,
 layout, and runtime improvements require measurement.
 
-The current generated component uses one flat native-source family. Existing
-Kind payload checks explicitly reject a nested Kind or parent error, so nested
-generation requires coordinated lint and explain changes with compliance and
-regression tests. Do not disable those checks or teach apply an architecture
-the selected strategy rejects.
+The current generated component uses one flat native-source family. The
+existing architecture already supports nested error families: an outer Kind
+variant carries a native source wrapper, and that wrapper contains the boxed
+inner Kind and call-site context. Generate this supported shape rather than
+putting a Kind directly inside another Kind. The existing
+`nested_kind_on_native_source_is_accepted` regression test demonstrates the
+distinction. Preserve the checks rejecting direct Kind and root-parent payloads;
+nested generation does not require relaxing them.
 
 Implement this incrementally:
 
@@ -1079,8 +1083,8 @@ evidence, including identity and origin while retaining the digest.
 **Next:** canonicalize complete family sets and test reuse selection in
 isolation, retaining producer identities for domain distinctions. Settle the
 TOML threshold and source-reuse policy before exposing configuration. Broader
-typed error resolution and call-edge conversions remain explicit gaps;
-nested generation still requires coordinated architecture lint changes.
+typed error resolution and call-edge conversions remain explicit gaps.
+Nested generation should use the existing native-source-wrapper architecture.
 
 ### Exact-family reuse selection (eighteenth follow-up cycle)
 
@@ -1122,8 +1126,8 @@ bytes untouched.
 
 **Next:** define a representation operation for one selected nested family,
 including exact versus represented contracts and explicit broadening/refusal
-for rejected crossings. Connect configuration with documented defaults,
-coordinate Kind-payload lint policy, and prove the isolated declarations and
+for rejected crossings. Connect configuration with documented defaults, and
+prove isolated declarations using the supported nested source wrappers and
 call-edge conversions before composing them into production apply.
 
 ### Explicit contract representation (nineteenth follow-up cycle)
@@ -1166,8 +1170,56 @@ specimen compiles without warnings and executes.
 **Next:** use these explicit contracts to plan a declaration layout, deduplicating
 equal represented sets while preserving each exact consumer mapping. Select
 strict subset edges without duplicating an alternative inside one enum.
-Coordinate the existing prohibition on nested Kind payloads with validated
-generated nesting and test isolated source-chain-preserving declarations and
-conversions. Neither preview authorizes edits; placement, storage policy,
-conversion coverage, component closure, configuration, and production
+Represent child families through native source wrappers containing their own
+Kind, and test isolated source-chain-preserving declarations and conversions.
+Neither preview authorizes edits; placement, storage policy, conversion
+coverage, component closure, configuration, and production
 integration remain separate obligations.
+
+### Acyclic declaration layout (twentieth follow-up cycle)
+
+`plan_error_family_layout` derives its inputs from shared IR through the
+representation operation. It refuses the whole layout when any representation
+blocker remains. A ready preview merges equal represented sets into one family
+node while retaining every exact group, its distinct function consumers, and
+the group-to-family mapping. Empty error contracts need no declaration. Equal
+nominal types with different producer sets remain distinct identities.
+
+Family nodes have explicit child indices and direct alternatives. Children
+are strict subsets, ordered before their parents by set size and canonical
+identity, so recursive call evidence cannot create recursive declarations.
+These edges represent nested error families, not literal Kind-in-Kind payloads.
+Each child is carried through a native source wrapper containing its own Kind,
+as the existing architecture already permits. Expanding a node through its
+children yields its complete represented member
+payload exactly once: no omitted alternatives and no duplicate path to one
+source inside an enum.
+
+Under no-source-reuse, maximal proper subsets determine children. This forms
+a forest with one direct owner per source, including required return contracts
+below the preferred reuse threshold. The threshold selects preferred reusable
+families; it cannot waive the unique-ownership policy for an infrequent return
+contract. Under permitted reuse, only selected families become children.
+Frequency, then size and canonical identity, choose nonoverlapping children
+when candidates cross. Other selected families retain their own exact return
+contracts; they are not ambiguously added to the same parent. This is a
+deterministic layout, not a minimum-depth or optimal allocation claim.
+
+Tests exercise broadened-set deduplication, complete consumer mapping, nested
+and disjoint ownership, overlap under permitted reuse, threshold behavior,
+producer separation, refused/infallible scopes, source preservation, and stable
+ordering. All 455 four-source contract triples run under both source-reuse
+policies and two thresholds. Tests expand every node recursively and compare
+the complete member/provenance payload without deduplicating the result. They
+also verify strict edges, one direct owner and at most one parent when reuse
+is forbidden. The production-loaded specimen compiles warning-free and runs.
+
+**Next:** render an isolated owned nested declaration from this layout, using
+shared module insertion/name evidence and the existing nested source-wrapper
+shape. Preserve the Error::source chain through each level, verify compliance
+with the existing architecture checks, and prove explicit child-to-parent
+conversions without ambiguous blanket native-error conversions. Borrowed
+storage, placement across modules,
+call-edge adaptation/closure, configuration defaults, and production apply
+composition remain separate work. A layout preview cannot reach the source
+transaction writer.
