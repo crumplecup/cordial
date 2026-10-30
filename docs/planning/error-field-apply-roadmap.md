@@ -1,9 +1,179 @@
 # Error field `--apply` roadmap
 
-**Status:** Active. Work in small, independently gated slices. This plan covers
+**Status:** Paused after the verified 117-field Amenable round trip. Resume from
+the handoff below. This plan covers
 `cordial quality --apply --etiquette internal_error_chain` under the
 `[internal_error_chain] field_strategy` switch. It is a roadmap, not a claim
 that every borrowed error can be generated automatically.
+
+## Resumption handoff (2026-10-29)
+
+### Verified checkpoint
+
+Cordial commit `d0e71af` adds candidate-specific getter receiver evidence and
+shared macro syntax. The isolated Amenable copy completed owned → borrowed →
+owned for **117 fields across 33 files**, up from 113 fields across 29 files.
+All four Kani filename candidates now work: `KaniModelError`,
+`KaniAlreadyExists`, `KaniAlreadyLocked`, and `KaniWriteHalfClosed`.
+
+Both directions passed `cargo test --workspace --locked` and
+`cargo test -p amenable_time --features chrono-tz,jiff --locked`. Repeat apply
+was a no-op; crate source returned byte for byte to `baseline-owned`, and
+`cordial.toml` returned to its owned-policy checkpoint `f232abf`. Borrowed
+apply claimed 117 matching worklist items and left 219 manual findings. Reverse
+apply claimed zero items because its refreshed owned-policy list contained no
+matching storage findings; that is not a reverse-coverage failure.
+
+The original `/home/erik/repos/amenable` was not modified. The independent Git
+repository `/home/erik/repos/amenable_copy` is restored to owned policy and
+baseline crate source. Its recovery commits are `cc50221` (borrowed), `6548149`
+(owned restoration), and `c596a8d` (benchmark notes). Read the copy's
+`docs/error-strategy-benchmark.md` for experiment history. Recheck its worktree
+before resuming; do not reset it over later work.
+
+The Cordial build-tier gate passed. Five findings from the unrun deep tier
+remained unverified. No verifier proof run or feature-powerset run was part of
+this checkpoint. Do not describe this as a globally zero-finding result.
+
+### What the numbers mean
+
+| Cohort | Evidence at pause | Remaining work |
+| --- | --- | --- |
+| Original 118 call-site filename fields | 117 round-trip successfully | `AmenableError::file` reports `FieldUse`; unresolved macro/alias evidence remains. |
+| Other 37 String candidates | Still blocked in the borrowed preview | 35 report `OutsideFile`, two report `Initializer`. These categories need causal evidence before choosing transformations. |
+| Original inventory gap: 113 Kind tuple payloads and 62 other non-Copy fields | Absent from the first ordinary field-candidate comparison | Reconcile current shared graph coverage with compliance findings. Existing graph fixtures do not establish migration coverage for these 175 real fields. |
+| Parent Kind storage | Five additional findings in the original benchmark | Track connected parent/Kind/source units separately; do not add these to the 175-field denominator. |
+
+The borrowed preview's **38 blockers** are one filename field plus 37 other
+String fields. They are not the complete unsupported inventory. The original
+330 field findings, 175-field gap, and worklist totals are historical cohort
+counts, not a fresh census after later changes to either repository.
+
+### Recommended order of work
+
+The next substantial step is to make the unsupported inventory complete and
+actionable, then select a family whose missing evidence unlocks several units.
+Do not spend successive phases pursuing one more filename solely to reach
+118/118. Amenable has provided real patterns and reliable regression cases;
+full coverage of this one library is not the completion criterion.
+
+1. **Reconcile findings, candidates, and graph units in the shared IR.** Join
+   field-storage and Kind-storage compliance sites to declaration identity,
+   named field or tuple position, and conversion component. Inventory every
+   relevant owned non-Copy slot, including enum payloads, `PathBuf`, native and
+   foreign source fields, and boxed Kind storage. Distinguish a missing
+   candidate from a known candidate whose conversion is unsafe. Record the
+   exact blocking site and reason: visibility/API change, unresolved receiver
+   or alias, macro contract, unknown initializer, owned runtime origin,
+   missing lifetime anchor, or source-trait constraint. Report readiness for
+   each direction without treating a borrowed-to-owned capability as proof of
+   owned-to-borrowed capability. A refused unit remains visible in the survey.
+   This is an inventory phase, not permission to rewrite all 175 fields.
+2. **Use that survey to choose the next reusable provenance/closure family.**
+   Inspect `UnknownCaseIdSource::id` and `UnknownKaniProofIdSource::proof` first:
+   these are the two current `Initializer` refusals. The 35 `OutsideFile`
+   cases include dynamic context such as proof IDs, paths, names, dates, and
+   routes; `OutsideFile` alone does not prove an external caller is the cause.
+   For example, `KaniSpawnFailedSource::new(..., proof_id: impl Into<String>)`
+   supplies no borrowed lifetime contract. Collect constructor and forwarding
+   signatures, argument origins, consumers, and escape constraints before
+   deciding whether a family can borrow. Prefer a missing relationship shared
+   by several cases to a special rule for one error name.
+3. **Extend connected Kind/source migration from a representative real unit.**
+   The existing planner already introduces and removes one anchored lifetime
+   across supported private, cross-file graphs. Extend its IR evidence rather
+   than writing another planner. Amenable's public `AmenableError`, its
+   `Box<AmenableErrorKind>`, derived `From` implementations, bridge macros,
+   foreign sources, and `?` callers go beyond that proven boundary. Inventory
+   the whole connected component before editing any member. Native source and
+   Kind references must have a caller-owned lifetime; foreign errors and
+   `Error::source()` must retain their typed chain and required lifetime.
+   Public signature changes require an explicit API-impact decision. A public
+   type's private static filename conversion does not establish permission for
+   a public lifetime-changing migration.
+4. **Resolve the final filename only if its evidence work is reusable.**
+   `crates/amenable/src/error/wrapper.rs` defines `AmenableError::file`, a
+   derived getter, the `AmenableResult<T>` alias, and `bridge_error!` /
+   `error_from!` definitions and uses. These are investigation entry points,
+   not a proven list of harmless blockers. Inspect its exact unresolved IR
+   sites; distinguish actual field consumers from syntax that preserves the
+   storage contract. Add declaration/alias resolution or a proven macro
+   contract if justified. Never delete the conservative guard or whitelist
+   these names to make the final field pass.
+5. **Check generality on another real library.** Select a project and isolated
+   copy before running a strategy-flip survey. Compare unsupported families
+   with Amenable's; prioritize common missing evidence and keep project-specific
+   cases explicit. Do not copy a large workspace into `/tmp`, modify original
+   libraries, or assume an unselected project is authorized for writes.
+
+Keep a runtime-created value as a manual design case when no valid borrowed
+origin exists. Never leak allocations, invent `'static`, stringify a source
+error, or change the code's purpose to increase an automation percentage.
+
+### Implementation entry points and boundaries
+
+- `src/loader/source/macros.rs` owns lazy, snapshot-shared Rust syntax inside
+  supported macro token islands. It handles supported assertion/format/list
+  arguments and Amenable harness item bodies, including nested invocations;
+  it does not expand arbitrary macros. A parsed payload alone is not proof of
+  the macro's behavior. Unknown payloads remain opaque.
+- `apply/getter_uses.rs` and its `identity.rs` / `visit.rs` children collect
+  declaration-based receiver evidence. It is serialized **once** in
+  `apply/inventory/resolution/ir.rs`, then read back from the shared IR.
+  `apply/inventory/resolution/getter_consumers.rs` connects that evidence to
+  candidate-specific field and macro closure. Do not duplicate the receiver
+  inventory into every getter or reconstruct it during apply.
+- `apply/inventory/collection.rs` currently selects named string-storage fields
+  on error structs, skipping `source` and `kind`; enum payloads and other
+  storage shapes need reconciliation with the graph machinery. Start the
+  inventory work here and with the existing graph declaration/edge facts.
+- `apply/inventory/batch/visit.rs` records alias, field, macro, generated-code,
+  and other use sites. `apply/patch.rs` chooses coarse blocker reasons. Improve
+  those reasons using collected evidence rather than adding a reporter scan.
+- The broader graph and pipeline sections below describe the existing private
+  lifetime planner and IR contract. They are implementation history, not a
+  claim that public Amenable graphs are already covered.
+
+All new source evidence must enter through the shared loader and collection /
+enrichment path. Transform planning consumes `IrView`; located edits consume
+source text and digests through `SourceEditView`. Do not introduce a standalone
+parse, downstream syntax walk, private source index, or fallback scan when a
+fact is missing. Opaque macro evidence belongs in the shared loader and IR.
+Keep aliases, deref forwarding, generic specializations, conditional methods,
+unknown attributes, and unknown macro contracts conservative until resolved.
+
+### Resume and validation checklist
+
+- [ ] Inspect Cordial and copy worktrees, read this handoff and the copy's
+  benchmark notes, and identify the baseline before changing policy.
+- [ ] Produce the reconciled survey above, with located blockers and separate
+  inventory/automation denominators. Preserve unresolved cases as evidence.
+- [ ] Reduce the selected family to compiling positive and rejection fixtures;
+  extend shared IR facts and their consumer, then prove both directions.
+- [ ] Require dry-run preservation, preview/write agreement, repeat-apply
+  idempotence, and whole-component refusal when one edge is unresolved. Retain
+  stale-snapshot and multi-file rollback checks.
+- [ ] Retain the existing getter/shared-source regression coverage. Relevant
+  Cargo targets are `internal_error_chain_apply_getters`, `shared_source`,
+  `internal_error_chain_apply`, `internal_error_chain_apply_cross_file`,
+  `internal_error_chain_apply_public`, and `internal_error_chain_apply_write`.
+  Choose focused targets for the actual change; do not repeat checks without
+  a remaining risk.
+- [ ] If binary behavior changes, use `just install`; documentation and file
+  rearrangements alone do not need installation. Use the ordinary binary and
+  default stores. Run the copy's preview under a deliberately flipped policy.
+- [ ] When coverage changes, perform the real subset round trip, test affected
+  consumers and feature-specific backend paths, commit benchmark transforms
+  as recovery points, and restore the copy's source and owned configuration.
+  Periodically clean its accumulated build artifacts. Do not rerun an unchanged
+  full benchmark merely for another documentation checkpoint.
+- [ ] Work from `cordial open`, explain new findings, fix and check them, claim
+  only resolved items, and run `cordial submit --tier build --deny-open` before
+  the phase commit. Save the all/deep tier for the end of the plan. Record any
+  deferred tier findings separately from the build-tier result.
+- [ ] Update this survey with new supported families, exact residual blockers,
+  test evidence, and recovery commits. Do not equate remaining refusals with
+  implementation bugs or report full coverage from candidate counts alone.
 
 ## Goal and current boundary
 
