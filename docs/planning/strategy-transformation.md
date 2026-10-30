@@ -60,7 +60,8 @@ error variants, conversions, and changed function signatures.
 ### Two independent capabilities
 
 1. **Construction:** panic-based source → a coherent typed-error design without
-   historical metadata. This drives the architecture and first acceptance test.
+   historical metadata. This drives the architecture and first composed
+   acceptance test, after the constituent transforms pass in isolation.
 2. **Preservation:** richer design → simpler design → richer design while
    retaining supported details. Additional metadata can improve fidelity, but
    absence of metadata must not disable generic construction.
@@ -201,6 +202,33 @@ behavioral change, generated obligations, edits, and postconditions. Store
 these obligations as structured facts rather than strings interpreted later.
 Names and imports must be collision-safe and stable on repeat apply.
 
+### Prove individual transforms before composing them
+
+Build complexity incrementally. Collection and enrichment can anticipate the
+evidence needed by the larger migration, but transform implementation and tests
+must advance one operation at a time. A broad IR model does not require a broad
+first rewrite.
+
+Start with independently testable operations: generate a declaration, lift a
+return signature and its successful paths, rewrite a proven failure site,
+adapt a caller, and handle an executable boundary. Give each its own minimal
+input, typed preconditions, expected edits, compiling target, behavior checks,
+and relevant refusal cases. An isolated fixture may supply the surrounding
+target structure needed to exercise that operation; it proves that operation,
+not construction of the whole design from panic.
+
+Once the individual operations are established, compose the smallest compatible
+pair and verify their combined obligations. Grow through a leaf migration,
+one caller, and a boundary before adding branches, multiple sources, additional
+callers, or recursion. Each new example should introduce one new obligation
+where practical, making failures attributable to the new capability.
+
+Keep the independently authored panic-to-typed-error executable as the first
+complete construction milestone. It is a destination for the initial operations,
+not the first implementation task. Isolated development does not authorize
+writing an incomplete migration to a user's program: each exposed apply unit
+must still be closed and atomic.
+
 ### Compose before writing
 
 A leaf return-type change creates obligations at callers. Callers may combine
@@ -261,9 +289,16 @@ do not add blanket lint suppression or self-approved exceptions to accommodate
 test inputs. If target/scoping support is missing, include that in the first
 phase rather than hiding input from the transformation itself.
 
-### First specimen and growth matrix
+### Isolated specimens and the first construction milestone
 
-Start with a private leaf calling a proven `Result`-returning operation,
+Begin with small runnable specimens for the individual transforms described
+above, then add specimens for their smallest compositions. Use the same
+production shared-IR and edit paths for these tests; do not substitute a
+test-only text-rewrite implementation. Apply the relevant checks from the test
+protocol below to each operation, adding chain-wide checks as composition grows.
+
+For the first complete construction milestone, use a private leaf calling a
+proven `Result`-returning operation,
 unwrapping it, and returning its successful value to one private caller. Give
 the executable a defined success/failure scenario and boundary. A helper with
 an explicit resolved `Result` signature can make the first source type
@@ -337,29 +372,37 @@ compiled explanations with actual strategy support as it lands.
 
 ## Implementation roadmap
 
-- [ ] **Phase 0 — executable specification and discovery.** Add the first Cargo
-  example and integration-test harness. Prove the production loader inventories
-  its leaf, caller, failure site, source type, and boundary. Document fixture
-  scoping. Preserve a compiling rejection example. No claim of apply coverage
-  until an actual transform passes its executable contract.
-- [ ] **Phase 1 — first complete construction.** Add missing typed IR evidence,
-  target-strategy selection, generated umbrella/source structure, return
-  lifting, caller adaptation, and executable boundary handling. Deliver one
-  minimal panic → typed-error example end to end, without retained metadata.
-  The dry run presents one complete plan; the writer commits one complete unit.
-- [ ] **Phase 2 — reusable return and failure operations.** Cover branches,
+- [ ] **Phase 0 — executable specification and discovery.** Add isolated Cargo
+  specimens and an integration-test harness. Prove the production loader
+  inventories the declarations, signatures, failure sites, source types,
+  callers, and boundaries required for the initial operations. Document fixture
+  scoping and add missing typed IR evidence through collection/enrichment.
+  Preserve a compiling rejection example. No claim of apply coverage until an
+  actual transform passes its executable contract.
+- [ ] **Phase 1 — individual transforms.** Implement and test declaration
+  generation, return lifting, failure-site rewriting, caller adaptation, and
+  boundary handling separately, in dependency order. Establish each operation's
+  evidence, edits, behavior, idempotence, and refusal contract before adding it
+  to a chain. Supply surrounding structure explicitly in isolated fixtures.
+- [ ] **Phase 2 — incremental composition and first construction.** Combine the
+  proven operations in the smallest compatible steps: pairs, a complete leaf,
+  one caller, then an executable boundary. Add target-strategy selection as
+  needed. Finish with a minimal panic → typed-error executable without retained
+  metadata or pre-supplied error architecture. The dry run presents one complete
+  plan; the writer commits one complete unit.
+- [ ] **Phase 3 — richer return and failure patterns.** Cover branches,
   early returns, multiple typed sources, Option absence, and explicit panic
   failures through the shared operations. Add expect only with its context
   contract. Validate negative cases and deterministic naming.
-- [ ] **Phase 3 — composition and wider closure.** Extend to several callers,
+- [ ] **Phase 4 — wider closure.** Extend to several callers,
   modules, existing Result surfaces, and recursive components. Add each fixed
   signature, macro, cfg, or async boundary only with collected evidence and
   executable fixtures. Preserve atomic refusal for unknown edges.
-- [ ] **Phase 4 — reverse construction and preservation.** Transform independently
+- [ ] **Phase 5 — reverse construction and preservation.** Transform independently
   authored typed-error code to panic, then construct typed errors afresh.
   Preserve extra details where supported; metadata-assisted exact restoration
   remains an additional capability rather than the core proof of construction.
-- [ ] **Phase 5 — real programs and additional strategies.** Survey isolated real
+- [ ] **Phase 6 — real programs and additional strategies.** Survey isolated real
   projects, map new failures to specimen families, and measure manual versus
   automated units. Extend toward ownership and alternative-library strategies
   using the same operations and shared evidence. Handle dependency/feature
