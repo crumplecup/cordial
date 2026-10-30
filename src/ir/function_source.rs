@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+mod output;
 mod returns;
 pub use returns::{
     FunctionBoundary, FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionTail,
@@ -56,6 +57,9 @@ pub struct FunctionSourceSyntax {
     /// Type range, or an empty insertion range for an implicit unit return.
     output_range: SourceByteRange,
     return_flow: FunctionReturnFlow,
+    /// Exact generated wrapper shape, used only to avoid repeated lifting.
+    #[getter(copy)]
+    has_infallible_result_syntax: bool,
 }
 
 impl FunctionSourceSyntax {
@@ -89,6 +93,9 @@ impl FunctionSourceSyntax {
             body_range: function.block.span().byte_range().into(),
             output_range: output_range.into(),
             return_flow: FunctionReturnFlow::collect(function),
+            has_infallible_result_syntax: output::has_infallible_result_syntax(
+                &function.sig.output,
+            ),
         })
     }
 }

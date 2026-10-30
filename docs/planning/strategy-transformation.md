@@ -396,6 +396,12 @@ compiled explanations with actual strategy support as it lands.
   boundary handling separately, in dependency order. Establish each operation's
   evidence, edits, behavior, idempotence, and refusal contract before adding it
   to a chain. Supply surrounding structure explicitly in isolated fixtures.
+  - [x] Plan and execute isolated successful-return lifting from shared IR:
+    explicit returns and a separate tail, deterministic preview, stale/corrupt
+    evidence rejection, fixed-boundary refusal, and repeat planning without
+    nesting the generated wrapper.
+  - [ ] Extend structural tail handling to returns nested in branches/blocks and
+    prove unit fallthrough and evaluation counts before composing operations.
 - [ ] **Phase 2 — incremental composition and first construction.** Combine the
   proven operations in the smallest compatible steps: pairs, a complete leaf,
   one caller, then an executable boundary. Add target-strategy selection as
@@ -495,3 +501,26 @@ scope distinctions through the production loader and serialized IR. Caller
 resolution and typed Result source resolution remain outstanding. The next
 operation is isolated return lifting; it must not be exposed as a complete
 user-facing migration before caller closure is available.
+
+### Isolated return lifting (second follow-up cycle)
+
+`plan_infallible_return_lift` consumes `IrView` and an existing function identity.
+It emits a typed operation plan or a typed refusal; downstream planning does
+not inspect a syntax tree. The first destination uses `Infallible` to test the
+success adapter independently of source-error taxonomy generation. Exact
+wrapper syntax is recognized during shared collection for repeat planning;
+this is not receiver/type resolution evidence for rewriting panic sites.
+
+A preview verifies the source digest, validates byte ranges, and renders located
+edits without writing files or checking off findings. The executable specimen
+uses Debug at its boundary so both the original value and its lifted Result can
+be observed without bundling caller adaptation into the test. Both early and
+fallthrough values are compiled and executed after the actual production plan
+is rendered. Recollection returns `AlreadyLifted` instead of adding wrappers.
+
+This is a library planning primitive, not a new user-facing apply mode. Its
+caller obligations remain open. Macros, residual propagation, loops, nested
+scopes, attributes with semantic effects, visible/special/generic signatures,
+and never outputs are refused. Returns inside a tail expression currently
+require the next structural-tail operation. Existing apply writers and closed
+component transactions will be used when these operations can be composed.

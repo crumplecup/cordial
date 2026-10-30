@@ -79,6 +79,7 @@ mod targets;
 pub mod testing;
 mod tier;
 mod tracing_init;
+mod transform;
 #[cfg(feature = "verus_ir")]
 mod verus_ir;
 #[cfg(feature = "quality")]
@@ -401,6 +402,10 @@ pub use store_lock::{SysrootLock, WorklistLock};
 pub use tier::{
     BUILTIN_TIER_ASSIGNMENTS, COLD_THRESHOLD, EtiquetteLedgerEntry, GateLedger, HookTiming,
     HookTimings, Tier, TierSelection, WARM_THRESHOLD, assigned_tier, builtin_tier, tier_for_timing,
+};
+pub use transform::{
+    ReturnLiftBlocker, ReturnLiftDecision, ReturnLiftEdit, ReturnLiftPlan,
+    plan_infallible_return_lift,
 };
 #[cfg(feature = "quality")]
 pub use worklist::{

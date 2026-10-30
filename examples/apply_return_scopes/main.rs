@@ -28,7 +28,32 @@ fn residual() -> Result<u32, std::convert::Infallible> {
     Ok(8)
 }
 
+fn macro_value() -> usize {
+    stringify!(value).len()
+}
+
+fn loop_value() -> u32 {
+    loop {
+        break 5;
+    }
+}
+
+fn diverge() -> ! {
+    loop {}
+}
+
+fn identity<T>(value: T) -> T {
+    value
+}
+
+#[inline]
+fn attributed() -> u32 {
+    1
+}
+
 fn main() {
+    let _ = (macro_value(), loop_value(), identity(1), attributed());
+    let _: fn() -> ! = diverge;
     let early = std::env::args().any(|argument| argument == "early");
     println!("{} {} {:?}", scoped(early), fixed_contract(), residual());
 }

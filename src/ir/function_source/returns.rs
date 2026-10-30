@@ -52,6 +52,10 @@ pub enum FunctionBoundary {
     Try,
     /// Nested scopes have separate returns and capture contracts.
     NestedScope,
+    /// Loop and break targets need a dedicated control-flow contract.
+    LoopControl,
+    /// The never type cannot be used as a stable generic Result argument.
+    NeverOutput,
 }
 
 /// A nested body whose returns do not belong to the enclosing function.
@@ -106,6 +110,10 @@ impl FunctionReturnFlow {
         }
         if !signature.generics.params.is_empty() || signature.generics.where_clause.is_some() {
             collector.boundary(FunctionBoundary::Generic);
+        }
+        if matches!(&signature.output, syn::ReturnType::Type(_, ty) if matches!(ty.as_ref(), syn::Type::Never(_)))
+        {
+            collector.boundary(FunctionBoundary::NeverOutput);
         }
         for attribute in &function.attrs {
             collector.visit_attribute(attribute);
@@ -184,14 +192,40 @@ impl<'ast> Visit<'ast> for ReturnCollector {
         self.nested(NestedScopeKind::Item, item.span());
     }
 
-    #[tracing::instrument(level = "trace", skip(self, _attribute))]
-    fn visit_attribute(&mut self, _attribute: &'ast syn::Attribute) {
-        self.boundary(FunctionBoundary::Attribute);
+    #[tracing::instrument(level = "trace", skip(self, attribute))]
+    fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
+        if !attribute.path().is_ident("doc") {
+            self.boundary(FunctionBoundary::Attribute);
+        }
     }
 
     #[tracing::instrument(level = "trace", skip(self, _syntax))]
     fn visit_macro(&mut self, _syntax: &'ast syn::Macro) {
         self.boundary(FunctionBoundary::Macro);
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, expression))]
+    fn visit_expr_loop(&mut self, expression: &'ast syn::ExprLoop) {
+        self.boundary(FunctionBoundary::LoopControl);
+        syn::visit::visit_expr_loop(self, expression);
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, expression))]
+    fn visit_expr_for_loop(&mut self, expression: &'ast syn::ExprForLoop) {
+        self.boundary(FunctionBoundary::LoopControl);
+        syn::visit::visit_expr_for_loop(self, expression);
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, expression))]
+    fn visit_expr_while(&mut self, expression: &'ast syn::ExprWhile) {
+        self.boundary(FunctionBoundary::LoopControl);
+        syn::visit::visit_expr_while(self, expression);
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, expression))]
+    fn visit_expr_break(&mut self, expression: &'ast syn::ExprBreak) {
+        self.boundary(FunctionBoundary::LoopControl);
+        syn::visit::visit_expr_break(self, expression);
     }
 
     #[tracing::instrument(level = "trace", skip(self, expression))]

@@ -9,5 +9,5 @@ fn value(early: bool) -> u32 {
 
 fn main() {
     let early = std::env::args().any(|argument| argument == "early");
-    println!("{}", value(early));
+    println!("{:?}", value(early));
 }

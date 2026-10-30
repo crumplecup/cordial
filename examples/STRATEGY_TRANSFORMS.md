@@ -26,8 +26,14 @@ migration. The harness asserts both Cargo's binary discovery and the expected
 function and panic-site inventory, preventing an empty scan from passing.
 Changing general Cargo target discovery remains a separate capability.
 
-The current tests establish input behavior and shared source evidence only.
-They do not yet prove a transformation or a production refusal. In particular,
+`tests/strategy_return_lift.rs` now exercises the production isolated return
+lifting planner, compiles its rendered output, and executes both successful
+paths. Its Debug boundary observes the same values inside `Ok`. Preview does
+not write; the harness writes only its disposable copy. Recollection proves
+repeat planning adds no wrappers. Fixed boundaries and stale or corrupt
+evidence are refused. This does not yet prove a complete panic migration.
+
+In particular,
 the existing panic inventory also flags the lookalike's method call: a finding
 based on spelling must never authorize an apply edit. Receiver resolution is
 required before failure-site rewriting can be implemented.
