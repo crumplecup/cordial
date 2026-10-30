@@ -20,6 +20,10 @@ use crate::plugin::Plugin;
 use crate::progress::{ProgressSink, noop_progress, noop_progress_arc};
 
 use tracing::instrument;
+#[cfg(feature = "panics")]
+mod apply;
+#[cfg(feature = "panics")]
+pub(crate) use apply::collect as collect_apply_evidence;
 mod assess;
 #[cfg(any(
     feature = "quality",

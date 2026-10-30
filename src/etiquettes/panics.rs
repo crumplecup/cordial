@@ -24,7 +24,11 @@
 //! [`PANICS_ETIQUETTE`] on a [`crate::Session`]. Policy:
 //! `docs/planning/error-handling-as-plugin.md`.
 
+mod apply;
 mod assessor;
+pub use apply::{
+    PanicApplyBlocker, PanicApplyRepair, PanicApplySite, PanicApplySummary, run_panic_apply,
+};
 mod enricher;
 mod error_assertion;
 mod kani_reach;
@@ -79,7 +83,7 @@ pub static PANICS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(||
             EtiquetteExplain::new(
                 "Where does this crate abort?",
                 "Abort sites are the first error-handling layer. Library code should return the crate's internal error type (preserving source()); binaries and tests should surface through miette.",
-                "Inventories panic!, unwrap, expect, unreachable!, and compile_error!. String literals that parse as Rust and contain those APIs are scanned as embedded fixture programs; keep samples under tests/fixtures or tests/parity (path skip). Test unwrap/expect (including #[cfg(test)] modules under src/) stay on the checklist rather than becoming CSV-only inventory.",
+                "Inventories panic!, unwrap, expect, unreachable!, and compile_error!. String literals that parse as Rust and contain those APIs are scanned as embedded fixture programs; keep samples under tests/fixtures or tests/parity (path skip). Test unwrap/expect (including #[cfg(test)] modules under src/) stay on the checklist rather than becoming CSV-only inventory. Start with `cordial quality --apply --etiquette panics --dry-run`. Apply currently converts one resolved std::io::Error unwrap in a closed private, single-file binary call graph through unit main, under owned field policy. It generates a source-preserving typed error chain and lifts all affected callers. Successful behavior is preserved; failure deliberately changes from panic to returned error and Rust Result main termination (Debug diagnostic, exit 1), not miette rendering. Preview reports generated types and changed signatures. Remove --dry-run to write and check off exact repaired findings; unsupported sites remain open for manual repair. Borrowed policy, incomplete uses, opaque syntax, and unsupported boundaries are refused without partial component edits.",
                 "`[panics] enabled = false` in cordial.toml.",
                 vec![
                     EtiquetteRuleExplain::new("PANIC-SOURCE-PANIC", "`panic!` in source"),

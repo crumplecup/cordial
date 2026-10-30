@@ -17,6 +17,10 @@ pub struct FunctionCallSyntax {
 /// A zero-argument, nongeneric `unwrap` candidate; this does not prove Result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct FunctionUnwrapSyntax {
+    /// Source line from the shared tree; absent in older cache versions.
+    #[serde(default)]
+    #[getter(copy)]
+    line: Option<u32>,
     range: SourceByteRange,
     receiver: SourceByteRange,
     /// Dot, method name, and delimiters; comments between them are retained.
@@ -82,6 +86,7 @@ impl<'ast> Visit<'ast> for Calls {
     fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
         if call.method == "unwrap" && call.args.is_empty() && call.turbofish.is_none() {
             self.unwraps.push(FunctionUnwrapSyntax {
+                line: Some(call.span().start().line as u32),
                 range: call.span().byte_range().into(),
                 receiver: call.receiver.span().byte_range().into(),
                 suffix_tokens: vec![

@@ -3,8 +3,9 @@
 **Status:** Shared-IR foundations, isolated operations, transitive composition,
 and closed single-module binary migrations through a unit-main adapter are
 implemented and tested against executable specimens. Closed migrations now
-support guarded dry run and writes through the shared source transaction. CLI
-apply integration remains ahead; broader use and target forms are refusals.
+support guarded dry run and writes through the shared source transaction and
+`quality --apply --etiquette panics`, with exact worklist claims. Broader use
+and target forms remain explicit refusals.
 
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
@@ -376,7 +377,7 @@ compiled explanations with actual strategy support as it lands.
 
 ## Implementation roadmap
 
-- [ ] **Phase 0 — executable specification and discovery.** Add isolated Cargo
+- [x] **Phase 0 — executable specification and discovery.** Add isolated Cargo
   specimens and an integration-test harness. Prove the production loader
   inventories the declarations, signatures, failure sites, source types,
   callers, and boundaries required for the initial operations. Document fixture
@@ -392,9 +393,9 @@ compiled explanations with actual strategy support as it lands.
   - [x] Collect return paths and nested execution scopes for isolated return
     lifting. Retain output edit ranges and explicit signature, attribute, macro,
     residual, and nested-scope boundaries before planning edits.
-  - [ ] Resolve source Result contracts and caller/boundary relationships through
+  - [x] Resolve source Result contracts and caller/boundary relationships through
     shared enrichment. A declared output string is not resolution evidence.
-- [ ] **Phase 1 — individual transforms.** Implement and test declaration
+- [x] **Phase 1 — individual transforms.** Implement and test declaration
   generation, return lifting, failure-site rewriting, caller adaptation, and
   boundary handling separately, in dependency order. Establish each operation's
   evidence, edits, behavior, idempotence, and refusal contract before adding it
@@ -405,12 +406,14 @@ compiled explanations with actual strategy support as it lands.
     nesting the generated wrapper.
   - [x] Extend structural tail handling to returns nested in branches/blocks and
     prove unit fallthrough and evaluation counts before composing operations.
-- [ ] **Phase 2 — incremental composition and first construction.** Combine the
+- [x] **Phase 2 — incremental composition and first construction.** Combine the
   proven operations in the smallest compatible steps: pairs, a complete leaf,
   one caller, then an executable boundary. Add target-strategy selection as
   needed. Finish with a minimal panic → typed-error executable without retained
   metadata or pre-supplied error architecture. The dry run presents one complete
   plan; the writer commits one complete unit.
+  Completed for the documented initial owned, single-I/O-source, closed
+  private binary domain. Broader strategies and source contracts remain below.
 - [ ] **Phase 3 — richer return and failure patterns.** Cover branches,
   early returns, multiple typed sources, Option absence, and explicit panic
   failures through the shared operations. Add expect only with its context
@@ -831,3 +834,35 @@ existing apply workflow, report refusals and effects, and claim only matching
 worklist items after real successful writes. Keep the initial single-module,
 one-I/O-site, private-function, binary-unit-main contract explicit. Wider
 closure, additional error alternatives, and reverse construction follow.
+
+### Production panic apply and worklist integration (fourteenth follow-up cycle)
+
+`cordial quality --apply --etiquette panics --dry-run` now collects fresh
+evidence through the normal loader, enrichers, probes, assessors, and central
+exception application. Apply retains crate-local finding anchors alongside
+the shared workspace graph; it does not reconstruct analysis from source or
+from rendered reports. The shared function inventory includes each unwrap's
+line so an assessed site can be joined to its exact located operation. Missing
+or ambiguous evidence refuses a candidate.
+
+The initial supported operation is one resolved standard-I/O unwrap, through
+its complete private single-module caller component to the actual binary unit
+main. The configured error field strategy must be owned. The preview names
+the generated parent, Kind, and source types, all changed functions, and the
+intentional failure-policy change: panic becomes a returned error observed
+through Rust Result main termination (Debug output and exit 1). This first
+adapter does not implement miette rendering.
+
+Removing `--dry-run` invokes the guarded shared writer. Only successfully
+repaired sites are eligible for worklist claims; rule, crate, path, line,
+context, and exact unwrap snippet must match. Unsupported expect/unwrap_err
+and other panic sites remain manual items. Dry runs leave source and worklist
+bytes unchanged. Missing or outdated worklists are not created or claimed.
+Existing exceptions are respected before any migration is planned.
+
+This integrates one complete operation rather than exposing partial signature
+edits. Multiple ready plans in a crate are refused until their edits can be
+composed against one snapshot. The next substantial coverage work is joint
+construction for multiple failure sources, followed by wider module/call
+identity resolution. Reverse transitions and alternate diagnostics remain
+separate operations to test in isolation before composition.

@@ -94,5 +94,6 @@ pub fn plan_owned_panic_component(
         ),
         ordered_functions,
         boundary,
+        declaration.names().clone(),
     )))
 }

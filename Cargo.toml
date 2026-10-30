@@ -191,6 +191,10 @@ name = "error_apply_worklist"
 required-features = ["cli", "quality"]
 
 [[test]]
+name = "panic_apply_worklist"
+required-features = ["cli", "quality"]
+
+[[test]]
 name = "tracing_subscriber"
 required-features = ["tracing"]
 

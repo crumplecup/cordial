@@ -8,6 +8,8 @@ use tracing::instrument;
 
 #[cfg(feature = "internal_error_chain")]
 mod error_fields;
+#[cfg(feature = "panics")]
+mod panics;
 #[cfg(feature = "quality")]
 mod worklist;
 
@@ -24,8 +26,34 @@ pub(in crate::cli) fn execute_quality_apply(
 ) -> CordialResult<()> {
     let _worklist_lock =
         crate::WorklistLock::exclusive(store, "quality --apply", progress.as_ref())?;
-    #[cfg(not(any(feature = "crate_attrs", feature = "internal_error_chain")))]
+    #[cfg(not(any(
+        feature = "crate_attrs",
+        feature = "internal_error_chain",
+        feature = "panics"
+    )))]
     let _ = store_home;
+
+    #[cfg(feature = "panics")]
+    if only_etiquette.is_none_or(|name| name == "panics") {
+        let home = store_home.clone().unwrap_or_else(default_store_home);
+        let task = progress.spinner("Applying closed panic-to-error migrations".to_string());
+        let summary = crate::run_panic_apply(
+            project_root,
+            store,
+            &home,
+            crate_name,
+            dry_run,
+            Arc::clone(&progress),
+        )?;
+        panics::report(project_root, &summary, dry_run)?;
+        #[cfg(feature = "quality")]
+        panics::report_worklist(project_root, store, &home, &summary, dry_run)?;
+        task.finish(format!(
+            "Panic apply complete: {} repaired, {} blocked",
+            summary.repairs().len(),
+            summary.blockers().len()
+        ));
+    }
 
     #[cfg(feature = "crate_attrs")]
     if only_etiquette.is_none_or(|name| name == "crate_attrs") {

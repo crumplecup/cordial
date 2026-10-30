@@ -61,4 +61,5 @@ pub struct PanicComponentPreview {
     functions: Vec<NodeId>,
     #[getter(copy)]
     boundary: NodeId,
+    error_names: super::GeneratedErrorNames,
 }
