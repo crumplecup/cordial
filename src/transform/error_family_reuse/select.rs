@@ -1,8 +1,8 @@
 //! Deterministic frequent-first selection, with explicit overlap reasons.
 
 use super::{
-    ErrorFamilyConflict, ErrorFamilyDisposition as Disposition, ErrorFamilyMember,
-    ErrorFamilyReusePolicy, ReusableErrorFamily, SourceErrorReuse,
+    ErrorFamilyDisposition as Disposition, ErrorFamilyReusePolicy, ReusableErrorFamily,
+    SourceErrorReuse, conflict,
 };
 
 #[tracing::instrument(level = "trace", skip(groups, policy))]
@@ -48,25 +48,4 @@ fn choose(
         }
     }
     Disposition::Selected
-}
-
-#[tracing::instrument(level = "trace", skip(left, right))]
-fn conflict(
-    left: &[ErrorFamilyMember],
-    right: &[ErrorFamilyMember],
-) -> Option<ErrorFamilyConflict> {
-    let mut shared = 0;
-    for member in left {
-        if let Some(other) = right
-            .iter()
-            .find(|other| other.identity() == member.identity())
-        {
-            if member.origins() != other.origins() {
-                return Some(ErrorFamilyConflict::DistinctProducers);
-            }
-            shared += 1;
-        }
-    }
-    (shared != 0 && shared != left.len() && shared != right.len())
-        .then_some(ErrorFamilyConflict::CrossingOverlap)
 }

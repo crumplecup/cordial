@@ -11,7 +11,9 @@ Distinct I/O and integer-parsing sources have concrete generated alternatives.
 Shared IR now also retains bounded per-function error-family summaries,
 including propagation through recursive callers and explicit analysis gaps.
 An isolated reuse preview counts exact contracts and compares source-reuse
-policies. Nested declaration generation remains unimplemented.
+policies. A representation preview separates exact evidence from proposed
+contracts, with explicit broadening and refusal. Nested declaration generation
+remains unimplemented.
 
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
@@ -193,7 +195,8 @@ parallel function, type, or ownership indexes.
 
 ### Error families and nested variants
 
-**Shared evidence started; nesting not implemented.** Derive the escaping error family at each
+**Shared evidence and representation previews implemented; declaration nesting
+not implemented.** Derive the escaping error family at each
 function from the shared call and error-flow IR. Starting with locally produced
 failures, propagate the failures that can escape a callee through its callers.
 An error that is handled does not escape that boundary. Recursive components
@@ -235,7 +238,8 @@ The exact computed family remains shared IR evidence under both policies.
 Representation choices must not alter that evidence. Here reuse concerns a
 source type appearing in multiple family declarations, not copying an error
 value or declaring that unrelated domain failures are interchangeable. The
-configuration spelling and default remain to be selected before implementation.
+configuration spelling and default remain to be selected before production
+integration.
 
 Conversions at call edges know the originating family; do not generate
 competing blanket `From<Io>` implementations for an umbrella containing both
@@ -1121,3 +1125,49 @@ including exact versus represented contracts and explicit broadening/refusal
 for rejected crossings. Connect configuration with documented defaults,
 coordinate Kind-payload lint policy, and prove the isolated declarations and
 call-edge conversions before composing them into production apply.
+
+### Explicit contract representation (nineteenth follow-up cycle)
+
+`plan_error_family_representation` consumes the shared family evidence through
+the reuse planner and produces a separate typed representation preview. It
+records both policies, retains every exact group and its consumers, and shows
+proposed members, added alternatives with their producer identities, and the
+crossing groups responsible for expansions. Group indices refer to this one
+preview. No source, shared family, or persistent cache is modified.
+
+With source reuse permitted, every complete contract remains exact, including
+crossing families and families with distinct producer provenance. With source
+reuse forbidden, selected frequent families stay exact. A crossing unselected
+contract expands to include its conflicting family; if neither is selected,
+both expand. Repeat until every represented set is disjoint or contained in
+another. Each step adds members from a finite source universe, so this process
+terminates without recursive declarations. It also checks infrequent families:
+meeting the reuse threshold is not required to create a conflicting contract.
+This is deterministic feasibility analysis, not minimal broadening or an
+optimal nesting layout.
+
+Broadening is a separate explicit typed policy. When forbidden, the preview
+still shows the proposed alternatives and marks each broadened contract as a
+blocker. When permitted, those additions are accepted as representation
+choices, not rewritten as reachable errors in shared IR. Overlapping nominal
+types with different producer sets block the entire no-reuse preview before
+any union, even below the threshold. Broadening cannot erase domain identity.
+Excluded or incomplete functions also block acceptance of the whole scope;
+their original per-function issues remain visible in the reuse preview.
+
+Production-pipeline tests cover exact overlap under reuse, nested/disjoint
+families, explicit broadening and refusal, producer conflicts, transitive
+expansion without any selected family, and unchanged source/shared evidence.
+All 455 triples of the fifteen nonempty subsets of four real source types
+are checked at two thresholds for containment, consistent nesting, unchanged
+selected sets, and determinism under reordered/duplicate inputs. The source
+specimen compiles without warnings and executes.
+
+**Next:** use these explicit contracts to plan a declaration layout, deduplicating
+equal represented sets while preserving each exact consumer mapping. Select
+strict subset edges without duplicating an alternative inside one enum.
+Coordinate the existing prohibition on nested Kind payloads with validated
+generated nesting and test isolated source-chain-preserving declarations and
+conversions. Neither preview authorizes edits; placement, storage policy,
+conversion coverage, component closure, configuration, and production
+integration remain separate obligations.

@@ -18,7 +18,7 @@ pub enum SourceErrorReuse {
 }
 
 /// Explicit analysis policy; no configuration default or rewrite authority.
-#[derive(Debug, Clone, Copy, derive_getters::Getters, derive_new::new)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
 pub struct ErrorFamilyReusePolicy {
     #[getter(copy)]
     basis: ErrorFamilyBasis,
@@ -117,3 +117,25 @@ pub fn plan_error_family_reuse(
 }
 
 type FamilyKey = Vec<(String, Vec<u32>)>;
+
+/// Canonical member sets must agree on producer identity before nesting.
+#[tracing::instrument(level = "trace", skip(left, right))]
+pub(super) fn conflict(
+    left: &[ErrorFamilyMember],
+    right: &[ErrorFamilyMember],
+) -> Option<ErrorFamilyConflict> {
+    let mut shared = 0;
+    for member in left {
+        if let Some(other) = right
+            .iter()
+            .find(|other| other.identity() == member.identity())
+        {
+            if member.origins() != other.origins() {
+                return Some(ErrorFamilyConflict::DistinctProducers);
+            }
+            shared += 1;
+        }
+    }
+    (shared != 0 && shared != left.len() && shared != right.len())
+        .then_some(ErrorFamilyConflict::CrossingOverlap)
+}
