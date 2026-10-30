@@ -8,6 +8,7 @@ mod call_target;
 mod caller_adaptation;
 mod closed_panic;
 mod error_declaration;
+mod error_family_reuse;
 mod failure_propagation;
 mod generated_contract;
 mod main_boundary;
@@ -26,6 +27,11 @@ pub use closed_panic::{
 pub use error_declaration::{
     ErrorDeclarationBlocker, ErrorDeclarationDecision, GeneratedErrorNames, GeneratedErrorSource,
     OwnedErrorDeclaration, plan_owned_error_declaration, plan_owned_error_group_declaration,
+};
+pub use error_family_reuse::{
+    ErrorFamilyConflict, ErrorFamilyDisposition, ErrorFamilyReuseBlocker, ErrorFamilyReuseIssue,
+    ErrorFamilyReusePlan, ErrorFamilyReusePolicy, ReusableErrorFamily, SourceErrorReuse,
+    plan_error_family_reuse,
 };
 pub use failure_propagation::{
     FailurePropagationBlocker, FailurePropagationDecision, plan_result_unwrap_propagation,

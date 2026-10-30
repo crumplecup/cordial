@@ -1,0 +1,34 @@
+fn io() -> ::std::result::Result<u32, ::std::io::Error> { ::std::result::Result::Ok(1) }
+fn other_io() -> ::std::result::Result<u32, ::std::io::Error> { ::std::result::Result::Ok(2) }
+fn parse() -> ::std::result::Result<u32, ::std::num::ParseIntError> { "3".parse() }
+fn utf8() -> ::std::result::Result<u32, ::std::str::Utf8Error> {
+    ::std::str::from_utf8(b"4").map(|_| 4)
+}
+
+fn a() -> u32 { io().unwrap() + parse().unwrap() }
+fn a_again() -> u32 { a() }
+fn a_third() -> u32 { a() + a_again() }
+fn b() -> u32 { io().unwrap() + utf8().unwrap() }
+fn b_again() -> u32 { b() }
+fn b_third() -> u32 { b() + b_again() }
+fn b_fourth() -> u32 { b() }
+fn domain() -> u32 { other_io().unwrap() + parse().unwrap() }
+fn domain_again() -> u32 { domain() }
+fn domain_third() -> u32 { domain() + domain_again() }
+fn nested() -> u32 { a() + b() }
+fn nested_again() -> u32 { nested() }
+fn nested_third() -> u32 { nested() + nested_again() }
+fn single() -> u32 { io().unwrap() }
+fn single_again() -> u32 { single() }
+fn single_third() -> u32 { single() + single_again() }
+fn utf8_only() -> u32 { utf8().unwrap() }
+fn utf8_again() -> u32 { utf8_only() }
+fn utf8_third() -> u32 { utf8_only() + utf8_again() }
+fn two_producers() -> u32 { io().unwrap() + other_io().unwrap() }
+fn empty() -> u32 { 0 }
+fn unknown() -> u32 { let _ = ::std::env::var("CORDIAL_SPECIMEN_MISSING"); a() }
+
+fn main() {
+    let _ = (a_third(), b_third(), b_fourth(), domain_third(), nested_third(), single_third(), utf8_third(),
+        two_producers(), empty(), unknown());
+}

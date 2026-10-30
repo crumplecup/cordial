@@ -10,7 +10,8 @@ unwraps now share one declaration, transitive caller adaptation, and write.
 Distinct I/O and integer-parsing sources have concrete generated alternatives.
 Shared IR now also retains bounded per-function error-family summaries,
 including propagation through recursive callers and explicit analysis gaps.
-Family selection and nested declaration generation remain unimplemented.
+An isolated reuse preview counts exact contracts and compares source-reuse
+policies. Nested declaration generation remains unimplemented.
 
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
@@ -258,6 +259,9 @@ Implement this incrementally:
 2. Test exact-family canonicalization, configurable reuse selection, and both
    source-reuse policies in isolation, including overlap, reported contract
    broadening, and same-foreign-type domain distinctions.
+   The eighteenth follow-up supplies explicit threshold/policy inputs and
+   selection previews. Configuration and represented-contract broadening
+   remain pending; previews never silently broaden a rejected exact family.
 3. Generate one supported nested family and its call-edge conversions, with
    corresponding lint compliance and refusal tests.
 4. Compose that operation through a complete binary migration, then extend to
@@ -1073,3 +1077,47 @@ isolation, retaining producer identities for domain distinctions. Settle the
 TOML threshold and source-reuse policy before exposing configuration. Broader
 typed error resolution and call-edge conversions remain explicit gaps;
 nested generation still requires coordinated architecture lint changes.
+
+### Exact-family reuse selection (eighteenth follow-up cycle)
+
+`plan_error_family_reuse` is an isolated analysis operation over shared IR and
+an explicit set of function nodes. Its typed policy requires a nonzero reuse
+threshold, a declared/prospective basis, and a source-reuse choice. It does not
+add dormant TOML settings or change production generation. Configuration
+spelling and defaults will be settled when the consumer is connected.
+
+The preview canonicalizes member and producer ordering, groups exact sets,
+and counts distinct functions. Duplicate input ids and repeated calls in one
+function cannot raise that count. Equal native types with different producer
+sets remain separate contracts. Empty sets need no declaration; unresolved,
+incomplete, stale, or inconsistent summaries are reported as per-function
+issues instead of contributing to reuse. Corrupt serialized facts return an
+error through the usual shared-IR accessors.
+
+Selection is deterministic: frequent contracts first, larger sets on ties,
+then canonical identity order. This is an explainable greedy choice, not a
+global optimization guarantee. With reuse permitted, all qualifying exact
+families are candidates. With reuse forbidden, selected groups must be
+disjoint or consistently nested. Crossing sets are rejected with a reference
+to the selected conflicting group. Overlapping native identities with
+different producer sets have a distinct conflict reason, so nominal equality
+cannot erase a domain distinction.
+
+Rejected groups retain their exact members. This preview does not choose a
+broader represented contract, construct a nesting tree, authorize a rewrite,
+or prove conversion coverage. A subsequent representation operation must
+explicitly report broadening or refuse it; selection must never substitute a
+broader set for the shared analysis evidence.
+
+Tests use production enrichment of a warning-free executable specimen to
+cover the three-function threshold, duplicate inputs, repeated calls,
+overlapping and disjoint sets, consistent subsets, distinct producers, and
+frequency ordering. Input/member order does not change the preview; invalid
+producer evidence and inherited gaps do not count. Analysis leaves source
+bytes untouched.
+
+**Next:** define a representation operation for one selected nested family,
+including exact versus represented contracts and explicit broadening/refusal
+for rejected crossings. Connect configuration with documented defaults,
+coordinate Kind-payload lint policy, and prove the isolated declarations and
+call-edge conversions before composing them into production apply.
