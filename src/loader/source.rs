@@ -14,7 +14,7 @@ use super::LoadView;
 use tracing::instrument;
 
 mod cache;
-mod macros;
+use super::macro_syntax as macros;
 use cache::CacheToken;
 pub(crate) use cache::ParsedSourceSession;
 pub use macros::SharedMacroSyntax;
@@ -46,53 +46,6 @@ impl Loader for SourceLoader {
     fn load(&self, view: LoadContext<'_>) -> CordialResult<Box<dyn LoadView>> {
         Ok(Box::new(SourceLoadView::for_target(view.target())?))
     }
-}
-
-impl SourceLoadView {
-    /// Load the same source view used by the session for a crate target.
-    #[instrument(level = "debug", skip(target), err(level = "warn"))]
-    pub(crate) fn for_target(target: &super::CrateTarget) -> CordialResult<Self> {
-        let src_root = target.crate_root().join("src");
-        Ok(Self::new(
-            target.crate_name().clone(),
-            src_root.clone(),
-            read_source_files(&src_root)?,
-            target.kinds().clone(),
-        ))
-    }
-
-    /// Load a standalone crate's source through the same snapshot path.
-    #[cfg(feature = "crate_attrs")]
-    #[instrument(level = "debug", skip(crate_root), err(level = "warn"))]
-    pub(crate) fn for_crate_root(crate_root: &Path, crate_name: &str) -> CordialResult<Self> {
-        let src_root = crate_root.join("src");
-        Ok(Self::new(
-            crate_name.to_string(),
-            src_root.clone(),
-            read_source_files(&src_root)?,
-            Vec::new(),
-        ))
-    }
-}
-
-#[instrument(level = "debug", skip(src_root), err(level = "warn"))]
-fn read_source_files(src_root: &Path) -> CordialResult<Vec<SourceFile>> {
-    let mut files = Vec::new();
-    if src_root.is_dir() {
-        for entry in walkdir::WalkDir::new(src_root)
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(|entry| entry.file_type().is_file())
-        {
-            let path = entry.path();
-            if path.extension().is_none_or(|ext| ext != "rs") {
-                continue;
-            }
-            let source = super::source_work::read(path, SourceLoader::ID)?;
-            files.push(SourceFile::new(path.to_path_buf(), source));
-        }
-    }
-    Ok(files)
 }
 
 /// Parsed source file retained for IR construction.

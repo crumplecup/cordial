@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::enricher::{PathIndexEnricher, SynDocLinkEnricher};
+use crate::enricher::{PathIndexEnricher, SourceCallEnricher, SynDocLinkEnricher};
 use crate::error::{CordialError, CordialResult};
 use crate::etiquette::Etiquette;
 use crate::hooks::{Assessor, IrEnricher, Loader, Probe, Reporter, WorkspaceAssessor};
@@ -109,12 +109,20 @@ pub(super) fn dedupe_enrichers<'a>(
 ) -> Vec<&'a dyn IrEnricher> {
     static PATH_INDEX: PathIndexEnricher = PathIndexEnricher;
     static SYN_DOC_LINK: SynDocLinkEnricher = SynDocLinkEnricher;
+    static SOURCE_CALLS: SourceCallEnricher = SourceCallEnricher;
     let mut out = dedupe_hooks(
         etiquettes
             .iter()
             .flat_map(|etiquette| etiquette.enrichers().iter().copied()),
     );
     let dual_inventory = loaders_include_source_and_rustdoc(loaders);
+    if loaders.iter().any(|loader| loader.id() == SourceLoader::ID)
+        && !out
+            .iter()
+            .any(|enricher| enricher.id() == SOURCE_CALLS.id())
+    {
+        out.push(&SOURCE_CALLS);
+    }
     #[cfg(feature = "rustdoc")]
     let has_rustdoc = loaders
         .iter()

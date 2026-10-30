@@ -23,6 +23,8 @@ pub enum EdgeKind {
     Depends,
     /// Error value flows from origin to site.
     ErrorFlow,
+    /// Resolved direct source call; absence does not prove caller closure.
+    Calls,
     /// Node carries this attribute.
     HasAttr,
     /// Edge or node owned by a plugin.

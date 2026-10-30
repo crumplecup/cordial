@@ -51,3 +51,10 @@ source type arguments, located direct calls, and unwrap receiver ranges through
 the production loader and persisted IR. Relative paths, aliases, generic errors,
 and shadowed call names retain unknown evidence. Nested bodies have separate
 execution scopes. These facts do not yet authorize edits or prove caller closure.
+
+`tests/strategy_call_resolution.rs` exercises the IR enrichment that joins direct
+calls to same-module source declarations. Located records retain snapshot-bound
+callee identities, while `Calls` edges expose incoming callers. Repeated sites
+and recursion retain their identities; shadowed names and opaque namespaces stay
+unresolved. Missing edges cannot be interpreted as proof of complete caller
+coverage. Broader type inference, imports, and cross-module calls remain open.

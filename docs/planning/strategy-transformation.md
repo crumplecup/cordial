@@ -566,3 +566,28 @@ its baseline compiles and runs with both successful and panicking inputs.
 Next, join calls to source declarations and retain explicit resolution failures
 and incoming caller relationships. Namespace ambiguity and source boundaries
 must be checked before these declaration facts can authorize a rewrite.
+
+### Shared call resolution (fifth follow-up cycle)
+
+`SourceCallEnricher` now runs with the source loader and resolves eligible direct
+calls against declarations in the same module's shared graph. Per-site evidence
+retains the callee's node identity and snapshot digest. `Calls` edges retain
+incoming caller relationships, with separate located records for repeated calls
+and one adjacency edge per pair. Recursion is represented without traversing it.
+The enrichment uses IR facts only, with a temporary declaration lookup built from
+the graph; it neither parses nor keeps a parallel source inventory.
+
+Unknowns are explicit: unsupported/qualified/indirect calls, bound names, missing
+or duplicate declarations, and unsupported source contracts do not produce
+resolved edges. Imports, namespace macros/attributes, local items, extern aliases,
+and missing namespace facts constrain resolution. Absolute standard paths are
+trusted only within that checked scope. Typed reads distinguish absent from
+corrupt evidence. Tests inspect the persisted production graph, including
+incoming edges, recursion, repeated sites, shadowing, and namespace refusals.
+
+This resolver does not claim complete caller closure: method calls, function
+values, macro expansion, nested functions, external callers, and cross-module
+imports still need their own evidence. Next, use a resolved Result-producing
+call and matching error identities to rewrite one unwrap inside an already
+fallible function. That isolated operation must compile and execute before
+combining it with success lifting, declaration generation, or caller adaptation.

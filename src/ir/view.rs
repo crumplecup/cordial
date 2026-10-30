@@ -10,6 +10,30 @@ use super::query::Query;
 /// concrete petgraph storage. All node ids are local to this crate graph and
 /// remain valid only for the IR snapshot passed to the hook.
 pub trait IrView {
+    /// Read persisted call resolution; missing evidence never means no callers.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn function_call_flow(&self, id: NodeId) -> CordialResult<Option<super::FunctionCallFlow>> {
+        Ok(self
+            .node(id)
+            .and_then(|node| {
+                node.attr(super::ATTR_FUNCTION_CALL_FLOW)
+                    .map(|value| serde_json::from_value(value.clone()))
+            })
+            .transpose()?)
+    }
+
+    /// Read namespace evidence collected by the source loader.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn source_module_scope(&self, id: NodeId) -> CordialResult<Option<super::SourceModuleScope>> {
+        Ok(self
+            .node(id)
+            .and_then(|node| {
+                node.attr(super::ATTR_SOURCE_MODULE_SCOPE)
+                    .map(|value| serde_json::from_value(value.clone()))
+            })
+            .transpose()?)
+    }
+
     /// Read declared function syntax without reparsing source or hiding corrupt facts.
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
     fn function_source_syntax(

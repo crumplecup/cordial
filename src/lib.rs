@@ -355,13 +355,15 @@ pub use hooks::{
     RenderView, Reporter, SourceEnrichView, SourceEnricher, WorkspaceAssessView, WorkspaceAssessor,
 };
 pub use ir::{
-    ATTR_CRATE_KINDS, ATTR_FUNCTION_SOURCE_SYNTAX, ATTR_IR_ORIGIN, ATTR_SYN_DOC_PEER, AttrKey,
-    AttrValue, BasicQuery, CrateIr, CrateIrSnapshot, CrateKind, CrateView, CrateViewMut,
-    DeclaredFunctionOutput, EdgeKind, EdgeWeight, FunctionBoundary, FunctionCallSyntax,
-    FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionSourceSyntax,
-    FunctionSuccessExit, FunctionTail, FunctionUnwrapSyntax, IrIndexes, IrMut, IrView, ItemKind,
-    NestedScopeKind, NodeId, NodeKind, NodeView, NodeWeight, ORIGIN_RUSTDOC, ORIGIN_SOURCE,
-    PanicSitesQuery, QualifiedPath, Query, QueryBuilder, ReturnValue, SourceByteRange,
+    ATTR_CRATE_KINDS, ATTR_FUNCTION_CALL_FLOW, ATTR_FUNCTION_SOURCE_SYNTAX, ATTR_IR_ORIGIN,
+    ATTR_SOURCE_MODULE_SCOPE, ATTR_SYN_DOC_PEER, AttrKey, AttrValue, BasicQuery,
+    CallResolutionFailure, CrateIr, CrateIrSnapshot, CrateKind, CrateView, CrateViewMut,
+    DeclaredFunctionOutput, EdgeKind, EdgeWeight, FunctionBoundary, FunctionCallFlow,
+    FunctionCallSyntax, FunctionNestedScope, FunctionReturn, FunctionReturnFlow,
+    FunctionSourceSyntax, FunctionSuccessExit, FunctionTail, FunctionUnwrapSyntax, IrIndexes,
+    IrMut, IrView, ItemKind, NestedScopeKind, NodeId, NodeKind, NodeView, NodeWeight,
+    ORIGIN_RUSTDOC, ORIGIN_SOURCE, PanicSitesQuery, QualifiedPath, Query, QueryBuilder,
+    ResolvedFunctionCall, ReturnValue, SourceByteRange, SourceCallResolution, SourceModuleScope,
     SourceResultContract, WorkspaceIr,
 };
 #[cfg(feature = "impl_coverage")]

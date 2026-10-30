@@ -89,7 +89,7 @@ impl SourceLoadView {
     }
 
     #[instrument(level = "debug", skip(files, crate_kinds), fields(crate_name = crate_name))]
-    pub(super) fn new(
+    pub(in crate::loader) fn new(
         crate_name: String,
         src_root: PathBuf,
         files: Vec<SourceFile>,

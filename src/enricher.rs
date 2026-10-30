@@ -18,6 +18,7 @@ mod proof_harness;
 mod rustdoc_structure;
 #[cfg(feature = "shadow")]
 mod shadow;
+mod source_calls;
 mod syn_doc_link;
 #[cfg(feature = "impl_coverage")]
 mod trait_impl;
@@ -55,6 +56,7 @@ pub use shadow::{
     ShadowLinkEnricher, ShadowMapEntry, discover_same_crate_shadow_pairs, load_shadow_map,
     resolve_shadow_entries,
 };
+pub(crate) use source_calls::SourceCallEnricher;
 #[cfg(feature = "rustdoc")]
 pub use syn_doc_link::inventory_link_key;
 pub use syn_doc_link::{SynDocLinkEnricher, syn_doc_peer};

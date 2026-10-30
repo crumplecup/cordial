@@ -1,4 +1,5 @@
 use tracing::instrument;
+mod macro_syntax;
 mod populate;
 mod scan_roots;
 mod source;

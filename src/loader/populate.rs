@@ -11,6 +11,53 @@ use super::source::{SourceFile, SourceLoadView, SourceLoader};
 
 use tracing::instrument;
 impl SourceLoadView {
+    /// Load the same source view used by the session for a crate target.
+    #[instrument(level = "debug", skip(target), err(level = "warn"))]
+    pub(crate) fn for_target(target: &super::CrateTarget) -> CordialResult<Self> {
+        let src_root = target.crate_root().join("src");
+        Ok(Self::new(
+            target.crate_name().clone(),
+            src_root.clone(),
+            read_source_files(&src_root)?,
+            target.kinds().clone(),
+        ))
+    }
+
+    /// Load a standalone crate's source through the same snapshot path.
+    #[cfg(feature = "crate_attrs")]
+    #[instrument(level = "debug", skip(crate_root), err(level = "warn"))]
+    pub(crate) fn for_crate_root(crate_root: &Path, crate_name: &str) -> CordialResult<Self> {
+        let src_root = crate_root.join("src");
+        Ok(Self::new(
+            crate_name.to_string(),
+            src_root.clone(),
+            read_source_files(&src_root)?,
+            Vec::new(),
+        ))
+    }
+}
+
+#[instrument(level = "debug", skip(src_root), err(level = "warn"))]
+fn read_source_files(src_root: &Path) -> CordialResult<Vec<SourceFile>> {
+    let mut files = Vec::new();
+    if src_root.is_dir() {
+        for entry in walkdir::WalkDir::new(src_root)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_type().is_file())
+        {
+            let path = entry.path();
+            if path.extension().is_none_or(|ext| ext != "rs") {
+                continue;
+            }
+            let source = super::source_work::read(path, SourceLoader::ID)?;
+            files.push(SourceFile::new(path.to_path_buf(), source));
+        }
+    }
+    Ok(files)
+}
+
+impl SourceLoadView {
     /// Fill the crate IR from loaded views.
     #[instrument(level = "debug", skip(self, ir), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourceLoadView")]
@@ -51,6 +98,11 @@ impl SourceLoadView {
                 .with_name(module_path.clone())
                 .with_span(line_span(file.path(), 1)),
         );
+        ir.set_attr(
+            module_node,
+            crate::ir::ATTR_SOURCE_MODULE_SCOPE,
+            serde_json::to_value(crate::ir::SourceModuleScope::collect(&syntax))?,
+        )?;
         ir.set_attr(
             module_node,
             "qualified_path",
