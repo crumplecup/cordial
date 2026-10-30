@@ -1,0 +1,51 @@
+fn converted(fail: bool, expected_line: &mut u32) -> Result<u32, $PARENT> {
+    *expected_line = line!() + 1;
+    let value = operation(fail)?;
+    Ok(value)
+}
+
+fn main() {
+    let fail = std::env::args().any(|argument| argument == "fail");
+    let mut expected_line = 0;
+    match converted(fail, &mut expected_line) {
+        Ok(value) => {
+            assert_eq!(value, leaf(false));
+            println!("{}", value + 1);
+        }
+        Err(error) => {
+            let native = std::error::Error::source(&error)
+                .and_then(|source| source.downcast_ref::<$SOURCE>())
+                .expect("parent must expose native source");
+            assert_eq!(native.line, expected_line);
+            assert_eq!(native.file, file!());
+            let original = std::error::Error::source(native)
+                .and_then(|source| source.downcast_ref::<std::io::Error>())
+                .expect("native source must retain the typed foreign error");
+            assert_eq!(original.kind(), std::io::ErrorKind::PermissionDenied);
+            assert!(std::error::Error::source(original).is_none());
+            assert!(error.to_string().contains(&format!("{}:{expected_line}", file!())));
+            // Direct conversion also retains a custom payload, not just its text.
+            let source = std::io::Error::new(std::io::ErrorKind::Other, Payload(31));
+            let expected_line = line!() + 1;
+            let direct = $PARENT::from(source);
+            let native = std::error::Error::source(&direct)
+                .and_then(|source| source.downcast_ref::<$SOURCE>()).unwrap();
+            assert_eq!(native.line, expected_line);
+            let source = std::error::Error::source(native)
+                .and_then(|source| source.downcast_ref::<std::io::Error>()).unwrap();
+            assert_eq!(source.get_ref().and_then(|inner| inner.downcast_ref::<Payload>()).unwrap().0, 31);
+            println!("typed source and caller location preserved");
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Payload(u32);
+
+impl std::fmt::Display for Payload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "payload {}", self.0)
+    }
+}
+
+impl std::error::Error for Payload {}

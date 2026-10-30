@@ -94,7 +94,7 @@ pub fn plan_result_unwrap_propagation(
 }
 
 #[tracing::instrument(level = "trace", skip(ir, function, facts, site), err(level = "warn"))]
-fn resolved_callee(
+pub(super) fn resolved_callee(
     ir: &dyn IrView,
     function: NodeId,
     facts: &FunctionSourceSyntax,

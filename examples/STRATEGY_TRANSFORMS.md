@@ -12,6 +12,8 @@ Run one with `cargo run --example apply_panic_result -- fail`.
 | `apply_panic_result` | Construct a typed error chain from a fresh Result panic site, one caller, and main | Prints `8`; panics with `fail`, retaining `PermissionDenied` in its diagnostic. |
 | `apply_failure_site` | Propagate one resolved Result failure inside an already fallible function | Prints `Ok(8)`; initially panics with `fail`. |
 | `apply_unwrap_lookalike` | Refuse rewriting a user-defined same-spelling method as Result propagation | Prints `7`; its `unwrap` returns `u32`. |
+| `apply_result_propagation` | Preserve source evaluation and side-effect order while propagating a resolved failure | Prints `Ok(8)` with a trace; initially panics with `fail`. |
+| `apply_error_declaration` | Construct an owned parent / Kind / native source chain from a resolved I/O failure | Prints `8`; initially panics with `fail`. |
 
 The integration harness in `tests/strategy_specimens.rs` copies each example's
 actual `main.rs` bytes into an isolated Cargo package at `src/main.rs`, with an
@@ -44,7 +46,7 @@ structural exit positions in the shared IR; apply never rediscovers syntax.
 In particular,
 the existing panic inventory also flags the lookalike's method call: a finding
 based on spelling must never authorize an apply edit. Receiver resolution is
-required before failure-site rewriting can be implemented.
+required to authorize failure-site rewriting.
 
 `tests/strategy_result_contracts.rs` checks absolute standard Result declarations,
 source type arguments, located direct calls, and unwrap receiver ranges through
@@ -66,3 +68,12 @@ order, comments, and a returned typed source error. Additional tests refuse
 lookalike methods and unresolved/error-mismatched contracts, reject stale or
 corrupt evidence, and compile independent repeated-site previews after reload.
 This operation does not yet provide a complete panic-to-error CLI migration.
+
+`tests/strategy_error_declaration.rs` generates a fresh owned error architecture
+through the production declaration planner. A surrounding test consumer proves
+that the generated `From` conversion works through `?` and direct conversion,
+retaining typed source links, a custom payload, and the exact caller location.
+Names and the insertion anchor come from shared IR; collisions, unsupported
+source types, stale snapshots, and corrupt facts refuse generation. The planner
+only appends declarations; signature and caller migration remain independent
+operations before composition into a complete apply unit.

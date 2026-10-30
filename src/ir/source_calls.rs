@@ -14,6 +14,13 @@ pub const ATTR_FUNCTION_CALL_FLOW: &str = "function_call_flow";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct SourceModuleScope {
     #[getter(copy)]
+    source_digest: [u8; 32],
+    /// End of the shared snapshot, before which existing bytes are preserved.
+    #[getter(copy)]
+    insertion_offset: usize,
+    /// All written identifiers, including local bindings, conservatively reserve names.
+    identifiers: Vec<String>,
+    #[getter(copy)]
     opaque: bool,
     #[getter(copy)]
     extern_crates: bool,
@@ -23,15 +30,26 @@ impl SourceModuleScope {
     #[tracing::instrument(level = "trace", skip(file))]
     pub(crate) fn collect(file: &crate::loader::SharedParsedFile) -> Self {
         let mut scope = Self {
+            source_digest: file.source_digest(),
+            insertion_offset: file.source().len(),
+            identifiers: Vec::new(),
             opaque: false,
             extern_crates: false,
         };
         scope.visit_file(file.syntax());
+        scope.identifiers.sort();
+        scope.identifiers.dedup();
         scope
     }
 }
 
 impl<'ast> Visit<'ast> for SourceModuleScope {
+    #[tracing::instrument(level = "trace", skip(self, ident))]
+    fn visit_ident(&mut self, ident: &'ast syn::Ident) {
+        self.identifiers
+            .push(ident.to_string().trim_start_matches("r#").to_owned());
+    }
+
     #[tracing::instrument(level = "trace", skip(self, attribute))]
     fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
         self.opaque |= !attribute.path().is_ident("doc");

@@ -1,7 +1,8 @@
 # Strategy transformations through `--apply`
 
 **Status:** Phase 0 foundations and isolated success-return/failure-propagation
-previews are implemented and tested against executable specimens. Complete
+previews and isolated owned error declaration construction are implemented and
+tested against executable specimens. Complete
 panic-to-error migrations and their CLI apply entry point remain ahead.
 
 This plan defines the broader purpose of strategy-driven apply and a first
@@ -634,3 +635,34 @@ Cross-module imports, method/trait resolution, aliases, cfg/macro contracts,
 Option/expect/domain failure construction, reverse transformations, and whole
 caller closure remain uncovered. Extend shared collection/enrichment for each
 missing fact before attempting its consuming transform.
+
+### Owned source-chain construction (seventh follow-up cycle)
+
+`plan_owned_error_declaration` constructs a fresh parent, boxed Kind, native
+source wrapper, and caller-tracked `From` conversion from a resolved I/O failure
+site. It needs no previous generated declarations or migration markers. Owned
+storage is an explicit operation contract; borrowed construction remains a
+separate lifetime obligation. The initial supported source is the known
+`::std::io::Error` type, not arbitrary standard paths or Result error arguments.
+
+The shared module facts now retain the source digest, end-of-file insertion
+offset, and conservative identifier reservations collected from the same shared
+parse. Planning consumes those facts through `IrView`, shares the existing
+receiver/callee proof, and uses `FunctionEditPlan` for its preview. Names derive
+deterministically from the source function and site index; a collision refuses
+the operation, including raw identifiers and local bindings. Existing bytes
+remain unchanged. Missing/corrupt module facts and stale source cannot authorize
+an insertion. Recollection refuses duplicate generation.
+
+`apply_error_declaration` is an independently authored panic specimen. Its test
+supplies a surrounding consumer of the generated conversion in isolation, then
+compiles without warnings and executes success and failure. It checks the
+original successful result, downcastable native and foreign source links,
+retention of a custom I/O payload, and exact caller file/line through both `?`
+and direct conversion. This proves generated construction, not automatic
+signature migration: the production preview only appends declarations.
+
+**Next:** lift an infallible function to the generated error contract, then prove
+one resolved caller adaptation independently. Compose only after both contracts
+pass. Function values, public/trait/extern boundaries, cross-module resolution,
+and unknown callers still prevent claiming a closed writable component.
