@@ -400,7 +400,7 @@ compiled explanations with actual strategy support as it lands.
     explicit returns and a separate tail, deterministic preview, stale/corrupt
     evidence rejection, fixed-boundary refusal, and repeat planning without
     nesting the generated wrapper.
-  - [ ] Extend structural tail handling to returns nested in branches/blocks and
+  - [x] Extend structural tail handling to returns nested in branches/blocks and
     prove unit fallthrough and evaluation counts before composing operations.
 - [ ] **Phase 2 — incremental composition and first construction.** Combine the
   proven operations in the smallest compatible steps: pairs, a complete leaf,
@@ -521,6 +521,30 @@ is rendered. Recollection returns `AlreadyLifted` instead of adding wrappers.
 This is a library planning primitive, not a new user-facing apply mode. Its
 caller obligations remain open. Macros, residual propagation, loops, nested
 scopes, attributes with semantic effects, visible/special/generic signatures,
-and never outputs are refused. Returns inside a tail expression currently
-require the next structural-tail operation. Existing apply writers and closed
-component transactions will be used when these operations can be composed.
+and never outputs are refused. Existing apply writers and closed component
+transactions will be used when these operations can be composed.
+
+### Structural success exits (third follow-up cycle)
+
+The shared collector now retains `FunctionSuccessExit` facts for value leaves,
+bare returns, block unit fallthrough, and an if expression's implicit else.
+Branch, match, block, and parenthesized value paths are decomposed during
+collection. The planner consumes those facts through `IrView`; it does not
+reconstruct control flow from source text. A syntactically returning branch
+followed by a semicolon does not acquire unreachable unit fallthrough.
+
+`apply_return_paths` is the executable contract. Its tests lift each function
+independently, compile without warnings, and execute every branch and match arm.
+They cover nested explicit returns, implicit unit, unit fallthrough, and
+mutation counts that verify once-only evaluation and order. Recollection proves
+repeat planning is idempotent. Missing, duplicated, or malformed exit evidence
+and invalid UTF-8 edit positions are rejected before any write.
+
+**Next substantive operation:** collect and resolve source Result contracts and
+caller/boundary relationships in the shared IR, then implement a failure-site
+rewrite in isolation. The existing panic inventory identifies syntax, including
+the same-spelling user method specimen; it does not authorize a rewrite.
+Declaration generation and caller adaptation still need their own executable
+contracts before composing a complete fresh panic-to-error migration. This
+return primitive remains a library preview operation with no CLI writer or
+worklist claims; it must not publish a partially converted program.

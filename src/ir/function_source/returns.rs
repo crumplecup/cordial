@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 
-use super::SourceByteRange;
+use super::{FunctionSuccessExit, SourceByteRange, success};
 
 /// A return exits the current function, rather than a nested execution scope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
@@ -24,11 +24,13 @@ pub enum ReturnValue {
     Expression(SourceByteRange),
 }
 
-/// How control reaches the end of a function body.
+/// Surface syntax at the end of a function body.
+///
+/// Structural success exits separately describe which paths can supply a value.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FunctionTail {
-    /// A statement-only block falls through with unit.
-    Unit,
+    /// Empty or statement-ending block; this alone does not prove fallthrough.
+    Statements,
     /// An explicit return is already represented in the return inventory.
     Return,
     /// A trailing expression supplies the value.
@@ -84,6 +86,7 @@ pub enum NestedScopeKind {
 pub struct FunctionReturnFlow {
     returns: Vec<FunctionReturn>,
     tail: FunctionTail,
+    success_exits: Vec<FunctionSuccessExit>,
     nested_scopes: Vec<FunctionNestedScope>,
     boundaries: Vec<FunctionBoundary>,
 }
@@ -93,6 +96,7 @@ impl FunctionReturnFlow {
     pub(super) fn collect(function: &syn::ItemFn) -> Self {
         let mut collector = ReturnCollector {
             returns: Vec::new(),
+            success_exits: Vec::new(),
             nested_scopes: Vec::new(),
             boundaries: Vec::new(),
         };
@@ -119,16 +123,18 @@ impl FunctionReturnFlow {
             collector.visit_attribute(attribute);
         }
         collector.visit_block(&function.block);
+        success::collect_block(&function.block, &mut collector.success_exits);
         let tail = match function.block.stmts.last() {
             Some(syn::Stmt::Expr(syn::Expr::Return(_), _)) => FunctionTail::Return,
             Some(syn::Stmt::Expr(expression, None)) => {
                 FunctionTail::Expression(expression.span().byte_range().into())
             }
-            _ => FunctionTail::Unit,
+            _ => FunctionTail::Statements,
         };
         Self {
             returns: collector.returns,
             tail,
+            success_exits: collector.success_exits,
             nested_scopes: collector.nested_scopes,
             boundaries: collector.boundaries,
         }
@@ -137,6 +143,7 @@ impl FunctionReturnFlow {
 
 struct ReturnCollector {
     returns: Vec<FunctionReturn>,
+    success_exits: Vec<FunctionSuccessExit>,
     nested_scopes: Vec<FunctionNestedScope>,
     boundaries: Vec<FunctionBoundary>,
 }
@@ -162,6 +169,12 @@ impl ReturnCollector {
 impl<'ast> Visit<'ast> for ReturnCollector {
     #[tracing::instrument(level = "trace", skip(self, expression))]
     fn visit_expr_return(&mut self, expression: &'ast syn::ExprReturn) {
+        match &expression.expr {
+            Some(value) => success::collect_value(value, &mut self.success_exits),
+            None => self.success_exits.push(FunctionSuccessExit::BareReturn {
+                offset: expression.span().byte_range().end,
+            }),
+        }
         self.returns.push(FunctionReturn {
             range: expression.span().byte_range().into(),
             value: match &expression.expr {

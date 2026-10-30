@@ -8,6 +8,7 @@ Run one with `cargo run --example apply_panic_result -- fail`.
 | --- | --- | --- |
 | `apply_return_lifting` | Wrap both explicit early returns and the tail when lifting a return type | Prints `11`, or `7` with `early`. |
 | `apply_return_scopes` | Separate nested returns and identify fixed signatures and residual propagation | Prints `10 1 Ok(8)`, or `2 1 Ok(8)` with `early`. |
+| `apply_return_paths` | Lift branch, match, nested return, and unit exits without changing evaluation counts | Exercises all paths; counted calls return `11` and `112`, leaving counter `112`. |
 | `apply_panic_result` | Construct a typed error chain from a fresh Result panic site, one caller, and main | Prints `8`; panics with `fail`, retaining `PermissionDenied` in its diagnostic. |
 | `apply_unwrap_lookalike` | Refuse rewriting a user-defined same-spelling method as Result propagation | Prints `7`; its `unwrap` returns `u32`. |
 
@@ -32,6 +33,12 @@ paths. Its Debug boundary observes the same values inside `Ok`. Preview does
 not write; the harness writes only its disposable copy. Recollection proves
 repeat planning adds no wrappers. Fixed boundaries and stale or corrupt
 evidence are refused. This does not yet prove a complete panic migration.
+
+`tests/strategy_return_paths.rs` extends that contract to structural exits. Each
+function is lifted independently through the production planner, compiled
+without warnings, and executed on every path. Full output comparison checks
+that other functions and side effects remain unchanged. Collection retains the
+structural exit positions in the shared IR; apply never rediscovers syntax.
 
 In particular,
 the existing panic inventory also flags the lookalike's method call: a finding

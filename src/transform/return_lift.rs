@@ -49,8 +49,6 @@ pub enum ReturnLiftBlocker {
     Boundary(FunctionBoundary),
     /// Ranges are inconsistent with their owning signature, body, or returns.
     InvalidRanges,
-    /// A return nested in a tail expression needs structural tail handling.
-    ReturnInsideTail,
 }
 
 /// Plan `T` to `Result<T, Infallible>` using only collected IR facts.

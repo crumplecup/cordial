@@ -4,7 +4,7 @@ use std::ops::ControlFlow;
 
 use super::return_lift::{ReturnLiftBlocker, ReturnLiftEdit};
 use crate::ir::{
-    DeclaredFunctionOutput, FunctionSourceSyntax, FunctionTail, ReturnValue, SourceByteRange,
+    DeclaredFunctionOutput, FunctionSourceSyntax, FunctionSuccessExit, SourceByteRange,
 };
 
 type EditDecision = ControlFlow<ReturnLiftBlocker, Vec<ReturnLiftEdit>>;
@@ -20,8 +20,7 @@ pub(super) fn edits_from_facts(facts: &FunctionSourceSyntax) -> EditDecision {
         return ControlFlow::Break(ReturnLiftBlocker::InvalidRanges);
     }
     let mut edits = vec![signature_edit(facts)];
-    edits.extend(return_edits(facts)?);
-    edits.extend(tail_edits(facts)?);
+    edits.extend(success_edits(facts)?);
     edits.sort_by_key(|edit| (edit.range().start(), edit.range().end()));
     ControlFlow::Continue(edits)
 }
@@ -39,54 +38,42 @@ fn signature_edit(facts: &FunctionSourceSyntax) -> ReturnLiftEdit {
 }
 
 #[tracing::instrument(level = "trace", skip(facts))]
-fn return_edits(facts: &FunctionSourceSyntax) -> EditDecision {
+fn success_edits(facts: &FunctionSourceSyntax) -> EditDecision {
     let mut edits = Vec::new();
-    let mut previous_end = facts.body_range().start();
-    for site in facts.return_flow().returns() {
-        if !inside_body(facts.body_range(), site.range()) || site.range().start() < previous_end {
+    let exits = facts.return_flow().success_exits();
+    for (index, exit) in exits.iter().enumerate() {
+        if exits[..index].contains(exit) {
             return ControlFlow::Break(ReturnLiftBlocker::InvalidRanges);
         }
-        previous_end = site.range().end();
-        match site.value() {
-            ReturnValue::Unit => insert(
-                &mut edits,
-                site.range().end(),
-                " ::core::result::Result::Ok(())",
-            ),
-            ReturnValue::Expression(range) => {
-                if !contains(site.range(), range) || range.start() == range.end() {
+        let range = match exit {
+            FunctionSuccessExit::Expression(range) => range.clone(),
+            FunctionSuccessExit::BareReturn { offset }
+            | FunctionSuccessExit::BlockUnit { offset }
+            | FunctionSuccessExit::MissingElse { offset } => (*offset..*offset).into(),
+        };
+        if !inside_body(facts.body_range(), &range) {
+            return ControlFlow::Break(ReturnLiftBlocker::InvalidRanges);
+        }
+        match exit {
+            FunctionSuccessExit::Expression(range) => {
+                if range.start() == range.end() {
                     return ControlFlow::Break(ReturnLiftBlocker::InvalidRanges);
                 }
                 wrap(&mut edits, range);
             }
-        }
-    }
-    ControlFlow::Continue(edits)
-}
-
-#[tracing::instrument(level = "trace", skip(facts))]
-fn tail_edits(facts: &FunctionSourceSyntax) -> EditDecision {
-    let mut edits = Vec::new();
-    match facts.return_flow().tail() {
-        FunctionTail::Unit => insert(
-            &mut edits,
-            facts.body_range().end() - 1,
-            "\n::core::result::Result::Ok(())\n",
-        ),
-        FunctionTail::Return => {}
-        FunctionTail::Expression(range) => {
-            if !inside_body(facts.body_range(), range) || range.start() == range.end() {
-                return ControlFlow::Break(ReturnLiftBlocker::InvalidRanges);
+            FunctionSuccessExit::BareReturn { offset } => {
+                insert(&mut edits, *offset, " ::core::result::Result::Ok(())");
             }
-            if facts
-                .return_flow()
-                .returns()
-                .iter()
-                .any(|site| contains(range, site.range()))
-            {
-                return ControlFlow::Break(ReturnLiftBlocker::ReturnInsideTail);
+            FunctionSuccessExit::BlockUnit { offset } => {
+                insert(&mut edits, *offset, "\n::core::result::Result::Ok(())\n");
             }
-            wrap(&mut edits, range);
+            FunctionSuccessExit::MissingElse { offset } => {
+                insert(
+                    &mut edits,
+                    *offset,
+                    " else { ::core::result::Result::Ok(()) }",
+                );
+            }
         }
     }
     ControlFlow::Continue(edits)

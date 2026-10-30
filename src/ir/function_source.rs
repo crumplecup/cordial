@@ -4,10 +4,12 @@ use serde::{Deserialize, Serialize};
 
 mod output;
 mod returns;
+mod success;
 pub use returns::{
     FunctionBoundary, FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionTail,
     NestedScopeKind, ReturnValue,
 };
+pub use success::FunctionSuccessExit;
 
 /// Attribute carrying [`FunctionSourceSyntax`] on a source function node.
 pub const ATTR_FUNCTION_SOURCE_SYNTAX: &str = "function_source_syntax";
