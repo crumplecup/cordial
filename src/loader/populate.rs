@@ -15,12 +15,14 @@ impl SourceLoadView {
     #[instrument(level = "debug", skip(target), err(level = "warn"))]
     pub(crate) fn for_target(target: &super::CrateTarget) -> CordialResult<Self> {
         let src_root = target.crate_root().join("src");
-        Ok(Self::new(
+        let view = Self::new(
             target.crate_name().clone(),
             src_root.clone(),
             read_source_files(&src_root)?,
             target.kinds().clone(),
-        ))
+        )
+        .with_binary_entries(target.binary_entries().clone());
+        Ok(view)
     }
 
     /// Load a standalone crate's source through the same snapshot path.
@@ -63,6 +65,11 @@ impl SourceLoadView {
     #[hotpath::measure(impl_type = "SourceLoadView")]
     pub fn populate_ir(&self, ir: &mut CrateIr) -> CordialResult<()> {
         let root = ir.root();
+        ir.set_attr(
+            root,
+            crate::ir::ATTR_BINARY_ENTRY_PATHS,
+            serde_json::to_value(self.binary_entries())?,
+        )?;
         if !self.crate_kinds().is_empty() {
             ir.set_attr(
                 root,

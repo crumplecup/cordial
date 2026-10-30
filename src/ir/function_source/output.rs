@@ -3,6 +3,25 @@
 use serde::{Deserialize, Serialize};
 use syn::spanned::Spanned;
 
+/// Syntactic entry signature; Cargo identity must be checked separately.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SourceEntryContract {
+    /// A free `main` with no parameters and a unit return.
+    UnitMain,
+}
+
+#[tracing::instrument(level = "trace", skip(function))]
+pub(super) fn entry_contract(function: &syn::ItemFn) -> Option<SourceEntryContract> {
+    let unit = match &function.sig.output {
+        syn::ReturnType::Default => true,
+        syn::ReturnType::Type(_, ty) => {
+            matches!(ty.as_ref(), syn::Type::Tuple(tuple) if tuple.elems.is_empty())
+        }
+    };
+    (function.sig.ident == "main" && function.sig.inputs.is_empty() && unit)
+        .then_some(SourceEntryContract::UnitMain)
+}
+
 /// Explicit absolute standard Result syntax and its source type arguments.
 ///
 /// This deliberately leaves aliases, relative paths, and generic error types

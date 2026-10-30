@@ -46,6 +46,9 @@ pub struct CrateTarget {
     /// Cargo target kinds; empty when no Cargo metadata was available.
     #[new(default)]
     kinds: Vec<CrateKind>,
+    /// Binary entry paths supplied by Cargo metadata, not inferred from names.
+    #[new(default)]
+    binary_entries: Vec<PathBuf>,
 }
 
 impl CrateTarget {

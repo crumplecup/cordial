@@ -65,7 +65,9 @@ impl<'ast> Visit<'ast> for Calls {
     fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
         let local_name = match call.func.as_ref() {
             syn::Expr::Path(path) if path.qself.is_none() && path.path.get_ident().is_some() => {
-                path.path.get_ident().map(ToString::to_string)
+                path.path
+                    .get_ident()
+                    .map(|ident| ident.to_string().trim_start_matches("r#").to_owned())
             }
             _ => None,
         };

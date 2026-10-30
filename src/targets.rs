@@ -113,7 +113,15 @@ fn workspace_targets(project_root: &Path) -> CordialResult<Vec<CrateTarget>> {
         })?;
         targets.push(
             CrateTarget::new(package.name.to_string(), PathBuf::from(crate_root.as_str()))
-                .with_kinds(package_kinds(package)),
+                .with_kinds(package_kinds(package))
+                .with_binary_entries(
+                    package
+                        .targets
+                        .iter()
+                        .filter(|target| target.kind.contains(&cargo_metadata::TargetKind::Bin))
+                        .map(|target| target.src_path.clone().into_std_path_buf())
+                        .collect(),
+                ),
         );
     }
 

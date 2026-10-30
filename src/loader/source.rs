@@ -56,12 +56,16 @@ pub struct SourceFile {
 }
 
 /// Source loader output.
-#[derive(Debug, Clone, derive_getters::Getters)]
+#[derive(Debug, Clone, derive_getters::Getters, derive_setters::Setters)]
+#[setters(generate = false, prefix = "with_")]
 pub struct SourceLoadView {
     crate_name: String,
     src_root: PathBuf,
     files: Vec<SourceFile>,
     crate_kinds: Vec<CrateKind>,
+    /// Binary entry paths supplied by the target's Cargo metadata.
+    #[setters(generate)]
+    binary_entries: Vec<PathBuf>,
     #[getter(skip)]
     cache_token: Arc<CacheToken>,
 }

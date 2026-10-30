@@ -52,7 +52,7 @@ impl IrEnricher for SourceCallEnricher {
                 for parent in ir.parents(node.id(), EdgeKind::Contains) {
                     if let Some(name) = node.weight().name() {
                         names
-                            .entry((parent, name.clone()))
+                            .entry((parent, name.trim_start_matches("r#").to_owned()))
                             .or_default()
                             .push(node.id());
                     }

@@ -35,6 +35,8 @@ pub enum ReturnLiftBlocker {
     UntrustedNamespace,
     /// Changing an existing Result error contract needs a separate operation.
     AlreadyFallible,
+    /// Cargo identity and collected syntax do not establish a supported main.
+    UnsupportedEntryPoint,
 }
 
 /// Plan `T` to `Result<T, Infallible>` using only collected IR facts.

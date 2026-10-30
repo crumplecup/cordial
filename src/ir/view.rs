@@ -10,6 +10,18 @@ use super::query::Query;
 /// concrete petgraph storage. All node ids are local to this crate graph and
 /// remain valid only for the IR snapshot passed to the hook.
 pub trait IrView {
+    /// Read Cargo's binary entry paths; missing metadata cannot prove a boundary.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn binary_entry_paths(&self) -> CordialResult<Option<Vec<std::path::PathBuf>>> {
+        Ok(self
+            .node(self.root()?)
+            .and_then(|node| {
+                node.attr(super::ATTR_BINARY_ENTRY_PATHS)
+                    .map(|value| serde_json::from_value(value.clone()))
+            })
+            .transpose()?)
+    }
+
     /// Read persisted call resolution; missing evidence never means no callers.
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
     fn function_call_flow(&self, id: NodeId) -> CordialResult<Option<super::FunctionCallFlow>> {

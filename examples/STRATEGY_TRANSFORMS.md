@@ -18,6 +18,7 @@ Run one with `cargo run --example apply_panic_result -- fail`.
 | `apply_error_caller` | Adapt every call from one caller to a newly fallible callee, including exact-tail and early-return calls | Prints `14 2`, or `7 1` with `early` or `tail`; initially panics with `fail`. |
 | `apply_error_component` | Compose a fresh typed error migration through a multilevel caller graph, diamond, repeated sites, and self/mutual recursion | Prints `24 3`, or `25 3` with `deep`; initially panics with `fail`. |
 | `apply_function_uses` | Inventory direct calls, function values, qualified paths, nested scopes, and macro boundaries | Prints `45`. |
+| `apply_error_main` | Close the transitive migration through Cargo's unit `main` and returned-error termination | Prints `success`; initially panics with `fail`. |
 
 The integration harness in `tests/strategy_specimens.rs` copies each example's
 actual `main.rs` bytes into an isolated Cargo package at `src/main.rs`, with an
@@ -118,3 +119,13 @@ survive persisted IR reload. Path and call ranges retain their original bytes;
 macro tokens remain opaque obligations. Missing inventory on an older snapshot
 means unknown, while malformed inventory returns an error. No downstream parse
 or source scan supplies these facts.
+
+`tests/strategy_closed_panic.rs` joins written uses to resolved call identities
+before issuing a closed migration token. The eight-function executable keeps
+successful output and evaluation counts, while failure returns its original
+typed I/O source through `main` with Rust's error diagnostic and failure exit
+status. An isolated boundary-adapter test leaves the leaf panic unchanged.
+Cargo entry paths come from the existing metadata load into the shared IR;
+a same-named non-entry function cannot qualify. Function values, unresolved
+qualified or nested uses, opaque syntax, other source files, and missing or
+inconsistent inventories prevent closure. Preview still never writes files.

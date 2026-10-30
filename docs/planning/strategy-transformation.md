@@ -1,9 +1,9 @@
 # Strategy transformations through `--apply`
 
-**Status:** Shared-IR foundations, isolated operations, and a composed
-panic-to-error preview through transitive callers are implemented and tested
-against executable specimens. Complete use-site closure, boundary adapters,
-and the CLI apply entry point remain ahead.
+**Status:** Shared-IR foundations, isolated operations, transitive composition,
+and closed single-module binary migrations through a unit-main adapter are
+implemented and tested against executable specimens. Writer and CLI apply
+integration remain ahead; broader use and target forms are explicit refusals.
 
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
@@ -765,3 +765,37 @@ without adding another parse or a private analysis cache.
 **Next:** consume this inventory to close a migration through a selected
 executable boundary, then test a `main` Result adapter independently before
 connecting closed plans to writing and worklist claims.
+
+### Closed binary migration and main adapter (twelfth follow-up cycle)
+
+`plan_closed_owned_panic_component` joins the written-use inventory to enriched
+call identities and exact snapshot-bound call ranges. Every matching written
+reference must resolve to a changed function and an adapted site within the
+component; every changed call must have a corresponding written-use record.
+Function values, nested/qualified unresolved uses, opaque syntax, missing
+inventory, and inconsistent evidence refuse the entire plan. All collected
+source modules participate, including files outside the changed component.
+The resulting `ClosedPanicMigration` has no public constructor and is distinct
+from the earlier preview, which does not prove closure.
+
+The shared IR now retains binary entry paths from the existing Cargo metadata
+load and a collected unit-main signature contract. Closure requires a single
+binary target whose actual entry path and root function agree. Library/mixed
+targets, multiple binaries, same-named non-entry functions, or older snapshots
+without that evidence refuse. No new source scan, parse, or metadata side
+channel is introduced. `plan_owned_main_return_lift` independently tests the
+boundary's success contract before composition.
+
+`apply_error_main` exercises eight transformed functions through the binary
+entry point. Successful output and evaluation counts are preserved; failure
+returns the typed I/O source through Rust's `Result` termination contract,
+prints the generated Debug diagnostic, exits unsuccessfully, and does not
+continue into successful-path output. This is an explicit boundary-policy
+change from panic termination. Recollection finds no remaining candidate.
+
+**Next:** connect the closed contract to the existing snapshot-checked atomic
+writer, preserving dry-run and refusal behavior, then expose the complete
+operation through apply and worklist reporting. Keep the initial supported
+domain explicit: single-module private functions, one resolved I/O panic site,
+and one binary unit main. Broader source/error variants, cross-module identity
+resolution, and reverse transitions remain later work.

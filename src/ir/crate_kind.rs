@@ -12,6 +12,9 @@ use tracing::instrument;
 /// a plain library.
 pub const ATTR_CRATE_KINDS: &str = "crate_kinds";
 
+/// Cargo binary entry paths persisted by the shared source loader.
+pub const ATTR_BINARY_ENTRY_PATHS: &str = "binary_entry_paths";
+
 /// What Cargo builds a package as.
 ///
 /// A package may be several kinds at once (a library plus a binary). Example,

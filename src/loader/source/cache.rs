@@ -100,6 +100,7 @@ impl SourceLoadView {
             src_root,
             files,
             crate_kinds,
+            binary_entries: Vec::new(),
             cache_token: SESSION_TOKEN.with(|current| {
                 current
                     .borrow()

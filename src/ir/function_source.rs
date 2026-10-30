@@ -7,7 +7,7 @@ mod output;
 mod returns;
 mod success;
 pub use calls::{FunctionCallSyntax, FunctionUnwrapSyntax};
-pub use output::SourceResultContract;
+pub use output::{SourceEntryContract, SourceResultContract};
 pub use returns::{
     FunctionBoundary, FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionTail,
     NestedScopeKind, ReturnValue,
@@ -71,6 +71,9 @@ pub struct FunctionSourceSyntax {
     unwraps: Vec<FunctionUnwrapSyntax>,
     /// Local bindings and imports can shadow a direct call's written path.
     has_call_shadowing: bool,
+    /// Missing on older snapshots; names alone never establish an entry signature.
+    #[serde(default)]
+    entry_contract: Option<SourceEntryContract>,
 }
 
 impl FunctionSourceSyntax {
@@ -112,6 +115,7 @@ impl FunctionSourceSyntax {
             calls,
             unwraps,
             has_call_shadowing,
+            entry_contract: output::entry_contract(function),
         })
     }
 }
