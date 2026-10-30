@@ -17,6 +17,7 @@ use crate::targets::discover_crate_targets;
 
 use super::type_graph::{for_each_shared_src_rust_file, trait_is_std_error};
 
+mod getter_uses;
 pub(super) mod getters;
 mod graph_apply;
 mod initializers;

@@ -140,6 +140,7 @@ impl SourceLoadView {
                     syntax,
                     digest,
                     session: self.cache_token.0,
+                    macros: std::cell::OnceCell::new(),
                 }),
             };
             files.insert(path.to_path_buf(), file.clone());

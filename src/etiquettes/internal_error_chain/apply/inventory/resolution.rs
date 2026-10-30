@@ -17,11 +17,15 @@ use super::edges::{ErrorEdgeTarget, ErrorEdgeTargetKind};
 use super::helpers::derive_is_builtin;
 use super::syntax_facts::FileSyntaxFacts;
 
+mod getter_consumers;
 mod ir;
 mod lookup;
 mod paths;
 
-use paths::{ModuleIdentity, module_identities, use_paths};
+use paths::ModuleIdentity;
+pub(in crate::etiquettes::internal_error_chain::apply) use paths::{
+    absolute_path, module_identities, use_paths,
+};
 
 pub(in crate::etiquettes::internal_error_chain::apply) struct CrateTypeIndex {
     declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>>,
@@ -30,6 +34,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct CrateTypeIndex {
     imports: HashMap<PathBuf, Vec<(String, Vec<String>)>>,
     file_syntax: HashMap<PathBuf, FileSyntaxFacts>,
     incoming_edges: Vec<(String, ErrorEdgeTarget)>,
+    getter_uses: Vec<super::super::getter_uses::GetterUseFact>,
 }
 
 impl CrateTypeIndex {
@@ -37,7 +42,8 @@ impl CrateTypeIndex {
     pub(in crate::etiquettes::internal_error_chain::apply) fn new(
         files: &[SharedParsedFile],
     ) -> Self {
-        let getters = super::super::getters::collect_getter_storage(files);
+        let getter_uses = super::super::getter_uses::collect(files);
+        let getters = super::super::getters::collect_getter_storage(files, &getter_uses);
         let mut declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
         let mut local: HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
         let modules = module_identities(files);
@@ -125,6 +131,7 @@ impl CrateTypeIndex {
                 })
                 .collect(),
             incoming_edges: Vec::new(),
+            getter_uses,
         };
         index.incoming_edges = index.collect_incoming_edges(files);
         index

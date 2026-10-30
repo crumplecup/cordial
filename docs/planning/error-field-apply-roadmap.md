@@ -378,6 +378,56 @@ constructors. Do not remove the crate-wide guard or infer safety from a method
 name alone. Opaque macro cases need explicit collection evidence before they
 can stop blocking a migration.
 
+#### Candidate-specific getter closure
+
+Getter collection now records each filename use's source location and receiver
+identity in the shared IR. An inherent method or associated function on another
+resolved declaration no longer blocks every error field in the crate. A known
+candidate consumer blocks that candidate; unresolved receivers still block
+conversion. Explicit imports and reexports retain declaration identity across
+files. Receiver facts are stored once in the crate index, rather than copied
+into each field's getter contract. Aliases, generic specializations, deref
+forwarding without a proven inherent method, shadowed bindings, conditional
+methods or imports, unknown method attributes, and unknown macro payloads
+remain conservative blockers.
+
+The shared source snapshot owns lazy syntax for supported assertion, formatting,
+and list arguments and the item bodies of Amenable harness macros. These token
+islands are parsed once by the loader, including nested invocations. Collection
+consumes that shared syntax, verifies the macro contract, and records receiver
+evidence; apply uses the resulting IR facts without parsing macro payloads
+itself. A local helper's explicit standard `Location` return type can establish
+filename provenance.
+
+The field-use inventory consumes the same receiver facts to distinguish direct
+field reads on unrelated declarations. A recognized macro can be excluded only
+when its shared syntax and receiver evidence establish that its field uses are
+unrelated; candidate constructions and unresolved receivers still block it.
+
+Compiling fixtures exercise unrelated cross-file methods, associated
+constructors, and nested gallery assertions in both storage directions. They
+require unchanged consumers, byte-for-byte source restoration, dry-run
+preservation, and repeat-apply idempotence. Rejection fixtures cover aliases,
+shadowing, conditional and associated-only methods, deref forwarding, and
+unknown or replaced macros.
+
+The real Amenable copy now converts **117 fields in 33 files** in both
+directions, adding all four Kani filename fields to the previous 113-field
+round trip. Borrowed apply checked off **117 worklist items**, leaving 219
+error-handling findings. The owned policy's refreshed list had no matching
+storage findings to check off; its one unrelated caller-tracking finding
+remained open. Both directions passed `cargo test --workspace --locked` and
+`cargo test -p amenable_time --features chrono-tz,jiff --locked`. Repeat previews
+proposed zero conversions. Crate source matches `baseline-owned` byte for byte,
+and policy matches `f232abf`. The copy records borrowed checkpoint `cc50221`
+and restored owned checkpoint `6548149`; the original Amenable was untouched.
+
+Of the original 118 call-site filename candidates, only `AmenableError::file`
+remains blocked by unresolved macro/alias field-use evidence. The other 37
+String candidates and the original 175-field inventory gap remain separate
+roadmap work. This closes the four Kani candidates, not the entire migration
+roadmap. No verifier proofs or feature-powerset gate were run in this phase.
+
 ## First implementation decision
 
 Start with slice 0. It sets the minimum evidence needed for the existing

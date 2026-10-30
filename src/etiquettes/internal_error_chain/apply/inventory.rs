@@ -19,7 +19,7 @@ mod edges;
 mod from;
 mod graph;
 mod helpers;
-mod resolution;
+pub(super) mod resolution;
 mod result_alias;
 mod source_method;
 mod syntax_facts;

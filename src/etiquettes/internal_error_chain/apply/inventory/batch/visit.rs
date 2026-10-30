@@ -220,7 +220,16 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
             }
             for offset in 0..self.relevant.len() {
                 let index = self.relevant[offset];
-                if name == self.candidates[index].field_name.as_str() {
+                let candidate = &self.candidates[index];
+                if name == candidate.field_name.as_str()
+                    && !(candidate.field.getter_storage.is_some()
+                        && self.declarations.unrelated_getter_field(
+                            &candidate.declaration,
+                            &candidate.type_name,
+                            self.file.path(),
+                            item.span(),
+                        ))
+                {
                     self.record(index, ErrorConversionSiteKind::FieldUse, item.span(), false);
                 }
             }
@@ -318,6 +327,17 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
             let candidate = &self.candidates[index];
             let constructs = tokens_construct_type(&item.tokens, &candidate.type_name);
             if constructs || tokens_access_field(&item.tokens, &candidate.field_name) {
+                if !constructs
+                    && (candidate.field.getter_storage.is_some()
+                        && self.declarations.unrelated_getter_macro(
+                            &candidate.declaration,
+                            &candidate.type_name,
+                            self.file.path(),
+                            item.span(),
+                        ))
+                {
+                    continue;
+                }
                 let resolved =
                     !constructs && !macro_has_unhandled_field_use(item, &candidate.field_name);
                 self.record(index, ErrorConversionSiteKind::Macro, item.span(), resolved);

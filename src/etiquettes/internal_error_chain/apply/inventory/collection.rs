@@ -43,7 +43,7 @@ pub(super) fn collect_conversion_units(
         if relevant.is_empty() {
             continue;
         }
-        let mut sites = BatchInventoryVisitor::collect(file, &candidates, &relevant);
+        let mut sites = BatchInventoryVisitor::collect(file, &candidates, &relevant, declarations);
         for index in relevant {
             let candidate = &candidates[index];
             let external = file.path() != candidate.declaration;

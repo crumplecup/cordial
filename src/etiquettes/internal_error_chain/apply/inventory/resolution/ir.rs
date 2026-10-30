@@ -24,6 +24,7 @@ struct CrateTypeIndexFacts {
     imports: Vec<(PathBuf, Vec<(String, Vec<String>)>)>,
     file_syntax: Vec<FileSyntaxFacts>,
     incoming_edges: Vec<(String, ErrorEdgeTarget)>,
+    getter_uses: Vec<super::super::super::getter_uses::GetterUseFact>,
 }
 
 impl CrateTypeIndex {
@@ -55,6 +56,7 @@ impl CrateTypeIndex {
                 .collect(),
             file_syntax: self.file_syntax.values().cloned().collect(),
             incoming_edges: self.incoming_edges.clone(),
+            getter_uses: self.getter_uses.clone(),
         };
         let root = ir.root()?;
         ir.set_attr(root, TYPE_INDEX_ATTR, serde_json::to_value(facts)?)
@@ -85,6 +87,7 @@ impl CrateTypeIndex {
                 .map(|facts| (facts.path().clone(), facts))
                 .collect(),
             incoming_edges: facts.incoming_edges,
+            getter_uses: facts.getter_uses,
         })
     }
 }

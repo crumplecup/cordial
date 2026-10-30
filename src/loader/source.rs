@@ -14,8 +14,10 @@ use super::LoadView;
 use tracing::instrument;
 
 mod cache;
+mod macros;
 use cache::CacheToken;
 pub(crate) use cache::ParsedSourceSession;
+pub use macros::SharedMacroSyntax;
 #[cfg(feature = "internal_error_chain")]
 mod edit;
 #[cfg(feature = "internal_error_chain")]
@@ -143,6 +145,7 @@ struct ParsedSource {
     syntax: syn::File,
     digest: [u8; 32],
     session: u64,
+    macros: std::cell::OnceCell<macros::MacroTrees>,
 }
 
 impl SharedParsedFile {
@@ -174,6 +177,16 @@ impl SharedParsedFile {
     #[instrument(level = "trace", skip(self))]
     pub fn syntax(&self) -> &syn::File {
         &self.inner.syntax
+    }
+
+    /// Rust islands inside supported macros, parsed once with this snapshot.
+    /// Unknown macro grammars return `None`; this does not expand macros.
+    #[instrument(level = "trace", skip(self, invocation))]
+    pub fn macro_syntax(&self, invocation: &syn::Macro) -> Option<&SharedMacroSyntax> {
+        self.inner
+            .macros
+            .get_or_init(|| macros::collect(&self.inner.syntax))
+            .get(&macros::location(invocation))
     }
 }
 

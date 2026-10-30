@@ -11,14 +11,12 @@ use super::derives::known_derive;
 use super::names::Names;
 use super::{GetterFiles, GetterStorageFacts};
 
-#[instrument(level = "debug", skip(files))]
+#[instrument(level = "debug", skip(files, uses))]
 pub(in crate::etiquettes::internal_error_chain::apply) fn collect_getter_storage(
     files: &[SharedParsedFile],
+    uses: &[super::super::getter_uses::GetterUseFact],
 ) -> GetterFiles {
     let mut names = Names::collect(files);
-    let unresolved_uses = files
-        .iter()
-        .any(|file| super::super::initializers::has_unresolved_getter_uses(file.syntax()));
     let mut facts = GetterFiles::new();
     for file in files {
         let fields = facts.entry(file.path().to_path_buf()).or_default();
@@ -36,6 +34,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) fn collect_getter_storage
                     continue;
                 }
                 let owner = item.ident.to_string();
+                let unresolved_uses = uses.iter().any(|usage| usage.blocks(file.path(), &owner));
                 let storage = if super::super::is_string(&field.ty) {
                     let alias = names.reserve(&owner, &field_name);
                     GetterStorageFacts {

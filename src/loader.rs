@@ -12,7 +12,7 @@ use crate::ir::CrateKind;
 pub use scan_roots::path_has_fixtures;
 pub use scan_roots::quality_scan_trees;
 pub(crate) use source::ParsedSourceSession;
-pub use source::{SharedParsedFile, SourceFile, SourceLoadView, SourceLoader};
+pub use source::{SharedMacroSyntax, SharedParsedFile, SourceFile, SourceLoadView, SourceLoader};
 #[cfg(feature = "internal_error_chain")]
 pub(crate) use source::{SourceEditView, SourceSnapshot};
 #[cfg(feature = "allows")]

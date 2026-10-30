@@ -11,14 +11,16 @@ use crate::loader::SharedParsedFile;
 /// A cfg can remove a module without changing its privacy boundary when present.
 /// Conditional identities do not establish an unconditional type-resolution path.
 #[derive(Clone, serde::Serialize, serde::Deserialize, derive_getters::Getters)]
-pub(super) struct ModuleIdentity {
+pub(in crate::etiquettes::internal_error_chain::apply) struct ModuleIdentity {
     path: Vec<String>,
     #[getter(copy)]
     unconditional: bool,
 }
 
 #[instrument(level = "debug", skip(files))]
-pub(super) fn module_identities(files: &[SharedParsedFile]) -> HashMap<PathBuf, ModuleIdentity> {
+pub(in crate::etiquettes::internal_error_chain::apply) fn module_identities(
+    files: &[SharedParsedFile],
+) -> HashMap<PathBuf, ModuleIdentity> {
     let mut by_module: HashMap<Vec<String>, Vec<&SharedParsedFile>> = HashMap::new();
     for file in files {
         if let Some(module) = module_path(file.path()) {
@@ -80,7 +82,10 @@ fn module_path(path: &Path) -> Option<Vec<String>> {
 }
 
 #[instrument(level = "debug")]
-pub(super) fn absolute_path(module: &[String], written: &[String]) -> Option<Vec<String>> {
+pub(in crate::etiquettes::internal_error_chain::apply) fn absolute_path(
+    module: &[String],
+    written: &[String],
+) -> Option<Vec<String>> {
     let (mut base, mut rest) = if written.first().is_some_and(|name| name == "crate") {
         (Vec::new(), &written[1..])
     } else if written.first().is_some_and(|name| name == "self") {
@@ -100,7 +105,7 @@ pub(super) fn absolute_path(module: &[String], written: &[String]) -> Option<Vec
 }
 
 #[instrument(level = "debug", skip(tree))]
-pub(super) fn use_paths(
+pub(in crate::etiquettes::internal_error_chain::apply) fn use_paths(
     tree: &UseTree,
     prefix: Vec<String>,
     paths: &mut Vec<(String, Vec<String>)>,

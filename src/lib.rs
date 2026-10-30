@@ -366,8 +366,8 @@ pub use ir::{
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use loader::path_has_fixtures;
 pub use loader::{
-    CrateTarget, LoadView, SharedParsedFile, SourceFile, SourceLoadView, SourceLoader,
-    module_path_from_src_file, quality_scan_trees,
+    CrateTarget, LoadView, SharedMacroSyntax, SharedParsedFile, SourceFile, SourceLoadView,
+    SourceLoader, module_path_from_src_file, quality_scan_trees,
 };
 pub use objects::{
     Artifact, Disposition, FileSpan, Finding, FindingSink, IrAnchor, MapFindingSink, Marker,

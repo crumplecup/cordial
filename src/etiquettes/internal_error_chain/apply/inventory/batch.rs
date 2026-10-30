@@ -15,6 +15,7 @@ pub(super) struct BatchInventoryVisitor<'a> {
     file: &'a SharedParsedFile,
     candidates: &'a [ConversionCandidate],
     relevant: &'a [usize],
+    declarations: &'a super::CrateTypeIndex,
     module_depth: usize,
     current_impl: Option<String>,
     current_error_trait: Option<syn::Path>,
@@ -25,16 +26,18 @@ pub(super) struct BatchInventoryVisitor<'a> {
 }
 
 impl<'a> BatchInventoryVisitor<'a> {
-    #[instrument(level = "debug", skip(file, candidates, relevant))]
+    #[instrument(level = "debug", skip(file, candidates, relevant, declarations))]
     pub(super) fn collect(
         file: &'a SharedParsedFile,
         candidates: &'a [ConversionCandidate],
         relevant: &'a [usize],
+        declarations: &'a super::CrateTypeIndex,
     ) -> Vec<Vec<ErrorConversionSite>> {
         let mut visitor = Self {
             file,
             candidates,
             relevant,
+            declarations,
             module_depth: 0,
             current_impl: None,
             current_error_trait: None,
