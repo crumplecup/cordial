@@ -1,9 +1,42 @@
 //! Source call relationships persisted in the shared graph.
 
-use serde::{Deserialize, Serialize};
-use syn::visit::Visit;
-
 use super::{FunctionBoundary, NodeId, SourceByteRange};
+use serde::{Deserialize, Serialize};
+
+mod collect;
+
+/// A value path, including uses outside the direct-call graph.
+///
+/// Written names are not declaration identities. Enrichment must resolve a use
+/// before it can authorize a transform; ambiguous matches remain obligations.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub struct SourcePathUse {
+    range: SourceByteRange,
+    segments: Vec<String>,
+    #[getter(copy)]
+    absolute: bool,
+    /// Qualified-self or generic arguments require richer resolution.
+    #[getter(copy)]
+    qualified: bool,
+    /// Owning top-level free function, identified within the enclosing snapshot.
+    owner_signature: Option<SourceByteRange>,
+    /// Only a path directly in callee position has a call range.
+    call_range: Option<SourceByteRange>,
+    /// Closures, async/const blocks, and nested items have separate contracts.
+    #[getter(copy)]
+    nested_scope: bool,
+}
+
+/// Complete written value-use inventory for the enclosing module snapshot.
+///
+/// Macro tokens and verbatim islands are retained as opaque ranges, never
+/// interpreted as absence of references. This inventory is collected together
+/// with namespace facts in one traversal of the shared tree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub struct SourceUseInventory {
+    paths: Vec<SourcePathUse>,
+    opaque_ranges: Vec<SourceByteRange>,
+}
 
 /// Module-level evidence needed before interpreting source names.
 pub const ATTR_SOURCE_MODULE_SCOPE: &str = "source_module_scope";
@@ -24,48 +57,15 @@ pub struct SourceModuleScope {
     opaque: bool,
     #[getter(copy)]
     extern_crates: bool,
+    /// Older snapshots lack this evidence and cannot establish use-site closure.
+    #[serde(default)]
+    uses: Option<SourceUseInventory>,
 }
 
 impl SourceModuleScope {
     #[tracing::instrument(level = "trace", skip(file))]
     pub(crate) fn collect(file: &crate::loader::SharedParsedFile) -> Self {
-        let mut scope = Self {
-            source_digest: file.source_digest(),
-            insertion_offset: file.source().len(),
-            identifiers: Vec::new(),
-            opaque: false,
-            extern_crates: false,
-        };
-        scope.visit_file(file.syntax());
-        scope.identifiers.sort();
-        scope.identifiers.dedup();
-        scope
-    }
-}
-
-impl<'ast> Visit<'ast> for SourceModuleScope {
-    #[tracing::instrument(level = "trace", skip(self, ident))]
-    fn visit_ident(&mut self, ident: &'ast syn::Ident) {
-        self.identifiers
-            .push(ident.to_string().trim_start_matches("r#").to_owned());
-    }
-
-    #[tracing::instrument(level = "trace", skip(self, attribute))]
-    fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
-        self.opaque |= !attribute.path().is_ident("doc");
-    }
-
-    #[tracing::instrument(level = "trace", skip(self, item))]
-    fn visit_item(&mut self, item: &'ast syn::Item) {
-        self.opaque |= matches!(
-            item,
-            syn::Item::Use(_)
-                | syn::Item::ExternCrate(_)
-                | syn::Item::Macro(_)
-                | syn::Item::Verbatim(_)
-        );
-        self.extern_crates |= matches!(item, syn::Item::ExternCrate(_));
-        syn::visit::visit_item(self, item);
+        collect::collect(file)
     }
 }
 

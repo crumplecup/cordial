@@ -61,7 +61,8 @@ pub use rustdoc_query::{
 };
 pub use source_calls::{
     ATTR_FUNCTION_CALL_FLOW, ATTR_SOURCE_MODULE_SCOPE, CallResolutionFailure, FunctionCallFlow,
-    ResolvedFunctionCall, SourceCallResolution, SourceModuleScope,
+    ResolvedFunctionCall, SourceCallResolution, SourceModuleScope, SourcePathUse,
+    SourceUseInventory,
 };
 #[cfg(feature = "homecoming_std")]
 pub use trait_impls::collect_trait_impl_type_paths_from_ir;

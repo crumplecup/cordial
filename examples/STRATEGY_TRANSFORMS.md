@@ -17,6 +17,7 @@ Run one with `cargo run --example apply_panic_result -- fail`.
 | `apply_error_return` | Lift early and tail successes to a generated error contract independently of failure rewriting | Prints `8`, or `11` with `early`; initially panics with `fail`. |
 | `apply_error_caller` | Adapt every call from one caller to a newly fallible callee, including exact-tail and early-return calls | Prints `14 2`, or `7 1` with `early` or `tail`; initially panics with `fail`. |
 | `apply_error_component` | Compose a fresh typed error migration through a multilevel caller graph, diamond, repeated sites, and self/mutual recursion | Prints `24 3`, or `25 3` with `deep`; initially panics with `fail`. |
+| `apply_function_uses` | Inventory direct calls, function values, qualified paths, nested scopes, and macro boundaries | Prints `45`. |
 
 The integration harness in `tests/strategy_specimens.rs` copies each example's
 actual `main.rs` bytes into an isolated Cargo package at `src/main.rs`, with an
@@ -109,3 +110,11 @@ transitive boundary/call refusal, comments, and no-op recollection are checked.
 The explicitly selected `entry` becomes Result and `main` observes it through
 Debug. This proves a transitive preview, not complete use-site closure or a CLI
 write: function values and unknown uses still need shared evidence.
+
+`tests/strategy_function_uses.rs` checks the shared loader's written-use
+inventory. Function values in constants and locals, qualified uses, impl and
+inline-module bodies, nested functions, closures, async and const blocks all
+survive persisted IR reload. Path and call ranges retain their original bytes;
+macro tokens remain opaque obligations. Missing inventory on an older snapshot
+means unknown, while malformed inventory returns an error. No downstream parse
+or source scan supplies these facts.

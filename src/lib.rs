@@ -364,7 +364,7 @@ pub use ir::{
     IrMut, IrView, ItemKind, NestedScopeKind, NodeId, NodeKind, NodeView, NodeWeight,
     ORIGIN_RUSTDOC, ORIGIN_SOURCE, PanicSitesQuery, QualifiedPath, Query, QueryBuilder,
     ResolvedFunctionCall, ReturnValue, SourceByteRange, SourceCallResolution, SourceModuleScope,
-    SourceResultContract, WorkspaceIr,
+    SourcePathUse, SourceResultContract, SourceUseInventory, WorkspaceIr,
 };
 #[cfg(feature = "impl_coverage")]
 pub use ir::{

@@ -744,3 +744,24 @@ shared IR, then prove a closed component and an explicit boundary adapter
 (starting with `main`). Only that closed contract may reach the existing atomic
 writer and worklist claims. Generalize source variants and reverse transitions
 after the forward closure and boundary contracts compile and execute.
+
+### Written-use inventory (eleventh follow-up cycle)
+
+The shared loader now collects value-path uses alongside namespace evidence in
+one traversal of each shared tree. `SourceModuleScope::uses` retains written
+segments, exact path and direct-call ranges, the owning top-level signature,
+and nested execution boundaries. The walk includes function values, constants,
+impls, inline modules, nested items, closures, async blocks, and inline consts.
+Raw identifiers are normalized for name comparison while original ranges remain
+unchanged. Macro and verbatim syntax are explicit opaque ranges.
+
+These are written facts, not resolved identities. The next closure operation
+must join them to enriched calls before authorizing edits, and refuse unresolved
+matching names or opaque syntax. A missing inventory on an older snapshot is
+unknown rather than an empty set. Corrupt inventory propagates an error.
+Executable and persisted-IR tests demonstrate uses omitted by direct call edges
+without adding another parse or a private analysis cache.
+
+**Next:** consume this inventory to close a migration through a selected
+executable boundary, then test a `main` Result adapter independently before
+connecting closed plans to writing and worklist claims.
