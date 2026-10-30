@@ -414,11 +414,12 @@ pub use transform::{
     ClosedPanicMigration, ErrorDeclarationBlocker, ErrorDeclarationDecision,
     FailurePropagationBlocker, FailurePropagationDecision, FunctionEdit, FunctionEditPlan,
     GeneratedErrorNames, OwnedCallerAdaptation, OwnedErrorDeclaration, PanicComponentBlocker,
-    PanicComponentDecision, PanicComponentPreview, PanicMigrationApplySummary, ReturnLiftBlocker,
-    ReturnLiftDecision, ReturnLiftEdit, ReturnLiftPlan, apply_closed_panic_migration,
-    plan_closed_owned_panic_component, plan_infallible_return_lift, plan_owned_caller_adaptation,
-    plan_owned_error_declaration, plan_owned_error_return_lift, plan_owned_main_return_lift,
-    plan_owned_panic_component, plan_result_unwrap_propagation,
+    PanicComponentDecision, PanicComponentPreview, PanicMigrationApplySummary, PanicSiteSelection,
+    ReturnLiftBlocker, ReturnLiftDecision, ReturnLiftEdit, ReturnLiftPlan,
+    apply_closed_panic_migration, plan_closed_owned_panic_component, plan_closed_owned_panic_group,
+    plan_infallible_return_lift, plan_owned_caller_adaptation, plan_owned_error_declaration,
+    plan_owned_error_return_lift, plan_owned_main_return_lift, plan_owned_panic_component,
+    plan_owned_panic_group, plan_result_unwrap_propagation,
 };
 #[cfg(feature = "quality")]
 pub use worklist::{

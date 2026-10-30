@@ -45,12 +45,13 @@ pub fn apply_closed_panic_migration(
     let write = SourceWrite::new(plan.path().clone(), source, replacement);
     write_sources(&[write], dry_run, || validate_inputs(migration))?;
     let changed_functions = migration.component().functions().len();
-    tracing::info!(path = %plan.path().display(), dry_run, changed_functions, converted_sites = 1,
+    let converted_sites = migration.component().sites().len();
+    tracing::info!(path = %plan.path().display(), dry_run, changed_functions, converted_sites,
         "closed panic migration validated");
     Ok(PanicMigrationApplySummary {
         planned_files: 1,
         written_files: usize::from(!dry_run),
-        converted_sites: 1,
+        converted_sites,
         changed_functions,
     })
 }

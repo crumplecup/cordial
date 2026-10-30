@@ -35,8 +35,6 @@ pub enum PanicApplyBlocker {
     MissingEntryPoint,
     /// A declaration, caller, written use, or boundary obligation remains open.
     Closure(ClosedPanicBlocker),
-    /// Several plans would require joint composition before any write.
-    OverlappingMigrations,
 }
 
 /// Proposed or written repairs; dry-run repairs are never worklist claims.

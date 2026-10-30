@@ -4,7 +4,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::{
-    CordialResult, Disposition, NamedRunFilter, ProgressSink, SessionBuilder, StoreLayout,
+    ClosedPanicDecision, CordialResult, Disposition, IrView, NamedRunFilter, ProgressSink,
+    SessionBuilder, StoreLayout,
 };
 
 mod candidate;
@@ -41,7 +42,7 @@ pub fn run_panic_apply(
     let mut summary = PanicApplySummary::default();
     for (crate_name, findings) in evidence.findings() {
         let ir = crate::CrateView::new(evidence.workspace(), crate_name.clone());
-        let mut plans = Vec::new();
+        let mut candidates = Vec::new();
         for finding in findings
             .iter()
             .filter(|finding| finding.disposition() == Disposition::Open)
@@ -51,25 +52,40 @@ pub fn run_panic_apply(
                 summary.block(site, PanicApplyBlocker::BorrowedPolicy);
                 continue;
             }
-            match candidate::plan(&ir, finding.as_ref())? {
-                Ok(migration) => plans.push((site, migration)),
+            match candidate::selection(&ir, finding.as_ref())? {
+                Ok(selection) => candidates.push((site, selection)),
                 Err(reason) => summary.block(site, reason),
             }
         }
-        // All plans were made against one snapshot. Never apply a second plan
-        // against bytes changed by the first or silently omit a shared caller.
-        if plans.len() > 1 {
-            for (site, _) in plans {
-                summary.block(site, PanicApplyBlocker::OverlappingMigrations);
-            }
+        if candidates.is_empty() {
             continue;
         }
-        for (site, migration) in plans {
-            let functions = candidate::function_names(&ir, &migration)?;
-            crate::apply_closed_panic_migration(&migration, dry_run)?;
+        // Compose every assessed selection before the single closed write.
+        let selections: Vec<_> = candidates.iter().map(|(_, selection)| *selection).collect();
+        let decision = if let Some(main) = ir.node_by_path("main") {
+            match crate::plan_closed_owned_panic_group(&ir, &selections, main)? {
+                ClosedPanicDecision::Ready(migration) => Ok(migration),
+                ClosedPanicDecision::Refused(reason) => Err(PanicApplyBlocker::Closure(reason)),
+                ClosedPanicDecision::NoCandidate => Err(PanicApplyBlocker::UnsupportedSite),
+            }
+        } else {
+            Err(PanicApplyBlocker::MissingEntryPoint)
+        };
+        let migration = match decision {
+            Ok(migration) => migration,
+            Err(reason) => {
+                for (site, _) in candidates {
+                    summary.block(site, reason.clone());
+                }
+                continue;
+            }
+        };
+        let functions = candidate::function_names(&ir, &migration)?;
+        crate::apply_closed_panic_migration(&migration, dry_run)?;
+        for (site, _) in candidates {
             summary.repair(PanicApplyRepair::new(
                 site,
-                functions,
+                functions.clone(),
                 migration.component().error_names().clone(),
             ));
         }

@@ -5,7 +5,8 @@ and closed single-module binary migrations through a unit-main adapter are
 implemented and tested against executable specimens. Closed migrations now
 support guarded dry run and writes through the shared source transaction and
 `quality --apply --etiquette panics`, with exact worklist claims. Broader use
-and target forms remain explicit refusals.
+and target forms remain explicit refusals. Multiple selected standard-I/O
+unwraps now share one declaration, transitive caller adaptation, and write.
 
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
@@ -418,6 +419,11 @@ compiled explanations with actual strategy support as it lands.
   early returns, multiple typed sources, Option absence, and explicit panic
   failures through the shared operations. Add expect only with its context
   contract. Validate negative cases and deterministic naming.
+  - [x] Jointly compose multiple resolved standard-I/O failures, including
+    several unwraps in one function and distinct leaves with shared callers.
+    Validate all selections before generating one shared error chain and write.
+  - [ ] Construct alternatives for different native error types; repeated I/O
+    failures currently share one source variant rather than redundant variants.
 - [ ] **Phase 4 — wider closure.** Extend to several callers,
   modules, existing Result surfaces, and recursive components. Add each fixed
   signature, macro, cfg, or async boundary only with collected evidence and
@@ -866,3 +872,40 @@ composed against one snapshot. The next substantial coverage work is joint
 construction for multiple failure sources, followed by wider module/call
 identity resolution. Reverse transitions and alternate diagnostics remain
 separate operations to test in isolation before composition.
+
+### Joint failure construction (fifteenth follow-up cycle)
+
+`PanicSiteSelection` identifies requested operations in the shared graph; it is
+not proof that a transformation is safe. `plan_owned_panic_group` canonicalizes
+these selections, validates every native source contract, unions the incoming
+caller closures, and composes one declaration with all failure-site edits and
+one return adaptation per function. The original single-site API delegates to
+this operation. Group selection order does not change generated names or edits.
+
+This first grouped contract accepts repeated `::std::io::Error` sources. Their
+shared native identity warrants one source-preserving variant. Different or
+unresolved source contracts, duplicate selections, an unselected unwrap in an
+affected function, and incomplete caller evidence expose no partial preview.
+The closed group planner retains the existing written-use and Cargo boundary
+proofs, freshness inputs, and guarded single-file transaction. Its summary
+reports the actual selected-site count.
+
+Production apply groups the open assessed unwrap findings before any write.
+Every selection must satisfy the shared contract; it never writes one leaf and
+then plans another against an invalidated snapshot. Worklist claims remain
+per repaired site and occur only after that complete write. Unsupported panic
+kinds still remain manual findings; suppressed findings are not selected.
+
+The executable `apply_error_multiple` specimen has three unwraps across two
+leaves, a shared leaf reached through two callers, and a binary main. Tests
+compile and run the original and transformed programs, preserve successful
+output, and compare observable execution prefixes at each independent failure.
+They also verify deterministic reverse-order selection, one generated source
+conversion, five adapted signatures, accurate dry-run/write counts, no partial
+writes or claims on a single unresolved source, and all three worklist claims.
+
+**Next:** enrich this source-construction operation with distinct native error
+alternatives, testing each new declaration/conversion independently before
+composing it. Wider modules and call identities, Option absence, expect context,
+and reverse construction remain explicit coverage work, rather than implicit
+promises of the grouped I/O implementation.

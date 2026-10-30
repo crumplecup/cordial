@@ -21,7 +21,7 @@ pub use caller_adaptation::{
 };
 pub use closed_panic::{
     ClosedPanicBlocker, ClosedPanicDecision, ClosedPanicMigration, PanicMigrationApplySummary,
-    apply_closed_panic_migration, plan_closed_owned_panic_component,
+    apply_closed_panic_migration, plan_closed_owned_panic_component, plan_closed_owned_panic_group,
 };
 pub use error_declaration::{
     ErrorDeclarationBlocker, ErrorDeclarationDecision, GeneratedErrorNames, OwnedErrorDeclaration,
@@ -32,8 +32,8 @@ pub use failure_propagation::{
 };
 pub use main_boundary::plan_owned_main_return_lift;
 pub use panic_component::{
-    PanicComponentBlocker, PanicComponentDecision, PanicComponentPreview,
-    plan_owned_panic_component,
+    PanicComponentBlocker, PanicComponentDecision, PanicComponentPreview, PanicSiteSelection,
+    plan_owned_panic_component, plan_owned_panic_group,
 };
 pub use preview::{FunctionEdit, FunctionEditPlan};
 

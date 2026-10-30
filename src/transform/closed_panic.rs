@@ -6,8 +6,8 @@ use std::ops::ControlFlow;
 use std::path::PathBuf;
 
 use super::{
-    PanicComponentBlocker, PanicComponentDecision, PanicComponentPreview,
-    plan_owned_panic_component,
+    PanicComponentBlocker, PanicComponentDecision, PanicComponentPreview, PanicSiteSelection,
+    plan_owned_panic_group,
 };
 
 mod uses;
@@ -77,7 +77,18 @@ pub fn plan_closed_owned_panic_component(
     site_index: usize,
     main: NodeId,
 ) -> CordialResult<ClosedPanicDecision> {
-    let component = match plan_owned_panic_component(ir, leaf, site_index, main)? {
+    plan_closed_owned_panic_group(ir, &[PanicSiteSelection::new(leaf, site_index)], main)
+}
+
+/// Close a jointly planned group against one shared use inventory and main.
+#[tracing::instrument(level = "debug", skip(ir, sites, main), err(level = "warn"))]
+#[hotpath::measure]
+pub fn plan_closed_owned_panic_group(
+    ir: &dyn IrView,
+    sites: &[PanicSiteSelection],
+    main: NodeId,
+) -> CordialResult<ClosedPanicDecision> {
+    let component = match plan_owned_panic_group(ir, sites, main)? {
         PanicComponentDecision::Ready(component) => component,
         PanicComponentDecision::NoCandidate => return Ok(ClosedPanicDecision::NoCandidate),
         PanicComponentDecision::Refused(reason) => {

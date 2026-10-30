@@ -3,7 +3,9 @@
 use std::ops::ControlFlow;
 
 use crate::error::CordialResult;
-use crate::ir::{EdgeKind, IrView, ItemKind, NodeId, NodeKind};
+use crate::ir::{
+    EdgeKind, FunctionSourceSyntax, FunctionUnwrapSyntax, IrView, ItemKind, NodeId, NodeKind,
+};
 use crate::objects::SourceSpan;
 
 use super::failure_propagation::resolved_callee;
@@ -75,16 +77,8 @@ pub fn plan_owned_error_declaration(
     let Some(site) = facts.unwraps().get(site_index) else {
         return Ok(NoCandidate);
     };
-    let callee = match resolved_callee(ir, function, &facts, site)? {
-        ControlFlow::Break(blocker) => return Ok(failure(blocker)),
-        ControlFlow::Continue(callee) => callee,
-    };
-    if !callee
-        .result_contract()
-        .as_ref()
-        .is_some_and(|contract| contract.error_identity().as_deref() == Some("::std::io::Error"))
-    {
-        return Ok(Refused(Blocker::UnsupportedSourceType));
+    if let Some(reason) = validate_source(ir, function, &facts, site)? {
+        return Ok(Refused(reason));
     }
     let Some(names) = node
         .weight()
@@ -129,4 +123,25 @@ pub fn plan_owned_error_declaration(
             vec![FunctionEdit::new((offset..offset).into(), declaration)],
         ),
     )))
+}
+
+/// Require each grouped failure to share the generated native I/O contract.
+#[tracing::instrument(level = "trace", skip(ir, function, facts, site), err(level = "warn"))]
+pub(super) fn validate_source(
+    ir: &dyn IrView,
+    function: NodeId,
+    facts: &FunctionSourceSyntax,
+    site: &FunctionUnwrapSyntax,
+) -> CordialResult<Option<ErrorDeclarationBlocker>> {
+    let callee = match resolved_callee(ir, function, facts, site)? {
+        ControlFlow::Break(reason) => {
+            return Ok(Some(ErrorDeclarationBlocker::FailureEvidence(reason)));
+        }
+        ControlFlow::Continue(callee) => callee,
+    };
+    Ok((!callee
+        .result_contract()
+        .as_ref()
+        .is_some_and(|contract| contract.error_identity().as_deref() == Some("::std::io::Error")))
+    .then_some(ErrorDeclarationBlocker::UnsupportedSourceType))
 }

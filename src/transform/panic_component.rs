@@ -7,7 +7,16 @@ use crate::ir::NodeId;
 
 mod callers;
 mod plan;
-pub use plan::plan_owned_panic_component;
+pub use plan::{plan_owned_panic_component, plan_owned_panic_group};
+
+/// Requested unwrap coordinates in shared IR; this is not a proof token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
+pub struct PanicSiteSelection {
+    #[getter(copy)]
+    function: NodeId,
+    #[getter(copy)]
+    index: usize,
+}
 
 /// Result of composing declarations, failure conversion, and transitive callers.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,7 +52,7 @@ pub enum PanicComponentBlocker {
     BoundaryNotReached,
     /// A different known caller chain terminates outside the selected boundary.
     OpenCaller(NodeId),
-    /// Multiple failure sources need a separate error-variant obligation.
+    /// An affected function contains a panic site outside the selected group.
     AdditionalPanicSites(NodeId),
     /// Located edits or graph relationships contradict their owners.
     InvalidEvidence,
@@ -62,4 +71,5 @@ pub struct PanicComponentPreview {
     #[getter(copy)]
     boundary: NodeId,
     error_names: super::GeneratedErrorNames,
+    sites: Vec<PanicSiteSelection>,
 }

@@ -1,9 +1,7 @@
 //! Join assessed panic anchors to located function facts without a source scan.
 
 use super::{PanicApplyBlocker, PanicApplySite};
-use crate::{
-    ClosedPanicDecision, ClosedPanicMigration, EdgeKind, plan_closed_owned_panic_component,
-};
+use crate::{ClosedPanicMigration, EdgeKind, PanicSiteSelection};
 use crate::{CordialError, CordialResult, Finding, IrView, SourceSpan};
 
 #[tracing::instrument(level = "trace", skip(ir, finding), err(level = "warn"))]
@@ -29,10 +27,10 @@ pub(super) fn site(ir: &dyn IrView, finding: &dyn Finding) -> CordialResult<Pani
 }
 
 #[tracing::instrument(level = "debug", skip(ir, finding), err(level = "warn"))]
-pub(super) fn plan(
+pub(super) fn selection(
     ir: &dyn IrView,
     finding: &dyn Finding,
-) -> CordialResult<Result<ClosedPanicMigration, PanicApplyBlocker>> {
+) -> CordialResult<Result<PanicSiteSelection, PanicApplyBlocker>> {
     use PanicApplyBlocker as Blocker;
     let anchor = finding.anchor().node_id();
     let node = ir.node(anchor).ok_or_else(missing_evidence)?;
@@ -67,16 +65,7 @@ pub(super) fn plan(
     }) {
         return Ok(Err(Blocker::UnsupportedSite));
     }
-    let Some(main) = ir.node_by_path("main") else {
-        return Ok(Err(Blocker::MissingEntryPoint));
-    };
-    Ok(
-        match plan_closed_owned_panic_component(ir, *function, *index, main)? {
-            ClosedPanicDecision::Ready(migration) => Ok(migration),
-            ClosedPanicDecision::Refused(reason) => Err(Blocker::Closure(reason)),
-            ClosedPanicDecision::NoCandidate => Err(Blocker::UnsupportedSite),
-        },
-    )
+    Ok(Ok(PanicSiteSelection::new(*function, *index)))
 }
 
 #[tracing::instrument(level = "trace", skip(ir, migration), err(level = "warn"))]
