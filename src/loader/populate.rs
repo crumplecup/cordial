@@ -64,8 +64,15 @@ impl SourceLoadView {
         ir.insert_edge(parent, module_node, EdgeKind::Contains)?;
 
         super::source_work::walk(file.path(), "source-ir", || {
-            for item in &syntax.syntax().items {
-                self.load_item(ir, module_node, &module_path, file.path(), item)?;
+            for (index, item) in syntax.syntax().items.iter().enumerate() {
+                let node = self.load_item(ir, module_node, &module_path, file.path(), item)?;
+                if let Some(facts) = crate::ir::FunctionSourceSyntax::collect(&syntax, index) {
+                    ir.set_attr(
+                        node,
+                        crate::ir::ATTR_FUNCTION_SOURCE_SYNTAX,
+                        serde_json::to_value(facts)?,
+                    )?;
+                }
             }
             Ok::<(), crate::error::CordialError>(())
         })?;
@@ -84,7 +91,7 @@ impl SourceLoadView {
         module_path: &str,
         file: &Path,
         item: &syn::Item,
-    ) -> CordialResult<()> {
+    ) -> CordialResult<crate::ir::NodeId> {
         let (name, kind) = match &item {
             syn::Item::Fn(item_fn) => (item_fn.sig.ident.to_string(), ItemKind::Fn),
             syn::Item::Struct(item_struct) => (item_struct.ident.to_string(), ItemKind::Struct),
@@ -128,7 +135,7 @@ impl SourceLoadView {
             serde_json::Value::String(SourceLoader::ORIGIN.to_string()),
         )?;
         ir.insert_edge(parent, item_node, EdgeKind::Contains)?;
-        Ok(())
+        Ok(item_node)
     }
 }
 

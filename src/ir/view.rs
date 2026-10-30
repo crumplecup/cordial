@@ -10,6 +10,22 @@ use super::query::Query;
 /// concrete petgraph storage. All node ids are local to this crate graph and
 /// remain valid only for the IR snapshot passed to the hook.
 pub trait IrView {
+    /// Read declared function syntax without reparsing source or hiding corrupt facts.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn function_source_syntax(
+        &self,
+        id: NodeId,
+    ) -> CordialResult<Option<super::FunctionSourceSyntax>> {
+        let facts = self
+            .node(id)
+            .and_then(|node| {
+                node.attr(super::ATTR_FUNCTION_SOURCE_SYNTAX)
+                    .map(|value| serde_json::from_value(value.clone()))
+            })
+            .transpose()?;
+        Ok(facts)
+    }
+
     /// Cargo package name this crate IR belongs to.
     fn crate_name(&self) -> &str;
     /// Dependency survey facts collected once for the current workspace run.

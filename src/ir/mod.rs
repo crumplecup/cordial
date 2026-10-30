@@ -16,6 +16,7 @@ mod crate_kind;
 #[cfg(feature = "rustdoc")]
 mod crate_load;
 mod edge;
+mod function_source;
 mod graph;
 mod indexes;
 mod node;
@@ -41,6 +42,9 @@ pub use crate_kind::{ATTR_CRATE_KINDS, CrateKind};
 #[cfg(feature = "rustdoc")]
 pub use crate_load::{load_crate_ir_if_missing, resolve_crate_root, shadow_dep_rustdoc_path};
 pub use edge::{EdgeKind, EdgeWeight};
+pub use function_source::{
+    ATTR_FUNCTION_SOURCE_SYNTAX, DeclaredFunctionOutput, FunctionSourceSyntax, SourceByteRange,
+};
 pub use graph::{CrateIr, CrateIrSnapshot};
 pub use indexes::{AttrKey, AttrValue, IrIndexes, QualifiedPath};
 pub use node::{ItemKind, NodeId, NodeKind, NodeWeight};

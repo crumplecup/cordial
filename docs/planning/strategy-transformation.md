@@ -1,6 +1,7 @@
 # Strategy transformations through `--apply`
 
-**Status:** Active design; implementation has not started.
+**Status:** Phase 0 started: executable input specimens and shared signature
+evidence are implemented. Transformation coverage is not implemented yet.
 
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
@@ -379,6 +380,16 @@ compiled explanations with actual strategy support as it lands.
   scoping and add missing typed IR evidence through collection/enrichment.
   Preserve a compiling rejection example. No claim of apply coverage until an
   actual transform passes its executable contract.
+  - [x] Add runnable input specimens for return lifting, a Result panic chain,
+    and a same-spelling user method; compile and execute their baselines.
+  - [x] Copy actual example bytes into an explicit isolated Cargo binary target;
+    assert production target/function/panic discovery and source immutability.
+  - [x] Retain snapshot-bound free-function signatures, declared output syntax,
+    and signature/body byte ranges in shared IR, with strict typed reads.
+  - [ ] Collect return paths and nested execution scopes for isolated return
+    lifting. Add explicit boundary constraints before planning its edits.
+  - [ ] Resolve source Result contracts and caller/boundary relationships through
+    shared enrichment. A declared output string is not resolution evidence.
 - [ ] **Phase 1 — individual transforms.** Implement and test declaration
   generation, return lifting, failure-site rewriting, caller adaptation, and
   boundary handling separately, in dependency order. Establish each operation's
@@ -442,3 +453,28 @@ signature propagation; source-type resolution evidence; generated error naming
 and placement; entry-point adapters; expect-context preservation; and the
 public contract for a composed transformation plan. Record each decision here
 as its first executable proof lands.
+
+### Phase 0 discovery decisions
+
+The [specimen guide](../../examples/STRATEGY_TRANSFORMS.md) records each input's
+role and expected behavior. `tests/strategy_specimens.rs` compiles and runs the
+copied programs and reads the normal session's serialized IR through `IrView`.
+Source normalization into `src/main.rs` is explicit: direct analysis of native
+Cargo example target paths is not yet supported. These are executable inputs,
+not a test-only rewrite engine or a claim of apply coverage.
+
+The shared source loader now attaches `FunctionSourceSyntax` to its existing
+top-level free-function nodes. Collection selects the item from a
+`SharedParsedFile`; it cannot be handed an independently parsed function.
+The facts include the snapshot digest, exact signature and declared output
+syntax, and byte ranges for signature/body edits. Reads distinguish missing
+older evidence from corrupt evidence, which is an error. No new parse, private
+source index, or durable side cache is introduced.
+
+This does not establish inferred types, return-path coverage, method inventory,
+inline-module inventory, or caller closure. The lookalike example deliberately
+exposes the existing panic lint's syntax-only classification. Before the first
+return-lifting transform, collect explicit returns, tail exits, and nested
+scope/boundary constraints in shared IR. Before rewriting failure sites, add
+resolved receiver/source contracts; the lint finding alone cannot permit an
+edit. Continue with isolated operation tests before composing the panic chain.
