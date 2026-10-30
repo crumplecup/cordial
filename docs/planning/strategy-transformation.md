@@ -1,9 +1,9 @@
 # Strategy transformations through `--apply`
 
-**Status:** Phase 0 foundations and isolated success-return/failure-propagation
-previews and isolated owned error declaration construction are implemented and
-tested against executable specimens. Complete
-panic-to-error migrations and their CLI apply entry point remain ahead.
+**Status:** Shared-IR foundations, isolated operations, and a composed
+panic-to-error preview through transitive callers are implemented and tested
+against executable specimens. Complete use-site closure, boundary adapters,
+and the CLI apply entry point remain ahead.
 
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
@@ -712,3 +712,35 @@ and failure. Compose declaration generation, leaf failure conversion, success
 lifting, and caller adaptation against one snapshot. No writer may treat
 missing `Calls` edges as evidence of closure; function-value and unresolved-use
 inventory still needs shared collection before a closed component can be claimed.
+
+### Transitive panic-to-error composition (tenth follow-up cycle)
+
+`plan_owned_panic_component` composes the independently tested contracts against
+one shared snapshot: fresh owned I/O error declarations, leaf unwrap conversion
+via the generated `From`, success lifting, and propagation through callers of
+callers. An incoming-edge walk reaches a fixed point, deduplicates diamonds and
+repeated edges, and terminates on recursive components. Every changed function
+gets one signature lift; every located call between changed functions gets `?`.
+Collected ranges authorize all edits, with propagation ordered inside success
+wrappers and contradictory overlaps refused.
+
+The preview has an explicit observation boundary whose own return type becomes
+Result. Known caller paths terminating elsewhere refuse planning. This is not
+proof of complete use-site closure: unsupported calls may lack `Calls` edges,
+and a boundary's consumers may need adaptation. `PanicComponentPreview` exposes
+no writer or worklist claim. Public/trait/extern/generic/macro boundaries and
+additional panic sources remain named obligations rather than partial writes.
+
+`apply_error_component` compiles and executes the complete rendered preview.
+Seven functions cover multiple levels, repeated calls, a diamond, and both self
+and mutual recursion. Successful values and evaluation counts are preserved;
+failure returns the original typed I/O source through all levels, skipping
+later computations at each level. Tests also check determinism, retained
+comments, stale snapshots, a refused transitive signature, missing located
+call evidence, and recollection with no remaining candidate.
+
+**Next:** collect non-call function uses and unresolved-use boundaries into the
+shared IR, then prove a closed component and an explicit boundary adapter
+(starting with `main`). Only that closed contract may reach the existing atomic
+writer and worklist claims. Generalize source variants and reverse transitions
+after the forward closure and boundary contracts compile and execute.

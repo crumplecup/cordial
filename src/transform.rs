@@ -9,6 +9,7 @@ mod caller_adaptation;
 mod error_declaration;
 mod failure_propagation;
 mod generated_contract;
+mod panic_component;
 mod preview;
 mod return_lift;
 mod success_edits;
@@ -22,6 +23,10 @@ pub use error_declaration::{
 };
 pub use failure_propagation::{
     FailurePropagationBlocker, FailurePropagationDecision, plan_result_unwrap_propagation,
+};
+pub use panic_component::{
+    PanicComponentBlocker, PanicComponentDecision, PanicComponentPreview,
+    plan_owned_panic_component,
 };
 pub use preview::{FunctionEdit, FunctionEditPlan};
 

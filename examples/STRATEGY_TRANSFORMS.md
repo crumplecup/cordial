@@ -16,6 +16,7 @@ Run one with `cargo run --example apply_panic_result -- fail`.
 | `apply_error_declaration` | Construct an owned parent / Kind / native source chain from a resolved I/O failure | Prints `8`; initially panics with `fail`. |
 | `apply_error_return` | Lift early and tail successes to a generated error contract independently of failure rewriting | Prints `8`, or `11` with `early`; initially panics with `fail`. |
 | `apply_error_caller` | Adapt every call from one caller to a newly fallible callee, including exact-tail and early-return calls | Prints `14 2`, or `7 1` with `early` or `tail`; initially panics with `fail`. |
+| `apply_error_component` | Compose a fresh typed error migration through a multilevel caller graph, diamond, repeated sites, and self/mutual recursion | Prints `24 3`, or `25 3` with `deep`; initially panics with `fail`. |
 
 The integration harness in `tests/strategy_specimens.rs` copies each example's
 actual `main.rs` bytes into an isolated Cargo package at `src/main.rs`, with an
@@ -96,3 +97,15 @@ inside `Ok` for an exact-tail call. Executable comparisons check all branches
 and evaluation counts; corrupted later call sites must refuse the entire
 operation. This is one edge of a potentially transitive migration: changing the
 caller creates obligations for its own callers, including function-value uses.
+
+`tests/strategy_error_component.rs` exercises the production composed preview.
+One shared snapshot supplies a fresh I/O error architecture, leaf unwrap
+conversion, seven signature lifts, and every located call between the changed
+functions. The fixed-point walk terminates on recursive cycles and deduplicates
+diamond relationships. Success values and evaluation counts remain unchanged.
+Failure returns the typed error through every caller and skips the remaining
+successful-path calls. Compilation, deterministic preview, stale-byte refusal,
+transitive boundary/call refusal, comments, and no-op recollection are checked.
+The explicitly selected `entry` becomes Result and `main` observes it through
+Debug. This proves a transitive preview, not complete use-site closure or a CLI
+write: function values and unknown uses still need shared evidence.

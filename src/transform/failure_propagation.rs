@@ -122,7 +122,7 @@ fn error_contract(
 }
 
 #[tracing::instrument(level = "trace", skip(facts, site))]
-fn suffix_edits(
+pub(super) fn suffix_edits(
     facts: &FunctionSourceSyntax,
     site: &FunctionUnwrapSyntax,
 ) -> Option<Vec<FunctionEdit>> {

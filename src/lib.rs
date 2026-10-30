@@ -410,9 +410,10 @@ pub use transform::{
     CallerAdaptationBlocker, CallerAdaptationDecision, ErrorDeclarationBlocker,
     ErrorDeclarationDecision, FailurePropagationBlocker, FailurePropagationDecision, FunctionEdit,
     FunctionEditPlan, GeneratedErrorNames, OwnedCallerAdaptation, OwnedErrorDeclaration,
-    ReturnLiftBlocker, ReturnLiftDecision, ReturnLiftEdit, ReturnLiftPlan,
-    plan_infallible_return_lift, plan_owned_caller_adaptation, plan_owned_error_declaration,
-    plan_owned_error_return_lift, plan_result_unwrap_propagation,
+    PanicComponentBlocker, PanicComponentDecision, PanicComponentPreview, ReturnLiftBlocker,
+    ReturnLiftDecision, ReturnLiftEdit, ReturnLiftPlan, plan_infallible_return_lift,
+    plan_owned_caller_adaptation, plan_owned_error_declaration, plan_owned_error_return_lift,
+    plan_owned_panic_component, plan_result_unwrap_propagation,
 };
 #[cfg(feature = "quality")]
 pub use worklist::{
