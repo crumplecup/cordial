@@ -8,6 +8,9 @@ support guarded dry run and writes through the shared source transaction and
 and target forms remain explicit refusals. Multiple selected standard-I/O
 unwraps now share one declaration, transitive caller adaptation, and write.
 Distinct I/O and integer-parsing sources have concrete generated alternatives.
+Shared IR now also retains bounded per-function error-family summaries,
+including propagation through recursive callers and explicit analysis gaps.
+Family selection and nested declaration generation remain unimplemented.
 
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
@@ -189,7 +192,7 @@ parallel function, type, or ownership indexes.
 
 ### Error families and nested variants
 
-**Design direction; not implemented.** Derive the escaping error family at each
+**Shared evidence started; nesting not implemented.** Derive the escaping error family at each
 function from the shared call and error-flow IR. Starting with locally produced
 failures, propagate the failures that can escape a callee through its callers.
 An error that is handled does not escape that boundary. Recursive components
@@ -249,6 +252,9 @@ Implement this incrementally:
 1. Collect and enrich resolved failure identities, escaping/handled flow, and
    per-function family completeness in shared IR; test chains, diamonds,
    recursion, and unresolved boundaries before generating any new code.
+   The seventeenth follow-up implements bounded signature and prospective
+   panic-migration summaries. Existing error enums, aliases, and conversions
+   still need richer type and error-flow evidence.
 2. Test exact-family canonicalization, configurable reuse selection, and both
    source-reuse policies in isolation, including overlap, reported contract
    broadening, and same-foreign-type domain distinctions.
@@ -1020,3 +1026,50 @@ declaration and grouped-migration regression tests remain passing.
 alternatives and collected failure/context evidence. Expect requires a policy
 for preserving its diagnostic context. Wider module/call identities, existing
 Result surfaces, and reverse construction remain separate composition work.
+
+### Shared error families (seventeenth follow-up cycle)
+
+The shared source collector records how each direct call is used: ordinary
+value, unwrap receiver, residual operand, or a supported Result handler.
+Unmodeled method calls and residual receivers retain located obligations.
+These facts come from the existing shared tree traversal; no source is parsed
+or independently scanned by the analysis. Older snapshots without usage facts
+remain readable but do not acquire invented evidence.
+
+`ErrorFamilyEnricher` follows shared call resolution. It publishes a
+`FunctionErrorFamily` on each function node, distinguishing two bases:
+
+- **Declared Result:** the nominal error in an explicitly resolved standard
+  Result signature. This is a possible type contract, not a claim that every
+  value is reachable or that the implementation contains no panic.
+- **Prospective panic migration:** alternatives exposed by adapting inventoried
+  unwraps and their ordinary callers. This describes a proposed migration,
+  not the function's current escaping-return contract.
+
+The analysis canonicalizes known standard reexports and treats Infallible as
+empty. It propagates alternatives, producing declaration identities, and
+located gaps to a fixed point through a reverse dependency work queue.
+Diamonds and recursion deduplicate evidence; recursive calls do not create
+recursive type declarations. Proven direct Result handlers consume only their
+receiver's error, so errors arising while evaluating arguments remain visible.
+Unresolved calls, unsupported operations, or inconsistent shared evidence keep
+families incomplete rather than silently disappearing.
+
+Native declaration planning now consumes the shared family summary and checks
+its digest, basis, member identity, and producing declaration against shared
+source/call facts. Missing, corrupt, stale, and same-digest inconsistent
+summaries cannot authorize generation. This evidence is not itself a rewrite
+token and does not establish Error implementations, conversions, storage
+policy, reachability, or source-use closure.
+
+Production-pipeline tests cover chains, diamonds, recursive components,
+handlers, eager handler arguments, multiple producers of the same native
+type, Infallible, and inherited located gaps. The specimen also compiles
+without warnings and executes. Declaration regression tests mutate complete
+evidence, including identity and origin while retaining the digest.
+
+**Next:** canonicalize complete family sets and test reuse selection in
+isolation, retaining producer identities for domain distinctions. Settle the
+TOML threshold and source-reuse policy before exposing configuration. Broader
+typed error resolution and call-edge conversions remain explicit gaps;
+nested generation still requires coordinated architecture lint changes.

@@ -3,7 +3,9 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::enricher::{PathIndexEnricher, SourceCallEnricher, SynDocLinkEnricher};
+use crate::enricher::{
+    ErrorFamilyEnricher, PathIndexEnricher, SourceCallEnricher, SynDocLinkEnricher,
+};
 use crate::error::{CordialError, CordialResult};
 use crate::etiquette::Etiquette;
 use crate::hooks::{Assessor, IrEnricher, Loader, Probe, Reporter, WorkspaceAssessor};
@@ -110,6 +112,7 @@ pub(super) fn dedupe_enrichers<'a>(
     static PATH_INDEX: PathIndexEnricher = PathIndexEnricher;
     static SYN_DOC_LINK: SynDocLinkEnricher = SynDocLinkEnricher;
     static SOURCE_CALLS: SourceCallEnricher = SourceCallEnricher;
+    static ERROR_FAMILY: ErrorFamilyEnricher = ErrorFamilyEnricher;
     let mut out = dedupe_hooks(
         etiquettes
             .iter()
@@ -122,6 +125,13 @@ pub(super) fn dedupe_enrichers<'a>(
             .any(|enricher| enricher.id() == SOURCE_CALLS.id())
     {
         out.push(&SOURCE_CALLS);
+    }
+    if loaders.iter().any(|loader| loader.id() == SourceLoader::ID)
+        && !out
+            .iter()
+            .any(|enricher| enricher.id() == ERROR_FAMILY.id())
+    {
+        out.push(&ERROR_FAMILY);
     }
     #[cfg(feature = "rustdoc")]
     let has_rustdoc = loaders

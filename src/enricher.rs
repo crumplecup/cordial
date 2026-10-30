@@ -5,6 +5,7 @@ mod attribute;
 mod attribute_paths;
 #[cfg(feature = "error_sites")]
 mod error;
+mod error_family;
 #[cfg(feature = "error_sites")]
 mod error_flow;
 #[cfg(feature = "impl_coverage")]
@@ -40,6 +41,7 @@ pub use error::{
     ERROR_IR_ENRICHERS, ErrorIrScanEnricher, ErrorIrScanReport, error_ir_enricher_ids,
     scan_crate_error_ir,
 };
+pub(crate) use error_family::ErrorFamilyEnricher;
 #[cfg(feature = "error_sites")]
 pub use error_flow::ErrorFlowEnricher;
 #[cfg(feature = "impl_coverage")]

@@ -34,6 +34,20 @@ pub struct SourceResultContract {
     error_identity: Option<String>,
 }
 
+impl SourceResultContract {
+    /// Normalize known standard-library reexports without resolving new types.
+    #[tracing::instrument(level = "trace", skip(self))]
+    pub fn canonical_error_identity(&self) -> Option<&str> {
+        self.error_identity
+            .as_deref()
+            .map(|identity| match identity {
+                "::core::num::ParseIntError" => "::std::num::ParseIntError",
+                "::std::convert::Infallible" => "::core::convert::Infallible",
+                other => other,
+            })
+    }
+}
+
 #[tracing::instrument(level = "trace", skip(file, output))]
 pub(super) fn result_contract(
     file: &crate::loader::SharedParsedFile,

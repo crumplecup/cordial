@@ -358,16 +358,18 @@ pub use hooks::{
 };
 pub use ir::{
     ATTR_BINARY_ENTRY_PATHS, ATTR_CARGO_MANIFEST_SNAPSHOT, ATTR_CRATE_KINDS,
-    ATTR_FUNCTION_CALL_FLOW, ATTR_FUNCTION_SOURCE_SYNTAX, ATTR_IR_ORIGIN, ATTR_SOURCE_MODULE_SCOPE,
-    ATTR_SYN_DOC_PEER, AttrKey, AttrValue, BasicQuery, CallResolutionFailure, CrateIr,
-    CrateIrSnapshot, CrateKind, CrateView, CrateViewMut, DeclaredFunctionOutput, EdgeKind,
-    EdgeWeight, FileSnapshot, FunctionBoundary, FunctionCallFlow, FunctionCallSyntax,
-    FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionSourceSyntax,
-    FunctionSuccessExit, FunctionTail, FunctionUnwrapSyntax, IrIndexes, IrMut, IrView, ItemKind,
-    NestedScopeKind, NodeId, NodeKind, NodeView, NodeWeight, ORIGIN_RUSTDOC, ORIGIN_SOURCE,
-    PanicSitesQuery, QualifiedPath, Query, QueryBuilder, ResolvedFunctionCall, ReturnValue,
-    SourceByteRange, SourceCallResolution, SourceEntryContract, SourceModuleScope, SourcePathUse,
-    SourceResultContract, SourceUseInventory, WorkspaceIr,
+    ATTR_FUNCTION_CALL_FLOW, ATTR_FUNCTION_ERROR_FAMILY, ATTR_FUNCTION_SOURCE_SYNTAX,
+    ATTR_IR_ORIGIN, ATTR_SOURCE_MODULE_SCOPE, ATTR_SYN_DOC_PEER, AttrKey, AttrValue, BasicQuery,
+    CallResolutionFailure, CrateIr, CrateIrSnapshot, CrateKind, CrateView, CrateViewMut,
+    DeclaredFunctionOutput, EdgeKind, EdgeWeight, ErrorFamilyBasis, ErrorFamilyGap,
+    ErrorFamilyGapReason, ErrorFamilyMember, FileSnapshot, FunctionBoundary, FunctionCallFlow,
+    FunctionCallSyntax, FunctionErrorFamily, FunctionNestedScope, FunctionReturn,
+    FunctionReturnFlow, FunctionSourceSyntax, FunctionSuccessExit, FunctionTail,
+    FunctionUnwrapSyntax, IrIndexes, IrMut, IrView, ItemKind, NestedScopeKind, NodeId, NodeKind,
+    NodeView, NodeWeight, ORIGIN_RUSTDOC, ORIGIN_SOURCE, PanicSitesQuery, QualifiedPath, Query,
+    QueryBuilder, ResolvedFunctionCall, ReturnValue, SourceByteRange, SourceCallResolution,
+    SourceCallUse, SourceEntryContract, SourceModuleScope, SourcePathUse, SourceResultContract,
+    SourceUseInventory, WorkspaceIr,
 };
 #[cfg(feature = "impl_coverage")]
 pub use ir::{

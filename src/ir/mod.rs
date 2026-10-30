@@ -16,6 +16,7 @@ mod crate_kind;
 #[cfg(feature = "rustdoc")]
 mod crate_load;
 mod edge;
+mod error_family;
 mod function_source;
 mod graph;
 mod indexes;
@@ -44,11 +45,15 @@ mod input_snapshot;
 #[cfg(feature = "rustdoc")]
 pub use crate_load::{load_crate_ir_if_missing, resolve_crate_root, shadow_dep_rustdoc_path};
 pub use edge::{EdgeKind, EdgeWeight};
+pub use error_family::{
+    ATTR_FUNCTION_ERROR_FAMILY, ErrorFamilyBasis, ErrorFamilyGap, ErrorFamilyGapReason,
+    ErrorFamilyMember, FunctionErrorFamily,
+};
 pub use function_source::{
     ATTR_FUNCTION_SOURCE_SYNTAX, DeclaredFunctionOutput, FunctionBoundary, FunctionCallSyntax,
     FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionSourceSyntax,
     FunctionSuccessExit, FunctionTail, FunctionUnwrapSyntax, NestedScopeKind, ReturnValue,
-    SourceByteRange, SourceEntryContract, SourceResultContract,
+    SourceByteRange, SourceCallUse, SourceEntryContract, SourceResultContract,
 };
 pub use graph::{CrateIr, CrateIrSnapshot};
 pub use indexes::{AttrKey, AttrValue, IrIndexes, QualifiedPath};

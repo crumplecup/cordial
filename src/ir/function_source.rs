@@ -6,7 +6,7 @@ mod calls;
 mod output;
 mod returns;
 mod success;
-pub use calls::{FunctionCallSyntax, FunctionUnwrapSyntax};
+pub use calls::{FunctionCallSyntax, FunctionUnwrapSyntax, SourceCallUse};
 pub use output::{SourceEntryContract, SourceResultContract};
 pub use returns::{
     FunctionBoundary, FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionTail,
@@ -74,6 +74,9 @@ pub struct FunctionSourceSyntax {
     /// Missing on older snapshots; names alone never establish an entry signature.
     #[serde(default)]
     entry_contract: Option<SourceEntryContract>,
+    /// Uninterpreted method/residual operations; missing on older snapshots.
+    #[serde(default)]
+    opaque_calls: Option<Vec<SourceByteRange>>,
 }
 
 impl FunctionSourceSyntax {
@@ -99,7 +102,7 @@ impl FunctionSourceSyntax {
             syn::ReturnType::Default => signature_range.end..signature_range.end,
             syn::ReturnType::Type(_, ty) => ty.span().byte_range(),
         };
-        let (calls, unwraps, has_call_shadowing) = calls::collect(function);
+        let (calls, unwraps, has_call_shadowing, opaque_calls) = calls::collect(function);
         Some(Self {
             source_digest: file.source_digest(),
             signature: file.source()[signature_range.clone()].to_string(),
@@ -116,6 +119,7 @@ impl FunctionSourceSyntax {
             unwraps,
             has_call_shadowing,
             entry_contract: output::entry_contract(function),
+            opaque_calls: Some(opaque_calls),
         })
     }
 }

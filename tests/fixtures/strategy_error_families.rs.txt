@@ -1,0 +1,65 @@
+fn io() -> ::std::result::Result<u32, ::std::io::Error> {
+    ::std::result::Result::Ok(1)
+}
+
+fn io_again() -> ::std::result::Result<u32, ::std::io::Error> {
+    ::std::result::Result::Ok(2)
+}
+
+fn parse() -> ::std::result::Result<u32, ::core::num::ParseIntError> {
+    "3".parse::<u32>()
+}
+
+fn read() -> u32 { io().unwrap() }
+fn number() -> u32 { parse().unwrap() }
+fn pair() -> u32 { read() + number() }
+fn left() -> u32 { pair() }
+fn right() -> u32 { pair() + read() }
+fn diamond() -> u32 { left() + right() }
+
+fn recursive_a(depth: u32) -> u32 {
+    if depth == 0 { read() } else { recursive_b(depth - 1) }
+}
+fn recursive_b(depth: u32) -> u32 {
+    if depth == 0 { number() } else { recursive_a(depth - 1) }
+}
+fn empty_recursion(depth: u32) -> u32 {
+    if depth == 0 { 0 } else { empty_recursion(depth - 1) }
+}
+
+fn handled() -> u32 { io().unwrap_or(0) + io().unwrap_or_default() }
+fn handled_bool() -> bool { io().is_ok() && parse().is_err() }
+
+fn consume(value: u32) -> ::std::result::Result<u32, ::std::io::Error> {
+    ::std::result::Result::Ok(value)
+}
+fn argument() -> u32 { consume(number()).unwrap_or(0) }
+fn distinct_origins() -> u32 { io().unwrap() + io_again().unwrap() }
+
+fn unknown() -> u32 {
+    let _ = ::std::env::var("CORDIAL_SPECIMEN_MISSING");
+    read()
+}
+fn unknown_caller() -> u32 { unknown() }
+fn unknown_recursive_a(depth: u32) -> u32 {
+    if depth == 0 { unknown() } else { unknown_recursive_b(depth - 1) }
+}
+fn unknown_recursive_b(depth: u32) -> u32 { unknown_recursive_a(depth) }
+fn unmodeled_method() -> u32 { read().wrapping_add(1) }
+fn discarded_result() { let _ = io(); }
+fn indirect(call: fn() -> u32) -> u32 { call() }
+
+fn optional() -> ::std::option::Option<u32> { ::std::option::Option::Some(5) }
+fn unproven_handler() -> u32 { optional().unwrap_or(0) }
+fn residual() -> ::std::result::Result<u32, ::std::io::Error> { io()?; io() }
+fn infallible() -> ::std::result::Result<u32, ::core::convert::Infallible> {
+    ::std::result::Result::Ok(0)
+}
+fn infallible_use() -> u32 { infallible().unwrap() }
+
+fn main() {
+    let _ = (diamond(), recursive_a(3), empty_recursion(2), handled(), handled_bool(),
+        argument(), distinct_origins(), unknown_caller(), unknown_recursive_a(2),
+        unmodeled_method(), indirect(read), unproven_handler(), residual(), infallible_use());
+    discarded_result();
+}
