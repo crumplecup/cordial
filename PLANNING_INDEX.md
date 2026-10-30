@@ -22,6 +22,7 @@ user-facing guidance lives in `README.md`, `docs/running-cordial.md`,
 | [cordial.toml config](docs/planning/cordial-config.md) | **Reference** | Layered config, built-in etiquette thresholds, and enabled gates |
 | [Etiquette explain](docs/planning/etiquette-explain.md) | **Reference** | Required `Etiquette::explain`; `cordial explain [id]`; rule ids alias the page |
 | [Custom plugin example](docs/planning/custom-plugin-example.md) | **Reference** | Downstream templates: `StaticPlugin`, `Coverage`, `ErrorHandling` |
+| [Strategy transformations](docs/planning/strategy-transformation.md) | **Active** | Construct selected designs through shared-IR apply: start from panic, generate typed error structure and caller signatures, and validate through executable Cargo examples |
 | [Exceptions remove / edit](docs/planning/exceptions-remove-edit.md) | **Active** | `cordial exceptions remove` / `edit` with unique selectors; stale-exception warnings on run |
 | [Agent worklist](docs/planning/agent-worklist.md) | **Active** | `cordial open` / `done` / `skip` / `submit`, with `peek` / `stats` / `instructions` beside them: a fixed worklist with a cursor the agent moves without re-running the gate; `submit` runs the gate and scores the batch |
 | [Etiquette API and pipeline review](docs/planning/etiquette-api-review.md) | **Active** | Ordered review checklist: caller-location correctness, repeated source work, probe contract, typed plugin facts, tutorial corrections, and registration ergonomics |

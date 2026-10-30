@@ -6,6 +6,11 @@ the handoff below. This plan covers
 `[internal_error_chain] field_strategy` switch. It is a roadmap, not a claim
 that every borrowed error can be generated automatically.
 
+The broader [strategy transformation plan](strategy-transformation.md) develops
+construction from minimal panic-based programs, reusable signature/error
+transforms, and executable Cargo examples. This document retains the separate
+Owned/Borrowed coverage history and paused resumption backlog.
+
 ## Resumption handoff (2026-10-29)
 
 ### Verified checkpoint
