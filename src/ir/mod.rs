@@ -43,7 +43,9 @@ pub use crate_kind::{ATTR_CRATE_KINDS, CrateKind};
 pub use crate_load::{load_crate_ir_if_missing, resolve_crate_root, shadow_dep_rustdoc_path};
 pub use edge::{EdgeKind, EdgeWeight};
 pub use function_source::{
-    ATTR_FUNCTION_SOURCE_SYNTAX, DeclaredFunctionOutput, FunctionSourceSyntax, SourceByteRange,
+    ATTR_FUNCTION_SOURCE_SYNTAX, DeclaredFunctionOutput, FunctionBoundary, FunctionNestedScope,
+    FunctionReturn, FunctionReturnFlow, FunctionSourceSyntax, FunctionTail, NestedScopeKind,
+    ReturnValue, SourceByteRange,
 };
 pub use graph::{CrateIr, CrateIrSnapshot};
 pub use indexes::{AttrKey, AttrValue, IrIndexes, QualifiedPath};

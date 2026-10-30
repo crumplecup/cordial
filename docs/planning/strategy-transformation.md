@@ -386,8 +386,9 @@ compiled explanations with actual strategy support as it lands.
     assert production target/function/panic discovery and source immutability.
   - [x] Retain snapshot-bound free-function signatures, declared output syntax,
     and signature/body byte ranges in shared IR, with strict typed reads.
-  - [ ] Collect return paths and nested execution scopes for isolated return
-    lifting. Add explicit boundary constraints before planning its edits.
+  - [x] Collect return paths and nested execution scopes for isolated return
+    lifting. Retain output edit ranges and explicit signature, attribute, macro,
+    residual, and nested-scope boundaries before planning edits.
   - [ ] Resolve source Result contracts and caller/boundary relationships through
     shared enrichment. A declared output string is not resolution evidence.
 - [ ] **Phase 1 — individual transforms.** Implement and test declaration
@@ -478,3 +479,19 @@ return-lifting transform, collect explicit returns, tail exits, and nested
 scope/boundary constraints in shared IR. Before rewriting failure sites, add
 resolved receiver/source contracts; the lint finding alone cannot permit an
 edit. Continue with isolated operation tests before composing the panic chain.
+
+### Return evidence (first follow-up cycle)
+
+The loader now retains explicit returns, tail expressions or unit fallthrough,
+output edit ranges, and nested execution scopes in `FunctionSourceSyntax`.
+Collection walks the existing shared AST. Returns inside closures, async blocks,
+inline consts, and local items do not leak into the enclosing function's return
+inventory. Boundary facts explicitly identify visible/special/generic signatures,
+attributes, macros, residual propagation, and nested scopes. They are constraints,
+not proof that every function without one is a closed migration component.
+
+`apply_return_scopes` compiles and executes both branches and exercises those
+scope distinctions through the production loader and serialized IR. Caller
+resolution and typed Result source resolution remain outstanding. The next
+operation is isolated return lifting; it must not be exposed as a complete
+user-facing migration before caller closure is available.

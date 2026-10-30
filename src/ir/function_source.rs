@@ -2,6 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 
+mod returns;
+pub use returns::{
+    FunctionBoundary, FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionTail,
+    NestedScopeKind, ReturnValue,
+};
+
 /// Attribute carrying [`FunctionSourceSyntax`] on a source function node.
 pub const ATTR_FUNCTION_SOURCE_SYNTAX: &str = "function_source_syntax";
 
@@ -47,6 +53,9 @@ pub struct FunctionSourceSyntax {
     declared_output: DeclaredFunctionOutput,
     signature_range: SourceByteRange,
     body_range: SourceByteRange,
+    /// Type range, or an empty insertion range for an implicit unit return.
+    output_range: SourceByteRange,
+    return_flow: FunctionReturnFlow,
 }
 
 impl FunctionSourceSyntax {
@@ -68,12 +77,18 @@ impl FunctionSourceSyntax {
                 DeclaredFunctionOutput::Explicit(file.source()[ty.span().byte_range()].to_string())
             }
         };
+        let output_range = match &function.sig.output {
+            syn::ReturnType::Default => signature_range.end..signature_range.end,
+            syn::ReturnType::Type(_, ty) => ty.span().byte_range(),
+        };
         Some(Self {
             source_digest: file.source_digest(),
             signature: file.source()[signature_range.clone()].to_string(),
             declared_output,
             signature_range: signature_range.into(),
             body_range: function.block.span().byte_range().into(),
+            output_range: output_range.into(),
+            return_flow: FunctionReturnFlow::collect(function),
         })
     }
 }

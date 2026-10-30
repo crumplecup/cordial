@@ -89,6 +89,75 @@ fn unwrap_lookalike_is_a_compiling_negative_specimen() -> miette::Result<()> {
 }
 
 #[test]
+fn return_evidence_separates_nested_scopes_and_fixed_contracts() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = copy_specimen("apply_return_scopes")?;
+    build(fixture.path())?;
+    for (arguments, expected) in [
+        (&[][..], b"10 1 Ok(8)\n".as_slice()),
+        (&["early"][..], b"2 1 Ok(8)\n"),
+    ] {
+        let output = execute(fixture.path(), arguments)?;
+        assert!(output.status.success());
+        assert_eq!(output.stdout, expected);
+    }
+    let source = fs::read_to_string(fixture.path().join("src/main.rs")).into_diagnostic()?;
+    let ir = discover(fixture.path())?;
+    let facts = function_facts(&ir, "scoped")?;
+    let flow = facts.return_flow();
+    assert_eq!(
+        flow.returns().len(),
+        1,
+        "nested returns belong to their own scope"
+    );
+    let cordial::ReturnValue::Expression(range) = flow.returns()[0].value() else {
+        miette::bail!("expected outer return value");
+    };
+    assert_eq!(&source[range.start()..range.end()], "closure()");
+    let cordial::FunctionTail::Expression(range) = flow.tail() else {
+        miette::bail!("expected tail expression");
+    };
+    assert_eq!(&source[range.start()..range.end()], "local() + constant");
+    assert_eq!(flow.boundaries(), &[cordial::FunctionBoundary::NestedScope]);
+    assert_eq!(
+        flow.nested_scopes()
+            .iter()
+            .map(|scope| scope.kind())
+            .collect::<Vec<_>>(),
+        [
+            cordial::NestedScopeKind::Closure,
+            cordial::NestedScopeKind::Item,
+            cordial::NestedScopeKind::Async,
+            cordial::NestedScopeKind::Const
+        ]
+    );
+    assert_eq!(
+        function_facts(&ir, "fixed_contract")?
+            .return_flow()
+            .boundaries(),
+        &[
+            cordial::FunctionBoundary::Visible,
+            cordial::FunctionBoundary::SpecialSignature
+        ]
+    );
+    assert_eq!(
+        function_facts(&ir, "residual")?.return_flow().boundaries(),
+        &[cordial::FunctionBoundary::Try]
+    );
+    let simple = copy_specimen("apply_return_lifting")?;
+    let simple_ir = discover(simple.path())?;
+    let simple_facts = function_facts(&simple_ir, "value")?;
+    let output = simple_facts.output_range();
+    let simple_source = fs::read_to_string(simple.path().join("src/main.rs")).into_diagnostic()?;
+    assert_eq!(&simple_source[output.start()..output.end()], "u32");
+    assert_eq!(simple_facts.return_flow().returns().len(), 1);
+    assert!(simple_facts.return_flow().boundaries().is_empty());
+    assert_source_snapshot(fixture.path(), &ir)?;
+    assert_unchanged("apply_return_scopes", fixture.path())?;
+    Ok(())
+}
+
+#[test]
 fn function_source_facts_distinguish_missing_from_corrupt() -> miette::Result<()> {
     cordial::init_tracing();
     let mut ir = CrateIr::new("missing-or-corrupt");

@@ -356,9 +356,11 @@ pub use hooks::{
 pub use ir::{
     ATTR_CRATE_KINDS, ATTR_FUNCTION_SOURCE_SYNTAX, ATTR_IR_ORIGIN, ATTR_SYN_DOC_PEER, AttrKey,
     AttrValue, BasicQuery, CrateIr, CrateIrSnapshot, CrateKind, CrateView, CrateViewMut,
-    DeclaredFunctionOutput, EdgeKind, EdgeWeight, FunctionSourceSyntax, IrIndexes, IrMut, IrView,
-    ItemKind, NodeId, NodeKind, NodeView, NodeWeight, ORIGIN_RUSTDOC, ORIGIN_SOURCE,
-    PanicSitesQuery, QualifiedPath, Query, QueryBuilder, SourceByteRange, WorkspaceIr,
+    DeclaredFunctionOutput, EdgeKind, EdgeWeight, FunctionBoundary, FunctionNestedScope,
+    FunctionReturn, FunctionReturnFlow, FunctionSourceSyntax, FunctionTail, IrIndexes, IrMut,
+    IrView, ItemKind, NestedScopeKind, NodeId, NodeKind, NodeView, NodeWeight, ORIGIN_RUSTDOC,
+    ORIGIN_SOURCE, PanicSitesQuery, QualifiedPath, Query, QueryBuilder, ReturnValue,
+    SourceByteRange, WorkspaceIr,
 };
 #[cfg(feature = "impl_coverage")]
 pub use ir::{
