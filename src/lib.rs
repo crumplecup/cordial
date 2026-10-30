@@ -407,8 +407,9 @@ pub use tier::{
     HookTimings, Tier, TierSelection, WARM_THRESHOLD, assigned_tier, builtin_tier, tier_for_timing,
 };
 pub use transform::{
+    FailurePropagationBlocker, FailurePropagationDecision, FunctionEdit, FunctionEditPlan,
     ReturnLiftBlocker, ReturnLiftDecision, ReturnLiftEdit, ReturnLiftPlan,
-    plan_infallible_return_lift,
+    plan_infallible_return_lift, plan_result_unwrap_propagation,
 };
 #[cfg(feature = "quality")]
 pub use worklist::{

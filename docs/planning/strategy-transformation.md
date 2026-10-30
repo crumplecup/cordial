@@ -1,7 +1,8 @@
 # Strategy transformations through `--apply`
 
-**Status:** Phase 0 started: executable input specimens and shared signature
-evidence are implemented. Transformation coverage is not implemented yet.
+**Status:** Phase 0 foundations and isolated success-return/failure-propagation
+previews are implemented and tested against executable specimens. Complete
+panic-to-error migrations and their CLI apply entry point remain ahead.
 
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
@@ -591,3 +592,45 @@ imports still need their own evidence. Next, use a resolved Result-producing
 call and matching error identities to rewrite one unwrap inside an already
 fallible function. That isolated operation must compile and execute before
 combining it with success lifting, declaration generation, or caller adaptation.
+
+### Isolated Result propagation (sixth follow-up cycle)
+
+`plan_result_unwrap_propagation` now plans one proven Result receiver's `unwrap`
+to `?` inside an already fallible function. It consumes only `IrView`: collected
+method/receiver/token ranges, resolved source node identities, `Calls` edges,
+namespace constraints, snapshot digests, and explicit Result/error contracts.
+Caller and callee must have the same known absolute error identity; this first
+operation neither infers `From` conversions nor resolves aliases. Ambiguous
+standard-library names, including root declarations named `std` or `core`, cannot
+authorize standard Result interpretation. Unknowns produce named refusals.
+
+Both success lifting and failure propagation use `FunctionEditPlan` for located,
+digest-checked previews. The existing return-lift API names remain aliases.
+There is no second parser, text-based evidence recovery, CLI writer, or worklist
+claim. Removing individual method tokens retains interspersed comments.
+
+`apply_result_propagation` compiles and executes before and after the production
+preview. Successful results, once-only source evaluation, and side-effect order
+are preserved; failure returns the original typed `io::Error` instead of
+panicking and skips the remaining successful-path computation. Tests also cover
+same-spelling user methods, error mismatches/aliases, unresolved/shadowed calls,
+namespace ambiguity, corrupted evidence, stale source, independent repeated
+sites, and recollection without another candidate. Each repeated-site preview
+is compiled separately, including the second operation after a `?` is present.
+
+**Next independent contracts:**
+
+1. Generate a typed error declaration and its source-preserving construction
+   from a resolved failing source, without relying on prior migration markers.
+   First compile and execute the generated declaration/conversion in isolation.
+2. Lift an infallible function to that selected error contract and adapt one
+   resolved caller independently. Keep public/trait/extern/unknown caller
+   boundaries explicit; incoming `Calls` edges are not proof of closure.
+3. Compose those proven operations into the smallest closed panic-to-error
+   component, then connect the existing atomic apply writer and worklist claims.
+   A preview of one operation must never be presented as a complete migration.
+
+Cross-module imports, method/trait resolution, aliases, cfg/macro contracts,
+Option/expect/domain failure construction, reverse transformations, and whole
+caller closure remain uncovered. Extend shared collection/enrichment for each
+missing fact before attempting its consuming transform.

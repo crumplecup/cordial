@@ -58,3 +58,11 @@ callee identities, while `Calls` edges expose incoming callers. Repeated sites
 and recursion retain their identities; shadowed names and opaque namespaces stay
 unresolved. Missing edges cannot be interpreted as proof of complete caller
 coverage. Broader type inference, imports, and cross-module calls remain open.
+
+`apply_result_propagation` exercises an isolated Result `unwrap` to `?` operation
+inside an already fallible function. Its integration test renders the production
+IR-backed preview, compiles both forms, and checks successful values, evaluation
+order, comments, and a returned typed source error. Additional tests refuse
+lookalike methods and unresolved/error-mismatched contracts, reject stale or
+corrupt evidence, and compile independent repeated-site previews after reload.
+This operation does not yet provide a complete panic-to-error CLI migration.

@@ -34,6 +34,9 @@ impl IrEnricher for SourceCallEnricher {
         let mut functions = Vec::new();
         let mut extern_crates = false;
         for node in nodes {
+            // In older editions a root declaration can shadow an absolute
+            // standard-library path. Refuse these names in every edition.
+            extern_crates |= matches!(node.weight().name().as_deref(), Some("std" | "core"));
             if let Some(scope) = ir.source_module_scope(node.id())? {
                 // Root macros/attributes can also introduce extern aliases
                 // affecting absolute paths in files below the crate root.

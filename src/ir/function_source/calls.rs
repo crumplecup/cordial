@@ -19,6 +19,8 @@ pub struct FunctionCallSyntax {
 pub struct FunctionUnwrapSyntax {
     range: SourceByteRange,
     receiver: SourceByteRange,
+    /// Dot, method name, and delimiters; comments between them are retained.
+    suffix_tokens: Vec<SourceByteRange>,
 }
 
 #[tracing::instrument(level = "trace", skip(function))]
@@ -80,6 +82,12 @@ impl<'ast> Visit<'ast> for Calls {
             self.unwraps.push(FunctionUnwrapSyntax {
                 range: call.span().byte_range().into(),
                 receiver: call.receiver.span().byte_range().into(),
+                suffix_tokens: vec![
+                    call.dot_token.span().byte_range().into(),
+                    call.method.span().byte_range().into(),
+                    call.paren_token.span.open().byte_range().into(),
+                    call.paren_token.span.close().byte_range().into(),
+                ],
             });
         }
         syn::visit::visit_expr_method_call(self, call);
