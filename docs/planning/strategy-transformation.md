@@ -687,3 +687,28 @@ already fallible functions refuse planning. No writer or worklist claim is added
 then compose declaration, success lifting, and failure propagation. Caller
 closure remains a separate obligation before connecting a complete migration
 to the atomic writer.
+
+### Isolated caller adaptation (ninth follow-up cycle)
+
+`plan_owned_caller_adaptation` resolves a selected caller-to-callee relationship,
+proves both can use the same generated error contract, and propagates every
+resolved call to that callee within the caller. Its result retains the callee
+signature lift as a required dependency. The declaration, success lifting, and
+caller operation share one target/snapshot validator; no downstream source scan
+or parser participates. Stable insertion ordering ensures `Ok(callee()?)`,
+including exact-tail and early-return calls.
+
+`apply_error_caller` executes every branch before and after the isolated plans,
+checking values and call counts. Tests refuse fixed signatures, unresolved and
+stale call evidence, including corruption in a later repeated site. The leaf's
+unwrap remains unchanged in this independent contract test.
+
+**Next: transitive composition.** A signature change propagates through callers
+of callers; one adapted relationship is not a complete migration. Walk incoming
+relationships to a fixed point, handle repeated edges and recursive components,
+and retain explicit public/trait/extern/unknown-use boundary obligations. A
+multilevel executable specimen must exercise that propagation in both success
+and failure. Compose declaration generation, leaf failure conversion, success
+lifting, and caller adaptation against one snapshot. No writer may treat
+missing `Calls` edges as evidence of closure; function-value and unresolved-use
+inventory still needs shared collection before a closed component can be claimed.

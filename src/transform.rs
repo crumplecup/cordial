@@ -4,12 +4,18 @@
 //! return signature change creates caller obligations; its preview is not a
 //! complete migration until a component planner has discharged them.
 
+mod call_target;
+mod caller_adaptation;
 mod error_declaration;
 mod failure_propagation;
 mod generated_contract;
 mod preview;
 mod return_lift;
 mod success_edits;
+pub use caller_adaptation::{
+    CallerAdaptationBlocker, CallerAdaptationDecision, OwnedCallerAdaptation,
+    plan_owned_caller_adaptation,
+};
 pub use error_declaration::{
     ErrorDeclarationBlocker, ErrorDeclarationDecision, GeneratedErrorNames, OwnedErrorDeclaration,
     plan_owned_error_declaration,

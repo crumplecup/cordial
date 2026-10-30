@@ -15,6 +15,7 @@ Run one with `cargo run --example apply_panic_result -- fail`.
 | `apply_result_propagation` | Preserve source evaluation and side-effect order while propagating a resolved failure | Prints `Ok(8)` with a trace; initially panics with `fail`. |
 | `apply_error_declaration` | Construct an owned parent / Kind / native source chain from a resolved I/O failure | Prints `8`; initially panics with `fail`. |
 | `apply_error_return` | Lift early and tail successes to a generated error contract independently of failure rewriting | Prints `8`, or `11` with `early`; initially panics with `fail`. |
+| `apply_error_caller` | Adapt every call from one caller to a newly fallible callee, including exact-tail and early-return calls | Prints `14 2`, or `7 1` with `early` or `tail`; initially panics with `fail`. |
 
 The integration harness in `tests/strategy_specimens.rs` copies each example's
 actual `main.rs` bytes into an isolated Cargo package at `src/main.rs`, with an
@@ -87,3 +88,11 @@ and executes early and tail success paths. The original failure still panics:
 this isolates success lifting from the subsequent propagation operation. Stale
 contracts, different modules, existing Result contracts, and fixed signatures
 are refused before returning edits.
+
+`tests/strategy_error_caller.rs` checks an isolated caller relationship. The
+planner retains the callee signature lift as a dependency, lifts the caller,
+and adapts all its resolved calls to that callee. Stable edit ordering puts `?`
+inside `Ok` for an exact-tail call. Executable comparisons check all branches
+and evaluation counts; corrupted later call sites must refuse the entire
+operation. This is one edge of a potentially transitive migration: changing the
+caller creates obligations for its own callers, including function-value uses.

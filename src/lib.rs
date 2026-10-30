@@ -407,11 +407,12 @@ pub use tier::{
     HookTimings, Tier, TierSelection, WARM_THRESHOLD, assigned_tier, builtin_tier, tier_for_timing,
 };
 pub use transform::{
-    ErrorDeclarationBlocker, ErrorDeclarationDecision, FailurePropagationBlocker,
-    FailurePropagationDecision, FunctionEdit, FunctionEditPlan, GeneratedErrorNames,
-    OwnedErrorDeclaration, ReturnLiftBlocker, ReturnLiftDecision, ReturnLiftEdit, ReturnLiftPlan,
-    plan_infallible_return_lift, plan_owned_error_declaration, plan_owned_error_return_lift,
-    plan_result_unwrap_propagation,
+    CallerAdaptationBlocker, CallerAdaptationDecision, ErrorDeclarationBlocker,
+    ErrorDeclarationDecision, FailurePropagationBlocker, FailurePropagationDecision, FunctionEdit,
+    FunctionEditPlan, GeneratedErrorNames, OwnedCallerAdaptation, OwnedErrorDeclaration,
+    ReturnLiftBlocker, ReturnLiftDecision, ReturnLiftEdit, ReturnLiftPlan,
+    plan_infallible_return_lift, plan_owned_caller_adaptation, plan_owned_error_declaration,
+    plan_owned_error_return_lift, plan_result_unwrap_propagation,
 };
 #[cfg(feature = "quality")]
 pub use worklist::{

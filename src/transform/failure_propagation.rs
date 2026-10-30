@@ -3,8 +3,8 @@
 use super::preview::{FunctionEdit, FunctionEditPlan};
 use crate::error::CordialResult;
 use crate::ir::{
-    CallResolutionFailure, EdgeKind, FunctionBoundary, FunctionSourceSyntax, FunctionUnwrapSyntax,
-    IrView, ItemKind, NodeId, NodeKind, SourceCallResolution,
+    CallResolutionFailure, FunctionBoundary, FunctionSourceSyntax, FunctionUnwrapSyntax, IrView,
+    ItemKind, NodeId, NodeKind,
 };
 use crate::objects::SourceSpan;
 use std::ops::ControlFlow;
@@ -100,66 +100,10 @@ pub(super) fn resolved_callee(
     facts: &FunctionSourceSyntax,
     site: &FunctionUnwrapSyntax,
 ) -> CordialResult<ControlFlow<FailurePropagationBlocker, FunctionSourceSyntax>> {
-    use FailurePropagationBlocker as Blocker;
-    let Some(flow) = ir.function_call_flow(function)? else {
-        return Ok(ControlFlow::Break(Blocker::MissingCallEvidence));
-    };
-    if flow.source_digest() != facts.source_digest()
-        || flow.calls().len() != facts.calls().len()
-        || !flow
-            .calls()
-            .iter()
-            .zip(facts.calls())
-            .all(|(resolved, call)| resolved.range() == call.range())
-    {
-        return Ok(ControlFlow::Break(Blocker::InvalidEvidence));
-    }
-    if !flow.namespace_trusted() {
-        return Ok(ControlFlow::Break(Blocker::UnresolvedReceiver(
-            CallResolutionFailure::OpaqueScope,
-        )));
-    }
-    let mut matches = flow
-        .calls()
-        .iter()
-        .filter(|call| call.range() == site.receiver());
-    let Some(call) = matches.next() else {
-        return Ok(ControlFlow::Break(Blocker::UnresolvedReceiver(
-            CallResolutionFailure::UnsupportedCallee,
-        )));
-    };
-    if matches.next().is_some() {
-        return Ok(ControlFlow::Break(Blocker::InvalidEvidence));
-    }
-    let (target, digest) = match call.resolution() {
-        SourceCallResolution::Source {
-            function,
-            source_digest,
-        } => (*function, *source_digest),
-        SourceCallResolution::Unresolved(reason) => {
-            return Ok(ControlFlow::Break(Blocker::UnresolvedReceiver(*reason)));
-        }
-    };
-    if !ir.children(function, EdgeKind::Calls).contains(&target)
-        || !ir
-            .node(target)
-            .is_some_and(|node| node.kind() == &NodeKind::Item(ItemKind::Fn))
-    {
-        return Ok(ControlFlow::Break(Blocker::InvalidEvidence));
-    }
-    let (Some(callee), Some(callee_flow)) = (
-        ir.function_source_syntax(target)?,
-        ir.function_call_flow(target)?,
-    ) else {
-        return Ok(ControlFlow::Break(Blocker::MissingCallEvidence));
-    };
-    if digest != callee.source_digest()
-        || digest != callee_flow.source_digest()
-        || !callee_flow.namespace_trusted()
-    {
-        return Ok(ControlFlow::Break(Blocker::InvalidEvidence));
-    }
-    Ok(ControlFlow::Continue(callee))
+    Ok(
+        super::call_target::resolved_call(ir, function, facts, site.receiver())?
+            .map_continue(|(_, facts)| facts),
+    )
 }
 
 #[tracing::instrument(level = "trace", skip(caller, callee))]
