@@ -2,9 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 
+mod calls;
 mod output;
 mod returns;
 mod success;
+pub use calls::{FunctionCallSyntax, FunctionUnwrapSyntax};
+pub use output::SourceResultContract;
 pub use returns::{
     FunctionBoundary, FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionTail,
     NestedScopeKind, ReturnValue,
@@ -62,6 +65,12 @@ pub struct FunctionSourceSyntax {
     /// Exact generated wrapper shape, used only to avoid repeated lifting.
     #[getter(copy)]
     has_infallible_result_syntax: bool,
+    /// Explicit standard Result declaration; aliases remain unresolved.
+    result_contract: Option<SourceResultContract>,
+    calls: Vec<FunctionCallSyntax>,
+    unwraps: Vec<FunctionUnwrapSyntax>,
+    /// Local bindings and imports can shadow a direct call's written path.
+    has_call_shadowing: bool,
 }
 
 impl FunctionSourceSyntax {
@@ -87,6 +96,7 @@ impl FunctionSourceSyntax {
             syn::ReturnType::Default => signature_range.end..signature_range.end,
             syn::ReturnType::Type(_, ty) => ty.span().byte_range(),
         };
+        let (calls, unwraps, has_call_shadowing) = calls::collect(function);
         Some(Self {
             source_digest: file.source_digest(),
             signature: file.source()[signature_range.clone()].to_string(),
@@ -98,6 +108,10 @@ impl FunctionSourceSyntax {
             has_infallible_result_syntax: output::has_infallible_result_syntax(
                 &function.sig.output,
             ),
+            result_contract: output::result_contract(file, &function.sig.output),
+            calls,
+            unwraps,
+            has_call_shadowing,
         })
     }
 }

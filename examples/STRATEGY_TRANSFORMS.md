@@ -10,6 +10,7 @@ Run one with `cargo run --example apply_panic_result -- fail`.
 | `apply_return_scopes` | Separate nested returns and identify fixed signatures and residual propagation | Prints `10 1 Ok(8)`, or `2 1 Ok(8)` with `early`. |
 | `apply_return_paths` | Lift branch, match, nested return, and unit exits without changing evaluation counts | Exercises all paths; counted calls return `11` and `112`, leaving counter `112`. |
 | `apply_panic_result` | Construct a typed error chain from a fresh Result panic site, one caller, and main | Prints `8`; panics with `fail`, retaining `PermissionDenied` in its diagnostic. |
+| `apply_failure_site` | Propagate one resolved Result failure inside an already fallible function | Prints `Ok(8)`; initially panics with `fail`. |
 | `apply_unwrap_lookalike` | Refuse rewriting a user-defined same-spelling method as Result propagation | Prints `7`; its `unwrap` returns `u32`. |
 
 The integration harness in `tests/strategy_specimens.rs` copies each example's
@@ -44,3 +45,9 @@ In particular,
 the existing panic inventory also flags the lookalike's method call: a finding
 based on spelling must never authorize an apply edit. Receiver resolution is
 required before failure-site rewriting can be implemented.
+
+`tests/strategy_result_contracts.rs` checks absolute standard Result declarations,
+source type arguments, located direct calls, and unwrap receiver ranges through
+the production loader and persisted IR. Relative paths, aliases, generic errors,
+and shadowed call names retain unknown evidence. Nested bodies have separate
+execution scopes. These facts do not yet authorize edits or prove caller closure.

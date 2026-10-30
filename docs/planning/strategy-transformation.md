@@ -548,3 +548,21 @@ Declaration generation and caller adaptation still need their own executable
 contracts before composing a complete fresh panic-to-error migration. This
 return primitive remains a library preview operation with no CLI writer or
 worklist claims; it must not publish a partially converted program.
+
+### Result and call evidence (fourth follow-up cycle)
+
+The shared function facts now retain explicit absolute standard Result contracts,
+their success/error syntax, direct call ranges, and zero-argument unwrap receiver
+ranges. Collection uses the same `SharedParsedFile`; downstream consumers need
+no syntax tree. Standard nongeneric absolute error paths have comparable type
+identities. Relative paths, aliases, and generic error types remain unresolved.
+Bound parameters and local patterns cannot acquire direct-function identities
+merely by spelling a function's name. Calls within nested execution scopes do
+not leak into the enclosing function inventory.
+
+`apply_failure_site` isolates propagation inside an already fallible function;
+its baseline compiles and runs with both successful and panicking inputs.
+`strategy_result_contracts` checks persisted evidence and unresolved cases.
+Next, join calls to source declarations and retain explicit resolution failures
+and incoming caller relationships. Namespace ambiguity and source boundaries
+must be checked before these declaration facts can authorize a rewrite.
