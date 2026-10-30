@@ -14,7 +14,9 @@ An isolated reuse preview counts exact contracts and compares source-reuse
 policies. A representation preview separates exact evidence from proposed
 contracts, with explicit broadening and refusal. A declaration-layout operation
 deduplicates represented sets and plans acyclic child families and direct
-alternatives. Rendering and applying nested declarations remain unimplemented.
+alternatives. Isolated owned rendering now generates a selected root and its
+nested source wrappers with typed conversions. Composing nested declarations
+into complete function/caller migrations remains unimplemented.
 
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
@@ -196,8 +198,9 @@ parallel function, type, or ownership indexes.
 
 ### Error families and nested variants
 
-**Shared evidence, representation and declaration layout implemented; nested
-declaration rendering not implemented.** Derive the escaping error family at each
+**Shared evidence, representation, declaration layout and isolated owned
+rendering implemented; nested migration composition not implemented.** Derive
+the escaping error family at each
 function from the shared call and error-flow IR. Starting with locally produced
 failures, propagate the failures that can escape a callee through its callers.
 An error that is handled does not escape that boundary. Recursive components
@@ -1223,3 +1226,52 @@ storage, placement across modules,
 call-edge adaptation/closure, configuration defaults, and production apply
 composition remain separate work. A layout preview cannot reach the source
 transaction writer.
+
+### Owned nested declarations (twenty-first follow-up cycle)
+
+`plan_owned_error_family_declaration` derives a layout from shared IR and renders
+one selected root family and its reachable children. The root is included in
+analysis even if omitted from the supplied function list. Other represented
+families stay visible in the layout; they are not silently claimed as emitted
+or migrated. All requested consumers must share one source module. Shared
+module facts authorize the insertion point and reserve every generated
+identifier, including child Kinds and native wrappers. The preview reads source
+text only to verify the snapshot digest and perform the located insertion.
+
+Each family uses a wrapper containing its boxed Kind and owned file/line
+context. An outer Kind variant holds a child wrapper, never the child's bare
+Kind. Native alternatives retain their concrete error in a source wrapper.
+Every wrapper implements Error and Display, and Error::source visits the child
+or native wrapper at each level. No architecture lint policy was changed.
+
+Explicit child-to-parent From implementations move the entire child, retaining
+its boxed Kind, native payload and earlier location. Native-to-family From
+implementations follow the unique alternative path through the represented
+tree. Every constructor and conversion is caller-tracked, including routing
+through intermediate families. There are no competing blanket conversions.
+Concrete native support is bounded to standard I/O, integer parsing, float
+parsing and UTF-8 errors; a nominal Result error alone does not prove Error.
+The established flat generator shares the native source template with this
+renderer and retains its existing supported native alternatives.
+
+Executable tests build a four-family tree, propagate an existing child through
+each parent, and compare the retained boxed Kind address, file and line at
+every frame. They downcast every source-chain frame and verify each original
+native payload. A separate bare-? path proves caller location survives all
+generated conversion hops. Tests also compile permitted-overlap layouts with
+only the selected root's reachable declarations, run the existing compliance
+scanner with no findings, check all generated names, reject changed or corrupt
+module evidence and unsupported nominal error types, refuse multiple consumer
+modules, and preserve the original source during preview. Existing native
+declaration and composed-migration tests continue to pass.
+
+**Next:** adapt function returns and failure sites to their mapped emitted
+families, then discharge caller conversions using exact source membership and
+producer provenance. A function's layout mapping is insufficient if its family
+was not emitted under the selected root. Adjacent child-to-parent conversions
+exist; nonadjacent calls and compatible subset contracts with a different
+declaration layout still need explicit conversion planning and tests. Reject
+an uncovered call edge before exposing a writable component. Borrowed storage,
+cross-module placement, configuration defaults, and production apply composition
+remain separate obligations. The declaration preview has no transaction-write
+authority and checks off no worklist items.

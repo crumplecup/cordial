@@ -111,14 +111,19 @@ impl GeneratedErrorNames {
             .replace("$PARENT", &self.parent)
             .replace("$KIND", &self.kind);
         for source in &self.sources {
-            output.push_str(
-                &include_str!("owned_source.rs.txt")
-                    .replace("$PARENT", &self.parent)
-                    .replace("$KIND", &self.kind)
-                    .replace("$SOURCE", &source.wrapper)
-                    .replace("$NATIVE", &source.native_type)
-                    .replace("$VARIANT", &source.variant),
-            );
+            for template in [
+                include_str!("owned_source.rs.txt"),
+                include_str!("owned_source_conversion.rs.txt"),
+            ] {
+                output.push_str(
+                    &template
+                        .replace("$PARENT", &self.parent)
+                        .replace("$KIND", &self.kind)
+                        .replace("$SOURCE", &source.wrapper)
+                        .replace("$NATIVE", &source.native_type)
+                        .replace("$VARIANT", &source.variant),
+                );
+            }
         }
         output
     }

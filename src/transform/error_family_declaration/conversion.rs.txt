@@ -1,0 +1,7 @@
+
+impl ::core::convert::From<$INPUT> for $WRAPPER {
+    #[track_caller]
+    fn from(source: $INPUT) -> Self {
+        $BODY
+    }
+}

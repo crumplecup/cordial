@@ -8,6 +8,7 @@ mod call_target;
 mod caller_adaptation;
 mod closed_panic;
 mod error_declaration;
+mod error_family_declaration;
 mod error_family_layout;
 mod error_family_representation;
 mod error_family_reuse;
@@ -29,6 +30,11 @@ pub use closed_panic::{
 pub use error_declaration::{
     ErrorDeclarationBlocker, ErrorDeclarationDecision, GeneratedErrorNames, GeneratedErrorSource,
     OwnedErrorDeclaration, plan_owned_error_declaration, plan_owned_error_group_declaration,
+};
+pub use error_family_declaration::{
+    ErrorFamilyDeclarationBlocker, ErrorFamilyDeclarationDecision, GeneratedErrorFamily,
+    GeneratedErrorFamilyChild, GeneratedErrorFamilySource, OwnedErrorFamilyDeclaration,
+    plan_owned_error_family_declaration,
 };
 pub use error_family_layout::{
     ErrorFamilyLayoutDecision, ErrorFamilyLayoutNode, ErrorFamilyLayoutPlan,

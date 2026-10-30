@@ -18,15 +18,6 @@ impl $SOURCE {
     }
 }
 
-impl ::core::convert::From<$NATIVE> for $PARENT {
-    #[track_caller]
-    fn from(source: $NATIVE) -> Self {
-        Self {
-            kind: ::std::boxed::Box::new($KIND::$VARIANT($SOURCE::new(source))),
-        }
-    }
-}
-
 impl ::core::fmt::Display for $SOURCE {
     fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         ::core::write!(formatter, "{} at {}:{}", self.source, self.file, self.line)

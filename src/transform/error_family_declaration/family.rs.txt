@@ -1,0 +1,47 @@
+
+
+#[derive(Debug)]
+struct $WRAPPER {
+    kind: ::std::boxed::Box<$KIND>,
+    file: ::std::string::String,
+    line: u32,
+}
+
+#[derive(Debug)]
+enum $KIND {
+$VARIANTS
+}
+
+impl $WRAPPER {
+    #[track_caller]
+    fn new(kind: $KIND) -> Self {
+        let location = ::std::panic::Location::caller();
+        Self {
+            kind: ::std::boxed::Box::new(kind),
+            file: ::std::string::String::from(location.file()),
+            line: location.line(),
+        }
+    }
+}
+
+impl ::core::fmt::Display for $WRAPPER {
+    fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        ::core::write!(formatter, "{} at {}:{}", self.kind, self.file, self.line)
+    }
+}
+
+impl ::core::fmt::Display for $KIND {
+    fn fmt(&self, formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+$DISPLAY
+        }
+    }
+}
+
+impl ::std::error::Error for $WRAPPER {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self.kind.as_ref() {
+$SOURCES
+        }
+    }
+}

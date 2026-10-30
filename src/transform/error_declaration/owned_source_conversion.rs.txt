@@ -1,0 +1,9 @@
+
+impl ::core::convert::From<$NATIVE> for $PARENT {
+    #[track_caller]
+    fn from(source: $NATIVE) -> Self {
+        Self {
+            kind: ::std::boxed::Box::new($KIND::$VARIANT($SOURCE::new(source))),
+        }
+    }
+}
