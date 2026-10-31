@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 mod calls;
+mod native;
+pub(crate) use native::signature_range as native_signature_range;
 mod output;
 mod returns;
 mod success;

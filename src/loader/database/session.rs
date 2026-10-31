@@ -1,9 +1,8 @@
 //! Canonical source inputs and semantic queries for the shared source loader.
 
-use super::queries;
+use super::{DatabaseSource, populate::Projection};
 
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use ra_ap_hir::{ChangeWithProcMacros, Semantics, attach_db};
@@ -11,11 +10,10 @@ use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
 use ra_ap_load_cargo::{LoadCargoConfig, ProcMacroServerChoice, load_workspace_at};
 use ra_ap_project_model::{CargoConfig, RustLibSource};
-use ra_ap_syntax::{AstNode, ast};
 use ra_ap_vfs::{Vfs, VfsPath};
 use tracing::instrument;
 
-use crate::{CordialError, CordialResult, CrateIr, EdgeKind, ItemKind, NodeKind, NodeWeight};
+use crate::{CordialError, CordialResult, CrateIr};
 
 /// Canonical source database shared by source collection and semantic queries.
 /// Revisions are serial; virtual changes never write to the loaded project.
@@ -110,8 +108,7 @@ impl SourceDatabase {
     fn project_attached(&self, crate_name: &str, paths: &[PathBuf]) -> CordialResult<CrateIr> {
         let mut graph = CrateIr::new(crate_name);
         let mut snapshots = Vec::new();
-        let mut definitions = HashMap::new();
-        let mut edges = Vec::new();
+        let mut projection = Projection::default();
         let sema = Semantics::new(&self.db);
         for path in paths {
             let file = self.file_id(path)?;
@@ -120,46 +117,35 @@ impl SourceDatabase {
                 path.canonicalize()?,
                 Sha256::digest(text.as_bytes()).into(),
             ));
-            let tree = sema.parse_guess_edition(file);
-            for syntax in tree.syntax().descendants().filter_map(ast::Fn::cast) {
-                let Some(function) = sema.to_def(&syntax) else {
-                    // Inactive syntax remains available to syntax collectors.
-                    // It must not acquire an active semantic definition.
-                    continue;
-                };
-                let key = queries::FunctionKey::new(&self.db, function);
-                let facts = queries::function_evidence(&self.db, key)
-                    .as_ref()
-                    .ok_or_else(|| {
-                        CordialError::workspace_source_facts_missing("semantic function source")
-                    })?;
-                let mut weight = NodeWeight::new(NodeKind::Item(ItemKind::Fn))
-                    .with_name(facts.label().clone())
-                    .with_span(crate::FileSpan::new(
-                        path,
-                        (text[..usize::from(syntax.syntax().text_range().start())]
-                            .bytes()
-                            .filter(|byte| *byte == b'\n')
-                            .count()
-                            + 1) as u32,
-                        1,
-                    ));
-                weight.set_attr(crate::ATTR_SEMANTIC_FUNCTION, serde_json::to_value(facts)?);
-                let node = graph.insert_node(weight);
-                graph.insert_edge(graph.root(), node, EdgeKind::Contains)?;
-                definitions.insert(*facts.definition(), node);
-                for call in facts.calls() {
-                    if let crate::SemanticCallTarget::Function(target) = *call.target() {
-                        edges.push((node, target));
-                    }
-                }
+            let edition = sema.attach_first_edition(file);
+            // This consults the same memoized parse used by Semantics. Parser
+            // recovery must not turn invalid syntax into complete edit facts.
+            if let Some(error) = edition.parse(&self.db).errors().first() {
+                return Err(anyhow::Error::new(error.clone()).into());
             }
+            let source = DatabaseSource::new(
+                path,
+                text,
+                sema.parse(edition),
+                ra_ap_ide_db::line_index(&self.db, file),
+            );
+            let module_path = sema
+                .file_to_module_defs(file)
+                .next()
+                .map(|module| {
+                    module
+                        .path_to_root(&self.db)
+                        .into_iter()
+                        .rev()
+                        .filter_map(|module| module.name(&self.db))
+                        .map(|name| name.as_str().to_owned())
+                        .collect::<Vec<_>>()
+                        .join("::")
+                })
+                .unwrap_or_else(|| path.display().to_string());
+            projection.populate(&self.db, &sema, &source, &module_path, &mut graph)?;
         }
-        for (caller, target) in edges {
-            if let Some(callee) = definitions.get(&target) {
-                graph.insert_edge(caller, *callee, EdgeKind::Calls)?;
-            }
-        }
+        projection.connect(&mut graph)?;
         graph.set_attr(
             graph.root(),
             crate::ATTR_SEMANTIC_SNAPSHOT,

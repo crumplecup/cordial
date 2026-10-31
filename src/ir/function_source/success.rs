@@ -5,6 +5,8 @@ use syn::spanned::Spanned;
 
 use super::SourceByteRange;
 
+pub(super) mod native;
+
 /// A successful exit that must acquire the lifted function's Result wrapper.
 ///
 /// These positions belong to the enclosing source snapshot. They describe

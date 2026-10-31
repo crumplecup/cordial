@@ -1,5 +1,6 @@
 use tracing::instrument;
 mod database;
+pub(crate) use database::DatabaseSource;
 pub use database::SourceDatabase;
 mod macro_syntax;
 mod populate;

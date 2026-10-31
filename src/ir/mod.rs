@@ -50,6 +50,7 @@ pub use error_family::{
     ATTR_FUNCTION_ERROR_FAMILY, ErrorFamilyBasis, ErrorFamilyGap, ErrorFamilyGapReason,
     ErrorFamilyMember, FunctionErrorFamily,
 };
+pub(crate) use function_source::native_signature_range;
 pub use function_source::{
     ATTR_FUNCTION_SOURCE_SYNTAX, DeclaredFunctionOutput, FunctionBoundary, FunctionCallSyntax,
     FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionSourceSyntax,

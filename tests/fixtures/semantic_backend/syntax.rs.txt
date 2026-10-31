@@ -1,0 +1,73 @@
+//! Syntax preservation and conservative transformation boundaries.
+use crate::leaf::fallible;
+
+/// An explicit standard contract, with comments inside an unwrap suffix.
+pub fn explicit() -> ::core::result::Result<u32, ::std::num::ParseIntError> {
+    if false { return "2".parse(); }
+    let _value = fallible(). /* keep */ unwrap(/* also keep */);
+    "3".parse()
+}
+
+fn branches(value: bool) -> u32 {
+    if value { return 1; }
+    match value { true => { 2 }, false => 3 }
+}
+
+fn unit(value: bool) {
+    if value { return; }
+    if value { return; }
+}
+
+fn terminal(value: bool) -> u32 {
+    if value { return 1; } else { return 2; };
+}
+
+fn handling() {
+    let _ = fallible().unwrap_or(4);
+    let _ = fallible().unwrap_or_default();
+    let _ = fallible().is_ok();
+    let _ = fallible().is_err();
+    let _ = (fallible()).unwrap();
+}
+
+fn residual() -> crate::leaf::ReadResult<u32> { fallible()?; fallible() }
+
+fn nested_methods() {
+    fallible().one(fallible().two()).three();
+    (fallible().one())?;
+}
+
+fn labeled() -> u32 { 'exit: { break 'exit 1; } }
+
+fn scopes() {
+    let _closure = || { return 1; };
+    let _future = async { return 2; };
+    let _constant = const { 3 };
+    fn local() { return; }
+    local();
+}
+
+fn loops() {
+    for _ in 0..2 { if false { return; } }
+    while false { return; }
+    loop { break; }
+}
+
+fn generic<T>() -> T where T: Default { T::default() }
+fn lifetime<'a>(value: &'a str) -> &'a str { value }
+pub unsafe extern "C" fn foreign() {}
+const fn constant() -> u32 { 4 }
+async fn future() -> u32 { 5 }
+fn diverge() -> ! { loop {} }
+fn generated() -> ::core::result::Result<u32, ::core::convert::Infallible> { Ok(6) }
+fn main() {}
+
+#[cfg(any())]
+fn inactive() -> u32 { 7 }
+
+mod inline {
+    pub struct Widget;
+    pub fn nested() -> u32 { 8 }
+}
+
+fn macro_boundary() { todo!("opaque return"); }

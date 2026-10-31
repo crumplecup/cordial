@@ -4,6 +4,7 @@ use super::{FunctionBoundary, NodeId, SourceByteRange};
 use serde::{Deserialize, Serialize};
 
 mod collect;
+mod native;
 
 /// A value path, including uses outside the direct-call graph.
 ///

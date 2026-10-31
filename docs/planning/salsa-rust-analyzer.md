@@ -275,10 +275,54 @@ standard-library definitions.
 
 The production session currently captures text and builds its compatibility
 `syn` tree; it does not also request a rust-analyzer parse of that input. Cargo
-context loading, syntax-carrier migration, and production semantic enrichment
-remain the next integration work. Reachable error types are an inventory that
+context loading, remaining syntax collectors, and production semantic enrichment
+remain integration work. Reachable error types are an inventory that
 includes handled errors. They do not establish which errors escape a function
 or authorize transformations.
+
+### Syntax and graph projection checkpoint
+
+The database projection now materializes source modules and recursively nested
+items with `Contains` edges, alongside the existing semantic facts and `Calls`
+edges. Its private `DatabaseSource` carrier binds source text, digest, canonical
+tree, and the database's cached line index. A collector selects its function
+from this carrier; it cannot supply an independently parsed tree.
+
+Native collectors populate the existing `SourceModuleScope` and
+`FunctionSourceSyntax` contracts: written identifiers and value uses,
+signatures, output contracts, calls and their uses, unwrap suffix tokens,
+return/success paths, nested scopes, and conservative transformation boundaries.
+Function edit contracts remain scoped to top-level free functions, matching the
+current consumers. Inactive items retain syntax without acquiring semantic
+identities. Syntax recovery errors reject the projection.
+
+`tests/source_backend_parity.rs` compares complete typed payloads from separate
+compatibility and database sessions. Its specimen includes doc comments,
+comments inside unwrap suffixes, explicit returns, branches, handled calls,
+nested method evaluation order, residuals, labeled breaks, lifetimes,
+closures, async/const blocks, local items, special
+signatures, inactive functions, inline modules, and macros. It also checks
+invalid virtual syntax rejection and restoration without filesystem writes.
+Collection and graph projection have Hotpath measurement boundaries.
+
+This ports the first collection group into the selected backend. The shipping
+source session still uses only its compatibility parse while the remaining
+collectors migrate; it does not request both trees. Remove that ownership and
+cache together at production cutover.
+
+The call, return, and output modules keep their typed facts separate from the
+temporary `compatibility` collectors. Those collectors retain the shipping
+behavior and have an explicit removal boundary when the remaining source
+collection groups migrate.
+
+Validation on 2026-10-30: `cargo test --features full --test semantic_backend`
+passed after graph integration (100.20 seconds). The final focused run,
+`cargo test --features full --test source_backend_parity --test shared_source
+--test source_etiquette`, passed all four tests without compiler warnings;
+the complete parity regression took 92.36 seconds. These are test durations,
+not isolated parser timings.
+`cordial submit --tier build --deny-open` passed after clearing the new tracing
+and modularity findings. The deep tier was not rerun at this checkpoint.
 
 ### Collector migration inventory
 
@@ -359,8 +403,11 @@ Reserve the all-tier gate for completion of the migration plan.
 
 ## Current next step
 
-Port syntax carriers and graph-population facts against the collector inventory
-above. Continue
+Port the attribute and file-policy collectors onto the database-issued syntax
+carrier and existing IR contracts. Preserve inactive-code policy coverage and
+golden findings. Then work through API/layout, tracing, error/apply, and proof
+collection in the inventory above. Complete the Cargo context driver before
+using semantic facts to authorize transformations. Continue
 implement / focused checks / build-tier submit / commit. Keep the selected
 architecture as the destination throughout; do not create another user-facing
 backend choice or extend handwritten semantic resolution.
