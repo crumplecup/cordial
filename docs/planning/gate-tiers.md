@@ -212,9 +212,11 @@ have to keep those two apart.
   wall time sums the etiquette's measured hooks; a shared hook is attributed to
   each etiquette that uses it. The isolated `timings` command will measure the
   complete cost of one etiquette, including shared setup.
-- `--deny-open` judges only what ran, and prints a line naming any tier that was
-  skipped. The promotion gate uses `--tier all`, so a skipped tier cannot reach
-  `main` unnoticed.
+- `--deny-open` checks the reconciled worklist, including known open and skipped
+  items from tiers that did not run. Carried checked-off claims remain
+  unverified and are not counted as open or reported as cleared. It also prints
+  a line naming skipped tiers. The promotion gate uses `--tier all` to verify
+  every claim.
 
 ## Library design
 
@@ -253,9 +255,9 @@ The tier selection becomes part of the worklist snapshot, replacing the
 - `submit` repeats the tiers the previous run used, and `submit --tier <name>`
   overrides them. An agent can verify an area cheaply with `--tier quick`, and
   finish with `submit --tier all`.
-- Items from a tier that this `submit` did not run carry over from the previous
-  worklist unchanged and are marked unverified. They cannot be scored, and they
-  are never reported as cleared.
+- Items from a tier that this `submit` or `quality` did not run carry over from
+  the previous valid worklist unchanged and are marked unverified. They cannot
+  be scored, and they are never reported as cleared.
 - `stats` states which tiers the current worklist covers.
 
 ## Phases

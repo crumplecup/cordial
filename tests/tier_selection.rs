@@ -5,8 +5,8 @@ use std::path::Path;
 use std::process::{Command, Output};
 
 use cordial::{
-    GateLedger, SessionBuilder, StoreLayout, TierSelection, all_plugins, assigned_tier,
-    etiquettes_from_plugins, load_cordial_config, project_slug_from_path,
+    GateLedger, ItemState, SessionBuilder, StoreLayout, TierSelection, Worklist, all_plugins,
+    assigned_tier, etiquettes_from_plugins, load_cordial_config, project_slug_from_path,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -250,5 +250,98 @@ fn skipped_area_keeps_last_count_and_marks_checklist_stale() -> miette::Result<(
         "{section}"
     );
     assert!(!section.contains("**Open items:** 0"), "{section}");
+    Ok(())
+}
+
+#[test]
+fn deny_open_includes_items_from_omitted_tiers_in_text_and_json() -> miette::Result<()> {
+    cordial::init_tracing();
+    for command in ["submit", "quality"] {
+        for state in [ItemState::Open, ItemState::Skipped, ItemState::Done] {
+            for json in [false, true] {
+                if command == "quality" && json {
+                    continue;
+                }
+                let project = project()?;
+                let home = tempfile::tempdir().into_diagnostic()?;
+                fs::write(
+                    project.path().join("cordial.toml"),
+                    "[tiers.assign]\npanics = \"deep\"\nvisibility = \"focused\"\n",
+                )
+                .into_diagnostic()?;
+                let initial = run(
+                    project.path(),
+                    home.path(),
+                    &["quality", "--etiquette", "panics"],
+                )?;
+                assert!(initial.status.success(), "{initial:?}");
+                let store = store(project.path(), home.path());
+                let mut previous = Worklist::read(&store)
+                    .into_diagnostic()?
+                    .ok_or_else(|| miette::miette!("missing initial worklist"))?;
+                assert!(!previous.items().is_empty());
+                let ids = previous
+                    .items()
+                    .iter()
+                    .map(|item| item.id().as_str().to_string())
+                    .collect::<Vec<_>>();
+                match state {
+                    ItemState::Open => {}
+                    ItemState::Skipped => {
+                        previous.skip(&ids, Some("deferred")).into_diagnostic()?;
+                    }
+                    ItemState::Done => {
+                        previous.done(&ids).into_diagnostic()?;
+                    }
+                }
+                previous.write(&store).into_diagnostic()?;
+                let mut args = vec![command, "--tier", "focused", "--deny-open"];
+                if json {
+                    args.push("--json");
+                }
+                let output = run(project.path(), home.path(), &args)?;
+                let should_fail = state != ItemState::Done;
+                assert_eq!(
+                    output.status.success(),
+                    !should_fail,
+                    "{args:?} {state:?}: {output:?}"
+                );
+                let current = Worklist::read(&store)
+                    .into_diagnostic()?
+                    .ok_or_else(|| miette::miette!("missing reconciled worklist"))?;
+                assert_eq!(
+                    current.record().generation(),
+                    &(previous.record().generation() + 1)
+                );
+                assert_eq!(current.items().len(), ids.len());
+                assert_eq!(
+                    current.open_count(),
+                    if should_fail { ids.len() } else { 0 }
+                );
+                for item in current.items() {
+                    assert!(ids.iter().any(|id| id == item.id().as_str()));
+                    assert_eq!(*item.state(), state);
+                    assert!(*item.unverified());
+                    assert!(!*item.reopened());
+                }
+                if json {
+                    // Parsing the whole stdout also rejects multiple JSON responses.
+                    let response: serde_json::Value =
+                        serde_json::from_slice(&output.stdout).into_diagnostic()?;
+                    assert_eq!(response["command"], "submit");
+                    if should_fail {
+                        assert!(response["error"].is_object(), "{response}");
+                    } else {
+                        assert_eq!(response["gate"]["open_now"], 0);
+                    }
+                } else if command == "submit" {
+                    assert!(
+                        String::from_utf8_lossy(&output.stdout)
+                            .contains(&format!("Gate: {} open items remain", current.open_count()))
+                    );
+                }
+            }
+        }
+    }
     Ok(())
 }

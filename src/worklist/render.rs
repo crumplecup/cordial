@@ -129,8 +129,8 @@ pub fn render_submit(previous: &Worklist, current: &Worklist, scorecard: &Scorec
     let _ = writeln!(
         output,
         "Gate: {} open items remain ({} at the last run).",
-        current.items().len(),
-        previous.items().len()
+        current.open_count(),
+        previous.open_count()
     );
     let ambiguous_claims = scorecard
         .checked_off()

@@ -85,11 +85,12 @@ pub(in crate::cli) fn execute_run_plugins_locked(
     let outcome = session.run(filter.as_ref())?;
     let summary = print_run_summary(outcome.as_ref())?;
     #[cfg(feature = "quality")]
-    if write_worklist {
-        let previous = if score_worklist {
-            crate::Worklist::read(store)?
-        } else {
-            None
+    let open_action_items = if write_worklist {
+        let previous = match crate::Worklist::read(store)? {
+            Some(previous) if previous.validity(&config)? == crate::Validity::Current => {
+                Some(previous)
+            }
+            _ => None,
         };
         let findings = outcome.findings().collect::<Vec<_>>();
         let report = crate::build_quality_report(&findings)?;
@@ -104,22 +105,32 @@ pub(in crate::cli) fn execute_run_plugins_locked(
             .artifacts()
             .map(|artifact| artifact.name().to_string())
             .collect();
-        let scored = previous.map(|previous| {
-            let scorecard = crate::worklist::score_verified(&previous, &mut list, &verified);
+        let scored = previous.and_then(|previous| {
+            let scorecard = score_worklist
+                .then(|| crate::worklist::score_verified(&previous, &mut list, &verified));
             list.carry_unverified(&previous, &verified);
-            if json_submit {
-                crate::worklist::json_submit(store, &previous, &list, &scorecard).to_string() + "\n"
-            } else {
-                crate::render_submit(&previous, &list, &scorecard)
-            }
+            scorecard.map(|scorecard| {
+                if json_submit {
+                    crate::worklist::json_submit(store, &previous, &list, &scorecard).to_string()
+                        + "\n"
+                } else {
+                    crate::render_submit(&previous, &list, &scorecard)
+                }
+            })
         });
+        let open_action_items = list.open_count();
         list.write(store)?;
         if let Some(summary) =
-            scored.filter(|_| !json_submit || !deny_open || summary.open_action_items == 0)
+            scored.filter(|_| !json_submit || !deny_open || open_action_items == 0)
         {
             write!(io::stdout(), "{summary}")?;
         }
-    }
+        open_action_items
+    } else {
+        summary.open_action_items
+    };
+    #[cfg(not(feature = "quality"))]
+    let open_action_items = summary.open_action_items;
     progress.notice(format!(
         "Reports available under {}",
         store.findings_dir().display()
@@ -131,8 +142,8 @@ pub(in crate::cli) fn execute_run_plugins_locked(
             outcome.skipped_tiers().join(", ")
         )?;
     }
-    if deny_open && summary.open_action_items > 0 {
-        return Err(CordialError::open_findings(summary.open_action_items));
+    if deny_open && open_action_items > 0 {
+        return Err(CordialError::open_findings(open_action_items));
     }
     Ok(())
 }
