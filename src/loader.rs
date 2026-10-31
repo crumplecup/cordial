@@ -1,4 +1,6 @@
 use tracing::instrument;
+mod database;
+pub use database::SourceDatabase;
 mod macro_syntax;
 mod populate;
 mod scan_roots;

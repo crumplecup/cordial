@@ -26,7 +26,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          # Semantic loader tests resolve core/std definitions from rust-src.
+          components: rustfmt, clippy, rust-src
       # rustdoc JSON needs nightly. Install it here so parallel tests do not
       # race rustup's auto-install of the rolling toolchain.
       - run: rustup toolchain install nightly --profile minimal --no-self-update

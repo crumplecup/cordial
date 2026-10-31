@@ -1,8 +1,9 @@
 # A shared semantic backend with Salsa and rust-analyzer
 
-**Status:** Architecture exploration. No dependencies or production behavior
-changed. Research checked on 2026-10-30; upstream APIs and release versions must
-be checked again when implementation begins.
+**Status:** Adoption in progress. Salsa and rust-analyzer are the selected
+source backend. Migrate existing collection through the shared loader and
+retire its `syn` ownership.
+Research and dependency compatibility checked on 2026-10-30.
 
 ## Purpose
 
@@ -13,20 +14,20 @@ on constructing the selected design, preserving evidence, and validating the
 result. Implementing Rust name resolution, type inference, and invalidation
 ourselves consumes effort that could go toward those transformations.
 
-Explore replacing the source frontend with rust-analyzer and extending its
+Replace the source frontend with rust-analyzer and extend its
 Salsa database with Cordial queries. Keep one canonical analysis backend and
 the shared IR boundary. Preserve the existing transformation operations,
 evidence requirements, transaction handling, and executable specimens.
 
-This exploration supports the [strategy transformation plan](strategy-transformation.md).
-It pauses further composition of nested error migrations while we evaluate the
-frontend they should consume. It does not discard completed transformations.
+This migration supports the [strategy transformation plan](strategy-transformation.md).
+It pauses further composition of nested error migrations while we migrate the
+frontend they consume. It does not discard completed transformations.
 
 ## What exists today
 
 | Responsibility | Current implementation | Consequence for a pivot |
 | --- | --- | --- |
-| Source ownership and parsing | `src/loader/source.rs`, `source/cache.rs`, `source_work.rs` | One shared `syn::File` per cached path within a parsed-source session; no revision-aware dependency graph across candidate edits. |
+| Source ownership and parsing | `src/loader/database/`, `source.rs`, `source/cache.rs`, `source_work.rs` | Source sessions now register canonical text inputs in the database. Existing collectors still consume one cached `syn::File` per path until their syntax migration. |
 | Syntax collection | `src/loader/populate.rs` and etiquette collectors | Collectors depend on `syn` nodes and visitors. Replacing the frontend requires migrating them. |
 | Shared evidence | `src/ir/`, `src/session/source_facts.rs` | Keep the `IrView` consumption boundary and typed source, call, and error-family facts. |
 | Direct call resolution | `src/enricher/source_calls.rs` | Currently restricts resolution to unique local names in a trusted module and refuses several generic, macro, and attribute boundaries. |
@@ -42,9 +43,10 @@ both frontends over every production input would also leave duplicate work.
 
 rust-analyzer already represents analysis in a Salsa `RootDatabase`. Its
 `load-cargo` implementation explicitly supports loading into an existing
-database for third-party extensions. This makes extending that database the
-first integration approach to test. We do not yet have a compiled Cordial
-prototype proving that our query types fit its published APIs.
+database for third-party extensions. Cordial extends that same database with
+tracked queries. The source loader
+owns the database adapter in `src/loader/database/`; downstream consumers read
+the typed projection through `IrView`.
 
 Sources: [RootDatabase implementation](https://raw.githubusercontent.com/rust-lang/rust-analyzer/master/crates/ide-db/src/lib.rs),
 [Cargo loader implementation](https://raw.githubusercontent.com/rust-lang/rust-analyzer/master/crates/load-cargo/src/lib.rs).
@@ -209,30 +211,105 @@ Sources: [rust-analyzer architecture](https://rust-analyzer.github.io/book/contr
 | --- | --- | --- |
 | Salsa around our current frontend | Incremental dependencies while retaining collectors | Leaves Rust resolution and inference in our maintenance budget; useful only if embedding proves unsuitable. |
 | External rust-analyzer over LSP | Stable protocol and separate process | Useful editor integration; a poor primary fit for typed, revision-bound evidence across the whole transformation graph. |
-| Embedded rust-analyzer with Cordial queries in its database | Shared language analysis and tracked policy facts | Recommended prototype. Requires adapter maintenance and collector migration. |
+| Embedded rust-analyzer with Cordial queries in its database | Shared language analysis and tracked policy facts | Selected direction. Requires adapter maintenance and collector migration. |
 
-## Implementation sequence and decision gates
+## Adoption sequence and gates
 
-### 1. Prove integration and a meaningful semantic gain
+Integration tests exercise the shared loader's database and its normal IR
+boundary. The shipping loader now registers source inputs there.
+Existing collectors still need their `syn` compatibility AST until migrated;
+that path does not request a second rust-analyzer syntax tree. The parser
+cutover must remove that AST and its cache, not add another parse beside it.
 
-- [ ] Select one published `ra_ap_*` release cohort and verify its Rust and
-  Salsa requirements against this repository. The published loader inspected
-  during research is `0.0.358`; this is a research reference, not a selected pin.
-- [ ] In an isolated test/example harness, load a Cargo workspace once and add a
-  Cordial tracked query to its database. Demonstrate invalidation through an
-  upstream semantic query. Do not add a parallel production parser.
-- [ ] Populate the shared IR for a cross-file panic specimen with an import
-  alias, a type alias for `Result`, and a method call. Compare resolved item and
-  error identities against fixture expectations, including a shadowed fake
-  `Result` and an unresolved call.
-- [ ] Change one leaf's return contract. Observe the affected callers, including
-  callers of callers. Keep an unrelated module as a recomputation control.
+### 1. Adopt canonical inputs and establish semantic queries
 
-**Gate:** one canonical database, useful semantic facts through `IrView`, and
-correct revision invalidation. If published APIs cannot support this boundary,
-record the concrete blocker before expanding dependencies or adopting a fork.
+- [x] Select `ra_ap_*` `0.0.358` with Salsa `0.28.5`. The cohort requires Rust
+  1.98; the repository currently runs Rust 1.99. Keep upstream crates in lockstep.
+- [x] Place the database under the existing source loader and route shared
+  source-session inputs through it.
+- [x] Compile Cordial tracked queries in rust-analyzer's database, with typed
+  semantic facts projected into `IrView`.
+- [x] Verify resolved import aliases, type aliases, methods, shadowed `Result`,
+  unresolved calls, transitive invalidation, unrelated cache reuse, and virtual
+  rollback. Record actual test outcomes below before claiming this gate.
+- [x] Bind semantic projection to revision/source digests and emit ordinary
+  `Calls` edges, with unknown/unsupported evidence explicit.
 
-Published package reference: [ra_ap_load-cargo](https://docs.rs/crate/ra_ap_load-cargo/0.0.358).
+**Gate:** canonical source ownership has started in the production loader;
+semantic identity and invalidation have executable regression coverage. This
+is not completion of the parser or collector migration.
+
+### Implementation checkpoint
+
+`SourceDatabase` now lives under `loader/database/`. Each parsed-source session
+owns one database and registers captured text before producing the compatibility
+tree. Cargo-backed loading uses the same database type and projects semantic
+facts into typed IR attributes and ordinary `Calls` edges. Cordial's direct-call
+and reachable-error queries execute in rust-analyzer's Salsa database.
+
+`tests/semantic_backend.rs` exercises import aliases, a `Result` type alias,
+method resolution, an unrelated enum named `Result`, and unresolved calls. It
+changes a leaf's error contract in memory and checks its method, caller, and
+caller's caller. Query execution counts distinguish a warm lookup from a
+recomputation and verify that the unrelated function stays cached. Restoring
+the original input must restore the semantic facts and source digests without
+writing the workspace. Const-generic and lifetime-bearing ADTs remain explicit
+unsupported types until the projection can retain their arguments.
+
+`tests/shared_source.rs` retains the existing pointer-identity, frozen source
+snapshot, reload, and macro-island checks; `tests/source_etiquette.rs` checks
+normal source-loader IR population. These remain migration regression tests.
+
+Validation on 2026-10-30: `cargo test --features full --test semantic_backend
+--test shared_source --test source_etiquette` passed all four tests without
+compiler warnings. The semantic regression completed in 105.44 seconds; this
+is the complete test duration, not a parser benchmark. The initial regression
+suite also passed with `--no-default-features` before the additional generic
+argument assertions were added.
+
+The build-tier submit gate (list 349) cleared all twelve findings introduced
+during integration and found no new items. Five prior deep-tier items remain
+unverified; the deep tier is reserved for the end of this plan. CI's test job
+installs `rust-src` explicitly so the semantic regressions can resolve core and
+standard-library definitions.
+
+The production session currently captures text and builds its compatibility
+`syn` tree; it does not also request a rust-analyzer parse of that input. Cargo
+context loading, syntax-carrier migration, and production semantic enrichment
+remain the next integration work. Reachable error types are an inventory that
+includes handled errors. They do not establish which errors escape a function
+or authorize transformations.
+
+### Collector migration inventory
+
+The starting audit found 53 files consuming `.syntax()` or `.macro_syntax()`
+from shared carriers (75 call sites before the new adapter). Port collection
+in the following dependency order. Preserve existing fact payloads wherever
+possible so consumer stages do not need a simultaneous rewrite.
+
+| Collection group | Current entry points | Required backend capability / retirement |
+| --- | --- | --- |
+| Source ownership and graph population | `loader/source.rs`, `source/cache.rs`, `source_work.rs`, `populate.rs` | Canonical text inputs first; then syntax carriers, source ranges, item/module population, inactive syntax. Remove `ParsedSource.syntax`, the thread-local AST cache, and the `syn` parser on cutover. |
+| Syntax/source facts and direct calls | `ir/function_source.rs`, `ir/source_calls/collect.rs`, `enricher/source_calls.rs` | Signatures, exact edit ranges, declaration identity, instantiated contracts, resolved calls. Replace name-based resolution using semantic facts. |
+| Attributes and file policy | `enricher/attribute.rs`; `allows`, `crate_attrs`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity`, `pageantry` scans | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
+| API and layout | `derives/scan.rs`, `derives/path_inclusion.rs`, `visibility/scan/tree.rs`, `cli_layout/{tree,scan,scan/catalog}.rs` | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
+| Tracing | `tracing/scan.rs`, `call_graph/collect.rs`, `{subscriber,boundary,print}/scan.rs` | Function/call identity, attributes, macro input syntax, executable boundary facts; retain apply ranges and worklist accounting. |
+| Error analysis | `enricher/error/scan.rs`; `error_sites`, `error_chain`, `internal_error_chain/{architecture,type_graph}` | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
+| Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |
+| Panic and proof collectors | `panics/{scan,kani_reach}`, `verus_ir/parse.rs`, `antipatterns/{scan,contract_bounds}` | Macro payloads, proof dialect syntax, Kani/Creusot/Verus contracts. No fallback whole-file parser. Resolve the dialect capability before retiring its current support. |
+| Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
+
+Macro islands and snippet parsers need their own inventory in addition to shared
+carrier consumers. The audit found 36 files mentioning `syn`/`verus_syn` parse
+entry points; some are documentation, fixture helpers, generation, or proposed
+edit validation. Classify each before removal. A text search count is not proof
+that every production path has been migrated.
+
+Complete the input/context driver before semantic facts authorize transforms:
+selected target/features/cfg, build-script outputs, proc macros, manifest and
+lockfile identity. Current Cargo loading covers ordinary Rust library fixtures
+without running build scripts or proc-macro servers. Missing expansion and
+unsupported call/type evidence must stay incomplete.
 
 ### 2. Exercise one complete transformation with the backend
 
@@ -248,16 +325,15 @@ Published package reference: [ra_ap_load-cargo](https://docs.rs/crate/ra_ap_load
 **Gate:** a complete useful migration works with source-backed evidence and
 safe rejection. Neither a hover demonstration nor a faster parse is sufficient.
 
-### 3. Migrate collection and retire the previous ownership
+### 3. Complete collection migration and retire previous ownership
 
-- [ ] Inventory every `SharedParsedFile` consumer, `syn` visitor, macro-island
-  collector, source-span converter, and candidate validator. Map each to a
-  backend fact or required adapter capability.
-- [ ] Migrate collectors in reviewable batches within the isolated backend.
+- [x] Inventory shared-tree consumer groups and map required backend facts
+  above. Continue classifying snippet parsers and validators during each port.
+- [ ] Migrate the listed collectors through the existing shared loader.
   Compare normalized IR payloads and findings, with explicit expectations for
   semantic improvements. Run the two backends in separate test executions.
 - [ ] Resolve inactive-code and proof-dialect coverage before production cutover.
-- [ ] Switch the production source owner only when its enabled consumers are
+- [ ] Complete the production parser cutover when its enabled consumers are
   migrated. Remove superseded parse caches, handwritten resolution, and orphaned
   data paths in the same cutover. Do not preserve a permanent dual frontend.
 
@@ -281,10 +357,10 @@ the shared IR, and the old parsing ownership has been removed.
 Use focused checks and the build-tier Cordial gate for implementation cycles.
 Reserve the all-tier gate for completion of the migration plan.
 
-## Recommendation
+## Current next step
 
-Proceed to the integration prototype before adding more handwritten semantic
-resolution. The expected payoff is broader transformation coverage and less
-language machinery to maintain, with incremental reuse across candidates.
-Performance gains and the complete migration cost remain unmeasured. Keep
-those as prototype results to establish, rather than reasons to skip it.
+Port syntax carriers and graph-population facts against the collector inventory
+above. Continue
+implement / focused checks / build-tier submit / commit. Keep the selected
+architecture as the destination throughout; do not create another user-facing
+backend choice or extend handwritten semantic resolution.

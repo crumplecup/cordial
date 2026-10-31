@@ -1,0 +1,2 @@
+use crate::leaf::{fallible as renamed, Reader};
+pub fn middle() { let _value = renamed().unwrap(); let _other = Reader.read().unwrap(); }

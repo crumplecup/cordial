@@ -371,6 +371,10 @@ pub use ir::{
     SourceCallUse, SourceEntryContract, SourceModuleScope, SourcePathUse, SourceResultContract,
     SourceUseInventory, WorkspaceIr,
 };
+pub use ir::{
+    ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, SemanticCall, SemanticCallTarget,
+    SemanticFunction, SemanticItemId, SemanticReturnContract, SemanticSnapshot, SemanticType,
+};
 #[cfg(feature = "impl_coverage")]
 pub use ir::{
     build_wrapper_coverage_from_hub_ir, collect_trenchcoat_pairs_from_ir, wrapper_maps_equivalent,
@@ -378,8 +382,8 @@ pub use ir::{
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use loader::path_has_fixtures;
 pub use loader::{
-    CrateTarget, LoadView, SharedMacroSyntax, SharedParsedFile, SourceFile, SourceLoadView,
-    SourceLoader, module_path_from_src_file, quality_scan_trees,
+    CrateTarget, LoadView, SharedMacroSyntax, SharedParsedFile, SourceDatabase, SourceFile,
+    SourceLoadView, SourceLoader, module_path_from_src_file, quality_scan_trees,
 };
 pub use objects::{
     Artifact, Disposition, FileSpan, Finding, FindingSink, IrAnchor, MapFindingSink, Marker,

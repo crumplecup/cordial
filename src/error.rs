@@ -15,6 +15,7 @@ mod local;
 mod parse;
 mod scan;
 mod scan_sources;
+mod semantic;
 mod store_lock;
 mod targets;
 mod tier;
@@ -61,6 +62,8 @@ pub struct CordialError {
 /// Umbrella kind boxed by [`CordialError`].
 #[derive(Debug)]
 pub enum CordialErrorKind {
+    /// The shared semantic workspace loader failed.
+    SemanticLoad(semantic::SemanticLoadSource),
     /// A requested clean was refused or incomplete.
     Clean(CleanSource),
     /// Filesystem I/O failed.
@@ -167,6 +170,7 @@ impl std::error::Error for CordialError {
     #[instrument(level = "trace", skip(self))]
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self.kind.as_ref() {
+            CordialErrorKind::SemanticLoad(source) => Some(source),
             CordialErrorKind::Clean(source) => Some(source),
             CordialErrorKind::Io(source) => Some(source),
             CordialErrorKind::Json(source) => Some(source),
@@ -212,6 +216,7 @@ impl Display for CordialErrorKind {
     #[instrument(level = "trace", skip(self, formatter))]
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self {
+            Self::SemanticLoad(source) => source.fmt(formatter),
             Self::Clean(source) => source.fmt(formatter),
             Self::Io(source) => source.fmt(formatter),
             Self::Json(source) => source.fmt(formatter),

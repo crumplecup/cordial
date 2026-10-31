@@ -1,0 +1,10 @@
+#[derive(Debug)]
+pub struct ReadFailure;
+#[derive(Debug)]
+pub struct OtherFailure;
+pub type ReadResult<T> = std::result::Result<T, ReadFailure>;
+pub fn fallible() -> ReadResult<u32> { Ok(3) }
+pub struct Reader;
+impl Reader {
+    pub fn read(&self) -> ReadResult<u32> { fallible() }
+}

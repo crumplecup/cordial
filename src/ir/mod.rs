@@ -25,6 +25,7 @@ mod origin;
 mod query;
 #[cfg(feature = "rustdoc")]
 mod rustdoc_query;
+mod semantic;
 mod source_calls;
 #[cfg(feature = "homecoming_std")]
 mod trait_impls;
@@ -65,6 +66,10 @@ pub use query::{BasicQuery, PanicSitesQuery, Query, QueryBuilder};
 pub use rustdoc_query::{
     count_type_nodes, mirror_target, rustdoc_item_nodes, type_elicit_complete, type_public_methods,
     type_trait_impls, type_trait_prereqs, type_wraps_foreign,
+};
+pub use semantic::{
+    ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, SemanticCall, SemanticCallTarget,
+    SemanticFunction, SemanticItemId, SemanticReturnContract, SemanticSnapshot, SemanticType,
 };
 pub use source_calls::{
     ATTR_FUNCTION_CALL_FLOW, ATTR_SOURCE_MODULE_SCOPE, CallResolutionFailure, FunctionCallFlow,

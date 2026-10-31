@@ -28,7 +28,13 @@ impl Default for CacheToken {
 }
 
 type ParsedFiles = HashMap<PathBuf, SharedParsedFile>;
-type ParsedRuns = HashMap<u64, (Weak<CacheToken>, ParsedFiles)>;
+struct ParsedRun {
+    token: Weak<CacheToken>,
+    database: crate::loader::SourceDatabase,
+    files: ParsedFiles,
+}
+
+type ParsedRuns = HashMap<u64, ParsedRun>;
 
 thread_local! {
     static PARSED: RefCell<ParsedRuns> = RefCell::new(HashMap::new());
@@ -118,11 +124,15 @@ impl SourceLoadView {
     pub fn parsed_file(&self, path: &Path, hook: &str) -> CordialResult<SharedParsedFile> {
         PARSED.with(|parsed| {
             let mut parsed = parsed.borrow_mut();
-            parsed.retain(|_, (token, _)| token.strong_count() != 0);
-            let files = &mut parsed
+            parsed.retain(|_, run| run.token.strong_count() != 0);
+            let run = parsed
                 .entry(self.cache_token.0)
-                .or_insert_with(|| (Arc::downgrade(&self.cache_token), HashMap::new()))
-                .1;
+                .or_insert_with(|| ParsedRun {
+                    token: Arc::downgrade(&self.cache_token),
+                    database: crate::loader::SourceDatabase::new(),
+                    files: HashMap::new(),
+                });
+            let files = &mut run.files;
             if let Some(file) = files.get(path) {
                 debug_assert_eq!(file.inner.session, self.cache_token.0);
                 source_work::reuse(path, hook);
@@ -133,6 +143,9 @@ impl SourceLoadView {
             } else {
                 source_work::read(path, hook)?
             };
+            let source = run.database.capture(path, &source)?;
+            // Retire this compatibility AST as collectors move to database
+            // syntax. Semantic collection must not parse these inputs twice.
             let syntax = source_work::parse(&source, path, hook)?;
             let digest = Sha256::digest(source.as_bytes()).into();
             let file = SharedParsedFile {

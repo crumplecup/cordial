@@ -10,6 +10,30 @@ use super::query::Query;
 /// concrete petgraph storage. All node ids are local to this crate graph and
 /// remain valid only for the IR snapshot passed to the hook.
 pub trait IrView {
+    /// Source input identity for the semantic projection in this graph.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn semantic_snapshot(&self) -> CordialResult<Option<super::SemanticSnapshot>> {
+        Ok(self
+            .node(self.root()?)
+            .and_then(|node| {
+                node.attr(super::ATTR_SEMANTIC_SNAPSHOT)
+                    .map(|value| serde_json::from_value(value.clone()))
+            })
+            .transpose()?)
+    }
+
+    /// Read the source database's snapshot-local semantic function facts.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn semantic_function(&self, id: NodeId) -> CordialResult<Option<super::SemanticFunction>> {
+        Ok(self
+            .node(id)
+            .and_then(|node| {
+                node.attr(super::ATTR_SEMANTIC_FUNCTION)
+                    .map(|value| serde_json::from_value(value.clone()))
+            })
+            .transpose()?)
+    }
+
     /// Read signature-level or prospective migration alternatives from shared IR.
     /// Missing facts never establish an empty error family.
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
