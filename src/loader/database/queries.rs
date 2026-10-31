@@ -9,7 +9,7 @@ use tracing::instrument;
 
 use crate::{SemanticCall, SemanticCallTarget, SemanticFunction, SemanticReturnContract};
 
-use super::types;
+use super::{recording, types};
 
 #[salsa::db]
 pub(super) trait SemanticDatabase: salsa::Database {
@@ -89,6 +89,8 @@ fn collect_direct(db: &RootDatabase, function: Function) -> Option<DirectFacts> 
     }
     Some(DirectFacts {
         facts: SemanticFunction::new(types::identity(db, function.into()), label, output)
+            .with_result_recording(recording::result_recording(&sema, function))
+            .with_formatting_role(recording::formatting_role(&sema, function))
             .with_calls(calls)
             .with_incomplete(incomplete),
         source_targets,

@@ -1,0 +1,22 @@
+use crate::types::{Error, Failure as ImportedFailure, Outcome as ImportedOutcome, SearchResult, Wrapper};
+
+pub fn cross_file() -> ImportedOutcome<()> { Ok(()) }
+pub fn borrowed_success(value: &str) -> ImportedOutcome<&str> { Ok(value) }
+pub fn borrowed_error(error: &ImportedFailure) -> Result<(), &ImportedFailure> { Err(error) }
+pub fn bounded<E: core::fmt::Display>(error: E) -> Result<(), E> { Err(error) }
+pub fn where_bound<E>(error: E) -> Result<(), E> where E: core::fmt::Display { Err(error) }
+pub fn unbounded<E>(error: E) -> Result<(), E> { Err(error) }
+pub fn debug_only<E: core::fmt::Debug>(error: E) -> Result<(), E> { Err(error) }
+pub fn instantiated(error: Wrapper<ImportedFailure>) -> Result<(), Wrapper<ImportedFailure>> { Err(error) }
+pub fn conditional_unknown<E>(error: Wrapper<E>) -> Result<(), Wrapper<E>> { Err(error) }
+pub fn named_error() -> Result<(), Error> { Ok(()) }
+pub fn named_result() -> SearchResult { SearchResult }
+pub fn option() -> Option<ImportedFailure> { None }
+
+pub trait Read {
+    fn read(&self) -> ImportedOutcome<&str>;
+}
+pub struct Reader;
+impl Read for Reader {
+    fn read(&self) -> ImportedOutcome<&str> { Ok("value") }
+}

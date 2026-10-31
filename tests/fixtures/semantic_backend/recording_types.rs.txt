@@ -1,0 +1,31 @@
+pub struct Failure;
+pub struct Error;
+pub struct Wrapper<E>(pub E);
+pub type Outcome<T> = core::result::Result<T, Failure>;
+pub struct SearchResult;
+
+impl core::fmt::Display for Failure {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("failure")
+    }
+}
+
+impl core::fmt::Debug for Failure {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("Failure")
+    }
+}
+
+impl<E: core::fmt::Display> core::fmt::Display for Wrapper<E> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Display::fmt(&self.0, f)
+    }
+}
+
+// Neither a trait nor a type gains core formatting capabilities from its name.
+pub trait Display {
+    fn display(&self) -> Outcome<()>;
+}
+impl Display for Error {
+    fn display(&self) -> Outcome<()> { Ok(()) }
+}

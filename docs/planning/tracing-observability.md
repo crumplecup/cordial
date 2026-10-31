@@ -1,7 +1,6 @@
 # Automated tracing as a sensible observability default
 
-**Status:** Phase 1 complete; Phase 2 next, 2026-10-31. Pauses further work on
-[Salsa/rust-analyzer adoption](salsa-rust-analyzer.md).
+**Status:** Phase 1 complete; Phase 2 in progress, 2026-10-31.
 
 ## Purpose
 
@@ -21,9 +20,7 @@ spans supply execution context; warning events should describe something worth
 attention. Propagating an error through six functions should not automatically
 produce six indistinguishable warnings.
 
-This plan updates the direction in [tracing-etiquette.md](tracing-etiquette.md).
-That document describes the original recipe design and historical findings;
-its instruction to replace entire attributes is superseded here. Compiled
+Apply must preserve existing instrumentation through minimal edits. Compiled
 `cordial explain tracing` remains the authority for currently shipped behavior
 and must change alongside each implemented policy change.
 
@@ -35,11 +32,6 @@ evidence into default arguments. Apply then rewrote 376 files while checking
 off two worklist items. Phase 1 addresses this with the enrichment fix,
 an assessment error for missing evidence, and regression tests. Its validation
 checkpoint is recorded below; this does not certify the later policy phases.
-
-The subsequent build-tier submit cleared the two prior claims and reported a
-new subscriber-init finding in `tests/tracing_attribute_evidence.rs`. Five
-older deep-tier claims remain unverified by that build run. Preserve that
-distinction when resuming; do not describe the repository as fully gated.
 
 ### Weak spots and closure criteria
 
@@ -184,11 +176,10 @@ Missing structural evidence should fail assessment. Valid but incomplete
 language analysis should yield an actionable analysis-gap finding. Distinguish
 those from normal policy findings and show them in human/JSON output.
 
-Use the canonical backend already adopted in the paused plan. A narrowly
-required adapter or projection improvement belongs in this work; it does not
-authorize restarting the entire frontend migration as a prerequisite. Retire
-the superseded per-file Display/name inference as semantic coverage replaces
-it. Keep unsupported cases explicit during that transition.
+Use the canonical backend to collect semantic evidence into the shared IR.
+Extend its adapters and projections where required. Retire the superseded
+per-file Display/name inference as semantic coverage replaces it. Keep
+unsupported cases explicit during that transition.
 
 ## Apply contract
 
@@ -263,10 +254,7 @@ build ran its 24 tests without warnings.
 Dogfood repaired 13 tracing items across seven files and checked off their
 matching worklist items. The build-tier submit then verified all 16 Phase 1
 repair claims (including field visibility and apply organization), with no new
-findings, producing list 355. The subscriber-init claim had already cleared in
-the preceding submit. Five older deep-tier claims remain unverified; the deep
-tier was deliberately not rerun. Save their verification for the end-of-plan
-all-tier gate.
+findings. The subscriber-init claim had already cleared in the preceding submit.
 
 ### 2. Close error-contract blind spots
 
@@ -279,6 +267,22 @@ all-tier gate.
 - [ ] Add explicit gap findings and blockers; unknown is never silently clean.
 - [ ] Compile specimens for borrowed success/error values, local and imported
   aliases, generic errors, trait implementations, and non-Display errors.
+
+Collection checkpoint: canonical function projections now retain independent
+Display and Debug obligations for the actual Result error, evaluated in the
+function's generic environment. These facts cover cross-file aliases, borrowed
+success/error values, conditional generic implementations, and trait methods.
+Formatting roles distinguish core Display/Debug methods from ordinary methods
+and unresolved implementations. Missing evidence stays unavailable, including
+when older snapshots lack the new fields. An unresolved success type does not
+erase an established error capability.
+
+These facts are stored on shared IR function nodes and participate in tracked
+query invalidation. The production tracing inventory still uses its file-local
+collector. Next, route canonical projection through the shared loader into that
+inventory, preserving declaration/configuration identity; then replace the old
+name inference and expose unresolved capabilities as findings/apply blockers.
+Do not load a second semantic database from a tracing hook or apply.
 
 ### 3. Establish observability policy and explain it
 
@@ -324,14 +328,10 @@ all-tier gate.
 - [ ] Run the end-of-plan all-tier gate, clear every open item, and record the
   verified coverage and remaining explicitly blocked patterns.
 
-## Completion and resumption
+## Completion
 
 The plan is complete when supported programs get comprehensive context,
 correctly placed and leveled error events, safe useful fields, and repeatable
 minimal apply edits; unsupported evidence remains visible and cannot yield a
 false clean result. Runtime tests, compilation tests, worklist verification,
 and the final all-tier gate must agree.
-
-Then resume [Salsa/rust-analyzer adoption](salsa-rust-analyzer.md) at its saved
-collector checkpoint. Preserve the current attribute projection work and
-pending validation notes; this pause does not discard or certify that work.

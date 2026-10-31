@@ -2,6 +2,7 @@
 
 mod populate;
 mod queries;
+mod recording;
 mod session;
 mod source;
 mod types;

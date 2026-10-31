@@ -373,7 +373,8 @@ pub use ir::{
 };
 pub use ir::{
     ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, SemanticCall, SemanticCallTarget,
-    SemanticFunction, SemanticItemId, SemanticReturnContract, SemanticSnapshot, SemanticType,
+    SemanticCapability, SemanticFormattingRole, SemanticFunction, SemanticItemId,
+    SemanticResultRecording, SemanticReturnContract, SemanticSnapshot, SemanticType,
 };
 pub use ir::{
     ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_FILE_ATTRIBUTES, SourceAttribute, SourceAttributeArgument,

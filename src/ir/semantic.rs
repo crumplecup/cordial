@@ -65,6 +65,50 @@ pub enum SemanticReturnContract {
     Unavailable,
 }
 
+/// A formatting obligation checked in the function's own generic environment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SemanticCapability {
+    /// The semantic solver established the actual core formatting trait.
+    Proven,
+    /// Resolution succeeded, but the solver did not establish the obligation.
+    /// This is not proof that no implementation can exist.
+    NotProven,
+    /// The type or the core trait could not be resolved.
+    Unavailable,
+}
+
+/// Recording capabilities of the actual Result error, independent of success.
+/// These facts do not depend on the bounded `SemanticType` representation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SemanticResultRecording {
+    /// The resolved output is not core Result, even if its name ends in Result.
+    NotResult,
+    /// Instantiated error capabilities, including references and generic bounds.
+    Result {
+        /// Suitability for `instrument(err)`.
+        display: SemanticCapability,
+        /// Suitability for `instrument(err(Debug))`.
+        debug: SemanticCapability,
+    },
+    /// Missing evidence must never become a non-fallible contract.
+    #[default]
+    Unavailable,
+}
+
+/// Formatting methods need a recursion-aware recording policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SemanticFormattingRole {
+    /// The declaration is known not to belong to a core formatting trait.
+    Ordinary,
+    /// The actual core Display trait, not a similarly named local trait.
+    Display,
+    /// The actual core Debug trait.
+    Debug,
+    /// Missing trait or implementation evidence cannot prove recursion safety.
+    #[default]
+    Unavailable,
+}
+
 /// A call's resolved target, or the reason it cannot supply a source edge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SemanticCallTarget {
@@ -105,6 +149,16 @@ pub struct SemanticFunction {
     definition: SemanticItemId,
     label: String,
     output: SemanticReturnContract,
+    /// Formatting evidence from HIR, never inferred from printed type names.
+    #[new(default)]
+    #[serde(default)]
+    #[setters(generate)]
+    result_recording: SemanticResultRecording,
+    /// Whether this declaration implements a core formatting trait.
+    #[new(default)]
+    #[serde(default)]
+    #[setters(generate)]
+    formatting_role: SemanticFormattingRole,
     /// Direct calls with their resolved targets and instantiated return types.
     #[new(default)]
     #[setters(generate)]

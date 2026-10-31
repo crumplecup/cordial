@@ -76,7 +76,8 @@ pub use rustdoc_query::{
 };
 pub use semantic::{
     ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, SemanticCall, SemanticCallTarget,
-    SemanticFunction, SemanticItemId, SemanticReturnContract, SemanticSnapshot, SemanticType,
+    SemanticCapability, SemanticFormattingRole, SemanticFunction, SemanticItemId,
+    SemanticResultRecording, SemanticReturnContract, SemanticSnapshot, SemanticType,
 };
 pub use source_calls::{
     ATTR_FUNCTION_CALL_FLOW, ATTR_SOURCE_MODULE_SCOPE, CallResolutionFailure, FunctionCallFlow,
