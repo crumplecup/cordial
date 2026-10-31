@@ -6,6 +6,33 @@ use cordial::{
 };
 use miette::{IntoDiagnostic, Result};
 
+#[path = "support/tracing_inventory_consumer.rs"]
+mod tracing_inventory_consumer;
+
+#[test]
+fn enrichment_uses_loader_inventory_and_rejects_incomplete_facts() -> Result<()> {
+    use cordial::Session;
+    cordial::init_cli_tracing();
+    let root = tempfile::tempdir().into_diagnostic()?;
+    let store = tempfile::tempdir().into_diagnostic()?;
+    std::fs::create_dir(root.path().join("src")).into_diagnostic()?;
+    std::fs::write(root.path().join("Cargo.toml"), "[package]\nname = \"inventory_consumer\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n").into_diagnostic()?;
+    std::fs::write(root.path().join("src/lib.rs"), "pub fn work() {}\n").into_diagnostic()?;
+    for corrupt in [false, true] {
+        let session = SessionBuilder::new(root.path())
+            .with_store_root(store.path())
+            .register(tracing_inventory_consumer::etiquette(corrupt))
+            .build();
+        let result = session.run(&cordial::RunAll);
+        if corrupt {
+            assert!(result.is_err(), "incomplete facts must stop the pipeline");
+        } else {
+            result.into_diagnostic()?;
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn recipe_assessment_rejects_missing_attribute_evidence() -> Result<()> {
     cordial::init_tracing();

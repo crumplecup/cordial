@@ -6,7 +6,8 @@ use syn::visit::Visit;
 use syn::{Attribute, ImplItem, Item, ItemFn, ItemImpl, ItemMod, Type, Visibility};
 
 use crate::error::CordialResult;
-use crate::loader::{SharedParsedFile, SourceLoadView, module_path_from_src_file};
+use crate::ir::{SourceTracingFunction, SourceTracingInventory};
+use crate::loader::{SharedParsedFile, module_path_from_src_file};
 
 use super::classify::classify;
 use super::display_types::{DisplayTypeFacts, collect_display_type_facts};
@@ -15,55 +16,72 @@ use super::types::{FunctionKind, FunctionRecord, VisibilityLabel};
 
 use tracing::instrument;
 
-/// Scan every `src/**/*.rs` file from the shared view. `never_instrument`
-/// names (already scoped to `crate_name`) never get recorded at all.
-#[instrument(level = "debug", skip(source, never_instrument), err(level = "warn"))]
-pub(super) fn scan_shared_source_tree(
-    source: &SourceLoadView,
-    src_root: &Path,
-    project_root: &Path,
-    crate_name: &str,
-    extra_skip: &[String],
-    never_instrument: &HashSet<String>,
-) -> CordialResult<Vec<FunctionRecord>> {
-    let mut records = Vec::new();
-    for file in source.parsed_rust_files_under(src_root, "function-inventory", |_| true)? {
-        records.extend(scan_shared_file(
-            &file,
-            src_root,
-            project_root,
-            crate_name,
-            extra_skip,
-            never_instrument,
-        )?);
+impl SourceTracingInventory {
+    /// Project function facts while the loader owns the shared tree.
+    #[instrument(level = "debug", skip(file), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceTracingInventory")]
+    pub(crate) fn collect(file: &SharedParsedFile) -> CordialResult<Self> {
+        crate::loader::source_walk(file.path(), "tracing-inventory", || {
+            Ok(Self::new(
+                file.source_digest(),
+                collect_syntax(file.syntax())?,
+            ))
+        })
     }
-    records.sort_by(|a, b| {
-        a.file()
-            .cmp(b.file())
-            .then(a.line().cmp(&b.line()))
-            .then(a.qualified_name().cmp(b.qualified_name()))
-    });
-    Ok(records)
-}
 
-#[instrument(level = "debug", skip(file, never_instrument), err(level = "warn"))]
-pub(super) fn scan_shared_file(
-    file: &SharedParsedFile,
-    src_root: &Path,
-    project_root: &Path,
-    crate_name: &str,
-    extra_skip: &[String],
-    never_instrument: &HashSet<String>,
-) -> CordialResult<Vec<FunctionRecord>> {
-    scan_syntax(
-        file.syntax(),
-        file.path(),
-        src_root,
-        project_root,
-        crate_name,
-        extra_skip,
-        never_instrument,
-    )
+    /// Apply run-specific configuration and proof reachability to collected facts.
+    #[instrument(
+        level = "debug",
+        skip(self, never_instrument, file),
+        err(level = "warn")
+    )]
+    pub(crate) fn records(
+        &self,
+        file: &Path,
+        module_prefix: &str,
+        project_root: &Path,
+        crate_name: &str,
+        extra_skip: &[String],
+        never_instrument: &HashSet<String>,
+    ) -> CordialResult<Vec<FunctionRecord>> {
+        let relative = file
+            .strip_prefix(project_root)
+            .unwrap_or(file)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let mut records = Vec::new();
+        for function in self.functions() {
+            let qualified = if module_prefix.is_empty() {
+                function.path().clone()
+            } else {
+                format!("{module_prefix}::{}", function.path())
+            };
+            let proof_only = never_instrument.contains(&qualified);
+            if proof_only && !function.instrumented() {
+                continue;
+            }
+            let ctx = function.context();
+            records.push(
+                FunctionRecord::builder()
+                    .crate_name(crate_name.to_string())
+                    .qualified_name(qualified)
+                    .kind(function.kind())
+                    .visibility(function.visibility().clone())
+                    .file(relative.clone())
+                    .line(function.line())
+                    .instrumented(function.instrumented())
+                    .proof_only(proof_only)
+                    .prover_visible_instrument(function.prover_visible_instrument())
+                    .has_error_path_event(ctx.has_error_path_event())
+                    .param_names(ctx.param_names().clone())
+                    .role(ctx.role())
+                    .complexity(ctx.complexity())
+                    .recipe(instrument_recipe(ctx, extra_skip)?)
+                    .build()?,
+            );
+        }
+        Ok(records)
+    }
 }
 
 /// Parse one source file and return discovered functions (used by tests).
@@ -83,10 +101,16 @@ pub fn scan_rust_source(
 ) -> CordialResult<Vec<FunctionRecord>> {
     let syntax = syn::parse_file(source)
         .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    scan_syntax(
-        &syntax,
+    SourceTracingInventory::new(
+        {
+            use sha2::{Digest, Sha256};
+            Sha256::digest(source.as_bytes()).into()
+        },
+        collect_syntax(&syntax)?,
+    )
+    .records(
         file,
-        src_root,
+        &module_path_from_src_file(src_root, file).join("::"),
         project_root,
         crate_name,
         extra_skip,
@@ -94,34 +118,11 @@ pub fn scan_rust_source(
     )
 }
 
-#[instrument(
-    level = "debug",
-    skip(syntax, file, never_instrument),
-    err(level = "warn")
-)]
-fn scan_syntax(
-    syntax: &syn::File,
-    file: &Path,
-    src_root: &Path,
-    project_root: &Path,
-    crate_name: &str,
-    extra_skip: &[String],
-    never_instrument: &HashSet<String>,
-) -> CordialResult<Vec<FunctionRecord>> {
-    let module_prefix = module_path_from_src_file(src_root, file);
-    let rel_file = file
-        .strip_prefix(project_root)
-        .unwrap_or(file)
-        .to_string_lossy()
-        .replace('\\', "/");
-    let display_types = collect_display_type_facts(&syntax.items);
+#[instrument(level = "debug", skip(syntax), err(level = "warn"))]
+fn collect_syntax(syntax: &syn::File) -> CordialResult<Vec<SourceTracingFunction>> {
     let mut visitor = FileScanVisitor {
-        crate_name: crate_name.to_string(),
-        rel_file,
-        module_prefix,
-        extra_skip,
-        display_types,
-        never_instrument,
+        module_prefix: Vec::new(),
+        display_types: collect_display_type_facts(&syntax.items),
         records: Vec::new(),
         error: None,
     };
@@ -132,14 +133,10 @@ fn scan_syntax(
     Ok(visitor.records)
 }
 
-struct FileScanVisitor<'a> {
-    crate_name: String,
-    rel_file: String,
+struct FileScanVisitor {
     module_prefix: Vec<String>,
-    extra_skip: &'a [String],
     display_types: DisplayTypeFacts,
-    never_instrument: &'a HashSet<String>,
-    records: Vec<FunctionRecord>,
+    records: Vec<SourceTracingFunction>,
     error: Option<crate::error::CordialError>,
 }
 
@@ -155,7 +152,7 @@ struct RecordFnArgs<'a> {
     body: Option<&'a syn::Block>,
 }
 
-impl FileScanVisitor<'_> {
+impl FileScanVisitor {
     #[instrument(level = "debug", skip(self))]
     fn qualify(&self, local: &str) -> String {
         if self.module_prefix.is_empty() {
@@ -176,12 +173,6 @@ impl FileScanVisitor<'_> {
         }
         let qualified_name = self.qualify(args.local_name);
         let instrumented = args.attrs.iter().any(crate::enricher::is_instrument_attr);
-        let proof_only = self.never_instrument.contains(&qualified_name);
-        if proof_only && !instrumented {
-            // Proof-only and no span: attenuation has nothing to remove,
-            // and missing-instrument must not push toward adding one.
-            return;
-        }
         let prover_visible_instrument = args.attrs.iter().any(|attr| {
             crate::enricher::is_instrument_attr(attr)
                 && !crate::enricher::is_gated_instrument_attr(attr)
@@ -202,37 +193,20 @@ impl FileScanVisitor<'_> {
                 return;
             }
         };
-        let recipe = match instrument_recipe(&ctx, self.extra_skip) {
-            Ok(recipe) => recipe,
-            Err(error) => {
-                if self.error.is_none() {
-                    self.error = Some(error);
-                }
-                return;
-            }
-        };
-        if self.error.is_some() {
-            return;
-        }
-        match FunctionRecord::builder()
-            .crate_name(self.crate_name.clone())
-            .qualified_name(qualified_name)
+        match SourceTracingFunction::builder()
+            .path(qualified_name)
+            .range(args.span.byte_range().into())
+            .line(line)
             .kind(args.kind)
             .visibility(visibility_label(args.visibility))
-            .file(self.rel_file.clone())
-            .line(line)
             .instrumented(instrumented)
-            .proof_only(proof_only)
             .prover_visible_instrument(prover_visible_instrument)
-            .has_error_path_event(ctx.has_error_path_event())
-            .param_names(ctx.param_names().clone())
-            .role(ctx.role())
-            .complexity(ctx.complexity())
-            .recipe(recipe)
+            .context(ctx)
             .build()
         {
             Ok(record) => self.records.push(record),
-            Err(error) => self.error = Some(error),
+            Err(error) if self.error.is_none() => self.error = Some(error),
+            Err(_) => {}
         }
     }
 
@@ -309,7 +283,7 @@ impl FileScanVisitor<'_> {
     }
 }
 
-impl<'ast> Visit<'ast> for FileScanVisitor<'_> {
+impl<'ast> Visit<'ast> for FileScanVisitor {
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         self.record_fn(RecordFnArgs {

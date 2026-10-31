@@ -37,7 +37,11 @@ pub fn classify(
     let returns_bool = returns_named(sig, "bool");
     let role = classify_role(
         ident,
-        sig,
+        &ReceiverShape {
+            immutable_reference: sig.receiver().is_some_and(receiver_is_immutable_reference),
+            mutable_value: sig.receiver().is_some_and(receiver_is_mut_value),
+            input_count: sig.inputs.len(),
+        },
         kind,
         &peek,
         returns_self,
@@ -67,10 +71,10 @@ fn err_type_is_displayable(sig: &Signature, display_types: &DisplayTypeFacts) ->
     }
 }
 
-#[instrument(level = "debug", skip(sig, kind, peek))]
-fn classify_role(
+#[instrument(level = "debug", skip(receiver, kind, peek))]
+pub(crate) fn classify_role(
     ident: &str,
-    sig: &Signature,
+    receiver: &ReceiverShape,
     kind: FunctionKind,
     peek: &BodyPeek,
     returns_self: bool,
@@ -80,10 +84,10 @@ fn classify_role(
     if is_constructor(ident, returns_self) {
         return FunctionRole::Constructor;
     }
-    if is_getter(ident, sig, peek, returns_result) {
+    if is_getter(ident, receiver, peek, returns_result) {
         return FunctionRole::Getter;
     }
-    if is_setter(ident, sig) {
+    if is_setter(ident, receiver) {
         return FunctionRole::Setter;
     }
     if is_predicate(ident, returns_bool) {
@@ -113,15 +117,16 @@ fn is_constructor(ident: &str, returns_self: bool) -> bool {
         || ((ident == "from" || ident.starts_with("from_")) && returns_self)
 }
 
-#[instrument(level = "trace", skip(sig, peek))]
-fn is_getter(ident: &str, sig: &Signature, peek: &BodyPeek, returns_result: bool) -> bool {
-    if returns_result {
-        return false;
-    }
-    let Some(recv) = sig.receiver() else {
-        return false;
-    };
-    if !receiver_is_immutable_reference(recv) {
+#[derive(Debug, derive_new::new)]
+pub(crate) struct ReceiverShape {
+    immutable_reference: bool,
+    mutable_value: bool,
+    input_count: usize,
+}
+
+#[instrument(level = "trace", skip(receiver, peek))]
+fn is_getter(ident: &str, receiver: &ReceiverShape, peek: &BodyPeek, returns_result: bool) -> bool {
+    if returns_result || !receiver.immutable_reference {
         return false;
     }
     if getter_name(ident) {
@@ -153,15 +158,11 @@ fn is_entry(ident: &str) -> bool {
     ident == "main" || ident == "run" || ident.starts_with("run_")
 }
 
-#[instrument(level = "trace", skip(sig))]
-fn is_setter(ident: &str, sig: &Signature) -> bool {
-    if ident.starts_with("set_") || ident.starts_with("with_") {
-        return true;
-    }
-    let Some(recv) = sig.receiver() else {
-        return false;
-    };
-    receiver_is_mut_value(recv) && sig.inputs.len() >= 2
+#[instrument(level = "trace", skip(receiver))]
+fn is_setter(ident: &str, receiver: &ReceiverShape) -> bool {
+    ident.starts_with("set_")
+        || ident.starts_with("with_")
+        || (receiver.mutable_value && receiver.input_count >= 2)
 }
 
 #[instrument(level = "trace", skip(recv), ret)]
@@ -186,7 +187,7 @@ fn has_prefix(ident: &str, prefixes: &[&str]) -> bool {
 }
 
 #[instrument(level = "debug", skip(peek))]
-fn classify_complexity(
+pub(crate) fn classify_complexity(
     body_lines: u32,
     returns_result: bool,
     peek: &BodyPeek,
@@ -306,10 +307,13 @@ fn block_lines(block: &Block) -> u32 {
     end.saturating_sub(start).max(1)
 }
 
-#[derive(Debug, Default)]
-struct BodyPeek {
+#[derive(Debug, Default, derive_new::new, derive_getters::Getters)]
+pub(crate) struct BodyPeek {
+    #[getter(skip)]
     stmts: usize,
+    #[getter(skip)]
     has_branch: bool,
+    #[getter(copy)]
     has_error_path_event: bool,
 }
 

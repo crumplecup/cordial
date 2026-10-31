@@ -101,11 +101,12 @@ impl AttributeVisitor {
         }
     }
 
-    #[instrument(level = "debug", skip(self, path, attrs))]
-    fn attach_attrs(&mut self, path: &str, attrs: &[Attribute], line: u32) {
+    #[instrument(level = "debug", skip(self, path, attrs, span))]
+    fn attach_attrs(&mut self, path: &str, attrs: &[Attribute], span: proc_macro2::Span) {
         self.items.push(SourceAttributedItem {
             path: path.to_string(),
-            line,
+            range: span.byte_range().into(),
+            line: span.start().line as u32,
             attributes: attrs.iter().map(attribute).collect(),
         });
     }
@@ -125,18 +126,18 @@ impl AttributeVisitor {
         match item {
             Item::Fn(item_fn) => {
                 let name = item_fn.sig.ident.to_string();
-                let line = item_fn.span().start().line as u32;
-                self.attach_attrs(&self.qualify(&name), &item_fn.attrs, line);
+                let span = item_fn.span();
+                self.attach_attrs(&self.qualify(&name), &item_fn.attrs, span);
             }
             Item::Struct(item_struct) => {
                 let name = item_struct.ident.to_string();
-                let line = item_struct.span().start().line as u32;
-                self.attach_attrs(&self.qualify(&name), &item_struct.attrs, line);
+                let span = item_struct.span();
+                self.attach_attrs(&self.qualify(&name), &item_struct.attrs, span);
             }
             Item::Enum(item_enum) => {
                 let name = item_enum.ident.to_string();
-                let line = item_enum.span().start().line as u32;
-                self.attach_attrs(&self.qualify(&name), &item_enum.attrs, line);
+                let span = item_enum.span();
+                self.attach_attrs(&self.qualify(&name), &item_enum.attrs, span);
             }
             Item::Mod(item_mod) => self.visit_mod(item_mod),
             Item::Impl(item_impl) => self.visit_impl(item_impl),
@@ -150,11 +151,11 @@ impl AttributeVisitor {
             return;
         }
         let Some((_, items)) = &item_mod.content else {
-            let line = item_mod.span().start().line as u32;
+            let span = item_mod.span();
             self.attach_attrs(
                 &self.qualify(&item_mod.ident.to_string()),
                 &item_mod.attrs,
-                line,
+                span,
             );
             return;
         };
@@ -183,8 +184,8 @@ impl AttributeVisitor {
             } else {
                 format!("{self_ty}::{}", method.sig.ident)
             };
-            let line = method.span().start().line as u32;
-            self.attach_attrs(&self.qualify(&local), &method.attrs, line);
+            let span = method.span();
+            self.attach_attrs(&self.qualify(&local), &method.attrs, span);
         }
     }
 }

@@ -101,6 +101,22 @@ pub trait IrView {
             .transpose()?)
     }
 
+    /// Read loader-projected tracing declarations without accessing source syntax.
+    #[cfg(feature = "tracing")]
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn source_tracing_inventory(
+        &self,
+        id: NodeId,
+    ) -> CordialResult<Option<super::SourceTracingInventory>> {
+        Ok(self
+            .node(id)
+            .and_then(|node| {
+                node.attr(super::ATTR_SOURCE_TRACING_INVENTORY)
+                    .map(|value| serde_json::from_value(value.clone()))
+            })
+            .transpose()?)
+    }
+
     /// Read the located syntax attached by the shared attribute enricher.
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
     fn source_attribute(&self, id: NodeId) -> CordialResult<Option<super::SourceAttribute>> {

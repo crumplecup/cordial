@@ -2,32 +2,48 @@
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
+use serde::{Deserialize, Serialize};
+
 use tracing::instrument;
 
 /// How a discovered function is categorized.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FunctionKind {
+    /// A function declared outside an implementation.
     Free,
+    /// A method on an inherent implementation.
     InherentMethod,
+    /// A method implementing a trait.
     TraitImplMethod,
 }
 
 /// Use-class for an instrument recipe. Dispatch is a `match` on this enum.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum FunctionRole {
+    /// Creates or converts a value.
     Constructor,
+    /// Reads a small property of a value.
     Getter,
+    /// Updates a value or its configuration.
     Setter,
+    /// Answers a boolean question.
     Predicate,
+    /// Traverses or collects input.
     Scan,
+    /// Loads, reads, writes, or fetches data.
     Io,
+    /// Produces a rendered representation.
     Render,
+    /// Supplies an otherwise unclassified trait method.
     TraitSurface,
+    /// Starts an operation or command.
     Entry,
+    /// Has no more specific recognized role.
     Other,
 }
 
 impl FunctionRole {
+    /// Every role in classification order.
     pub const ALL: [Self; 10] = [
         Self::Constructor,
         Self::Getter,
@@ -41,6 +57,7 @@ impl FunctionRole {
         Self::Other,
     ];
 
+    /// Stable label stored in the IR and rendered in reports.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -57,6 +74,7 @@ impl FunctionRole {
         }
     }
 
+    /// Read a role from its stored IR label.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
@@ -83,16 +101,22 @@ impl Display for FunctionRole {
 }
 
 /// Body complexity, orthogonal to [`FunctionRole`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum FunctionComplexity {
+    /// At most two statements without branching or a fallible return.
     Trivial,
+    /// Straight-line work without a fallible return.
     Linear,
+    /// Contains a conditional or loop.
     Branchy,
+    /// Returns a recognized Result contract.
     Fallible,
+    /// Meets the configured function inventory size floor.
     Hotspot,
 }
 
 impl FunctionComplexity {
+    /// Stable label stored in the IR and rendered in reports.
     #[instrument(level = "debug", skip(self))]
     pub fn as_str(self) -> &'static str {
         match self {
@@ -104,6 +128,7 @@ impl FunctionComplexity {
         }
     }
 
+    /// Read complexity from its stored IR label.
     #[instrument(level = "debug")]
     pub fn from_attr(value: &str) -> Option<Self> {
         match value {
@@ -125,7 +150,7 @@ impl Display for FunctionComplexity {
 }
 
 /// `tracing` subscriber level used in a recipe.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum InstrumentLevel {
     Trace,
     Debug,
@@ -164,7 +189,16 @@ impl Display for InstrumentLevel {
 }
 
 /// Inputs the per-role recipe strategies read.
-#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_builder::Builder,
+    derive_getters::Getters,
+)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct FnContext {
     #[getter(copy)]
@@ -280,12 +314,17 @@ impl Display for FunctionKind {
 }
 
 /// Rust visibility rendered for reports.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VisibilityLabel {
+    /// Visible outside the crate.
     Public,
+    /// Visible throughout the crate.
     PubCrate,
+    /// Visible in the parent module.
     PubSuper,
+    /// Restricted to the named module path.
     PubInPath(String),
+    /// Uses inherited visibility.
     Private,
 }
 

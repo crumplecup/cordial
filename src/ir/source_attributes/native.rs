@@ -154,6 +154,7 @@ fn attach(
         .collect();
     out.push(SourceAttributedItem {
         path,
+        range: std::ops::Range::<usize>::from(owner.syntax().text_range()).into(),
         line: file.line(owner.syntax().text_range().start()),
         attributes,
     });

@@ -278,11 +278,33 @@ when older snapshots lack the new fields. An unresolved success type does not
 erase an established error capability.
 
 These facts are stored on shared IR function nodes and participate in tracked
-query invalidation. The production tracing inventory still uses its file-local
-collector. Next, route canonical projection through the shared loader into that
-inventory, preserving declaration/configuration identity; then replace the old
-name inference and expose unresolved capabilities as findings/apply blockers.
-Do not load a second semantic database from a tracing hook or apply.
+query invalidation. Tracing inventory collection now belongs to the shared
+loader: each source module carries a typed, digest-bound inventory, and tracing
+enrichment consumes that inventory without walking an AST. Missing or malformed
+inventory fails explicitly. Run-specific configuration and proof reachability
+are applied during enrichment rather than embedded in collection facts.
+
+The canonical backend projects the same inventory from its database-issued tree
+and resolved function contracts. Exact declaration ranges join its attributes,
+semantic facts, and function paths, including associated methods and cfg
+alternatives. Tests compare complete inventory payloads across backends, verify
+snapshot restoration, and prove that enrichment consumes modified IR facts
+rather than reconstructing them from source. Compiled semantic specimens check
+that the inventory retains cross-file and generic formatting capabilities.
+
+Production still uses the compatibility loader and its existing local Display
+inference. Canonical semantic collection is not yet active in that pipeline.
+Next, complete the shared-loader transition, then replace the old name inference
+and expose unresolved capabilities as findings/apply blockers. Do not load a
+second semantic database from a tracing hook or apply.
+
+Validation checkpoint: 68 focused tests pass across tracing assessment, apply,
+attribute evidence, backend parity, and semantic recording. The tracing-only
+feature build also passes its three evidence tests without warnings. Shared
+attribute and manifest collection now declare their required quote/TOML
+dependencies independently of optional etiquettes. Tracing apply repaired and
+checked off three annotation deltas; build-tier submit verified those and the
+three field-visibility/organization repairs, with no new findings.
 
 ### 3. Establish observability policy and explain it
 

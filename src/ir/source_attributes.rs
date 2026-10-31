@@ -43,6 +43,7 @@ pub struct SourceAttribute {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct SourceAttributedItem {
     path: String,
+    range: super::SourceByteRange,
     #[getter(copy)]
     line: u32,
     attributes: Vec<SourceAttribute>,

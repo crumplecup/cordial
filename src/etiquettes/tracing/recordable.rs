@@ -122,7 +122,7 @@ fn type_is_unrecordable(ty: &Type) -> bool {
 }
 
 /// Types tracing can record without a `Debug` bound blowing up the build.
-const RECORDABLE_IDENTS: &[&str] = &[
+pub(crate) const RECORDABLE_IDENTS: &[&str] = &[
     "bool", "char", "str", "String", "OsStr", "OsString", "Path", "PathBuf", "u8", "u16", "u32",
     "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize", "f32", "f64", "Duration",
     "Option", "Result", "Vec", "Box", "Arc", "Rc", "Cow",

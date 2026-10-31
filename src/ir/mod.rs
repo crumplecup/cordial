@@ -28,10 +28,16 @@ mod rustdoc_query;
 mod semantic;
 mod source_attributes;
 mod source_calls;
+#[cfg(feature = "tracing")]
+mod tracing_source;
 pub use source_attributes::{
     ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_FILE_ATTRIBUTES, SourceAttribute, SourceAttributeArgument,
     SourceAttributeArguments, SourceAttributedItem, SourceCrateLints, SourceFileAttributes,
     SourceInstrumentSyntax, is_cfg_test, is_gated_instrument_attr, is_instrument_attr,
+};
+#[cfg(feature = "tracing")]
+pub use tracing_source::{
+    ATTR_SOURCE_TRACING_INVENTORY, SourceTracingFunction, SourceTracingInventory,
 };
 #[cfg(feature = "homecoming_std")]
 mod trait_impls;

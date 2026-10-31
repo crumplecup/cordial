@@ -2,9 +2,9 @@ use crate::enricher::{member_crate_root, resolve_parent};
 use crate::error::CordialResult;
 use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{ItemKind, NodeKind, NodeWeight};
-use crate::objects::FileSpan;
+use crate::objects::{FileSpan, SourceSpan};
 
-use super::scan::scan_shared_source_tree;
+use crate::ir::QueryBuilder;
 
 use tracing::instrument;
 /// Materializes function item nodes (including impl methods) in the IR graph.
@@ -33,18 +33,7 @@ impl SourceEnricher for FunctionInventoryEnricher {
         let crate_root = member_crate_root(source, session);
         let config = crate::config::load_session_config(session);
         let extra_skip = config.tracing().extra_skip();
-        let call_graph = ir.workspace_call_graph().ok_or_else(|| {
-            crate::error::CordialError::workspace_source_facts_missing("call graph")
-        })?;
-        let never_instrument = call_graph.never_instrument(source.crate_name());
-        let records = scan_shared_source_tree(
-            source,
-            source.src_root(),
-            &crate_root,
-            source.crate_name(),
-            extra_skip,
-            never_instrument,
-        )?;
+        let records = inventory_records(ir, &crate_root, source.crate_name(), extra_skip)?;
         let facts = ir.workspace_path_inclusions().ok_or_else(|| {
             crate::error::CordialError::workspace_source_facts_missing("path inclusions")
         })?;
@@ -81,7 +70,6 @@ impl SourceEnricher for FunctionInventoryEnricher {
                 continue;
             }
 
-            let parent = resolve_parent(ir, &module_context(record.qualified_name()))?;
             let span = FileSpan::new(crate_root.join(record.file()), record.line(), 1);
 
             let node = if let Some(existing) =
@@ -89,6 +77,7 @@ impl SourceEnricher for FunctionInventoryEnricher {
             {
                 existing
             } else {
+                let parent = resolve_parent(ir, &module_context(record.qualified_name()))?;
                 let node = ir.insert_node(
                     NodeWeight::new(NodeKind::Item(ItemKind::Fn))
                         .with_name(
@@ -209,6 +198,62 @@ impl SourceEnricher for FunctionInventoryEnricher {
         }
         Ok(())
     }
+}
+
+/// Project loader-owned facts with the current crate and recording policy.
+#[instrument(level = "debug", skip(ir), err(level = "warn"))]
+fn inventory_records(
+    ir: &dyn crate::IrView,
+    crate_root: &std::path::Path,
+    crate_name: &str,
+    extra_skip: &[String],
+) -> CordialResult<Vec<super::types::FunctionRecord>> {
+    let call_graph = ir
+        .workspace_call_graph()
+        .ok_or_else(|| crate::error::CordialError::workspace_source_facts_missing("call graph"))?;
+    let never_instrument = call_graph.never_instrument(crate_name);
+    let query = QueryBuilder::new()
+        .node_kinds([NodeKind::Module])
+        .with_attr(
+            crate::loader::SourceLoader::ATTR_IR_ORIGIN,
+            crate::loader::SourceLoader::ORIGIN,
+        )
+        .build();
+    let mut records = Vec::new();
+    for module in ir.nodes_matching(&query) {
+        let inventory = ir.source_tracing_inventory(module.id())?.ok_or_else(|| {
+            crate::CordialError::workspace_source_facts_missing("tracing function inventory")
+        })?;
+        let file = module
+            .weight()
+            .span()
+            .as_ref()
+            .ok_or_else(|| {
+                crate::CordialError::workspace_source_facts_missing("source module span")
+            })?
+            .file();
+        let prefix = module
+            .attr("qualified_path")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| {
+                crate::CordialError::workspace_source_facts_missing("source module path")
+            })?;
+        records.extend(inventory.records(
+            file,
+            prefix,
+            crate_root,
+            crate_name,
+            extra_skip,
+            never_instrument,
+        )?);
+    }
+    records.sort_by(|a, b| {
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.qualified_name().cmp(b.qualified_name()))
+    });
+    Ok(records)
 }
 
 #[instrument(level = "debug")]

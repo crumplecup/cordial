@@ -132,6 +132,12 @@ impl SourceLoadView {
             crate::ir::ATTR_SOURCE_FILE_ATTRIBUTES,
             serde_json::to_value(crate::ir::SourceFileAttributes::collect(syntax))?,
         )?;
+        #[cfg(feature = "tracing")]
+        ir.set_attr(
+            module_node,
+            crate::ir::ATTR_SOURCE_TRACING_INVENTORY,
+            serde_json::to_value(crate::ir::SourceTracingInventory::collect(syntax)?)?,
+        )?;
         ir.set_attr(
             module_node,
             "qualified_path",

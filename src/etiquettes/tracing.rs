@@ -44,10 +44,13 @@ mod probe;
 mod quality_area;
 mod recipe;
 mod recordable;
+pub(crate) use recordable::RECORDABLE_IDENTS;
 mod reporter;
 mod scan;
 mod subscriber;
 mod types;
+pub(crate) use classify::{BodyPeek, ReceiverShape, classify_complexity, classify_role};
+pub use types::{FnContext, FunctionComplexity, FunctionKind, FunctionRole, VisibilityLabel};
 
 #[cfg(feature = "cli")]
 pub(crate) use apply::{ApplyTargets, run_apply};

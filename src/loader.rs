@@ -27,6 +27,7 @@ pub(crate) use source_work::parse as source_parse;
     feature = "allows",
     feature = "panics",
     feature = "error_sites",
+    feature = "tracing",
     feature = "internal_error_chain"
 ))]
 pub(crate) use source_work::walk as source_walk;

@@ -10,6 +10,9 @@ use miette::{IntoDiagnostic, Result};
 
 #[path = "support/source_attribute_projection.rs"]
 mod source_attribute_projection;
+#[cfg(feature = "tracing")]
+#[path = "support/tracing_source_projection.rs"]
+mod tracing_source_projection;
 
 const SOURCE: &str = include_str!("fixtures/semantic_backend/syntax.rs.txt");
 
@@ -181,7 +184,7 @@ fn assert_virtual_attribute_policies(database: &mut SourceDatabase, path: &Path)
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Result<()> {
-    cordial::init_tracing();
+    cordial::init_cli_tracing();
     let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let root = tempfile::tempdir().into_diagnostic()?;
     std::fs::create_dir(root.path().join("src")).into_diagnostic()?;
@@ -201,6 +204,8 @@ fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Resul
     assert_eq!(legacy_scope.uses(), native_scope.uses());
     assert_eq!(legacy_scope, native_scope);
     assert_attribute_contract(&legacy, &native)?;
+    #[cfg(feature = "tracing")]
+    tracing_source_projection::assert_contract(&legacy, &native)?;
     source_attribute_projection::assert_graph_only_attributes(&legacy, root.path())?;
     source_attribute_projection::assert_graph_only_attributes(&native, root.path())?;
     let query = QueryBuilder::new()

@@ -44,6 +44,46 @@ fn assert_capability(
             "{name}"
         );
     }
+    #[cfg(feature = "tracing")]
+    assert_tracing_capability(ir, name, display)?;
+    Ok(())
+}
+
+#[cfg(feature = "tracing")]
+#[tracing::instrument(level = "debug", skip(ir, display), err(level = "warn"))]
+fn assert_tracing_capability(
+    ir: &dyn IrView,
+    name: &str,
+    display: SemanticCapability,
+) -> Result<()> {
+    let mut checked = 0;
+    for node in ir.nodes_matching(
+        &QueryBuilder::new()
+            .has_attr(cordial::ATTR_SOURCE_TRACING_INVENTORY)
+            .build(),
+    ) {
+        let inventory = ir
+            .source_tracing_inventory(node.id())
+            .into_diagnostic()?
+            .ok_or_else(|| miette::miette!("missing tracing inventory"))?;
+        for function in inventory
+            .functions()
+            .iter()
+            .filter(|function| function.path().rsplit("::").next() == Some(name))
+        {
+            assert!(
+                function.context().returns_result(),
+                "resolved Result identity for {name}"
+            );
+            assert_eq!(
+                function.context().err_is_displayable(),
+                display == SemanticCapability::Proven,
+                "tracing capability for {name}"
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "missing tracing declaration {name}");
     Ok(())
 }
 

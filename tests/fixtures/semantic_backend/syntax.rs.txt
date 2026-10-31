@@ -103,3 +103,15 @@ mod inactive_attributes {
 mod external_attributes;
 #[unsafe(no_mangle)]
 fn exported_attribute() {}
+
+struct TraceRole;
+impl TraceRole {
+    fn new() -> Self { Self }
+    fn get_value(&self) -> u32 { 1 }
+    fn set_value(mut self, value: u32) { let _ = value; }
+    fn is_ready(&self) -> bool { true }
+    pub(in crate::inline) fn scoped(&self) {}
+}
+fn bindings<T>((value, count): (T, u32), slice: &[u8], callback: fn()) {
+    let _ = (value, count, slice, callback);
+}

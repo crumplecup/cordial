@@ -42,14 +42,22 @@ impl Projection {
             crate::ir::ATTR_SOURCE_MODULE_SCOPE,
             serde_json::to_value(crate::ir::SourceModuleScope::collect_native(source))?,
         );
+        let attributes = crate::ir::SourceFileAttributes::collect_native(source);
+        let declaration_paths: HashMap<_, _> = attributes
+            .items()
+            .iter()
+            .map(|item| ((item.range().start(), item.range().end()), item.path()))
+            .collect();
         module.set_attr(
             crate::ir::ATTR_SOURCE_FILE_ATTRIBUTES,
-            serde_json::to_value(crate::ir::SourceFileAttributes::collect_native(source))?,
+            serde_json::to_value(&attributes)?,
         );
         module.set_attr("qualified_path", module_path.into());
         let module = graph.insert_node(module);
         graph.insert_edge(graph.root(), module, EdgeKind::Contains)?;
         let mut nodes: HashMap<TextRange, (NodeId, String)> = HashMap::new();
+        #[cfg(feature = "tracing")]
+        let mut tracing_semantics = HashMap::new();
         for item in source
             .tree()
             .syntax()
@@ -73,7 +81,20 @@ impl Projection {
                 Some((node, path)) => (*node, path.as_str()),
                 None => (module, module_path),
             };
-            let qualified = if path.is_empty() {
+            let range = item.syntax().text_range();
+            // Attribute and tracing consumers share the declaration's canonical
+            // file-local path. Join by range, never a method's spelling or line.
+            let local = declaration_paths.get(&(
+                u32::from(range.start()) as usize,
+                u32::from(range.end()) as usize,
+            ));
+            let qualified = if let Some(local) = local {
+                if module_path.is_empty() {
+                    (*local).clone()
+                } else {
+                    format!("{module_path}::{local}")
+                }
+            } else if path.is_empty() {
                 name.clone()
             } else {
                 format!("{path}::{name}")
@@ -91,6 +112,8 @@ impl Projection {
             let node = graph.insert_node(weight);
             graph.insert_edge(parent, node, EdgeKind::Contains)?;
             if let Some(facts) = crate::IrView::semantic_function(graph, node)? {
+                #[cfg(feature = "tracing")]
+                tracing_semantics.insert(item.syntax().text_range(), facts.clone());
                 self.definitions.insert(*facts.definition(), node);
                 for call in facts.calls() {
                     if let crate::SemanticCallTarget::Function(target) = call.target() {
@@ -100,6 +123,16 @@ impl Projection {
             }
             nodes.insert(item.syntax().text_range(), (node, qualified));
         }
+        #[cfg(feature = "tracing")]
+        graph.set_attr(
+            module,
+            crate::ir::ATTR_SOURCE_TRACING_INVENTORY,
+            serde_json::to_value(crate::ir::SourceTracingInventory::collect_native(
+                source,
+                &attributes,
+                &tracing_semantics,
+            )?)?,
+        )?;
         Ok(())
     }
 

@@ -145,7 +145,13 @@ fn path_use(expression: &ast::PathExpr, path: ast::Path) -> SourcePathUse {
     let mut nested_scope = false;
     let mut item_count = 0;
     for ancestor in expression.syntax().ancestors() {
-        if ast::Item::can_cast(ancestor.kind()) {
+        // Associated items are members of the enclosing impl/trait, rather
+        // than another nested Item scope in the compatibility contract.
+        if ast::Item::can_cast(ancestor.kind())
+            && !ancestor
+                .parent()
+                .is_some_and(|parent| ast::AssocItemList::can_cast(parent.kind()))
+        {
             item_count += 1;
             if ancestor
                 .parent()
