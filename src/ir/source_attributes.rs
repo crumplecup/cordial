@@ -8,6 +8,7 @@ mod native;
 mod native_types;
 pub use instrument::{SourceAttributeArgument, SourceAttributeArguments, SourceInstrumentSyntax};
 
+#[cfg(feature = "_attribute_scan")]
 pub use compatibility::{is_cfg_test, is_gated_instrument_attr, is_instrument_attr};
 
 /// File attribute inventory on a source module node.

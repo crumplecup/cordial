@@ -33,8 +33,10 @@ mod tracing_source;
 pub use source_attributes::{
     ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_FILE_ATTRIBUTES, SourceAttribute, SourceAttributeArgument,
     SourceAttributeArguments, SourceAttributedItem, SourceCrateLints, SourceFileAttributes,
-    SourceInstrumentSyntax, is_cfg_test, is_gated_instrument_attr, is_instrument_attr,
+    SourceInstrumentSyntax,
 };
+#[cfg(feature = "_attribute_scan")]
+pub use source_attributes::{is_cfg_test, is_gated_instrument_attr, is_instrument_attr};
 #[cfg(feature = "tracing")]
 pub use tracing_source::{
     ATTR_SOURCE_TRACING_INVENTORY, SourceTracingFunction, SourceTracingInventory,

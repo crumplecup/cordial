@@ -244,6 +244,7 @@ pub fn is_instrument_attr(attr: &Attribute) -> bool {
 /// `true` when `attr` is `#[cfg_attr(.., instrument)]` / `tracing::instrument`
 /// — the gated form apply writes for verifier crates. Bare `#[instrument]`
 /// is not gated: a Kani (etc.) build will still expand it.
+#[cfg(feature = "_attribute_scan")]
 #[instrument(level = "trace", skip(attr))]
 pub fn is_gated_instrument_attr(attr: &Attribute) -> bool {
     match &attr.meta {
