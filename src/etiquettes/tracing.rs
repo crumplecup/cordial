@@ -168,7 +168,7 @@ pub static TRACING_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|
             EtiquetteExplain::new(
                 "Are functions instrumented with the recipe for their role?",
                 "A missing-span census that skips private helpers creates blind spots. Volume is a subscriber level problem, not a reason to skip spans.",
-                "Every function gets a use-class, complexity, and target InstrumentRecipe. Probes flag a missing attribute, a recipe delta, or attenuation (instrument on proof-only code, skip-policy files, or ungated on a prover-reachable function). Visibility does not exempt a function. For instrument findings, run `cordial quality --apply --etiquette tracing` after `cordial open`; add `--dry-run` to preview. Apply repairs supported argument deltas while preserving existing custom fields, return recording, error formatting/severity, qualification, comments, and compatible gates. Ambiguous declarations or unsupported annotation forms remain unresolved rather than being replaced. Proposed Rust syntax and source snapshots are checked before the source transaction writes. Apply checks off matching worklist items it edits and reports how many tracing items remain open. Run focused checks, then `cordial submit` to verify the claims. Subscriber-init rows are a second checklist. Leftover stdio macros are a third filter ([tracing.stdio]: println/eprintln/print/eprint/dbg, skip_cargo_protocol, skip_folders). --apply does not patch subscriber or print rows; repair those manually.",
+                "Every function gets a use-class, complexity, and target InstrumentRecipe. Probes flag a missing attribute, a recipe delta, or attenuation (instrument on proof-only code, skip-policy files, or ungated on a prover-reachable function). Visibility does not exempt a function. Error events must meet the recipe severity: bare err defaults to error; warn and error satisfy a warning requirement, while trace/debug/info do not. Apply raises only a weaker error level, preserving formatting mode and unrelated arguments. Unknown level expressions and ambiguous arguments remain open for review. For instrument findings, run `cordial quality --apply --etiquette tracing` after `cordial open`; add `--dry-run` to preview. Apply repairs supported argument deltas while preserving existing custom fields, return recording, error formatting/severity, qualification, comments, and compatible gates. Ambiguous declarations or unsupported annotation forms remain unresolved rather than being replaced. Proposed Rust syntax and source snapshots are checked before the source transaction writes. Apply checks off matching worklist items it edits and reports how many tracing items remain open. Run focused checks, then `cordial submit` to verify the claims. Subscriber-init rows are a second checklist. Leftover stdio macros are a third filter ([tracing.stdio]: println/eprintln/print/eprint/dbg, skip_cargo_protocol, skip_folders). --apply does not patch subscriber or print rows; repair those manually.",
                 "`[tracing] enabled = false` in cordial.toml.",
                 vec![
                     EtiquetteRuleExplain::new(
@@ -186,6 +186,14 @@ pub static TRACING_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|
                     EtiquetteRuleExplain::new(
                         "TRACING-ERR-MISSING",
                         "fallible function missing err",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "TRACING-ERR-LEVEL-MISMATCH",
+                        "error event is below the required severity; use --apply",
+                    ),
+                    EtiquetteRuleExplain::new(
+                        "TRACING-INSTRUMENT-UNRESOLVED",
+                        "annotation levels or arguments need review; apply leaves them unchanged",
                     ),
                     EtiquetteRuleExplain::new(
                         "TRACING-ERROR-PATH-SILENT",

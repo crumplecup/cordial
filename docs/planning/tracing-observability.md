@@ -1,6 +1,6 @@
 # Automated tracing as a sensible observability default
 
-**Status:** Phase 1 complete; Phase 2 in progress, 2026-10-31.
+**Status:** Phase 1 complete; Phase 2 in progress; Phase 3 severity comparison implemented, 2026-10-31.
 
 ## Purpose
 
@@ -42,7 +42,7 @@ checkpoint is recorded below; this does not certify the later policy phases.
 | Type spelling substitutes for identity | `*Result` suffix checks and a displayable name list containing bare `Error` | Use resolved type and trait identities; unrelated names must not confer capabilities |
 | Borrowed returns suppress errors | `fallible_err` rejects any return type containing a borrow | Evaluate the error payload's recording capabilities independently of the success value's ownership |
 | Trait methods have a blanket exemption from `err` | `trait_surface_recipe` always sets no error event | Use the actual error contract and reporting responsibility; trait role determines span defaults, not universal error silence |
-| Error severity disappears | `PresentInstrument` stores `err` as a boolean | Preserve default and explicit event levels, formatting mode, and cfg applicability; assess actual severity |
+| Error severity disappears | Assessment previously treated `err` as a boolean | Default and explicit event levels now come from shared argument facts; assessment and apply compare actual severity. Formatting policy and cfg applicability still need further work |
 | A warning anywhere can count as error coverage | Body and boundary collectors use coarse presence booleans | Record which error/path an event covers, whether it executes, and which resolved helper reports it |
 | Configuration alternatives can share evidence | Confirmed: a compliant cfg sibling hid the other declaration's missing error event | Declaration multimap and file/line joins now isolate siblings; keep adversarial regressions |
 | One repair discards unrelated instrumentation | Whole-attribute replacement and text-based removal were unsafe | Located argument edits and attribute removal now consume shared IR ranges; unsupported forms remain unresolved |
@@ -238,8 +238,8 @@ Existing finer span levels remain intact. Unknown level expressions, multiple
 instrument annotations, mismatched verifier gates, and short-form annotations
 requiring a new verifier gate remain unresolved. The last case needs shared IR
 import ownership before apply can safely avoid unused imports in prover builds.
-Argument syntax is now typed and preserved; severity/mode policy comparison
-still belongs to Phase 3. New annotation insertion retains its existing located
+Argument syntax is now typed and preserved; the Phase 3 checkpoint below adds
+severity comparison. Formatting-mode policy remains pending. New annotation insertion retains its existing located
 line helper; this checkpoint does not claim complete semantic edit planning.
 
 File-local planning is separated from the transaction coordinator. Dry-run
@@ -312,11 +312,49 @@ three field-visibility/organization repairs, with no new findings.
   including defaults, precedence, resolved boundary selection, and overrides.
 - [ ] Refine role defaults using shared operation/effect facts. Stop promoting
   spans solely because a function is long.
-- [ ] Compare actual error-event severity/mode rather than boolean presence.
+- [x] Compare actual error-event severity rather than boolean presence.
+- [ ] Decide formatting-mode policy using resolved capabilities, preserving
+  compatible explicit Display/Debug choices.
 - [ ] Specify safe argument/return recording and preserve existing redaction.
 - [ ] Update compiled explain, config examples, rule meanings, and migration
   guidance together. Findings state what is needed, why, and whether apply
   can do it.
+
+Severity checkpoint: assessment and apply interpret the same shared attribute
+arguments. Bare `err` and `err(Debug)` default to error severity; explicit
+warning/error satisfy a warning requirement, while trace/debug/info do not.
+`TRACING-ERR-LEVEL-MISMATCH` identifies insufficient severity. Apply changes
+only the nested level value, retaining formatting mode, comments, span level,
+fields, return recording, and other annotation choices. Unknown level
+expressions and ambiguous managed arguments produce
+`TRACING-INSTRUMENT-UNRESOLVED` and remain untouched. Boundary assessment uses
+the same interpretation, so a debug error event cannot satisfy warning-level
+reporting. This does not yet prove event ownership or execution-path coverage.
+
+This policy change can ship before the remaining Phase 2 loader migration:
+it consumes facts from the existing shared parse and IR, with no additional
+parser or semantic database. Compiled explain includes both new rule meanings
+and the preservation/blocking behavior.
+
+Validation: 83 focused tests pass across apply, attribute evidence, boundary,
+assessment, and severity. Complete attribute/inventory backend parity passes,
+and a tracing-only feature build passes its four focused tests without warnings.
+A compiled executable specimen captures a real
+subscriber at an info filter: its debug event is initially hidden, then the
+applied warning emits exactly once with Debug formatting preserved. The
+function's error kind/message and every other source byte remain unchanged;
+the next apply is a no-op. Broader runtime context and reporting-path coverage
+remain Phase 5 work.
+
+Dogfood exposed nine existing debug-level error events in the type-identity
+resolver. Apply raised only their nested level values and checked off the nine
+matching worklist items. All 18 resolver tests pass. Their captured output also
+shows repeated warnings as the same failure propagates through the resolver.
+Build-tier submit verified all nine repairs with no new findings.
+Severity enforcement alone does not solve that problem: the current recipe
+still falls back to warning without established reporting ownership. Keep
+independent reporting policy and path attribution as required follow-up work;
+do not present this checkpoint as warning deduplication.
 
 ### 4. Attribute reporting to real error paths
 

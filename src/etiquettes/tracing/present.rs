@@ -1,16 +1,16 @@
-//! Parse the `#[instrument]` currently on a function from IR `HasAttr` nodes.
+//! Interpret located instrument arguments retained in the shared IR.
 
-use crate::ir::{EdgeKind, IrView, NodeId};
+use crate::CordialResult;
+use crate::ir::{EdgeKind, IrView, NodeId, SourceAttributeArguments, SourceInstrumentSyntax};
 
 use super::types::InstrumentLevel;
-
 use tracing::instrument;
-/// Arguments recorded on an existing `#[instrument]` attribute.
-#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
-#[builder(build_fn(error = "crate::error::CordialError"))]
+
+/// Existing annotation policy; unknown levels remain explicit.
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
 pub struct PresentInstrument {
     #[getter(copy)]
-    level: InstrumentLevel,
+    level: Option<InstrumentLevel>,
     skip: Vec<String>,
     #[getter(copy)]
     skip_all: bool,
@@ -18,223 +18,118 @@ pub struct PresentInstrument {
     #[getter(copy)]
     err: bool,
     #[getter(copy)]
-    ret: bool,
+    err_level: Option<InstrumentLevel>,
+    #[getter(copy)]
+    unresolved: bool,
 }
 
-impl Default for PresentInstrument {
-    #[instrument(level = "debug", ret)]
-    fn default() -> Self {
+impl PresentInstrument {
+    /// Interpret shared argument facts, without parsing rendered attribute text.
+    #[instrument(level = "debug", skip(syntax))]
+    pub(super) fn from_syntax(syntax: &SourceInstrumentSyntax) -> Self {
+        let args = syntax.arguments().as_ref();
+        let err = args.and_then(|args| args.entries().iter().find(|arg| arg.name() == "err"));
+        let level = argument_level(args, InstrumentLevel::Info);
+        let err_level =
+            err.and_then(|arg| argument_level(arg.arguments().as_ref(), InstrumentLevel::Error));
         Self {
-            level: InstrumentLevel::Info,
-            skip: Vec::new(),
-            skip_all: false,
-            fields: Vec::new(),
-            err: false,
-            ret: false,
+            level,
+            skip: list_names(args, "skip"),
+            skip_all: args
+                .is_some_and(|args| args.entries().iter().any(|arg| arg.name() == "skip_all")),
+            fields: list_names(args, "fields"),
+            err: err.is_some(),
+            err_level,
+            unresolved: level.is_none()
+                || (err.is_some() && err_level.is_none())
+                || args.is_some_and(ambiguous_arguments),
         }
     }
 }
 
-/// Load present instrument args from `HasAttr` children, if any.
-#[instrument(level = "debug", skip(ir, node_id))]
-pub fn present_instrument(ir: &dyn IrView, node_id: NodeId) -> Option<PresentInstrument> {
-    for child_id in ir.children(node_id, EdgeKind::HasAttr) {
-        let Some(child) = ir.node(child_id) else {
-            continue;
-        };
-        let path = child
-            .attr("attr_path")
-            .and_then(|value| value.as_str())
-            .unwrap_or("");
-        let meta = child
-            .attr("meta")
-            .and_then(|value| value.as_str())
-            .unwrap_or("");
-        if let Some(present) = present_from_attr(path, meta) {
-            return Some(present);
-        }
-    }
-    None
-}
-
-#[instrument(level = "trace", skip(path, meta))]
-fn present_from_attr(path: &str, meta: &str) -> Option<PresentInstrument> {
-    if is_instrument_path(path) {
-        return Some(parse_instrument_meta(meta));
-    }
-    if path != "cfg_attr" {
-        return None;
-    }
-    let inner = cfg_attr_inner_attr(meta)?;
-    let compact: String = inner.split_whitespace().collect();
-    let rest = compact.strip_prefix("::").unwrap_or(compact.as_str());
-    let rest = rest.strip_prefix("tracing::").unwrap_or(rest);
-    rest.starts_with("instrument")
-        .then(|| parse_instrument_meta(rest))
-}
-
-#[instrument(level = "trace", skip(path), ret)]
-fn is_instrument_path(path: &str) -> bool {
-    path == "instrument" || path.ends_with("::instrument")
-}
-
-/// Second argument of `cfg_attr(<predicate>, <inner>)` as stored by the
-/// attribute enricher (`cfg_attr(not(kani), tracing::instrument(...))`).
+/// Literal severity only. Constants need resolved value evidence, even when
+/// their spelling resembles a tracing constant.
 #[instrument(level = "trace")]
-fn cfg_attr_inner_attr(meta: &str) -> Option<&str> {
-    let rest = meta.trim().strip_prefix("cfg_attr(")?.strip_suffix(')')?;
-    let mut depth: u32 = 0;
-    for (idx, ch) in rest.char_indices() {
-        match ch {
-            '(' => depth += 1,
-            ')' => depth = depth.saturating_sub(1),
-            ',' if depth == 0 => return Some(rest[idx + 1..].trim()),
-            _ => {}
-        }
-    }
-    None
+pub(super) fn parse_level(value: &str) -> Option<InstrumentLevel> {
+    let literal = value.strip_prefix('"')?.strip_suffix('"')?;
+    InstrumentLevel::from_attr(&literal.to_ascii_lowercase())
 }
 
-/// Parse `instrument` or `instrument(...)` meta rendered by the attribute enricher.
-#[instrument(level = "debug")]
-pub fn parse_instrument_meta(meta: &str) -> PresentInstrument {
-    let mut present = PresentInstrument::default();
-    let trimmed = meta.trim();
-    let Some(inner) = instrument_inner(trimmed) else {
-        return present;
+#[instrument(level = "trace", skip(args, default))]
+fn argument_level(
+    args: Option<&SourceAttributeArguments>,
+    default: InstrumentLevel,
+) -> Option<InstrumentLevel> {
+    let Some(args) = args else {
+        return Some(default);
     };
-    if inner.is_empty() {
-        return present;
-    }
-    for arg in split_top_level(inner) {
-        let arg = arg.trim();
-        if arg.is_empty() {
-            continue;
-        }
-        if let Some(level) = named_value(arg, "level") {
-            if let Some(parsed) = parse_level(level) {
-                present.level = parsed;
-            }
-            continue;
-        }
-        if ident_eq(arg, "skip_all") || grouped_args(arg, "skip_all").is_some() {
-            present.skip_all = true;
-            continue;
-        }
-        if let Some(names) = grouped_args(arg, "skip") {
-            present.skip = csv_idents(names);
-            continue;
-        }
-        if let Some(fields) = grouped_args(arg, "fields") {
-            present.fields = field_names(fields);
-            continue;
-        }
-        if ident_eq(arg, "err") || grouped_args(arg, "err").is_some() {
-            present.err = true;
-            continue;
-        }
-        if ident_eq(arg, "ret") || grouped_args(arg, "ret").is_some() {
-            present.ret = true;
-        }
-    }
-    present
-}
-
-#[instrument(level = "debug")]
-fn instrument_inner(meta: &str) -> Option<&str> {
-    let rest = meta.strip_prefix("instrument")?;
-    if rest.is_empty() {
-        return Some("");
-    }
-    let rest = rest.trim();
-    let inner = rest.strip_prefix('(')?.strip_suffix(')')?;
-    Some(inner.trim())
-}
-
-#[instrument(level = "debug")]
-fn named_value<'a>(arg: &'a str, name: &str) -> Option<&'a str> {
-    let rest = arg.strip_prefix(name)?.trim_start();
-    let rest = rest.strip_prefix('=')?.trim();
-    Some(rest)
-}
-
-#[instrument(level = "debug")]
-fn ident_eq(arg: &str, name: &str) -> bool {
-    arg == name
-}
-
-#[instrument(level = "debug")]
-fn grouped_args<'a>(arg: &'a str, name: &str) -> Option<&'a str> {
-    let rest = arg.strip_prefix(name)?;
-    if !rest.is_empty() && !rest.starts_with(|ch: char| ch == '(' || ch.is_whitespace()) {
+    let mut levels = args.entries().iter().filter(|arg| arg.name() == "level");
+    let Some(level) = levels.next() else {
+        return Some(default);
+    };
+    if levels.next().is_some() {
         return None;
     }
-    let rest = rest.trim_start();
-    if rest.is_empty() {
-        return Some("");
-    }
-    rest.strip_prefix('(')?.strip_suffix(')').map(str::trim)
+    level.value().as_deref().and_then(parse_level)
 }
 
-#[instrument(level = "debug")]
-fn parse_level(value: &str) -> Option<InstrumentLevel> {
-    let token = value
-        .trim()
-        .trim_matches('"')
-        .rsplit("::")
-        .next()
-        .unwrap_or(value)
-        .trim();
-    InstrumentLevel::from_attr(&token.to_ascii_lowercase())
-}
-
-#[instrument(level = "debug")]
-fn split_top_level(input: &str) -> Vec<&str> {
-    let mut parts = Vec::new();
-    let mut start = 0;
-    let mut depth: u32 = 0;
-    for (idx, ch) in input.char_indices() {
-        match ch {
-            '(' => depth += 1,
-            ')' => depth = depth.saturating_sub(1),
-            ',' if depth == 0 => {
-                parts.push(&input[start..idx]);
-                start = idx + 1;
-            }
-            _ => {}
-        }
-    }
-    if start < input.len() {
-        parts.push(&input[start..]);
-    }
-    parts
-}
-
-#[instrument(level = "debug")]
-fn csv_idents(inner: &str) -> Vec<String> {
-    inner
-        .split(',')
-        .map(str::trim)
-        .filter(|part| !part.is_empty())
-        .map(ToString::to_string)
-        .collect()
-}
-
-#[instrument(level = "debug")]
-fn field_names(inner: &str) -> Vec<String> {
-    split_top_level(inner)
-        .into_iter()
-        .filter_map(|part| {
-            let part = part.trim();
-            if part.is_empty() {
-                return None;
-            }
-            let name = part.split('=').next().unwrap_or(part).trim();
-            if name.is_empty() {
-                None
-            } else {
-                Some(name.to_string())
-            }
+#[instrument(level = "trace", skip(args))]
+fn ambiguous_arguments(args: &SourceAttributeArguments) -> bool {
+    ["level", "skip", "skip_all", "fields", "err", "ret"]
+        .iter()
+        .any(|key| {
+            args.entries()
+                .iter()
+                .filter(|arg| arg.name() == *key)
+                .count()
+                > 1
         })
-        .collect()
+}
+
+#[instrument(level = "trace", skip(args))]
+fn list_names(args: Option<&SourceAttributeArguments>, key: &str) -> Vec<String> {
+    args.and_then(|args| args.entries().iter().find(|arg| arg.name() == key))
+        .and_then(|arg| arg.arguments().as_ref())
+        .map(|args| {
+            args.entries()
+                .iter()
+                .map(|arg| arg.name().clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Load typed attribute evidence. A missing snapshot is a structural failure;
+/// unsupported syntax remains visible as an unresolved policy finding.
+#[instrument(level = "debug", skip(ir, node_id), err(level = "warn"))]
+pub fn present_instrument(
+    ir: &dyn IrView,
+    node_id: NodeId,
+) -> CordialResult<Option<PresentInstrument>> {
+    let mut present = None;
+    for child_id in ir.children(node_id, EdgeKind::HasAttr) {
+        let attr = ir.source_attribute(child_id)?.ok_or_else(|| {
+            crate::CordialError::workspace_source_facts_missing("typed source attribute")
+        })?;
+        if !attr.instrument() {
+            continue;
+        }
+        let mut next = match attr.instrument_syntax() {
+            Some(syntax) => PresentInstrument::from_syntax(syntax),
+            None => PresentInstrument {
+                level: None,
+                skip: Vec::new(),
+                skip_all: false,
+                fields: Vec::new(),
+                err: false,
+                err_level: None,
+                unresolved: true,
+            },
+        };
+        if present.is_some() {
+            next.unresolved = true;
+        }
+        present = Some(next);
+    }
+    Ok(present)
 }

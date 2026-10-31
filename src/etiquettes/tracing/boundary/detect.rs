@@ -1,12 +1,14 @@
 use syn::visit::Visit;
 use syn::{
-    Attribute, Block, ExprCall, ExprMethodCall, ExprPath, Macro, Meta, Path, ReturnType, Signature,
-    Type, TypePath,
+    Attribute, Block, ExprCall, ExprMethodCall, ExprPath, Macro, Path, ReturnType, Signature, Type,
+    TypePath,
 };
 
 use tracing::instrument;
 
-use crate::etiquettes::tracing::present::parse_instrument_meta;
+use crate::etiquettes::tracing::present::PresentInstrument;
+use crate::etiquettes::tracing::types::InstrumentLevel;
+use crate::ir::SourceInstrumentSyntax;
 
 /// Facts collected from one function's signature and body about whether it
 /// reports its own error to the UI-facing tracing channel before returning.
@@ -97,67 +99,20 @@ fn path_last(path: &Path) -> Option<String> {
         .map(|segment| segment.ident.to_string())
 }
 
-/// Meta string for one attribute, in the same `name(tokens)` shape the
-/// attribute enricher stores (`crate::enricher::attribute::attr_meta_string`
-/// is private to that module, so this mirrors it locally rather than
-/// widening its visibility for one caller).
-#[instrument(level = "debug", skip(attr))]
-fn attr_meta_string(attr: &Attribute) -> String {
-    match &attr.meta {
-        Meta::Path(path) => path_last(path).unwrap_or_default(),
-        Meta::List(list) => format!(
-            "{}({})",
-            path_last(&list.path).unwrap_or_default(),
-            list.tokens
-        ),
-        Meta::NameValue(value) => format!("{} = …", path_last(&value.path).unwrap_or_default()),
-    }
-}
-
-/// First top-level-comma-split part after `#[cfg_attr(<predicate>, <inner>)]`'s
-/// predicate, given just the `cfg_attr(...)` call's inner tokens rendered as
-/// text (`not (kani) , instrument (...)`).
-#[instrument(level = "debug")]
-fn cfg_attr_inner(tokens: &str) -> Option<&str> {
-    let mut depth: u32 = 0;
-    for (idx, ch) in tokens.char_indices() {
-        match ch {
-            '(' => depth += 1,
-            ')' => depth = depth.saturating_sub(1),
-            ',' if depth == 0 => return Some(tokens[idx + 1..].trim()),
-            _ => {}
-        }
-    }
-    None
-}
-
-/// Whether `attrs` carries `#[instrument(err(...))]` (bare `err` counts
-/// too), including the `#[cfg_attr(pred, instrument(...))]` / `#[cfg_attr(pred,
-/// tracing::instrument(...))]` gated forms `--apply` writes for verifier crates.
+/// Boundary reporting requires a warning or error event. Debug events disappear
+/// under an ordinary info filter and cannot satisfy that responsibility.
 #[instrument(level = "debug", skip(attrs))]
 fn instrument_has_err(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(|attr| {
-        let Some(last) = path_last(attr.path()) else {
-            return false;
-        };
-        if last == "instrument" {
-            return parse_instrument_meta(&attr_meta_string(attr)).err();
-        }
-        if last != "cfg_attr" {
-            return false;
-        }
-        let Meta::List(list) = &attr.meta else {
-            return false;
-        };
-        let tokens = list.tokens.to_string();
-        let Some(inner) = cfg_attr_inner(&tokens) else {
-            return false;
-        };
-        let compact: String = inner.split_whitespace().collect();
-        let rest = compact.strip_prefix("::").unwrap_or(compact.as_str());
-        let rest = rest.strip_prefix("tracing::").unwrap_or(rest);
-        rest.starts_with("instrument") && parse_instrument_meta(rest).err()
-    })
+    attrs
+        .iter()
+        .filter_map(SourceInstrumentSyntax::from_attribute)
+        .any(|syntax| {
+            let present = PresentInstrument::from_syntax(&syntax);
+            !present.unresolved()
+                && present
+                    .err_level()
+                    .is_some_and(|level| level >= InstrumentLevel::Warn)
+        })
 }
 
 impl BoundaryBodyFacts {

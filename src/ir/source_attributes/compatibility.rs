@@ -36,7 +36,6 @@ impl SourceFileAttributes {
 
 #[instrument(level = "debug", skip(attr))]
 fn attribute(attr: &Attribute) -> SourceAttribute {
-    use quote::ToTokens;
     SourceAttribute {
         path: attr_path_label(attr),
         meta: attr_meta_string(attr),
@@ -46,10 +45,19 @@ fn attribute(attr: &Attribute) -> SourceAttribute {
             .is_some_and(|text| text.starts_with("//")))
         .then(|| attr.span().byte_range().into()),
         instrument: is_instrument_attr(attr),
-        instrument_syntax: super::instrument::collect(
+        instrument_syntax: super::SourceInstrumentSyntax::from_attribute(attr),
+    }
+}
+
+impl super::SourceInstrumentSyntax {
+    /// Project arguments from an attribute on the loader's shared tree.
+    #[instrument(level = "debug", skip(attr))]
+    pub(crate) fn from_attribute(attr: &Attribute) -> Option<Self> {
+        use quote::ToTokens;
+        super::instrument::collect(
             &super::instrument::compatibility_tokens(attr.meta.to_token_stream()),
             None,
-        ),
+        )
     }
 }
 

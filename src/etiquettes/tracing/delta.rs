@@ -23,7 +23,10 @@ pub fn recipe_deltas(
     ctx: &DeltaContext<'_>,
 ) -> Vec<TracingRuleKind> {
     let mut kinds = Vec::new();
-    if present.level() > recipe.level() {
+    if present.unresolved() {
+        return vec![TracingRuleKind::InstrumentUnresolved];
+    }
+    if present.level().is_some_and(|level| level > recipe.level()) {
         kinds.push(TracingRuleKind::LevelMismatch);
     }
     if skip_missing(recipe, present, ctx.param_names()) {
@@ -31,6 +34,13 @@ pub fn recipe_deltas(
     }
     if recipe.err().is_some() && !present.err() {
         kinds.push(TracingRuleKind::ErrMissing);
+    }
+    if recipe
+        .err()
+        .zip(present.err_level())
+        .is_some_and(|(required, actual)| actual < required)
+    {
+        kinds.push(TracingRuleKind::ErrLevelMismatch);
     }
     if error_path_silent(recipe, present, ctx) {
         kinds.push(TracingRuleKind::ErrorPathSilent);

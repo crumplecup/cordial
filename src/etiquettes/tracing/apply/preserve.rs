@@ -1,5 +1,6 @@
 //! Repair only managed arguments, using locations retained in the shared IR.
 
+use super::super::present::PresentInstrument;
 use super::super::types::{InstrumentLevel, InstrumentRecipe};
 use super::{
     instrument::GapApplyOutcome,
@@ -20,6 +21,10 @@ pub(super) fn repair(
     let Some(syntax) = attr.instrument_syntax() else {
         return GapApplyOutcome::Unresolved;
     };
+    let present = PresentInstrument::from_syntax(syntax);
+    if present.unresolved() {
+        return GapApplyOutcome::Unresolved;
+    }
     let mut edits = Vec::new();
     let mut additions = Vec::new();
     if let Some(args) = syntax.arguments() {
@@ -36,16 +41,7 @@ pub(super) fn repair(
             }
         }
         let existing_level = args.entries().iter().find(|arg| arg.name() == "level");
-        let level = match existing_level {
-            Some(arg) => arg
-                .value_range()
-                .as_ref()
-                .and_then(|range| source.get(range.start()..range.end()))
-                .and_then(|value| value.strip_prefix('"')?.strip_suffix('"'))
-                .and_then(InstrumentLevel::from_attr),
-            None => Some(InstrumentLevel::Info),
-        };
-        let Some(level) = level else {
+        let Some(level) = present.level() else {
             return GapApplyOutcome::Unresolved;
         };
         if level > recipe.level() {
@@ -89,11 +85,22 @@ pub(super) fn repair(
         ) {
             return GapApplyOutcome::Unresolved;
         }
-        if let Some(level) = recipe
-            .err()
-            .filter(|_| !args.entries().iter().any(|arg| arg.name() == "err"))
-        {
-            additions.push(format!("err(level = \"{level}\")"));
+        if let Some(required) = recipe.err() {
+            match args.entries().iter().find(|arg| arg.name() == "err") {
+                None => additions.push(format!("err(level = \"{required}\")")),
+                Some(arg) if present.err_level().is_some_and(|actual| actual < required) => {
+                    let Some(range) = arg
+                        .arguments()
+                        .as_ref()
+                        .and_then(|list| list.entries().iter().find(|arg| arg.name() == "level"))
+                        .and_then(|arg| arg.value_range().as_ref())
+                    else {
+                        return GapApplyOutcome::Unresolved;
+                    };
+                    edits.push((range.start()..range.end(), format!("\"{required}\"")));
+                }
+                Some(_) => {}
+            }
         }
         append(args, additions, &mut edits);
     } else {

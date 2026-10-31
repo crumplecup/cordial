@@ -57,6 +57,10 @@ pub enum TracingRuleKind {
     LevelMismatch,
     SkipMissing,
     ErrMissing,
+    /// Existing error event is below the recipe's required severity.
+    ErrLevelMismatch,
+    /// An annotation's level or argument structure cannot be established.
+    InstrumentUnresolved,
     ErrorPathSilent,
     FieldsMissing,
     /// Proof-only function already has `#[instrument]` (bare or gated).
@@ -75,6 +79,8 @@ impl TracingRuleKind {
             Self::LevelMismatch => "TRACING-LEVEL-MISMATCH",
             Self::SkipMissing => "TRACING-SKIP-MISSING",
             Self::ErrMissing => "TRACING-ERR-MISSING",
+            Self::ErrLevelMismatch => "TRACING-ERR-LEVEL-MISMATCH",
+            Self::InstrumentUnresolved => "TRACING-INSTRUMENT-UNRESOLVED",
             Self::ErrorPathSilent => "TRACING-ERROR-PATH-SILENT",
             Self::FieldsMissing => "TRACING-FIELDS-MISSING",
             Self::ProofInstrument => "TRACING-PROOF-INSTRUMENT",
@@ -93,6 +99,12 @@ impl TracingRuleKind {
             Self::SkipMissing => "Recipe `skip` names are live params and absent from `skip(...)`",
             Self::ErrMissing => {
                 "Recipe wants `err` and the attribute has neither `err` nor `err(level = ...)`"
+            }
+            Self::ErrLevelMismatch => {
+                "Error-event severity is below the recipe; use cordial quality --apply --etiquette tracing to raise only its level"
+            }
+            Self::InstrumentUnresolved => {
+                "Instrument levels or arguments are unresolved; apply preserves the annotation for review"
             }
             Self::ErrorPathSilent => {
                 "Recipe wants `err` and the body has neither `err` nor `warn!`/`error!`"

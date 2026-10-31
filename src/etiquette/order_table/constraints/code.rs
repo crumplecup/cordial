@@ -29,6 +29,18 @@ pub(super) const ROWS: &[LintConstraint] = &[
     ),
     #[cfg(all(feature = "tracing", feature = "derives"))]
     LintConstraint::new(
+        "TRACING-ERR-LEVEL-MISMATCH",
+        super::super::ids::DERIVE_RULE_IDS,
+        super::super::explains::TRACING_AFTER_DERIVES,
+    ),
+    #[cfg(all(feature = "tracing", feature = "derives"))]
+    LintConstraint::new(
+        "TRACING-INSTRUMENT-UNRESOLVED",
+        super::super::ids::DERIVE_RULE_IDS,
+        super::super::explains::TRACING_AFTER_DERIVES,
+    ),
+    #[cfg(all(feature = "tracing", feature = "derives"))]
+    LintConstraint::new(
         "TRACING-ERROR-PATH-SILENT",
         super::super::ids::DERIVE_RULE_IDS,
         super::super::explains::TRACING_AFTER_DERIVES,

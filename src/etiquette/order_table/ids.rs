@@ -30,6 +30,10 @@ pub(super) const TRACING_RULE_IDS: &[&str] = &[
     #[cfg(feature = "tracing")]
     "TRACING-ERR-MISSING",
     #[cfg(feature = "tracing")]
+    "TRACING-ERR-LEVEL-MISMATCH",
+    #[cfg(feature = "tracing")]
+    "TRACING-INSTRUMENT-UNRESOLVED",
+    #[cfg(feature = "tracing")]
     "TRACING-ERROR-PATH-SILENT",
     #[cfg(feature = "tracing")]
     "TRACING-FIELDS-MISSING",

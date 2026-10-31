@@ -201,6 +201,10 @@ name = "tracing_attribute_evidence"
 required-features = ["tracing"]
 
 [[test]]
+name = "tracing_event_levels"
+required-features = ["tracing"]
+
+[[test]]
 name = "error_apply_worklist"
 required-features = ["cli", "quality"]
 

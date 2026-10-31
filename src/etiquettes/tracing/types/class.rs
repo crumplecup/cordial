@@ -156,6 +156,7 @@ pub enum InstrumentLevel {
     Debug,
     Info,
     Warn,
+    Error,
 }
 
 impl InstrumentLevel {
@@ -166,6 +167,7 @@ impl InstrumentLevel {
             Self::Debug => "debug",
             Self::Info => "info",
             Self::Warn => "warn",
+            Self::Error => "error",
         }
     }
 
@@ -176,6 +178,7 @@ impl InstrumentLevel {
             "debug" => Some(Self::Debug),
             "info" => Some(Self::Info),
             "warn" => Some(Self::Warn),
+            "error" => Some(Self::Error),
             _ => None,
         }
     }

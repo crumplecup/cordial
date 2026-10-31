@@ -267,3 +267,30 @@ fn dogfood_cordial_boundary_policy_is_clean() -> miette::Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn boundary_error_reporting_requires_warning_severity() -> miette::Result<()> {
+    cordial::init_tracing();
+    for (argument, silent) in [
+        ("err(level = \"trace\")", true),
+        ("err(Debug, level = \"debug\")", true),
+        ("err(level = \"info\")", true),
+        ("err(level = EVENT_LEVEL)", true),
+        ("err(level = \"warn\")", false),
+        ("err(level = \"error\")", false),
+        ("err", false),
+        ("err(Debug)", false),
+    ] {
+        let source = format!(
+            "#[tracing::instrument(level = \"trace\", {argument})]\nfn main() -> Result<(), String> {{ Ok(()) }}\n"
+        );
+        let fixture = write_bin(&source)?;
+        let rules = scan(fixture.path(), "fixture", false)?;
+        assert_eq!(
+            has(&rules, BoundaryRuleId::MainSilent),
+            silent,
+            "{argument}: {rules:?}"
+        );
+    }
+    Ok(())
+}

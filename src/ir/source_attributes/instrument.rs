@@ -27,6 +27,9 @@ pub struct SourceAttributeArgument {
     name: String,
     range: SourceByteRange,
     value_range: Option<SourceByteRange>,
+    /// Canonical value tokens from the shared tree; no source read is needed
+    /// to interpret a literal or qualified constant during assessment.
+    value: Option<String>,
     arguments: Option<SourceAttributeArguments>,
 }
 
@@ -114,6 +117,10 @@ fn arguments(group: &LocatedGroup) -> SourceAttributeArguments {
                     .filter(|token| token.text == "=")
                     .and_then(|_| tokens.get(2))
                     .map(|value| (value.range.start..last.range.end).into()),
+                value: tokens
+                    .get(1)
+                    .filter(|token| token.text == "=")
+                    .map(|_| compact_tokens(&tokens[2..])),
                 arguments: tokens
                     .get(1)
                     .and_then(|token| token.group.as_ref())
