@@ -1,10 +1,9 @@
 # A shared semantic backend with Salsa and rust-analyzer
 
-**Status:** Paused on 2026-10-31 for the
-[automated tracing observability plan](tracing-observability.md). Preserve the
-collector checkpoints and pending work below. Salsa and rust-analyzer remain
-the selected source backend; resume migration through the shared loader and
-retirement of its `syn` ownership after tracing acceptance.
+**Status:** Active again, 2026-10-31. The next milestone is the production
+frontend cutover: one rust-analyzer/Salsa database supplies collection and
+semantic evidence through the shared IR, and the replaced parsing ownership
+is removed. Tracing's remaining semantic work depends on this milestone.
 Research and dependency compatibility checked on 2026-10-30.
 
 ## Purpose
@@ -40,6 +39,61 @@ frontend they consume. It does not discard completed transformations.
 The frontend migration is substantial. Converting the existing shared tree to
 rust-analyzer by printing and reparsing it would defeat the invariant. Running
 both frontends over every production input would also leave duplicate work.
+
+## Active milestone: production cutover
+
+The current backend can project semantic evidence in integration tests. The
+production pipeline still collects through its compatibility `syn` tree.
+Registering text in the database and porting individual collectors are progress
+toward adoption; neither establishes that production uses the new frontend.
+
+Complete the following as one milestone, using reviewable implementation
+commits and the gates below:
+
+- [ ] Load the production workspace context into the session-owned database,
+  including target/features/cfg, dependency roots, build outputs and proc macros.
+  Retain the context identity and explicit unavailable evidence in the IR.
+- [ ] Migrate every production collector in the inventory below, including
+  inactive syntax, macro islands and supported proof dialects. Collect missing
+  facts in the loader; consumers read them through `IrView`.
+- [ ] Route ordinary quality, submit and apply runs through that database and
+  its IR projection. No hook or apply planner creates a private analysis path.
+- [ ] Use the projected semantic identities and error formatting capabilities
+  in production tracing assessment and apply. Remove the corresponding
+  handwritten resolution as its replacement becomes authoritative.
+- [ ] Remove the compatibility AST ownership, parse cache and orphaned evidence
+  paths at cutover. Classify candidate validation and code generation separately;
+  they must not conceal another parse of original production inputs.
+- [ ] Demonstrate production tracing across files and one complete strategy
+  transformation, including rejected candidates and restored evidence.
+
+Collector ports are implementation steps within this milestone. Do not divert
+to independent tracing configuration or recipe refinements while the production
+semantic evidence remains unavailable. Do not declare completion on collector
+counts or test-only projection results.
+
+### Acceptance evidence
+
+- Normal CLI execution uses the canonical backend with no compatibility
+  original-source parse. Exercise both quality collection and apply; adapter
+  tests alone do not establish this.
+- Compare complete IR payloads and findings in separate compatibility/native
+  test sessions before retiring the compatibility implementation. Preserve
+  inactive-code coverage and intentional existing findings; document semantic
+  corrections with adversarial regressions.
+- Compile and execute tracing specimens containing cross-file aliases, borrowed
+  success values and trait methods. Verify actual error recording, preservation
+  of compliant instrumentation, worklist accounting and a no-op second apply.
+  Unsupported or unavailable capabilities must not authorize an edit.
+- Check source revision and configuration identity, invalidation after a leaf
+  contract change, unrelated query reuse, and rejection/restoration. Candidate
+  compilation remains required in addition to semantic analysis.
+- Audit source consumers and removed ownership paths, including feature-gated
+  collectors, rather than relying only on search counts. Record remaining
+  generation/validation parse sites and why they do not duplicate input analysis.
+- Use focused checks and build-tier submits throughout. Run the all-tier gate
+  at milestone completion, fixing feature-specific compilation issues whenever
+  they are encountered during implementation.
 
 ## What upstream provides
 
@@ -270,8 +324,7 @@ suite also passed with `--no-default-features` before the additional generic
 argument assertions were added.
 
 The build-tier submit gate (list 349) cleared all twelve findings introduced
-during integration and found no new items. Five prior deep-tier items remain
-unverified; the deep tier is reserved for the end of this plan. CI's test job
+during integration and found no new items. CI's test job
 installs `rust-src` explicitly so the semantic regressions can resolve core and
 standard-library definitions.
 
@@ -410,7 +463,29 @@ lockfile identity. Current Cargo loading covers ordinary Rust library fixtures
 without running build scripts or proc-macro servers. Missing expansion and
 unsupported call/type evidence must stay incomplete.
 
-### 2. Exercise one complete transformation with the backend
+### 2. Complete production context and collection migration
+
+- [ ] Complete the session-owned Cargo context driver described above. Bind
+  projections to the selected context, and invalidate affected facts when its
+  inputs change. Missing context or expansion support remains an explicit gap.
+- [x] Inventory shared-tree consumer groups and map required backend facts
+  above. Continue classifying snippet parsers and validators during each port.
+- [ ] Migrate the listed collectors through the existing shared loader.
+  Compare normalized IR payloads and findings, with explicit expectations for
+  semantic improvements. Run the two backends in separate test executions.
+- [ ] Resolve inactive-code and proof-dialect coverage before production cutover.
+- [ ] Complete the production parser cutover when its enabled consumers are
+  migrated. Remove superseded parse caches, handwritten resolution, and orphaned
+  data paths in the same cutover. Do not preserve a permanent dual frontend.
+- [ ] Wire production tracing to the shared semantic contracts and formatting
+  capabilities; verify assessment, apply, runtime events and worklist outcomes
+  against cross-file specimens.
+
+**Gate:** supported lints and apply operations obtain all required facts through
+the shared IR in normal CLI execution, production tracing uses semantic facts,
+and the old parsing ownership has been removed.
+
+### 3. Exercise one complete transformation with the backend
 
 - [ ] Reuse our existing isolated operations to perform a cross-file
   panic-to-typed-error migration and its transitive caller adaptations.
@@ -423,21 +498,6 @@ unsupported call/type evidence must stay incomplete.
 
 **Gate:** a complete useful migration works with source-backed evidence and
 safe rejection. Neither a hover demonstration nor a faster parse is sufficient.
-
-### 3. Complete collection migration and retire previous ownership
-
-- [x] Inventory shared-tree consumer groups and map required backend facts
-  above. Continue classifying snippet parsers and validators during each port.
-- [ ] Migrate the listed collectors through the existing shared loader.
-  Compare normalized IR payloads and findings, with explicit expectations for
-  semantic improvements. Run the two backends in separate test executions.
-- [ ] Resolve inactive-code and proof-dialect coverage before production cutover.
-- [ ] Complete the production parser cutover when its enabled consumers are
-  migrated. Remove superseded parse caches, handwritten resolution, and orphaned
-  data paths in the same cutover. Do not preserve a permanent dual frontend.
-
-**Gate:** supported lints and apply operations obtain all required facts through
-the shared IR, and the old parsing ownership has been removed.
 
 ### 4. Measure and resume strategy coverage
 
@@ -458,13 +518,15 @@ Reserve the all-tier gate for completion of the migration plan.
 
 ## Current next step
 
-Port the remaining file-policy collectors onto the database-issued syntax
-carrier and existing IR contracts, starting with `allows` and cfg policy.
+Work toward the production cutover, starting with the remaining file-policy
+collectors (`allows`, `cfg_scatter`, `cfg_hygiene`) and their shared IR contracts.
 Attribute materialization and crate-attribute policy already consume the new
 loader projection. Preserve inactive-code policy coverage and golden findings.
-Then work through API/layout, tracing, error/apply, and proof
-collection in the inventory above. Complete the Cargo context driver before
-using semantic facts to authorize transformations. Continue
+Then complete the remaining file policy, API/layout, tracing, error/apply, and
+proof collection in the inventory above. Integrate the Cargo context driver
+before using semantic facts to authorize transformations. Track the remaining
+collector groups, context gaps and ownership removals against the active
+milestone; do not treat each port as a separate product destination. Continue
 implement / focused checks / build-tier submit / commit. Keep the selected
 architecture as the destination throughout; do not create another user-facing
 backend choice or extend handwritten semantic resolution.

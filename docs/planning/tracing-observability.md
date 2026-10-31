@@ -1,6 +1,9 @@
 # Automated tracing as a sensible observability default
 
-**Status:** Phase 1 complete; Phase 2 in progress; Phase 3 severity comparison implemented, 2026-10-31.
+**Status:** Phase 1 complete; Phase 2 requires the production semantic frontend
+cutover; Phase 3 severity comparison implemented, 2026-10-31. Further tracing
+policy work is paused while canonical semantic collection becomes available in
+the production pipeline. Existing fixes and regression coverage remain in place.
 
 ## Purpose
 
