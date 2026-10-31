@@ -18,6 +18,12 @@ alternatives. Isolated owned rendering now generates a selected root and its
 nested source wrappers with typed conversions. Composing nested declarations
 into complete function/caller migrations remains unimplemented.
 
+**Architecture exploration:** Further composition is paused while we evaluate a
+[shared Salsa and rust-analyzer backend](salsa-rust-analyzer.md). That proposal
+preserves this plan's transformation operations and shared-IR requirements,
+while investigating replacement of our source frontend and handwritten
+semantic resolution.
+
 This plan defines the broader purpose of strategy-driven apply and a first
 implementation path using panic-to-error migrations. The
 [error-field apply roadmap](error-field-apply-roadmap.md) retains the verified
