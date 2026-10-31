@@ -20,13 +20,11 @@ use crate::targets::discover_crate_targets;
 mod instrument;
 mod ir;
 mod parse;
+mod plan;
+mod preserve;
 mod verifier_policy;
 
-use instrument::{
-    GapApplyOutcome, InstrumentAttrStyle, apply_gap, attr_style, ensure_use_instrument,
-    recipe_for_gap, strip_instrument,
-};
-use ir::{build_apply_ir, recipes_for_file};
+use ir::build_apply_ir;
 
 pub use parse::{parse_tracing_instrument_checklist, parse_tracing_instrument_checklist_text};
 pub use verifier_policy::TracingApplyPolicy;
@@ -80,6 +78,8 @@ pub struct InstrumentApplySummary {
     unresolved: usize,
     /// Functions whose source edits were successfully written.
     applied_gaps: Vec<InstrumentGap>,
+    /// Functions with validated edits proposed by a dry run; never written or claimed.
+    proposed_gaps: Vec<InstrumentGap>,
 }
 
 /// Patch source files listed in the tracing instrument checklist.
@@ -163,6 +163,7 @@ pub(crate) fn run_apply(
         skipped_policy: 0,
         unresolved: 0,
         applied_gaps: Vec::new(),
+        proposed_gaps: Vec::new(),
     };
     if checklist_path.is_some() && by_file.is_empty() {
         tracing::info!("no open checklist items found in tracing instrument checklist");
@@ -194,120 +195,30 @@ pub(crate) fn run_apply(
         .call_graph()
         .ok_or_else(|| crate::error::CordialError::workspace_source_facts_missing("call graph"))?;
 
-    for ((crate_name, rel_path), mut file_gaps) in by_file {
+    let mut planned = Vec::new();
+    let mut applied = Vec::new();
+
+    let planner = plan::FilePlanner::new(&source_view, &workspace, &config, facts, call_graph);
+    for ((crate_name, rel_path), file_gaps) in by_file {
         let Some(crate_root) = crate_roots.get(&crate_name) else {
             continue;
         };
-        let path = crate_root.join(&rel_path);
-        if !path.is_file() {
-            tracing::warn!(
-                path = %path.display(),
-                crate_name = %crate_name,
-                "checklist path does not exist"
-            );
-            summary.unresolved += file_gaps.len();
-            continue;
-        }
-
-        let parsed = source_view.parsed_file(&path, "tracing-instrument-apply")?;
-        let source = parsed.source();
-        let never_instrument = call_graph.never_instrument(&crate_name);
-        let records = match recipes_for_file(&workspace, &crate_name, &rel_path) {
-            Ok(records) => records,
-            Err(error) => {
-                tracing::warn!(
-                    path = %path.display(),
-                    crate_name = %crate_name,
-                    error = %error,
-                    "failed to classify functions for apply"
-                );
-                summary.unresolved += file_gaps.len();
-                continue;
-            }
-        };
-        let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
-        dedupe_gaps(&mut file_gaps);
-        file_gaps.sort_by_key(|right| std::cmp::Reverse(right.line()));
-        let style = attr_style(&lines);
-        let policy =
-            resolve_tracing_apply_policy(&crate_name, &path, crate_root, config.tracing(), &facts);
-        if policy == TracingApplyPolicy::Skip {
-            tracing::info!(
-                path = %path.display(),
-                crate_name = %crate_name,
-                "skip-policy file: apply strips existing #[instrument], never writes one"
-            );
-        }
-
-        let mut file_changed = false;
-        let mut file_applied = Vec::new();
-        for gap in file_gaps {
-            let strip = never_instrument.contains(gap.qualified_name())
-                || policy == TracingApplyPolicy::Skip;
-            if strip {
-                match strip_instrument(&mut lines, &gap) {
-                    GapApplyOutcome::Applied => {
-                        summary.changed_functions += 1;
-                        file_changed = true;
-                        file_applied.push(gap.clone());
-                    }
-                    GapApplyOutcome::AlreadyInstrumented => {
-                        summary.skipped_existing += 1;
-                    }
-                    GapApplyOutcome::Unresolved => {
-                        summary.unresolved += 1;
-                    }
-                    GapApplyOutcome::SkippedPolicy => {
-                        summary.skipped_policy += 1;
-                    }
-                }
-                continue;
-            }
-            let Some(recipe) = recipe_for_gap(&records, &gap) else {
-                tracing::warn!(
-                    path = %gap.rel_path().display(),
-                    line = gap.line(),
-                    qualified_name = %gap.qualified_name(),
-                    "no classified recipe for checklist item"
-                );
-                summary.unresolved += 1;
-                continue;
-            };
-            match apply_gap(&mut lines, &gap, recipe, style, &policy)? {
-                GapApplyOutcome::Applied => {
-                    summary.changed_functions += 1;
-                    file_changed = true;
-                    file_applied.push(gap.clone());
-                }
-                GapApplyOutcome::AlreadyInstrumented => {
-                    summary.skipped_existing += 1;
-                }
-                GapApplyOutcome::Unresolved => {
-                    summary.unresolved += 1;
-                }
-                GapApplyOutcome::SkippedPolicy => {
-                    summary.skipped_policy += 1;
-                }
-            }
-        }
-
-        if file_changed {
-            // Only `Bare` ever writes the short `instrument(..)` form
-            // that needs this import -- `Gated` always renders fully
-            // qualified (see `apply_gap`), so inserting it regardless
-            // of `policy` would leave a real `unused_imports` warning
-            // in any file where every applied gap was `Gated`.
-            if style == InstrumentAttrStyle::Short && policy == TracingApplyPolicy::Bare {
-                lines = ensure_use_instrument(lines);
-            }
+        if let Some((write, file_applied)) =
+            planner.plan_file(&crate_name, crate_root, &rel_path, file_gaps, &mut summary)?
+        {
+            planned.push(write);
             if dry_run {
-                tracing::info!(path = %path.display(), "dry run: would update file");
-            } else {
-                std::fs::write(&path, format!("{}\n", lines.join("\n")))?;
-                summary.applied_gaps.extend(file_applied);
+                tracing::info!(path = %crate_root.join(&rel_path).display(), "dry run: would update file");
             }
-            summary.changed_files += 1;
+            applied.extend(file_applied);
         }
+    }
+
+    crate::source_write::write_sources(&planned, dry_run, || Ok(()))?;
+    if dry_run {
+        summary.proposed_gaps = applied;
+    } else {
+        summary.applied_gaps = applied;
     }
 
     tracing::info!(

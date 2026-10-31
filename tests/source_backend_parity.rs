@@ -8,6 +8,9 @@ use cordial::{
 };
 use miette::{IntoDiagnostic, Result};
 
+#[path = "support/source_attribute_projection.rs"]
+mod source_attribute_projection;
+
 const SOURCE: &str = include_str!("fixtures/semantic_backend/syntax.rs.txt");
 
 #[tracing::instrument(level = "debug", skip(root), err(level = "warn"))]
@@ -43,6 +46,138 @@ fn module_scope(graph: &CrateIr) -> Result<cordial::SourceModuleScope> {
         .ok_or_else(|| miette::miette!("source module facts missing"))
 }
 
+#[tracing::instrument(level = "debug", skip(graph), err(level = "warn"))]
+fn file_attributes(graph: &CrateIr) -> Result<cordial::SourceFileAttributes> {
+    let node = graph
+        .nodes_matching(
+            &QueryBuilder::new()
+                .has_attr(cordial::ATTR_SOURCE_FILE_ATTRIBUTES)
+                .build(),
+        )
+        .into_iter()
+        .next()
+        .ok_or_else(|| miette::miette!("source attributes missing"))?;
+    graph
+        .source_file_attributes(node.id())
+        .into_diagnostic()?
+        .ok_or_else(|| miette::miette!("source attribute payload missing"))
+}
+
+#[tracing::instrument(level = "debug", skip(legacy, native), err(level = "warn"))]
+fn assert_attribute_contract(legacy: &CrateIr, native: &CrateIr) -> Result<()> {
+    let expected = file_attributes(legacy)?;
+    let actual = file_attributes(native)?;
+    assert_eq!(expected, actual, "complete file attribute inventory");
+    assert!(actual.lints().forbid_unsafe_code());
+    assert!(actual.lints().missing_docs_at_least_warn());
+    assert!(
+        actual
+            .items()
+            .iter()
+            .any(|item| item.path() == "AttributeOwner"
+                && item
+                    .attributes()
+                    .iter()
+                    .any(|attr| attr.meta() == "derive(Debug)")),
+        "top-level type attributes must reach the shared inventory"
+    );
+    assert!(
+        !actual
+            .items()
+            .iter()
+            .any(|item| item.path().starts_with("excluded_attributes::"))
+    );
+    for path in [
+        "attributed",
+        "<AttributeOwner<T, N> as AttributeTrait>::method",
+        "AttributeOwner<(&mut u32, [u8; 16]), 4>::tuple_method",
+        "inactive_attributes::nested",
+    ] {
+        assert!(
+            actual.items().iter().any(|item| item.path() == path
+                && item.attributes().iter().any(|attr| attr.instrument())),
+            "missing attributed owner {path}"
+        );
+    }
+    assert!(
+        actual
+            .items()
+            .iter()
+            .flat_map(|item| item.attributes())
+            .any(|attr| attr.meta().contains("\"keep : : spaces\"")),
+        "literal contents must survive token rendering"
+    );
+    let mut damaged = native.clone();
+    let node = damaged.nodes_matching(
+        &QueryBuilder::new()
+            .has_attr(cordial::ATTR_SOURCE_FILE_ATTRIBUTES)
+            .build(),
+    )[0]
+    .id();
+    damaged
+        .set_attr(
+            node,
+            cordial::ATTR_SOURCE_FILE_ATTRIBUTES,
+            serde_json::json!({"items": []}),
+        )
+        .into_diagnostic()?;
+    assert!(
+        damaged.source_file_attributes(node).is_err(),
+        "corrupt facts cannot become an empty inventory"
+    );
+    Ok(())
+}
+
+#[tracing::instrument(level = "debug", skip(database), err(level = "warn"))]
+fn assert_virtual_attribute_policies(database: &mut SourceDatabase, path: &Path) -> Result<()> {
+    for (source, unsafe_code, missing_docs) in [
+        (
+            "#![forbid(dead_code, reason = \"unsafe_code, missing_docs\")]\n",
+            false,
+            false,
+        ),
+        (
+            "#![cfg_attr(any(), forbid(unsafe_code), deny(missing_docs))]\n",
+            true,
+            true,
+        ),
+        (
+            "#![warn(nested(unsafe_code, missing_docs))]\n",
+            false,
+            false,
+        ),
+        ("#![allow(missing_docs)]\n", false, false),
+        (
+            "#![cfg_attr(any(), cfg_attr(any(), forbid(unsafe_code)))]\n",
+            false,
+            false,
+        ),
+        ("#![forbid(module::unsafe_code)]\n", true, false),
+        ("//! An itemless file.\n", false, false),
+    ] {
+        database
+            .change_file(path, source.into())
+            .into_diagnostic()?;
+        let graph = database
+            .project("source_parity", &[path.to_path_buf()])
+            .into_diagnostic()?;
+        let facts = file_attributes(&graph)?;
+        assert_eq!(facts.lints().forbid_unsafe_code(), unsafe_code, "{source}");
+        assert_eq!(
+            facts.lints().missing_docs_at_least_warn(),
+            missing_docs,
+            "{source}"
+        );
+        assert_eq!(
+            facts.insert_at(),
+            source.lines().count(),
+            "itemless insertion point"
+        );
+        assert!(facts.items().is_empty());
+    }
+    Ok(())
+}
+
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Result<()> {
@@ -65,6 +200,9 @@ fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Resul
     assert_eq!(legacy_scope.identifiers(), native_scope.identifiers());
     assert_eq!(legacy_scope.uses(), native_scope.uses());
     assert_eq!(legacy_scope, native_scope);
+    assert_attribute_contract(&legacy, &native)?;
+    source_attribute_projection::assert_graph_only_attributes(&legacy, root.path())?;
+    source_attribute_projection::assert_graph_only_attributes(&native, root.path())?;
     let query = QueryBuilder::new()
         .has_attr(cordial::ATTR_FUNCTION_SOURCE_SYNTAX)
         .build();
@@ -109,6 +247,7 @@ fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Resul
             "missing nested source item {name}"
         );
     }
+    assert_virtual_attribute_policies(&mut database, &path)?;
     database
         .change_file(&path, "fn broken( {".into())
         .into_diagnostic()?;
@@ -125,6 +264,7 @@ fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Resul
         .project("source_parity", &[path])
         .into_diagnostic()?;
     assert_eq!(module_scope(&native)?, module_scope(&restored)?);
+    assert_eq!(file_attributes(&native)?, file_attributes(&restored)?);
     assert_eq!(
         std::fs::read_to_string(root.path().join("src/lib.rs")).into_diagnostic()?,
         SOURCE

@@ -143,6 +143,7 @@ impl std::error::Error for PrefixSource {
 
 impl From<std::io::Error> for super::CordialError {
     #[track_caller]
+    #[instrument(level = "debug", skip(value))]
     fn from(value: std::io::Error) -> Self {
         Self::from_kind(super::CordialErrorKind::Io(IoSource::from(value)))
     }
@@ -150,6 +151,7 @@ impl From<std::io::Error> for super::CordialError {
 
 impl From<std::fmt::Error> for super::CordialError {
     #[track_caller]
+    #[instrument(level = "debug", skip(value))]
     fn from(value: std::fmt::Error) -> Self {
         Self::from_kind(super::CordialErrorKind::Fmt(FmtSource::from(value)))
     }

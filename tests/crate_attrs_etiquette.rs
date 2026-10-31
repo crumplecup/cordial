@@ -270,7 +270,7 @@ fn verus_target_with_assume_specification_skips_forbid_unsafe() -> miette::Resul
     write_lib(&crate_root, "pub fn ready() {}\n")?;
     fs::write(
         crate_root.join("src").join("carrier.rs"),
-        "pub assume_specification [char::from_str] (s: &str) -> (result: Result<char, ()>);\n",
+        "verus! { pub assume_specification [char::from_str] (s: &str) -> (result: Result<char, ()>); }\n",
     )
     .into_diagnostic()
     .wrap_err("write carrier")?;
@@ -280,9 +280,10 @@ fn verus_target_with_assume_specification_skips_forbid_unsafe() -> miette::Resul
         &CrateAttrsThresholds::default(),
     )
     .into_diagnostic()?;
-    assert!(
+    assert_eq!(
         !has(&records, CrateAttrsRuleId::ForbidUnsafe001),
-        "verus target with a real assume_specification site is exempt: {records:?}"
+        cfg!(feature = "verus_warnings"),
+        "Verus exemption requires the Verus integration feature: {records:?}"
     );
     assert!(
         has(&records, CrateAttrsRuleId::MissingDocs001),
@@ -313,7 +314,11 @@ fn session_uses_loaded_verus_source_for_crate_attrs_exemption() -> miette::Resul
         .findings()
         .map(|finding| finding.rule().id())
         .collect();
-    assert!(!ids.contains(&"CRATE-FORBID-UNSAFE-001"), "{ids:?}");
+    assert_eq!(
+        !ids.contains(&"CRATE-FORBID-UNSAFE-001"),
+        cfg!(feature = "verus_warnings"),
+        "Verus exemption requires the Verus integration feature: {ids:?}"
+    );
     assert!(ids.contains(&"CRATE-MISSING-DOCS-001"), "{ids:?}");
     Ok(())
 }
@@ -584,6 +589,49 @@ fn apply_inserts_both_after_crate_docs() -> miette::Result<()> {
         .find("pub fn ready()")
         .ok_or_else(|| miette::miette!("expected item in:\n{lib}"))?;
     assert!(docs_at < forbid_at && forbid_at < item_at, "order: {lib}");
+    Ok(())
+}
+
+#[test]
+fn apply_handles_library_entry_outside_src() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic()?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = \"custom_root\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[lib]\npath = \"library.rs\"\n",
+    )
+    .into_diagnostic()?;
+    let path = fixture.path().join("library.rs");
+    fs::write(&path, "//! Custom root.\n\npub fn ready() {}\n").into_diagnostic()?;
+    let before = scan_crate_attrs(
+        fixture.path(),
+        "custom_root",
+        &CrateAttrsThresholds::default(),
+    )
+    .into_diagnostic()?;
+    assert_eq!(before.len(), 2);
+    assert!(
+        before
+            .iter()
+            .all(|record| record.file() == Path::new("library.rs"))
+    );
+    let applied =
+        run_crate_attrs_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(applied.changed_files(), 1);
+    assert_eq!(applied.inserted_attrs(), 2);
+    assert_eq!(
+        fs::read_to_string(&path).into_diagnostic()?,
+        "//! Custom root.\n\n#![forbid(unsafe_code)]\n#![warn(missing_docs)]\npub fn ready() {}\n"
+    );
+    assert!(
+        scan_crate_attrs(
+            fixture.path(),
+            "custom_root",
+            &CrateAttrsThresholds::default()
+        )
+        .into_diagnostic()?
+        .is_empty()
+    );
     Ok(())
 }
 

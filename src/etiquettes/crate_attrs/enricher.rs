@@ -2,11 +2,9 @@ use crate::enricher::{member_crate_root, resolve_parent};
 use crate::error::CordialResult;
 use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, IrMut, IrView, NodeKind, NodeWeight, QueryBuilder};
-use crate::loader::SourceLoadView;
 use crate::objects::FileSpan;
-use syn::spanned::Spanned;
 
-use super::scan::{library_root_rs, scan_shared_crate_attrs};
+use super::scan::{library_facts, library_root_rs, scan_shared_crate_attrs};
 use super::types::CrateAttrsSiteRecord;
 
 const RECORD_ATTR: &str = "crate_attrs_record";
@@ -37,36 +35,25 @@ impl SourceEnricher for CrateAttrsInventoryEnricher {
         let policy = crate::config::load_session_config(session)
             .crate_attrs()
             .clone();
-        enrich_crate_attrs_evidence(ir, source, &crate_root, &policy)
+        enrich_crate_attrs_evidence(ir, &crate_root, &policy)
     }
 }
 
-/// Collect the crate-attribute decision and insertion position from one shared tree.
-#[instrument(level = "debug", skip(ir, source, policy), err(level = "warn"))]
+/// Derive crate-attribute decisions and insertion evidence from the shared IR.
+#[instrument(level = "debug", skip(ir, policy), err(level = "warn"))]
 pub(super) fn enrich_crate_attrs_evidence(
     ir: &mut dyn IrMut,
-    source: &SourceLoadView,
     crate_root: &std::path::Path,
     policy: &crate::config::CrateAttrsThresholds,
 ) -> CordialResult<()> {
-    let (records, verus_exempt) =
-        scan_shared_crate_attrs(source, crate_root, ir.crate_name(), policy)?;
+    let (records, verus_exempt) = scan_shared_crate_attrs(ir, crate_root, ir.crate_name(), policy)?;
     let root = ir.root()?;
     ir.set_attr(root, VERUS_EXEMPT_ATTR, serde_json::json!(verus_exempt))?;
-    let insert_at = if let Some(lib) = library_root_rs(crate_root)
-        && lib.is_file()
-    {
-        let file = source.parsed_file(&lib, CrateAttrsInventoryEnricher::ID)?;
-        Some(
-            file.syntax()
-                .items
-                .first()
-                .map(|item| item.span().start().line.saturating_sub(1))
-                .unwrap_or_else(|| file.source().lines().count()),
-        )
-    } else {
-        None
-    };
+    let insert_at = library_root_rs(crate_root)
+        .map(|lib| library_facts(ir, &lib))
+        .transpose()?
+        .flatten()
+        .map(|facts| facts.insert_at());
 
     for record in records {
         let parent = resolve_parent(ir, "<crate>")?;

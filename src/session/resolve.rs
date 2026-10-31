@@ -22,30 +22,35 @@ trait Hook {
 }
 
 impl Hook for dyn Loader + '_ {
+    #[instrument(level = "trace", skip(self))]
     fn hook_id(&self) -> &str {
         self.id()
     }
 }
 
 impl Hook for dyn IrEnricher + '_ {
+    #[instrument(level = "trace", skip(self))]
     fn hook_id(&self) -> &str {
         self.id()
     }
 }
 
 impl Hook for dyn Probe + '_ {
+    #[instrument(level = "trace", skip(self))]
     fn hook_id(&self) -> &str {
         self.id()
     }
 }
 
 impl Hook for dyn Assessor + '_ {
+    #[instrument(level = "trace", skip(self))]
     fn hook_id(&self) -> &str {
         self.id()
     }
 }
 
 impl Hook for dyn WorkspaceAssessor + '_ {
+    #[instrument(level = "trace", skip(self))]
     fn hook_id(&self) -> &str {
         self.id()
     }

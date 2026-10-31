@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::enricher::ScopeEnricher;
+use crate::enricher::{AttributeEnricher, ScopeEnricher};
 use crate::error::{CordialError, CordialResult};
 use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{BasicQuery, CrateIr, CrateView, CrateViewMut, IrView, WorkspaceIr};
@@ -30,7 +30,8 @@ pub(super) fn build_apply_ir(
         .build();
     let scope = ScopeEnricher;
     let inventory = FunctionInventoryEnricher;
-    let enrichers: [&dyn IrEnricher; 2] = [&scope, &inventory];
+    let attributes = AttributeEnricher;
+    let enrichers: [&dyn IrEnricher; 3] = [&scope, &inventory, &attributes];
     let mut workspace = WorkspaceIr::default();
 
     for target in targets {
@@ -169,6 +170,13 @@ pub(super) fn recipes_for_file(
             file.to_string(),
             line,
             recipe,
+            view.children(node.id(), crate::ir::EdgeKind::HasAttr)
+                .into_iter()
+                .map(|id| {
+                    view.source_attribute(id)
+                        .and_then(|attr| attr.ok_or_else(missing_recipe_fact))
+                })
+                .collect::<CordialResult<Vec<_>>>()?,
         ));
     }
     Ok(records)

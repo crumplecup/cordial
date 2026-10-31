@@ -150,6 +150,11 @@ fn report_tracing_apply_worklist(
     summary: &crate::etiquettes::tracing::InstrumentApplySummary,
     dry_run: bool,
 ) -> CordialResult<()> {
+    let gaps = if dry_run {
+        summary.proposed_gaps()
+    } else {
+        summary.applied_gaps()
+    };
     worklist::report(
         project_root,
         store,
@@ -159,7 +164,7 @@ fn report_tracing_apply_worklist(
         dry_run,
         |item| {
             item.checklist() == "tracing-instrument.checklist.md" && {
-                summary.applied_gaps().iter().any(|gap| {
+                gaps.iter().any(|gap| {
                     item.crate_name().as_deref() == Some(gap.crate_name())
                         && item.file().as_deref() == gap.rel_path().to_str()
                         && item.line().as_ref() == Some(&gap.line())

@@ -1,4 +1,7 @@
 //! Syntax preservation and conservative transformation boundaries.
+#![cfg_attr(any(), forbid(unsafe_code), warn(missing_docs))]
+#![deny(dead_code, reason = "not unsafe_code, missing_docs")]
+
 use crate::leaf::fallible;
 
 /// An explicit standard contract, with comments inside an unwrap suffix.
@@ -71,3 +74,32 @@ mod inline {
 }
 
 fn macro_boundary() { todo!("opaque return"); }
+
+/// Attribute inventory preserves docs without reparsing their spelling.
+#[cfg_attr(not(kani), tracing::instrument(level = "debug", skip(value), fields(note = "keep : : spaces")))]
+fn attributed(value: u32) { #![allow(unused)] let _ = value; }
+
+#[derive(Debug)]
+struct AttributeOwner<'a, T, const N: usize>(&'a T);
+trait AttributeTrait { fn method(&self); }
+impl<'a, T, const N: usize> AttributeTrait for AttributeOwner<'a, T, N> {
+    /// A method on a generic trait implementation.
+    #[tracing::instrument(skip_all)]
+    fn method(&self) {}
+}
+impl<'a> AttributeOwner<'a, (&'a mut u32, [u8; 0x10]), 4> {
+    #[instrument(level = "trace")]
+    fn tuple_method(&self) {}
+}
+#[cfg(test)]
+mod excluded_attributes {
+    #[instrument] fn excluded() {}
+}
+#[cfg(any())]
+mod inactive_attributes {
+    #[cfg_attr(not(kani), instrument)] fn nested() {}
+}
+#[cfg(any())]
+mod external_attributes;
+#[unsafe(no_mangle)]
+fn exported_attribute() {}

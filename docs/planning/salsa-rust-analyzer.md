@@ -1,8 +1,10 @@
 # A shared semantic backend with Salsa and rust-analyzer
 
-**Status:** Adoption in progress. Salsa and rust-analyzer are the selected
-source backend. Migrate existing collection through the shared loader and
-retire its `syn` ownership.
+**Status:** Paused on 2026-10-31 for the
+[automated tracing observability plan](tracing-observability.md). Preserve the
+collector checkpoints and pending work below. Salsa and rust-analyzer remain
+the selected source backend; resume migration through the shared loader and
+retirement of its `syn` ownership after tracing acceptance.
 Research and dependency compatibility checked on 2026-10-30.
 
 ## Purpose
@@ -324,6 +326,59 @@ not isolated parser timings.
 `cordial submit --tier build --deny-open` passed after clearing the new tracing
 and modularity findings. The deep tier was not rerun at this checkpoint.
 
+### Attribute projection checkpoint
+
+The loader now collects `SourceFileAttributes` on ordinary source module nodes.
+It carries snapshot digests, crate lint declarations, the crate-attribute apply
+insertion line, the existing Verus lexical marker, and the supported item
+attribute inventory. The database projection produces the same typed contract
+from its canonical syntax carrier. Item keys preserve the tracing inventory's
+generic impl-method identities; test-only modules keep their existing exclusion.
+
+`AttributeEnricher` materializes `HasAttr` nodes and instrumentation flags from
+`IrView`. The crate-attribute scanner and inventory enricher also consume those
+facts, including apply insertion positions and Verus exemption evidence. They
+no longer walk the shared syntax themselves. The loader resolves custom library
+entry paths before collecting facts, including entries outside `src/`.
+
+The parity specimen now includes conditional attributes, doc comments, inner
+function attributes, generic trait/inherent methods, inactive modules, and
+literal contents that must survive normalization. A graph-only regression runs
+attribute enrichment with an empty source view; malformed serialized evidence
+is an error. Virtual revisions check lint names versus nested arguments and
+literal contents, itemless files, and restored attribute payloads. The expanded
+specimen also exposed a receiver-token difference in the namespace projection;
+the native collector now preserves that existing contract. Attribute parity
+also exposed an old visitor omission: top-level structs and enums did not reach
+the attribute attachment routine. Both projections now include these owners.
+
+Focused validation passed: complete source-backend parity, 24 crate-attribute
+tests (including the slim crate-attrs feature build), 22 tracing tests, 41
+tracing-apply tests, and two attribute-evidence tests.
+
+Dogfooding exposed a tracing apply defect: its pipeline omitted
+`AttributeEnricher`, so assessment replaced missing evidence with defaults and
+selected compliant functions for destructive rewrites. Apply now runs the
+attribute enricher, and assessment rejects missing attribute evidence. A CLI
+regression preserves compliant annotations byte for byte, repairs the one
+deficient function, checks off exactly one item, and verifies that a second
+apply makes no edits. This regression failed before the fix.
+
+The active tracing corrective plan extended the projection with complete
+attribute and nested argument ranges. Both backend projections preserve those
+facts. A declaration multimap plus file/line joins prevents same-named cfg
+alternatives from sharing attributes. Existing annotation repairs now preserve
+unrelated choices and use the common source transaction; ambiguous or
+unsupported forms remain unchanged. See the active plan for the verified
+checkpoint and the remaining observability work.
+
+This completes attribute materialization and crate-attribute policy collection,
+not the entire file-policy group. The compatibility collector remains inside
+the loader's current single-parse path until production cutover. Bare Verus
+declarations outside supported macro islands remain part of the unresolved
+proof-dialect migration; the crate-attribute fixture now uses the same `verus!`
+input shape as its pipeline counterpart.
+
 ### Collector migration inventory
 
 The starting audit found 53 files consuming `.syntax()` or `.macro_syntax()`
@@ -335,7 +390,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | --- | --- | --- |
 | Source ownership and graph population | `loader/source.rs`, `source/cache.rs`, `source_work.rs`, `populate.rs` | Canonical text inputs first; then syntax carriers, source ranges, item/module population, inactive syntax. Remove `ParsedSource.syntax`, the thread-local AST cache, and the `syn` parser on cutover. |
 | Syntax/source facts and direct calls | `ir/function_source.rs`, `ir/source_calls/collect.rs`, `enricher/source_calls.rs` | Signatures, exact edit ranges, declaration identity, instantiated contracts, resolved calls. Replace name-based resolution using semantic facts. |
-| Attributes and file policy | `enricher/attribute.rs`; `allows`, `crate_attrs`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity`, `pageantry` scans | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
+| Attributes and file policy | Attribute materialization and `crate_attrs` now consume loader-projected IR; remaining: `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity`, `pageantry` scans | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
 | API and layout | `derives/scan.rs`, `derives/path_inclusion.rs`, `visibility/scan/tree.rs`, `cli_layout/{tree,scan,scan/catalog}.rs` | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | `tracing/scan.rs`, `call_graph/collect.rs`, `{subscriber,boundary,print}/scan.rs` | Function/call identity, attributes, macro input syntax, executable boundary facts; retain apply ranges and worklist accounting. |
 | Error analysis | `enricher/error/scan.rs`; `error_sites`, `error_chain`, `internal_error_chain/{architecture,type_graph}` | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
@@ -403,9 +458,11 @@ Reserve the all-tier gate for completion of the migration plan.
 
 ## Current next step
 
-Port the attribute and file-policy collectors onto the database-issued syntax
-carrier and existing IR contracts. Preserve inactive-code policy coverage and
-golden findings. Then work through API/layout, tracing, error/apply, and proof
+Port the remaining file-policy collectors onto the database-issued syntax
+carrier and existing IR contracts, starting with `allows` and cfg policy.
+Attribute materialization and crate-attribute policy already consume the new
+loader projection. Preserve inactive-code policy coverage and golden findings.
+Then work through API/layout, tracing, error/apply, and proof
 collection in the inventory above. Complete the Cargo context driver before
 using semantic facts to authorize transformations. Continue
 implement / focused checks / build-tier submit / commit. Keep the selected

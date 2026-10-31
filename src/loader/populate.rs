@@ -91,7 +91,16 @@ impl SourceLoadView {
             )?;
         }
         for file in self.files() {
-            self.load_file(ir, root, file)?;
+            let syntax = self.parsed_file(file.path(), "source-ir")?;
+            self.load_file(ir, root, &syntax)?;
+        }
+        if let Some(crate_root) = self.src_root().parent()
+            && let Some(lib) = super::library_root_rs(crate_root)
+            && lib.is_file()
+            && !self.files().iter().any(|file| file.path() == &lib)
+        {
+            let syntax = self.parsed_file(&lib, "source-ir")?;
+            self.load_file(ir, root, &syntax)?;
         }
         Ok(())
     }
@@ -102,9 +111,9 @@ impl SourceLoadView {
         &self,
         ir: &mut CrateIr,
         parent: crate::ir::NodeId,
-        file: &SourceFile,
+        file: &super::SharedParsedFile,
     ) -> CordialResult<()> {
-        let syntax = self.parsed_file(file.path(), "source-ir")?;
+        let syntax = file;
 
         let parts = module_path_from_src_file(self.src_root(), file.path());
         let module_path = parts.join("::");
@@ -116,7 +125,12 @@ impl SourceLoadView {
         ir.set_attr(
             module_node,
             crate::ir::ATTR_SOURCE_MODULE_SCOPE,
-            serde_json::to_value(crate::ir::SourceModuleScope::collect(&syntax))?,
+            serde_json::to_value(crate::ir::SourceModuleScope::collect(syntax))?,
+        )?;
+        ir.set_attr(
+            module_node,
+            crate::ir::ATTR_SOURCE_FILE_ATTRIBUTES,
+            serde_json::to_value(crate::ir::SourceFileAttributes::collect(syntax))?,
         )?;
         ir.set_attr(
             module_node,
@@ -133,7 +147,7 @@ impl SourceLoadView {
         super::source_work::walk(file.path(), "source-ir", || {
             for (index, item) in syntax.syntax().items.iter().enumerate() {
                 let node = self.load_item(ir, module_node, &module_path, file.path(), item)?;
-                if let Some(facts) = crate::ir::FunctionSourceSyntax::collect(&syntax, index) {
+                if let Some(facts) = crate::ir::FunctionSourceSyntax::collect(syntax, index) {
                     ir.set_attr(
                         node,
                         crate::ir::ATTR_FUNCTION_SOURCE_SYNTAX,

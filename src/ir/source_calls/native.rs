@@ -94,6 +94,16 @@ fn collect_identifiers(file: &DatabaseSource<'_>) -> Vec<String> {
         {
             continue;
         }
+        // A receiver's `self` is a language token rather than a visited Ident
+        // in the compatibility contract. Written paths such as `self::item`
+        // and value expressions still contribute their ordinary identifiers.
+        if token.kind() == SyntaxKind::SELF_KW
+            && token
+                .parent_ancestors()
+                .any(|node| ast::SelfParam::can_cast(node.kind()))
+        {
+            continue;
+        }
         identifiers.push(
             token
                 .text()

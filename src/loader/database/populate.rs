@@ -42,6 +42,10 @@ impl Projection {
             crate::ir::ATTR_SOURCE_MODULE_SCOPE,
             serde_json::to_value(crate::ir::SourceModuleScope::collect_native(source))?,
         );
+        module.set_attr(
+            crate::ir::ATTR_SOURCE_FILE_ATTRIBUTES,
+            serde_json::to_value(crate::ir::SourceFileAttributes::collect_native(source))?,
+        );
         module.set_attr("qualified_path", module_path.into());
         let module = graph.insert_node(module);
         graph.insert_edge(graph.root(), module, EdgeKind::Contains)?;

@@ -82,7 +82,7 @@ pub fn run_crate_attrs_apply(
         let source_view = SourceLoadView::for_target(&target)?;
         let mut ir = CrateIr::new(crate_name);
         source_view.populate_ir(&mut ir)?;
-        enrich_crate_attrs_evidence(&mut ir, &source_view, crate_root, &policy)?;
+        enrich_crate_attrs_evidence(&mut ir, crate_root, &policy)?;
         let Some((records, insert_at)) = crate_attrs_apply_evidence_from_ir(&ir)? else {
             summary.skipped_existing += 1;
             continue;

@@ -185,11 +185,13 @@ impl CrateIr {
         }
 
         let root = snapshot.root;
+        let mut indexes = snapshot.indexes;
+        indexes.rebuild_by_path(&graph);
         Ok(Self {
             crate_name: snapshot.crate_name,
             root,
             graph,
-            indexes: snapshot.indexes,
+            indexes,
         })
     }
 

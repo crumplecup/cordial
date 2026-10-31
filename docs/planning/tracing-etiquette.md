@@ -1,5 +1,10 @@
 # Tracing etiquette
 
+**Follow-up:** [Automated tracing as a sensible observability default](tracing-observability.md)
+is the active corrective plan as of 2026-10-31. It supersedes full-attribute
+replacement and refines the error-reporting policy described below. Historical
+counts here are not the current worklist.
+
 Upgrade the tracing etiquette from a missing-`#[instrument]` census to a
 **classified recommendation**: every function gets a use-class, a
 complexity, and a target recipe. Apply writes that recipe. Volume is a

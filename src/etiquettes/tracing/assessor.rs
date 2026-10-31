@@ -54,7 +54,9 @@ impl Assessor for TracingAssessor {
                 }
                 RECIPE_DELTA_LABEL => {
                     let present =
-                        present_instrument(ir, parsed.anchor.node_id()).unwrap_or_default();
+                        present_instrument(ir, parsed.anchor.node_id()).ok_or_else(|| {
+                            crate::CordialError::workspace_source_facts_missing("tracing attribute")
+                        })?;
                     let kinds = recipe_deltas(
                         &parsed.recipe,
                         &present,

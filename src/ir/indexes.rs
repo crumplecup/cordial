@@ -56,6 +56,9 @@ impl From<&str> for QualifiedPath {
 pub struct IrIndexes {
     /// Node ids keyed by `foo::bar` path.
     by_path: HashMap<String, NodeId>,
+    /// All declarations at a path, including configuration alternatives.
+    #[serde(default)]
+    declarations_by_path: HashMap<String, Vec<NodeId>>,
     /// Node ids grouped by kind tag.
     by_kind: HashMap<String, Vec<NodeId>>,
 }
@@ -72,6 +75,13 @@ impl IrIndexes {
 
         if let Some(path) = weight.attr("qualified_path").and_then(|v| v.as_str()) {
             self.by_path.insert(path.to_string(), node);
+            let declarations = self
+                .declarations_by_path
+                .entry(path.to_string())
+                .or_default();
+            if !declarations.contains(&node) {
+                declarations.push(node);
+            }
         }
     }
 
@@ -84,6 +94,7 @@ impl IrIndexes {
         graph: &petgraph::stable_graph::StableDiGraph<NodeWeight, EdgeWeight>,
     ) {
         self.by_path.clear();
+        self.declarations_by_path.clear();
         let mut preferred: std::collections::BTreeMap<String, (NodeId, u8)> =
             std::collections::BTreeMap::new();
         for index in graph.node_indices() {
@@ -94,6 +105,10 @@ impl IrIndexes {
             let Some(path) = weight.attr("qualified_path").and_then(|v| v.as_str()) else {
                 continue;
             };
+            self.declarations_by_path
+                .entry(path.to_string())
+                .or_default()
+                .push(node);
             let priority = match weight.attr("ir_origin").and_then(|v| v.as_str()) {
                 Some("rustdoc") => 2,
                 Some("source") => 1,

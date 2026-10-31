@@ -26,7 +26,13 @@ mod query;
 #[cfg(feature = "rustdoc")]
 mod rustdoc_query;
 mod semantic;
+mod source_attributes;
 mod source_calls;
+pub use source_attributes::{
+    ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_FILE_ATTRIBUTES, SourceAttribute, SourceAttributeArgument,
+    SourceAttributeArguments, SourceAttributedItem, SourceCrateLints, SourceFileAttributes,
+    SourceInstrumentSyntax, is_cfg_test, is_gated_instrument_attr, is_instrument_attr,
+};
 #[cfg(feature = "homecoming_std")]
 mod trait_impls;
 mod view;

@@ -246,6 +246,7 @@ impl From<serde_json::Error> for super::CordialError {
 
 impl From<config::ConfigError> for super::CordialError {
     #[track_caller]
+    #[instrument(level = "debug", skip(value))]
     fn from(value: config::ConfigError) -> Self {
         Self::from_kind(super::CordialErrorKind::Config(ConfigSource::from(value)))
     }

@@ -128,6 +128,14 @@ impl IrView for CrateView<'_> {
             .crate_ir(&self.crate_name)
             .and_then(|ir| ir.node_by_path(path))
     }
+
+    #[instrument(level = "trace", skip(self, path))]
+    fn nodes_by_path(&self, path: &str) -> Vec<NodeId> {
+        self.workspace
+            .crate_ir(&self.crate_name)
+            .map(|ir| ir.nodes_by_path(path))
+            .unwrap_or_default()
+    }
 }
 
 /// Mutable view over one crate inside a workspace.
@@ -254,6 +262,14 @@ impl IrView for CrateViewMut<'_> {
         self.workspace
             .crate_ir(&self.crate_name)
             .and_then(|ir| ir.node_by_path(path))
+    }
+
+    #[instrument(level = "trace", skip(self, path))]
+    fn nodes_by_path(&self, path: &str) -> Vec<NodeId> {
+        self.workspace
+            .crate_ir(&self.crate_name)
+            .map(|ir| ir.nodes_by_path(path))
+            .unwrap_or_default()
     }
 }
 

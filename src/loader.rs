@@ -2,6 +2,8 @@ use tracing::instrument;
 mod database;
 pub(crate) use database::DatabaseSource;
 pub use database::SourceDatabase;
+mod library_root;
+pub use library_root::library_root_rs;
 mod macro_syntax;
 mod populate;
 mod scan_roots;
@@ -21,7 +23,12 @@ pub use source::{SharedMacroSyntax, SharedParsedFile, SourceFile, SourceLoadView
 pub(crate) use source::{SourceEditView, SourceSnapshot};
 #[cfg(feature = "allows")]
 pub(crate) use source_work::parse as source_parse;
-#[cfg(feature = "_attribute_scan")]
+#[cfg(any(
+    feature = "allows",
+    feature = "panics",
+    feature = "error_sites",
+    feature = "internal_error_chain"
+))]
 pub(crate) use source_work::walk as source_walk;
 
 /// Opaque bundle produced by a loader.

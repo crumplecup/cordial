@@ -86,6 +86,33 @@ pub trait IrView {
             .transpose()?)
     }
 
+    /// Read file attribute evidence collected by the source loader.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn source_file_attributes(
+        &self,
+        id: NodeId,
+    ) -> CordialResult<Option<super::SourceFileAttributes>> {
+        Ok(self
+            .node(id)
+            .and_then(|node| {
+                node.attr(super::ATTR_SOURCE_FILE_ATTRIBUTES)
+                    .map(|value| serde_json::from_value(value.clone()))
+            })
+            .transpose()?)
+    }
+
+    /// Read the located syntax attached by the shared attribute enricher.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn source_attribute(&self, id: NodeId) -> CordialResult<Option<super::SourceAttribute>> {
+        Ok(self
+            .node(id)
+            .and_then(|node| {
+                node.attr(super::ATTR_SOURCE_ATTRIBUTE)
+                    .map(|value| serde_json::from_value(value.clone()))
+            })
+            .transpose()?)
+    }
+
     /// Read namespace evidence collected by the source loader.
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
     fn source_module_scope(&self, id: NodeId) -> CordialResult<Option<super::SourceModuleScope>> {
@@ -182,6 +209,46 @@ pub trait IrView {
     fn children(&self, id: NodeId, kind: EdgeKind) -> Vec<NodeId>;
     /// Node id for a `foo::bar` path, if the path index knows it.
     fn node_by_path(&self, path: &str) -> Option<NodeId>;
+
+    /// All declarations at a path; a qualified name alone is not an identity.
+    #[instrument(level = "trace", skip(self))]
+    fn nodes_by_path(&self, path: &str) -> Vec<NodeId> {
+        self.nodes_matching(
+            &super::QueryBuilder::new()
+                .with_attr("qualified_path", path)
+                .build(),
+        )
+        .into_iter()
+        .map(|node| node.id())
+        .collect()
+    }
+
+    /// Join source evidence to its declaration, never to a same-named sibling.
+    /// Ambiguous locations require more evidence rather than an arbitrary pick.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn source_node_at(
+        &self,
+        path: &str,
+        file: &std::path::Path,
+        line: u32,
+    ) -> CordialResult<Option<NodeId>> {
+        use crate::objects::SourceSpan;
+        let mut matching = self.nodes_by_path(path).into_iter().filter(|id| {
+            self.node(*id).is_some_and(|node| {
+                node.weight()
+                    .span()
+                    .as_ref()
+                    .is_some_and(|span| span.file() == file && span.line() == line)
+            })
+        });
+        let first = matching.next();
+        if matching.next().is_some() {
+            return Err(crate::CordialError::workspace_source_facts_missing(
+                "unique source declaration",
+            ));
+        }
+        Ok(first)
+    }
 
     /// Cargo kinds recorded on the crate root, empty when unknown.
     ///
@@ -342,6 +409,15 @@ impl IrView for CrateIr {
     fn node_by_path(&self, path: &str) -> Option<NodeId> {
         self.indexes().by_path().get(path).copied()
     }
+
+    #[instrument(level = "trace", skip(self, path))]
+    fn nodes_by_path(&self, path: &str) -> Vec<NodeId> {
+        self.indexes()
+            .declarations_by_path()
+            .get(path)
+            .cloned()
+            .unwrap_or_default()
+    }
 }
 
 impl IrMut for CrateIr {
@@ -355,7 +431,7 @@ impl IrMut for CrateIr {
         CrateIr::insert_edge(self, from, to, kind)
     }
 
-    #[instrument(level = "trace", skip(self, node, value), err(level = "warn"))]
+    #[instrument(level = "trace", skip(self, node, value))]
     fn set_attr(&mut self, node: NodeId, key: &str, value: serde_json::Value) -> CordialResult<()> {
         CrateIr::set_attr(self, node, key, value)
     }

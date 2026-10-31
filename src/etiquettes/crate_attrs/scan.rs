@@ -1,23 +1,18 @@
 //! Resolve the library root and inspect crate-level inner attributes.
 
-use std::path::{Path, PathBuf};
+pub use crate::loader::library_root_rs;
+use std::path::Path;
 
-use syn::punctuated::Punctuated;
-use syn::{Attribute, File, Meta, MetaList, Token};
+use crate::ir::{CrateIr, IrView, QueryBuilder, SourceCrateLints, SourceFileAttributes};
 
 use crate::config::CrateAttrsThresholds;
 use crate::error::CordialResult;
 use crate::loader::SourceLoadView;
+use crate::objects::SourceSpan;
 
 use super::types::{CrateAttrsRuleId, CrateAttrsSiteRecord};
 
 use tracing::instrument;
-
-#[derive(Debug, Default, Clone, Copy)]
-struct CrateLintPresence {
-    forbid_unsafe_code: bool,
-    missing_docs_at_least_warn: bool,
-}
 
 /// Scan the crate's library root for missing crate-level lint attributes.
 #[instrument(level = "debug", skip(policy), err(level = "warn"))]
@@ -31,20 +26,18 @@ pub fn scan_crate_attrs(
     };
 
     let source = SourceLoadView::for_crate_root(crate_root, crate_name)?;
-    let presence = if lib.is_file() {
-        let file = source.parsed_file(&lib, "crate-attrs-standalone")?;
-        inspect_file(file.syntax())
-    } else {
-        CrateLintPresence::default()
-    };
-
-    let verus_exempt = verus_exemption::is_unsafe_forbid_exempt_verus_target(crate_root, &source);
+    let mut ir = CrateIr::new(crate_name);
+    source.populate_ir(&mut ir)?;
+    let presence = library_facts(&ir, &lib)?
+        .map(|facts| *facts.lints())
+        .unwrap_or_default();
+    let verus_exempt = verus_exemption::is_unsafe_forbid_exempt_verus_target(crate_root, &ir)?;
     records_for_presence(crate_root, crate_name, policy, &lib, presence, verus_exempt)
 }
 
-#[instrument(level = "debug", skip(source, policy), err(level = "warn"))]
+#[instrument(level = "debug", skip(ir, policy), err(level = "warn"))]
 pub(super) fn scan_shared_crate_attrs(
-    source: &SourceLoadView,
+    ir: &dyn IrView,
     crate_root: &Path,
     crate_name: &str,
     policy: &CrateAttrsThresholds,
@@ -52,13 +45,10 @@ pub(super) fn scan_shared_crate_attrs(
     let Some(lib) = library_root_rs(crate_root) else {
         return Ok((Vec::new(), false));
     };
-    let presence = if lib.is_file() {
-        let file = source.parsed_file(&lib, "crate-attrs-inventory")?;
-        inspect_file(file.syntax())
-    } else {
-        CrateLintPresence::default()
-    };
-    let verus_exempt = verus_exemption::is_unsafe_forbid_exempt_verus_target(crate_root, source);
+    let presence = library_facts(ir, &lib)?
+        .map(|facts| *facts.lints())
+        .unwrap_or_default();
+    let verus_exempt = verus_exemption::is_unsafe_forbid_exempt_verus_target(crate_root, ir)?;
     let records =
         records_for_presence(crate_root, crate_name, policy, &lib, presence, verus_exempt)?;
     Ok((records, verus_exempt))
@@ -70,7 +60,7 @@ fn records_for_presence(
     crate_name: &str,
     policy: &CrateAttrsThresholds,
     lib: &Path,
-    presence: CrateLintPresence,
+    presence: SourceCrateLints,
     verus_exempt: bool,
 ) -> CordialResult<Vec<CrateAttrsSiteRecord>> {
     let mut file = lib.to_path_buf();
@@ -79,7 +69,7 @@ fn records_for_presence(
     }
     let line = 1;
     let mut records = Vec::new();
-    if !policy.skip_unsafe(crate_name) && !presence.forbid_unsafe_code && !verus_exempt {
+    if !policy.skip_unsafe(crate_name) && !presence.forbid_unsafe_code() && !verus_exempt {
         records.push(
             CrateAttrsSiteRecord::builder()
                 .rule_id(CrateAttrsRuleId::ForbidUnsafe001)
@@ -90,7 +80,7 @@ fn records_for_presence(
                 .build()?,
         );
     }
-    if !policy.skip_missing_docs(crate_name) && !presence.missing_docs_at_least_warn {
+    if !policy.skip_missing_docs(crate_name) && !presence.missing_docs_at_least_warn() {
         records.push(
             CrateAttrsSiteRecord::builder()
                 .rule_id(CrateAttrsRuleId::MissingDocs001)
@@ -118,151 +108,73 @@ fn records_for_presence(
 /// way has no reason to be exempt.
 #[cfg(feature = "verus_warnings")]
 mod verus_exemption {
+    use crate::CordialResult;
+    use crate::ir::{ATTR_SOURCE_FILE_ATTRIBUTES, IrView, QueryBuilder};
     use std::path::Path;
 
-    use crate::loader::SourceLoadView;
-    use tracing::instrument;
-
-    #[instrument(level = "debug", skip(source))]
+    #[tracing::instrument(level = "trace", skip(ir), err(level = "warn"))]
     pub(super) fn is_unsafe_forbid_exempt_verus_target(
         crate_root: &Path,
-        source: &SourceLoadView,
-    ) -> bool {
-        crate::etiquettes::verus_warnings::crate_is_verus_target(crate_root)
-            && crate_uses_assume_specification(source)
-    }
-
-    /// Whether any `.rs` file under `crate_root/src` literally mentions
-    /// `assume_specification` -- a plain substring search, not a real parse:
-    /// the construct only compiles under the real `verus` toolchain's own
-    /// extended grammar (`verus_syn`), which this scanner has no reason to
-    /// depend on just to recognize the one keyword that triggers the
-    /// `forbid(unsafe_code)` conflict this exemption exists for.
-    #[instrument(level = "debug", skip(source))]
-    fn crate_uses_assume_specification(source: &SourceLoadView) -> bool {
-        source
-            .files()
-            .iter()
-            .any(|file| file.source().contains("assume_specification"))
+        ir: &dyn IrView,
+    ) -> CordialResult<bool> {
+        if !crate::etiquettes::verus_warnings::crate_is_verus_target(crate_root) {
+            return Ok(false);
+        }
+        for node in ir.nodes_matching(
+            &QueryBuilder::new()
+                .has_attr(ATTR_SOURCE_FILE_ATTRIBUTES)
+                .build(),
+        ) {
+            if ir
+                .source_file_attributes(node.id())?
+                .is_some_and(|facts| facts.assume_specification())
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 }
 
 #[cfg(not(feature = "verus_warnings"))]
 mod verus_exemption {
+    use crate::{CordialResult, ir::IrView};
     use std::path::Path;
 
-    use crate::loader::SourceLoadView;
-    use tracing::instrument;
-
-    #[instrument(level = "trace", skip(source), ret)]
+    #[tracing::instrument(level = "trace", skip(ir))]
     pub(super) fn is_unsafe_forbid_exempt_verus_target(
         crate_root: &Path,
-        source: &SourceLoadView,
-    ) -> bool {
-        let _ = (crate_root, source);
-        false
+        ir: &dyn IrView,
+    ) -> CordialResult<bool> {
+        let _ = (crate_root, ir);
+        Ok(false)
     }
 }
 
-/// Absolute path of this package's library root, if it has one.
-#[instrument(level = "debug")]
-pub fn library_root_rs(crate_root: &Path) -> Option<PathBuf> {
-    let default = crate_root.join("src").join("lib.rs");
-    let manifest = crate_root.join("Cargo.toml");
-    if manifest.is_file()
-        && let Ok(text) = std::fs::read_to_string(&manifest)
-        && let Ok(parsed) = toml::from_str::<toml::Value>(&text)
-    {
-        if let Some(path) = parsed
-            .get("lib")
-            .and_then(|lib| lib.get("path"))
-            .and_then(|path| path.as_str())
+/// Read the library's collected facts; an existing file without evidence is an error.
+#[instrument(level = "debug", skip(ir), err(level = "warn"))]
+pub(super) fn library_facts(
+    ir: &dyn IrView,
+    lib: &Path,
+) -> CordialResult<Option<SourceFileAttributes>> {
+    for node in ir.nodes_matching(
+        &QueryBuilder::new()
+            .has_attr(crate::ir::ATTR_SOURCE_FILE_ATTRIBUTES)
+            .build(),
+    ) {
+        if node
+            .weight()
+            .span()
+            .as_ref()
+            .is_some_and(|span| span.file() == lib)
         {
-            return Some(crate_root.join(path));
-        }
-        if parsed.get("lib").is_some() {
-            return Some(default);
+            return ir.source_file_attributes(node.id());
         }
     }
-    default.is_file().then_some(default)
-}
-
-#[instrument(level = "debug", skip(file))]
-fn inspect_file(file: &File) -> CrateLintPresence {
-    let mut presence = CrateLintPresence::default();
-    for attr in &file.attrs {
-        apply_attr(attr, &mut presence);
+    if lib.is_file() {
+        return Err(crate::CordialError::workspace_source_facts_missing(
+            "library attributes",
+        ));
     }
-    presence
-}
-
-#[instrument(level = "debug", skip(attr, presence))]
-fn apply_attr(attr: &Attribute, presence: &mut CrateLintPresence) {
-    match &attr.meta {
-        Meta::List(list) if is_lint_level(&list.path, "forbid") => {
-            apply_level("forbid", list, presence);
-        }
-        Meta::List(list) if is_lint_level(&list.path, "deny") => {
-            apply_level("deny", list, presence);
-        }
-        Meta::List(list) if is_lint_level(&list.path, "warn") => {
-            apply_level("warn", list, presence);
-        }
-        Meta::List(list) if list.path.is_ident("cfg_attr") => {
-            apply_cfg_attr(list, presence);
-        }
-        _ => {}
-    }
-}
-
-#[instrument(level = "trace", skip(path), ret)]
-fn is_lint_level(path: &syn::Path, level: &str) -> bool {
-    path.is_ident(level)
-}
-
-#[instrument(level = "debug", skip(list, presence))]
-fn apply_level(level: &str, list: &MetaList, presence: &mut CrateLintPresence) {
-    for name in nested_lint_names(list) {
-        match (level, name.as_str()) {
-            ("forbid", "unsafe_code") => presence.forbid_unsafe_code = true,
-            ("forbid" | "deny" | "warn", "missing_docs") => {
-                presence.missing_docs_at_least_warn = true;
-            }
-            _ => {}
-        }
-    }
-}
-
-#[instrument(level = "debug", skip(list, presence))]
-fn apply_cfg_attr(list: &MetaList, presence: &mut CrateLintPresence) {
-    let Ok(nested) = list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated) else {
-        return;
-    };
-    for meta in nested.into_iter().skip(1) {
-        let Meta::List(inner) = meta else {
-            continue;
-        };
-        if inner.path.is_ident("forbid") {
-            apply_level("forbid", &inner, presence);
-        } else if inner.path.is_ident("deny") {
-            apply_level("deny", &inner, presence);
-        } else if inner.path.is_ident("warn") {
-            apply_level("warn", &inner, presence);
-        }
-    }
-}
-
-#[instrument(level = "debug", skip(list))]
-fn nested_lint_names(list: &MetaList) -> Vec<String> {
-    let Ok(nested) = list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated) else {
-        return Vec::new();
-    };
-    nested
-        .into_iter()
-        .filter_map(|meta| match meta {
-            Meta::Path(path) => path.segments.last().map(|seg| seg.ident.to_string()),
-            Meta::List(inner) => inner.path.segments.last().map(|seg| seg.ident.to_string()),
-            Meta::NameValue(nv) => nv.path.segments.last().map(|seg| seg.ident.to_string()),
-        })
-        .collect()
+    Ok(None)
 }

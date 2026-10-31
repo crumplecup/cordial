@@ -18,6 +18,56 @@ fn write_minimal_crate_manifest(root: &Path, crate_name: &str) -> miette::Result
 }
 
 #[test]
+fn tracing_keeps_cfg_alternative_declarations_separate() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic()?;
+    fs::create_dir(fixture.path().join("src")).into_diagnostic()?;
+    write_minimal_crate_manifest(fixture.path(), "cfg_alternatives")?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        r#"#[cfg(feature = "alternate")]
+#[tracing::instrument(level = "trace", skip_all)]
+pub fn choose() -> Result<(), std::io::Error> { Ok(()) }
+
+#[cfg(not(feature = "alternate"))]
+#[tracing::instrument(level = "trace", skip_all, err(level = "warn"))]
+pub fn choose() -> Result<(), std::io::Error> { Ok(()) }
+"#,
+    )
+    .into_diagnostic()?;
+    let store = tempfile::tempdir().into_diagnostic()?;
+    let session = SessionBuilder::new(fixture.path())
+        .with_store_root(store.path())
+        .register(&*TRACING_ETIQUETTE)
+        .build();
+    session.run(&RunAll).into_diagnostic()?;
+    let csv = fs::read_to_string(store.path().join("findings/tracing-instrument.csv"))
+        .into_diagnostic()?;
+    let rows: Vec<_> = csv
+        .lines()
+        .filter(|line| line.contains(",choose,"))
+        .collect();
+    assert_eq!(
+        rows.len(),
+        2,
+        "cfg alternatives must retain both declarations: {csv}"
+    );
+    let checklist = fs::read_to_string(
+        store
+            .path()
+            .join("findings/tracing-instrument.checklist.md"),
+    )
+    .into_diagnostic()?;
+    assert!(checklist.contains("src/lib.rs:1"), "{checklist}");
+    assert!(
+        !checklist.contains("src/lib.rs:5"),
+        "a sibling's missing err must not contaminate the compliant declaration: {checklist}"
+    );
+    assert!(checklist.contains("TRACING-ERR-MISSING"), "{checklist}");
+    Ok(())
+}
+
+#[test]
 fn tracing_etiquette_detects_missing_instrument() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;

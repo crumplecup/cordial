@@ -35,6 +35,7 @@ pub(super) struct ApplyRecipeRecord {
     #[getter(copy)]
     line: u32,
     recipe: InstrumentRecipe,
+    attributes: Vec<crate::ir::SourceAttribute>,
 }
 
 #[instrument(level = "debug")]
@@ -48,14 +49,31 @@ pub(super) fn attr_style(lines: &[String]) -> InstrumentAttrStyle {
     }
 }
 
-#[instrument(level = "debug", skip(gap, recipe, style, policy), err(level = "warn"))]
+#[instrument(
+    level = "debug",
+    skip(lines, source, gap, record, style, policy),
+    err(level = "warn")
+)]
 pub(super) fn apply_gap(
     lines: &mut Vec<String>,
+    source: &str,
     gap: &InstrumentGap,
-    recipe: &InstrumentRecipe,
+    record: &ApplyRecipeRecord,
     style: InstrumentAttrStyle,
     policy: &TracingApplyPolicy,
 ) -> CordialResult<GapApplyOutcome> {
+    let recipe = record.recipe();
+    let existing: Vec<_> = record
+        .attributes()
+        .iter()
+        .filter(|attr| attr.instrument())
+        .collect();
+    if !existing.is_empty() {
+        return Ok(match existing.as_slice() {
+            [attr] => super::preserve::repair(lines, source, attr, recipe, policy),
+            _ => GapApplyOutcome::Unresolved,
+        });
+    }
     let Some(fn_idx) = find_fn_line(lines, gap.line(), gap.qualified_name()) else {
         tracing::warn!(
             path = %gap.rel_path().display(),
@@ -96,10 +114,8 @@ pub(super) fn apply_gap(
         if attrs_match_recipe(&lines[start..=end], &attr) {
             return Ok(GapApplyOutcome::AlreadyInstrumented);
         }
-        let indent = leading_indent(&lines[start]);
-        lines.drain(start..=end);
-        lines.insert(start, format!("{indent}{attr}"));
-        return Ok(GapApplyOutcome::Applied);
+        // Existing syntax without shared evidence is not permission to replace it.
+        return Ok(GapApplyOutcome::Unresolved);
     }
 
     let attr_indices = collect_attr_indices(lines, fn_idx);
@@ -115,22 +131,22 @@ pub(super) fn apply_gap(
 
 /// Remove an existing `#[instrument]` / `#[cfg_attr(.., instrument)]` from
 /// `gap` — attenuation for proof-only functions and skip-policy files.
-#[instrument(level = "debug", skip(lines, gap))]
-pub(super) fn strip_instrument(lines: &mut Vec<String>, gap: &InstrumentGap) -> GapApplyOutcome {
-    let Some(fn_idx) = find_fn_line(lines, gap.line(), gap.qualified_name()) else {
-        tracing::warn!(
-            path = %gap.rel_path().display(),
-            line = gap.line(),
-            qualified_name = %gap.qualified_name(),
-            "no fn near checklist line"
-        );
-        return GapApplyOutcome::Unresolved;
-    };
-    let Some((start, end)) = instrument_attr_range(lines, fn_idx) else {
-        return GapApplyOutcome::SkippedPolicy;
-    };
-    lines.drain(start..=end);
-    GapApplyOutcome::Applied
+#[instrument(level = "debug", skip(lines, source, record))]
+pub(super) fn strip_instrument(
+    lines: &mut Vec<String>,
+    source: &str,
+    record: &ApplyRecipeRecord,
+) -> GapApplyOutcome {
+    let attributes: Vec<_> = record
+        .attributes()
+        .iter()
+        .filter(|attr| attr.instrument())
+        .collect();
+    match attributes.as_slice() {
+        [] => GapApplyOutcome::SkippedPolicy,
+        [attribute] => super::preserve::strip(lines, source, attribute),
+        _ => GapApplyOutcome::Unresolved,
+    }
 }
 
 #[instrument(level = "debug", skip(recipe, style))]
@@ -146,33 +162,44 @@ fn recipe_attr(recipe: &InstrumentRecipe, style: InstrumentAttrStyle) -> String 
 pub(super) fn recipe_for_gap<'a>(
     records: &'a [ApplyRecipeRecord],
     gap: &InstrumentGap,
-) -> Option<&'a InstrumentRecipe> {
+) -> Option<&'a ApplyRecipeRecord> {
     let rel = gap.rel_path().to_string_lossy().replace('\\', "/");
     let named: Vec<_> = records
         .iter()
         .filter(|record| record.qualified_name() == gap.qualified_name())
         .collect();
-    if let Some(record) = named
+    let matching: Vec<_> = named
         .iter()
         .copied()
         .filter(|record| file_matches(record.file(), &rel))
-        .min_by_key(|record| record.line().abs_diff(gap.line()))
-    {
-        return Some(record.recipe());
-    }
-    if let Some(record) = named.first().copied() {
-        return Some(record.recipe());
+        .collect();
+    match matching.as_slice() {
+        [record] => return Some(record),
+        [] => {}
+        _ => {
+            let exact: Vec<_> = matching
+                .into_iter()
+                .filter(|record| record.line() == gap.line())
+                .collect();
+            return match exact.as_slice() {
+                [record] => Some(*record),
+                _ => None,
+            };
+        }
     }
 
     let local = local_fn_name(gap.qualified_name());
-    records
+    let local_matches: Vec<_> = records
         .iter()
         .filter(|record| {
             local_fn_name(record.qualified_name()) == local && file_matches(record.file(), &rel)
         })
-        .min_by_key(|record| record.line().abs_diff(gap.line()))
         .filter(|record| record.line().abs_diff(gap.line()) <= 24)
-        .map(|record| record.recipe())
+        .collect();
+    match local_matches.as_slice() {
+        [record] => Some(*record),
+        _ => None,
+    }
 }
 
 #[instrument(level = "debug")]

@@ -375,6 +375,11 @@ pub use ir::{
     ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, SemanticCall, SemanticCallTarget,
     SemanticFunction, SemanticItemId, SemanticReturnContract, SemanticSnapshot, SemanticType,
 };
+pub use ir::{
+    ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_FILE_ATTRIBUTES, SourceAttribute, SourceAttributeArgument,
+    SourceAttributeArguments, SourceAttributedItem, SourceCrateLints, SourceFileAttributes,
+    SourceInstrumentSyntax,
+};
 #[cfg(feature = "impl_coverage")]
 pub use ir::{
     build_wrapper_coverage_from_hub_ir, collect_trenchcoat_pairs_from_ir, wrapper_maps_equivalent,

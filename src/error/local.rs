@@ -477,6 +477,7 @@ impl super::CordialError {
 
 impl From<cargo_metadata::Error> for super::CordialError {
     #[track_caller]
+    #[instrument(level = "debug", skip(value))]
     fn from(value: cargo_metadata::Error) -> Self {
         Self::from_kind(super::CordialErrorKind::CargoMetadata(
             CargoMetadataSource::from(value),

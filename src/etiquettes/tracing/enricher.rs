@@ -84,7 +84,9 @@ impl SourceEnricher for FunctionInventoryEnricher {
             let parent = resolve_parent(ir, &module_context(record.qualified_name()))?;
             let span = FileSpan::new(crate_root.join(record.file()), record.line(), 1);
 
-            let node = if let Some(existing) = ir.node_by_path(record.qualified_name()) {
+            let node = if let Some(existing) =
+                ir.source_node_at(record.qualified_name(), &file_path, record.line())?
+            {
                 existing
             } else {
                 let node = ir.insert_node(
