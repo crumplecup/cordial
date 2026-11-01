@@ -32,7 +32,7 @@ pub use enricher::CfgScatterInventoryEnricher;
 pub use probe::CfgScatterSiteProbe;
 pub use reporter::{CfgScatterChecklistReporter, CfgScatterCsvReporter, CfgScatterSummaryReporter};
 pub use scan::scan_rust_source;
-pub use types::CfgSiteKind;
+pub use types::{CfgScatterGroup, CfgSiteKind, CfgSiteOccurrence};
 
 use std::sync::LazyLock;
 

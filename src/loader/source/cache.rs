@@ -103,6 +103,7 @@ impl SourceLoadView {
     ) -> Self {
         Self {
             crate_name,
+            workspace_root: src_root.parent().unwrap_or(&src_root).to_path_buf(),
             src_root,
             files,
             crate_kinds,
@@ -115,6 +116,23 @@ impl SourceLoadView {
                     .unwrap_or_else(|| Arc::new(CacheToken::default()))
             }),
         }
+    }
+
+    /// Freeze non-syntax inputs in the same database as the shared tree.
+    #[cfg(feature = "cfg_hygiene")]
+    #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
+    pub(crate) fn input_text(&self, path: &Path) -> CordialResult<Option<String>> {
+        PARSED.with(|parsed| {
+            let mut parsed = parsed.borrow_mut();
+            let run = parsed
+                .entry(self.cache_token.0)
+                .or_insert_with(|| ParsedRun {
+                    token: Arc::downgrade(&self.cache_token),
+                    database: crate::loader::SourceDatabase::new(),
+                    files: HashMap::new(),
+                });
+            run.database.input_text(path)
+        })
     }
 
     /// Return the same parsed file to every hook scanning this path.

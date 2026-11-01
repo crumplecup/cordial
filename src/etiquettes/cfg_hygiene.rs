@@ -34,11 +34,12 @@ mod scan_crate;
 mod types;
 
 pub use assessor::CfgHygieneAssessor;
+pub(crate) use declared::declared_names_from_inputs;
 pub use declared::{all_verifier_names, declared_names_for_crate, expected_verifier_for};
 pub use enricher::CfgHygieneInventoryEnricher;
 pub use probe::CfgHygieneSiteProbe;
 pub use reporter::{CfgHygieneChecklistReporter, CfgHygieneCsvReporter, CfgHygieneSummaryReporter};
-pub use scan::scan_rust_source;
+pub use scan::{CfgNameOccurrence, scan_rust_source};
 pub use scan_crate::scan_crate_cfg_hygiene;
 pub use types::{CfgHygieneRuleId, CfgHygieneSiteRecord};
 

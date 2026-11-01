@@ -20,7 +20,11 @@ mod store_lock;
 mod targets;
 mod tier;
 mod time;
-#[cfg(any(feature = "antipatterns", feature = "dependency_freshness"))]
+#[cfg(any(
+    feature = "antipatterns",
+    feature = "dependency_freshness",
+    feature = "cfg_hygiene"
+))]
 mod toml_parse;
 mod worklist_cli;
 mod worklist_state;
@@ -73,7 +77,11 @@ pub enum CordialErrorKind {
     /// A JSON file failed to parse.
     JsonParse(JsonParseSource),
     /// A TOML file failed to parse.
-    #[cfg(any(feature = "antipatterns", feature = "dependency_freshness"))]
+    #[cfg(any(
+        feature = "antipatterns",
+        feature = "dependency_freshness",
+        feature = "cfg_hygiene"
+    ))]
     TomlParse(toml_parse::TomlParseSource),
     /// The system clock was before the Unix epoch.
     Clock(ClockSource),
@@ -175,7 +183,11 @@ impl std::error::Error for CordialError {
             CordialErrorKind::Io(source) => Some(source),
             CordialErrorKind::Json(source) => Some(source),
             CordialErrorKind::JsonParse(source) => Some(source),
-            #[cfg(any(feature = "antipatterns", feature = "dependency_freshness"))]
+            #[cfg(any(
+                feature = "antipatterns",
+                feature = "dependency_freshness",
+                feature = "cfg_hygiene"
+            ))]
             CordialErrorKind::TomlParse(source) => Some(source),
             CordialErrorKind::Clock(source) => Some(source),
             CordialErrorKind::Config(source) => Some(source),
@@ -221,7 +233,11 @@ impl Display for CordialErrorKind {
             Self::Io(source) => source.fmt(formatter),
             Self::Json(source) => source.fmt(formatter),
             Self::JsonParse(source) => source.fmt(formatter),
-            #[cfg(any(feature = "antipatterns", feature = "dependency_freshness"))]
+            #[cfg(any(
+                feature = "antipatterns",
+                feature = "dependency_freshness",
+                feature = "cfg_hygiene"
+            ))]
             Self::TomlParse(source) => source.fmt(formatter),
             Self::Clock(source) => source.fmt(formatter),
             Self::Config(source) => source.fmt(formatter),

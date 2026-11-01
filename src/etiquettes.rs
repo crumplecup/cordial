@@ -64,7 +64,7 @@ pub(crate) mod antipatterns;
 #[cfg(feature = "cfg_hygiene")]
 pub(crate) mod cfg_hygiene;
 #[cfg(feature = "cfg_scatter")]
-mod cfg_scatter;
+pub(crate) mod cfg_scatter;
 #[cfg(feature = "cli_layout")]
 pub(crate) mod cli_layout;
 #[cfg(feature = "crate_attrs")]
@@ -124,7 +124,8 @@ mod trenchcoat;
 
 #[cfg(feature = "cfg_scatter")]
 pub use cfg_scatter::{
-    CFG_SCATTER_ETIQUETTE, CfgSiteKind, scan_rust_source as scan_cfg_scatter_rust_source,
+    CFG_SCATTER_ETIQUETTE, CfgScatterGroup, CfgScatterInventoryEnricher, CfgSiteKind,
+    CfgSiteOccurrence, scan_rust_source as scan_cfg_scatter_rust_source,
 };
 #[cfg(feature = "dependency_freshness")]
 pub use dependency_freshness::DEPENDENCY_FRESHNESS_ETIQUETTE;

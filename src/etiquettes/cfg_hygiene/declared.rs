@@ -2,11 +2,10 @@
 //! `unexpected_cfgs` firing, and (separately) each backend crate's own
 //! configured verifier identity.
 //!
-//! Static source scanning only — this never invokes `rustc`/`cargo`, so it
+//! Captured input analysis only — this never invokes `rustc`/`cargo`, so it
 //! can't see a `build.rs` that computes its `--check-cfg` list at runtime
-//! (e.g. from an env var). That's an accepted limitation, same as every
-//! other syn-based scanner in this crate: it reads what's on disk, not what
-//! a real build would compute.
+//! (e.g. from an env var). The loader freezes these declaration inputs in
+//! the source database; evaluated build-script outputs remain a context gap.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -92,6 +91,28 @@ pub fn declared_names_for_crate(
     workspace_root: &Path,
     thresholds: &CfgHygieneThresholds,
 ) -> CordialResult<HashSet<String>> {
+    let manifest = source.input_text(&crate_root.join("Cargo.toml"))?;
+    let workspace = source.input_text(&workspace_root.join("Cargo.toml"))?;
+    let build = source.input_text(&crate_root.join("build.rs"))?;
+    declared_names_from_inputs(
+        manifest.as_deref(),
+        workspace.as_deref(),
+        build.as_deref(),
+        thresholds,
+    )
+}
+
+/// Resolve declaration policy from captured loader inputs only.
+#[instrument(
+    level = "debug",
+    skip(manifest_source, workspace_source, build_source, thresholds)
+)]
+pub(crate) fn declared_names_from_inputs(
+    manifest_source: Option<&str>,
+    workspace_source: Option<&str>,
+    build_source: Option<&str>,
+    thresholds: &CfgHygieneThresholds,
+) -> CordialResult<HashSet<String>> {
     let mut names: HashSet<String> = RUSTC_BUILTIN_NAMES
         .iter()
         .chain(CARGO_INJECTED_NAMES.iter())
@@ -99,29 +120,28 @@ pub fn declared_names_for_crate(
         .collect();
     names.extend(thresholds.extra_known_names().iter().cloned());
 
-    let manifest_path = crate_root.join("Cargo.toml");
-    if let Ok(content) = std::fs::read_to_string(&manifest_path)
-        && let Ok(table) = content.parse::<toml::Table>()
-    {
+    if let Some(content) = manifest_source {
+        let table = content
+            .parse::<toml::Table>()
+            .map_err(|error| crate::CordialError::toml_parse("crate Cargo.toml", error))?;
         names.extend(check_cfg_names_from_package_table(&table));
-        if uses_workspace_lints(&table) {
-            let workspace_manifest = workspace_root.join("Cargo.toml");
-            if let Ok(workspace_content) = std::fs::read_to_string(&workspace_manifest)
-                && let Ok(workspace_table) = workspace_content.parse::<toml::Table>()
-                && let Some(workspace_section) =
-                    workspace_table.get("workspace").and_then(Value::as_table)
+        if uses_workspace_lints(&table)
+            && let Some(content) = workspace_source
+        {
+            let workspace_table = content
+                .parse::<toml::Table>()
+                .map_err(|error| crate::CordialError::toml_parse("workspace Cargo.toml", error))?;
+            if let Some(workspace_section) =
+                workspace_table.get("workspace").and_then(Value::as_table)
             {
                 names.extend(check_cfg_names_from_package_table(workspace_section));
             }
         }
     }
 
-    let build_script = crate_root.join("build.rs");
-    if build_script.is_file() {
-        let parsed = source.parsed_file(&build_script, "cfg-hygiene-build-script")?;
-        names.extend(check_cfg_names_from_build_script(parsed.source()));
+    if let Some(build_source) = build_source {
+        names.extend(check_cfg_names_from_build_script(build_source));
     }
-
     Ok(names)
 }
 

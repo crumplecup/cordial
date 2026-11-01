@@ -90,6 +90,15 @@ impl SourceLoadView {
                 ),
             )?;
         }
+        #[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+        if let Some(crate_root) = self.src_root().parent() {
+            let inventory = crate::ir::SourcePolicyInventory::collect(self, crate_root)?;
+            ir.set_attr(
+                root,
+                crate::ir::ATTR_SOURCE_POLICY_INVENTORY,
+                serde_json::to_value(inventory)?,
+            )?;
+        }
         for file in self.files() {
             let syntax = self.parsed_file(file.path(), "source-ir")?;
             self.load_file(ir, root, &syntax)?;

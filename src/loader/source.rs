@@ -44,7 +44,10 @@ impl Loader for SourceLoader {
 
     #[instrument(level = "trace", skip(self, view))]
     fn load(&self, view: LoadContext<'_>) -> CordialResult<Box<dyn LoadView>> {
-        Ok(Box::new(SourceLoadView::for_target(view.target())?))
+        Ok(Box::new(
+            SourceLoadView::for_target(view.target())?
+                .with_workspace_root(view.session().project_root().to_path_buf()),
+        ))
     }
 }
 
@@ -62,6 +65,9 @@ pub struct SourceLoadView {
     crate_name: String,
     src_root: PathBuf,
     files: Vec<SourceFile>,
+    /// Workspace root owning shared manifest policy declarations.
+    #[setters(generate)]
+    workspace_root: PathBuf,
     crate_kinds: Vec<CrateKind>,
     /// Binary entry paths supplied by the target's Cargo metadata.
     #[setters(generate)]

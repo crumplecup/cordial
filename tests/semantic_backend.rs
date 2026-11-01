@@ -85,7 +85,10 @@ fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> 
     let root = specimen()?;
     let mut session = SourceDatabase::load(root.path()).into_diagnostic()?;
     let graph = session
-        .project("semantic_specimen", &paths(root.path()))
+        .project(
+            &cordial::CrateTarget::new("semantic_specimen", root.path()),
+            &paths(root.path()),
+        )
         .into_diagnostic()?;
     let leaf = function(&graph, "fallible")?;
     let method = function(&graph, "read")?;
@@ -180,7 +183,10 @@ fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> 
     assert_eq!(initial_snapshot.sources().len(), 6);
     let paths = paths(root.path());
     let first = session
-        .project("semantic_specimen", &paths)
+        .project(
+            &cordial::CrateTarget::new("semantic_specimen", root.path()),
+            &paths,
+        )
         .into_diagnostic()?;
     let before = metrics.snapshot();
     assert!(
@@ -188,7 +194,10 @@ fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> 
         "query counts: {before:?}"
     );
     let warm = session
-        .project("semantic_specimen", &paths)
+        .project(
+            &cordial::CrateTarget::new("semantic_specimen", root.path()),
+            &paths,
+        )
         .into_diagnostic()?;
     assert_eq!(function(&first, "root")?, function(&warm, "root")?);
     assert_eq!(
@@ -209,7 +218,10 @@ fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> 
             .is_err()
     );
     let revised = session
-        .project("semantic_specimen", &paths)
+        .project(
+            &cordial::CrateTarget::new("semantic_specimen", root.path()),
+            &paths,
+        )
         .into_diagnostic()?;
     let revised_snapshot = revised
         .semantic_snapshot()
@@ -262,7 +274,10 @@ fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> 
         .change_file(&root.path().join("src/leaf.rs"), LEAF.to_owned())
         .into_diagnostic()?;
     let restored = session
-        .project("semantic_specimen", &paths)
+        .project(
+            &cordial::CrateTarget::new("semantic_specimen", root.path()),
+            &paths,
+        )
         .into_diagnostic()?;
     assert_eq!(function(&first, "root")?, function(&restored, "root")?);
     let restored_snapshot = restored

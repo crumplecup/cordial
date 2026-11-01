@@ -151,7 +151,16 @@ impl Finding for AllowFinding {
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_builder::Builder,
+    derive_getters::Getters,
+)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct AllowSiteRecord {
     /// Stable probe rule identifier.

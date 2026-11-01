@@ -94,7 +94,7 @@ pub use etiquettes::IMPL_COVERAGE_ETIQUETTE;
 pub use etiquettes::TRENCHCOAT_ETIQUETTE;
 #[cfg(feature = "allows")]
 pub use etiquettes::allows::{
-    ALLOWS_ETIQUETTE, AllowRuleId, AllowSiteRecord, scan_crate_allows,
+    ALLOWS_ETIQUETTE, AllowInventoryEnricher, AllowRuleId, AllowSiteRecord, scan_crate_allows,
     scan_rust_source as scan_allows_rust_source,
 };
 #[cfg(feature = "antipatterns")]
@@ -111,9 +111,9 @@ pub use etiquettes::antipatterns::{
 };
 #[cfg(feature = "cfg_hygiene")]
 pub use etiquettes::cfg_hygiene::{
-    CFG_HYGIENE_ETIQUETTE, CfgHygieneRuleId, CfgHygieneSiteRecord, all_verifier_names,
-    declared_names_for_crate, expected_verifier_for, scan_crate_cfg_hygiene,
-    scan_rust_source as scan_cfg_hygiene_rust_source,
+    CFG_HYGIENE_ETIQUETTE, CfgHygieneInventoryEnricher, CfgHygieneRuleId, CfgHygieneSiteRecord,
+    CfgNameOccurrence, all_verifier_names, declared_names_for_crate, expected_verifier_for,
+    scan_crate_cfg_hygiene, scan_rust_source as scan_cfg_hygiene_rust_source,
 };
 #[cfg(feature = "cli_layout")]
 pub use etiquettes::cli_layout::{
@@ -229,7 +229,10 @@ pub use etiquettes::visibility::{
     VISIBILITY_ETIQUETTE, VisibilityRecord, VisibilityRuleId, scan_crate_visibility,
 };
 #[cfg(feature = "cfg_scatter")]
-pub use etiquettes::{CFG_SCATTER_ETIQUETTE, CfgSiteKind, scan_cfg_scatter_rust_source};
+pub use etiquettes::{
+    CFG_SCATTER_ETIQUETTE, CfgScatterGroup, CfgScatterInventoryEnricher, CfgSiteKind,
+    CfgSiteOccurrence, scan_cfg_scatter_rust_source,
+};
 #[cfg(feature = "proof_patterns")]
 pub use etiquettes::{PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, scan_crate_proof_patterns};
 #[cfg(feature = "tracing")]
@@ -485,3 +488,6 @@ pub use {
     },
     rustdoc_loader::{RustdocLoadView, RustdocLoader, resolve_rustdoc_json},
 };
+
+#[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+pub use ir::{ATTR_SOURCE_POLICY_INVENTORY, SourcePolicyInventory};

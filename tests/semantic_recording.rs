@@ -125,7 +125,10 @@ fn recording_contracts_resolve_cross_file_bounds_and_invalidate() -> Result<()> 
         .into();
     let mut database = SourceDatabase::load(root.path()).into_diagnostic()?;
     let graph = database
-        .project("recording_specimen", &paths)
+        .project(
+            &cordial::CrateTarget::new("recording_specimen", root.path()),
+            &paths,
+        )
         .into_diagnostic()?;
     use SemanticCapability::{NotProven, Proven};
     for name in [
@@ -189,7 +192,10 @@ fn recording_contracts_resolve_cross_file_bounds_and_invalidate() -> Result<()> 
         )
         .into_diagnostic()?;
     let revised = database
-        .project("recording_specimen", &paths)
+        .project(
+            &cordial::CrateTarget::new("recording_specimen", root.path()),
+            &paths,
+        )
         .into_diagnostic()?;
     for name in ["bounded", "where_bound"] {
         assert_capability(&revised, name, NotProven, Proven)?;
@@ -213,7 +219,10 @@ fn recording_contracts_resolve_cross_file_bounds_and_invalidate() -> Result<()> 
         )
         .into_diagnostic()?;
     let changed_impl = database
-        .project("recording_specimen", &paths)
+        .project(
+            &cordial::CrateTarget::new("recording_specimen", root.path()),
+            &paths,
+        )
         .into_diagnostic()?;
     for name in ["cross_file", "borrowed_success", "borrowed_error", "read"] {
         assert_capability(&changed_impl, name, NotProven, Proven)?;
@@ -235,7 +244,10 @@ fn recording_contracts_resolve_cross_file_bounds_and_invalidate() -> Result<()> 
         )
         .into_diagnostic()?;
     let partial = database
-        .project("recording_specimen", &paths)
+        .project(
+            &cordial::CrateTarget::new("recording_specimen", root.path()),
+            &paths,
+        )
         .into_diagnostic()?;
     assert_capability(&partial, "missing_success", Proven, NotProven)?;
     assert_capability(

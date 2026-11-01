@@ -22,6 +22,8 @@ pub struct SourceDatabase {
     db: RootDatabase,
     vfs: Vfs,
     revision: u64,
+    #[cfg(feature = "cfg_hygiene")]
+    workspace_root: Option<PathBuf>,
 }
 
 impl SourceDatabase {
@@ -33,6 +35,8 @@ impl SourceDatabase {
             db: RootDatabase::new(None),
             vfs: Vfs::default(),
             revision: 1,
+            #[cfg(feature = "cfg_hygiene")]
+            workspace_root: None,
         }
     }
 
@@ -53,6 +57,31 @@ impl SourceDatabase {
             .ok_or_else(|| CordialError::not_found(path))?;
         self.db.set_file_text(file, text);
         Ok(self.db.file_text(file).text(&self.db).to_string())
+    }
+
+    /// Freeze a loader input without parsing it. Repeated reads reuse the
+    /// database value, including virtual revisions made by candidate analysis.
+    #[cfg(feature = "cfg_hygiene")]
+    #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
+    pub(crate) fn input_text(&mut self, path: &Path) -> CordialResult<Option<String>> {
+        use std::io::ErrorKind;
+        let absolute = match path.canonicalize() {
+            Ok(path) => path,
+            Err(error) if error.kind() == ErrorKind::NotFound => std::path::absolute(path)?,
+            Err(error) => return Err(error.into()),
+        };
+        let text_path = absolute
+            .to_str()
+            .ok_or_else(|| CordialError::not_found(absolute.clone()))?;
+        let vfs_path = VfsPath::new_real_path(text_path.to_owned());
+        if let Some((file, _excluded)) = self.vfs.file_id(&vfs_path) {
+            return Ok(Some(self.db.file_text(file).text(&self.db).to_string()));
+        }
+        match std::fs::read_to_string(&absolute) {
+            Ok(text) => Ok(Some(self.capture(&absolute, &text)?)),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error.into()),
+        }
     }
 
     /// Load Cargo metadata, sysroot and source once for semantic collection.
@@ -80,6 +109,8 @@ impl SourceDatabase {
             db,
             vfs,
             revision: 1,
+            #[cfg(feature = "cfg_hygiene")]
+            workspace_root: Some(root.to_path_buf()),
         })
     }
 
@@ -98,15 +129,54 @@ impl SourceDatabase {
     /// Materialize tracked semantic facts into the ordinary shared graph.
     /// The source selection must belong to one library target and Cargo
     /// configuration. Broader target contexts are part of loader migration.
-    #[instrument(level = "debug", skip(self, paths), err(level = "warn"))]
+    #[instrument(level = "debug", skip(self, paths, target), err(level = "warn"))]
     #[hotpath::measure]
-    pub fn project(&self, crate_name: &str, paths: &[PathBuf]) -> CordialResult<CrateIr> {
-        attach_db(&self.db, || self.project_attached(crate_name, paths))
+    pub fn project(
+        &mut self,
+        target: &crate::CrateTarget,
+        paths: &[PathBuf],
+    ) -> CordialResult<CrateIr> {
+        #[cfg(feature = "cfg_hygiene")]
+        let declarations = {
+            let workspace_root = self
+                .workspace_root
+                .clone()
+                .unwrap_or_else(|| target.crate_root().clone());
+            let mut inventory = crate::ir::SourcePolicyInventory::default();
+            inventory.collect_declarations(target.crate_root(), &workspace_root, |path| {
+                self.input_text(path)
+            })?;
+            inventory
+        };
+        attach_db(&self.db, || {
+            self.project_attached(
+                target,
+                paths,
+                #[cfg(feature = "cfg_hygiene")]
+                declarations,
+            )
+        })
     }
 
-    #[instrument(level = "debug", skip(self, paths), err(level = "warn"))]
-    fn project_attached(&self, crate_name: &str, paths: &[PathBuf]) -> CordialResult<CrateIr> {
-        let mut graph = CrateIr::new(crate_name);
+    #[instrument(level = "debug", skip_all, err(level = "warn"))]
+    fn project_attached(
+        &self,
+        target: &crate::CrateTarget,
+        paths: &[PathBuf],
+        #[cfg(feature = "cfg_hygiene")] declarations: crate::ir::SourcePolicyInventory,
+    ) -> CordialResult<CrateIr> {
+        let mut graph = CrateIr::new(target.crate_name());
+        #[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+        let mut policies = {
+            #[cfg(feature = "cfg_hygiene")]
+            {
+                declarations
+            }
+            #[cfg(not(feature = "cfg_hygiene"))]
+            {
+                crate::ir::SourcePolicyInventory::default()
+            }
+        };
         let mut snapshots = Vec::new();
         let mut projection = Projection::default();
         let sema = Semantics::new(&self.db);
@@ -143,7 +213,18 @@ impl SourceDatabase {
                         .join("::")
                 })
                 .unwrap_or_else(|| path.display().to_string());
+            #[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+            policies.collect_native_file(&source, target.crate_root())?;
             projection.populate(&self.db, &sema, &source, &module_path, &mut graph)?;
+        }
+        #[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+        {
+            policies.sort();
+            graph.set_attr(
+                graph.root(),
+                crate::ir::ATTR_SOURCE_POLICY_INVENTORY,
+                serde_json::to_value(policies)?,
+            )?;
         }
         projection.connect(&mut graph)?;
         graph.set_attr(

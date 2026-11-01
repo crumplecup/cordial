@@ -14,6 +14,10 @@ mod source_attribute_projection;
 #[path = "support/tracing_source_projection.rs"]
 mod tracing_source_projection;
 
+#[cfg(all(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+#[path = "support/source_policy_projection.rs"]
+mod source_policy_projection;
+
 const SOURCE: &str = include_str!("fixtures/semantic_backend/syntax.rs.txt");
 
 #[tracing::instrument(level = "debug", skip(root), err(level = "warn"))]
@@ -162,7 +166,15 @@ fn assert_virtual_attribute_policies(database: &mut SourceDatabase, path: &Path)
             .change_file(path, source.into())
             .into_diagnostic()?;
         let graph = database
-            .project("source_parity", &[path.to_path_buf()])
+            .project(
+                &cordial::CrateTarget::new(
+                    "source_parity",
+                    path.parent()
+                        .and_then(Path::parent)
+                        .ok_or_else(|| miette::miette!("source root missing"))?,
+                ),
+                &[path.to_path_buf()],
+            )
             .into_diagnostic()?;
         let facts = file_attributes(&graph)?;
         assert_eq!(facts.lints().forbid_unsafe_code(), unsafe_code, "{source}");
@@ -196,7 +208,10 @@ fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Resul
     let legacy = baseline(root.path())?;
     let mut database = SourceDatabase::load(root.path()).into_diagnostic()?;
     let native = database
-        .project("source_parity", std::slice::from_ref(&path))
+        .project(
+            &cordial::CrateTarget::new("source_parity", root.path()),
+            std::slice::from_ref(&path),
+        )
         .into_diagnostic()?;
     let legacy_scope = module_scope(&legacy)?;
     let native_scope = module_scope(&native)?;
@@ -204,6 +219,12 @@ fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Resul
     assert_eq!(legacy_scope.uses(), native_scope.uses());
     assert_eq!(legacy_scope, native_scope);
     assert_attribute_contract(&legacy, &native)?;
+    #[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+    assert_eq!(
+        legacy.source_policy_inventory().into_diagnostic()?,
+        native.source_policy_inventory().into_diagnostic()?,
+        "complete source policy inventory"
+    );
     #[cfg(feature = "tracing")]
     tracing_source_projection::assert_contract(&legacy, &native)?;
     source_attribute_projection::assert_graph_only_attributes(&legacy, root.path())?;
@@ -258,7 +279,10 @@ fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Resul
         .into_diagnostic()?;
     assert!(
         database
-            .project("source_parity", std::slice::from_ref(&path))
+            .project(
+                &cordial::CrateTarget::new("source_parity", root.path()),
+                std::slice::from_ref(&path)
+            )
             .is_err(),
         "parser recovery cannot authorize incomplete source facts"
     );
@@ -266,7 +290,10 @@ fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Resul
         .change_file(&path, SOURCE.into())
         .into_diagnostic()?;
     let restored = database
-        .project("source_parity", &[path])
+        .project(
+            &cordial::CrateTarget::new("source_parity", root.path()),
+            &[path],
+        )
         .into_diagnostic()?;
     assert_eq!(module_scope(&native)?, module_scope(&restored)?);
     assert_eq!(file_attributes(&native)?, file_attributes(&restored)?);
@@ -275,4 +302,17 @@ fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Resul
         SOURCE
     );
     Ok(())
+}
+
+#[test]
+#[cfg(all(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn file_policies_use_shared_evidence_and_track_virtual_revisions() -> Result<()> {
+    cordial::init_tracing();
+    let _subscriber = tracing::subscriber::set_default(
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::WARN)
+            .finish(),
+    );
+    source_policy_projection::verify()
 }

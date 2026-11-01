@@ -8,8 +8,8 @@ use crate::config::CfgHygieneThresholds;
 use crate::error::CordialResult;
 use crate::loader::SourceLoadView;
 
-use super::declared::{all_verifier_names, declared_names_for_crate, expected_verifier_for};
-use super::scan::{CfgNameOccurrence, scan_shared_file};
+use super::declared::{all_verifier_names, expected_verifier_for};
+use super::scan::CfgNameOccurrence;
 use super::types::{CfgHygieneRuleId, CfgHygieneSiteRecord};
 
 use tracing::instrument;
@@ -21,47 +21,21 @@ pub fn scan_crate_cfg_hygiene(
     workspace_root: &Path,
     thresholds: &CfgHygieneThresholds,
 ) -> CordialResult<Vec<CfgHygieneSiteRecord>> {
-    let source = SourceLoadView::for_standalone_scan();
-    scan_shared_crate_cfg_hygiene(&source, crate_root, crate_name, workspace_root, thresholds)
+    let source =
+        SourceLoadView::for_standalone_scan().with_workspace_root(workspace_root.to_path_buf());
+    let inventory = crate::ir::SourcePolicyInventory::collect(&source, crate_root)?;
+    records_for_inventory(&inventory, crate_name, thresholds)
 }
 
-#[instrument(level = "debug", skip(source, thresholds), err(level = "warn"))]
-pub(super) fn scan_shared_crate_cfg_hygiene(
-    source: &SourceLoadView,
-    crate_root: &Path,
+#[instrument(level = "debug", skip(inventory, thresholds), err(level = "warn"))]
+pub(crate) fn records_for_inventory(
+    inventory: &crate::ir::SourcePolicyInventory,
     crate_name: &str,
-    workspace_root: &Path,
     thresholds: &CfgHygieneThresholds,
 ) -> CordialResult<Vec<CfgHygieneSiteRecord>> {
-    let src_root = crate_root.join("src");
-    let mut occurrences = Vec::new();
-    for file in source.parsed_rust_files_under(&src_root, "cfg-hygiene-inventory", |_| true)? {
-        occurrences.extend(scan_shared_file(&file, &src_root, crate_root)?);
-    }
-    records_for_occurrences(
-        &occurrences,
-        source,
-        crate_root,
-        crate_name,
-        workspace_root,
-        thresholds,
-    )
-}
-
-#[instrument(
-    level = "debug",
-    skip(occurrences, source, thresholds),
-    err(level = "warn")
-)]
-fn records_for_occurrences(
-    occurrences: &[CfgNameOccurrence],
-    source: &SourceLoadView,
-    crate_root: &Path,
-    crate_name: &str,
-    workspace_root: &Path,
-    thresholds: &CfgHygieneThresholds,
-) -> CordialResult<Vec<CfgHygieneSiteRecord>> {
-    let declared = declared_names_for_crate(source, crate_root, workspace_root, thresholds)?;
+    let mut declared = inventory.known_cfg_names().clone();
+    declared.extend(thresholds.extra_known_names().iter().cloned());
+    let occurrences = inventory.cfg_names();
     let expected_verifier = expected_verifier_for(thresholds, crate_name);
     let verifier_names = all_verifier_names(thresholds);
 

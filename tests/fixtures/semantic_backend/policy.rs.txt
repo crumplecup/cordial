@@ -1,0 +1,74 @@
+#![allow(dead_code)]
+#[allow(unused_imports)]
+use {vstd::prelude::*, std::fs};
+#[allow(unused_imports, reason = r#"proof, boundary"#)]
+use ::verus_builtin::anything;
+#[allow(unused_imports, reason = "\n\t")]
+use {verus_builtin_macros::something as renamed};
+#[cfg_attr(any(unknown, feature = "disabled"), allow(unused))]
+mod nested {
+    #![allow(unused)]
+    #![cfg(unknown)]
+    #[allow(unused)]
+    #[cfg(unknown)]
+    pub struct Holder {
+        #[cfg(unknown)]
+        #[allow(unused)]
+        pub field: u8,
+    }
+    pub struct Tuple(#[cfg(unknown)] pub u8);
+    #[cfg(unknown)]
+    pub enum Choice {
+        #[cfg(unknown)]
+        One,
+    }
+    #[cfg(unknown)]
+    pub trait Contract {
+        #[cfg(unknown)]
+        #[allow(unused)]
+        fn method() {
+            #[allow(unused)]
+            let n = 1;
+        }
+        #[cfg(unknown)] const N: u8 = 1;
+        #[cfg(unknown)] type Value;
+    }
+    #[cfg(unknown)]
+    impl Holder {
+        #[cfg(unknown)]
+        #[allow(unused)]
+        fn method() {
+            match 0 {
+                #[cfg(unknown)]
+                0 => (),
+                _ => (),
+            }
+        }
+        #[cfg(unknown)] const N: u8 = 1;
+        #[cfg(unknown)] type Value = u8;
+    }
+    /// Documentation precedes cfg; its line is the original scatter locator.
+    #[cfg(any(unknown, feature = "disabled"))]
+    fn work() {}
+    #[cfg(any(unknown, feature = "disabled"))]
+    struct Other;
+}
+#[cfg(test)]
+#[allow(unused)]
+mod test_only {
+    #[allow(unused)]
+    #[cfg(unknown)]
+    fn ignored_allow() {}
+}
+#[cfg(unknown)]
+#[proc_macro_derive(Example)]
+fn entry() {
+    #![cfg(unknown)]
+    #[cfg(unknown)]
+    struct Inside;
+}
+#[cfg(from_build)] fn build_declared() {}
+#[cfg(from_manifest)] fn manifest_declared() {}
+macro_rules! payload {
+    () => { #[allow(unused)] #[cfg(macro_payload)] fn not_syntax() {} };
+}

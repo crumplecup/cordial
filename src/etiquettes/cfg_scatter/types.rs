@@ -119,7 +119,16 @@ impl Display for CfgSiteKind {
 pub use crate::config::CfgScatterThresholds;
 
 /// One raw `#[cfg(...)]` occurrence collected while scanning a file.
-#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_builder::Builder,
+    derive_getters::Getters,
+)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct CfgSiteOccurrence {
     #[getter(copy)]
@@ -141,7 +150,16 @@ impl CfgSiteOccurrence {
 /// All `#[cfg(...)]` occurrences in one file that share the same predicate.
 /// `mod` declarations are never collected here — gating a whole module is
 /// the pattern this lint recommends, not an antipattern.
-#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_new::new,
+    derive_getters::Getters,
+)]
 pub struct CfgScatterGroup {
     file: PathBuf,
     predicate: String,
@@ -155,11 +173,13 @@ impl CfgScatterGroup {
     }
 
     #[instrument(level = "trace", skip(self))]
+    /// Distinct item kinds contributing to this group's scatter threshold.
     pub fn distinct_non_field_kinds(&self) -> BTreeSet<CfgSiteKind> {
         self.non_field_occurrences().map(|o| o.kind).collect()
     }
 
     #[instrument(level = "trace", skip(self))]
+    /// Number of sites other than fields.
     pub fn non_field_count(&self) -> usize {
         self.non_field_occurrences().count()
     }

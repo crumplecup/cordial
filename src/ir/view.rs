@@ -86,6 +86,19 @@ pub trait IrView {
             .transpose()?)
     }
 
+    /// Read complete loader-owned file-policy evidence, including inactive syntax.
+    #[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn source_policy_inventory(&self) -> CordialResult<Option<super::SourcePolicyInventory>> {
+        Ok(self
+            .node(self.root()?)
+            .and_then(|node| {
+                node.attr(super::ATTR_SOURCE_POLICY_INVENTORY)
+                    .map(|value| serde_json::from_value(value.clone()))
+            })
+            .transpose()?)
+    }
+
     /// Read file attribute evidence collected by the source loader.
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
     fn source_file_attributes(

@@ -443,7 +443,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | --- | --- | --- |
 | Source ownership and graph population | `loader/source.rs`, `source/cache.rs`, `source_work.rs`, `populate.rs` | Canonical text inputs first; then syntax carriers, source ranges, item/module population, inactive syntax. Remove `ParsedSource.syntax`, the thread-local AST cache, and the `syn` parser on cutover. |
 | Syntax/source facts and direct calls | `ir/function_source.rs`, `ir/source_calls/collect.rs`, `enricher/source_calls.rs` | Signatures, exact edit ranges, declaration identity, instantiated contracts, resolved calls. Replace name-based resolution using semantic facts. |
-| Attributes and file policy | Attribute materialization and `crate_attrs` now consume loader-projected IR; remaining: `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity`, `pageantry` scans | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
+| Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, and `cfg_hygiene` consume loader-projected IR; remaining: `glob_imports`, `inline_tests`, `modularity`, `pageantry` scans | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
 | API and layout | `derives/scan.rs`, `derives/path_inclusion.rs`, `visibility/scan/tree.rs`, `cli_layout/{tree,scan,scan/catalog}.rs` | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | `tracing/scan.rs`, `call_graph/collect.rs`, `{subscriber,boundary,print}/scan.rs` | Function/call identity, attributes, macro input syntax, executable boundary facts; retain apply ranges and worklist accounting. |
 | Error analysis | `enricher/error/scan.rs`; `error_sites`, `error_chain`, `internal_error_chain/{architecture,type_graph}` | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
@@ -462,6 +462,17 @@ selected target/features/cfg, build-script outputs, proc macros, manifest and
 lockfile identity. Current Cargo loading covers ordinary Rust library fixtures
 without running build scripts or proc-macro servers. Missing expansion and
 unsupported call/type evidence must stay incomplete.
+
+The three file policies now share a typed, snapshot-bound
+`SourcePolicyInventory` on the crate root. Enrichers consume this inventory
+through `IrView` and reject missing or malformed evidence. The loader owns the
+temporary shared-syn collectors; the native database projects the same facts
+from its canonical syntax, including inactive items. Declaration inputs for
+cfg hygiene (`Cargo.toml`, inherited workspace lints, and `build.rs` text) are
+captured in the source database and fingerprinted with the source files.
+Evaluating build scripts remains a context-driver obligation. These ports
+prepare the production cutover; normal execution still uses the shared-syn
+frontend until its remaining consumers migrate.
 
 ### 2. Complete production context and collection migration
 
@@ -518,11 +529,11 @@ Reserve the all-tier gate for completion of the migration plan.
 
 ## Current next step
 
-Work toward the production cutover, starting with the remaining file-policy
-collectors (`allows`, `cfg_scatter`, `cfg_hygiene`) and their shared IR contracts.
-Attribute materialization and crate-attribute policy already consume the new
-loader projection. Preserve inactive-code policy coverage and golden findings.
-Then complete the remaining file policy, API/layout, tracing, error/apply, and
+Work toward the production cutover, continuing with the remaining file-policy
+collectors (`glob_imports`, `inline_tests`, `modularity`, `pageantry`) and their
+shared IR contracts. Attribute materialization, crate-attribute policy, allows,
+and cfg policies now consume loader projections. Preserve inactive-code policy
+coverage and golden findings. Then complete API/layout, tracing, error/apply, and
 proof collection in the inventory above. Integrate the Cargo context driver
 before using semantic facts to authorize transformations. Track the remaining
 collector groups, context gaps and ownership removals against the active
