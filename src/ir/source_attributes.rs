@@ -7,6 +7,8 @@ mod instrument;
 mod native;
 mod native_types;
 pub use instrument::{SourceAttributeArgument, SourceAttributeArguments, SourceInstrumentSyntax};
+#[cfg(feature = "tracing")]
+pub(crate) use native_types::type_key as native_type_key;
 
 #[cfg(feature = "_attribute_scan")]
 pub use compatibility::{is_cfg_test, is_gated_instrument_attr, is_instrument_attr};

@@ -65,7 +65,7 @@ fn macro_rust_islands_share_the_source_snapshot() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
     let path = fixture.path().join("src/lib.rs");
-    let text = "amenable_derive::gallery_harness! { kani, SOURCE, { fn proof() { assert!(true); } } }\nunknown!(arbitrary tokens);";
+    let text = "amenable_derive::gallery_harness! { kani, SOURCE, { fn proof() { assert!(true); } } }\nunknown!(arbitrary tokens);\nunknown! { args, { fn fragment() {} } }\namenable_derive::harness! { wrong_header, { fn fragment() {} } }";
     fs::write(&path, text).into_diagnostic()?;
     let session = SessionBuilder::new(fixture.path()).build();
     let target = CrateTarget::new("fixture", fixture.path());
@@ -106,6 +106,17 @@ fn macro_rust_islands_share_the_source_snapshot() -> miette::Result<()> {
         return Err(miette::miette!("missing unknown macro"));
     };
     assert!(first.macro_syntax(&unknown.mac).is_none());
+    // Recognizing Rust items must not grant an unknown or malformed macro the
+    // stronger Amenable harness contract used by other consumers.
+    for item in &first.syntax().items[2..] {
+        let syn::Item::Macro(invocation) = item else {
+            return Err(miette::miette!("missing opaque macro"));
+        };
+        assert!(matches!(
+            first.macro_syntax(&invocation.mac),
+            Some(SharedMacroSyntax::TrailingItems(items)) if items.len() == 1
+        ));
+    }
     fs::write(&path, "unknown!(changed);").into_diagnostic()?;
     assert!(!first.matches_disk().into_diagnostic()?);
     assert!(std::ptr::eq(

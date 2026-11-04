@@ -41,6 +41,11 @@ pub(crate) fn workspace_path_inclusions_with_source(
                 member.name().clone(),
                 FileSnapshot::new(canonical_or(file.path()), file.source_digest()),
                 compatibility(&file),
+                #[cfg(feature = "tracing")]
+                crate::ir::SourceProofFunction::collect(
+                    &file,
+                    &super::module_path_from_src_file(&member.root().join("src"), file.path()),
+                ),
             ));
         }
     }

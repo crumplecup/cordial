@@ -15,15 +15,14 @@
 //! tracing as the entry point itself, whatever trait (if any) it
 //! happens to implement.
 //!
-//! **How.** No rustc integration, so no real type inference -- call
+//! **How.** The shared IR retains syntax-level evidence; call
 //! resolution is name-based: `Type::method(..)`/`bare_fn(..)` (explicit
 //! path syntax) is unambiguous enough to match against a workspace-wide
 //! registry of known function definitions by their own last one or two
 //! path segments; `receiver.method(..)` calls, whose receiver's type
 //! isn't known without real inference, are not resolved at all and so
-//! never produce a graph edge -- a missed edge only risks under-
-//! excluding (a function stays `Gated` that could have been `Skip`),
-//! never the reverse. Fixed point: seed `excluded` with every function
+//! never produce a graph edge. This is the existing name-based proof policy;
+//! unresolved or external callers can exist. Fixed point: seed `excluded` with every function
 //! nested in an ancestor gate cfg, then repeatedly add any function
 //! whose in-workspace callers are **all** already `excluded` (and it
 //! has at least one) until nothing changes. A function with zero known
@@ -40,7 +39,6 @@ use std::collections::{HashMap, HashSet};
 
 use crate::PathInclusionFacts;
 use crate::config::TracingThresholds;
-use crate::loader::SourceLoadView;
 
 use tracing::instrument;
 
@@ -72,22 +70,13 @@ impl CallGraphFacts {
     }
 }
 
-#[instrument(level = "debug", skip(config, path_facts, source))]
-pub(crate) fn workspace_call_graph_with_source(
+/// Evaluate proof-only reachability using loader-owned workspace evidence.
+#[instrument(level = "debug", skip(config, path_facts))]
+pub(crate) fn workspace_call_graph(
     config: &TracingThresholds,
     path_facts: &PathInclusionFacts,
-    source: &SourceLoadView,
 ) -> CallGraphFacts {
-    compute_call_graph(config, path_facts, source)
-}
-
-#[instrument(level = "debug", skip(config, path_facts, source))]
-fn compute_call_graph(
-    config: &TracingThresholds,
-    path_facts: &PathInclusionFacts,
-    source: &SourceLoadView,
-) -> CallGraphFacts {
-    let collected = collect_workspace_functions(config, path_facts, source);
+    let collected = collect_workspace_functions(config, path_facts);
     let never_instrument = never_instrument_from_calls(&collected);
     CallGraphFacts { never_instrument }
 }

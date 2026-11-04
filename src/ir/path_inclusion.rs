@@ -1,4 +1,4 @@
-//! Shared workspace module-splice and Cargo dependency evidence.
+//! Shared workspace source, proof-call, module-splice and Cargo evidence.
 
 use crate::FileSnapshot;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,7 @@ pub struct PathInclusionMember {
     dependencies: BTreeSet<String>,
 }
 
-/// Exact source snapshot and ordered `#[path]` targets from its module tree.
+/// Exact snapshot, module targets and proof calls collected from its syntax.
 #[derive(
     Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
 )]
@@ -24,6 +24,8 @@ pub struct PathInclusionSource {
     crate_name: String,
     snapshot: FileSnapshot,
     targets: Vec<String>,
+    #[cfg(feature = "tracing")]
+    proof_calls: Vec<super::SourceProofFunction>,
 }
 
 /// Workspace-wide splice graph and dependencies, with their collected evidence.

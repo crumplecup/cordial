@@ -1,5 +1,7 @@
 use tracing::instrument;
 mod database;
+#[cfg(feature = "tracing")]
+pub(crate) use database::DatabaseMacroSyntax;
 pub(crate) use database::DatabaseSource;
 pub use database::SourceDatabase;
 mod library_root;

@@ -17,6 +17,8 @@ pub enum SharedMacroSyntax {
     Expressions(Vec<syn::Expr>),
     /// Items in an Amenable harness's third, braced argument.
     Items(Vec<syn::Item>),
+    /// Rust items in another macro's last braced argument. No expansion claim.
+    TrailingItems(Vec<syn::Item>),
 }
 
 pub(super) type MacroTrees = BTreeMap<(usize, usize, usize, usize), SharedMacroSyntax>;
@@ -57,7 +59,7 @@ impl<'ast> Visit<'ast> for MacroCollector {
                     self.visit_expr(expr);
                 }
             }
-            SharedMacroSyntax::Items(items) => {
+            SharedMacroSyntax::Items(items) | SharedMacroSyntax::TrailingItems(items) => {
                 for item in items {
                     self.visit_item(item);
                 }
@@ -85,26 +87,33 @@ fn parse_payload(invocation: &syn::Macro) -> Option<SharedMacroSyntax> {
             expressions.into_iter().collect(),
         ));
     }
-    if !matches!(path.as_slice(), [root, name] if root == "amenable_derive" && matches!(name.as_str(), "harness" | "gallery_harness"))
-    {
-        return None;
-    }
     let tokens: Vec<_> = invocation.tokens.clone().into_iter().collect();
-    let [
-        TokenTree::Ident(_),
-        TokenTree::Punct(first),
-        TokenTree::Ident(_),
-        TokenTree::Punct(second),
-        TokenTree::Group(body),
-    ] = tokens.as_slice()
-    else {
-        return None;
-    };
-    if first.as_char() != ',' || second.as_char() != ',' || body.delimiter() != Delimiter::Brace {
+    let known_harness = matches!(path.as_slice(), [root, name] if root == "amenable_derive" && matches!(name.as_str(), "harness" | "gallery_harness"))
+        && matches!(tokens.as_slice(), [TokenTree::Ident(_), TokenTree::Punct(first), TokenTree::Ident(_), TokenTree::Punct(second), TokenTree::Group(body)] if first.as_char() == ',' && second.as_char() == ',' && body.delimiter() == Delimiter::Brace);
+    let body = tokens.iter().rev().find_map(|token| match token {
+        TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => Some(group),
+        _ => None,
+    })?;
+    let statements = syn::Block::parse_within.parse2(body.stream()).ok()?;
+    let known_harness = known_harness
+        && statements
+            .iter()
+            .all(|stmt| matches!(stmt, syn::Stmt::Item(_)));
+    let items: Vec<_> = statements
+        .into_iter()
+        .filter_map(|statement| match statement {
+            syn::Stmt::Item(item) => Some(item),
+            _ => None,
+        })
+        .collect();
+    if items.is_empty() && !known_harness {
         return None;
     }
-    let syntax = syn::parse2::<syn::File>(body.stream()).ok()?;
-    Some(SharedMacroSyntax::Items(syntax.items))
+    Some(if known_harness {
+        SharedMacroSyntax::Items(items)
+    } else {
+        SharedMacroSyntax::TrailingItems(items)
+    })
 }
 
 #[instrument(level = "trace")]

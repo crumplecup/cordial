@@ -30,7 +30,7 @@
 
 pub use crate::ir::{
     ATTR_SOURCE_OBSERVABILITY, ATTR_SOURCE_TRACING_INVENTORY, SourceObservability,
-    SourceTracingFunction, SourceTracingInventory,
+    SourceProofFunction, SourceTracingFunction, SourceTracingInventory,
 };
 
 mod apply;
@@ -38,7 +38,7 @@ mod assessor;
 mod boundary;
 mod call_graph;
 pub(crate) use call_graph::CallGraphFacts;
-pub(crate) use call_graph::workspace_call_graph_with_source;
+pub(crate) use call_graph::workspace_call_graph;
 mod classify;
 mod delta;
 mod display_types;
@@ -54,6 +54,7 @@ mod recordable;
 pub(crate) use recordable::RECORDABLE_IDENTS;
 mod reporter;
 mod scan;
+pub(crate) use scan::{self_type_key, syn_path_label, type_label};
 mod subscriber;
 mod types;
 pub(crate) use classify::{BodyPeek, ReceiverShape, classify_complexity, classify_role};

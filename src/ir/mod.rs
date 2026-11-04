@@ -28,6 +28,10 @@ mod path_inclusion;
 pub use path_inclusion::{PathInclusionFacts, PathInclusionMember, PathInclusionSource};
 #[cfg(feature = "derives")]
 pub(crate) use path_inclusion::{canonical_or, normalize};
+#[cfg(feature = "tracing")]
+mod proof_calls;
+#[cfg(feature = "tracing")]
+pub use proof_calls::SourceProofFunction;
 mod query;
 #[cfg(feature = "rustdoc")]
 mod rustdoc_query;

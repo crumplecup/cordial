@@ -4,7 +4,7 @@ use ra_ap_syntax::ast::{self, HasGenericArgs};
 
 use tracing::instrument;
 #[instrument(level = "debug", skip(ty))]
-pub(super) fn type_key(ty: &ast::Type) -> String {
+pub(crate) fn type_key(ty: &ast::Type) -> String {
     match ty {
         ast::Type::PathType(ty) => {
             let Some(segment) = ty.path().and_then(|path| path.segment()) else {

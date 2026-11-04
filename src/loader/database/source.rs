@@ -9,6 +9,8 @@ use sha2::{Digest, Sha256};
 /// borrowed. Collectors cannot substitute a separately parsed tree.
 #[derive(derive_getters::Getters)]
 pub(crate) struct DatabaseSource<'db> {
+    #[cfg(feature = "tracing")]
+    database: &'db ra_ap_ide_db::RootDatabase,
     path: &'db Path,
     source: &'db str,
     tree: ast::SourceFile,
@@ -18,14 +20,17 @@ pub(crate) struct DatabaseSource<'db> {
 }
 
 impl<'db> DatabaseSource<'db> {
-    #[tracing::instrument(level = "trace", skip(path, source, tree, line_index))]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub(super) fn new(
+        #[cfg(feature = "tracing")] database: &'db ra_ap_ide_db::RootDatabase,
         path: &'db Path,
         source: &'db str,
         tree: ast::SourceFile,
         line_index: &'db ra_ap_ide_db::line_index::LineIndex,
     ) -> Self {
         Self {
+            #[cfg(feature = "tracing")]
+            database,
             path,
             source,
             tree,

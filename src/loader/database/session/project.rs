@@ -105,6 +105,8 @@ impl SourceDatabase {
                 return Err(anyhow::Error::new(error.clone()).into());
             }
             let source = DatabaseSource::new(
+                #[cfg(feature = "tracing")]
+                &self.db,
                 path,
                 text,
                 sema.parse(edition),

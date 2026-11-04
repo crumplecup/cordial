@@ -139,15 +139,9 @@ pub(crate) fn prepare_workspace_source_facts(
         .iter()
         .any(|enricher| enricher.id() == crate::etiquettes::tracing::FunctionInventoryEnricher::ID)
         && workspace.call_graph().is_none()
-        && let Some(path_facts) = workspace.path_inclusions()
     {
         let config = crate::config::load_session_config(session);
-        let call_graph = crate::etiquettes::tracing::workspace_call_graph_with_source(
-            config.tracing(),
-            path_facts,
-            source,
-        );
-        workspace.set_call_graph(call_graph);
+        workspace.refresh_tracing_call_graph(config.tracing())?;
     }
     #[cfg(not(feature = "derives"))]
     let _ = source;

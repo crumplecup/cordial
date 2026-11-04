@@ -313,7 +313,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
                     }
                     return;
                 }
-                None => {}
+                Some(SharedMacroSyntax::TrailingItems(_)) | None => {}
             }
         }
         self.opaque(invocation.tokens.clone());

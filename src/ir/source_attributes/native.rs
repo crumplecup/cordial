@@ -293,6 +293,7 @@ fn apply_level(meta: &ast::Meta, presence: &mut SourceCrateLints) {
     }
 }
 
+#[cfg(feature = "tracing")]
 impl super::SourceInstrumentSyntax {
     #[instrument(level = "debug", skip(attr))]
     pub(crate) fn from_native_attribute(attr: &ast::Attr) -> Option<Self> {

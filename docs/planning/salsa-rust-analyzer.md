@@ -632,7 +632,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | Syntax/source facts and direct calls | `ir/function_source.rs`, `ir/source_calls/collect.rs`, `enricher/source_calls.rs` | Signatures, exact edit ranges, declaration identity, instantiated contracts, resolved calls. Replace name-based resolution using semantic facts. |
 | Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity` and `pageantry` consume loader-projected IR | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
 | API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
-| Tracing | Function inventory and subscriber/boundary/stdio policy consume loader-projected typed IR with native collectors. Workspace proof call-graph collection still uses the shared-syn carrier in `call_graph/collect.rs`. | Finish proof call identity/reachability and preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. |
+| Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
 | Error analysis | `enricher/error/scan.rs`; `error_sites`, `error_chain`, `internal_error_chain/{architecture,type_graph}` | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
 | Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |
 | Panic and proof collectors | `panics/{scan,kani_reach}`, `verus_ir/parse.rs`, `antipatterns/{scan,contract_bounds}` | Macro payloads, proof dialect syntax, Kani/Creusot/Verus contracts. No fallback whole-file parser. Resolve the dialect capability before retiring its current support. |
@@ -738,14 +738,45 @@ behavioral reference. This checkpoint does not complete the tracing cutover:
 workspace proof call-graph collection and its downstream reachability evidence
 still need native projection before retiring the shared-syn carrier.
 
+## Checkpoint: workspace proof call evidence
+
+The workspace source inventory now retains required `SourceProofFunction`
+evidence beside each source snapshot: qualified identities, call keys, inherited
+cfg and verifier markers, and direct path-call keys. Compatibility collection
+runs during the existing workspace inventory walk. Native collection consumes
+canonical database trees. Tracing reachability reads only this shared IR;
+it no longer discovers files, clones function bodies or visits source syntax.
+Policy can change without recollecting source evidence.
+
+Macro token trees remain opaque in the file grammar. Supported assertion
+arguments and harness item blocks are projected at the loader boundary. Native
+macro grammar projections use memoized Salsa queries; compatibility collection
+uses the existing snapshot-owned macro cache. No lint parses these islands.
+Native collectors can only look up syntax issued from the canonical snapshot;
+foreign macro trees cannot populate the loader's projection table.
+Recognizing Rust items inside a harness does not claim knowledge of its expansion.
+
+Regression coverage compares the complete workspace evidence and expected
+cross-crate exclusion sets, including runtime callers, inactive items, generic
+and trait impl identities, nested harnesses and assertion message boundaries.
+Virtual edits replace calls without changing function identities, change runtime
+reachability, and restore the original payload. Missing or malformed evidence
+fails; a serialized inventory supports policy re-evaluation after deleting source
+files and dropping the database.
+
+This is a collection migration. The existing name-based resolution and fixed
+point remain unchanged; unresolved receiver calls and external callers are not
+proof of absence. Semantic proof reachability still depends on the complete
+Cargo context driver. Normal execution retains the shared-syn frontend until
+the remaining consumer groups migrate together.
+
 ## Current next step
 
-Work toward the production cutover, completing native workspace proof call-graph
-collection and its shared IR contract for tracing reachability. Derives,
+Work toward the production cutover, completing native error analysis, error/apply
+inventory and panic/proof collection against the inventory above. Derives,
 visibility, CLI layout, module splices, attribute materialization and the complete
-file-policy group now consume loader projections.
-Preserve inactive-code policy coverage and golden findings, then complete tracing,
-error/apply and proof collection in the inventory above.
+file-policy and tracing groups now consume loader projections.
+Preserve inactive-code policy coverage and golden findings.
 Integrate the Cargo context driver before using semantic facts to authorize
 transformations. Track the remaining
 collector groups, context gaps and ownership removals against the active

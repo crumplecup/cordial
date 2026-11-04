@@ -214,12 +214,12 @@ pub use etiquettes::panics::{
 pub use etiquettes::tracing::{
     ATTR_SOURCE_OBSERVABILITY, ATTR_SOURCE_TRACING_INVENTORY, BoundaryRuleId, BoundarySiteRecord,
     FnContext, FunctionComplexity, FunctionKind, FunctionRole, InstrumentApplySummary,
-    InstrumentGap, PrintRuleId, PrintSiteRecord, SourceObservability, SourceTracingFunction,
-    SourceTracingInventory, SubscriberRuleId, SubscriberSiteRecord, TRACING_ETIQUETTE,
-    VisibilityLabel, parse_tracing_instrument_checklist, parse_tracing_instrument_checklist_text,
-    run_tracing_instrument_apply, scan_crate_tracing_boundary, scan_crate_tracing_print,
-    scan_crate_tracing_subscriber, scan_rust_source as scan_tracing_rust_source,
-    scan_tracing_print_rust_source,
+    InstrumentGap, PrintRuleId, PrintSiteRecord, SourceObservability, SourceProofFunction,
+    SourceTracingFunction, SourceTracingInventory, SubscriberRuleId, SubscriberSiteRecord,
+    TRACING_ETIQUETTE, VisibilityLabel, parse_tracing_instrument_checklist,
+    parse_tracing_instrument_checklist_text, run_tracing_instrument_apply,
+    scan_crate_tracing_boundary, scan_crate_tracing_print, scan_crate_tracing_subscriber,
+    scan_rust_source as scan_tracing_rust_source, scan_tracing_print_rust_source,
 };
 #[cfg(feature = "verus_warnings")]
 pub use etiquettes::verus_warnings::{

@@ -326,7 +326,7 @@ fn visibility_label(vis: &Visibility) -> VisibilityLabel {
 }
 
 #[instrument(level = "debug", skip(ty))]
-pub(super) fn type_label(ty: &Type) -> String {
+pub(crate) fn type_label(ty: &Type) -> String {
     match ty {
         Type::Path(type_path) => syn_path_label(&type_path.path),
         Type::Reference(reference) => type_label(&reference.elem),
@@ -337,7 +337,7 @@ pub(super) fn type_label(ty: &Type) -> String {
 }
 
 #[instrument(level = "debug", skip(path))]
-pub(super) fn syn_path_label(path: &syn::Path) -> String {
+pub(crate) fn syn_path_label(path: &syn::Path) -> String {
     path.segments
         .last()
         .map(|segment| segment.ident.to_string())
@@ -353,7 +353,7 @@ pub(super) fn syn_path_label(path: &syn::Path) -> String {
 /// prefixes are dropped; tuples, refs, slices, arrays and pointers are
 /// rendered structurally; anything else falls back to [`type_label`].
 #[instrument(level = "debug", skip(ty))]
-pub(super) fn self_type_key(ty: &Type) -> String {
+pub(crate) fn self_type_key(ty: &Type) -> String {
     match ty {
         Type::Path(type_path) => {
             let Some(segment) = type_path.path.segments.last() else {

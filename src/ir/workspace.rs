@@ -150,6 +150,23 @@ impl WorkspaceIr {
         self.path_inclusions = Some(std::sync::Arc::new(facts));
     }
 
+    /// Re-evaluate tracing proof reachability from shared workspace evidence.
+    /// Changing policy does not reload files or revisit syntax.
+    #[cfg(feature = "tracing")]
+    #[instrument(level = "debug", skip(self, config), err(level = "warn"))]
+    pub fn refresh_tracing_call_graph(
+        &mut self,
+        config: &crate::config::TracingThresholds,
+    ) -> crate::CordialResult<()> {
+        let facts = self.path_inclusions().ok_or_else(|| {
+            crate::CordialError::workspace_source_facts_missing("workspace source inventory")
+        })?;
+        self.set_call_graph(crate::etiquettes::tracing::workspace_call_graph(
+            config, facts,
+        ));
+        Ok(())
+    }
+
     #[cfg(feature = "tracing")]
     #[instrument(level = "trace", skip(self, facts))]
     pub(crate) fn set_call_graph(&mut self, facts: crate::etiquettes::tracing::CallGraphFacts) {

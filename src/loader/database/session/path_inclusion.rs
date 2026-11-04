@@ -34,6 +34,29 @@ impl SourceDatabase {
                     input.crate_name().clone(),
                     FileSnapshot::new(path.to_path_buf(), Sha256::digest(text.as_bytes()).into()),
                     targets(tree.items()),
+                    #[cfg(feature = "tracing")]
+                    {
+                        let source = super::super::DatabaseSource::new(
+                            &self.db,
+                            path,
+                            text,
+                            tree,
+                            ra_ap_ide_db::line_index(&self.db, id),
+                        );
+                        let root = context
+                            .crate_roots()
+                            .find(|(name, _)| *name == input.crate_name())
+                            .map(|(_, root)| root)
+                            .ok_or_else(|| {
+                                crate::CordialError::workspace_source_facts_missing(
+                                    "proof source crate root",
+                                )
+                            })?;
+                        crate::ir::SourceProofFunction::collect_native(
+                            &source,
+                            &crate::loader::module_path_from_src_file(&root.join("src"), path),
+                        )
+                    },
                 ));
             }
             Ok(PathInclusionFacts::from_evidence(
