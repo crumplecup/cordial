@@ -127,12 +127,10 @@ pub(crate) fn prepare_workspace_source_facts(
             }
         });
         if needs_path_facts && workspace.path_inclusions().is_none() {
-            workspace.set_path_inclusions(
-                crate::etiquettes::derives::workspace_path_inclusions_with_source(
-                    session.project_root(),
-                    source,
-                ),
-            );
+            workspace.set_path_inclusions(crate::loader::workspace_path_inclusions_with_source(
+                session.project_root(),
+                source,
+            )?);
         }
     }
 

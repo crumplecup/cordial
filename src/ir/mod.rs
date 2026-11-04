@@ -22,6 +22,12 @@ mod graph;
 mod indexes;
 mod node;
 mod origin;
+#[cfg(feature = "derives")]
+mod path_inclusion;
+#[cfg(feature = "derives")]
+pub use path_inclusion::{PathInclusionFacts, PathInclusionMember, PathInclusionSource};
+#[cfg(feature = "derives")]
+pub(crate) use path_inclusion::{canonical_or, normalize};
 mod query;
 #[cfg(feature = "rustdoc")]
 mod rustdoc_query;

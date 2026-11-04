@@ -5,6 +5,12 @@ pub use database::SourceDatabase;
 mod library_root;
 pub use library_root::library_root_rs;
 mod macro_syntax;
+#[cfg(feature = "derives")]
+mod path_inclusion;
+#[cfg(feature = "derives")]
+pub use path_inclusion::workspace_path_inclusions;
+#[cfg(feature = "derives")]
+pub(crate) use path_inclusion::workspace_path_inclusions_with_source;
 mod populate;
 mod scan_roots;
 mod source;

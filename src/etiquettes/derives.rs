@@ -27,16 +27,15 @@
 
 mod assessor;
 mod enricher;
-mod path_inclusion;
 mod probe;
 mod reporter;
 mod scan;
 mod types;
 
+pub use crate::ir::PathInclusionFacts;
+pub use crate::loader::workspace_path_inclusions;
 pub use assessor::DeriveAssessor;
 pub use enricher::DeriveInventoryEnricher;
-pub(crate) use path_inclusion::workspace_path_inclusions_with_source;
-pub use path_inclusion::{PathInclusionFacts, workspace_path_inclusions};
 pub use probe::DeriveSiteProbe;
 pub use reporter::{DeriveChecklistReporter, DeriveCsvReporter, DeriveSummaryReporter};
 pub use scan::scan_rust_source;

@@ -515,10 +515,45 @@ All 39 existing derive tests and the dedicated backend parity test pass with
 only the derives feature enabled. The collector and policy also retain their
 existing full-feature test coverage.
 
-The shared workspace path-inclusion inventory still supplies consumer dependency
-checks. Its `#[path]` collector remains to be ported, alongside visibility and
-CLI layout, before the API/layout group is complete. Production source ownership
+The shared workspace path-inclusion inventory supplies consumer dependency
+checks. Its collector migration is described below. Visibility and CLI layout
+remain before the API/layout group is complete. Production source ownership
 has not switched backends yet.
+
+### Workspace module-splice projection checkpoint
+
+`PathInclusionFacts` now belongs to the shared IR. It retains typed Cargo member
+and dependency inputs, each selected source file's digest, and ordered module
+`#[path]` targets, alongside deterministic indexes used by derives and tracing.
+Collection belongs to the loader: the compatibility path uses shared source
+carriers; the native database projects the same source selection from its
+canonical trees. Consumer modules no longer discover or traverse source syntax
+for these facts.
+
+The native projection accepts the captured workspace selection from IR. It
+reuses member/dependency context and recomputes source evidence at the current
+database revision. It does not run another Cargo query or filesystem source
+scan. An unavailable source or invalid tree fails the projection. Shipping
+collection now propagates metadata and source errors instead of reporting an
+empty graph; manifest-free projects retain explicit synthetic-target support.
+The standalone `workspace_path_inclusions` API consequently returns a result.
+
+Parity coverage compares complete typed evidence and lookup indexes across
+backends. It covers inactive and nested modules, repeated attributes, raw string
+paths, source fixtures, integration-test exclusions, macro/function-local
+exclusions, renamed dependency edges, transitive dependents and derive blockers.
+Virtual changes remove and restore splices and their downstream recommendations;
+invalid syntax and newly discovered unavailable inputs fail closed.
+
+Validation: all 39 derive tests and both workspace evidence tests pass with
+only the derives feature enabled. The workspace evidence tests and all 46
+tracing apply regressions also pass with full features enabled.
+
+Path target resolution and declared dependency policy retain their existing
+semantics. The member selection and dependency inputs still originate in the
+shipping Cargo discovery path. Moving that context's ownership to the native
+session remains part of the complete Cargo context driver; this checkpoint
+does not switch production source ownership.
 
 ### Collector migration inventory
 
@@ -532,7 +567,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | Source ownership and graph population | `loader/source.rs`, `source/cache.rs`, `source_work.rs`, `populate.rs` | Canonical text inputs first; then syntax carriers, source ranges, item/module population, inactive syntax. Remove `ParsedSource.syntax`, the thread-local AST cache, and the `syn` parser on cutover. |
 | Syntax/source facts and direct calls | `ir/function_source.rs`, `ir/source_calls/collect.rs`, `enricher/source_calls.rs` | Signatures, exact edit ranges, declaration identity, instantiated contracts, resolved calls. Replace name-based resolution using semantic facts. |
 | Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity` and `pageantry` consume loader-projected IR | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
-| API and layout | Derive policy consumes loader-projected typed IR with native collector parity. Remaining: `derives/path_inclusion.rs`, `visibility/scan/tree.rs`, `cli_layout/{tree,scan,scan/catalog}.rs` | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
+| API and layout | Derive policy consumes loader-projected typed IR with native collector parity. Module-splice collection also has shared IR evidence and native parity. Remaining: `visibility/scan/tree.rs`, `cli_layout/{tree,scan,scan/catalog}.rs` | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | `tracing/scan.rs`, `call_graph/collect.rs`, `{subscriber,boundary,print}/scan.rs` | Function/call identity, attributes, macro input syntax, executable boundary facts; retain apply ranges and worklist accounting. |
 | Error analysis | `enricher/error/scan.rs`; `error_sites`, `error_chain`, `internal_error_chain/{architecture,type_graph}` | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
 | Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |

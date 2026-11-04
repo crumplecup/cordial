@@ -2,11 +2,8 @@
 mod candidates;
 mod walk;
 
-use super::{
-    path_inclusion::PathInclusionFacts,
-    types::{DeriveRuleId, DeriveSiteRecord},
-};
-use crate::ir::{DeriveFileFacts, DeriveStructFacts};
+use super::types::{DeriveRuleId, DeriveSiteRecord};
+use crate::ir::{DeriveFileFacts, DeriveStructFacts, PathInclusionFacts};
 use crate::{CordialResult, config::DerivesThresholds};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
