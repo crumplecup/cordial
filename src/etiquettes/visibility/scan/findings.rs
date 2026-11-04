@@ -1,11 +1,12 @@
 //! Emit visibility records from a scanned module tree.
+use crate::ir::VisibilityModule as ModuleNode;
 
 use super::eval::VisibilityEval;
-use super::tree::{ModuleNode, external_name_count, public_path_mods};
-use super::vis::VisKind;
+use super::tree::{external_name_count, public_path_mods};
 use crate::etiquettes::visibility::types::{
     VisibilityRecord, VisibilityRuleId, VisibilityThresholds,
 };
+use crate::ir::VisibilityKind as VisKind;
 
 use tracing::instrument;
 #[instrument(level = "debug", skip(root, thresholds, eval))]

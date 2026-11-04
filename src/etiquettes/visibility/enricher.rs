@@ -1,10 +1,9 @@
-use crate::enricher::member_crate_root;
 use crate::error::CordialResult;
 use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
 
-use super::scan::scan_shared_crate_visibility;
+use super::scan::select_records;
 use super::types::VisibilityRuleId;
 use crate::config::VisibilityThresholds;
 
@@ -14,6 +13,7 @@ use tracing::instrument;
 pub struct VisibilityInventoryEnricher;
 
 impl VisibilityInventoryEnricher {
+    /// Stable identifier for visibility-policy materialization.
     pub const ID: &'static str = "visibility-inventory";
 }
 
@@ -25,13 +25,16 @@ impl SourceEnricher for VisibilityInventoryEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
-        let (ir, source, session) = view.into_parts();
+        let (ir, _source, session) = view.into_parts();
 
-        let crate_root = member_crate_root(source, session);
+        let inventory = ir
+            .source_policy_inventory()?
+            .ok_or_else(|| crate::CordialError::not_found("source policy inventory".into()))?;
+        let crate_root = inventory.crate_root();
         let thresholds = crate::config::load_session_config(session)
             .visibility()
             .clone();
-        let records = scan_shared_crate_visibility(source, &crate_root, thresholds.clone())?;
+        let records = select_records(inventory.visibility(), thresholds.clone())?;
 
         for record in records {
             if record.rule_id() == VisibilityRuleId::ModThin001

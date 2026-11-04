@@ -10,7 +10,8 @@ use crate::{CordialResult, FileSnapshot};
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "modularity",
-    feature = "pageantry"
+    feature = "pageantry",
+    feature = "visibility"
 ))]
 use ra_ap_syntax::{AstNode, SyntaxNode, ast};
 use std::path::Path;
@@ -46,9 +47,12 @@ mod scatter;
     feature = "inline_tests",
     feature = "modularity",
     feature = "pageantry",
-    feature = "derives"
+    feature = "derives",
+    feature = "visibility"
 ))]
 mod tokens;
+#[cfg(feature = "visibility")]
+mod visibility;
 
 impl SourcePolicyInventory {
     #[tracing::instrument(level = "debug", skip(file, self), err(level = "warn"))]
@@ -74,6 +78,9 @@ impl SourcePolicyInventory {
             && is_source
             && !crate::loader::path_has_fixtures(file.path(), crate_root);
         let include_derives = cfg!(feature = "derives") && is_source;
+        let include_visibility = cfg!(feature = "visibility")
+            && is_source
+            && !crate::loader::path_has_fixtures(file.path(), crate_root);
         let include_modularity = cfg!(feature = "modularity") && is_source;
         let include_pageantry = cfg!(feature = "pageantry")
             && (is_source || is_test)
@@ -85,11 +92,12 @@ impl SourcePolicyInventory {
             && !include_modularity
             && !include_pageantry
             && !include_derives
+            && !include_visibility
         {
             return Ok(());
         }
         let tree_root = if is_source { &source_root } else { &test_root };
-        let prefix = module_path_from_src_file(tree_root, file.path());
+        let _prefix = module_path_from_src_file(tree_root, file.path());
         self.snapshots.push(FileSnapshot::new(
             file.path().to_path_buf(),
             file.source_digest(),
@@ -97,40 +105,40 @@ impl SourcePolicyInventory {
         #[cfg(feature = "allows")]
         if include_allows {
             self.allows
-                .extend(allows::collect(file, crate_root, &prefix)?);
+                .extend(allows::collect(file, crate_root, &_prefix)?);
         }
         #[cfg(feature = "glob_imports")]
         if include_globs {
             self.glob_imports
-                .extend(glob_imports::collect(file, crate_root, &prefix)?);
+                .extend(glob_imports::collect(file, crate_root, &_prefix)?);
         }
         #[cfg(feature = "inline_tests")]
         if include_tests {
             self.inline_tests
-                .extend(inline_tests::collect(file, crate_root, &prefix)?);
+                .extend(inline_tests::collect(file, crate_root, &_prefix)?);
         }
         #[cfg(feature = "modularity")]
         if include_modularity {
             self.modularity
-                .extend(modularity::collect(file, crate_root, &prefix)?);
+                .extend(modularity::collect(file, crate_root, &_prefix)?);
         }
         #[cfg(feature = "pageantry")]
         if include_pageantry {
             self.pageantry
-                .extend(pageantry::collect(file, crate_root, &prefix)?);
+                .extend(pageantry::collect(file, crate_root, &_prefix)?);
         }
         #[cfg(feature = "derives")]
         if include_derives {
             self.derives
-                .push(derives::collect(file, crate_root, &prefix)?);
+                .push(derives::collect(file, crate_root, &_prefix)?);
         }
         if is_source {
             #[cfg(feature = "cfg_hygiene")]
             self.cfg_names
-                .extend(cfg_names::collect(file, crate_root, &prefix)?);
+                .extend(cfg_names::collect(file, crate_root, &_prefix)?);
             #[cfg(feature = "cfg_scatter")]
             self.cfg_groups
-                .extend(scatter::collect(file, crate_root, &prefix)?);
+                .extend(scatter::collect(file, crate_root, &_prefix)?);
         }
         Ok(())
     }
@@ -158,7 +166,8 @@ fn outside_macro(node: &SyntaxNode) -> bool {
     feature = "cfg_scatter",
     feature = "inline_tests",
     feature = "modularity",
-    feature = "pageantry"
+    feature = "pageantry",
+    feature = "visibility"
 ))]
 fn attributes(node: &SyntaxNode) -> impl Iterator<Item = ast::Attr> {
     ast::AnyHasAttrs::cast(node.clone())
@@ -190,7 +199,8 @@ fn policy_owner(attr: &ast::Attr) -> Option<SyntaxNode> {
     feature = "allows",
     feature = "inline_tests",
     feature = "modularity",
-    feature = "pageantry"
+    feature = "pageantry",
+    feature = "visibility"
 ))]
 fn test_gate(attr: &ast::Attr) -> bool {
     match attr.meta() {

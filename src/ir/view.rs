@@ -95,7 +95,8 @@ pub trait IrView {
         feature = "inline_tests",
         feature = "modularity",
         feature = "pageantry",
-        feature = "derives"
+        feature = "derives",
+        feature = "visibility"
     ))]
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
     fn source_policy_inventory(&self) -> CordialResult<Option<super::SourcePolicyInventory>> {

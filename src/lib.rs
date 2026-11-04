@@ -226,7 +226,8 @@ pub use etiquettes::verus_warnings::{
 };
 #[cfg(feature = "visibility")]
 pub use etiquettes::visibility::{
-    VISIBILITY_ETIQUETTE, VisibilityRecord, VisibilityRuleId, scan_crate_visibility,
+    VISIBILITY_ETIQUETTE, VisibilityFacts, VisibilityInventoryEnricher, VisibilityKind,
+    VisibilityModule, VisibilityRecord, VisibilityRuleId, scan_crate_visibility,
 };
 #[cfg(feature = "cfg_scatter")]
 pub use etiquettes::{
@@ -492,6 +493,7 @@ pub use {
     feature = "inline_tests",
     feature = "modularity",
     feature = "pageantry",
-    feature = "derives"
+    feature = "derives",
+    feature = "visibility"
 ))]
 pub use ir::{ATTR_SOURCE_POLICY_INVENTORY, SourcePolicyInventory};

@@ -3,6 +3,8 @@
 #[cfg(feature = "derives")]
 mod path_inclusion;
 mod project;
+#[cfg(feature = "visibility")]
+mod visibility;
 
 use std::path::Path;
 

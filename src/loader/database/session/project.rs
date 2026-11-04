@@ -58,7 +58,8 @@ impl SourceDatabase {
             feature = "inline_tests",
             feature = "modularity",
             feature = "pageantry",
-            feature = "derives"
+            feature = "derives",
+            feature = "visibility"
         ))]
         let mut policies = {
             #[cfg(feature = "cfg_hygiene")]
@@ -70,6 +71,11 @@ impl SourceDatabase {
                 crate::ir::SourcePolicyInventory::default()
             }
         };
+        #[cfg(feature = "visibility")]
+        policies.set_visibility(
+            target.crate_root(),
+            self.project_visibility(target.crate_root())?,
+        );
         let mut snapshots = Vec::new();
         let mut projection = Projection::default();
         let sema = Semantics::new(&self.db);
@@ -114,7 +120,8 @@ impl SourceDatabase {
                 feature = "inline_tests",
                 feature = "modularity",
                 feature = "pageantry",
-                feature = "derives"
+                feature = "derives",
+                feature = "visibility"
             ))]
             policies.collect_native_file(&source, target.crate_root())?;
             projection.populate(&self.db, &sema, &source, &module_path, &mut graph)?;
@@ -127,7 +134,8 @@ impl SourceDatabase {
             feature = "inline_tests",
             feature = "modularity",
             feature = "pageantry",
-            feature = "derives"
+            feature = "derives",
+            feature = "visibility"
         ))]
         {
             policies.sort();

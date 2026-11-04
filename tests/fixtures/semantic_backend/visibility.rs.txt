@@ -1,0 +1,29 @@
+pub mod external;
+mod private { pub mod mismatch { pub(crate) fn internal() {} } }
+pub mod inline {
+    pub use crate::{Root as Renamed, external::{Leaf, self}, *};
+    pub const VALUE: u8 = 0;
+    pub static STATIC: u8 = 0;
+    pub type Alias = u8;
+    pub struct Struct;
+    pub enum Enum { A }
+    pub trait Trait {}
+    pub union Union { pub value: u8 }
+    pub fn function() {}
+    pub(crate) fn internal() {}
+    pub(super) fn parent() {}
+    fn private() { pub mod local { pub fn ignored() {} } }
+    pub mod nested { pub fn nested() {} }
+}
+#[cfg(test)] pub mod tests { pub mod ignored {} }
+#[doc(hidden)] pub mod hidden {}
+pub mod inner_hidden { #![doc(hidden)] pub mod ignored {} }
+#[cfg(any())] pub mod inactive { pub fn counted() {} }
+#[path = r#"../support.rs"#] pub mod custom;
+pub(crate) mod restricted { pub(self) fn local() {} pub(in crate) fn ancestor() {} }
+pub(super) mod parent {}
+pub(self) mod own {}
+#[path = "not-present.rs"] pub mod unresolved;
+pub struct Root;
+macro_rules! opaque { () => { pub mod not_a_declaration {} } }
+opaque!();

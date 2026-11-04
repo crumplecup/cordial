@@ -54,3 +54,10 @@ mod derives;
 pub(super) use derives::collect as collect_derives;
 #[cfg(feature = "derives")]
 pub use derives::scan_rust_source as scan_derives_source;
+
+#[cfg(feature = "visibility")]
+mod visibility;
+#[cfg(feature = "visibility")]
+mod visibility_vis;
+#[cfg(feature = "visibility")]
+pub(super) use visibility::collect as collect_visibility;

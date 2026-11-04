@@ -26,6 +26,7 @@ mod reporter;
 mod scan;
 mod types;
 
+pub use crate::ir::{VisibilityFacts, VisibilityKind, VisibilityModule};
 pub use assessor::VisibilityAssessor;
 pub use enricher::VisibilityInventoryEnricher;
 pub use probe::VisibilitySiteProbe;

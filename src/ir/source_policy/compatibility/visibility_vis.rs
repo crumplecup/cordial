@@ -1,52 +1,26 @@
-//! Visibility kind helpers for scanned items.
-
+//! Compatibility visibility and leaf-name classification.
+use super::super::visibility::VisibilityKind;
 use syn::{Attribute, Item, UseTree, Visibility};
-
 use tracing::instrument;
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum VisKind {
-    Private,
-    Pub,
-    PubCrate,
-    PubSuper,
-}
-
-impl VisKind {
-    #[instrument(level = "debug", skip(self))]
-    pub(super) fn as_str(self) -> &'static str {
-        match self {
-            Self::Private => "private",
-            Self::Pub => "pub",
-            Self::PubCrate => "pub(crate)",
-            Self::PubSuper => "pub(super)",
-        }
-    }
-
-    #[instrument(level = "trace", skip(self), ret)]
-    pub(super) fn is_unrestricted_pub(self) -> bool {
-        matches!(self, Self::Pub)
-    }
-}
-
 #[instrument(level = "debug", skip(vis))]
-pub(super) fn vis_kind(vis: &Visibility) -> VisKind {
+pub(super) fn vis_kind(vis: &Visibility) -> VisibilityKind {
     match vis {
-        Visibility::Public(_) => VisKind::Pub,
-        Visibility::Inherited => VisKind::Private,
+        Visibility::Public(_) => VisibilityKind::Pub,
+        Visibility::Inherited => VisibilityKind::Private,
         Visibility::Restricted(restricted) => {
             if restricted.path.is_ident("crate") {
-                VisKind::PubCrate
+                VisibilityKind::PubCrate
             } else if restricted.path.is_ident("super") {
-                VisKind::PubSuper
+                VisibilityKind::PubSuper
             } else {
-                VisKind::PubCrate
+                VisibilityKind::PubCrate
             }
         }
     }
 }
 
 #[instrument(level = "debug", skip(item))]
-pub(super) fn item_vis(item: &Item) -> Option<VisKind> {
+pub(super) fn item_vis(item: &Item) -> Option<VisibilityKind> {
     let vis = match item {
         Item::Const(item) => &item.vis,
         Item::Enum(item) => &item.vis,

@@ -42,7 +42,8 @@ mod source_calls;
     feature = "inline_tests",
     feature = "modularity",
     feature = "pageantry",
-    feature = "derives"
+    feature = "derives",
+    feature = "visibility"
 ))]
 mod source_policy;
 #[cfg(feature = "allows")]
@@ -67,7 +68,8 @@ pub use source_policy::scan_pageantry_source;
     feature = "inline_tests",
     feature = "modularity",
     feature = "pageantry",
-    feature = "derives"
+    feature = "derives",
+    feature = "visibility"
 ))]
 pub use source_policy::{ATTR_SOURCE_POLICY_INVENTORY, SourcePolicyInventory};
 #[cfg(feature = "derives")]
@@ -76,6 +78,8 @@ pub use source_policy::{
     DeriveMethodFacts, DeriveMethodFlags, DeriveModuleFacts, DeriveSetterShape, DeriveStructFacts,
     scan_derives_source,
 };
+#[cfg(feature = "visibility")]
+pub use source_policy::{VisibilityFacts, VisibilityKind, VisibilityModule};
 #[cfg(feature = "tracing")]
 mod tracing_source;
 pub use source_attributes::{

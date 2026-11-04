@@ -1,6 +1,7 @@
 //! Branching-floor evaluation and crate-file digest.
+use crate::ir::VisibilityModule as ModuleNode;
 
-use super::tree::{ModuleNode, external_name_count, public_path_mods};
+use super::tree::{external_name_count, public_path_mods};
 use crate::etiquettes::visibility::types::VisibilityThresholds;
 
 use tracing::instrument;

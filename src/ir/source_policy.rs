@@ -11,6 +11,8 @@ mod declarations;
 #[cfg(feature = "derives")]
 mod derive_facts;
 mod native;
+#[cfg(feature = "visibility")]
+mod visibility;
 #[cfg(feature = "derives")]
 pub use compatibility::scan_derives_source;
 #[cfg(feature = "derives")]
@@ -18,6 +20,8 @@ pub use derive_facts::{
     DeriveFieldFacts, DeriveFieldRead, DeriveFileFacts, DeriveImplFacts, DeriveItemFacts,
     DeriveMethodFacts, DeriveMethodFlags, DeriveModuleFacts, DeriveSetterShape, DeriveStructFacts,
 };
+#[cfg(feature = "visibility")]
+pub use visibility::{VisibilityFacts, VisibilityKind, VisibilityModule};
 
 #[cfg(feature = "allows")]
 pub use compatibility::scan_allows_source;
@@ -48,6 +52,8 @@ pub struct SourcePolicyInventory {
     pageantry: Vec<crate::etiquettes::pageantry::PageantrySourceSite>,
     #[cfg(feature = "derives")]
     derives: Vec<DeriveFileFacts>,
+    #[cfg(feature = "visibility")]
+    visibility: VisibilityFacts,
     snapshots: Vec<FileSnapshot>,
     #[cfg(feature = "allows")]
     allows: Vec<crate::etiquettes::allows::AllowSiteRecord>,
@@ -153,6 +159,10 @@ impl SourcePolicyInventory {
         inventory.collect_declarations(crate_root, source.workspace_root(), |path| {
             source.input_text(path)
         })?;
+        #[cfg(feature = "visibility")]
+        {
+            inventory.visibility = Self::collect_visibility(source, crate_root)?;
+        }
         inventory.sort();
         Ok(inventory)
     }
