@@ -171,13 +171,13 @@ pub use etiquettes::foreign_error_types::{
 };
 #[cfg(feature = "glob_imports")]
 pub use etiquettes::glob_imports::{
-    GLOB_IMPORTS_ETIQUETTE, GlobImportRuleId, scan_crate_glob_imports,
-    scan_rust_source as scan_glob_imports_rust_source,
+    GLOB_IMPORTS_ETIQUETTE, GlobImportInventoryEnricher, GlobImportRuleId, GlobImportSiteRecord,
+    scan_crate_glob_imports, scan_rust_source as scan_glob_imports_rust_source,
 };
 #[cfg(feature = "inline_tests")]
 pub use etiquettes::inline_tests::{
-    INLINE_TESTS_ETIQUETTE, InlineTestRuleId, scan_crate_inline_tests,
-    scan_rust_source as scan_inline_tests_rust_source,
+    INLINE_TESTS_ETIQUETTE, InlineTestInventoryEnricher, InlineTestRuleId, InlineTestSiteRecord,
+    scan_crate_inline_tests, scan_rust_source as scan_inline_tests_rust_source,
 };
 #[cfg(feature = "internal_error_chain")]
 pub use etiquettes::internal_error_chain::{
@@ -305,11 +305,10 @@ pub use plugin::{
 };
 pub use plugin::{
     ErrorHandling, ErrorHandlingLayers, ErrorHandlingPolicy, ErrorScope, ErrorScopeProvider,
-    ErrorSurface, StandardErrorHandlingPolicy, WorkspaceMembersErrorScopeProvider,
-};
-pub use plugin::{
-    EtiquettePlugin, Plugin, PluginCategory, StaticPlugin, StrategicPlugin, StrategicPortfolio,
-    Strategy, etiquettes_from_plugins, plugins_in_category, selected_plugins,
+    ErrorSurface, EtiquettePlugin, Plugin, PluginCategory, StandardErrorHandlingPolicy,
+    StaticPlugin, StrategicPlugin, StrategicPortfolio, Strategy,
+    WorkspaceMembersErrorScopeProvider, etiquettes_from_plugins, plugins_in_category,
+    selected_plugins,
 };
 #[cfg(feature = "amenable_ext")]
 pub use plugins::{AMENABLE_EXT_COVERAGE, AmenableExtCoverage};
@@ -365,27 +364,22 @@ pub use hooks::{
 pub use ir::{
     ATTR_BINARY_ENTRY_PATHS, ATTR_CARGO_MANIFEST_SNAPSHOT, ATTR_CRATE_KINDS,
     ATTR_FUNCTION_CALL_FLOW, ATTR_FUNCTION_ERROR_FAMILY, ATTR_FUNCTION_SOURCE_SYNTAX,
-    ATTR_IR_ORIGIN, ATTR_SOURCE_MODULE_SCOPE, ATTR_SYN_DOC_PEER, AttrKey, AttrValue, BasicQuery,
-    CallResolutionFailure, CrateIr, CrateIrSnapshot, CrateKind, CrateView, CrateViewMut,
-    DeclaredFunctionOutput, EdgeKind, EdgeWeight, ErrorFamilyBasis, ErrorFamilyGap,
+    ATTR_IR_ORIGIN, ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, ATTR_SOURCE_ATTRIBUTE,
+    ATTR_SOURCE_FILE_ATTRIBUTES, ATTR_SOURCE_MODULE_SCOPE, ATTR_SYN_DOC_PEER, AttrKey, AttrValue,
+    BasicQuery, CallResolutionFailure, CrateIr, CrateIrSnapshot, CrateKind, CrateView,
+    CrateViewMut, DeclaredFunctionOutput, EdgeKind, EdgeWeight, ErrorFamilyBasis, ErrorFamilyGap,
     ErrorFamilyGapReason, ErrorFamilyMember, FileSnapshot, FunctionBoundary, FunctionCallFlow,
     FunctionCallSyntax, FunctionErrorFamily, FunctionNestedScope, FunctionReturn,
     FunctionReturnFlow, FunctionSourceSyntax, FunctionSuccessExit, FunctionTail,
     FunctionUnwrapSyntax, IrIndexes, IrMut, IrView, ItemKind, NestedScopeKind, NodeId, NodeKind,
     NodeView, NodeWeight, ORIGIN_RUSTDOC, ORIGIN_SOURCE, PanicSitesQuery, QualifiedPath, Query,
-    QueryBuilder, ResolvedFunctionCall, ReturnValue, SourceByteRange, SourceCallResolution,
-    SourceCallUse, SourceEntryContract, SourceModuleScope, SourcePathUse, SourceResultContract,
-    SourceUseInventory, WorkspaceIr,
-};
-pub use ir::{
-    ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, SemanticCall, SemanticCallTarget,
+    QueryBuilder, ResolvedFunctionCall, ReturnValue, SemanticCall, SemanticCallTarget,
     SemanticCapability, SemanticFormattingRole, SemanticFunction, SemanticItemId,
     SemanticResultRecording, SemanticReturnContract, SemanticSnapshot, SemanticType,
-};
-pub use ir::{
-    ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_FILE_ATTRIBUTES, SourceAttribute, SourceAttributeArgument,
-    SourceAttributeArguments, SourceAttributedItem, SourceCrateLints, SourceFileAttributes,
-    SourceInstrumentSyntax,
+    SourceAttribute, SourceAttributeArgument, SourceAttributeArguments, SourceAttributedItem,
+    SourceByteRange, SourceCallResolution, SourceCallUse, SourceCrateLints, SourceEntryContract,
+    SourceFileAttributes, SourceInstrumentSyntax, SourceModuleScope, SourcePathUse,
+    SourceResultContract, SourceUseInventory, WorkspaceIr,
 };
 #[cfg(feature = "impl_coverage")]
 pub use ir::{
@@ -490,5 +484,11 @@ pub use {
     rustdoc_loader::{RustdocLoadView, RustdocLoader, resolve_rustdoc_json},
 };
 
-#[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+#[cfg(any(
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests"
+))]
 pub use ir::{ATTR_SOURCE_POLICY_INVENTORY, SourcePolicyInventory};

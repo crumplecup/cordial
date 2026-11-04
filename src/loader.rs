@@ -21,10 +21,12 @@ pub(crate) use source::ParsedSourceSession;
 pub use source::{SharedMacroSyntax, SharedParsedFile, SourceFile, SourceLoadView, SourceLoader};
 #[cfg(feature = "internal_error_chain")]
 pub(crate) use source::{SourceEditView, SourceSnapshot};
-#[cfg(feature = "allows")]
+#[cfg(any(feature = "allows", feature = "glob_imports", feature = "inline_tests"))]
 pub(crate) use source_work::parse as source_parse;
 #[cfg(any(
     feature = "allows",
+    feature = "glob_imports",
+    feature = "inline_tests",
     feature = "panics",
     feature = "error_sites",
     feature = "tracing",

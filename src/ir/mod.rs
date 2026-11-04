@@ -28,7 +28,13 @@ mod rustdoc_query;
 mod semantic;
 mod source_attributes;
 mod source_calls;
-#[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+#[cfg(any(
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests"
+))]
 mod source_policy;
 #[cfg(feature = "allows")]
 pub use source_policy::scan_allows_source;
@@ -36,7 +42,17 @@ pub use source_policy::scan_allows_source;
 pub use source_policy::scan_cfg_hygiene_source;
 #[cfg(feature = "cfg_scatter")]
 pub use source_policy::scan_cfg_scatter_source;
-#[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+#[cfg(feature = "glob_imports")]
+pub use source_policy::scan_glob_imports_source;
+#[cfg(feature = "inline_tests")]
+pub use source_policy::scan_inline_tests_source;
+#[cfg(any(
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests"
+))]
 pub use source_policy::{ATTR_SOURCE_POLICY_INVENTORY, SourcePolicyInventory};
 #[cfg(feature = "tracing")]
 mod tracing_source;

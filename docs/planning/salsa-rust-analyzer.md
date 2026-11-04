@@ -432,6 +432,35 @@ declarations outside supported macro islands remain part of the unresolved
 proof-dialect migration; the crate-attribute fixture now uses the same `verus!`
 input shape as its pipeline counterpart.
 
+### Glob imports and inline-test projection checkpoint
+
+`SourcePolicyInventory` now carries typed, snapshot-bound glob-import and
+inline-test evidence as well. Both inventory enrichers consume it through
+`IrView`, with explicit errors for missing or corrupt facts. Their shipping
+compatibility visitors now belong to loader collection; the enrichers and
+standalone crate adapters no longer walk syntax. Native database collectors
+produce the same records directly from canonical rust-analyzer syntax.
+
+The complete-payload parity specimen covers grouped and absolute imports,
+raw identifiers, prelude exemptions, local modules, inactive syntax, free and
+impl test functions, test attributes, cfg-test suppression, and macro payloads.
+Graph-only materialization uses an empty source view and compares every
+generated policy node's attributes and span. Integration-test and fixture
+selection retain their existing scope. Virtual revisions and restoration cover
+the complete expanded inventory. Standalone source-string compatibility
+adapters remain within loader-owned collection until the frontend cutover.
+
+Validation: the glob-import and inline-test etiquette suites pass, including
+their generated-checklist checks. Complete policy parity and virtual
+change/restore checks pass with both native collectors enabled. Each feature
+also compiles independently without warnings. The build-tier commit gate
+passes with zero open items; the all-tier gate stays at the migration completion
+milestone.
+
+This retires syntax access in these two enrichers. It does not complete the
+file-policy group or switch production input ownership to rust-analyzer;
+modularity and pageantry remain next in that group.
+
 ### Collector migration inventory
 
 The starting audit found 53 files consuming `.syntax()` or `.macro_syntax()`
@@ -443,7 +472,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | --- | --- | --- |
 | Source ownership and graph population | `loader/source.rs`, `source/cache.rs`, `source_work.rs`, `populate.rs` | Canonical text inputs first; then syntax carriers, source ranges, item/module population, inactive syntax. Remove `ParsedSource.syntax`, the thread-local AST cache, and the `syn` parser on cutover. |
 | Syntax/source facts and direct calls | `ir/function_source.rs`, `ir/source_calls/collect.rs`, `enricher/source_calls.rs` | Signatures, exact edit ranges, declaration identity, instantiated contracts, resolved calls. Replace name-based resolution using semantic facts. |
-| Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, and `cfg_hygiene` consume loader-projected IR; remaining: `glob_imports`, `inline_tests`, `modularity`, `pageantry` scans | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
+| Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, and `inline_tests` consume loader-projected IR; remaining: `modularity` and `pageantry` scans | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
 | API and layout | `derives/scan.rs`, `derives/path_inclusion.rs`, `visibility/scan/tree.rs`, `cli_layout/{tree,scan,scan/catalog}.rs` | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | `tracing/scan.rs`, `call_graph/collect.rs`, `{subscriber,boundary,print}/scan.rs` | Function/call identity, attributes, macro input syntax, executable boundary facts; retain apply ranges and worklist accounting. |
 | Error analysis | `enricher/error/scan.rs`; `error_sites`, `error_chain`, `internal_error_chain/{architecture,type_graph}` | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
@@ -530,9 +559,9 @@ Reserve the all-tier gate for completion of the migration plan.
 ## Current next step
 
 Work toward the production cutover, continuing with the remaining file-policy
-collectors (`glob_imports`, `inline_tests`, `modularity`, `pageantry`) and their
-shared IR contracts. Attribute materialization, crate-attribute policy, allows,
-and cfg policies now consume loader projections. Preserve inactive-code policy
+collectors (`modularity`, `pageantry`) and their shared IR contracts. Attribute
+materialization, crate-attribute policy, allows, cfg policies, glob imports, and
+inline tests now consume loader projections. Preserve inactive-code policy
 coverage and golden findings. Then complete API/layout, tracing, error/apply, and
 proof collection in the inventory above. Integrate the Cargo context driver
 before using semantic facts to authorize transformations. Track the remaining

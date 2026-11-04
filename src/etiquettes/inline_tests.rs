@@ -31,7 +31,7 @@ pub use enricher::InlineTestInventoryEnricher;
 pub use probe::InlineTestSiteProbe;
 pub use reporter::{InlineTestChecklistReporter, InlineTestCsvReporter, InlineTestSummaryReporter};
 pub use scan::{scan_crate_inline_tests, scan_rust_source};
-pub use types::InlineTestRuleId;
+pub use types::{InlineTestRuleId, InlineTestSiteRecord};
 
 use std::sync::LazyLock;
 

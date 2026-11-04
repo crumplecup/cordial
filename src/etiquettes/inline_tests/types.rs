@@ -149,8 +149,17 @@ impl Finding for InlineTestFinding {
     }
 }
 
-/// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+/// Snapshot-bound source evidence used while building IR nodes.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_builder::Builder,
+    derive_getters::Getters,
+)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct InlineTestSiteRecord {
     #[getter(copy)]
@@ -163,6 +172,7 @@ pub struct InlineTestSiteRecord {
 }
 
 impl InlineTestSiteRecord {
+    /// Construct loader-owned inline-test evidence.
     #[instrument(level = "debug")]
     pub fn builder() -> InlineTestSiteRecordBuilder {
         InlineTestSiteRecordBuilder::default()

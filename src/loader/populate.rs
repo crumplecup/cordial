@@ -90,7 +90,13 @@ impl SourceLoadView {
                 ),
             )?;
         }
-        #[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+        #[cfg(any(
+            feature = "allows",
+            feature = "cfg_hygiene",
+            feature = "cfg_scatter",
+            feature = "glob_imports",
+            feature = "inline_tests"
+        ))]
         if let Some(crate_root) = self.src_root().parent() {
             let inventory = crate::ir::SourcePolicyInventory::collect(self, crate_root)?;
             ir.set_attr(

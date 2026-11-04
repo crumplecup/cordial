@@ -19,3 +19,17 @@ pub use cfg_hygiene::scan_rust_source as scan_cfg_hygiene_source;
 pub(super) use cfg_scatter::collect as collect_cfg_scatter;
 #[cfg(feature = "cfg_scatter")]
 pub use cfg_scatter::scan_rust_source as scan_cfg_scatter_source;
+
+#[cfg(feature = "glob_imports")]
+mod glob_imports;
+#[cfg(feature = "glob_imports")]
+pub(super) use glob_imports::collect as collect_glob_imports;
+#[cfg(feature = "glob_imports")]
+pub use glob_imports::scan_rust_source as scan_glob_imports_source;
+
+#[cfg(feature = "inline_tests")]
+mod inline_tests;
+#[cfg(feature = "inline_tests")]
+pub(super) use inline_tests::collect as collect_inline_tests;
+#[cfg(feature = "inline_tests")]
+pub use inline_tests::scan_rust_source as scan_inline_tests_source;

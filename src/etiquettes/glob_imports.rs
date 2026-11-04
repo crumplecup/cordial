@@ -32,7 +32,7 @@ pub use enricher::GlobImportInventoryEnricher;
 pub use probe::GlobImportSiteProbe;
 pub use reporter::{GlobImportChecklistReporter, GlobImportCsvReporter, GlobImportSummaryReporter};
 pub use scan::{scan_crate_glob_imports, scan_rust_source};
-pub use types::GlobImportRuleId;
+pub use types::{GlobImportRuleId, GlobImportSiteRecord};
 
 use std::sync::LazyLock;
 

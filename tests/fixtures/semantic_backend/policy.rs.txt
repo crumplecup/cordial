@@ -70,5 +70,38 @@ fn entry() {
 #[cfg(from_build)] fn build_declared() {}
 #[cfg(from_manifest)] fn manifest_declared() {}
 macro_rules! payload {
-    () => { #[allow(unused)] #[cfg(macro_payload)] fn not_syntax() {} };
+    () => { #[allow(unused)] #[cfg(macro_payload)] fn not_syntax() { use hidden::*; } };
+}
+use ::external::nested::{*, prelude::*, deeper::{r#type::*, self as renamed}};
+mod imports {
+    use super::*;
+    fn enclosing() {
+        use std::collections::*;
+        mod local { use crate::nested::*; }
+        #[cfg(test)] fn cfg_helper() {}
+        #[tokio::test] fn async_test() {}
+        #[::test] fn absolute_test() {}
+        #[rstest] fn parameterized() {}
+        #[my::rstest] fn not_a_test() {}
+    }
+    #[cfg(any())]
+    mod inactive {
+        use hidden::*;
+        #[test] fn inactive_test() {}
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        #[cfg(test)] mod nested_tests { #[test] fn hidden_test() {} }
+    }
+    struct Subject;
+    impl Subject {
+        #[test] fn method_test() { #[test] fn local_test() {} }
+    }
+    #[cfg(test)] impl Subject { #[test] fn suppressed_method() {} }
+    #[cfg(test)] use crate::nested::Holder;
+    #[cfg(test)] #[test] fn cfg_wins() {}
+    trait TraitTest {
+        #[test] fn not_an_inline_test() { #[test] fn nested_in_trait() {} }
+    }
 }

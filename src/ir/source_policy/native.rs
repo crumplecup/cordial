@@ -10,9 +10,20 @@ use std::path::Path;
 mod allows;
 #[cfg(feature = "cfg_hygiene")]
 mod cfg_names;
+#[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
 mod context;
+#[cfg(feature = "glob_imports")]
+mod glob_imports;
+#[cfg(feature = "inline_tests")]
+mod inline_tests;
 #[cfg(feature = "cfg_scatter")]
 mod scatter;
+#[cfg(any(
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "inline_tests"
+))]
 mod tokens;
 
 impl SourcePolicyInventory {
@@ -32,7 +43,13 @@ impl SourcePolicyInventory {
             && (is_source || is_test)
             && !crate::loader::path_has_fixtures(file.path(), crate_root);
         let include_cfg = is_source && cfg!(any(feature = "cfg_hygiene", feature = "cfg_scatter"));
-        if !include_cfg && !include_allows {
+        let include_globs = cfg!(feature = "glob_imports")
+            && (is_source || is_test)
+            && !crate::loader::path_has_fixtures(file.path(), crate_root);
+        let include_tests = cfg!(feature = "inline_tests")
+            && is_source
+            && !crate::loader::path_has_fixtures(file.path(), crate_root);
+        if !include_cfg && !include_allows && !include_globs && !include_tests {
             return Ok(());
         }
         let tree_root = if is_source { &source_root } else { &test_root };
@@ -45,6 +62,16 @@ impl SourcePolicyInventory {
         if include_allows {
             self.allows
                 .extend(allows::collect(file, crate_root, &prefix)?);
+        }
+        #[cfg(feature = "glob_imports")]
+        if include_globs {
+            self.glob_imports
+                .extend(glob_imports::collect(file, crate_root, &prefix)?);
+        }
+        #[cfg(feature = "inline_tests")]
+        if include_tests {
+            self.inline_tests
+                .extend(inline_tests::collect(file, crate_root, &prefix)?);
         }
         if is_source {
             #[cfg(feature = "cfg_hygiene")]
@@ -67,7 +94,7 @@ fn outside_macro(node: &SyntaxNode) -> bool {
 }
 
 #[tracing::instrument(level = "trace", skip(node))]
-#[cfg(any(feature = "allows", feature = "cfg_scatter"))]
+#[cfg(any(feature = "allows", feature = "cfg_scatter", feature = "inline_tests"))]
 fn attributes(node: &SyntaxNode) -> impl Iterator<Item = ast::Attr> {
     ast::AnyHasAttrs::cast(node.clone())
         .map(|owner| ast::attrs_including_inner(&owner).collect::<Vec<_>>())
@@ -94,7 +121,7 @@ fn policy_owner(attr: &ast::Attr) -> Option<SyntaxNode> {
 }
 
 #[tracing::instrument(level = "trace", skip(attr))]
-#[cfg(feature = "allows")]
+#[cfg(any(feature = "allows", feature = "inline_tests"))]
 fn test_gate(attr: &ast::Attr) -> bool {
     match attr.meta() {
         Some(ast::Meta::CfgMeta(meta)) => meta

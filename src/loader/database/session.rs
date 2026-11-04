@@ -166,7 +166,13 @@ impl SourceDatabase {
         #[cfg(feature = "cfg_hygiene")] declarations: crate::ir::SourcePolicyInventory,
     ) -> CordialResult<CrateIr> {
         let mut graph = CrateIr::new(target.crate_name());
-        #[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+        #[cfg(any(
+            feature = "allows",
+            feature = "cfg_hygiene",
+            feature = "cfg_scatter",
+            feature = "glob_imports",
+            feature = "inline_tests"
+        ))]
         let mut policies = {
             #[cfg(feature = "cfg_hygiene")]
             {
@@ -213,11 +219,23 @@ impl SourceDatabase {
                         .join("::")
                 })
                 .unwrap_or_else(|| path.display().to_string());
-            #[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+            #[cfg(any(
+                feature = "allows",
+                feature = "cfg_hygiene",
+                feature = "cfg_scatter",
+                feature = "glob_imports",
+                feature = "inline_tests"
+            ))]
             policies.collect_native_file(&source, target.crate_root())?;
             projection.populate(&self.db, &sema, &source, &module_path, &mut graph)?;
         }
-        #[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+        #[cfg(any(
+            feature = "allows",
+            feature = "cfg_hygiene",
+            feature = "cfg_scatter",
+            feature = "glob_imports",
+            feature = "inline_tests"
+        ))]
         {
             policies.sort();
             graph.set_attr(

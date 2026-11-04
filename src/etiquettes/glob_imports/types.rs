@@ -141,8 +141,17 @@ impl Finding for GlobImportFinding {
     }
 }
 
-/// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+/// Snapshot-bound source evidence used while building IR nodes.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_builder::Builder,
+    derive_getters::Getters,
+)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct GlobImportSiteRecord {
     #[getter(copy)]
@@ -155,6 +164,7 @@ pub struct GlobImportSiteRecord {
 }
 
 impl GlobImportSiteRecord {
+    /// Construct loader-owned glob-import evidence.
     #[instrument(level = "debug")]
     pub fn builder() -> GlobImportSiteRecordBuilder {
         GlobImportSiteRecordBuilder::default()

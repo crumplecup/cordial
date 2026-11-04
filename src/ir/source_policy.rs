@@ -16,6 +16,10 @@ pub use compatibility::scan_allows_source;
 pub use compatibility::scan_cfg_hygiene_source;
 #[cfg(feature = "cfg_scatter")]
 pub use compatibility::scan_cfg_scatter_source;
+#[cfg(feature = "glob_imports")]
+pub use compatibility::scan_glob_imports_source;
+#[cfg(feature = "inline_tests")]
+pub use compatibility::scan_inline_tests_source;
 
 /// Complete policy collection for a crate's quality scan trees.
 pub const ATTR_SOURCE_POLICY_INVENTORY: &str = "source_policy_inventory";
@@ -28,6 +32,10 @@ pub struct SourcePolicyInventory {
     snapshots: Vec<FileSnapshot>,
     #[cfg(feature = "allows")]
     allows: Vec<crate::etiquettes::allows::AllowSiteRecord>,
+    #[cfg(feature = "glob_imports")]
+    glob_imports: Vec<crate::etiquettes::glob_imports::GlobImportSiteRecord>,
+    #[cfg(feature = "inline_tests")]
+    inline_tests: Vec<crate::etiquettes::inline_tests::InlineTestSiteRecord>,
     #[cfg(feature = "cfg_hygiene")]
     cfg_names: Vec<crate::etiquettes::cfg_hygiene::CfgNameOccurrence>,
     #[cfg(feature = "cfg_hygiene")]
@@ -47,7 +55,7 @@ impl SourcePolicyInventory {
         };
         for tree in crate::loader::quality_scan_trees(crate_root) {
             let is_source = tree == crate_root.join("src");
-            if !is_source && !cfg!(feature = "allows") {
+            if !is_source && !cfg!(any(feature = "allows", feature = "glob_imports")) {
                 continue;
             }
             for file in source.parsed_rust_files_under(&tree, "source-policy", |path| {
@@ -64,7 +72,23 @@ impl SourcePolicyInventory {
                         .allows
                         .extend(compatibility::collect_allows(&file, &tree, crate_root)?);
                 }
+                #[cfg(feature = "glob_imports")]
+                if !crate::loader::path_has_fixtures(file.path(), crate_root) {
+                    inventory
+                        .glob_imports
+                        .extend(compatibility::collect_glob_imports(
+                            &file, &tree, crate_root,
+                        )?);
+                }
                 if is_source {
+                    #[cfg(feature = "inline_tests")]
+                    if !crate::loader::path_has_fixtures(file.path(), crate_root) {
+                        inventory
+                            .inline_tests
+                            .extend(compatibility::collect_inline_tests(
+                                &file, &tree, crate_root,
+                            )?);
+                    }
                     #[cfg(feature = "cfg_hygiene")]
                     inventory
                         .cfg_names
@@ -92,6 +116,20 @@ impl SourcePolicyInventory {
     pub(crate) fn sort(&mut self) {
         self.snapshots.sort_by(|a, b| a.path().cmp(b.path()));
         self.snapshots.dedup();
+        #[cfg(feature = "glob_imports")]
+        self.glob_imports.sort_by(|a, b| {
+            a.file()
+                .cmp(b.file())
+                .then(a.line().cmp(&b.line()))
+                .then(a.snippet().cmp(b.snippet()))
+        });
+        #[cfg(feature = "inline_tests")]
+        self.inline_tests.sort_by(|a, b| {
+            a.file()
+                .cmp(b.file())
+                .then(a.line().cmp(&b.line()))
+                .then(a.snippet().cmp(b.snippet()))
+        });
         #[cfg(feature = "allows")]
         self.allows.sort_by(|a, b| {
             a.file()

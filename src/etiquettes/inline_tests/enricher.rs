@@ -1,10 +1,8 @@
-use crate::enricher::{member_crate_root, resolve_parent};
+use crate::enricher::resolve_parent;
 use crate::error::CordialResult;
 use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
-
-use super::scan::scan_shared_crate_inline_tests;
 
 use tracing::instrument;
 
@@ -13,6 +11,7 @@ use tracing::instrument;
 pub struct InlineTestInventoryEnricher;
 
 impl InlineTestInventoryEnricher {
+    /// Stable registration identity for inline-test materialization.
     pub const ID: &'static str = "inline-test-inventory";
 }
 
@@ -24,10 +23,13 @@ impl SourceEnricher for InlineTestInventoryEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
-        let (ir, source, session) = view.into_parts();
+        let (ir, _source, _session) = view.into_parts();
 
-        let crate_root = member_crate_root(source, session);
-        let records = scan_shared_crate_inline_tests(source, &crate_root)?;
+        let inventory = ir
+            .source_policy_inventory()?
+            .ok_or_else(|| crate::CordialError::not_found("source policy inventory".into()))?;
+        let crate_root = inventory.crate_root();
+        let records = inventory.inline_tests();
 
         for record in records {
             let parent = resolve_parent(ir, record.context())?;

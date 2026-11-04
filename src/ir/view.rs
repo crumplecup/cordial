@@ -87,7 +87,13 @@ pub trait IrView {
     }
 
     /// Read complete loader-owned file-policy evidence, including inactive syntax.
-    #[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+    #[cfg(any(
+        feature = "allows",
+        feature = "cfg_hygiene",
+        feature = "cfg_scatter",
+        feature = "glob_imports",
+        feature = "inline_tests"
+    ))]
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
     fn source_policy_inventory(&self) -> CordialResult<Option<super::SourcePolicyInventory>> {
         Ok(self

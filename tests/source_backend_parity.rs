@@ -219,7 +219,13 @@ fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Resul
     assert_eq!(legacy_scope.uses(), native_scope.uses());
     assert_eq!(legacy_scope, native_scope);
     assert_attribute_contract(&legacy, &native)?;
-    #[cfg(any(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+    #[cfg(any(
+        feature = "allows",
+        feature = "cfg_hygiene",
+        feature = "cfg_scatter",
+        feature = "glob_imports",
+        feature = "inline_tests"
+    ))]
     assert_eq!(
         legacy.source_policy_inventory().into_diagnostic()?,
         native.source_policy_inventory().into_diagnostic()?,

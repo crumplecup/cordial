@@ -1,4 +1,8 @@
 //! Complete policy parity and consumers that cannot access the source tree.
+#[cfg(feature = "glob_imports")]
+use cordial::GlobImportInventoryEnricher;
+#[cfg(feature = "inline_tests")]
+use cordial::InlineTestInventoryEnricher;
 use cordial::{
     AllowInventoryEnricher, CfgHygieneInventoryEnricher, CfgScatterInventoryEnricher, CrateIr,
     CrateTarget, IrView, LoadContext, Loader, QueryBuilder, SessionBuilder, SourceDatabase,
@@ -22,10 +26,10 @@ pub fn verify() -> Result<()> {
     let path = root.path().join("src/lib.rs");
     std::fs::write(&path, SOURCE).into_diagnostic()?;
     let integration = root.path().join("tests/integration.rs");
-    std::fs::write(&integration, "#[allow(unused)] fn integration() {}\n").into_diagnostic()?;
+    std::fs::write(&integration, "#[allow(unused)] fn integration() { use crate::helper::*; }\n#[test] fn integration_test() {}\n").into_diagnostic()?;
     std::fs::write(
         root.path().join("tests/fixtures/ignored.rs"),
-        "#[allow(unused)] fn fixture() {}\n",
+        "#[allow(unused)] fn fixture() { use ignored::*; }\n#[test] fn ignored_test() {}\n",
     )
     .into_diagnostic()?;
     let target = CrateTarget::new("policy_parity", root.path());
@@ -41,9 +45,33 @@ pub fn verify() -> Result<()> {
         .source_policy_inventory()
         .into_diagnostic()?
         .ok_or_else(|| miette::miette!("missing native policy"))?;
+    assert_eq!(expected.snapshots(), actual.snapshots(), "policy snapshots");
+    assert_eq!(expected.allows(), actual.allows(), "allow evidence");
+    #[cfg(feature = "glob_imports")]
+    assert_eq!(
+        expected.glob_imports(),
+        actual.glob_imports(),
+        "glob evidence"
+    );
+    #[cfg(feature = "inline_tests")]
+    assert_eq!(
+        expected.inline_tests(),
+        actual.inline_tests(),
+        "test evidence"
+    );
+    assert_eq!(
+        expected.cfg_names(),
+        actual.cfg_names(),
+        "cfg name evidence"
+    );
+    assert_eq!(
+        expected.cfg_groups(),
+        actual.cfg_groups(),
+        "cfg group evidence"
+    );
     assert_eq!(
         expected, actual,
-        "complete policy evidence, snapshots and declarations"
+        "complete policy evidence and declarations"
     );
     assert!(actual.known_cfg_names().contains("from_build"));
     assert!(actual.known_cfg_names().contains("from_manifest"));
@@ -75,8 +103,56 @@ pub fn verify() -> Result<()> {
         materialized(&legacy, root.path())?,
         materialized(&native, root.path())?
     );
+    #[cfg(feature = "glob_imports")]
+    {
+        let sites = actual.glob_imports();
+        assert!(
+            sites
+                .iter()
+                .any(|site| site.snippet() == "hidden::*" && site.context() == "imports::inactive")
+        );
+        assert!(
+            sites
+                .iter()
+                .any(|site| site.snippet() == "external::nested::deeper::r#type::*")
+        );
+        assert!(sites.iter().any(|site| site.context() == "imports::tests"));
+        assert!(
+            sites
+                .iter()
+                .any(|site| site.file() == Path::new("tests/integration.rs"))
+        );
+        assert!(
+            !sites.iter().any(|site| site.snippet().contains("prelude")
+                || site.file().starts_with("tests/fixtures"))
+        );
+    }
+    #[cfg(feature = "inline_tests")]
+    {
+        let sites = actual.inline_tests();
+        assert!(
+            sites
+                .iter()
+                .any(|site| site.context() == "imports::inactive::inactive_test")
+        );
+        assert!(
+            sites
+                .iter()
+                .any(|site| site.context() == "imports::enclosing::parameterized")
+        );
+        assert!(!sites.iter().any(|site| site.file().starts_with("tests")
+            || site.snippet().contains("hidden_test")
+            || site.snippet().contains("suppressed_method")
+            || site.snippet().contains("not_a_test")));
+    }
     database
-        .change_file(&path, SOURCE.replace("unknown", "changed"))
+        .change_file(
+            &path,
+            SOURCE
+                .replace("unknown", "changed")
+                .replace("std::collections", "std::path")
+                .replace("parameterized", "revised_test"),
+        )
         .into_diagnostic()?;
     database
         .change_file(
@@ -103,6 +179,36 @@ pub fn verify() -> Result<()> {
     );
     assert!(revised.known_cfg_names().contains("changed_build"));
     assert!(!revised.known_cfg_names().contains("from_build"));
+    #[cfg(feature = "glob_imports")]
+    {
+        assert!(
+            revised
+                .glob_imports()
+                .iter()
+                .any(|site| site.snippet() == "std::path::*")
+        );
+        assert!(
+            !revised
+                .glob_imports()
+                .iter()
+                .any(|site| site.snippet() == "std::collections::*")
+        );
+    }
+    #[cfg(feature = "inline_tests")]
+    {
+        assert!(
+            revised
+                .inline_tests()
+                .iter()
+                .any(|site| site.context().ends_with("::revised_test"))
+        );
+        assert!(
+            !revised
+                .inline_tests()
+                .iter()
+                .any(|site| site.context().ends_with("::parameterized"))
+        );
+    }
     assert_ne!(actual.snapshots(), revised.snapshots());
     database
         .change_file(&path, SOURCE.into())
@@ -152,6 +258,10 @@ fn materialized(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> 
         &AllowInventoryEnricher as &dyn SourceEnricher,
         &CfgHygieneInventoryEnricher,
         &CfgScatterInventoryEnricher,
+        #[cfg(feature = "glob_imports")]
+        &GlobImportInventoryEnricher,
+        #[cfg(feature = "inline_tests")]
+        &InlineTestInventoryEnricher,
     ] {
         // Missing and corrupt evidence must fail before writing any policy node.
         let mut missing = CrateIr::new("missing");
@@ -179,6 +289,10 @@ fn materialized(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> 
         "allow_rule_id",
         "cfg_hygiene_rule_id",
         "cfg_scatter_predicate",
+        #[cfg(feature = "glob_imports")]
+        "glob_import_rule_id",
+        #[cfg(feature = "inline_tests")]
+        "inline_test_rule_id",
     ] {
         for node in actual.nodes_matching(&QueryBuilder::new().has_attr(key).build()) {
             rows.push(serde_json::json!({"kind":key, "attrs":node.weight().attrs(), "span":node.weight().span()}));
