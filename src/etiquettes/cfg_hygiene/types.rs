@@ -59,15 +59,17 @@ pub struct CfgHygieneRule {
     rule_id: CfgHygieneRuleId,
 }
 
+impl crate::TomlConfigured for CfgHygieneRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "cfg_hygiene"
+    }
+}
+
 impl Rule for CfgHygieneRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "cfg_hygiene"
     }
 
     #[instrument(level = "trace", skip(self))]

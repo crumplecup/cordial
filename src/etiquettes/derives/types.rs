@@ -74,15 +74,17 @@ pub struct DeriveRule {
     rule_id: DeriveRuleId,
 }
 
+impl crate::TomlConfigured for DeriveRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "derives"
+    }
+}
+
 impl Rule for DeriveRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "derives"
     }
 
     #[instrument(level = "trace", skip(self))]

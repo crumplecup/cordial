@@ -19,6 +19,7 @@ use crate::targets::discover_crate_targets;
 
 mod instrument;
 mod ir;
+mod lint_policy;
 mod parse;
 mod plan;
 mod preserve;
@@ -173,6 +174,9 @@ pub(crate) fn run_apply(
     let _parsed_source_session = crate::loader::ParsedSourceSession::begin();
     let source_view = SourceLoadView::for_standalone_scan();
     let config = crate::config::load_cordial_config(project_root, store_home);
+    if !config.etiquette_may_run("tracing") {
+        return Ok(summary);
+    }
     let selected_files = checklist_path.map(|_| &by_file);
     let workspace = build_apply_ir(project_root, store_home, &targets, selected_files)?;
     #[cfg(feature = "cli")]
@@ -198,7 +202,14 @@ pub(crate) fn run_apply(
     let mut planned = Vec::new();
     let mut applied = Vec::new();
 
-    let planner = plan::FilePlanner::new(&source_view, &workspace, &config, facts, call_graph);
+    let planner = plan::FilePlanner::new(
+        project_root,
+        &source_view,
+        &workspace,
+        &config,
+        facts,
+        call_graph,
+    );
     for ((crate_name, rel_path), file_gaps) in by_file {
         let Some(crate_root) = crate_roots.get(&crate_name) else {
             continue;

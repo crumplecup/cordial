@@ -7,6 +7,30 @@ use cordial::{
 };
 
 #[test]
+fn shared_plugin_policy_merges_store_and_workspace_tables() -> miette::Result<()> {
+    cordial::init_tracing();
+    let workspace = tempfile::tempdir().into_diagnostic()?;
+    let store = tempfile::tempdir().into_diagnostic()?;
+    fs::write(store.path().join("cordial.toml"),
+        "[lints.custom]\nenabled = false\n[lints.custom.rules]\nCUSTOM-001 = false\nCUSTOM-002 = true\n")
+        .into_diagnostic()?;
+    fs::write(
+        workspace.path().join("cordial.toml"),
+        "[lints.custom.rules]\nCUSTOM-001 = true\n",
+    )
+    .into_diagnostic()?;
+    let config = load_cordial_config(workspace.path(), store.path());
+    let location =
+        cordial::LintLocation::new(workspace.path(), Some(workspace.path()), "app", None);
+    assert!(!config.etiquette_enabled("custom"));
+    assert!(config.etiquette_may_run("custom"));
+    assert!(config.lint_enabled("custom", "CUSTOM-001", location));
+    assert!(config.lint_enabled("custom", "CUSTOM-002", location));
+    assert!(!config.lint_enabled("custom", "CUSTOM-003", location));
+    Ok(())
+}
+
+#[test]
 fn missing_config_files_use_default() -> miette::Result<()> {
     cordial::init_tracing();
     let workspace = tempfile::tempdir()

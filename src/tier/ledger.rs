@@ -90,7 +90,7 @@ impl GateLedger {
                 .iter()
                 .filter(|finding| {
                     finding.disposition() == Disposition::Open
-                        && finding.rule().category() == etiquette.id()
+                        && finding.rule().configuration_key() == etiquette.configuration_key()
                 })
                 .count();
             let wall_time_nanos = etiquette

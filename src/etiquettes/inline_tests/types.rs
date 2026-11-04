@@ -55,15 +55,17 @@ pub struct InlineTestRule {
     rule_id: InlineTestRuleId,
 }
 
+impl crate::TomlConfigured for InlineTestRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "inline_tests"
+    }
+}
+
 impl Rule for InlineTestRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "inline_tests"
     }
 
     #[instrument(level = "trace", skip(self))]

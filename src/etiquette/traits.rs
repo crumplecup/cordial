@@ -9,9 +9,11 @@ use super::explain::EtiquetteExplain;
 /// An etiquette is the smallest named standard a user can run or explain. It
 /// does not own scheduling; the session deduplicates hooks by id, invokes them
 /// in pipeline order, and writes any reporter artifacts into the project store.
-pub trait Etiquette: Send + Sync {
+pub trait Etiquette: crate::TomlConfigured {
     /// Stable identifier for command filters, reports, and deduplication.
-    fn id(&self) -> &str;
+    fn id(&self) -> &str {
+        self.configuration_key()
+    }
     /// Human-readable display name for reports and `cordial explain`.
     fn name(&self) -> &str;
 

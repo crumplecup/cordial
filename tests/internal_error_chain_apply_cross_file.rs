@@ -5,6 +5,35 @@ use std::process::Command;
 use cordial::run_error_file_apply;
 use miette::IntoDiagnostic;
 
+#[test]
+fn excluded_member_file_blocks_its_connected_error_conversion() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = fixture()?;
+    let library = root.path().join("src/lib.rs");
+    let child = root.path().join("src/child.rs");
+    let before_library = fs::read_to_string(&library).into_diagnostic()?;
+    let before_child = fs::read_to_string(&child).into_diagnostic()?;
+    fs::write(
+        root.path().join("cordial.toml"),
+        r#"
+[internal_error_chain]
+field_strategy = "borrowed"
+[[lints.internal_error_chain.paths]]
+path = "src/child.rs"
+enabled = false
+"#,
+    )
+    .into_diagnostic()?;
+    let result = run_error_file_apply(root.path(), root.path(), None, false).into_diagnostic()?;
+    assert_eq!(result.changed_files(), 0, "{:?}", result.blockers());
+    assert_eq!(
+        fs::read_to_string(&library).into_diagnostic()?,
+        before_library
+    );
+    assert_eq!(fs::read_to_string(&child).into_diagnostic()?, before_child);
+    Ok(())
+}
+
 #[cfg(all(feature = "cli", feature = "quality"))]
 #[test]
 fn distributed_apply_claims_exact_findings_in_both_strategies() -> miette::Result<()> {

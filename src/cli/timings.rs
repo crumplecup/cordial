@@ -86,7 +86,7 @@ pub(super) fn execute_timings(
     let available = etiquettes_from_plugins(&plugins, &session);
     let mut ids: Vec<String> = available
         .iter()
-        .filter(|etiquette| config.etiquette_enabled(etiquette.id()))
+        .filter(|etiquette| config.etiquette_may_run(etiquette.configuration_key()))
         .map(|etiquette| etiquette.id().to_string())
         .collect();
     ids.sort();

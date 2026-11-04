@@ -10,15 +10,17 @@ use tracing::instrument;
 #[derive(Debug, Clone, Copy)]
 pub struct AmenableStdRule;
 
+impl crate::TomlConfigured for AmenableStdRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        AMENABLE_STD_CATEGORY
+    }
+}
+
 impl Rule for AmenableStdRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "AMENABLE-STD-ROW"
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        AMENABLE_STD_CATEGORY
     }
 
     #[instrument(level = "trace", skip(self))]

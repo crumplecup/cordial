@@ -80,6 +80,8 @@ pub enum ErrorFieldApplyBlockerReason {
     InvalidEdit,
     /// The connected parent, Kind, source, constructor, and use graph is incomplete.
     GraphClosure,
+    /// A required part of the atomic conversion is disabled by lint policy.
+    DisabledPolicy,
 }
 
 /// A candidate left untouched by the error field apply pass.
@@ -179,7 +181,7 @@ pub fn run_error_field_apply(
         conversion_units: Vec::new(),
         repairs: Vec::new(),
     };
-    if !policy.enabled() {
+    if !config.etiquette_may_run("internal_error_chain") {
         return Ok(summary);
     }
     for target in discover_crate_targets(project_root, &RunAll)? {
@@ -204,7 +206,29 @@ pub fn run_error_field_apply(
             let plan = patch_file(file, policy.field_strategy(), &units, &graphs, dry_run)?;
             results.push((file, plan));
         }
-        let mut rejected = BTreeSet::new();
+        let disabled: BTreeSet<_> = edit_files
+            .iter()
+            .filter(|file| {
+                let location = crate::LintLocation::new(
+                    project_root,
+                    Some(target.crate_root()),
+                    target.crate_name(),
+                    Some(file.path()),
+                );
+                // These edits change field storage, source locations, and the Kind
+                // edge together. A disabled obligation blocks the whole connected
+                // transaction rather than authorizing a partial graph rewrite.
+                [
+                    super::InternalErrorComplianceId::FieldStrategy001,
+                    super::InternalErrorComplianceId::SourceShape001,
+                    super::InternalErrorComplianceId::ArchKindBox001,
+                ]
+                .into_iter()
+                .any(|rule| !config.lint_enabled("internal_error_chain", rule.as_str(), location))
+            })
+            .map(|file| file.path().to_path_buf())
+            .collect();
+        let mut rejected = disabled.clone();
         loop {
             let before = rejected.len();
             for graph in &graphs {
@@ -247,7 +271,11 @@ pub fn run_error_field_apply(
                                 file.path(),
                                 type_name,
                                 field_name,
-                                ErrorFieldApplyBlockerReason::GraphClosure,
+                                if disabled.contains(file.path()) {
+                                    ErrorFieldApplyBlockerReason::DisabledPolicy
+                                } else {
+                                    ErrorFieldApplyBlockerReason::GraphClosure
+                                },
                             ));
                         }
                     }

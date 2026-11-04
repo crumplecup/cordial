@@ -94,15 +94,17 @@ pub struct PrintRule {
     rule_id: PrintRuleId,
 }
 
+impl crate::TomlConfigured for PrintRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "tracing"
+    }
+}
+
 impl Rule for PrintRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "tracing"
     }
 
     #[instrument(level = "trace", skip(self))]

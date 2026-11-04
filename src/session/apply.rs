@@ -26,7 +26,7 @@ pub(crate) fn collect(
         session,
     )
     .into_iter()
-    .filter(|etiquette| config.etiquette_enabled(etiquette.id()))
+    .filter(|etiquette| config.etiquette_may_run(etiquette.configuration_key()))
     .collect();
     if etiquettes.is_empty() {
         return Ok(ApplyEvidence {

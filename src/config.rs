@@ -9,9 +9,13 @@ mod amenable_ext;
 mod antipatterns;
 mod cfg;
 mod checks;
+mod configured;
+mod finding_policy;
 mod gates;
 mod hotpath;
 mod internal_error_chain;
+mod lint_paths;
+mod lints;
 mod modularity;
 mod pageantry;
 mod tiers;
@@ -34,9 +38,11 @@ pub use self::checks::{
     CrateAttrsThresholds, CreusotDiagnosticsThresholds, DependencyFreshnessThresholds,
     DerivesThresholds, DocWarningsThresholds, FeatureWarningsThresholds,
 };
+pub use self::configured::TomlConfigured;
 pub use self::gates::EtiquetteGate;
 pub use self::hotpath::HotpathConfig;
 pub use self::internal_error_chain::{ErrorFieldStrategy, InternalErrorChainThresholds};
+pub use self::lints::{LintLocation, LintPathBase, LintPathPolicy, LintPolicy};
 pub use self::modularity::ModularityThresholds;
 pub use self::pageantry::PageantryThresholds;
 pub use self::tiers::TierConfig;
@@ -51,6 +57,9 @@ use crate::session::SessionView;
 /// All Cordial settings loaded from `cordial.toml`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct CordialConfig {
+    /// Shared enable and path policy, keyed by etiquette configuration identity.
+    #[serde(default)]
+    lints: std::collections::BTreeMap<String, LintPolicy>,
     #[serde(default)]
     hotpath: HotpathConfig,
     #[serde(default)]
@@ -124,10 +133,50 @@ pub struct CordialConfig {
 impl CordialConfig {
     /// Whether this etiquette should run for the project.
     ///
-    /// Unknown ids (custom plugins) stay on. Built-ins read
-    /// `[<id>] enabled` from `cordial.toml` (default `true`).
-    #[instrument(level = "debug", skip(self))]
+    /// `[lints.<id>] enabled` overrides the legacy built-in `[<id>]` switch.
+    /// Unconfigured ids, including custom plugin etiquettes, default to on.
+    #[instrument(level = "trace", skip(self))]
     pub fn etiquette_enabled(&self, id: &str) -> bool {
+        self.lints
+            .get(id)
+            .and_then(|policy| *policy.enabled())
+            .unwrap_or_else(|| self.legacy_etiquette_enabled(id))
+    }
+
+    /// Include etiquettes that can be enabled by a narrower rule or path setting.
+    #[instrument(level = "trace", skip(self))]
+    pub fn etiquette_may_run(&self, id: &str) -> bool {
+        self.etiquette_enabled(id) || self.lints.get(id).is_some_and(LintPolicy::has_enables)
+    }
+
+    /// Resolve shared policy for one rule using its collected location evidence.
+    #[instrument(level = "trace", skip(self, location))]
+    pub fn lint_enabled(&self, etiquette: &str, rule: &str, location: LintLocation<'_>) -> bool {
+        let default = self.etiquette_enabled(etiquette);
+        let legacy_skip = etiquette == "antipatterns"
+            && location.file().is_some_and(|file| {
+                let Some(root) = location.crate_root() else {
+                    return false;
+                };
+                let absolute = root.join(file);
+                self.antipatterns
+                    .skip_paths()
+                    .get(rule)
+                    .is_some_and(|paths| {
+                        paths
+                            .iter()
+                            .any(|path| lint_paths::matches(root, path, &absolute).is_some())
+                    })
+            });
+        self.lints
+            .get(etiquette)
+            .map_or(default && !legacy_skip, |policy| {
+                policy.resolve(default && !legacy_skip, rule, location)
+            })
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn legacy_etiquette_enabled(&self, id: &str) -> bool {
         match id {
             "visibility" => self.visibility.enabled(),
             "modularity" => self.modularity.enabled(),

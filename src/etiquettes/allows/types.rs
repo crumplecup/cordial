@@ -50,15 +50,17 @@ pub struct AllowRule {
     rule_id: AllowRuleId,
 }
 
+impl crate::TomlConfigured for AllowRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "allows"
+    }
+}
+
 impl Rule for AllowRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "allows"
     }
 
     #[instrument(level = "trace", skip(self))]

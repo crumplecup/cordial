@@ -143,15 +143,17 @@ pub struct ForeignErrorTypeRule {
     rule_id: String,
 }
 
+impl crate::TomlConfigured for ForeignErrorTypeRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "foreign_error_types"
+    }
+}
+
 impl Rule for ForeignErrorTypeRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         &self.rule_id
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "foreign_error_types"
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -163,15 +165,17 @@ impl Rule for ForeignErrorTypeRule {
 #[derive(Debug, Clone)]
 pub struct ForeignErrorCandidateRule;
 
+impl crate::TomlConfigured for ForeignErrorCandidateRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "foreign_error_types"
+    }
+}
+
 impl Rule for ForeignErrorCandidateRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "FOREIGN-ERROR-CANDIDATE"
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "foreign_error_types"
     }
 
     #[instrument(level = "trace", skip(self))]

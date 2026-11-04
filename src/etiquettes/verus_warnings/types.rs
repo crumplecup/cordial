@@ -47,15 +47,17 @@ pub struct VerusWarningRule {
     rule_id: VerusWarningRuleId,
 }
 
+impl crate::TomlConfigured for VerusWarningRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "verus_warnings"
+    }
+}
+
 impl Rule for VerusWarningRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "verus_warnings"
     }
 
     #[instrument(level = "trace", skip(self))]

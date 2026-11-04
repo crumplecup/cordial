@@ -60,15 +60,17 @@ pub struct VisibilityRule {
     rule_id: VisibilityRuleId,
 }
 
+impl crate::TomlConfigured for VisibilityRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "visibility"
+    }
+}
+
 impl Rule for VisibilityRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "visibility"
     }
 
     #[instrument(level = "trace", skip(self))]

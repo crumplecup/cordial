@@ -116,15 +116,17 @@ pub struct ProofPatternRule {
     kind: ProofPatternKind,
 }
 
+impl crate::TomlConfigured for ProofPatternRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "proof_patterns"
+    }
+}
+
 impl Rule for ProofPatternRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.kind.rule_id()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "proof_patterns"
     }
 
     #[instrument(level = "trace", skip(self))]

@@ -48,9 +48,8 @@ pub fn run_crate_attrs_apply(
     dry_run: bool,
 ) -> CordialResult<CrateAttrsApplySummary> {
     let targets = discover_crate_targets(project_root, &RunAll)?;
-    let policy = load_cordial_config(project_root, store_home)
-        .crate_attrs()
-        .clone();
+    let config = load_cordial_config(project_root, store_home);
+    let policy = config.crate_attrs();
 
     let mut summary = CrateAttrsApplySummary {
         changed_files: 0,
@@ -58,6 +57,9 @@ pub fn run_crate_attrs_apply(
         skipped_existing: 0,
         unresolved: 0,
     };
+    if !config.etiquette_may_run("crate_attrs") {
+        return Ok(summary);
+    }
 
     for target in targets {
         let crate_name = target.crate_name();
@@ -69,7 +71,7 @@ pub fn run_crate_attrs_apply(
             continue;
         };
         if !lib.is_file() {
-            let records = scan_crate_attrs(crate_root, crate_name, &policy)?;
+            let records = scan_crate_attrs(crate_root, crate_name, policy)?;
             tracing::warn!(
                 path = %lib.display(),
                 crate_name = %crate_name,
@@ -82,11 +84,16 @@ pub fn run_crate_attrs_apply(
         let source_view = SourceLoadView::for_target(&target)?;
         let mut ir = CrateIr::new(crate_name);
         source_view.populate_ir(&mut ir)?;
-        enrich_crate_attrs_evidence(&mut ir, crate_root, &policy)?;
-        let Some((records, insert_at)) = crate_attrs_apply_evidence_from_ir(&ir)? else {
+        enrich_crate_attrs_evidence(&mut ir, crate_root, policy)?;
+        let Some((mut records, insert_at)) = crate_attrs_apply_evidence_from_ir(&ir)? else {
             summary.skipped_existing += 1;
             continue;
         };
+        let location =
+            crate::LintLocation::new(project_root, Some(crate_root), crate_name, Some(&lib));
+        records.retain(|record| {
+            config.lint_enabled("crate_attrs", record.rule_id().as_str(), location)
+        });
         let to_insert = attr_lines_for(&records);
         if to_insert.is_empty() {
             summary.skipped_existing += 1;

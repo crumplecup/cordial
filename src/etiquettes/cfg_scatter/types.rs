@@ -243,15 +243,17 @@ pub struct CfgScatterRule {
     rule_id: CfgScatterRuleId,
 }
 
+impl crate::TomlConfigured for CfgScatterRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "cfg_scatter"
+    }
+}
+
 impl Rule for CfgScatterRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "cfg_scatter"
     }
 
     #[instrument(level = "trace", skip(self))]

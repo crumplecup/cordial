@@ -30,15 +30,17 @@ impl ImplGapKind {
 #[derive(Debug, Clone, Copy)]
 pub struct CoverageRule;
 
+impl crate::TomlConfigured for CoverageRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "impl-coverage"
+    }
+}
+
 impl Rule for CoverageRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "IMPL-COVERAGE-GAP"
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "impl-coverage"
     }
 
     #[instrument(level = "trace", skip(self))]

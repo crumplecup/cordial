@@ -15,10 +15,61 @@ Missing or unreadable files do not fail the run; the `Default` impl is the
 backup plan. Drift between `Default` and a committed `cordial.toml` is
 accepted.
 
-Every etiquette table accepts `enabled` (default `true`). Set
-`enabled = false` to skip that etiquette for the project — that is the
-line `cordial explain` points at. Per-site suppressions stay on
-`cordial exceptions add`.
+## Shared lint policy
+
+Every built-in and plugin etiquette supports `[lints.<etiquette-id>]`, using
+its `TomlConfigured::configuration_key()`. No plugin-specific config registration
+is necessary. Existing built-in `[tracing] enabled = false` switches remain
+supported; the shared `enabled` switch takes precedence when specified.
+Strategy and threshold settings stay in their existing etiquette tables.
+
+```toml
+[lints.tracing]
+enabled = true
+rules = { "TRACING-STD-PRINTLN" = false }
+skip_paths = { "TRACING-MISSING-INSTRUMENT" = ["src/verus_witness"] }
+
+[[lints.tracing.paths]]
+path = "src/generated"
+enabled = false
+
+[[lints.tracing.paths]]
+path = "src/generated/handwritten.rs"
+rules = { "TRACING-MISSING-INSTRUMENT" = true }
+
+[[lints.tracing.paths]]
+path = "crates/proofs/src"
+base = "workspace" # default: "crate"
+crate = "proofs"    # optional Cargo crate-name filter
+enabled = false
+
+[lints.acme-todo.rules] # custom plugin etiquette
+"ACME-TODO-001" = false
+```
+
+Defaults enable all checks. Resolve the etiquette switch, then the rule switch,
+then matching paths from broadest to narrowest. At each path, rule switches
+override `enabled`; equal paths use declaration order, with the last winning.
+A narrower enable can restore a globally disabled check. `skip_paths` applies
+before explicit path entries, which can restore a skipped rule.
+
+Paths match a complete file or folder component prefix, without globs. `src/a`
+matches `src/a/code.rs`, but not `src/another.rs`. Paths are relative to the
+crate root unless `base = "workspace"` is specified. Absolute configured paths
+and paths containing `..` are not matched. Slashes and backslashes are accepted.
+Findings with no file evidence receive only global controls. A workspace finding
+with an absolute file can receive workspace path policy; crate-relative policy
+requires its crate identity.
+
+The session removes disabled findings before exceptions, reports, gate accounting,
+and worklist generation. Apply uses the same controls, including when reading
+an old checklist. A new tracing annotation uses its complete safe recipe; repairs
+to an existing annotation honor each enabled rule. An atomic error conversion is
+left unchanged when a required field/source/Kind rule is disabled anywhere in its
+connected file graph. Existing `[antipatterns.skip_paths]` remains supported.
+Configuration switches are policy choices; they do not create approved exceptions.
+
+## Strategy and threshold examples
 
 ```toml
 [tiers]

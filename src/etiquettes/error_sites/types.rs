@@ -134,6 +134,13 @@ pub struct ErrorSiteRule {
     kind: ErrorSiteKind,
 }
 
+impl crate::TomlConfigured for ErrorSiteRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "error_sites"
+    }
+}
+
 impl Rule for ErrorSiteRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
@@ -145,11 +152,6 @@ impl Rule for ErrorSiteRule {
             ErrorSiteKind::MatchErr => "ERROR-SITE-MATCH-ERR",
             ErrorSiteKind::OkOr => "ERROR-SITE-OK-OR",
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "error_sites"
     }
 
     #[instrument(level = "trace", skip(self))]

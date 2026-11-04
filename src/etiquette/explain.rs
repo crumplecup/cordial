@@ -121,6 +121,7 @@ pub fn render_explain_page(etiquette: &dyn Etiquette) -> String {
         explain.logic(),
         explain.opt_out(),
     );
+    append_configuration(&mut body, etiquette);
     if !explain.rules().is_empty() {
         body.push_str("\n## Rules\n\n");
         for rule in explain.rules() {
@@ -129,6 +130,23 @@ pub fn render_explain_page(etiquette: &dyn Etiquette) -> String {
     }
     append_resolution_order(&mut body, etiquette);
     body
+}
+
+#[instrument(level = "debug", skip(body, etiquette))]
+fn append_configuration(body: &mut String, etiquette: &dyn Etiquette) {
+    let key = etiquette.configuration_key();
+    let _ = writeln!(
+        body,
+        "\n## Shared lint configuration\n\nBuilt-ins and plugins support the same `cordial.toml` controls:\n\n```toml\n[lints.{key:?}]\nenabled = false\n```"
+    );
+    if let Some(rule) = etiquette.explain().rules().first() {
+        let _ = writeln!(
+            body,
+            "\nFor one rule, or one file/folder (crate-relative, including descendants):\n\n```toml\n[lints.{key:?}.rules]\n{:?} = false\n\n[[lints.{key:?}.paths]]\npath = \"src/generated\"\nenabled = false\n```",
+            rule.id()
+        );
+    }
+    body.push_str("\nPath entries accept `rules = { RULE_ID = true }`, an optional `crate` name, and `base = \"workspace\"`. More specific paths override broader settings; later equal paths win. Findings without file evidence receive global policy only. Apply honors the same controls.\n");
 }
 
 #[instrument(level = "debug", skip(body, etiquette))]

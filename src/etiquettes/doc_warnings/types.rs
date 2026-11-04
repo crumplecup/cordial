@@ -49,15 +49,17 @@ pub struct DocWarningRule {
     rule_id: DocWarningRuleId,
 }
 
+impl crate::TomlConfigured for DocWarningRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "doc_warnings"
+    }
+}
+
 impl Rule for DocWarningRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "doc_warnings"
     }
 
     #[instrument(level = "trace", skip(self))]

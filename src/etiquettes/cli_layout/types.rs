@@ -72,15 +72,17 @@ pub struct CliLayoutRule {
     rule_id: CliLayoutId,
 }
 
+impl crate::TomlConfigured for CliLayoutRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "cli_layout"
+    }
+}
+
 impl Rule for CliLayoutRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "cli_layout"
     }
 
     #[instrument(level = "trace", skip(self))]

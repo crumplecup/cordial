@@ -67,15 +67,17 @@ pub struct FeatureWarningRule {
     rule_id: FeatureWarningRuleId,
 }
 
+impl crate::TomlConfigured for FeatureWarningRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "feature_warnings"
+    }
+}
+
 impl Rule for FeatureWarningRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "feature_warnings"
     }
 
     #[instrument(level = "trace", skip(self))]

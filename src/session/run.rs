@@ -94,7 +94,7 @@ pub(super) fn run_session(
     let selection = TierSelection::resolve(&available, &config, filter.tiers())?;
     let skipped_tiers: Vec<String> = available
         .iter()
-        .filter(|etiquette| config.etiquette_enabled(etiquette.id()))
+        .filter(|etiquette| config.etiquette_may_run(etiquette.configuration_key()))
         .filter(|etiquette| !selection.includes(etiquette.as_ref(), &config))
         .map(|etiquette| {
             crate::assigned_tier(etiquette.as_ref(), &config)
@@ -108,7 +108,7 @@ pub(super) fn run_session(
     let etiquettes: Vec<Arc<dyn Etiquette>> = available
         .into_iter()
         .filter(|etiquette| {
-            config.etiquette_enabled(etiquette.id())
+            config.etiquette_may_run(etiquette.configuration_key())
                 && (explicit || selection.includes(etiquette.as_ref(), &config))
         })
         .collect();
@@ -197,9 +197,17 @@ pub(super) fn run_session(
         );
         for assessor in &workspace_assessors {
             task.set_message(format!("Assessing workspace rule {}", assessor.id()));
-            all_findings.extend(timings.measure("workspace_assess", assessor.id(), || {
+            let mut findings = timings.measure("workspace_assess", assessor.id(), || {
                 assessor.assess(WorkspaceAssessView::new(&workspace, session, filter))
-            })?);
+            })?;
+            super::policy::retain_workspace_findings(
+                &config,
+                session.project_root(),
+                &targets,
+                &workspace,
+                &mut findings,
+            );
+            all_findings.extend(findings);
             task.inc(1);
         }
         task.finish(format!(

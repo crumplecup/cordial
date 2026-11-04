@@ -91,7 +91,15 @@ pub(super) fn gaps_from_ir(
             markers.extend(probe.probe(ProbeView::new(&view, &session))?);
         }
         let marker_refs: Vec<&dyn Marker> = markers.iter().map(|marker| marker.as_ref()).collect();
-        let findings = assessor.assess(AssessView::new(&marker_refs, &view, &session))?;
+        let mut findings = assessor.assess(AssessView::new(&marker_refs, &view, &session))?;
+        let config = crate::load_session_config(&session);
+        let location = crate::LintLocation::new(
+            project_root,
+            Some(target.crate_root()),
+            target.crate_name(),
+            None,
+        );
+        findings.retain(|finding| config.finding_enabled(finding.as_ref(), location, Some(&view)));
         let exceptions =
             crate::exceptions::load_exception_sets(store, &["tracing"], target.crate_name())?;
         let findings = crate::exceptions::apply_exception_sets(findings, &exceptions);

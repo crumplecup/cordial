@@ -110,12 +110,19 @@ We will build the hooks in order. First, the rule they all report against.
 
 ## Naming the rule
 
-Every finding points at a rule, and a rule is three strings.
+Every finding points at a rule. Its required configuration identity names the
+owning etiquette; its rule id and description identify the check.
 
 ```rust
 // A rule carries no data, so it is a unit struct.
 #[derive(Debug, Clone, Copy)]
 struct TodoRule;
+
+impl cordial::TomlConfigured for TodoRule {
+    fn configuration_key(&self) -> &str {
+        "acme-todo"
+    }
+}
 
 impl Rule for TodoRule {
     // The id is permanent.
@@ -134,6 +141,12 @@ impl Rule for TodoRule {
     }
 }
 ```
+
+Both `Rule` and `Etiquette` require `TomlConfigured`: forgetting it is a compile
+error. Cordial applies shared `[lints.acme-todo]` policy centrally, including
+individual rule switches and folder/file overrides. Implementations supply the
+same etiquette key, without implementing their own toggle or path logic.
+The category can differ from that key when reports group rules differently.
 
 The id deserves some thought. It shows up in reports, in `cordial explain`, and
 in the exceptions that silence a finding, so treat it as permanent as soon as

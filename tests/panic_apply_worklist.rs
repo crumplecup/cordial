@@ -98,6 +98,26 @@ fn policy_and_closure_blockers_preserve_source_and_claims() -> miette::Result<()
         ),
         ("", "fn hold() { let _ = leaf; }\n", "UnresolvedUse"),
         ("[panics]\nenabled = false\n", "", "0 site(s) converted"),
+        (
+            "[lints.panics]\nenabled = false\n",
+            "",
+            "0 site(s) converted",
+        ),
+        (
+            "[lints.panics.rules]\nPANIC-SOURCE-UNWRAP = false\n",
+            "",
+            "0 site(s) converted",
+        ),
+        (
+            "[[lints.panics.paths]]\npath = \"src\"\nenabled = false\n",
+            "",
+            "0 site(s) converted",
+        ),
+        (
+            "[[lints.panics.paths]]\npath = \"src/main.rs\"\nenabled = false\n",
+            "",
+            "0 site(s) converted",
+        ),
     ] {
         let root = copy_specimen("apply_error_main")?;
         let home = tempfile::tempdir().into_diagnostic()?;

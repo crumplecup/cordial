@@ -325,6 +325,10 @@ name = "multi_etiquette"
 required-features = ["quality"]
 
 [[test]]
+name = "lint_configuration"
+required-features = ["quality"]
+
+[[test]]
 name = "exceptions"
 required-features = ["panics", "visibility"]
 

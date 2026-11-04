@@ -67,15 +67,17 @@ pub struct AntipatternRule {
     rule_id: AntipatternRuleId,
 }
 
+impl crate::TomlConfigured for AntipatternRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "antipatterns"
+    }
+}
+
 impl Rule for AntipatternRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "antipatterns"
     }
 
     #[instrument(level = "trace", skip(self))]

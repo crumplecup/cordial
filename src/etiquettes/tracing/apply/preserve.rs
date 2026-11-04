@@ -1,7 +1,8 @@
 //! Repair only managed arguments, using locations retained in the shared IR.
 
 use super::super::present::PresentInstrument;
-use super::super::types::{InstrumentLevel, InstrumentRecipe};
+use super::super::types::{InstrumentLevel, InstrumentRecipe, TracingRuleKind};
+use super::lint_policy::ApplyLintPolicy;
 use super::{
     instrument::GapApplyOutcome,
     verifier_policy::{TracingApplyPolicy, gate_predicate},
@@ -10,13 +11,14 @@ use crate::ir::{SourceAttribute, SourceAttributeArguments, SourceByteRange};
 
 type Edit = (std::ops::Range<usize>, String);
 
-#[tracing::instrument(level = "debug", skip(lines, source, attr, recipe, policy))]
+#[tracing::instrument(level = "debug", skip(lines, source, attr, recipe, policy, controls))]
 pub(super) fn repair(
     lines: &mut Vec<String>,
     source: &str,
     attr: &SourceAttribute,
     recipe: &InstrumentRecipe,
     policy: &TracingApplyPolicy,
+    controls: &ApplyLintPolicy<'_>,
 ) -> GapApplyOutcome {
     let Some(syntax) = attr.instrument_syntax() else {
         return GapApplyOutcome::Unresolved;
@@ -44,7 +46,7 @@ pub(super) fn repair(
         let Some(level) = present.level() else {
             return GapApplyOutcome::Unresolved;
         };
-        if level > recipe.level() {
+        if controls.enabled(TracingRuleKind::LevelMismatch) && level > recipe.level() {
             let replacement = format!("\"{}\"", recipe.level());
             if let Some(level) = existing_level {
                 let Some(range) = level.value_range() else {
@@ -55,7 +57,9 @@ pub(super) fn repair(
                 additions.push(format!("level = {replacement}"));
             }
         }
-        if !args.entries().iter().any(|arg| arg.name() == "skip_all") {
+        if controls.enabled(TracingRuleKind::SkipMissing)
+            && !args.entries().iter().any(|arg| arg.name() == "skip_all")
+        {
             if !merge_list(
                 args,
                 "skip",
@@ -71,24 +75,33 @@ pub(super) fn repair(
                 return GapApplyOutcome::Unresolved;
             }
         }
-        if !merge_list(
-            args,
-            "fields",
-            recipe
-                .fields()
-                .iter()
-                .filter(|name| !list_has(args, "fields", name))
-                .map(|name| format!("{name} = {name}"))
-                .collect(),
-            &mut additions,
-            &mut edits,
-        ) {
+        if controls.enabled(TracingRuleKind::FieldsMissing)
+            && !merge_list(
+                args,
+                "fields",
+                recipe
+                    .fields()
+                    .iter()
+                    .filter(|name| !list_has(args, "fields", name))
+                    .map(|name| format!("{name} = {name}"))
+                    .collect(),
+                &mut additions,
+                &mut edits,
+            )
+        {
             return GapApplyOutcome::Unresolved;
         }
         if let Some(required) = recipe.err() {
             match args.entries().iter().find(|arg| arg.name() == "err") {
-                None => additions.push(format!("err(level = \"{required}\")")),
-                Some(arg) if present.err_level().is_some_and(|actual| actual < required) => {
+                None if controls.enabled(TracingRuleKind::ErrMissing)
+                    || controls.enabled(TracingRuleKind::ErrorPathSilent) =>
+                {
+                    additions.push(format!("err(level = \"{required}\")"))
+                }
+                Some(arg)
+                    if controls.enabled(TracingRuleKind::ErrLevelMismatch)
+                        && present.err_level().is_some_and(|actual| actual < required) =>
+                {
                     let Some(range) = arg
                         .arguments()
                         .as_ref()
@@ -99,19 +112,21 @@ pub(super) fn repair(
                     };
                     edits.push((range.start()..range.end(), format!("\"{required}\"")));
                 }
-                Some(_) => {}
+                _ => {}
             }
         }
         append(args, additions, &mut edits);
     } else {
         // A bare annotation has no unrelated arguments to overwrite.
-        if InstrumentLevel::Info > recipe.level() {
+        if controls.enabled(TracingRuleKind::LevelMismatch)
+            && InstrumentLevel::Info > recipe.level()
+        {
             additions.push(format!("level = \"{}\"", recipe.level()));
         }
-        if !recipe.skip().is_empty() {
+        if controls.enabled(TracingRuleKind::SkipMissing) && !recipe.skip().is_empty() {
             additions.push(format!("skip({})", recipe.skip().join(", ")));
         }
-        if !recipe.fields().is_empty() {
+        if controls.enabled(TracingRuleKind::FieldsMissing) && !recipe.fields().is_empty() {
             additions.push(format!(
                 "fields({})",
                 recipe
@@ -122,7 +137,10 @@ pub(super) fn repair(
                     .join(", ")
             ));
         }
-        if let Some(level) = recipe.err() {
+        if let Some(level) = recipe.err().filter(|_| {
+            controls.enabled(TracingRuleKind::ErrMissing)
+                || controls.enabled(TracingRuleKind::ErrorPathSilent)
+        }) {
             additions.push(format!("err(level = \"{level}\")"));
         }
         if !additions.is_empty() {
@@ -132,7 +150,9 @@ pub(super) fn repair(
             ));
         }
     }
-    if let TracingApplyPolicy::Gated(cfgs) = policy {
+    if let TracingApplyPolicy::Gated(cfgs) = policy
+        && controls.enabled(TracingRuleKind::UngatedInstrument)
+    {
         if let Some(existing) = syntax.gate_predicate() {
             if existing != &format!("not({})", gate_predicate(cfgs)) {
                 return GapApplyOutcome::Unresolved;

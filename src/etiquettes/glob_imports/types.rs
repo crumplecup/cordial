@@ -47,15 +47,17 @@ pub struct GlobImportRule {
     rule_id: GlobImportRuleId,
 }
 
+impl crate::TomlConfigured for GlobImportRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "glob_imports"
+    }
+}
+
 impl Rule for GlobImportRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "glob_imports"
     }
 
     #[instrument(level = "trace", skip(self))]

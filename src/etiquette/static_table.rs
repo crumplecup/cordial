@@ -66,12 +66,14 @@ impl StaticEtiquette {
     }
 }
 
-impl Etiquette for StaticEtiquette {
+impl crate::TomlConfigured for StaticEtiquette {
     #[instrument(level = "trace", skip(self))]
-    fn id(&self) -> &str {
+    fn configuration_key(&self) -> &str {
         &self.id
     }
+}
 
+impl Etiquette for StaticEtiquette {
     #[instrument(level = "trace", skip(self))]
     fn name(&self) -> &str {
         &self.name
@@ -141,12 +143,14 @@ impl StaticQualityEtiquette {
     }
 }
 
-impl Etiquette for StaticQualityEtiquette {
+impl crate::TomlConfigured for StaticQualityEtiquette {
     #[instrument(level = "trace", skip(self))]
-    fn id(&self) -> &str {
+    fn configuration_key(&self) -> &str {
         self.etiquette.id()
     }
+}
 
+impl Etiquette for StaticQualityEtiquette {
     #[instrument(level = "trace", skip(self))]
     fn name(&self) -> &str {
         self.etiquette.name()

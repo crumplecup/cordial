@@ -51,15 +51,17 @@ pub struct CreusotDiagnosticRule {
     rule_id: CreusotDiagnosticRuleId,
 }
 
+impl crate::TomlConfigured for CreusotDiagnosticRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "creusot_diagnostics"
+    }
+}
+
 impl Rule for CreusotDiagnosticRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "creusot_diagnostics"
     }
 
     #[instrument(level = "trace", skip(self))]

@@ -59,7 +59,7 @@ fn render_tiers(etiquettes: &[&dyn Etiquette], config: &CordialConfig) -> String
         rows.sort_by(|left, right| left.id().cmp(right.id()));
         let _ = writeln!(body, "\n{tier}:");
         for etiquette in rows {
-            let disabled = if config.etiquette_enabled(etiquette.id()) {
+            let disabled = if config.etiquette_may_run(etiquette.configuration_key()) {
                 ""
             } else {
                 ", disabled"

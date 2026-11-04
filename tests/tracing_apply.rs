@@ -63,6 +63,55 @@ fn checklist_for_crate(crate_name: &str, items: &[(&str, u32)]) -> String {
     body
 }
 
+#[test]
+fn old_checklist_cannot_bypass_shared_file_or_rule_policy() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = "pub fn pending() {}\n";
+    for policy in [
+        "[lints.tracing]\nenabled = false\n",
+        "[lints.tracing.rules]\nTRACING-MISSING-INSTRUMENT = false\n",
+        "[lints.tracing]\nskip_paths = { TRACING-MISSING-INSTRUMENT = [\"src/lib.rs\"] }\n",
+        "[[lints.tracing.paths]]\npath = \"fixture_crate/src/lib.rs\"\nbase = \"workspace\"\nenabled = false\n",
+    ] {
+        let fixture = write_apply_fixture(original, &checklist_for(&[("pending", 1)]))?;
+        fs::write(fixture.workspace.join("cordial.toml"), policy).into_diagnostic()?;
+        let result =
+            run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
+                .into_diagnostic()?;
+        assert_eq!(result.changed_functions(), 0, "{policy}");
+        assert_eq!(
+            fs::read_to_string(&fixture.src).into_diagnostic()?,
+            original
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn existing_annotation_repairs_preserve_disabled_rule_arguments() -> miette::Result<()> {
+    cordial::init_tracing();
+    let original = "#[tracing::instrument(level = \"info\")]\npub fn read_data(path: &std::path::Path) -> Result<(), std::io::Error> { std::fs::read(path)?; Ok(()) }\n";
+    let fixture = write_apply_fixture(original, &checklist_for(&[("read_data", 2)]))?;
+    fs::write(
+        fixture.workspace.join("cordial.toml"),
+        r#"
+[lints.tracing.rules]
+TRACING-LEVEL-MISMATCH = false
+TRACING-ERR-MISSING = false
+TRACING-ERROR-PATH-SILENT = false
+"#,
+    )
+    .into_diagnostic()?;
+    let result = run_tracing_instrument_apply(&fixture.workspace, &fixture.checklist, None, false)
+        .into_diagnostic()?;
+    assert_eq!(result.changed_functions(), 1);
+    let updated = fs::read_to_string(&fixture.src).into_diagnostic()?;
+    assert!(updated.contains("level = \"info\""), "{updated}");
+    assert!(updated.contains("skip(path)"), "{updated}");
+    assert!(!updated.contains("err("), "{updated}");
+    Ok(())
+}
+
 #[cfg(feature = "cli")]
 #[test]
 fn default_apply_preserves_compliant_annotations_and_is_idempotent() -> miette::Result<()> {

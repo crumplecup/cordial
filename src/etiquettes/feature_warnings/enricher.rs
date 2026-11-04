@@ -28,10 +28,9 @@ impl SourceEnricher for FeatureWarningInventoryEnricher {
         let (ir, source, session) = view.into_parts();
 
         let crate_root = member_crate_root(source, session);
-        let policy = crate::config::load_session_config(session)
-            .feature_warnings()
-            .clone();
-        if !policy.enabled() {
+        let config = crate::config::load_session_config(session);
+        let policy = config.feature_warnings().clone();
+        if !config.etiquette_may_run("feature_warnings") {
             return Ok(());
         }
         let records = scan_crate_feature_warnings(

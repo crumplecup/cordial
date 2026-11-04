@@ -51,15 +51,17 @@ pub struct CrateAttrsRule {
     rule_id: CrateAttrsRuleId,
 }
 
+impl crate::TomlConfigured for CrateAttrsRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "crate_attrs"
+    }
+}
+
 impl Rule for CrateAttrsRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "crate_attrs"
     }
 
     #[instrument(level = "trace", skip(self))]

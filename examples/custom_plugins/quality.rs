@@ -42,7 +42,7 @@ pub static TODO_ETIQUETTE: LazyLock<StaticEtiquette> = LazyLock::new(|| {
             "Leftover todo!() macros in source",
             "Unfinished todo!() sites should not merge. This example shows a quality-family plugin wrapping one etiquette.",
             "Walks syn for todo!() macros and emits ACME-TODO-001. Not a built-in; copy examples/custom_plugins.",
-            "Do not register ACME_STYLE. This is an example plugin, not compiled into the cordial binary.",
+            "Set [lints.acme-todo] enabled = false in cordial.toml. Individual rules and paths use the same shared controls as built-ins.",
             vec![EtiquetteRuleExplain::new(
                 "ACME-TODO-001",
                 "Leftover `todo!()` macro",
@@ -73,15 +73,22 @@ const TODO_LABEL: &str = "acme-todo-site";
 #[derive(Debug, Clone, Copy)]
 struct TodoRule;
 
+impl cordial::TomlConfigured for TodoRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "acme-todo"
+    }
+}
+
 impl Rule for TodoRule {
-    #[instrument(level = "trace", skip(self))]
-    fn id(&self) -> &str {
-        "ACME-TODO-001"
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn category(&self) -> &str {
+        "acme_style"
     }
 
     #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "acme_style"
+    fn id(&self) -> &str {
+        "ACME-TODO-001"
     }
 
     #[instrument(level = "trace", skip(self))]

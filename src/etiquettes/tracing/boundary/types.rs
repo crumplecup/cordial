@@ -64,15 +64,17 @@ pub struct BoundaryRule {
     rule_id: BoundaryRuleId,
 }
 
+impl crate::TomlConfigured for BoundaryRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "tracing"
+    }
+}
+
 impl Rule for BoundaryRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "tracing"
     }
 
     #[instrument(level = "trace", skip(self))]

@@ -37,7 +37,7 @@ impl SourceEnricher for AntipatternInventoryEnricher {
             &facts,
             config.antipatterns().static_refs().strategy(),
             config.internal_error_chain().field_strategy(),
-            config.antipatterns().skip_paths(),
+            &std::collections::HashMap::new(),
         )?;
 
         for record in records {

@@ -5,7 +5,9 @@ use tracing::instrument;
 use crate::error::{CordialError, CordialResult};
 
 use super::super::types::InstrumentRecipe;
+use super::super::types::TracingRuleKind;
 use super::InstrumentGap;
+use super::lint_policy::ApplyLintPolicy;
 use super::verifier_policy::{TracingApplyPolicy, gate_attr, gate_predicate};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,7 +53,7 @@ pub(super) fn attr_style(lines: &[String]) -> InstrumentAttrStyle {
 
 #[instrument(
     level = "debug",
-    skip(lines, source, gap, record, style, policy),
+    skip(lines, source, gap, record, style, policy, controls),
     err(level = "warn")
 )]
 pub(super) fn apply_gap(
@@ -61,6 +63,7 @@ pub(super) fn apply_gap(
     record: &ApplyRecipeRecord,
     style: InstrumentAttrStyle,
     policy: &TracingApplyPolicy,
+    controls: &ApplyLintPolicy<'_>,
 ) -> CordialResult<GapApplyOutcome> {
     let recipe = record.recipe();
     let existing: Vec<_> = record
@@ -70,9 +73,12 @@ pub(super) fn apply_gap(
         .collect();
     if !existing.is_empty() {
         return Ok(match existing.as_slice() {
-            [attr] => super::preserve::repair(lines, source, attr, recipe, policy),
+            [attr] => super::preserve::repair(lines, source, attr, recipe, policy, controls),
             _ => GapApplyOutcome::Unresolved,
         });
+    }
+    if !controls.enabled(TracingRuleKind::MissingInstrument) {
+        return Ok(GapApplyOutcome::SkippedPolicy);
     }
     let Some(fn_idx) = find_fn_line(lines, gap.line(), gap.qualified_name()) else {
         tracing::warn!(

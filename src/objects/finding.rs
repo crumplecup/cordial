@@ -6,11 +6,13 @@ use super::artifact::FindingSink;
 use tracing::instrument;
 
 /// Identity of a rule that produced a finding.
-pub trait Rule: Send + Sync {
+pub trait Rule: crate::TomlConfigured {
     /// Stable rule identifier.
     fn id(&self) -> &str;
     /// Etiquette / lint category this rule belongs to.
-    fn category(&self) -> &str;
+    fn category(&self) -> &str {
+        self.configuration_key()
+    }
     /// Human-readable rule description.
     fn description(&self) -> &str;
 }

@@ -10,6 +10,12 @@ use cordial::{
 
 struct SampleRule(String);
 
+impl cordial::TomlConfigured for SampleRule {
+    fn configuration_key(&self) -> &str {
+        "panics"
+    }
+}
+
 impl Rule for SampleRule {
     fn id(&self) -> &str {
         &self.0

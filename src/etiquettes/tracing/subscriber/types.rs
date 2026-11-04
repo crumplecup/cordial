@@ -90,15 +90,17 @@ pub struct SubscriberRule {
     rule_id: SubscriberRuleId,
 }
 
+impl crate::TomlConfigured for SubscriberRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "tracing"
+    }
+}
+
 impl Rule for SubscriberRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "tracing"
     }
 
     #[instrument(level = "trace", skip(self))]

@@ -129,15 +129,17 @@ pub struct TracingRule {
     kind: TracingRuleKind,
 }
 
+impl crate::TomlConfigured for TracingRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "tracing"
+    }
+}
+
 impl Rule for TracingRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.kind.rule_id()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "tracing"
     }
 
     #[instrument(level = "trace", skip(self))]

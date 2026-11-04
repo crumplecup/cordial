@@ -4,15 +4,17 @@ use tracing::instrument;
 #[derive(Debug, Clone, Copy)]
 pub struct ShadowRule;
 
+impl crate::TomlConfigured for ShadowRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "shadow"
+    }
+}
+
 impl Rule for ShadowRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "SHADOW-MISSING-MIRROR"
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "shadow"
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -64,6 +66,13 @@ pub struct MissingMirrorFinding {
 #[derive(Debug, Clone, Copy)]
 pub struct ShadowPairRule;
 
+impl crate::TomlConfigured for ShadowPairRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "shadow"
+    }
+}
+
 impl Rule for ShadowPairRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
@@ -83,6 +92,13 @@ impl Rule for ShadowPairRule {
 
 #[derive(Debug, Clone, Copy)]
 pub struct ShadowPairChecklistRule;
+
+impl crate::TomlConfigured for ShadowPairChecklistRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "shadow"
+    }
+}
 
 impl Rule for ShadowPairChecklistRule {
     #[instrument(level = "trace", skip(self))]

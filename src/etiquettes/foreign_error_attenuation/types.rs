@@ -316,6 +316,13 @@ pub struct ForeignErrorAttenuationRule {
     handling_class: ForeignErrorHandlingClass,
 }
 
+impl crate::TomlConfigured for ForeignErrorAttenuationRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "foreign_error_attenuation"
+    }
+}
+
 impl Rule for ForeignErrorAttenuationRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
@@ -325,11 +332,6 @@ impl Rule for ForeignErrorAttenuationRule {
             ForeignErrorHandlingClass::PendingInfrastructure => "ERROR-HANDLING-PENDING-INFRA",
             ForeignErrorHandlingClass::Neutral => "ERROR-HANDLING-NEUTRAL",
         }
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "foreign_error_attenuation"
     }
 
     #[instrument(level = "trace", skip(self))]

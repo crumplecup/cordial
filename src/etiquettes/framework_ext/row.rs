@@ -54,15 +54,17 @@ impl ExtRowRule {
     }
 }
 
+impl crate::TomlConfigured for ExtRowRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        &self.category
+    }
+}
+
 impl Rule for ExtRowRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         &self.id
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        &self.category
     }
 
     #[instrument(level = "trace", skip(self))]

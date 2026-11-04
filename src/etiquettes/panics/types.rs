@@ -74,15 +74,17 @@ pub struct PanicRule {
     kind: PanicKind,
 }
 
+impl crate::TomlConfigured for PanicRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "panics"
+    }
+}
+
 impl Rule for PanicRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.kind.rule_id()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "panics"
     }
 
     #[instrument(level = "trace", skip(self))]

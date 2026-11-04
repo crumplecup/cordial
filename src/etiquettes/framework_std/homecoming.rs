@@ -13,15 +13,17 @@ use tracing::instrument;
 #[derive(Debug, Clone, Copy)]
 pub struct FrameworkStdRule;
 
+impl crate::TomlConfigured for FrameworkStdRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        HOMECOMING_STD_CATEGORY
+    }
+}
+
 impl Rule for FrameworkStdRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "FRAMEWORK-STD-ROW"
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        HOMECOMING_STD_CATEGORY
     }
 
     #[instrument(level = "trace", skip(self))]

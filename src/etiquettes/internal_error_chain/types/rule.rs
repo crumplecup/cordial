@@ -24,15 +24,17 @@ impl InternalErrorChainRule {
     }
 }
 
+impl crate::TomlConfigured for InternalErrorChainRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "internal_error_chain"
+    }
+}
+
 impl Rule for InternalErrorChainRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         &self.rule_id
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "internal_error_chain"
     }
 
     #[instrument(level = "trace", skip(self))]

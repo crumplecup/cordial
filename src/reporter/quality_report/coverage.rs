@@ -63,6 +63,7 @@ impl ReportRunCoverage {
             let owners = quality_area_owners(area.title());
             let skipped: Vec<_> = owners
                 .iter()
+                .filter(|id| config.etiquette_may_run(id))
                 .filter(|id| !active_ids.contains(id))
                 .filter_map(|id| {
                     crate::etiquettes::quality_report_etiquettes()

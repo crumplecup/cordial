@@ -10,11 +10,13 @@ use crate::loader::SourceLoadView;
 use crate::source_write::SourceWrite;
 
 use super::super::CallGraphFacts;
+use super::super::types::TracingRuleKind;
 use super::instrument::{
     GapApplyOutcome, InstrumentAttrStyle, apply_gap, attr_style, ensure_use_instrument,
     recipe_for_gap, strip_instrument,
 };
 use super::ir::recipes_for_file;
+use super::lint_policy::ApplyLintPolicy;
 use super::{
     InstrumentApplySummary, InstrumentGap, TracingApplyPolicy, dedupe_gaps,
     resolve_tracing_apply_policy,
@@ -22,6 +24,7 @@ use super::{
 
 #[derive(derive_new::new)]
 pub(super) struct FilePlanner<'a> {
+    project_root: &'a Path,
     source_view: &'a SourceLoadView,
     workspace: &'a WorkspaceIr,
     config: &'a CordialConfig,
@@ -40,6 +43,10 @@ impl FilePlanner<'_> {
         summary: &mut InstrumentApplySummary,
     ) -> CordialResult<Option<(SourceWrite, Vec<InstrumentGap>)>> {
         let path = crate_root.join(&rel_path);
+        let controls = ApplyLintPolicy::new(
+            self.config,
+            crate::LintLocation::new(self.project_root, Some(crate_root), crate_name, Some(&path)),
+        );
         if !path.is_file() {
             tracing::warn!(
                 path = %path.display(),
@@ -100,14 +107,22 @@ impl FilePlanner<'_> {
             let record = recipe_for_gap(&records, &gap);
             let strip = never_instrument.contains(gap.qualified_name())
                 || policy == TracingApplyPolicy::Skip;
-            let outcome = if strip {
+            let strip_kind = if never_instrument.contains(gap.qualified_name()) {
+                TracingRuleKind::ProofInstrument
+            } else {
+                TracingRuleKind::SkipInstrument
+            };
+            let outcome = if strip && !controls.enabled(strip_kind) {
+                GapApplyOutcome::SkippedPolicy
+            } else if strip {
                 // Proof/skip-only functions may intentionally have no recipe.
                 // Without a located annotation there is no authorized edit.
                 record.map_or(GapApplyOutcome::SkippedPolicy, |record| {
                     strip_instrument(&mut lines, source, record)
                 })
             } else if let Some(record) = record {
-                let outcome = apply_gap(&mut lines, source, &gap, record, style, &policy)?;
+                let outcome =
+                    apply_gap(&mut lines, source, &gap, record, style, &policy, &controls)?;
                 if outcome == GapApplyOutcome::Applied {
                     needs_import |= !record.attributes().iter().any(|attr| attr.instrument())
                         && style == InstrumentAttrStyle::Short

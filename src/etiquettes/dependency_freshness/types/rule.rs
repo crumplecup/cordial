@@ -72,15 +72,17 @@ pub struct DependencyFreshnessRule {
     rule_id: DependencyFreshnessRuleId,
 }
 
+impl crate::TomlConfigured for DependencyFreshnessRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "dependency_freshness"
+    }
+}
+
 impl Rule for DependencyFreshnessRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "dependency_freshness"
     }
 
     #[instrument(level = "trace", skip(self))]

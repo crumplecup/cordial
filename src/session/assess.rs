@@ -42,6 +42,7 @@ pub(super) fn assess_targets(
         etiquette_ids,
     } = hooks;
     let mut all_findings: Vec<Box<dyn Finding>> = Vec::new();
+    let config = crate::load_session_config(session);
 
     let progress = session.progress().bar(
         "Assessing crate findings".to_string(),
@@ -77,6 +78,15 @@ pub(super) fn assess_targets(
             progress.inc(1);
         }
 
+        let location = crate::LintLocation::new(
+            session.project_root(),
+            Some(target.crate_root()),
+            target.crate_name(),
+            None,
+        );
+        crate_findings.retain(|finding| {
+            config.finding_enabled(finding.as_ref(), location, Some(&crate_view))
+        });
         progress.set_message(format!("Applying exceptions for {}", target.crate_name()));
         crate_findings = timings.measure("pipeline", "exceptions", || {
             let exception_sets =

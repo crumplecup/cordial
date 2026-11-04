@@ -110,15 +110,17 @@ pub struct ModularityRule {
     kind: ModularityKind,
 }
 
+impl crate::TomlConfigured for ModularityRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "modularity"
+    }
+}
+
 impl Rule for ModularityRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.kind.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "modularity"
     }
 
     #[instrument(level = "trace", skip(self))]

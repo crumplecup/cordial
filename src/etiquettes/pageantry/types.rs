@@ -55,15 +55,17 @@ pub struct PageantryRule {
     rule_id: PageantryRuleId,
 }
 
+impl crate::TomlConfigured for PageantryRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "pageantry"
+    }
+}
+
 impl Rule for PageantryRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "pageantry"
     }
 
     #[instrument(level = "trace", skip(self))]

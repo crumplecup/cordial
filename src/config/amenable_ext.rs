@@ -10,15 +10,10 @@ use super::default_true;
 
 /// One `[[amenable_ext.target]]` entry.
 ///
-/// This `enabled` flag -- not the generic `[{etiquette-id}] enabled =
-/// false` gate every other etiquette uses -- is the one mechanism that
-/// turns a target off: dynamically-named etiquette ids (`amenable-ext-jiff`,
-/// `amenable-ext-chrono`, ...) can't appear in
-/// [`crate::config::CordialConfig::etiquette_enabled`]'s fixed match, since
-/// that match is compiled once over a closed set of ids. Filtering here,
-/// before a disabled target's etiquette is even built, also skips its
-/// shadow-dep rustdoc build entirely rather than just skipping its probe
-/// after the fact.
+/// This `enabled` flag controls whether the target's etiquette is registered.
+/// Filtering before registration also avoids its shadow-dependency build.
+/// Registered dynamic ids, such as `amenable-ext-jiff`, support the shared
+/// `[lints.<id>]` etiquette, rule, and path policy like every other etiquette.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct AmenableExtTargetConfig {
     /// Upstream crate name (e.g. `"jiff"`).

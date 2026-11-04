@@ -4,15 +4,17 @@ use tracing::instrument;
 #[derive(Debug, Clone, Copy)]
 pub struct TrenchcoatRule;
 
+impl crate::TomlConfigured for TrenchcoatRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "trenchcoat"
+    }
+}
+
 impl Rule for TrenchcoatRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         "TRENCHCOAT-MISSING-WRAP"
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "trenchcoat"
     }
 
     #[instrument(level = "trace", skip(self))]

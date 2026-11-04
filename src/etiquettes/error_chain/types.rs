@@ -64,15 +64,17 @@ pub struct ErrorChainRule {
     rule_id: ErrorChainProbeId,
 }
 
+impl crate::TomlConfigured for ErrorChainRule {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn configuration_key(&self) -> &str {
+        "error_chain"
+    }
+}
+
 impl Rule for ErrorChainRule {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         self.rule_id.as_str()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn category(&self) -> &str {
-        "error_chain"
     }
 
     #[instrument(level = "trace", skip(self))]

@@ -593,6 +593,35 @@ fn apply_inserts_both_after_crate_docs() -> miette::Result<()> {
 }
 
 #[test]
+fn apply_respects_individual_attribute_switch_and_file_policy() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = tempfile::tempdir().into_diagnostic()?;
+    write_package(fixture.path(), "bare", "pub fn ready() {}\n")?;
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[lints.crate_attrs.rules]\nCRATE-MISSING-DOCS-001 = false\n",
+    )
+    .into_diagnostic()?;
+    let summary =
+        run_crate_attrs_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(summary.inserted_attrs(), 1);
+    let lib = fixture.path().join("src/lib.rs");
+    let source = fs::read_to_string(&lib).into_diagnostic()?;
+    assert!(source.contains("#![forbid(unsafe_code)]"));
+    assert!(!source.contains("missing_docs"));
+    fs::write(
+        fixture.path().join("cordial.toml"),
+        "[[lints.crate_attrs.paths]]\npath = \"src/lib.rs\"\nenabled = false\n",
+    )
+    .into_diagnostic()?;
+    let summary =
+        run_crate_attrs_apply(fixture.path(), fixture.path(), None, false).into_diagnostic()?;
+    assert_eq!(summary.inserted_attrs(), 0);
+    assert_eq!(fs::read_to_string(&lib).into_diagnostic()?, source);
+    Ok(())
+}
+
+#[test]
 fn apply_handles_library_entry_outside_src() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic()?;
