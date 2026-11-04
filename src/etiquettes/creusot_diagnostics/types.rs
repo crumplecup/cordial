@@ -12,9 +12,9 @@ use tracing::instrument;
 /// Stable rule identifier for a Creusot diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum CreusotDiagnosticRuleId {
-    /// A `warning:` diagnostic from `cargo creusot prove`.
+    /// A `warning:` diagnostic from `cargo creusot`.
     Warning001,
-    /// An `error:` diagnostic or failed `cargo creusot prove` run.
+    /// An `error:` diagnostic or failed `cargo creusot` run.
     Failure001,
 }
 
@@ -64,7 +64,7 @@ impl Rule for CreusotDiagnosticRule {
 
     #[instrument(level = "trace", skip(self))]
     fn description(&self) -> &str {
-        "Creusot prove diagnostic — rustc/clippy never see this warning or verifier failure"
+        "Creusot diagnostic — rustc/clippy never see this warning or verifier failure"
     }
 }
 

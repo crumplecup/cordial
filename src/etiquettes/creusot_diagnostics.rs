@@ -1,13 +1,13 @@
-//! Diagnostics from `cargo creusot prove`.
+//! Diagnostics from `cargo creusot`.
 //!
-//! **What.** Runs `cargo creusot prove` on Creusot compilation units and
+//! **What.** Runs `cargo creusot` on Creusot compilation units and
 //! captures diagnostics ordinary Rust tooling cannot see.
 //!
 //! **Why.** Creusot proof obligations run outside `cargo check` and Clippy.
 //! A clean Rust build can still hide proof warnings or verifier failures.
 //!
 //! **Flags.** Each `warning:` diagnostic as `CREUSOT-DIAGNOSTIC-001`; each
-//! `error:` diagnostic or failed prove run as `CREUSOT-DIAGNOSTIC-002`.
+//! `error:` diagnostic or failed Creusot run as `CREUSOT-DIAGNOSTIC-002`.
 //! Summary lines are dropped and duplicate spans are kept once.
 //!
 //! **Ignores.** Crates that are not Creusot targets are skipped. The scan also
@@ -89,18 +89,18 @@ pub static CREUSOT_DIAGNOSTICS_ETIQUETTE: LazyLock<StaticQualityEtiquette> = Laz
             EtiquetteHooks::new(LOADERS, ENRICHERS, PROBES, ASSESSORS, None, REPORTERS),
             false,
             EtiquetteExplain::new(
-                "Does `cargo creusot prove` emit warnings or verification failures?",
+                "Does `cargo creusot` emit warnings or verification failures?",
                 "Creusot proof obligations run outside cargo check and clippy, so their diagnostics need their own feedback loop.",
-                "Invokes `cargo creusot prove -- -p <crate>` for crates ending `_creusot` or depending on creusot-std / creusot_contracts. `CORDIAL_CREUSOT` can supply a custom runner. Records each warning/error diagnostic; nonzero output with no parseable error becomes a crate-level failure. Skips when no cargo-creusot/CORDIAL_CREUSOT runner exists or `[creusot_diagnostics] skip_crates` names the package.",
+                "Invokes `cargo creusot -- -p <crate>` for crates ending `_creusot` or depending on creusot-std / creusot_contracts. `CORDIAL_CREUSOT` can supply a custom runner, invoked as `<runner> -- -p <crate>`. Records each warning/error diagnostic; nonzero output with no parseable error becomes a crate-level invocation failure with a failure-output excerpt. Skips when no cargo-creusot/CORDIAL_CREUSOT runner exists or `[creusot_diagnostics] skip_crates` names the package.",
                 "`[creusot_diagnostics] enabled = false` in cordial.toml.",
                 vec![
                     EtiquetteRuleExplain::new(
                         "CREUSOT-DIAGNOSTIC-001",
-                        "A `warning:` diagnostic from `cargo creusot prove`",
+                        "A `warning:` diagnostic from `cargo creusot`",
                     ),
                     EtiquetteRuleExplain::new(
                         "CREUSOT-DIAGNOSTIC-002",
-                        "An `error:` diagnostic or failed `cargo creusot prove` run",
+                        "An `error:` diagnostic or failed `cargo creusot` run",
                     ),
                 ],
             ),

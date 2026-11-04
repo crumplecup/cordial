@@ -131,7 +131,7 @@ impl Reporter for CreusotDiagnosticChecklistReporter {
         body.push_str("# Creusot diagnostics checklist\n\n");
         body.push_str(&format!("**Open items:** {}\n\n", open.len()));
         body.push_str(
-            "`cargo creusot prove` diagnostics are proof-maintenance action \
+            "`cargo creusot` diagnostics are proof-maintenance action \
              items. Cordial captures both verifier failures and `warning:` \
              output because ordinary rustc and Clippy never see this pass.\n\n",
         );

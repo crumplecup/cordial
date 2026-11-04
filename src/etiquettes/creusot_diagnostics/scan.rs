@@ -1,4 +1,4 @@
-//! Invoke `cargo creusot prove` and parse rustc-style diagnostics.
+//! Invoke `cargo creusot` and parse rustc-style diagnostics.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -116,12 +116,7 @@ fn resolve_creusot_runner(crate_name: &str) -> Option<CreusotRunner> {
         if path.is_file() {
             return Some(CreusotRunner {
                 program: path,
-                args: vec![
-                    "prove".to_string(),
-                    "--".to_string(),
-                    "-p".to_string(),
-                    crate_name.to_string(),
-                ],
+                args: vec!["--".to_string(), "-p".to_string(), crate_name.to_string()],
             });
         }
     }
@@ -130,7 +125,6 @@ fn resolve_creusot_runner(crate_name: &str) -> Option<CreusotRunner> {
             program: PathBuf::from("cargo"),
             args: vec![
                 "creusot".to_string(),
-                "prove".to_string(),
                 "--".to_string(),
                 "-p".to_string(),
                 crate_name.to_string(),
@@ -240,7 +234,7 @@ pub fn parse_creusot_compiler_output(
                 .context("<crate>".to_string())
                 .file(crate_root.join("Cargo.toml"))
                 .line(1)
-                .snippet(truncate_snippet(first_non_empty_line(output), 96))
+                .snippet(truncate_snippet(&failure_summary(output), 240))
                 .build()?,
         );
     }
@@ -327,13 +321,24 @@ fn canonical_or_original(path: PathBuf) -> PathBuf {
     std::fs::canonicalize(&path).unwrap_or(path)
 }
 
-#[instrument(level = "trace")]
-fn first_non_empty_line(output: &str) -> &str {
-    output
+#[instrument(level = "trace", skip(output))]
+fn failure_summary(output: &str) -> String {
+    let failure = output
         .lines()
-        .find(|line| !line.trim().is_empty())
-        .unwrap_or("creusot prove failed without a parseable diagnostic")
-        .trim()
+        .map(str::trim)
+        .rev()
+        .find(|line| line.starts_with("error:") || line.starts_with("Error:"))
+        .or_else(|| {
+            output
+                .lines()
+                .map(str::trim)
+                .rev()
+                .find(|line| !line.is_empty())
+        });
+    match failure {
+        Some(message) => format!("Creusot invocation failed: {message}"),
+        None => "Creusot invocation failed without diagnostic output".to_string(),
+    }
 }
 
 #[instrument(level = "trace")]

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Make `cargo creusot prove` part of the same feedback loop as source lints:
+Make `cargo creusot` part of the same feedback loop as source lints:
 warnings and verifier failures become normal Cordial findings, checklist items,
 CSV rows, and quality-report totals.
 
@@ -10,8 +10,8 @@ CSV rows, and quality-report totals.
 
 | Rule | Meaning |
 | --- | --- |
-| `CREUSOT-DIAGNOSTIC-001` | A `warning:` diagnostic emitted by `cargo creusot prove` |
-| `CREUSOT-DIAGNOSTIC-002` | An `error:` diagnostic, or a failed prove run without a parseable span |
+| `CREUSOT-DIAGNOSTIC-001` | A `warning:` diagnostic emitted by `cargo creusot` |
+| `CREUSOT-DIAGNOSTIC-002` | An `error:` diagnostic, or a failed Creusot run without a parseable span |
 
 ## Target detection
 
@@ -29,20 +29,23 @@ runner is invoked.
 By default the scanner looks for `cargo-creusot` on `PATH` and invokes:
 
 ```sh
-cargo creusot prove -- -p <crate>
+cargo creusot -- -p <crate>
 ```
 
 Tests and custom integrations can set `CORDIAL_CREUSOT` to an executable. The
 custom runner receives:
 
 ```sh
-<runner> prove -- -p <crate>
+<runner> -- -p <crate>
 ```
 
 Stdout and stderr are parsed together. Rustc-style summary lines such as
 `warning: 3 warnings emitted` are ignored. A nonzero exit with no parseable
 `error:` span produces one crate-level `CREUSOT-DIAGNOSTIC-002` finding at
-`Cargo.toml:1`.
+`Cargo.toml:1`. Its summary explicitly identifies an invocation failure and prefers
+an unspanned error message over build progress; otherwise it uses the last
+nonempty output line. Empty output is reported explicitly. The default command
+runs both translation and proving on current Creusot versions.
 
 ## Config
 

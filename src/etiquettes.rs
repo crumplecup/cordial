@@ -39,7 +39,7 @@
 //! | `glob_imports` | `glob_imports` | Are there glob `use` trees (`foo::*`, including `super::*`)? |
 //! | `inline_tests` | `inline_tests` | Are tests mixed into `src/` instead of `tests/`? |
 //! | `verus_warnings` | `verus_warnings` | Does the Verus rustc fork emit warnings this crate's rustc never sees? |
-//! | `creusot_diagnostics` | `creusot_diagnostics` | Does `cargo creusot prove` emit warnings or verification failures? |
+//! | `creusot_diagnostics` | `creusot_diagnostics` | Does `cargo creusot` emit warnings or verification failures? |
 //! | `dependency_freshness` | `dependency_freshness` | Which manifest and lockfile facts can dependency freshness lints use? |
 //! | `proof_patterns` | `proof_patterns` | Which `verus!` functions are trusted rather than proven, or apply themselves invisibly (`broadcast`)? |
 //! | `pageantry` | `pageantry` | Are traits defined in a leading block just below the import / `mod` header? |

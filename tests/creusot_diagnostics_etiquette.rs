@@ -58,6 +58,46 @@ fn parse_failed_without_span_emits_crate_level_failure() -> miette::Result<()> {
 }
 
 #[test]
+fn parse_failed_invocation_prefers_error_over_build_progress() -> miette::Result<()> {
+    cordial::init_tracing();
+    for error in [
+        "Error: No files to prove",
+        "error: unrecognized subcommand 'prove'",
+    ] {
+        let output = format!(
+            "   Compiling demo_creusot v0.1.0\nWarning: obsolete command\n{error}\nTry --help for usage.\n"
+        );
+        let records = parse_creusot_compiler_output(&output, Path::new("/workspace"), false)
+            .into_diagnostic()?;
+        assert_eq!(records.len(), 1, "{records:?}");
+        assert_eq!(records[0].rule_id(), CreusotDiagnosticRuleId::Failure001);
+        assert_eq!(
+            records[0].snippet(),
+            &format!("Creusot invocation failed: {error}")
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn parse_failed_invocation_preserves_unstructured_or_empty_output() -> miette::Result<()> {
+    cordial::init_tracing();
+    for (output, expected) in [
+        (
+            "Compiling demo\nprover terminated unexpectedly\n",
+            "Creusot invocation failed: prover terminated unexpectedly",
+        ),
+        (" \n", "Creusot invocation failed without diagnostic output"),
+    ] {
+        let records = parse_creusot_compiler_output(output, Path::new("/workspace"), false)
+            .into_diagnostic()?;
+        assert_eq!(records.len(), 1, "{records:?}");
+        assert_eq!(records[0].snippet(), expected);
+    }
+    Ok(())
+}
+
+#[test]
 fn parse_success_drops_summary_lines() -> miette::Result<()> {
     cordial::init_tracing();
     let records = parse_creusot_compiler_output(
@@ -215,6 +255,18 @@ fn skip_crates_does_not_invoke_runner() -> miette::Result<()> {
 #[test]
 fn session_writes_checklist_from_injected_creusot() -> miette::Result<()> {
     cordial::init_tracing();
+    check_runner_contract(true)
+}
+
+#[cfg(unix)]
+#[test]
+fn session_invokes_cargo_creusot_without_prove() -> miette::Result<()> {
+    cordial::init_tracing();
+    check_runner_contract(false)
+}
+
+#[cfg(unix)]
+fn check_runner_contract(custom: bool) -> miette::Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let crate_root = fixture.path().join("canary_creusot");
@@ -231,8 +283,19 @@ fn session_writes_checklist_from_injected_creusot() -> miette::Result<()> {
     .into_diagnostic()?;
     fs::write(crate_root.join("src/lib.rs"), "pub fn ok() {}\n").into_diagnostic()?;
 
-    let fake = fixture.path().join("fake-creusot");
-    let script = format!("#!/bin/sh\ncat \"{}\"\nexit 1\n", canary_path().display());
+    let fake = fixture
+        .path()
+        .join(if custom { "fake-creusot" } else { "cargo" });
+    let cargo_dispatch = if custom {
+        String::new()
+    } else {
+        let cargo = env!("CARGO").replace('\'', "'\\''");
+        format!("if [ \"$1\" != creusot ]; then exec '{cargo}' \"$@\"; fi\nshift\n")
+    };
+    let script = format!(
+        "#!/bin/sh\n{cargo_dispatch}[ \"$#\" -eq 3 ] && [ \"$1\" = -- ] && [ \"$2\" = -p ] && [ \"$3\" = canary_creusot ] || {{ echo 'Error: incorrect runner arguments' >&2; exit 98; }}\ncat \"{}\"\nexit 1\n",
+        canary_path().display(),
+    );
     fs::write(&fake, script).into_diagnostic()?;
     let mut perms = fs::metadata(&fake).into_diagnostic()?.permissions();
     perms.set_mode(0o755);
@@ -246,8 +309,23 @@ fn session_writes_checklist_from_injected_creusot() -> miette::Result<()> {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let previous = std::env::var_os("CORDIAL_CREUSOT");
+    let previous_path = std::env::var_os("PATH");
+    let mut paths = vec![fixture.path().to_path_buf()];
+    if let Some(path) = &previous_path {
+        paths.extend(std::env::split_paths(path));
+    }
+    let runner_path = std::env::join_paths(paths).into_diagnostic()?;
+    if !custom {
+        // Discovery requires cargo-creusot; the fake Cargo above checks dispatch.
+        fs::write(fixture.path().join("cargo-creusot"), "").into_diagnostic()?;
+    }
     unsafe {
-        std::env::set_var("CORDIAL_CREUSOT", &fake);
+        std::env::set_var("PATH", runner_path);
+        if custom {
+            std::env::set_var("CORDIAL_CREUSOT", &fake);
+        } else {
+            std::env::remove_var("CORDIAL_CREUSOT");
+        }
     }
     let outcome = {
         let session = SessionBuilder::new(&crate_root)
@@ -264,6 +342,14 @@ fn session_writes_checklist_from_injected_creusot() -> miette::Result<()> {
         },
         None => unsafe {
             std::env::remove_var("CORDIAL_CREUSOT");
+        },
+    }
+    match previous_path {
+        Some(value) => unsafe {
+            std::env::set_var("PATH", value);
+        },
+        None => unsafe {
+            std::env::remove_var("PATH");
         },
     }
     drop(guard);
@@ -283,7 +369,8 @@ fn session_writes_checklist_from_injected_creusot() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("checklist")?;
     assert!(checklist.contains("**Open items:** 2"));
-    assert!(checklist.contains("cargo creusot prove"));
+    assert!(checklist.contains("`cargo creusot`"));
+    assert!(!checklist.contains("cargo creusot prove"));
 
     let summary = fs::read_to_string(findings_dir.join("creusot-diagnostics-summary.md"))
         .into_diagnostic()

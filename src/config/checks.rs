@@ -161,10 +161,10 @@ impl FeatureWarningsThresholds {
     }
 }
 
-/// `cargo creusot prove` diagnostic etiquette knobs.
+/// `cargo creusot` diagnostic etiquette knobs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct CreusotDiagnosticsThresholds {
-    /// Package names that skip the `cargo creusot prove` invocation.
+    /// Package names that skip the `cargo creusot` invocation.
     #[serde(default)]
     skip_crates: Vec<String>,
     /// Run this etiquette (`true`) or skip it (`false`).
@@ -184,7 +184,7 @@ impl Default for CreusotDiagnosticsThresholds {
 }
 
 impl CreusotDiagnosticsThresholds {
-    /// Whether this package should not run `cargo creusot prove`.
+    /// Whether this package should not run `cargo creusot`.
     #[instrument(level = "trace", skip(self))]
     pub fn skip(&self, crate_name: &str) -> bool {
         self.skip_crates.iter().any(|name| name == crate_name)
