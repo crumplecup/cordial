@@ -13,8 +13,6 @@ use std::path::Path;
 use syn::visit::Visit;
 
 use crate::error::CordialResult;
-#[cfg(feature = "error_chain")]
-use crate::etiquettes::error_chain::ErrorChainRecord;
 use crate::etiquettes::error_sites::ErrorSiteRecord;
 use crate::loader::module_path_from_src_file;
 use tracing::instrument;
@@ -61,10 +59,12 @@ impl ErrorIrScanLayers {
         is_proc_macro_crate: false,
     };
 
+    #[cfg(feature = "error_chain")]
     #[instrument(level = "debug")]
     pub fn for_unified_file(under_src: bool, is_proc_macro_crate: bool) -> Self {
         Self {
-            sites: true,
+            // The source loader has already collected the site census.
+            sites: false,
             chain: under_src,
             compliance: under_src,
             type_graph: under_src,
@@ -78,7 +78,7 @@ impl ErrorIrScanLayers {
 pub struct ErrorIrFileScan {
     sites: Vec<ErrorSiteRecord>,
     #[cfg(feature = "error_chain")]
-    chain: Vec<ErrorChainRecord>,
+    chain: Vec<crate::etiquettes::error_chain::ErrorChainRecord>,
     #[cfg(feature = "internal_error_chain")]
     compliance: Vec<crate::etiquettes::internal_error_chain::InternalErrorComplianceFinding>,
     #[cfg(feature = "internal_error_chain")]
@@ -106,7 +106,9 @@ impl ErrorIrFileScan {
     )]
     pub(super) fn from_parts(
         sites: Vec<ErrorSiteRecord>,
-        #[cfg(feature = "error_chain")] chain: Vec<ErrorChainRecord>,
+        #[cfg(feature = "error_chain")] chain: Vec<
+            crate::etiquettes::error_chain::ErrorChainRecord,
+        >,
         #[cfg(feature = "internal_error_chain")] compliance: Vec<
             crate::etiquettes::internal_error_chain::InternalErrorComplianceFinding,
         >,

@@ -633,7 +633,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity` and `pageantry` consume loader-projected IR | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
 | API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
-| Error analysis | `enricher/error/scan.rs`; `error_sites`, `error_chain`, `internal_error_chain/{architecture,type_graph}` | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
+| Error analysis | Error sites consume loader-projected `SourceErrorSites` with native collection. Remaining: `enricher/error/scan.rs`, `error_chain`, `internal_error_chain/{architecture,type_graph}` | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
 | Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |
 | Panic and proof collectors | `panics/{scan,kani_reach}`, `verus_ir/parse.rs`, `antipatterns/{scan,contract_bounds}` | Macro payloads, proof dialect syntax, Kani/Creusot/Verus contracts. No fallback whole-file parser. Resolve the dialect capability before retiring its current support. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
@@ -769,6 +769,41 @@ point remain unchanged; unresolved receiver calls and external callers are not
 proof of absence. Semantic proof reachability still depends on the complete
 Cargo context driver. Normal execution retains the shared-syn frontend until
 the remaining consumer groups migrate together.
+
+## Checkpoint: error-site census
+
+The loader retains a required `SourceErrorSites` inventory on each crate root.
+It includes snapshots of every scanned file, including files with no sites,
+and the complete records for propagation, mapping, explicit returns, conditional
+and match handling, and option conversion. Both collectors issue this same typed
+payload. The native collector walks canonical database syntax directly; it does
+not parse another representation or consult a compatibility tree.
+
+The site enricher consumes only `IrView`, materializing the existing expression
+nodes and attributes. The remaining compatibility chain collector joins its
+annotations to those nodes by location instead of collecting the site census
+again. Standalone site fixtures also obtain their trees through the shared
+loader. This retires site collection from the downstream unified error scan;
+chain, architecture, type and apply evidence still need migration.
+
+Regression coverage compares complete records, source digests, file coverage
+and materialized attributes and spans across both backends. It covers all six
+site kinds, inactive code, exact test-module exclusions, nested functions and
+modules, trait and impl contexts, opaque macros, Unicode truncation and fixture
+exclusions. Virtual edits replace evidence and exact restoration recovers it.
+Missing or malformed inventory and invalid native syntax fail closed. Graph-only
+materialization still works after dropping the database and deleting source files.
+
+Validation: 71 focused tests passed with full features, covering site payload
+parity, site/chain sessions, flow, plugin registration, internal compliance and
+foreign-error consumers. The site-only configuration passed its nine focused
+tests and a warning-free check. After grouping the chain-only implementation,
+the 20 site/chain/flow/plugin tests and eight site-only tests passed again.
+The chain-only configuration also checked without warnings. Build-tier submit
+completed with zero open items; the deep tier remains for the plan milestone.
+
+Production source ownership remains with the compatibility frontend until the
+remaining collection groups and Cargo context are ready for the complete cutover.
 
 ## Current next step
 

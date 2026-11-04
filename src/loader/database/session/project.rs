@@ -89,6 +89,12 @@ impl SourceDatabase {
             serde_json::to_value(self.project_observability(target.crate_root())?)?,
         )?;
         let mut snapshots = Vec::new();
+        #[cfg(feature = "error_sites")]
+        graph.set_attr(
+            graph.root(),
+            crate::ir::ATTR_SOURCE_ERROR_SITES,
+            serde_json::to_value(self.project_error_sites(target.crate_root())?)?,
+        )?;
         let mut projection = Projection::default();
         let sema = Semantics::new(&self.db);
         for path in paths {

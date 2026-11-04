@@ -30,6 +30,7 @@ mod reporter;
 mod scan;
 mod types;
 
+pub use crate::ir::{ATTR_SOURCE_ERROR_SITES, ErrorSitesFile, SourceErrorSites};
 pub use assessor::ErrorSiteAssessor;
 pub use foreign_infer::{ForeignTypeConfidence, infer_foreign_error_type};
 pub use partition::{
@@ -40,6 +41,7 @@ pub use reporter::{
     ErrorSitesChecklistReporter, ErrorSitesCsvReporter, ErrorSitesPartitionSummaryReporter,
     ErrorSitesPartitionedCsvReporter, ErrorSitesSummaryReporter,
 };
+pub(crate) use scan::scan_rust_syntax;
 pub use scan::{scan_crate_error_sites, scan_rust_source};
 pub use types::{
     ErrorOriginClass, ErrorSiteKind, ErrorSiteRecord, ErrorSiteScanRow, ForeignErrorRecordKind,

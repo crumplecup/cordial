@@ -1,0 +1,63 @@
+mod child;
+
+#[cfg(feature = "inactive")]
+mod dormant {
+    fn probe() { omitted()?.map_err(opaque)?; }
+}
+
+fn pipeline() -> Result<(), Error> {
+    input().map_err(Error::from)?;
+    option().ok_or(Error)?;
+    option().ok_or_else(|| Error)?;
+    if let Err(error) = operation() { return Err(error); }
+    match operation() { Ok(_) => (), Err(error) => return Err(error), }
+    match operation() { Err(error) | Ok(error) => (), }
+    match operation() { ::Err(error) => (), }
+    match operation() { other::Err(error) => (), }
+    match operation() { Err => (), }
+    if let other::Err(error) = operation() { return Result::Err(error); }
+    let _ = || { closure()?; };
+    async { deferred()?; };
+    fn nested() { object.0.field.map_err(convert)?; }
+    custom!(ignored()?);
+    std::assert!(ignored()?);
+    return Err(make::<Vec<u8>>());
+}
+
+struct Holder;
+impl<T> Holder {
+    fn method() {
+        <Self as Contract>::source().map_err(convert)?;
+        (&holder).field.ok_or_else(|| Error)?;
+        function_returning_function()().map_err(convert)?;
+        return Err(external::make!());
+    }
+}
+trait Contract {
+    fn default_method() { source()?; fn nested_default() { source()?; } }
+}
+impl Contract for &Holder {
+    fn method() { source()?; }
+}
+
+const CONSTANT: () = { factory()?.map_err(convert)?; };
+
+mod inline {
+    fn outer() {
+        mod nested { fn leaf() { source()?; } }
+        source()?.ok_or(Error)?;
+    }
+}
+
+#[cfg(
+    /* skip exactly cfg(test), including comments */ test
+)]
+mod tests { fn excluded() { source()?; } }
+
+#[cfg(any(test, feature = "inactive"))]
+mod included { fn check() { source()?; } }
+
+fn long_paths() {
+    a_really_long_unicode_éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé().map_err(convert)?;
+    return Err(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa);
+}

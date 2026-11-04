@@ -2,6 +2,8 @@
 
 #[cfg(feature = "cli_layout")]
 mod cli_layout;
+#[cfg(feature = "error_sites")]
+mod error_sites;
 #[cfg(feature = "tracing")]
 mod observability;
 #[cfg(feature = "derives")]

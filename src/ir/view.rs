@@ -141,6 +141,20 @@ pub trait IrView {
             .transpose()?)
     }
 
+    /// Read required error-site evidence without accessing source syntax.
+    #[cfg(feature = "error_sites")]
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn source_error_sites(&self) -> CordialResult<super::SourceErrorSites> {
+        let root = self.root()?;
+        let value = self
+            .node(root)
+            .and_then(|node| node.attr(super::ATTR_SOURCE_ERROR_SITES).cloned())
+            .ok_or_else(|| {
+                crate::CordialError::workspace_source_facts_missing("source error-site inventory")
+            })?;
+        Ok(serde_json::from_value(value)?)
+    }
+
     /// Read required crate-wide tracing evidence; malformed evidence is an error.
     #[cfg(feature = "tracing")]
     #[instrument(level = "trace", skip(self), err(level = "warn"))]

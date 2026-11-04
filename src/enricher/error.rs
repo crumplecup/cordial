@@ -7,11 +7,13 @@
 use tracing::instrument;
 mod inventory;
 mod scan;
+mod sites;
 
 pub use inventory::ErrorIrScanEnricher;
 #[cfg(feature = "internal_error_chain")]
 pub(crate) use scan::compliance_sort::scan_crate_error_ir_with_absolute_paths;
 pub use scan::{ErrorIrScanReport, scan_crate_error_ir};
+use sites::ErrorSiteInventoryEnricher;
 
 use crate::enricher::{AttributeEnricher, ErrorFlowEnricher, ScopeEnricher};
 use crate::hooks::IrEnricher;
@@ -20,6 +22,7 @@ use crate::plugin::ErrorHandlingLayers;
 static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
 static ATTRIBUTE_ENRICHER: AttributeEnricher = AttributeEnricher;
 static ERROR_IR_SCAN: ErrorIrScanEnricher = ErrorIrScanEnricher;
+static ERROR_SITE_INVENTORY: ErrorSiteInventoryEnricher = ErrorSiteInventoryEnricher;
 static ERROR_FLOW: ErrorFlowEnricher = ErrorFlowEnricher;
 
 /// Foreign-error-attenuation inventory enricher, gated as a whole unit —
@@ -34,10 +37,12 @@ mod attenuation {
 
 /// Canonical enricher stack for error-handling runs (feature-gated layers).
 ///
-/// Order after session priority sort: scope → attribute (6) → error-ir-scan (50) →
+/// Order after session priority sort: scope → attribute (6) → site inventory (49) → error-ir-scan (50) →
 /// error-flow (51) → attenuation (52).
 pub static ERROR_IR_ENRICHERS: &[&'static dyn IrEnricher] = &[
     &SCOPE_ENRICHER,
+    #[cfg(feature = "error_sites")]
+    &ERROR_SITE_INVENTORY,
     #[cfg(feature = "error_sites")]
     &ERROR_IR_SCAN,
     #[cfg(feature = "error_sites")]
@@ -54,6 +59,7 @@ pub fn error_ir_enricher_ids(layers: ErrorHandlingLayers) -> Vec<&'static str> {
     if layers.sites() || layers.chain() || layers.internal() {
         #[cfg(feature = "error_sites")]
         {
+            ids.push(ErrorSiteInventoryEnricher::ID);
             ids.push(ErrorIrScanEnricher::ID);
             ids.push(ErrorFlowEnricher::ID);
         }

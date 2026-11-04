@@ -17,6 +17,10 @@ mod crate_kind;
 mod crate_load;
 mod edge;
 mod error_family;
+#[cfg(feature = "error_sites")]
+mod error_sites_source;
+#[cfg(feature = "error_sites")]
+pub use error_sites_source::{ATTR_SOURCE_ERROR_SITES, ErrorSitesFile, SourceErrorSites};
 mod function_source;
 mod graph;
 mod indexes;
