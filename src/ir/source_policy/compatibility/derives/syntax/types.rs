@@ -4,7 +4,7 @@ use syn::Type;
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(ty))]
-pub(in crate::etiquettes::derives) fn type_label(ty: &Type) -> String {
+pub(in crate::ir::source_policy::compatibility::derives) fn type_label(ty: &Type) -> String {
     match ty {
         Type::Path(type_path) => syn_path_label(&type_path.path),
         Type::Reference(reference) => type_label(&reference.elem),

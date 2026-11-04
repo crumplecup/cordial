@@ -175,7 +175,16 @@ impl Finding for DeriveFinding {
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_builder::Builder,
+    derive_getters::Getters,
+)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct DeriveSiteRecord {
     /// Stable probe rule identifier.
@@ -203,5 +212,25 @@ impl DeriveSiteRecord {
     #[instrument(level = "debug")]
     pub fn builder() -> DeriveSiteRecordBuilder {
         DeriveSiteRecordBuilder::default()
+    }
+}
+
+impl crate::ir::DeriveSetterShape {
+    #[tracing::instrument(level = "trace", skip(self))]
+    pub(crate) fn recommendation(self) -> &'static str {
+        match self {
+            Self::Assign => {
+                "Use #[derive(derive_setters::Setters)] with #[setters(prefix = \"with_\")]"
+            }
+            Self::Into => {
+                "Use #[derive(derive_setters::Setters)] with #[setters(prefix = \"with_\", into)]"
+            }
+            Self::StripOption => {
+                "Use #[derive(derive_setters::Setters)] with #[setters(prefix = \"with_\", strip_option)]"
+            }
+            Self::StripOptionInto => {
+                "Use #[derive(derive_setters::Setters)] with #[setters(prefix = \"with_\", strip_option, into)]"
+            }
+        }
     }
 }

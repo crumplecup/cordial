@@ -8,7 +8,16 @@ use std::path::Path;
 mod compatibility;
 #[cfg(feature = "cfg_hygiene")]
 mod declarations;
+#[cfg(feature = "derives")]
+mod derive_facts;
 mod native;
+#[cfg(feature = "derives")]
+pub use compatibility::scan_derives_source;
+#[cfg(feature = "derives")]
+pub use derive_facts::{
+    DeriveFieldFacts, DeriveFieldRead, DeriveFileFacts, DeriveImplFacts, DeriveItemFacts,
+    DeriveMethodFacts, DeriveMethodFlags, DeriveModuleFacts, DeriveSetterShape, DeriveStructFacts,
+};
 
 #[cfg(feature = "allows")]
 pub use compatibility::scan_allows_source;
@@ -37,6 +46,8 @@ pub struct SourcePolicyInventory {
     modularity: Vec<crate::etiquettes::modularity::ModularitySiteRecord>,
     #[cfg(feature = "pageantry")]
     pageantry: Vec<crate::etiquettes::pageantry::PageantrySourceSite>,
+    #[cfg(feature = "derives")]
+    derives: Vec<DeriveFileFacts>,
     snapshots: Vec<FileSnapshot>,
     #[cfg(feature = "allows")]
     allows: Vec<crate::etiquettes::allows::AllowSiteRecord>,
@@ -77,7 +88,8 @@ impl SourcePolicyInventory {
                     && cfg!(any(
                         feature = "cfg_hygiene",
                         feature = "cfg_scatter",
-                        feature = "modularity"
+                        feature = "modularity",
+                        feature = "derives"
                     )))
                     || !crate::loader::path_has_fixtures(path, crate_root)
             })? {
@@ -106,6 +118,10 @@ impl SourcePolicyInventory {
                         .extend(compatibility::collect_pageantry(&file, &tree, crate_root)?);
                 }
                 if is_source {
+                    #[cfg(feature = "derives")]
+                    inventory
+                        .derives
+                        .push(compatibility::collect_derives(&file, &tree, crate_root)?);
                     #[cfg(feature = "modularity")]
                     inventory
                         .modularity
@@ -143,6 +159,8 @@ impl SourcePolicyInventory {
 
     #[tracing::instrument(level = "debug", skip(self))]
     pub(crate) fn sort(&mut self) {
+        #[cfg(feature = "derives")]
+        self.derives.sort_by(|a, b| a.file().cmp(b.file()));
         self.snapshots.sort_by(|a, b| a.path().cmp(b.path()));
         self.snapshots.dedup();
         #[cfg(feature = "modularity")]

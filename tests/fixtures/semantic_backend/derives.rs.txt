@@ -1,0 +1,93 @@
+//! Derive inventory exercises declaration order, attributes and body shapes.
+struct Widget {
+    pub(crate) exposed: u8,
+    name: String,
+    count: u32,
+    maybe: Option<String>,
+    boxed: Box<String>,
+}
+impl Widget {
+    pub fn new(name: String, count: u32) -> Self { Self { name, count } }
+    pub fn name(&self) -> &String { &self.name }
+    pub fn count(&self) -> u32 { self.count }
+    pub fn cloned(&self) -> String { self.name.clone() }
+    pub fn as_str(&self) -> &str { self.name.as_str() }
+    pub fn as_ref(&self) -> &str { self.name.as_ref() }
+    pub fn option(&self) -> Option<&String> { self.maybe.as_ref() }
+    pub fn boxed(&self) -> &String { &self.boxed }
+    pub fn set_name(&mut self, value: String) { self.name = value; }
+    pub fn with_maybe(mut self, value: &str) -> Self { self.maybe = Some(value.into()); self }
+    pub fn set_maybe(&mut self, value: String) { self.maybe = Some(value); }
+    pub fn with_name(mut self, name: &str) -> Self { self.name = name.to_owned(); return self; }
+    pub fn typed(self: &Self) -> u32 { self.count }
+    pub fn set_count(self: &mut Self, count: u32) { self.count = count; }
+    pub fn set_exposed(&mut self, value: u8) { self.exposed += value; }
+}
+
+struct Constructed { a: u32, b: String }
+impl Constructed {
+    #[inline]
+    pub fn new(a: u32, b: String) -> Self {
+        const EXTRA: u32 = 1;
+        return Self { a, b: b.into() };
+    }
+}
+struct Fat { a: u32, b: u32, c: u32, d: u32 }
+impl Fat {
+    fn new(a: u32, b: u32, c: u32, d: u32) -> Self { Self { a, b, c, d } }
+}
+struct PlainBuilder;
+impl PlainBuilder { fn build(self) -> Widget { unimplemented!() } }
+
+#[derive(other::Builder)]
+#[builder(setter(into), name = r#"CustomBuilder"#)]
+struct Generated { value: String }
+impl CustomBuilder { fn build(self) -> Generated { unimplemented!() } }
+impl GeneratedBuilder { fn build(self) -> Generated { unimplemented!() } }
+
+#[derive(derive_getters::Getters, derive_setters::Setters, derive_more::AsRef, derive_new::new)]
+struct Already { value: String }
+impl Already {
+    fn new(value: String) -> Self { Self { value } }
+    fn value(&self) -> &String { &self.value }
+    fn set_value(&mut self, value: String) { self.value = value; }
+    fn as_str(&self) -> &str { self.value.as_str() }
+}
+
+#[derive(clap::Parser)]
+struct Args { pub name: String }
+#[cfg(creusot)]
+mod proof { mod nested { struct Proof { pub visible: u32 } } }
+#[cfg(creusot)]
+struct Transparent { pub visible: u32 }
+#[cfg(test)]
+mod tests { struct Hidden { pub visible: u32 } }
+#[cfg(any())]
+mod inactive {
+    struct Record { value: u32 }
+    impl Record { fn value(&self) -> u32 { return (self.value); } }
+}
+struct Tuple(pub u8, pub(crate) u8, u8);
+impl Tuple { fn first(&self) -> u8 { self.0 } }
+struct Unit;
+struct Error { line: u32 }
+impl std::error::Error for Error {}
+impl Error { fn new(line: u32) -> Self { Self { line } } }
+struct Caller { line: u32 }
+impl Caller {
+    #[track_caller]
+    fn new(line: u32) -> Self { Self { line } }
+}
+struct Const { value: u32 }
+impl Const {
+    const fn new(value: u32) -> Self { Self { value } }
+    const fn value(&self) -> &u32 { &self.value }
+    const fn with_value(mut self, value: u32) -> Self { self.value = value; self }
+    const fn build(self) -> Self { self }
+}
+struct Computed { value: u32 }
+impl Computed {
+    fn new(value: u32) -> Self { Self { value: value + 1 } }
+    fn set_value(&mut self, value: u32) { let adjusted = value + 1; self.value = adjusted; }
+}
+macro_rules! ignored { () => { struct NotCollected { pub fake: u32 } }; }

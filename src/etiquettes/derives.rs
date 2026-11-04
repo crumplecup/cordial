@@ -31,7 +31,6 @@ mod path_inclusion;
 mod probe;
 mod reporter;
 mod scan;
-mod syntax;
 mod types;
 
 pub use assessor::DeriveAssessor;

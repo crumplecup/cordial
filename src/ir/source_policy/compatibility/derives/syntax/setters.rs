@@ -5,37 +5,10 @@ use tracing::instrument;
 
 use super::exprs::{expr_is_self, expr_is_self_field, non_item_stmts, stmt_tail_expr};
 
-/// Setter body that `derive_setters` can emit, including `into` and `strip_option`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::etiquettes::derives) enum SetterShape {
-    Assign,
-    Into,
-    StripOption,
-    StripOptionInto,
-}
-
-impl SetterShape {
-    #[instrument(level = "trace", skip(self))]
-    pub(in crate::etiquettes::derives) fn recommendation(self) -> &'static str {
-        match self {
-            Self::Assign => {
-                "Use #[derive(derive_setters::Setters)] with #[setters(prefix = \"with_\")]"
-            }
-            Self::Into => {
-                "Use #[derive(derive_setters::Setters)] with #[setters(prefix = \"with_\", into)]"
-            }
-            Self::StripOption => {
-                "Use #[derive(derive_setters::Setters)] with #[setters(prefix = \"with_\", strip_option)]"
-            }
-            Self::StripOptionInto => {
-                "Use #[derive(derive_setters::Setters)] with #[setters(prefix = \"with_\", strip_option, into)]"
-            }
-        }
-    }
-}
+pub(super) use crate::ir::DeriveSetterShape as SetterShape;
 
 #[instrument(level = "debug", skip(block, sig), ret)]
-pub(in crate::etiquettes::derives) fn classify_setter_body(
+pub(in crate::ir::source_policy::compatibility::derives) fn classify_setter_body(
     block: &syn::Block,
     field_name: &str,
     sig: &Signature,

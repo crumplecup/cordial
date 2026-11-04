@@ -1,13 +1,8 @@
-use syn::spanned::Spanned;
-
-use super::{DeriveScanVisitor, FieldMeta, SiteArgs, StructInfo, setter_field_name};
-use crate::etiquettes::derives::syntax::{
-    FieldRead, body_is_struct_literal, classify_field_read, classify_setter_body,
-    constructor_arg_count, constructor_fields_match_params, has_derive, has_track_caller,
-    receiver_is_immutable_reference, receiver_is_mutable, type_label,
-};
+use super::{DeriveScanVisitor, SiteArgs, setter_field_name};
 use crate::etiquettes::derives::types::DeriveRuleId;
-
+use crate::ir::{
+    DeriveFieldFacts, DeriveFieldRead as FieldRead, DeriveMethodFacts, DeriveStructFacts,
+};
 use tracing::instrument;
 
 impl DeriveScanVisitor<'_> {
@@ -15,11 +10,11 @@ impl DeriveScanVisitor<'_> {
     pub(super) fn check_getter_candidate(
         &mut self,
         self_ty: &str,
-        struct_info: Option<&StructInfo>,
-        method: &syn::ImplItemFn,
+        struct_info: Option<&DeriveStructFacts>,
+        method: &DeriveMethodFacts,
         method_name: &str,
     ) {
-        if method.sig.constness.is_some() {
+        if method.flags().is_const() {
             return;
         }
         if self.blocked_by_path_inclusion("derive_getters") {
@@ -28,22 +23,19 @@ impl DeriveScanVisitor<'_> {
         let Some(info) = struct_info else {
             return;
         };
-        if has_derive(&info.attrs, "Getters") {
+        if has_derive(info, "Getters") {
             return;
         }
-        let Some(field) = info.fields.get(method_name) else {
+        let Some(field) = info.fields().get(method_name) else {
             return;
         };
-        if field.is_public {
+        if field.is_public() {
             return;
         }
-        let Some(recv) = method.sig.receiver() else {
-            return;
-        };
-        if !receiver_is_immutable_reference(recv) {
+        if !method.flags().immutable_reference() {
             return;
         }
-        let Some((field_name, read)) = classify_field_read(&method.block) else {
+        let Some((field_name, read)) = method.field_read().as_ref() else {
             return;
         };
         if field_name != method_name {
@@ -53,7 +45,7 @@ impl DeriveScanVisitor<'_> {
             && field
                 .boxed_inner_type()
                 .as_ref()
-                .is_some_and(|inner| method_returns_reference_to(&method.sig, inner))
+                .is_some_and(|inner| method.return_reference().as_ref() == Some(inner))
         {
             return;
         }
@@ -77,7 +69,7 @@ impl DeriveScanVisitor<'_> {
             Some(method_name.to_string()),
             format!("{self_ty}::{method_name}"),
             recommendation,
-            method.span().start().line as u32,
+            method.line(),
             format!("`fn {method_name}(&self)` returns private field `{method_name}`"),
         ));
     }
@@ -86,11 +78,11 @@ impl DeriveScanVisitor<'_> {
     pub(super) fn check_as_ref_candidate(
         &mut self,
         self_ty: &str,
-        struct_info: Option<&StructInfo>,
-        method: &syn::ImplItemFn,
+        struct_info: Option<&DeriveStructFacts>,
+        method: &DeriveMethodFacts,
         method_name: &str,
     ) {
-        if method.sig.constness.is_some() {
+        if method.flags().is_const() {
             return;
         }
         if self.blocked_by_path_inclusion("derive_more") {
@@ -99,16 +91,13 @@ impl DeriveScanVisitor<'_> {
         let Some(info) = struct_info else {
             return;
         };
-        if has_derive(&info.attrs, "AsRef") {
+        if has_derive(info, "AsRef") {
             return;
         }
-        let Some(recv) = method.sig.receiver() else {
-            return;
-        };
-        if !receiver_is_immutable_reference(recv) {
+        if !method.flags().immutable_reference() {
             return;
         }
-        let Some((field_name, read)) = classify_field_read(&method.block) else {
+        let Some((field_name, read)) = method.field_read().as_ref() else {
             return;
         };
         // `Option<T>::as_ref()` (`&Option<T> -> Option<&T>`) is a real,
@@ -116,9 +105,9 @@ impl DeriveScanVisitor<'_> {
         // `derive_more::AsRef` (`&Self -> &FieldType`).
         if matches!(read, FieldRead::AsRef)
             && info
-                .fields
-                .get(&field_name)
-                .is_some_and(FieldMeta::is_option)
+                .fields()
+                .get(field_name)
+                .is_some_and(DeriveFieldFacts::is_option)
         {
             return;
         }
@@ -142,7 +131,7 @@ impl DeriveScanVisitor<'_> {
             Some(method_name.to_string()),
             format!("{self_ty}::{method_name}"),
             recommendation,
-            method.span().start().line as u32,
+            method.line(),
             evidence,
         ));
     }
@@ -151,11 +140,11 @@ impl DeriveScanVisitor<'_> {
     pub(super) fn check_setter_candidate(
         &mut self,
         self_ty: &str,
-        struct_info: Option<&StructInfo>,
-        method: &syn::ImplItemFn,
+        struct_info: Option<&DeriveStructFacts>,
+        method: &DeriveMethodFacts,
         method_name: &str,
     ) {
-        if method.sig.constness.is_some() {
+        if method.flags().is_const() {
             return;
         }
         if self.blocked_by_path_inclusion("derive_setters") {
@@ -164,7 +153,7 @@ impl DeriveScanVisitor<'_> {
         let Some(info) = struct_info else {
             return;
         };
-        if has_derive(&info.attrs, "Setters") {
+        if has_derive(info, "Setters") {
             return;
         }
         if self_ty.ends_with("Builder") {
@@ -173,16 +162,13 @@ impl DeriveScanVisitor<'_> {
         let Some(field_name) = setter_field_name(method_name) else {
             return;
         };
-        if !info.fields.contains_key(field_name) {
+        if !info.fields().contains_key(field_name) {
             return;
         }
-        let Some(recv) = method.sig.receiver() else {
-            return;
-        };
-        if !receiver_is_mutable(recv) {
+        if !method.flags().mutable_receiver() {
             return;
         }
-        let Some(shape) = classify_setter_body(&method.block, field_name, &method.sig) else {
+        let Some(shape) = method.setter() else {
             return;
         };
 
@@ -192,7 +178,7 @@ impl DeriveScanVisitor<'_> {
             Some(method_name.to_string()),
             format!("{self_ty}::{method_name}"),
             shape.recommendation(),
-            method.span().start().line as u32,
+            method.line(),
             format!("manual setter `{method_name}` on `{self_ty}`"),
         ));
     }
@@ -201,11 +187,11 @@ impl DeriveScanVisitor<'_> {
     pub(super) fn check_new_candidate(
         &mut self,
         self_ty: &str,
-        struct_info: Option<&StructInfo>,
-        method: &syn::ImplItemFn,
+        struct_info: Option<&DeriveStructFacts>,
+        method: &DeriveMethodFacts,
         method_name: &str,
     ) {
-        if method.sig.constness.is_some() {
+        if method.flags().is_const() {
             return;
         }
         if self.is_error_constructor(self_ty, method) {
@@ -217,21 +203,13 @@ impl DeriveScanVisitor<'_> {
         let Some(info) = struct_info else {
             return;
         };
-        if has_derive(&info.attrs, "Builder") {
+        if has_derive(info, "Builder") {
             return;
         }
 
-        if !matches!(method.sig.output, syn::ReturnType::Type(_, _)) {
+        let Some(args) = method.constructor() else {
             return;
-        }
-        if !body_is_struct_literal(&method.block, self_ty) {
-            return;
-        }
-        if !constructor_fields_match_params(&method.sig, &method.block) {
-            return;
-        }
-
-        let args = constructor_arg_count(&method.sig);
+        };
         if args > self.thresholds.max_constructor_args() {
             if self.blocked_by_path_inclusion("derive_builder") {
                 return;
@@ -245,7 +223,7 @@ impl DeriveScanVisitor<'_> {
                     "`new` has more than {} arguments; use a builder",
                     self.thresholds.max_constructor_args()
                 ),
-                method.span().start().line as u32,
+                method.line(),
                 format!(
                     "`fn new` takes {args} arguments (max {})",
                     self.thresholds.max_constructor_args()
@@ -254,7 +232,7 @@ impl DeriveScanVisitor<'_> {
             return;
         }
 
-        if has_derive(&info.attrs, "new") {
+        if has_derive(info, "new") {
             return;
         }
         if self.blocked_by_path_inclusion("derive_new") {
@@ -267,7 +245,7 @@ impl DeriveScanVisitor<'_> {
             Some(method_name.to_string()),
             format!("{self_ty}::{method_name}"),
             "Consider #[derive(derive_new::new)] if no validation logic is required",
-            method.span().start().line as u32,
+            method.line(),
             format!(
                 "`fn new(...)` fills `{self_ty}` via struct literal (<= {} params)",
                 self.thresholds.max_constructor_args()
@@ -276,18 +254,12 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "trace", skip(self, method))]
-    fn is_error_constructor(&self, self_ty: &str, method: &syn::ImplItemFn) -> bool {
-        self.error_types.contains(self_ty) || has_track_caller(&method.attrs)
+    fn is_error_constructor(&self, self_ty: &str, method: &DeriveMethodFacts) -> bool {
+        self.error_types.contains(self_ty) || method.flags().track_caller()
     }
 }
 
-#[instrument(level = "debug", skip(sig, type_name), ret)]
-fn method_returns_reference_to(sig: &syn::Signature, type_name: &str) -> bool {
-    let syn::ReturnType::Type(_, ty) = &sig.output else {
-        return false;
-    };
-    let syn::Type::Reference(reference) = ty.as_ref() else {
-        return false;
-    };
-    type_label(&reference.elem) == type_name
+#[instrument(level = "trace", skip(info))]
+pub(super) fn has_derive(info: &DeriveStructFacts, needle: &str) -> bool {
+    info.derives().iter().any(|name| name == needle)
 }

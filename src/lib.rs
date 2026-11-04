@@ -131,7 +131,7 @@ pub use etiquettes::creusot_diagnostics::{
 };
 #[cfg(feature = "derives")]
 pub use etiquettes::derives::{
-    DERIVES_ETIQUETTE, DeriveRuleId, DeriveSiteRecord, PathInclusionFacts,
+    DERIVES_ETIQUETTE, DeriveInventoryEnricher, DeriveRuleId, DeriveSiteRecord, PathInclusionFacts,
     scan_rust_source as scan_derives_rust_source, workspace_path_inclusions,
 };
 #[cfg(feature = "doc_warnings")]
@@ -491,6 +491,7 @@ pub use {
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "modularity",
-    feature = "pageantry"
+    feature = "pageantry",
+    feature = "derives"
 ))]
 pub use ir::{ATTR_SOURCE_POLICY_INVENTORY, SourcePolicyInventory};

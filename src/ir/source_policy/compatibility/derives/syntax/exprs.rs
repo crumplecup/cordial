@@ -3,20 +3,10 @@
 use syn::{Block, Expr, Stmt};
 use tracing::instrument;
 
-/// How a getter body reads a field; each maps to a derive option.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::etiquettes::derives) enum FieldRead {
-    /// `&self.field` maps to a plain `#[derive(Getters)]`.
-    Direct,
-    /// Bare `self.field` needs `#[getter(copy)]`.
-    DirectOwned,
-    Clone,
-    AsStr,
-    AsRef,
-}
+pub(super) use crate::ir::DeriveFieldRead as FieldRead;
 
 #[instrument(level = "debug", skip(block), ret)]
-pub(in crate::etiquettes::derives) fn classify_field_read(
+pub(in crate::ir::source_policy::compatibility::derives) fn classify_field_read(
     block: &Block,
 ) -> Option<(String, FieldRead)> {
     let stmts = non_item_stmts(block);

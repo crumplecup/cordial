@@ -1,17 +1,17 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use syn::{Fields, FieldsNamed, ItemStruct};
 
-use super::FieldMeta;
-use crate::etiquettes::derives::syntax::{field_is_exposed, type_label};
+use super::syntax::{field_is_exposed, type_label};
+use crate::ir::DeriveFieldFacts as FieldMeta;
 
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(item_struct))]
 pub(super) fn collect_struct_fields(
     item_struct: &ItemStruct,
-) -> (HashMap<String, FieldMeta>, Vec<String>) {
-    let mut fields = HashMap::new();
+) -> (BTreeMap<String, FieldMeta>, Vec<String>) {
+    let mut fields = BTreeMap::new();
     let mut exposed_fields = Vec::new();
     match &item_struct.fields {
         Fields::Named(FieldsNamed { named, .. }) => {
@@ -23,11 +23,11 @@ pub(super) fn collect_struct_fields(
                 let exposed = field_is_exposed(&field.vis);
                 fields.insert(
                     field_name.clone(),
-                    FieldMeta {
-                        is_public: exposed,
-                        is_option: type_is_option(&field.ty),
-                        boxed_inner_type: boxed_inner_type(&field.ty),
-                    },
+                    FieldMeta::new(
+                        exposed,
+                        type_is_option(&field.ty),
+                        boxed_inner_type(&field.ty),
+                    ),
                 );
                 if exposed {
                     exposed_fields.push(field_name);

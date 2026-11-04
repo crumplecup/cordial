@@ -3,6 +3,15 @@
 use super::SourcePolicyInventory;
 use crate::loader::{DatabaseSource, module_path_from_src_file};
 use crate::{CordialResult, FileSnapshot};
+#[cfg(any(
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry"
+))]
 use ra_ap_syntax::{AstNode, SyntaxNode, ast};
 use std::path::Path;
 
@@ -14,9 +23,12 @@ mod cfg_names;
     feature = "allows",
     feature = "cfg_hygiene",
     feature = "cfg_scatter",
-    feature = "modularity"
+    feature = "modularity",
+    feature = "derives"
 ))]
 mod context;
+#[cfg(feature = "derives")]
+mod derives;
 #[cfg(feature = "glob_imports")]
 mod glob_imports;
 #[cfg(feature = "inline_tests")]
@@ -33,7 +45,8 @@ mod scatter;
     feature = "cfg_scatter",
     feature = "inline_tests",
     feature = "modularity",
-    feature = "pageantry"
+    feature = "pageantry",
+    feature = "derives"
 ))]
 mod tokens;
 
@@ -60,6 +73,7 @@ impl SourcePolicyInventory {
         let include_tests = cfg!(feature = "inline_tests")
             && is_source
             && !crate::loader::path_has_fixtures(file.path(), crate_root);
+        let include_derives = cfg!(feature = "derives") && is_source;
         let include_modularity = cfg!(feature = "modularity") && is_source;
         let include_pageantry = cfg!(feature = "pageantry")
             && (is_source || is_test)
@@ -70,6 +84,7 @@ impl SourcePolicyInventory {
             && !include_tests
             && !include_modularity
             && !include_pageantry
+            && !include_derives
         {
             return Ok(());
         }
@@ -103,6 +118,11 @@ impl SourcePolicyInventory {
         if include_pageantry {
             self.pageantry
                 .extend(pageantry::collect(file, crate_root, &prefix)?);
+        }
+        #[cfg(feature = "derives")]
+        if include_derives {
+            self.derives
+                .push(derives::collect(file, crate_root, &prefix)?);
         }
         if is_source {
             #[cfg(feature = "cfg_hygiene")]

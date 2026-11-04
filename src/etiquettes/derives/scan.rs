@@ -1,76 +1,23 @@
-//! syn-based scan for manual builders, getters, setters, and `new()`.
-
+//! Derive policy over loader-projected declaration and method evidence.
 mod candidates;
-mod fields;
 mod walk;
 
+use super::{
+    path_inclusion::PathInclusionFacts,
+    types::{DeriveRuleId, DeriveSiteRecord},
+};
+use crate::ir::{DeriveFileFacts, DeriveStructFacts};
+use crate::{CordialResult, config::DerivesThresholds};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-
-use crate::config::DerivesThresholds;
-use crate::error::CordialResult;
-use crate::loader::{SharedParsedFile, SourceLoadView, module_path_from_src_file};
-
-use super::path_inclusion::PathInclusionFacts;
-use super::types::{DeriveRuleId, DeriveSiteRecord};
-
 use tracing::instrument;
 
 #[instrument(
     level = "debug",
-    skip(source, thresholds, path_inclusions),
+    skip(source, thresholds, path_inclusions, file),
     err(level = "warn")
 )]
-pub(super) fn scan_source_tree(
-    source: &SourceLoadView,
-    crate_root: &Path,
-    thresholds: DerivesThresholds,
-    path_inclusions: &PathInclusionFacts,
-) -> CordialResult<Vec<DeriveSiteRecord>> {
-    let src_root = source.src_root();
-    let mut findings = Vec::new();
-    for file in source.parsed_rust_files_under(src_root, "derive-inventory", |_| true)? {
-        findings.extend(scan_shared_file(
-            &file,
-            src_root,
-            crate_root,
-            thresholds,
-            path_inclusions,
-        )?);
-    }
-    findings.sort_by(|a, b| {
-        a.file()
-            .cmp(b.file())
-            .then(a.line().cmp(&b.line()))
-            .then(a.qualified_name().cmp(b.qualified_name()))
-    });
-    Ok(findings)
-}
-
-#[instrument(
-    level = "debug",
-    skip(file, thresholds, path_inclusions),
-    err(level = "warn")
-)]
-fn scan_shared_file(
-    file: &SharedParsedFile,
-    src_root: &Path,
-    crate_root: &Path,
-    thresholds: DerivesThresholds,
-    path_inclusions: &PathInclusionFacts,
-) -> CordialResult<Vec<DeriveSiteRecord>> {
-    scan_syntax(
-        file.syntax(),
-        file.path(),
-        src_root,
-        crate_root,
-        thresholds,
-        path_inclusions,
-    )
-}
-
-#[instrument(level = "debug", skip(source, file, thresholds, path_inclusions))]
-/// Scan one Rust source file and return records.
+/// Scan one Rust source using loader-owned collection and ordinary graph policy.
 pub fn scan_rust_source(
     source: &str,
     file: &Path,
@@ -79,50 +26,49 @@ pub fn scan_rust_source(
     thresholds: DerivesThresholds,
     path_inclusions: &PathInclusionFacts,
 ) -> CordialResult<Vec<DeriveSiteRecord>> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    scan_syntax(
-        &syntax,
-        file,
-        src_root,
-        crate_root,
-        thresholds,
-        path_inclusions,
-    )
+    let facts = crate::ir::scan_derives_source(source, file, src_root, crate_root)?;
+    select_records(&[facts], crate_root, thresholds, path_inclusions)
 }
 
 #[instrument(
     level = "debug",
-    skip(syntax, file, thresholds, path_inclusions),
+    skip(files, thresholds, path_inclusions),
     err(level = "warn")
 )]
-fn scan_syntax(
-    syntax: &syn::File,
-    file: &Path,
-    src_root: &Path,
+pub(super) fn select_records(
+    files: &[DeriveFileFacts],
     crate_root: &Path,
     thresholds: DerivesThresholds,
     path_inclusions: &PathInclusionFacts,
 ) -> CordialResult<Vec<DeriveSiteRecord>> {
-    let module_prefix = module_path_from_src_file(src_root, file);
-    let mut visitor = DeriveScanVisitor {
-        file: file.to_path_buf(),
-        crate_root: crate_root.to_path_buf(),
-        module_prefix,
-        structs: HashMap::new(),
-        generated_builders: HashSet::new(),
-        error_types: HashSet::new(),
-        thresholds,
-        path_inclusions,
-        findings: Vec::new(),
-        in_cfg_creusot_mod: false,
-        error: None,
-    };
-    visitor.walk_items(&syntax.items);
-    if let Some(error) = visitor.error {
-        return Err(error);
+    let mut findings = Vec::new();
+    for file in files {
+        let mut visitor = DeriveScanVisitor {
+            file: crate_root.join(file.file()),
+            crate_root: crate_root.to_path_buf(),
+            module_prefix: file.module_prefix().clone(),
+            structs: HashMap::new(),
+            generated_builders: HashSet::new(),
+            error_types: HashSet::new(),
+            thresholds,
+            path_inclusions,
+            findings: Vec::new(),
+            in_cfg_creusot_mod: false,
+            error: None,
+        };
+        visitor.walk_items(file.items());
+        if let Some(error) = visitor.error {
+            return Err(error);
+        }
+        findings.extend(visitor.findings);
     }
-    Ok(visitor.findings)
+    findings.sort_by(|a, b| {
+        a.file()
+            .cmp(b.file())
+            .then(a.line().cmp(&b.line()))
+            .then(a.qualified_name().cmp(b.qualified_name()))
+    });
+    Ok(findings)
 }
 
 /// Every fact needed to build one [`DeriveSiteRecord`], bundled so
@@ -142,26 +88,11 @@ struct SiteArgs {
     evidence: String,
 }
 
-#[derive(Debug, Clone)]
-struct StructInfo {
-    attrs: Vec<syn::Attribute>,
-    fields: HashMap<String, FieldMeta>,
-}
-
-#[derive(Debug, Clone, derive_getters::Getters)]
-struct FieldMeta {
-    #[getter(copy)]
-    is_public: bool,
-    #[getter(copy)]
-    is_option: bool,
-    boxed_inner_type: Option<String>,
-}
-
 struct DeriveScanVisitor<'a> {
     file: PathBuf,
     crate_root: PathBuf,
     module_prefix: Vec<String>,
-    structs: HashMap<String, StructInfo>,
+    structs: HashMap<String, DeriveStructFacts>,
     generated_builders: HashSet<String>,
     error_types: HashSet<String>,
     thresholds: DerivesThresholds,
@@ -250,9 +181,4 @@ fn setter_field_name(method_name: &str) -> Option<&str> {
     method_name
         .strip_prefix("with_")
         .or_else(|| method_name.strip_prefix("set_"))
-}
-
-#[instrument(level = "debug")]
-fn setter_target_field(method_name: &str) -> &str {
-    setter_field_name(method_name).unwrap_or(method_name)
 }

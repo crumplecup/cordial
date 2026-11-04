@@ -35,7 +35,8 @@ mod source_calls;
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "modularity",
-    feature = "pageantry"
+    feature = "pageantry",
+    feature = "derives"
 ))]
 mod source_policy;
 #[cfg(feature = "allows")]
@@ -59,9 +60,16 @@ pub use source_policy::scan_pageantry_source;
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "modularity",
-    feature = "pageantry"
+    feature = "pageantry",
+    feature = "derives"
 ))]
 pub use source_policy::{ATTR_SOURCE_POLICY_INVENTORY, SourcePolicyInventory};
+#[cfg(feature = "derives")]
+pub use source_policy::{
+    DeriveFieldFacts, DeriveFieldRead, DeriveFileFacts, DeriveImplFacts, DeriveItemFacts,
+    DeriveMethodFacts, DeriveMethodFlags, DeriveModuleFacts, DeriveSetterShape, DeriveStructFacts,
+    scan_derives_source,
+};
 #[cfg(feature = "tracing")]
 mod tracing_source;
 pub use source_attributes::{

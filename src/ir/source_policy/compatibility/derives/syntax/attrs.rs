@@ -7,14 +7,18 @@ use tracing::instrument;
 use super::types::type_label;
 
 #[instrument(level = "trace", skip(attrs), ret)]
-pub(in crate::etiquettes::derives) fn has_track_caller(attrs: &[Attribute]) -> bool {
+pub(in crate::ir::source_policy::compatibility::derives) fn has_track_caller(
+    attrs: &[Attribute],
+) -> bool {
     attrs
         .iter()
         .any(|attr| attr.path().is_ident("track_caller"))
 }
 
 #[instrument(level = "debug", skip(item_impl))]
-pub(in crate::etiquettes::derives) fn error_impl_target(item_impl: &ItemImpl) -> Option<String> {
+pub(in crate::ir::source_policy::compatibility::derives) fn error_impl_target(
+    item_impl: &ItemImpl,
+) -> Option<String> {
     let (trait_path, _) = item_impl.trait_.as_ref()?;
     let last = trait_path.segments.last()?;
     if last.ident != "Error" {
@@ -24,7 +28,9 @@ pub(in crate::etiquettes::derives) fn error_impl_target(item_impl: &ItemImpl) ->
 }
 
 #[instrument(level = "trace", skip(attrs))]
-pub(in crate::etiquettes::derives) fn is_cfg_test(attrs: &[Attribute]) -> bool {
+pub(in crate::ir::source_policy::compatibility::derives) fn is_cfg_test(
+    attrs: &[Attribute],
+) -> bool {
     attrs.iter().any(|attr| {
         let syn::Meta::List(list) = &attr.meta else {
             return false;
@@ -38,7 +44,9 @@ pub(in crate::etiquettes::derives) fn is_cfg_test(attrs: &[Attribute]) -> bool {
 
 /// Clap schema types: each field is a CLI argument, not an encapsulated record.
 #[instrument(level = "trace", skip(attrs), ret)]
-pub(in crate::etiquettes::derives) fn is_clap_schema(attrs: &[Attribute]) -> bool {
+pub(in crate::ir::source_policy::compatibility::derives) fn is_clap_schema(
+    attrs: &[Attribute],
+) -> bool {
     has_derive(attrs, "Parser") || has_derive(attrs, "Args") || has_derive(attrs, "Subcommand")
 }
 
@@ -50,7 +58,9 @@ pub(in crate::etiquettes::derives) fn is_clap_schema(attrs: &[Attribute]) -> boo
 /// This only recognizes the gate on the item's own attribute list.
 /// `DeriveScanVisitor::walk_mod` covers ancestor `#[cfg(creusot)]` modules.
 #[instrument(level = "trace", skip(attrs), ret)]
-pub(in crate::etiquettes::derives) fn is_cfg_creusot(attrs: &[Attribute]) -> bool {
+pub(in crate::ir::source_policy::compatibility::derives) fn is_cfg_creusot(
+    attrs: &[Attribute],
+) -> bool {
     attrs.iter().any(|attr| {
         let syn::Meta::List(list) = &attr.meta else {
             return false;
@@ -63,7 +73,10 @@ pub(in crate::etiquettes::derives) fn is_cfg_creusot(attrs: &[Attribute]) -> boo
 }
 
 #[instrument(level = "trace", skip(attrs))]
-pub(in crate::etiquettes::derives) fn has_derive(attrs: &[Attribute], needle: &str) -> bool {
+pub(in crate::ir::source_policy::compatibility::derives) fn has_derive(
+    attrs: &[Attribute],
+    needle: &str,
+) -> bool {
     attrs.iter().any(|attr| {
         let syn::Meta::List(list) = &attr.meta else {
             return false;
@@ -82,7 +95,7 @@ pub(in crate::etiquettes::derives) fn has_derive(attrs: &[Attribute], needle: &s
 }
 
 #[instrument(level = "trace", skip(attrs))]
-pub(in crate::etiquettes::derives) fn derive_builder_names(
+pub(in crate::ir::source_policy::compatibility::derives) fn derive_builder_names(
     attrs: &[Attribute],
     struct_name: &str,
 ) -> Vec<String> {

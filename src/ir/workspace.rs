@@ -144,8 +144,9 @@ impl WorkspaceIr {
         self.antipattern_facts.as_deref()
     }
     #[cfg(feature = "derives")]
+    /// Attach the shared module-splice and Cargo dependency inventory.
     #[instrument(level = "trace", skip(self, facts))]
-    pub(crate) fn set_path_inclusions(&mut self, facts: crate::PathInclusionFacts) {
+    pub fn set_path_inclusions(&mut self, facts: crate::PathInclusionFacts) {
         self.path_inclusions = Some(std::sync::Arc::new(facts));
     }
 

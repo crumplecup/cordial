@@ -47,3 +47,10 @@ mod pageantry;
 pub(super) use pageantry::collect as collect_pageantry;
 #[cfg(feature = "pageantry")]
 pub use pageantry::scan_rust_source as scan_pageantry_source;
+
+#[cfg(feature = "derives")]
+mod derives;
+#[cfg(feature = "derives")]
+pub(super) use derives::collect as collect_derives;
+#[cfg(feature = "derives")]
+pub use derives::scan_rust_source as scan_derives_source;

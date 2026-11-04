@@ -226,7 +226,8 @@ fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Resul
         feature = "glob_imports",
         feature = "inline_tests",
         feature = "modularity",
-        feature = "pageantry"
+        feature = "pageantry",
+        feature = "derives"
     ))]
     assert_eq!(
         legacy.source_policy_inventory().into_diagnostic()?,

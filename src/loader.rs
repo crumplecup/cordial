@@ -26,7 +26,8 @@ pub(crate) use source::{SourceEditView, SourceSnapshot};
     feature = "glob_imports",
     feature = "inline_tests",
     feature = "modularity",
-    feature = "pageantry"
+    feature = "pageantry",
+    feature = "derives"
 ))]
 pub(crate) use source_work::parse as source_parse;
 #[cfg(any(
@@ -35,6 +36,7 @@ pub(crate) use source_work::parse as source_parse;
     feature = "inline_tests",
     feature = "modularity",
     feature = "pageantry",
+    feature = "derives",
     feature = "panics",
     feature = "error_sites",
     feature = "tracing",

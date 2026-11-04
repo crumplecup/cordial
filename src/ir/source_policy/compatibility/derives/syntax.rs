@@ -12,7 +12,7 @@ pub(super) use attrs::{
     is_cfg_test, is_clap_schema,
 };
 pub(super) use constructor::{body_is_struct_literal, constructor_fields_match_params};
-pub(super) use exprs::{FieldRead, classify_field_read};
+pub(super) use exprs::classify_field_read;
 pub(super) use receivers::{
     constructor_arg_count, consumes_self, field_is_exposed, is_fluent_setter,
     receiver_is_immutable_reference, receiver_is_mutable,

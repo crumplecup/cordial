@@ -491,6 +491,35 @@ The file-policy group now has native collectors and graph-only consumers.
 Production cutover still depends on the API/layout, tracing, error/apply and
 proof collectors, together with complete Cargo context ownership.
 
+### Derive evidence projection checkpoint
+
+`SourcePolicyInventory` now carries typed derive declarations: struct fields,
+visibility and wrapper shapes, generated builder names, inline module gates,
+trait membership, receiver properties and supported method body shapes.
+Collection preserves constructor arities and fluent setters independently of
+configured thresholds. Derive policy consumes these facts through `IrView`;
+its enricher no longer walks source syntax. The compatibility helpers moved
+into loader collection and still use the shared parse. The native collector
+reads the canonical rust-analyzer tree, including inactive syntax.
+
+Parity coverage compares complete evidence payloads and all materialized
+finding attributes and spans with an empty source view. It exercises all eight
+derive rules, generated builders, Copy and borrowed getters, Box and Option
+exemptions, setter conversions, constructor forwarding, const and error
+constructors, test and Creusot gates, tuple fields, source fixtures and
+integration-test exclusions. Threshold changes reuse the same graph; virtual
+body edits invalidate the affected facts and restoration recovers the original
+payload and findings.
+
+All 39 existing derive tests and the dedicated backend parity test pass with
+only the derives feature enabled. The collector and policy also retain their
+existing full-feature test coverage.
+
+The shared workspace path-inclusion inventory still supplies consumer dependency
+checks. Its `#[path]` collector remains to be ported, alongside visibility and
+CLI layout, before the API/layout group is complete. Production source ownership
+has not switched backends yet.
+
 ### Collector migration inventory
 
 The starting audit found 53 files consuming `.syntax()` or `.macro_syntax()`
@@ -503,7 +532,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | Source ownership and graph population | `loader/source.rs`, `source/cache.rs`, `source_work.rs`, `populate.rs` | Canonical text inputs first; then syntax carriers, source ranges, item/module population, inactive syntax. Remove `ParsedSource.syntax`, the thread-local AST cache, and the `syn` parser on cutover. |
 | Syntax/source facts and direct calls | `ir/function_source.rs`, `ir/source_calls/collect.rs`, `enricher/source_calls.rs` | Signatures, exact edit ranges, declaration identity, instantiated contracts, resolved calls. Replace name-based resolution using semantic facts. |
 | Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity` and `pageantry` consume loader-projected IR | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
-| API and layout | `derives/scan.rs`, `derives/path_inclusion.rs`, `visibility/scan/tree.rs`, `cli_layout/{tree,scan,scan/catalog}.rs` | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
+| API and layout | Derive policy consumes loader-projected typed IR with native collector parity. Remaining: `derives/path_inclusion.rs`, `visibility/scan/tree.rs`, `cli_layout/{tree,scan,scan/catalog}.rs` | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | `tracing/scan.rs`, `call_graph/collect.rs`, `{subscriber,boundary,print}/scan.rs` | Function/call identity, attributes, macro input syntax, executable boundary facts; retain apply ranges and worklist accounting. |
 | Error analysis | `enricher/error/scan.rs`; `error_sites`, `error_chain`, `internal_error_chain/{architecture,type_graph}` | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
 | Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |

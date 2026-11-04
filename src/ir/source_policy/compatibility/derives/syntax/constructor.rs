@@ -6,7 +6,7 @@ use tracing::instrument;
 use super::exprs::{field_member_name, non_item_stmts, stmt_tail_expr};
 
 #[instrument(level = "debug", skip(block))]
-pub(in crate::etiquettes::derives) fn body_is_struct_literal(
+pub(in crate::ir::source_policy::compatibility::derives) fn body_is_struct_literal(
     block: &Block,
     type_name: &str,
 ) -> bool {
@@ -23,7 +23,7 @@ pub(in crate::etiquettes::derives) fn body_is_struct_literal(
 /// trivial pass-through of a same-named parameter: bare `field`,
 /// `field.into()`, `field.clone()`, or `field.to_owned()`.
 #[instrument(level = "debug", skip(sig, block), ret)]
-pub(in crate::etiquettes::derives) fn constructor_fields_match_params(
+pub(in crate::ir::source_policy::compatibility::derives) fn constructor_fields_match_params(
     sig: &Signature,
     block: &Block,
 ) -> bool {

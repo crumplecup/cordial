@@ -173,7 +173,8 @@ impl SourceDatabase {
             feature = "glob_imports",
             feature = "inline_tests",
             feature = "modularity",
-            feature = "pageantry"
+            feature = "pageantry",
+            feature = "derives"
         ))]
         let mut policies = {
             #[cfg(feature = "cfg_hygiene")]
@@ -228,7 +229,8 @@ impl SourceDatabase {
                 feature = "glob_imports",
                 feature = "inline_tests",
                 feature = "modularity",
-                feature = "pageantry"
+                feature = "pageantry",
+                feature = "derives"
             ))]
             policies.collect_native_file(&source, target.crate_root())?;
             projection.populate(&self.db, &sema, &source, &module_path, &mut graph)?;
@@ -240,7 +242,8 @@ impl SourceDatabase {
             feature = "glob_imports",
             feature = "inline_tests",
             feature = "modularity",
-            feature = "pageantry"
+            feature = "pageantry",
+            feature = "derives"
         ))]
         {
             policies.sort();

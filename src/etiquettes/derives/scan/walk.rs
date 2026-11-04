@@ -1,34 +1,28 @@
-use syn::spanned::Spanned;
-use syn::{Item, ItemImpl, ItemMod, ItemStruct};
-
-use super::fields::collect_struct_fields;
-use super::{DeriveScanVisitor, SiteArgs, StructInfo, setter_target_field};
-use crate::etiquettes::derives::syntax::{
-    classify_setter_body, consumes_self, derive_builder_names, error_impl_target, has_derive,
-    is_cfg_creusot, is_cfg_test, is_clap_schema, is_fluent_setter, type_label,
-};
+use super::candidates::has_derive;
+use super::{DeriveScanVisitor, SiteArgs};
 use crate::etiquettes::derives::types::DeriveRuleId;
-
+use crate::ir::{
+    DeriveImplFacts, DeriveItemFacts, DeriveMethodFacts, DeriveModuleFacts, DeriveStructFacts,
+};
 use tracing::instrument;
 
 impl DeriveScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, items))]
-    pub(super) fn walk_items(&mut self, items: &[Item]) {
+    pub(super) fn walk_items(&mut self, items: &[DeriveItemFacts]) {
         for item in items {
             match item {
-                Item::Struct(item_struct) => self.register_struct(item_struct),
-                Item::Impl(item_impl) => {
-                    if let Some(name) = error_impl_target(item_impl) {
-                        self.error_types.insert(name);
+                DeriveItemFacts::Struct(item_struct) => self.register_struct(item_struct),
+                DeriveItemFacts::Impl(item_impl) => {
+                    if item_impl.error_impl() {
+                        self.error_types.insert(item_impl.self_type().clone());
                     }
                 }
-                Item::Mod(item_mod) => self.walk_mod(item_mod),
-                _ => {}
+                DeriveItemFacts::Module(item_mod) => self.walk_mod(item_mod),
             }
         }
         for item in items {
-            if let Item::Impl(item_impl) = item
-                && item_impl.trait_.is_none()
+            if let DeriveItemFacts::Impl(item_impl) = item
+                && !item_impl.trait_impl()
             {
                 self.visit_impl(item_impl);
             }
@@ -36,15 +30,13 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "debug", skip(self, item_mod))]
-    fn walk_mod(&mut self, item_mod: &ItemMod) {
-        if is_cfg_test(&item_mod.attrs) {
+    fn walk_mod(&mut self, item_mod: &DeriveModuleFacts) {
+        if item_mod.test_only() {
             return;
         }
-        let Some((_, items)) = &item_mod.content else {
-            return;
-        };
+        let items = item_mod.items();
         let mut nested = self.module_prefix.clone();
-        nested.push(item_mod.ident.to_string());
+        nested.push(item_mod.name().clone());
         let previous_prefix = std::mem::replace(&mut self.module_prefix, nested);
         // Sticky, not reset per-mod: a plain nested `mod` inside a
         // `#[cfg(creusot)]` ancestor is still only compiled under that
@@ -52,7 +44,7 @@ impl DeriveScanVisitor<'_> {
         // cfg(creusot)-only even though this particular `mod` carries
         // no attribute of its own.
         let previous_cfg_creusot = self.in_cfg_creusot_mod;
-        if is_cfg_creusot(&item_mod.attrs) {
+        if item_mod.creusot_only() {
             self.in_cfg_creusot_mod = true;
         }
         self.walk_items(items);
@@ -61,22 +53,16 @@ impl DeriveScanVisitor<'_> {
     }
 
     #[instrument(level = "debug", skip(self, item_struct))]
-    fn register_struct(&mut self, item_struct: &ItemStruct) {
-        let name = item_struct.ident.to_string();
-        let (fields, exposed_fields) = collect_struct_fields(item_struct);
-        self.structs.insert(
-            name.clone(),
-            StructInfo {
-                attrs: item_struct.attrs.clone(),
-                fields,
-            },
-        );
+    fn register_struct(&mut self, item_struct: &DeriveStructFacts) {
+        let name = item_struct.name().clone();
+        let exposed_fields = item_struct.exposed_fields();
+        self.structs.insert(name.clone(), item_struct.clone());
         self.generated_builders
-            .extend(derive_builder_names(&item_struct.attrs, &name));
+            .extend(item_struct.generated_builders().iter().cloned());
         if exposed_fields.is_empty()
-            || is_clap_schema(&item_struct.attrs)
+            || item_struct.clap_schema()
             || self.in_cfg_creusot_mod
-            || is_cfg_creusot(&item_struct.attrs)
+            || item_struct.creusot_only()
         {
             return;
         }
@@ -92,31 +78,28 @@ impl DeriveScanVisitor<'_> {
             name,
             "Make fields private; use derive_getters, derive_setters, \
              derive_new, or derive_builder instead of struct literals",
-            item_struct.span().start().line as u32,
+            item_struct.line(),
             format!("non-private fields: {field_list}"),
         ));
     }
 
     #[instrument(level = "debug", skip(self, item_impl))]
-    fn visit_impl(&mut self, item_impl: &ItemImpl) {
-        let self_ty = type_label(&item_impl.self_ty);
+    fn visit_impl(&mut self, item_impl: &DeriveImplFacts) {
+        let self_ty = item_impl.self_type().clone();
         if self.generated_builders.contains(&self_ty) {
             return;
         }
         let struct_info = self.structs.get(&self_ty).cloned();
         if struct_info
             .as_ref()
-            .is_some_and(|info| has_derive(&info.attrs, "Builder"))
+            .is_some_and(|info| has_derive(info, "Builder"))
         {
             return;
         }
 
         let mut fluent_setters = Vec::new();
         let mut build_line = None;
-        for impl_item in &item_impl.items {
-            let syn::ImplItem::Fn(method) = impl_item else {
-                continue;
-            };
+        for method in item_impl.methods() {
             self.inspect_impl_method(
                 &self_ty,
                 struct_info.as_ref(),
@@ -132,25 +115,18 @@ impl DeriveScanVisitor<'_> {
     fn inspect_impl_method(
         &mut self,
         self_ty: &str,
-        struct_info: Option<&StructInfo>,
-        method: &syn::ImplItemFn,
+        struct_info: Option<&DeriveStructFacts>,
+        method: &DeriveMethodFacts,
         fluent_setters: &mut Vec<(String, u32, bool)>,
         build_line: &mut Option<(u32, bool)>,
     ) {
-        let method_name = method.sig.ident.to_string();
-        let line = method.span().start().line as u32;
-        let is_const = method.sig.constness.is_some();
-        if method_name == "build" && consumes_self(&method.sig) {
+        let method_name = method.name().clone();
+        let line = method.line();
+        let is_const = method.flags().is_const();
+        if method_name == "build" && method.flags().consumes_self() {
             *build_line = Some((line, is_const));
         }
-        if is_fluent_setter(&method.sig)
-            && classify_setter_body(
-                &method.block,
-                setter_target_field(&method_name),
-                &method.sig,
-            )
-            .is_some()
-        {
+        if method.flags().fluent_setter() && method.setter().is_some() {
             fluent_setters.push((method_name.clone(), line, is_const));
         }
         if method_name == "new" {
@@ -167,7 +143,7 @@ impl DeriveScanVisitor<'_> {
     fn maybe_flag_manual_builder(
         &mut self,
         self_ty: &str,
-        item_impl: &ItemImpl,
+        item_impl: &DeriveImplFacts,
         fluent_setters: &[(String, u32, bool)],
         build_line: Option<(u32, bool)>,
     ) {
@@ -179,7 +155,7 @@ impl DeriveScanVisitor<'_> {
                 None,
                 self_ty.to_string(),
                 recommendation,
-                item_impl.span().start().line as u32,
+                item_impl.line(),
                 format!("type `{self_ty}` ends with `Builder`"),
             ));
             return;

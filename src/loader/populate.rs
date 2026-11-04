@@ -97,7 +97,8 @@ impl SourceLoadView {
             feature = "glob_imports",
             feature = "inline_tests",
             feature = "modularity",
-            feature = "pageantry"
+            feature = "pageantry",
+            feature = "derives"
         ))]
         if let Some(crate_root) = self.src_root().parent() {
             let inventory = crate::ir::SourcePolicyInventory::collect(self, crate_root)?;
