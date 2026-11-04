@@ -33,7 +33,9 @@ mod source_calls;
     feature = "cfg_hygiene",
     feature = "cfg_scatter",
     feature = "glob_imports",
-    feature = "inline_tests"
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry"
 ))]
 mod source_policy;
 #[cfg(feature = "allows")]
@@ -46,12 +48,18 @@ pub use source_policy::scan_cfg_scatter_source;
 pub use source_policy::scan_glob_imports_source;
 #[cfg(feature = "inline_tests")]
 pub use source_policy::scan_inline_tests_source;
+#[cfg(feature = "modularity")]
+pub use source_policy::scan_modularity_source;
+#[cfg(feature = "pageantry")]
+pub use source_policy::scan_pageantry_source;
 #[cfg(any(
     feature = "allows",
     feature = "cfg_hygiene",
     feature = "cfg_scatter",
     feature = "glob_imports",
-    feature = "inline_tests"
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry"
 ))]
 pub use source_policy::{ATTR_SOURCE_POLICY_INVENTORY, SourcePolicyInventory};
 #[cfg(feature = "tracing")]

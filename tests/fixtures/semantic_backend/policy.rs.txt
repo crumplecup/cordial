@@ -105,3 +105,51 @@ mod imports {
         #[test] fn not_an_inline_test() { #[test] fn nested_in_trait() {} }
     }
 }
+
+/// Module size includes documentation and attributes.
+#[cfg(any())]
+mod size_cases {
+    trait Leading {}
+    struct First;
+    union Bits { integer: u32, float: f32 }
+    trait Later {}
+    trait Alias = Leading;
+    impl First {
+        fn method() {
+            fn nested() {}
+            let ignored = || { fn closure_hidden() {} };
+        }
+    }
+    impl Leading for &First {}
+    trait WithDefault {
+        fn default_method() { fn nested_default() {} }
+        fn required();
+    }
+    mod sizes {
+        fn worker() {
+            mod local { fn local_fn() {} }
+        }
+    }
+    #[cfg(test)] mod test_hidden { struct Excluded; fn ignored() {} }
+    #[cfg(test)] trait TestTrait { fn test_hidden() {} }
+    #[cfg(test)] impl First { fn test_hidden() {} }
+    fn enclosing() { #[cfg(test)] fn test_hidden() { fn hidden_nested() {} } }
+}
+#[proc_macro_attribute]
+fn oversized_shim() {
+    let shim_line = 1;
+    let a = 1;
+    let b = 2;
+    let c = 3;
+    let d = 4;
+    let e = 5;
+    let f = 6;
+    let g = 7;
+    let h = 8;
+}
+#[proc_macro] fn single_line_shim() {}
+unsafe extern "C" { fn foreign(); }
+const _: u8 = 0;
+static VALUE: u8 = 0;
+type Alias = u8;
+payload!();

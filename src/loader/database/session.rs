@@ -171,7 +171,9 @@ impl SourceDatabase {
             feature = "cfg_hygiene",
             feature = "cfg_scatter",
             feature = "glob_imports",
-            feature = "inline_tests"
+            feature = "inline_tests",
+            feature = "modularity",
+            feature = "pageantry"
         ))]
         let mut policies = {
             #[cfg(feature = "cfg_hygiene")]
@@ -224,7 +226,9 @@ impl SourceDatabase {
                 feature = "cfg_hygiene",
                 feature = "cfg_scatter",
                 feature = "glob_imports",
-                feature = "inline_tests"
+                feature = "inline_tests",
+                feature = "modularity",
+                feature = "pageantry"
             ))]
             policies.collect_native_file(&source, target.crate_root())?;
             projection.populate(&self.db, &sema, &source, &module_path, &mut graph)?;
@@ -234,7 +238,9 @@ impl SourceDatabase {
             feature = "cfg_hygiene",
             feature = "cfg_scatter",
             feature = "glob_imports",
-            feature = "inline_tests"
+            feature = "inline_tests",
+            feature = "modularity",
+            feature = "pageantry"
         ))]
         {
             policies.sort();

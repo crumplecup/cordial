@@ -160,7 +160,16 @@ impl Finding for PageantryFinding {
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_builder::Builder,
+    derive_getters::Getters,
+)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct PageantrySiteRecord {
     #[getter(copy)]
@@ -176,5 +185,51 @@ impl PageantrySiteRecord {
     #[instrument(level = "debug")]
     pub fn builder() -> PageantrySiteRecordBuilder {
         PageantrySiteRecordBuilder::default()
+    }
+}
+
+/// Source facts for a proc-macro entry point, independent of the shim limit.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters, derive_new::new,
+)]
+pub struct ProcMacroShim {
+    attribute: String,
+    #[getter(copy)]
+    body_lines: usize,
+}
+
+/// A possible pageantry site with the evidence needed for policy selection.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters, derive_new::new,
+)]
+pub struct PageantrySourceSite {
+    site: PageantrySiteRecord,
+    shim: Option<ProcMacroShim>,
+}
+
+impl PageantrySourceSite {
+    /// Apply rule switches and shim limits to already collected facts.
+    #[tracing::instrument(level = "debug", skip(self, thresholds))]
+    pub(crate) fn selected(
+        &self,
+        thresholds: &crate::PageantryThresholds,
+    ) -> Option<PageantrySiteRecord> {
+        if !thresholds.rule_enabled(self.site.rule_id().as_str()) {
+            return None;
+        }
+        let mut site = self.site.clone();
+        if let Some(shim) = &self.shim {
+            if shim.body_lines <= thresholds.max_shim_lines() {
+                return None;
+            }
+            site.snippet = format!(
+                "#[{}] fn {} has a {}-line body; shims may have {} — move the logic to a named file and delegate",
+                shim.attribute,
+                site.snippet,
+                shim.body_lines,
+                thresholds.max_shim_lines()
+            );
+        }
+        Some(site)
     }
 }

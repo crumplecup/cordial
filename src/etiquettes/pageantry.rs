@@ -33,7 +33,6 @@ mod enricher;
 mod probe;
 mod reporter;
 mod scan;
-mod shim;
 mod types;
 
 pub use assessor::PageantryAssessor;
@@ -41,7 +40,7 @@ pub use enricher::PageantryInventoryEnricher;
 pub use probe::PageantrySiteProbe;
 pub use reporter::{PageantryChecklistReporter, PageantryCsvReporter, PageantrySummaryReporter};
 pub use scan::{scan_crate_pageantry, scan_rust_source};
-pub use types::PageantryRuleId;
+pub use types::{PageantryRuleId, PageantrySiteRecord, PageantrySourceSite, ProcMacroShim};
 
 use std::sync::LazyLock;
 

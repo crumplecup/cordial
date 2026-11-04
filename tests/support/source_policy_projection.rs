@@ -3,6 +3,10 @@
 use cordial::GlobImportInventoryEnricher;
 #[cfg(feature = "inline_tests")]
 use cordial::InlineTestInventoryEnricher;
+#[cfg(feature = "modularity")]
+use cordial::ModularityInventoryEnricher;
+#[cfg(feature = "pageantry")]
+use cordial::PageantryInventoryEnricher;
 use cordial::{
     AllowInventoryEnricher, CfgHygieneInventoryEnricher, CfgScatterInventoryEnricher, CrateIr,
     CrateTarget, IrView, LoadContext, Loader, QueryBuilder, SessionBuilder, SourceDatabase,
@@ -16,7 +20,7 @@ const SOURCE: &str = include_str!("../fixtures/semantic_backend/policy.rs.txt");
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 pub fn verify() -> Result<()> {
     let root = tempfile::tempdir().into_diagnostic()?;
-    for dir in ["src", "tests/fixtures"] {
+    for dir in ["src/fixtures", "tests/fixtures"] {
         std::fs::create_dir_all(root.path().join(dir)).into_diagnostic()?;
     }
     std::fs::write(root.path().join("Cargo.toml"), "[package]\nname = \"policy_parity\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n[lints.rust.unexpected_cfgs]\nlevel = \"warn\"\ncheck-cfg = ['cfg(from_manifest)']\n").into_diagnostic()?;
@@ -32,10 +36,16 @@ pub fn verify() -> Result<()> {
         "#[allow(unused)] fn fixture() { use ignored::*; }\n#[test] fn ignored_test() {}\n",
     )
     .into_diagnostic()?;
+    let source_fixture = root.path().join("src/fixtures/generated.rs");
+    std::fs::write(
+        &source_fixture,
+        "struct FixtureType; fn fixture_worker() {}\n",
+    )
+    .into_diagnostic()?;
     let target = CrateTarget::new("policy_parity", root.path());
     let legacy = load(root.path(), &target)?;
     let mut database = SourceDatabase::load(root.path()).into_diagnostic()?;
-    let paths = [path.clone(), integration];
+    let paths = [path.clone(), integration, source_fixture];
     let native = database.project(&target, &paths).into_diagnostic()?;
     let expected = legacy
         .source_policy_inventory()
@@ -47,6 +57,18 @@ pub fn verify() -> Result<()> {
         .ok_or_else(|| miette::miette!("missing native policy"))?;
     assert_eq!(expected.snapshots(), actual.snapshots(), "policy snapshots");
     assert_eq!(expected.allows(), actual.allows(), "allow evidence");
+    #[cfg(feature = "modularity")]
+    assert_eq!(
+        expected.modularity(),
+        actual.modularity(),
+        "modularity evidence"
+    );
+    #[cfg(feature = "pageantry")]
+    assert_eq!(
+        expected.pageantry(),
+        actual.pageantry(),
+        "pageantry evidence"
+    );
     #[cfg(feature = "glob_imports")]
     assert_eq!(
         expected.glob_imports(),
@@ -103,6 +125,8 @@ pub fn verify() -> Result<()> {
         materialized(&legacy, root.path())?,
         materialized(&native, root.path())?
     );
+    #[cfg(all(feature = "modularity", feature = "pageantry"))]
+    verify_policy_changes(&legacy, &native, root.path())?;
     #[cfg(feature = "glob_imports")]
     {
         let sites = actual.glob_imports();
@@ -151,7 +175,12 @@ pub fn verify() -> Result<()> {
             SOURCE
                 .replace("unknown", "changed")
                 .replace("std::collections", "std::path")
-                .replace("parameterized", "revised_test"),
+                .replace("parameterized", "revised_test")
+                .replace("mod size_cases", "mod revised_sizes")
+                .replace(
+                    "let shim_line = 1;",
+                    "let shim_line = 1;\n    let extra_line = 2;",
+                ),
         )
         .into_diagnostic()?;
     database
@@ -209,6 +238,32 @@ pub fn verify() -> Result<()> {
                 .any(|site| site.context().ends_with("::parameterized"))
         );
     }
+    #[cfg(feature = "modularity")]
+    {
+        assert_ne!(actual.modularity(), revised.modularity());
+        assert!(
+            revised
+                .modularity()
+                .iter()
+                .any(|site| site.context() == "revised_sizes")
+        );
+        assert!(
+            !revised
+                .modularity()
+                .iter()
+                .any(|site| site.context().contains("closure_hidden")
+                    || site.context().contains("test_hidden"))
+        );
+    }
+    #[cfg(feature = "pageantry")]
+    {
+        assert_ne!(actual.pageantry(), revised.pageantry());
+        assert!(revised.pageantry().iter().any(|site| {
+            site.shim()
+                .as_ref()
+                .is_some_and(|shim| shim.body_lines() == 10)
+        }));
+    }
     assert_ne!(actual.snapshots(), revised.snapshots());
     database
         .change_file(&path, SOURCE.into())
@@ -262,6 +317,10 @@ fn materialized(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> 
         &GlobImportInventoryEnricher,
         #[cfg(feature = "inline_tests")]
         &InlineTestInventoryEnricher,
+        #[cfg(feature = "modularity")]
+        &ModularityInventoryEnricher,
+        #[cfg(feature = "pageantry")]
+        &PageantryInventoryEnricher,
     ] {
         // Missing and corrupt evidence must fail before writing any policy node.
         let mut missing = CrateIr::new("missing");
@@ -293,12 +352,53 @@ fn materialized(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> 
         "glob_import_rule_id",
         #[cfg(feature = "inline_tests")]
         "inline_test_rule_id",
+        #[cfg(feature = "modularity")]
+        "modularity_kind",
+        #[cfg(feature = "pageantry")]
+        "pageantry_rule_id",
     ] {
         for node in actual.nodes_matching(&QueryBuilder::new().has_attr(key).build()) {
-            rows.push(serde_json::json!({"kind":key, "attrs":node.weight().attrs(), "span":node.weight().span()}));
+            let attrs: std::collections::BTreeMap<_, _> =
+                node.weight().attrs().iter().cloned().collect();
+            rows.push(serde_json::json!({"kind":key, "attrs":attrs, "span":node.weight().span()}));
         }
     }
     assert!(!rows.is_empty());
     rows.sort_by_key(serde_json::Value::to_string);
     Ok(rows)
+}
+
+/// Reconfigure the same evidence, with no source tree available to enrichers.
+#[cfg(all(feature = "modularity", feature = "pageantry"))]
+#[tracing::instrument(level = "debug", skip(legacy, native), err(level = "warn"))]
+fn verify_policy_changes(legacy: &CrateIr, native: &CrateIr, root: &Path) -> Result<()> {
+    let baseline = materialized(native, root)?;
+    let config = root.join("cordial.toml");
+    std::fs::write(&config, "[modularity]\nfile_inventory_min_lines = 0\nfunction_inventory_min_lines = 0\nfunction_hotspot_min_lines = 0\nmax_types_per_file = 0\ngenerated_files = ['src/lib.rs']\n[pageantry]\nbarrel = false\nmax_shim_lines = 0\n").into_diagnostic()?;
+    let revised = materialized(native, root)?;
+    assert_eq!(materialized(legacy, root)?, revised);
+    assert_ne!(baseline, revised);
+    assert!(revised.iter().any(
+        |row| row["attrs"]["modularity_kind"] == "MODULARITY-FUNCTION"
+            && row["attrs"]["context"] == "size_cases::First::method"
+    ));
+    assert!(revised.iter().any(|row| {
+        row["attrs"]["pageantry_rule_id"] == "PAGEANTRY-BARREL-SHIM-001"
+            && row["attrs"]["snippet"]
+                .as_str()
+                .is_some_and(|snippet| snippet.contains("shims may have 0"))
+    }));
+    assert!(
+        !revised
+            .iter()
+            .any(|row| row["attrs"]["pageantry_rule_id"] == "PAGEANTRY-BARREL-001")
+    );
+    assert!(!revised.iter().any(|row| {
+        row["attrs"]["modularity_kind"] == "MODULARITY-MODULE-SIZE"
+            && row["attrs"]["file"]
+                .as_str()
+                .is_some_and(|file| Path::new(file) == root.join("src/lib.rs"))
+    }));
+    std::fs::remove_file(config).into_diagnostic()?;
+    Ok(())
 }

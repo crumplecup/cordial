@@ -40,7 +40,7 @@ pub use hierarchy::{
 pub use probe::ModularitySiteProbe;
 pub use reporter::{ModularityChecklistReporter, ModularityCsvReporter, ModularitySummaryReporter};
 pub use scan::scan_rust_source;
-pub use types::{ModularityKind, ModuleSizeStats};
+pub use types::{ModularityKind, ModularitySiteRecord, ModuleSizeStats};
 
 use std::sync::LazyLock;
 

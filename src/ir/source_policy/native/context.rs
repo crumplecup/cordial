@@ -105,10 +105,35 @@ fn lineage(node: &SyntaxNode) -> Vec<SyntaxNode> {
 }
 
 #[tracing::instrument(level = "trace", skip(parts))]
-fn joined(parts: Vec<String>) -> String {
+pub(super) fn joined(parts: Vec<String>) -> String {
     if parts.is_empty() {
         "<crate>".into()
     } else {
         parts.join("::")
     }
+}
+
+#[cfg(feature = "modularity")]
+#[tracing::instrument(level = "trace", skip(node, prefix))]
+pub(super) fn function_context(node: &SyntaxNode, prefix: &[String]) -> String {
+    let mut modules = prefix.to_vec();
+    let mut owner = None;
+    let mut functions = Vec::new();
+    for ancestor in lineage(node) {
+        if let Some(module) = ast::Module::cast(ancestor.clone()) {
+            modules.extend(module.name().map(|name| name.text().to_string()));
+        }
+        if let Some(item) = ast::Impl::cast(ancestor.clone()) {
+            owner = item.self_ty().map(type_label);
+        }
+        if let Some(item) = ast::Trait::cast(ancestor.clone()) {
+            owner = item.name().map(|name| name.text().to_string());
+        }
+        if let Some(item) = ast::Fn::cast(ancestor) {
+            functions.extend(item.name().map(|name| name.text().to_string()));
+        }
+    }
+    modules.extend(owner);
+    modules.extend(functions);
+    joined(modules)
 }

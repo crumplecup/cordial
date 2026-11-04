@@ -20,6 +20,10 @@ pub use compatibility::scan_cfg_scatter_source;
 pub use compatibility::scan_glob_imports_source;
 #[cfg(feature = "inline_tests")]
 pub use compatibility::scan_inline_tests_source;
+#[cfg(feature = "modularity")]
+pub use compatibility::scan_modularity_source;
+#[cfg(feature = "pageantry")]
+pub use compatibility::scan_pageantry_source;
 
 /// Complete policy collection for a crate's quality scan trees.
 pub const ATTR_SOURCE_POLICY_INVENTORY: &str = "source_policy_inventory";
@@ -29,6 +33,10 @@ pub const ATTR_SOURCE_POLICY_INVENTORY: &str = "source_policy_inventory";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters, Default)]
 pub struct SourcePolicyInventory {
     crate_root: std::path::PathBuf,
+    #[cfg(feature = "modularity")]
+    modularity: Vec<crate::etiquettes::modularity::ModularitySiteRecord>,
+    #[cfg(feature = "pageantry")]
+    pageantry: Vec<crate::etiquettes::pageantry::PageantrySourceSite>,
     snapshots: Vec<FileSnapshot>,
     #[cfg(feature = "allows")]
     allows: Vec<crate::etiquettes::allows::AllowSiteRecord>,
@@ -55,11 +63,22 @@ impl SourcePolicyInventory {
         };
         for tree in crate::loader::quality_scan_trees(crate_root) {
             let is_source = tree == crate_root.join("src");
-            if !is_source && !cfg!(any(feature = "allows", feature = "glob_imports")) {
+            if !is_source
+                && !cfg!(any(
+                    feature = "allows",
+                    feature = "glob_imports",
+                    feature = "pageantry"
+                ))
+            {
                 continue;
             }
             for file in source.parsed_rust_files_under(&tree, "source-policy", |path| {
-                (is_source && cfg!(any(feature = "cfg_hygiene", feature = "cfg_scatter")))
+                (is_source
+                    && cfg!(any(
+                        feature = "cfg_hygiene",
+                        feature = "cfg_scatter",
+                        feature = "modularity"
+                    )))
                     || !crate::loader::path_has_fixtures(path, crate_root)
             })? {
                 inventory.snapshots.push(FileSnapshot::new(
@@ -80,7 +99,17 @@ impl SourcePolicyInventory {
                             &file, &tree, crate_root,
                         )?);
                 }
+                #[cfg(feature = "pageantry")]
+                if !crate::loader::path_has_fixtures(file.path(), crate_root) {
+                    inventory
+                        .pageantry
+                        .extend(compatibility::collect_pageantry(&file, &tree, crate_root)?);
+                }
                 if is_source {
+                    #[cfg(feature = "modularity")]
+                    inventory
+                        .modularity
+                        .extend(compatibility::collect_modularity(&file, &tree, crate_root)?);
                     #[cfg(feature = "inline_tests")]
                     if !crate::loader::path_has_fixtures(file.path(), crate_root) {
                         inventory
@@ -116,6 +145,22 @@ impl SourcePolicyInventory {
     pub(crate) fn sort(&mut self) {
         self.snapshots.sort_by(|a, b| a.path().cmp(b.path()));
         self.snapshots.dedup();
+        #[cfg(feature = "modularity")]
+        self.modularity.sort_by(|a, b| {
+            b.lines()
+                .cmp(&a.lines())
+                .then(a.kind().as_str().cmp(b.kind().as_str()))
+                .then(a.file().cmp(b.file()))
+                .then(a.context().cmp(b.context()))
+        });
+        #[cfg(feature = "pageantry")]
+        self.pageantry.sort_by(|a, b| {
+            a.site()
+                .file()
+                .cmp(b.site().file())
+                .then(a.site().line().cmp(&b.site().line()))
+                .then(a.site().snippet().cmp(b.site().snippet()))
+        });
         #[cfg(feature = "glob_imports")]
         self.glob_imports.sort_by(|a, b| {
             a.file()

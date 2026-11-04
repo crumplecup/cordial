@@ -1,10 +1,10 @@
-use crate::enricher::{member_crate_root, resolve_parent};
+use crate::enricher::resolve_parent;
 use crate::error::CordialResult;
 use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
 
-use super::scan::scan_source_tree;
+use super::scan::select_records;
 use super::types::ModularityKind;
 
 use tracing::instrument;
@@ -13,6 +13,7 @@ use tracing::instrument;
 pub struct ModularityInventoryEnricher;
 
 impl ModularityInventoryEnricher {
+    /// Stable identifier for the modularity evidence projection.
     pub const ID: &'static str = "modularity-inventory";
 }
 
@@ -24,11 +25,14 @@ impl SourceEnricher for ModularityInventoryEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
-        let (ir, source, session) = view.into_parts();
+        let (ir, _source, session) = view.into_parts();
 
-        let crate_root = member_crate_root(source, session);
+        let inventory = ir
+            .source_policy_inventory()?
+            .ok_or_else(|| crate::CordialError::not_found("source policy inventory".into()))?;
+        let crate_root = inventory.crate_root();
         let config = crate::config::load_session_config(session);
-        let records = scan_source_tree(source, &crate_root, config.modularity())?;
+        let records = select_records(inventory.modularity(), crate_root, config.modularity())?;
 
         for record in records {
             let parent = match record.kind() {

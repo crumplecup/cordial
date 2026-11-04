@@ -195,14 +195,14 @@ pub use etiquettes::internal_error_chain::{
 };
 #[cfg(feature = "modularity")]
 pub use etiquettes::modularity::{
-    MODULARITY_ETIQUETTE, ModularityKind, ModuleHierarchyNode, ModuleSizeInput, ModuleSizeStats,
-    OrderBand, SiblingImbalance, UnaryNest, build_module_hierarchy, fat_leaves, library_branches,
-    lopsided_siblings, order_bands, scan_rust_source as scan_modularity_rust_source,
-    top_heavy_parents, unary_nests,
+    MODULARITY_ETIQUETTE, ModularityInventoryEnricher, ModularityKind, ModuleHierarchyNode,
+    ModuleSizeInput, ModuleSizeStats, OrderBand, SiblingImbalance, UnaryNest,
+    build_module_hierarchy, fat_leaves, library_branches, lopsided_siblings, order_bands,
+    scan_rust_source as scan_modularity_rust_source, top_heavy_parents, unary_nests,
 };
 #[cfg(feature = "pageantry")]
 pub use etiquettes::pageantry::{
-    PAGEANTRY_ETIQUETTE, PageantryRuleId, scan_crate_pageantry,
+    PAGEANTRY_ETIQUETTE, PageantryInventoryEnricher, PageantryRuleId, scan_crate_pageantry,
     scan_rust_source as scan_pageantry_rust_source,
 };
 #[cfg(feature = "panics")]
@@ -489,6 +489,8 @@ pub use {
     feature = "cfg_hygiene",
     feature = "cfg_scatter",
     feature = "glob_imports",
-    feature = "inline_tests"
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry"
 ))]
 pub use ir::{ATTR_SOURCE_POLICY_INVENTORY, SourcePolicyInventory};

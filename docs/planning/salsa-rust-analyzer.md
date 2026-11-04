@@ -457,9 +457,39 @@ also compiles independently without warnings. The build-tier commit gate
 passes with zero open items; the all-tier gate stays at the migration completion
 milestone.
 
-This retires syntax access in these two enrichers. It does not complete the
-file-policy group or switch production input ownership to rust-analyzer;
-modularity and pageantry remain next in that group.
+This checkpoint retired syntax access in these two enrichers. Modularity and
+pageantry completed the remaining file-policy ports in the checkpoint below;
+production input ownership still awaits the full collector migration.
+
+### Modularity and pageantry projection checkpoint
+
+`SourcePolicyInventory` now also records file, module, type-count and function
+size facts, item-order findings, and proc-macro shim sizes. Collection preserves
+small bodies and compliant shims: current thresholds, generated-file exclusions
+and rule switches are applied when materializing policy nodes from `IrView`.
+Neither enricher reads syntax or source text. Their compatibility visitors now
+belong to loader collection and use its existing shared parse; native collectors
+read the canonical rust-analyzer tree directly.
+
+The parity specimen covers documented and inactive modules, nested functions,
+impls and trait defaults, trait aliases, closure and test exclusions, anonymous
+constants, barrel declarations and proc-macro shims. It compares complete typed
+records and every materialized node's attributes and span with an empty source
+view. Changing thresholds and rule switches against the same graph verifies
+that collection does not discard facts needed by later policy decisions.
+Virtual edits and restoration exercise module identity and shim body sizes.
+Modularity retains source fixtures and excludes integration tests; pageantry
+excludes fixtures and includes integration-test files, matching existing scope.
+
+Validation: all 48 modularity tests and 19 pageantry tests pass. Backend parity,
+policy changes, virtual edits and restoration pass with both collectors enabled;
+each etiquette also compiles independently without warnings. The build-tier
+commit gate passes with zero open items; the all-tier gate remains reserved for
+migration completion.
+
+The file-policy group now has native collectors and graph-only consumers.
+Production cutover still depends on the API/layout, tracing, error/apply and
+proof collectors, together with complete Cargo context ownership.
 
 ### Collector migration inventory
 
@@ -472,7 +502,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | --- | --- | --- |
 | Source ownership and graph population | `loader/source.rs`, `source/cache.rs`, `source_work.rs`, `populate.rs` | Canonical text inputs first; then syntax carriers, source ranges, item/module population, inactive syntax. Remove `ParsedSource.syntax`, the thread-local AST cache, and the `syn` parser on cutover. |
 | Syntax/source facts and direct calls | `ir/function_source.rs`, `ir/source_calls/collect.rs`, `enricher/source_calls.rs` | Signatures, exact edit ranges, declaration identity, instantiated contracts, resolved calls. Replace name-based resolution using semantic facts. |
-| Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, and `inline_tests` consume loader-projected IR; remaining: `modularity` and `pageantry` scans | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
+| Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity` and `pageantry` consume loader-projected IR | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
 | API and layout | `derives/scan.rs`, `derives/path_inclusion.rs`, `visibility/scan/tree.rs`, `cli_layout/{tree,scan,scan/catalog}.rs` | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | `tracing/scan.rs`, `call_graph/collect.rs`, `{subscriber,boundary,print}/scan.rs` | Function/call identity, attributes, macro input syntax, executable boundary facts; retain apply ranges and worklist accounting. |
 | Error analysis | `enricher/error/scan.rs`; `error_sites`, `error_chain`, `internal_error_chain/{architecture,type_graph}` | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
@@ -492,7 +522,7 @@ lockfile identity. Current Cargo loading covers ordinary Rust library fixtures
 without running build scripts or proc-macro servers. Missing expansion and
 unsupported call/type evidence must stay incomplete.
 
-The three file policies now share a typed, snapshot-bound
+The file policies now share a typed, snapshot-bound
 `SourcePolicyInventory` on the crate root. Enrichers consume this inventory
 through `IrView` and reject missing or malformed evidence. The loader owns the
 temporary shared-syn collectors; the native database projects the same facts
@@ -558,13 +588,13 @@ Reserve the all-tier gate for completion of the migration plan.
 
 ## Current next step
 
-Work toward the production cutover, continuing with the remaining file-policy
-collectors (`modularity`, `pageantry`) and their shared IR contracts. Attribute
-materialization, crate-attribute policy, allows, cfg policies, glob imports, and
-inline tests now consume loader projections. Preserve inactive-code policy
-coverage and golden findings. Then complete API/layout, tracing, error/apply, and
-proof collection in the inventory above. Integrate the Cargo context driver
-before using semantic facts to authorize transformations. Track the remaining
+Work toward the production cutover, continuing with API/layout collection
+(`derives`, visibility and CLI layout) and its shared IR contracts. Attribute
+materialization and the complete file-policy group now consume loader
+projections. Preserve inactive-code policy coverage and golden findings, then
+complete tracing, error/apply and proof collection in the inventory above.
+Integrate the Cargo context driver before using semantic facts to authorize
+transformations. Track the remaining
 collector groups, context gaps and ownership removals against the active
 milestone; do not treat each port as a separate product destination. Continue
 implement / focused checks / build-tier submit / commit. Keep the selected

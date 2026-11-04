@@ -33,3 +33,17 @@ mod inline_tests;
 pub(super) use inline_tests::collect as collect_inline_tests;
 #[cfg(feature = "inline_tests")]
 pub use inline_tests::scan_rust_source as scan_inline_tests_source;
+
+#[cfg(feature = "modularity")]
+mod modularity;
+#[cfg(feature = "modularity")]
+pub(super) use modularity::collect as collect_modularity;
+#[cfg(feature = "modularity")]
+pub use modularity::scan_rust_source as scan_modularity_source;
+
+#[cfg(feature = "pageantry")]
+mod pageantry;
+#[cfg(feature = "pageantry")]
+pub(super) use pageantry::collect as collect_pageantry;
+#[cfg(feature = "pageantry")]
+pub use pageantry::scan_rust_source as scan_pageantry_source;

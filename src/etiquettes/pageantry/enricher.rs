@@ -1,11 +1,9 @@
 use crate::config::load_session_config;
-use crate::enricher::{member_crate_root, resolve_parent};
+use crate::enricher::resolve_parent;
 use crate::error::CordialResult;
 use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
-
-use super::scan::scan_shared_crate_pageantry;
 
 use tracing::instrument;
 
@@ -14,6 +12,7 @@ use tracing::instrument;
 pub struct PageantryInventoryEnricher;
 
 impl PageantryInventoryEnricher {
+    /// Stable identifier for the pageantry evidence projection.
     pub const ID: &'static str = "pageantry-inventory";
 }
 
@@ -25,11 +24,17 @@ impl SourceEnricher for PageantryInventoryEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
-        let (ir, source, session) = view.into_parts();
+        let (ir, _source, session) = view.into_parts();
 
-        let crate_root = member_crate_root(source, session);
+        let inventory = ir
+            .source_policy_inventory()?
+            .ok_or_else(|| crate::CordialError::not_found("source policy inventory".into()))?;
+        let crate_root = inventory.crate_root();
         let config = load_session_config(session);
-        let records = scan_shared_crate_pageantry(source, &crate_root, config.pageantry())?;
+        let records = inventory
+            .pageantry()
+            .iter()
+            .filter_map(|site| site.selected(config.pageantry()));
 
         for record in records {
             let parent = resolve_parent(ir, record.context())?;
