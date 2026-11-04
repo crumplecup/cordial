@@ -4,6 +4,8 @@
 cutover; Phase 3 severity comparison implemented, 2026-10-31. Further tracing
 policy work is paused while canonical semantic collection becomes available in
 the production pipeline. Existing fixes and regression coverage remain in place.
+Verifier participation and precise tracing gates are scheduled in Phase 2a,
+after that collection cutover and before the broader Phase 3 policy changes.
 
 ## Purpose
 
@@ -48,6 +50,7 @@ checkpoint is recorded below; this does not certify the later policy phases.
 | Error severity disappears | Assessment previously treated `err` as a boolean | Default and explicit event levels now come from shared argument facts; assessment and apply compare actual severity. Formatting policy and cfg applicability still need further work |
 | A warning anywhere can count as error coverage | Body and boundary collectors use coarse presence booleans | Record which error/path an event covers, whether it executes, and which resolved helper reports it |
 | Configuration alternatives can share evidence | Confirmed: a compliant cfg sibling hid the other declaration's missing error event | Declaration multimap and file/line joins now isolate siblings; keep adversarial regressions |
+| Verifier gates are broader than function participation | Gate policy propagates through Cargo dependencies and path inclusions; the tracing call graph uses name matching and omits receiver-method resolution | Retain compilation exposure separately from resolved proof participation; choose and explain gates using both through shared IR |
 | One repair discards unrelated instrumentation | Whole-attribute replacement and text-based removal were unsafe | Located argument edits and attribute removal now consume shared IR ranges; unsupported forms remain unresolved |
 | Recipes use names and size as behavioral proxies | I/O prefixes choose info; line count promotes Other to info | Prefer known operation roles and effects; use syntax heuristics only as explicit fallbacks, never as semantic proof |
 | Payload selection is coarse | Name-based skip list and recordability heuristics | Separate formatting capability, payload size, and recording policy; select useful safe identity fields without dumping objects |
@@ -68,8 +71,9 @@ cross-file alias limitation remains confirmed in the current implementation.
   must not mean either “safe to generate” or “no observability gap.”
 - Every edit has an explicit finding or policy delta. Already compliant code
   is byte-for-byte unchanged. A second apply is a no-op.
-- Preserve existing verifier gating, proof-only attenuation, and skip-policy
-  behavior. Fixing error reporting must not reintroduce verifier-hostile spans.
+- Preserve verifier safety while refining gating, proof-only attenuation, and
+  skip-policy behavior. Narrow existing restrictions only with sufficient
+  evidence; fixing error reporting must not reintroduce verifier-hostile spans.
 - Keep user configuration in `cordial.toml`. No new environment-only policy
   channel, temporary adoption feature, or parallel tracing implementation.
 - Preserve existing exception approval rules. Ordinary policy configuration
@@ -157,6 +161,43 @@ when the capability and payload policy explicitly permit it. An unresolved
 formatting capability produces a visible apply blocker, with a reason, rather
 than an annotation that might not compile or a false clean result.
 
+### Verifier participation determines tracing restrictions
+
+Make verifier-compatible tracing an explicit policy that users can configure
+or disable in `cordial.toml`. Its implementation must distinguish:
+
+- **Compilation exposure:** which verifier compilation or translation sees a
+  declaration and expands its attributes, including dependencies and path
+  inclusions. An uncalled function can still encounter an expansion or
+  translation restriction.
+- **Proof participation:** which proof roots can reach a function through
+  resolved calls under the relevant configuration. Track Kani, Creusot, and
+  Verus separately; one backend's participation does not imply another's.
+- **Runtime participation:** whether ordinary execution also uses the function.
+  No known runtime callers is not proof that none exist, especially for public
+  APIs, callbacks, trait dispatch, and incomplete macro expansion.
+
+Use these facts together with the backend's actual instrumentation constraints:
+
+| Established situation | Policy action |
+| --- | --- |
+| Ordinary runtime code with compatible compilation | Normal instrumentation |
+| Shared runtime/proof code whose instrumentation disrupts the affected verifier | Gate instrumentation for that verifier while retaining runtime spans |
+| Proof-only code under the selected policy | Omit instrumentation |
+| Compilation or translation prohibits instrumentation independently of reachability | Retain the required gate or exclusion even for uncalled functions |
+| Evidence is incomplete or backend restrictions conflict | Explain the gap and block unsupported automatic edits; do not claim compliance |
+
+Cargo dependency exposure remains relevant evidence, but is not a claim that
+every function participates in proofs. Likewise, a feature named `verus` or a
+method named `proof` is not semantic proof of participation. Explicit TOML
+overrides may declare project policy; findings must distinguish those choices
+from inferred facts. Choose actual backend cfg predicates from established
+build/toolchain evidence or explicit configuration, not from feature spelling.
+
+Preserve existing restrictions until a supported decision justifies changing
+them. Detection, explain, suggested recipes, and apply must agree on the same
+decision and show its backend, policy source, evidence, and limitations.
+
 ## Shared IR evidence
 
 Introduce or extend typed facts, reusing existing call, source, attribute, and
@@ -172,7 +213,11 @@ error-family facts rather than building a tracing-only copy of the program:
 4. **Execution and errors:** resolved calls and handlers, propagation edges,
    event identity/level/fields, associated error value and path, reporting
    helper contracts, and unresolved control-flow/dispatch boundaries.
-5. **Decision:** selected span recipe, error reporting responsibility, policy
+5. **Verifier participation:** identified proof roots and backend, compilation
+   contexts and restrictions, resolved call paths, runtime participation,
+   applicable cfg predicates, and explicit completeness/gap reasons. Bind these
+   facts to the same source revision and declaration identities as other facts.
+6. **Decision:** selected span recipe, error reporting responsibility, policy
    source, evidence dependencies, precise deltas, and automation blockers.
 
 Missing structural evidence should fail assessment. Valid but incomplete
@@ -308,6 +353,67 @@ attribute and manifest collection now declare their required quote/TOML
 dependencies independently of optional etiquettes. Tracing apply repaired and
 checked off three annotation deltas; build-tier submit verified those and the
 three field-visibility/organization repairs, with no new findings.
+
+### 2a. Resolve verifier participation and tracing gates
+
+Begin after canonical semantic collection is active in the production pipeline
+and its declaration/call identities can support this analysis. This is part of
+the tracing overhaul, not a separate implementation track. Extend canonical
+collection and shared IR where evidence is missing; do not add another semantic
+database, source scan, or tracing-owned approximation of the call graph.
+
+- [ ] Reproduce the reported gate suggestions for
+  `amenable_std::verus_witness::cell` and
+  `amenable_std::verus_witness::collections_iter_cell_ref`. Establish their
+  actual compilation exposure and proof participation before choosing the
+  expected recipe. A crate dependency explains today's broad gate, but does not
+  settle whether each function requires it.
+- [ ] Collect typed proof-root identities, backend/configuration identity, and
+  compilation constraints for Kani, Creusot, and Verus. Reuse existing harness,
+  macro, manifest, cfg, and path-inclusion facts. Record unavailable backend
+  evidence explicitly rather than assuming ordinary Rust analysis covers it.
+- [ ] Project resolved function/method call edges from the canonical backend
+  into shared IR. Start with direct cross-file and cross-crate calls, then
+  concrete trait implementations. Retire the old tracing name-based resolver
+  as supported semantic evidence replaces it.
+- [ ] Propagate backend participation from proof roots through call-graph
+  components, including recursion. Track ordinary roots/callers separately;
+  public entry points and unresolved indirect calls prevent an unsupported
+  proof-only classification. Missing edges never establish absence of callers.
+- [ ] Keep compilation/translation exposure separate from execution
+  reachability. Require evidence for narrowing a compiler-safety restriction;
+  reachability alone cannot establish that attribute expansion is safe.
+- [ ] Define configurable enforcement and explicit overrides in
+  `cordial.toml`, retaining existing configuration compatibility. Report whether
+  a restriction is inferred, configured, or unresolved. Users may disable the
+  policy; disabling it does not turn missing evidence into established facts.
+- [ ] Derive one typed tracing decision for assessment, recipes, and apply.
+  Support bare, verifier-gated, and proof-only omitted instrumentation; preserve
+  runtime spans on shared functions. Combine multiple backend predicates only
+  when their applicability is established. Conflicting restrictions or unknown
+  applicability remain visible blockers.
+- [ ] Use located edits to repair existing overbroad or missing gates, retaining
+  unrelated annotations. Account for import ownership before adding/removing
+  cfg wrappers so verifier configurations do not acquire unused imports.
+- [ ] Update compiled explain, rule meanings, configuration guidance, and
+  human/JSON findings together. Show the relevant proof path or compilation
+  constraint and distinguish established nonparticipation from unknown analysis.
+
+Build executable/compilable regression fixtures incrementally: ordinary code
+beside a proof harness, one proof caller, shared runtime/proof callers, cross-file
+and cross-crate calls, recursive components, and multiple backends. Include
+same-named unrelated methods, cfg alternatives, generic/trait dispatch,
+callbacks/function pointers, macro-generated roots/calls, and public external
+callers as adversarial cases. Unsupported cases must yield explicit gaps rather
+than incorrect omissions or verifier labels.
+
+Acceptance requires assessment, recipe, dry-run, and apply to agree. Supported
+edits compile under their ordinary and applicable verifier configurations,
+retain runtime tracing where required, introduce no unused imports, and are
+idempotent. Verify matching worklist closures through build-tier submit. Use
+focused verifier checks for affected fixtures; retain the plan's final all-tier
+gate for completion. Do not modify Amenable during reproduction without separate
+authorization; use fixtures or an authorized sandbox for transformations.
 
 ### 3. Establish observability policy and explain it
 
