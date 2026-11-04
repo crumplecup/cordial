@@ -586,7 +586,38 @@ driver. Native collection explicitly rejects `verus!` visibility bodies when
 the dialect feature is enabled; it cannot silently replace their declarations
 with zero counts. Shipping collection retains its existing Verus support until
 the dialect capability is migrated. Production source ownership has not switched
-backends. CLI layout remains in the API/layout collection group.
+backends. The following checkpoint completes the CLI layout collection group.
+
+### CLI layout collection checkpoint
+
+`SourcePolicyInventory` now carries a required, typed CLI catalog: library and
+binary ownership, clap/error classification, field and variant relationships,
+resolved `act` targets, free-function argument types, entry-point shapes and
+source fingerprints. The enricher and policy evaluator consume these facts
+through `IrView`; neither discovers modules nor walks source syntax.
+
+The shipping collector now lives at the loader boundary. The native collector
+uses canonical database syntax directly, including inactive declarations,
+external and inline modules, explicit module paths, and separate binary entries.
+It resolves the existing nested-dispatch cases over native expressions and
+patterns: direct/associated calls, field forwarding, destructuring, transparent
+`Some`/`Ok` wrappers, local bindings, match arms, `if let` and `while let` scopes.
+No native-to-syn fallback is introduced. Pending syntax is transient collection
+state; only resolved evidence is serialized into shared IR.
+
+The dedicated backend regression compares complete catalogs and findings,
+materializes policy with an empty source view, checks required evidence and
+test/fixture/function-local module exclusions, and exercises virtual edits,
+exact restoration, and invalid binary syntax. Existing
+root selection, short-name resolution and filesystem-based module discovery
+remain policy-compatible; Cargo context and semantic identity work are still
+required before production cutover.
+
+Validation passed with full features and with CLI layout alone: the new catalog
+and finding parity regression, all 14 existing CLI-layout tests, and the shared
+source-backend regressions. The latter also retain their malformed-evidence
+rejection checks. The build-tier commit gate reports zero open items; the
+all-tier gate remains reserved for migration completion.
 
 ### Collector migration inventory
 
@@ -600,7 +631,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | Source ownership and graph population | `loader/source.rs`, `source/cache.rs`, `source_work.rs`, `populate.rs` | Canonical text inputs first; then syntax carriers, source ranges, item/module population, inactive syntax. Remove `ParsedSource.syntax`, the thread-local AST cache, and the `syn` parser on cutover. |
 | Syntax/source facts and direct calls | `ir/function_source.rs`, `ir/source_calls/collect.rs`, `enricher/source_calls.rs` | Signatures, exact edit ranges, declaration identity, instantiated contracts, resolved calls. Replace name-based resolution using semantic facts. |
 | Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity` and `pageantry` consume loader-projected IR | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
-| API and layout | Derive and visibility policy consume loader-projected typed IR with native collector parity. Module-splice collection also has shared IR evidence and native parity. Remaining: `cli_layout/{tree,scan,scan/catalog}.rs` | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
+| API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | `tracing/scan.rs`, `call_graph/collect.rs`, `{subscriber,boundary,print}/scan.rs` | Function/call identity, attributes, macro input syntax, executable boundary facts; retain apply ranges and worklist accounting. |
 | Error analysis | `enricher/error/scan.rs`; `error_sites`, `error_chain`, `internal_error_chain/{architecture,type_graph}` | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
 | Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |
@@ -685,11 +716,11 @@ Reserve the all-tier gate for completion of the migration plan.
 
 ## Current next step
 
-Work toward the production cutover, completing CLI layout collection and its
-shared IR contracts. Derives, visibility, module splices, attribute materialization
-and the complete file-policy group now consume loader projections. Preserve
-inactive-code policy coverage and golden findings, then
-complete tracing, error/apply and proof collection in the inventory above.
+Work toward the production cutover, completing tracing collection and its
+shared IR contracts. Derives, visibility, CLI layout, module splices, attribute
+materialization and the complete file-policy group now consume loader projections.
+Preserve inactive-code policy coverage and golden findings, then complete tracing,
+error/apply and proof collection in the inventory above.
 Integrate the Cargo context driver before using semantic facts to authorize
 transformations. Track the remaining
 collector groups, context gaps and ownership removals against the active

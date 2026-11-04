@@ -28,7 +28,6 @@ mod hunt;
 mod probe;
 mod reporter;
 mod scan;
-mod tree;
 mod types;
 
 pub use assessor::CliLayoutAssessor;

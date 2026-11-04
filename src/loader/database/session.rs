@@ -1,5 +1,7 @@
 //! Canonical source inputs and semantic queries for the shared source loader.
 
+#[cfg(feature = "cli_layout")]
+mod cli_layout;
 #[cfg(feature = "derives")]
 mod path_inclusion;
 mod project;

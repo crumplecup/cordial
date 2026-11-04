@@ -59,7 +59,8 @@ impl SourceDatabase {
             feature = "modularity",
             feature = "pageantry",
             feature = "derives",
-            feature = "visibility"
+            feature = "visibility",
+            feature = "cli_layout"
         ))]
         let mut policies = {
             #[cfg(feature = "cfg_hygiene")]
@@ -75,6 +76,11 @@ impl SourceDatabase {
         policies.set_visibility(
             target.crate_root(),
             self.project_visibility(target.crate_root())?,
+        );
+        #[cfg(feature = "cli_layout")]
+        policies.set_cli_layout(
+            target.crate_root(),
+            self.project_cli_layout(target.crate_root(), target.crate_name())?,
         );
         let mut snapshots = Vec::new();
         let mut projection = Projection::default();
@@ -121,7 +127,8 @@ impl SourceDatabase {
                 feature = "modularity",
                 feature = "pageantry",
                 feature = "derives",
-                feature = "visibility"
+                feature = "visibility",
+                feature = "cli_layout"
             ))]
             policies.collect_native_file(&source, target.crate_root())?;
             projection.populate(&self.db, &sema, &source, &module_path, &mut graph)?;
@@ -135,7 +142,8 @@ impl SourceDatabase {
             feature = "modularity",
             feature = "pageantry",
             feature = "derives",
-            feature = "visibility"
+            feature = "visibility",
+            feature = "cli_layout"
         ))]
         {
             policies.sort();

@@ -1,0 +1,35 @@
+//! Collect the target's module hierarchy from canonical database trees.
+use super::SourceDatabase;
+use crate::{
+    CordialResult,
+    ir::{CliLayoutFacts, SourcePolicyInventory},
+    loader::DatabaseSource,
+};
+use ra_ap_hir::Semantics;
+use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
+use std::path::Path;
+
+impl SourceDatabase {
+    #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
+    pub(super) fn project_cli_layout(
+        &self,
+        root: &Path,
+        name: &str,
+    ) -> CordialResult<CliLayoutFacts> {
+        let sema = Semantics::new(&self.db);
+        SourcePolicyInventory::collect_native_cli_layout(root, name, |path| {
+            let file = self.file_id(path)?;
+            let edition = sema.attach_first_edition(file);
+            if let Some(error) = edition.parse(&self.db).errors().first() {
+                return Err(anyhow::Error::new(error.clone()).into());
+            }
+            let source = DatabaseSource::new(
+                path,
+                self.db.file_text(file).text(&self.db),
+                sema.parse(edition),
+                ra_ap_ide_db::line_index(&self.db, file),
+            );
+            SourcePolicyInventory::native_cli_layout_file(&source, name)
+        })
+    }
+}

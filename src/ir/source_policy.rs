@@ -5,7 +5,13 @@ use crate::{CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+#[cfg(feature = "cli_layout")]
+mod cli_layout;
 mod compatibility;
+#[cfg(feature = "cli_layout")]
+pub use cli_layout::CliLayoutFacts;
+#[cfg(feature = "cli_layout")]
+pub(crate) use cli_layout::{EntryItem, EntryKind, LayoutCatalog, TypeRec, VariantShape};
 #[cfg(feature = "cfg_hygiene")]
 mod declarations;
 #[cfg(feature = "derives")]
@@ -54,6 +60,8 @@ pub struct SourcePolicyInventory {
     derives: Vec<DeriveFileFacts>,
     #[cfg(feature = "visibility")]
     visibility: VisibilityFacts,
+    #[cfg(feature = "cli_layout")]
+    cli_layout: CliLayoutFacts,
     snapshots: Vec<FileSnapshot>,
     #[cfg(feature = "allows")]
     allows: Vec<crate::etiquettes::allows::AllowSiteRecord>,
@@ -162,6 +170,11 @@ impl SourcePolicyInventory {
         #[cfg(feature = "visibility")]
         {
             inventory.visibility = Self::collect_visibility(source, crate_root)?;
+        }
+        #[cfg(feature = "cli_layout")]
+        {
+            inventory.cli_layout =
+                Self::collect_cli_layout(source, crate_root, source.crate_name())?;
         }
         inventory.sort();
         Ok(inventory)

@@ -11,55 +11,13 @@ use crate::enricher::is_cfg_test;
 use crate::error::CordialResult;
 use crate::loader::SharedParsedFile;
 
-use super::super::tree::{item_derives_error, last_ident, trait_is_std_error, type_label};
+use super::super::catalog::{ActRec, FreeFnRec, TypeRec, VariantShape};
 use super::idents::{
     has_self_receiver, input_type_idents, item_derives, named_field_map, sig_returns_result,
     variant_shape,
 };
+use super::tree::{item_derives_error, last_ident, trait_is_std_error, type_label};
 use tracing::instrument;
-
-#[derive(derive_getters::Getters, derive_builder::Builder)]
-#[builder(build_fn(error = "crate::error::CordialError"))]
-pub(crate) struct TypeRec {
-    ident: String,
-    type_path: String,
-    file: PathBuf,
-    #[getter(copy)]
-    line: u32,
-    snippet: String,
-    #[getter(copy)]
-    parser: bool,
-    #[getter(copy)]
-    subcommand: bool,
-    #[getter(copy)]
-    error: bool,
-    #[getter(copy)]
-    in_library: bool,
-    fields: BTreeMap<String, Vec<String>>,
-    variants: BTreeMap<String, VariantShape>,
-}
-
-impl TypeRec {
-    #[instrument(level = "debug")]
-    pub(crate) fn builder() -> TypeRecBuilder {
-        TypeRecBuilder::default()
-    }
-}
-
-#[derive(Clone)]
-pub(crate) enum VariantShape {
-    Named(BTreeMap<String, Vec<String>>),
-    Unnamed(Vec<Vec<String>>),
-    Unit,
-}
-
-#[derive(derive_getters::Getters, derive_new::new)]
-pub(crate) struct ActRec {
-    file: PathBuf,
-    #[getter(copy)]
-    line: u32,
-    called_on: BTreeSet<String>,
-}
 
 #[derive(derive_getters::Getters, derive_new::new)]
 pub(crate) struct PendingAct {
@@ -75,17 +33,6 @@ impl PendingAct {
     pub(crate) fn into_parts(self) -> (String, PathBuf, u32, syn::Block) {
         (self.ident, self.file, self.line, self.block)
     }
-}
-
-#[derive(derive_getters::Getters, derive_new::new)]
-pub(crate) struct FreeFnRec {
-    name: String,
-    file: PathBuf,
-    #[getter(copy)]
-    line: u32,
-    #[getter(copy)]
-    in_library: bool,
-    input_idents: Vec<String>,
 }
 
 #[derive(derive_getters::Getters)]
@@ -149,7 +96,7 @@ fn load_syntax(
     }
     for ident in visitor.error_impls {
         if let Some(item) = catalog.types.get_mut(&ident) {
-            item.error = true;
+            item.mark_error();
         }
     }
     Ok(())
@@ -207,14 +154,14 @@ impl LayoutVisitor<'_> {
         let Some(entry) = self.catalog.types.get_mut(&seed.ident) else {
             return;
         };
-        entry.parser |= seed.parser;
-        entry.subcommand |= seed.subcommand;
-        entry.error |= seed.error;
-        entry.fields.extend(seed.fields);
-        entry.variants.extend(seed.variants);
-        if self.in_library {
-            entry.in_library = true;
-        }
+        entry.merge(
+            seed.parser,
+            seed.subcommand,
+            seed.error,
+            seed.fields,
+            seed.variants,
+            self.in_library,
+        );
     }
 }
 
@@ -316,5 +263,20 @@ impl<'ast> Visit<'ast> for LayoutVisitor<'_> {
                 method.block.clone(),
             ));
         }
+    }
+}
+
+impl LayoutCatalog {
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn into_resolved(self) -> super::super::catalog::LayoutCatalog {
+        let mut result = super::super::catalog::LayoutCatalog::new(self.crate_name);
+        for (_, item) in self.types {
+            result.insert_type(item);
+        }
+        result.acts_mut().extend(self.acts);
+        for item in self.free_fns {
+            result.add_free_fn(item);
+        }
+        result
     }
 }

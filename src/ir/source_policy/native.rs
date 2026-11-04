@@ -11,7 +11,8 @@ use crate::{CordialResult, FileSnapshot};
     feature = "inline_tests",
     feature = "modularity",
     feature = "pageantry",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "cli_layout"
 ))]
 use ra_ap_syntax::{AstNode, SyntaxNode, ast};
 use std::path::Path;
@@ -48,7 +49,8 @@ mod scatter;
     feature = "modularity",
     feature = "pageantry",
     feature = "derives",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "cli_layout"
 ))]
 mod tokens;
 #[cfg(feature = "visibility")]
@@ -78,7 +80,7 @@ impl SourcePolicyInventory {
             && is_source
             && !crate::loader::path_has_fixtures(file.path(), crate_root);
         let include_derives = cfg!(feature = "derives") && is_source;
-        let include_visibility = cfg!(feature = "visibility")
+        let include_visibility = cfg!(any(feature = "visibility", feature = "cli_layout"))
             && is_source
             && !crate::loader::path_has_fixtures(file.path(), crate_root);
         let include_modularity = cfg!(feature = "modularity") && is_source;
@@ -167,9 +169,10 @@ fn outside_macro(node: &SyntaxNode) -> bool {
     feature = "inline_tests",
     feature = "modularity",
     feature = "pageantry",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "cli_layout"
 ))]
-fn attributes(node: &SyntaxNode) -> impl Iterator<Item = ast::Attr> {
+pub(super) fn attributes(node: &SyntaxNode) -> impl Iterator<Item = ast::Attr> {
     ast::AnyHasAttrs::cast(node.clone())
         .map(|owner| ast::attrs_including_inner(&owner).collect::<Vec<_>>())
         .into_iter()
@@ -200,9 +203,10 @@ fn policy_owner(attr: &ast::Attr) -> Option<SyntaxNode> {
     feature = "inline_tests",
     feature = "modularity",
     feature = "pageantry",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "cli_layout"
 ))]
-fn test_gate(attr: &ast::Attr) -> bool {
+pub(super) fn test_gate(attr: &ast::Attr) -> bool {
     match attr.meta() {
         Some(ast::Meta::CfgMeta(meta)) => meta
             .cfg_predicate()

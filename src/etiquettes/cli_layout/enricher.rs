@@ -1,10 +1,10 @@
-use crate::enricher::member_crate_root;
+use crate::CordialError;
 use crate::error::CordialResult;
 use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
 
-use super::scan::scan_shared_crate_cli_layout;
+use super::scan::select_records;
 
 use tracing::instrument;
 /// Materializes CLI-layout findings as IR nodes.
@@ -12,6 +12,7 @@ use tracing::instrument;
 pub struct CliLayoutInventoryEnricher;
 
 impl CliLayoutInventoryEnricher {
+    /// Stable identity for the shared-IR CLI-layout materializer.
     pub const ID: &'static str = "cli-layout-inventory";
 }
 
@@ -23,10 +24,13 @@ impl SourceEnricher for CliLayoutInventoryEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
-        let (ir, source, session) = view.into_parts();
+        let (ir, _source, _session) = view.into_parts();
 
-        let crate_root = member_crate_root(source, session);
-        let records = scan_shared_crate_cli_layout(source, &crate_root, ir.crate_name())?;
+        let inventory = ir
+            .source_policy_inventory()?
+            .ok_or_else(|| CordialError::not_found("CLI layout inventory".into()))?;
+        let crate_root = inventory.crate_root();
+        let records = select_records(inventory.cli_layout(), ir.crate_name())?;
 
         for record in records {
             let file = if record.file().is_absolute() {

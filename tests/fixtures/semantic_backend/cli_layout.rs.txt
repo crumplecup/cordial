@@ -1,0 +1,67 @@
+#[derive(clap::Parser)]
+pub struct Cli { command: Option<Commands> }
+#[derive(clap::Subcommand)]
+pub enum Commands { Named { arg: Arg }, Tuple(Arg), Unit }
+#[derive(clap::Parser)]
+pub struct Arg;
+impl Cli {
+    pub fn act(self) -> Result<(), std::io::Error> {
+        match self.command { Some(command) => command.act(), None => Ok(()) }
+    }
+}
+impl Commands {
+    pub fn act(self) -> Result<(), std::io::Error> {
+        match self {
+            Self::Named { arg } => arg.act(),
+            Self::Tuple(ref arg) => Arg::act(arg),
+            Self::Unit => Ok(()),
+        }
+    }
+}
+impl Arg { pub fn act(self) -> Result<(), std::io::Error> { Ok(()) } }
+#[derive(clap::Parser)]
+pub struct Conditional { command: Option<Commands> }
+impl Conditional {
+    pub fn act(self) -> Result<(), std::io::Error> {
+        if let Some(command) = self.command { command.act()?; }
+        Ok(())
+    }
+}
+#[derive(clap::Parser)]
+pub struct Repeated { command: Option<Commands> }
+impl Repeated {
+    pub fn act(mut self) -> Result<(), std::io::Error> {
+        while let Some(command) = self.command { command.act()?; }
+        Ok(())
+    }
+}
+#[derive(clap::Parser)]
+pub struct Bound { command: Commands }
+impl Bound {
+    pub fn act(self) -> Result<(), std::io::Error> {
+        let Self { command } = self;
+        command.act()
+    }
+}
+#[derive(clap::Parser)]
+pub struct Forwarded { command: Commands }
+impl Forwarded {
+    pub fn act(self) -> Result<(), std::io::Error> {
+        (&self.command).clone().act()
+    }
+}
+#[derive(clap::Parser)]
+pub struct Missing;
+pub fn dispatch(cli: Missing) {}
+#[cfg(any())]
+#[derive(clap::Parser)]
+pub struct Inactive;
+#[cfg(test)]
+mod tests { #[derive(clap::Parser)] pub struct Ignored; }
+mod external;
+mod inline { pub mod nested; }
+#[path = "../support.rs"]
+mod support;
+fn local_scope() {
+    #[path = "../function_local.rs"] mod local;
+}

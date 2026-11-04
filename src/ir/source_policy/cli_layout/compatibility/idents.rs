@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 
 use syn::{Attribute, Fields, FnArg, ReturnType, Signature, Type};
 
-use super::super::tree::{last_ident, type_label};
-use super::catalog::VariantShape;
+use super::super::catalog::VariantShape;
+use super::tree::{last_ident, type_label};
 
 use tracing::instrument;
 #[instrument(level = "debug", skip(fields))]

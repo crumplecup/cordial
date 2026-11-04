@@ -43,7 +43,8 @@ mod source_calls;
     feature = "modularity",
     feature = "pageantry",
     feature = "derives",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "cli_layout"
 ))]
 mod source_policy;
 #[cfg(feature = "allows")]
@@ -69,7 +70,8 @@ pub use source_policy::scan_pageantry_source;
     feature = "modularity",
     feature = "pageantry",
     feature = "derives",
-    feature = "visibility"
+    feature = "visibility",
+    feature = "cli_layout"
 ))]
 pub use source_policy::{ATTR_SOURCE_POLICY_INVENTORY, SourcePolicyInventory};
 #[cfg(feature = "derives")]
@@ -152,3 +154,8 @@ pub use workspace::{CrateView, CrateViewMut, WorkspaceIr};
 pub use wrapper_query::{
     build_wrapper_coverage_from_hub_ir, collect_trenchcoat_pairs_from_ir, wrapper_maps_equivalent,
 };
+
+#[cfg(feature = "cli_layout")]
+pub use source_policy::CliLayoutFacts;
+#[cfg(feature = "cli_layout")]
+pub(crate) use source_policy::{EntryItem, EntryKind, LayoutCatalog, TypeRec, VariantShape};

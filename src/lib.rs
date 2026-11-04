@@ -26,7 +26,6 @@
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
-
 #[cfg(any(feature = "amenable_std", feature = "antipatterns"))]
 mod amenable_dump_registry;
 #[cfg(feature = "rustdoc")]
@@ -117,7 +116,8 @@ pub use etiquettes::cfg_hygiene::{
 };
 #[cfg(feature = "cli_layout")]
 pub use etiquettes::cli_layout::{
-    CLI_LAYOUT_ETIQUETTE, CliLayoutId, CliLayoutRecord, scan_crate_cli_layout,
+    CLI_LAYOUT_ETIQUETTE, CliLayoutId, CliLayoutInventoryEnricher, CliLayoutRecord,
+    scan_crate_cli_layout,
 };
 #[cfg(feature = "crate_attrs")]
 pub use etiquettes::crate_attrs::{
@@ -460,6 +460,19 @@ pub use {
 };
 // `rustdoc` re-exports live in one block (see docs/planning/cfg-scatter-etiquette.md)
 // even though they source from several internal modules.
+#[cfg(any(
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "visibility",
+    feature = "cli_layout"
+))]
+pub use ir::{ATTR_SOURCE_POLICY_INVENTORY, SourcePolicyInventory};
 pub use targets::{discover_crate_targets, discover_run_crate_targets};
 #[cfg(feature = "rustdoc")]
 pub use {
@@ -484,16 +497,3 @@ pub use {
     },
     rustdoc_loader::{RustdocLoadView, RustdocLoader, resolve_rustdoc_json},
 };
-
-#[cfg(any(
-    feature = "allows",
-    feature = "cfg_hygiene",
-    feature = "cfg_scatter",
-    feature = "glob_imports",
-    feature = "inline_tests",
-    feature = "modularity",
-    feature = "pageantry",
-    feature = "derives",
-    feature = "visibility"
-))]
-pub use ir::{ATTR_SOURCE_POLICY_INVENTORY, SourcePolicyInventory};
