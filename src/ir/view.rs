@@ -1,5 +1,5 @@
 use crate::error::CordialResult;
-use crate::ir::{ATTR_CRATE_KINDS, CrateIr, CrateKind, EdgeKind, NodeId, NodeKind, NodeWeight};
+use crate::ir::{ATTR_CRATE_KINDS, CrateIr, CrateKind, EdgeKind, NodeId, NodeRef, NodeWeight};
 use tracing::instrument;
 
 use super::query::Query;
@@ -139,6 +139,22 @@ pub trait IrView {
                     .map(|value| serde_json::from_value(value.clone()))
             })
             .transpose()?)
+    }
+
+    /// Read required crate-wide tracing evidence; malformed evidence is an error.
+    #[cfg(feature = "tracing")]
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn source_observability(&self) -> CordialResult<super::SourceObservability> {
+        let root = self.root()?;
+        let value = self
+            .node(root)
+            .and_then(|node| node.attr(super::ATTR_SOURCE_OBSERVABILITY).cloned())
+            .ok_or_else(|| {
+                crate::CordialError::workspace_source_facts_missing(
+                    "source observability inventory",
+                )
+            })?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Read the located syntax attached by the shared attribute enricher.
@@ -341,57 +357,6 @@ pub trait IrMut: IrView {
     #[cfg(feature = "impl_coverage")]
     fn workspace_wrapper_coverage(&self) -> Option<&crate::rustdoc::WrapperCoverageMap> {
         None
-    }
-}
-
-/// Node-level read API used by queries and probes.
-pub trait NodeView {
-    /// Crate-local node id.
-    fn id(&self) -> NodeId;
-    /// Node kind.
-    fn kind(&self) -> &NodeKind;
-    /// Latest attribute value stored under `key`, if present.
-    fn attr(&self, key: &str) -> Option<&serde_json::Value>;
-}
-
-/// Borrowed node handle returned by [`IrView`] queries.
-#[derive(Debug, Clone, Copy, derive_getters::Getters, derive_new::new)]
-pub struct NodeRef<'a> {
-    /// Crate-local node id.
-    #[getter(copy)]
-    id: NodeId,
-    /// Borrowed node payload.
-    weight: &'a NodeWeight,
-}
-
-impl<'a> NodeRef<'a> {
-    /// Node kind.
-    #[instrument(level = "trace", skip(self))]
-    pub fn kind(&self) -> &NodeKind {
-        self.weight.kind()
-    }
-
-    /// Latest attribute value stored under `key`, if present.
-    #[instrument(level = "trace", skip(self))]
-    pub fn attr(&self, key: &str) -> Option<&serde_json::Value> {
-        self.weight.attr(key)
-    }
-}
-
-impl NodeView for NodeRef<'_> {
-    #[instrument(level = "trace", skip(self))]
-    fn id(&self) -> NodeId {
-        self.id
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn kind(&self) -> &NodeKind {
-        self.weight.kind()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn attr(&self, key: &str) -> Option<&serde_json::Value> {
-        self.weight.attr(key)
     }
 }
 

@@ -82,6 +82,12 @@ impl SourceDatabase {
             target.crate_root(),
             self.project_cli_layout(target.crate_root(), target.crate_name())?,
         );
+        #[cfg(feature = "tracing")]
+        graph.set_attr(
+            graph.root(),
+            crate::ir::ATTR_SOURCE_OBSERVABILITY,
+            serde_json::to_value(self.project_observability(target.crate_root())?)?,
+        )?;
         let mut snapshots = Vec::new();
         let mut projection = Projection::default();
         let sema = Semantics::new(&self.db);

@@ -632,7 +632,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | Syntax/source facts and direct calls | `ir/function_source.rs`, `ir/source_calls/collect.rs`, `enricher/source_calls.rs` | Signatures, exact edit ranges, declaration identity, instantiated contracts, resolved calls. Replace name-based resolution using semantic facts. |
 | Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity` and `pageantry` consume loader-projected IR | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
 | API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
-| Tracing | `tracing/scan.rs`, `call_graph/collect.rs`, `{subscriber,boundary,print}/scan.rs` | Function/call identity, attributes, macro input syntax, executable boundary facts; retain apply ranges and worklist accounting. |
+| Tracing | Function inventory and subscriber/boundary/stdio policy consume loader-projected typed IR with native collectors. Workspace proof call-graph collection still uses the shared-syn carrier in `call_graph/collect.rs`. | Finish proof call identity/reachability and preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. |
 | Error analysis | `enricher/error/scan.rs`; `error_sites`, `error_chain`, `internal_error_chain/{architecture,type_graph}` | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
 | Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |
 | Panic and proof collectors | `panics/{scan,kani_reach}`, `verus_ir/parse.rs`, `antipatterns/{scan,contract_bounds}` | Macro payloads, proof dialect syntax, Kani/Creusot/Verus contracts. No fallback whole-file parser. Resolve the dialect capability before retiring its current support. |
@@ -714,11 +714,36 @@ safe rejection. Neither a hover demonstration nor a faster parse is sufficient.
 Use focused checks and the build-tier Cordial gate for implementation cycles.
 Reserve the all-tier gate for completion of the migration plan.
 
+### Tracing observability collection checkpoint
+
+Subscriber initialization, binary error boundaries and stdio policy now consume
+required `SourceObservability` evidence through `IrView`. Their enrichers no
+longer traverse source syntax. The loader projects one configuration-independent
+inventory of file snapshots, function fallibility, error instrumentation, body
+calls and stdio sites. Policy evaluates helper paths, rule switches and skip paths
+against that inventory. Missing or malformed fields fail closed.
+
+The shared-syn compatibility collector and native database collector project the
+same complete payload, including inactive code, nested functions and modules,
+trait default bodies, opaque macro boundaries and literal decoding. Deliberately
+invalid fixture files carry an explicit invalid-syntax state: default fixture
+exclusions still work, and including those files cannot establish compliance.
+Native collection uses canonical database trees without a parser fallback.
+
+Regression coverage compares complete inventory and finding payloads, runs the
+three enrichers with an empty source carrier, changes policy without recollection,
+rejects missing/corrupt evidence, and tests virtual edits, restoration and invalid
+executable source. Existing subscriber, boundary and stdio tests remain the
+behavioral reference. This checkpoint does not complete the tracing cutover:
+workspace proof call-graph collection and its downstream reachability evidence
+still need native projection before retiring the shared-syn carrier.
+
 ## Current next step
 
-Work toward the production cutover, completing tracing collection and its
-shared IR contracts. Derives, visibility, CLI layout, module splices, attribute
-materialization and the complete file-policy group now consume loader projections.
+Work toward the production cutover, completing native workspace proof call-graph
+collection and its shared IR contract for tracing reachability. Derives,
+visibility, CLI layout, module splices, attribute materialization and the complete
+file-policy group now consume loader projections.
 Preserve inactive-code policy coverage and golden findings, then complete tracing,
 error/apply and proof collection in the inventory above.
 Integrate the Cargo context driver before using semantic facts to authorize

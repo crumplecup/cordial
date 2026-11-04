@@ -313,3 +313,21 @@ fn dogfood_cordial_library_src_has_no_leftover_prints() -> miette::Result<()> {
     );
     Ok(())
 }
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn explicit_fixture_scan_preserves_discovery_and_source_order_contract() -> miette::Result<()> {
+    cordial::init_tracing();
+    let root = Path::new("/fixture");
+    let records = scan_tracing_print_rust_source(
+        "fn sample() { println!(\"first\"); dbg!(\"second\"); }",
+        &root.join("tests/fixtures/sample.rs"),
+        &root.join("tests"),
+        root,
+        &TracingStdioPolicy::default(),
+    )
+    .into_diagnostic()?;
+    let rules: Vec<_> = records.iter().map(|record| record.rule_id()).collect();
+    assert_eq!(rules, vec![PrintRuleId::Println, PrintRuleId::Dbg]);
+    Ok(())
+}

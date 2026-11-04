@@ -83,7 +83,15 @@ pub use source_policy::{
 #[cfg(feature = "visibility")]
 pub use source_policy::{VisibilityFacts, VisibilityKind, VisibilityModule};
 #[cfg(feature = "tracing")]
+mod observability_source;
+#[cfg(feature = "tracing")]
 mod tracing_source;
+#[cfg(feature = "tracing")]
+pub use observability_source::{ATTR_SOURCE_OBSERVABILITY, SourceObservability};
+#[cfg(feature = "tracing")]
+pub(crate) use observability_source::{
+    ObservabilityBody, ObservabilityFile, ObservabilityFileKind,
+};
 pub use source_attributes::{
     ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_FILE_ATTRIBUTES, SourceAttribute, SourceAttributeArgument,
     SourceAttributeArguments, SourceAttributedItem, SourceCrateLints, SourceFileAttributes,
@@ -129,6 +137,7 @@ pub use graph::{CrateIr, CrateIrSnapshot};
 pub use indexes::{AttrKey, AttrValue, IrIndexes, QualifiedPath};
 pub use input_snapshot::{ATTR_CARGO_MANIFEST_SNAPSHOT, FileSnapshot};
 pub use node::{ItemKind, NodeId, NodeKind, NodeWeight};
+pub use node::{NodeRef, NodeView};
 pub use origin::{ATTR_IR_ORIGIN, ATTR_SYN_DOC_PEER, ORIGIN_RUSTDOC, ORIGIN_SOURCE};
 pub use query::{BasicQuery, PanicSitesQuery, Query, QueryBuilder};
 #[cfg(feature = "rustdoc")]
@@ -148,7 +157,7 @@ pub use source_calls::{
 };
 #[cfg(feature = "homecoming_std")]
 pub use trait_impls::collect_trait_impl_type_paths_from_ir;
-pub use view::{IrMut, IrView, NodeRef, NodeView};
+pub use view::{IrMut, IrView};
 pub use workspace::{CrateView, CrateViewMut, WorkspaceIr};
 #[cfg(feature = "impl_coverage")]
 pub use wrapper_query::{

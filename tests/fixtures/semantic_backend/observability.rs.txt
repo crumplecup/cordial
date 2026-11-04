@@ -1,0 +1,44 @@
+/// Library helper
+pub fn install() {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_default();
+    OnceLock::new();
+    subscriber().with(filter).try_init();
+}
+fn forwarding() { install(); }
+fn forwarding_twice() { forwarding(); }
+#[cfg(any())]
+mod inactive {
+    #[cfg_attr(feature = "observe", tracing::instrument(err(level = "warn")))]
+    fn report() -> anyhow::Result<()> { Ok(()) }
+    fn prints() { std::println!("inactive"); }
+}
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn unit() { eprintln!("unit"); }
+}
+struct Worker;
+impl Worker {
+    #[instrument(err)]
+    fn run(&self) -> Result<(), ()> { Ok(()) }
+    fn init() { subscriber().init(); }
+}
+trait Contract {
+    fn default_body() {
+        fn nested() { dbg!("nested trait body"); }
+        println!("trait body");
+    }
+}
+fn outer() {
+    trait Local {
+        fn default_body() { tracing::warn!("local trait"); }
+    }
+    fn nested() { try_init(); tracing::error!("nested"); }
+    mod local { fn worker() { print!("local"); } }
+    capture!(tracing::error!("opaque"); println!("opaque"));
+    let literal = "RUST_LOG";
+    let raw_literal = r#"RUST_LOG"#;
+    let escaped_literal = "RUST\x5fLOG";
+    let _ = EnvFilter::try_from_default_env;
+    std::sync::Once::new();
+}

@@ -69,6 +69,19 @@ impl Drop for ParsedSourceSession {
 }
 
 impl SourceLoadView {
+    /// Issue a shared tree for an explicitly supplied standalone source fixture.
+    #[cfg(feature = "tracing")]
+    #[instrument(level = "debug", skip(source, path), err(level = "warn"))]
+    pub(crate) fn parse_fixture(path: &Path, source: &str) -> CordialResult<SharedParsedFile> {
+        let view = Self::new(
+            String::new(),
+            PathBuf::new(),
+            vec![SourceFile::new(path.to_path_buf(), source.to_owned())],
+            Vec::new(),
+        );
+        view.parsed_file(path, "source-fixture")
+    }
+
     /// A lazy shared parse cache for a standalone operation outside a session.
     /// Its caller must drop the view before rescanning files it has edited.
     #[cfg(any(
@@ -119,7 +132,7 @@ impl SourceLoadView {
     }
 
     /// Freeze non-syntax inputs in the same database as the shared tree.
-    #[cfg(feature = "cfg_hygiene")]
+    #[cfg(any(feature = "cfg_hygiene", feature = "tracing"))]
     #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
     pub(crate) fn input_text(&self, path: &Path) -> CordialResult<Option<String>> {
         PARSED.with(|parsed| {

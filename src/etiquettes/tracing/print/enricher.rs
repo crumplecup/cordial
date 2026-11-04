@@ -1,10 +1,10 @@
-use crate::enricher::{member_crate_root, resolve_parent};
+use crate::enricher::resolve_parent;
 use crate::error::CordialResult;
 use crate::hooks::{SourceEnrichView, SourceEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
 
-use super::scan::scan_shared_crate_tracing_print;
+use super::scan::findings_from_inventory;
 
 use tracing::instrument;
 
@@ -24,12 +24,12 @@ impl SourceEnricher for PrintInventoryEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
-        let (ir, source, session) = view.into_parts();
+        let (ir, _source, session) = view.into_parts();
 
-        let crate_root = member_crate_root(source, session);
+        let inventory = ir.source_observability()?;
+        let crate_root = inventory.crate_root();
         let config = crate::config::load_session_config(session);
-        let records =
-            scan_shared_crate_tracing_print(source, &crate_root, config.tracing().stdio())?;
+        let records = findings_from_inventory(&inventory, config.tracing().stdio())?;
 
         for record in records {
             let parent = resolve_parent(ir, record.context())?;

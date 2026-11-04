@@ -292,3 +292,11 @@ fn apply_level(meta: &ast::Meta, presence: &mut SourceCrateLints) {
         }
     }
 }
+
+impl super::SourceInstrumentSyntax {
+    #[instrument(level = "debug", skip(attr))]
+    pub(crate) fn from_native_attribute(attr: &ast::Attr) -> Option<Self> {
+        attr.meta()
+            .and_then(|meta| attribute(&meta).instrument_syntax)
+    }
+}

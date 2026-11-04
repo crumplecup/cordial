@@ -110,6 +110,15 @@ impl SourceLoadView {
                 serde_json::to_value(inventory)?,
             )?;
         }
+        #[cfg(feature = "tracing")]
+        if let Some(root) = self.src_root().parent() {
+            let inventory = crate::ir::SourceObservability::collect(self, root)?;
+            ir.set_attr(
+                ir.root(),
+                crate::ir::ATTR_SOURCE_OBSERVABILITY,
+                serde_json::to_value(inventory)?,
+            )?;
+        }
         for file in self.files() {
             let syntax = self.parsed_file(file.path(), "source-ir")?;
             self.load_file(ir, root, &syntax)?;

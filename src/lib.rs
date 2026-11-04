@@ -212,12 +212,14 @@ pub use etiquettes::panics::{
 };
 #[cfg(feature = "tracing")]
 pub use etiquettes::tracing::{
-    BoundaryRuleId, BoundarySiteRecord, FnContext, FunctionComplexity, FunctionKind, FunctionRole,
-    InstrumentApplySummary, InstrumentGap, PrintRuleId, PrintSiteRecord, SubscriberRuleId,
-    SubscriberSiteRecord, TRACING_ETIQUETTE, VisibilityLabel, parse_tracing_instrument_checklist,
-    parse_tracing_instrument_checklist_text, run_tracing_instrument_apply,
-    scan_crate_tracing_boundary, scan_crate_tracing_print, scan_crate_tracing_subscriber,
-    scan_rust_source as scan_tracing_rust_source, scan_tracing_print_rust_source,
+    ATTR_SOURCE_OBSERVABILITY, ATTR_SOURCE_TRACING_INVENTORY, BoundaryRuleId, BoundarySiteRecord,
+    FnContext, FunctionComplexity, FunctionKind, FunctionRole, InstrumentApplySummary,
+    InstrumentGap, PrintRuleId, PrintSiteRecord, SourceObservability, SourceTracingFunction,
+    SourceTracingInventory, SubscriberRuleId, SubscriberSiteRecord, TRACING_ETIQUETTE,
+    VisibilityLabel, parse_tracing_instrument_checklist, parse_tracing_instrument_checklist_text,
+    run_tracing_instrument_apply, scan_crate_tracing_boundary, scan_crate_tracing_print,
+    scan_crate_tracing_subscriber, scan_rust_source as scan_tracing_rust_source,
+    scan_tracing_print_rust_source,
 };
 #[cfg(feature = "verus_warnings")]
 pub use etiquettes::verus_warnings::{
@@ -236,8 +238,6 @@ pub use etiquettes::{
 };
 #[cfg(feature = "proof_patterns")]
 pub use etiquettes::{PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, scan_crate_proof_patterns};
-#[cfg(feature = "tracing")]
-pub use ir::{ATTR_SOURCE_TRACING_INVENTORY, SourceTracingFunction, SourceTracingInventory};
 #[cfg(feature = "verus_ir")]
 pub use verus_ir::{
     VerusCrateIr, VerusEnumFacts, VerusEnumVariantFacts, VerusFnFacts, VerusFnMode, VerusPanicKind,

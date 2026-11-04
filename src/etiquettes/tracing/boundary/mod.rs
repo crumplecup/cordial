@@ -21,7 +21,6 @@
 //! [`crate::etiquettes::tracing::TRACING_ETIQUETTE`].
 
 mod assessor;
-mod detect;
 mod enricher;
 mod probe;
 mod reporter;

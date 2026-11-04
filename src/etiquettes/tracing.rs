@@ -28,6 +28,11 @@
 //! [`TRACING_ETIQUETTE`] on a [`crate::Session`]. Policy:
 //! `docs/planning/tracing-etiquette.md`.
 
+pub use crate::ir::{
+    ATTR_SOURCE_OBSERVABILITY, ATTR_SOURCE_TRACING_INVENTORY, SourceObservability,
+    SourceTracingFunction, SourceTracingInventory,
+};
+
 mod apply;
 mod assessor;
 mod boundary;
@@ -39,6 +44,8 @@ mod delta;
 mod display_types;
 mod enricher;
 mod present;
+pub(crate) use present::PresentInstrument;
+pub(crate) use types::InstrumentLevel;
 mod print;
 mod probe;
 mod quality_area;

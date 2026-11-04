@@ -8,7 +8,7 @@ use crate::objects::{
 use tracing::instrument;
 
 /// Stable rule identifier for a leftover stdio macro.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PrintRuleId {
     /// Leftover `println!`.
     Println,

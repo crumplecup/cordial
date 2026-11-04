@@ -2,6 +2,8 @@
 
 #[cfg(feature = "cli_layout")]
 mod cli_layout;
+#[cfg(feature = "tracing")]
+mod observability;
 #[cfg(feature = "derives")]
 mod path_inclusion;
 mod project;
@@ -66,7 +68,7 @@ impl SourceDatabase {
 
     /// Freeze a loader input without parsing it. Repeated reads reuse the
     /// database value, including virtual revisions made by candidate analysis.
-    #[cfg(feature = "cfg_hygiene")]
+    #[cfg(any(feature = "cfg_hygiene", feature = "tracing"))]
     #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
     pub(crate) fn input_text(&mut self, path: &Path) -> CordialResult<Option<String>> {
         use std::io::ErrorKind;

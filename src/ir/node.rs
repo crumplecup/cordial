@@ -4,6 +4,17 @@ use petgraph::stable_graph::NodeIndex;
 use serde::{Deserialize, Serialize};
 
 use tracing::instrument;
+
+/// Node-level read API used by queries and probes.
+pub trait NodeView {
+    /// Crate-local node id.
+    fn id(&self) -> NodeId;
+    /// Node kind.
+    fn kind(&self) -> &NodeKind;
+    /// Latest attribute value stored under `key`, if present.
+    fn attr(&self, key: &str) -> Option<&serde_json::Value>;
+}
+
 /// Opaque stable node identifier wrapping a petgraph index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NodeId(u32);
@@ -150,5 +161,46 @@ impl NodeWeight {
             .rev()
             .find(|(k, _)| k == key)
             .map(|(_, v)| v)
+    }
+}
+
+/// Borrowed node handle returned by [`super::IrView`] queries.
+#[derive(Debug, Clone, Copy, derive_getters::Getters, derive_new::new)]
+pub struct NodeRef<'a> {
+    /// Crate-local node id.
+    #[getter(copy)]
+    id: NodeId,
+    /// Borrowed node payload.
+    weight: &'a NodeWeight,
+}
+
+impl<'a> NodeRef<'a> {
+    /// Node kind.
+    #[instrument(level = "trace", skip(self))]
+    pub fn kind(&self) -> &NodeKind {
+        self.weight.kind()
+    }
+
+    /// Latest attribute value stored under `key`, if present.
+    #[instrument(level = "trace", skip(self))]
+    pub fn attr(&self, key: &str) -> Option<&serde_json::Value> {
+        self.weight.attr(key)
+    }
+}
+
+impl NodeView for NodeRef<'_> {
+    #[instrument(level = "trace", skip(self))]
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn kind(&self) -> &NodeKind {
+        self.weight.kind()
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn attr(&self, key: &str) -> Option<&serde_json::Value> {
+        self.weight.attr(key)
     }
 }

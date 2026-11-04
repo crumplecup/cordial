@@ -26,7 +26,7 @@ pub struct PresentInstrument {
 impl PresentInstrument {
     /// Interpret shared argument facts, without parsing rendered attribute text.
     #[instrument(level = "debug", skip(syntax))]
-    pub(super) fn from_syntax(syntax: &SourceInstrumentSyntax) -> Self {
+    pub(crate) fn from_syntax(syntax: &SourceInstrumentSyntax) -> Self {
         let args = syntax.arguments().as_ref();
         let err = args.and_then(|args| args.entries().iter().find(|arg| arg.name() == "err"));
         let level = argument_level(args, InstrumentLevel::Info);
