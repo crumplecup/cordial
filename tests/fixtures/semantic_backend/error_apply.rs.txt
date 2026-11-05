@@ -1,0 +1,44 @@
+//! Declaration shapes used by error strategy conversion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Leaf { pub message: String, file: String, code: usize }
+impl std::error::Error for Leaf {}
+/// Doc comments belong to the declaration's edit range.
+#[derive(Error)]
+pub(crate) struct Parent { kind: Box<Kind>, source: std::boxed::Box<Leaf> }
+#[derive(Debug)]
+enum Kind { Native(Leaf), Named { source: alloc::boxed::Box<Leaf> }, Empty }
+struct Borrowed<'a> { source: &'a Leaf, kind: &'a Kind, message: &'static str }
+struct Mutable<'a> { source: &'a mut Leaf, message: &'a mut str, marker: &'a () }
+struct Tuple(pub String, #[cfg(unix)] Box<Leaf>, &'static str);
+struct Unit;
+#[derive()]
+struct EmptyDerive;
+struct Bounded<'a: 'static> { source: &'a Leaf }
+struct Mixed<'a, T> { source: &'a Leaf, value: T }
+struct Where<'a> where Leaf: 'a { source: &'a Leaf }
+struct Two<'a, 'b> { source: &'a Leaf, kind: &'b Kind }
+struct Unsupported<'a> {
+    callback: fn() -> String,
+    array: [u8; 4],
+    tuple: (String, usize),
+    projection: <Leaf as Trait>::Assoc,
+    source: Generic<Leaf>,
+    kind: &'a Generic<'a>,
+    unsupported_box: Box<'a>,
+    qualified: std::string::String,
+    absolute: ::String,
+    integer: u128,
+    text: &str,
+}
+#[derive(derive_getters::Getters)]
+struct Getters { message: String, source: Leaf }
+struct Unicode { /* é */ message: String }
+#[doc = "explicit"]
+struct Multiline {
+    #[cfg(feature = "alternate")]
+    pub(in crate) source:
+        Box<Leaf>,
+    #[other]
+    detail: String,
+}
+enum Variants<'a> { #[doc = "a"] Unit, Tuple(&'a Leaf, bool), Named { source: Leaf } }

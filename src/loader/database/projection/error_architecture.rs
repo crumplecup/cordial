@@ -20,13 +20,13 @@ impl SourceDatabase {
         &self,
         target: &CrateTarget,
     ) -> CordialResult<SourceErrorArchitecture> {
-        let paths = self.architecture_files(target.crate_root())?;
+        let paths = self.error_module_files(target.crate_root())?;
         SourceErrorArchitecture::collect_with(
             target.crate_root(),
             target.crate_name(),
             &paths,
             |catalog, path, tree| {
-                let source = self.architecture_source(path)?;
+                let source = self.error_source(path)?;
                 catalog.collect_native(&source, tree);
                 Ok(FileSnapshot::new(
                     path.to_path_buf(),
@@ -36,7 +36,10 @@ impl SourceDatabase {
         )
     }
     #[tracing::instrument(level = "debug", skip(self, path), err(level = "warn"))]
-    fn architecture_source<'db>(&'db self, path: &'db Path) -> CordialResult<DatabaseSource<'db>> {
+    pub(super) fn error_source<'db>(
+        &'db self,
+        path: &'db Path,
+    ) -> CordialResult<DatabaseSource<'db>> {
         let sema = Semantics::new(&self.db);
         let file = self.file_id(path)?;
         let edition = sema.attach_first_edition(file);
@@ -52,7 +55,7 @@ impl SourceDatabase {
         ))
     }
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
-    fn architecture_files(&self, root: &Path) -> CordialResult<Vec<PathBuf>> {
+    pub(super) fn error_module_files(&self, root: &Path) -> CordialResult<Vec<PathBuf>> {
         let src = root.join("src");
         let library = src.join("lib.rs");
         let binary = src.join("main.rs");
@@ -87,7 +90,7 @@ impl SourceDatabase {
         if crate::loader::path_has_fixtures(path, root) || !files.insert(path.to_path_buf()) {
             return Ok(());
         }
-        let file = self.architecture_source(path)?;
+        let file = self.error_source(path)?;
         for module in file.tree().items().filter_map(|i| match i {
             ast::Item::Module(m) => Some(m),
             _ => None,

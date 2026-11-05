@@ -7,20 +7,9 @@ use cordial::{
 use miette::{IntoDiagnostic, Result};
 use std::path::Path;
 
-#[tracing::instrument(level = "debug", skip(target), err(level = "warn"))]
-pub fn baseline(root: &Path, target: &CrateTarget) -> Result<CrateIr> {
-    let session = SessionBuilder::new(root).build();
-    let loaded = SourceLoader
-        .load(LoadContext::new(&session, target))
-        .into_diagnostic()?;
-    let source = loaded
-        .as_any()
-        .downcast_ref::<SourceLoadView>()
-        .ok_or_else(|| miette::miette!("source view"))?;
-    let mut graph = CrateIr::new(target.crate_name());
-    source.populate_ir(&mut graph).into_diagnostic()?;
-    Ok(graph)
-}
+#[path = "source_projection.rs"]
+mod source_projection;
+pub use source_projection::baseline;
 
 #[tracing::instrument(level = "debug", skip(graph), err(level = "warn"))]
 pub fn materialized(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> {

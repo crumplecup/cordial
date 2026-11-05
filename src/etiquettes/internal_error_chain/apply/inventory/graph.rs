@@ -23,7 +23,7 @@ pub(crate) fn enrich_conversion_units(
     ir: &mut dyn IrMut,
     files: &[SharedParsedFile],
 ) -> CordialResult<()> {
-    let index = CrateTypeIndex::new(files);
+    let index = CrateTypeIndex::new(files, &ir.source_error_apply()?)?;
     enrich_conversion_units_with_index(ir, files, &index)
 }
 

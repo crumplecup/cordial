@@ -634,7 +634,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
 | Error analysis | Sites, chain records, type relationships, expression compliance, signature-chain and architecture assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`, `SourceErrorArchitecture`). Apply collection remains. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
-| Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |
+| Error apply inventory | Both loaders project required `SourceErrorApply` declaration evidence. Expression, use, initializer and lifetime collection in `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` remains. | Complete declaration payloads include storage, source/Kind edges, generic and lifetime shapes, visibility, attributes and edit ranges. Collect the remaining uses and initializers into typed IR. Keep edit rendering text-only. |
 | Panic and proof collectors | Both loaders project required `SourceVerus`, `SourcePanics` and `SourceAntipatterns` graph evidence. Proof-pattern, panic and antipattern hooks consume IR alone. Native collection covers ordinary syntax, Kani proof graphs, embedded programs and Creusot/Kani/Verus contract clauses. | Canonical outer Rust plus memoized payload grammars. Retire compatibility collection with the production frontend; no fallback whole-file parser. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
 
@@ -1135,6 +1135,32 @@ and contract-shape suites. Full-feature native parity passes for antipatterns,
 panics, tracing proof evidence and error architecture. Panic-only parity also
 passes, with a warning-free isolated compilation. Build-tier submit cleared all
 findings and verified zero open items (list 62). The deep tier was not run.
+
+## Checkpoint: error/apply declaration projection
+
+Both loaders now project a required, snapshot-bound `SourceErrorApply`
+inventory. It records every reachable module's complete struct and enum
+declarations: fields, variants, storage shapes, source and Kind edges,
+visibility and attributes, generic and lifetime restrictions, and original edit
+ranges. Unsupported field types remain in the inventory so graph safety checks
+can reject incomplete conversions.
+
+The production apply index consumes these declarations from shared IR and joins
+the existing getter evidence afterward. It rejects missing, malformed,
+ambiguous or stale declaration evidence instead of reconstructing it from the
+source. The native collector uses canonical database syntax without a second
+parser. Remaining expression, use, initializer, getter and lifetime collectors
+still use the shared compatibility tree; this checkpoint does not retire that
+frontend or switch production ownership.
+
+Validation on 2026-11-05: complete declaration parity and production-consumer
+tests pass with full features and with `internal_error_chain` alone. Existing
+apply, cross-file and getter round-trip suites pass with full features. Parity
+also exposed a compatibility edit-range bug: proc-macro columns count
+characters while edits use bytes. The conversion now handles Unicode prefixes,
+with an exact-range regression assertion. Missing, malformed, duplicate and
+stale declaration inventories fail closed.
+Build-tier submit verified zero open items (list 66). The deep tier was not run.
 
 ## Current next step
 

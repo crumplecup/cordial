@@ -1,0 +1,98 @@
+//! Loader-owned declaration evidence for error strategy transformations.
+
+use crate::etiquettes::internal_error_chain::GraphDeclarationFacts;
+use crate::loader::{DatabaseSource, SharedParsedFile, SourceLoadView};
+use crate::{CordialError, CordialResult, FileSnapshot};
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+
+/// Required declaration evidence on the shared crate graph root.
+pub const ATTR_SOURCE_ERROR_APPLY: &str = "source_error_apply";
+
+/// Error graph declarations, bound to every inspected source snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+pub struct SourceErrorApply {
+    crate_root: PathBuf,
+    files: Vec<ErrorApplyFile>,
+}
+
+/// Original field, variant, lifetime, edge and edit-range facts for one file.
+#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+pub struct ErrorApplyFile {
+    snapshot: FileSnapshot,
+    #[getter(skip)]
+    declarations: GraphDeclarationFacts,
+}
+
+impl SourceErrorApply {
+    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceErrorApply")]
+    pub(crate) fn collect(source: &SourceLoadView, root: &Path) -> CordialResult<Self> {
+        let mut files = Vec::new();
+        crate::etiquettes::internal_error_chain::for_each_shared_src_rust_file(
+            source,
+            root,
+            |path, _| {
+                let file = source.parsed_file(path, "source-error-apply")?;
+                files.push(ErrorApplyFile {
+                    snapshot: FileSnapshot::new(path.to_path_buf(), file.source_digest()),
+                    declarations: GraphDeclarationFacts::collect(&file),
+                });
+                Ok(())
+            },
+        )?;
+        files.sort_by(|a, b| a.snapshot.path().cmp(b.snapshot.path()));
+        Ok(Self {
+            crate_root: root.to_path_buf(),
+            files,
+        })
+    }
+
+    #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
+    pub(crate) fn collect_with(
+        root: &Path,
+        paths: &[PathBuf],
+        mut collect: impl FnMut(&Path) -> CordialResult<ErrorApplyFile>,
+    ) -> CordialResult<Self> {
+        let mut files = paths
+            .iter()
+            .map(|path| collect(path))
+            .collect::<CordialResult<Vec<_>>>()?;
+        files.sort_by(|a, b| a.snapshot.path().cmp(b.snapshot.path()));
+        Ok(Self {
+            crate_root: root.to_path_buf(),
+            files,
+        })
+    }
+
+    #[tracing::instrument(level = "debug", skip(file))]
+    pub(crate) fn native_file(file: &DatabaseSource<'_>) -> ErrorApplyFile {
+        ErrorApplyFile {
+            snapshot: FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
+            declarations: GraphDeclarationFacts::collect_native(file),
+        }
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
+    pub(crate) fn declarations_for(
+        &self,
+        file: &SharedParsedFile,
+    ) -> CordialResult<GraphDeclarationFacts> {
+        let mut matches = self
+            .files
+            .iter()
+            .filter(|entry| entry.snapshot.path() == file.path());
+        let entry = matches
+            .next()
+            .filter(|entry| entry.snapshot.digest() == file.source_digest())
+            .ok_or_else(|| {
+                CordialError::workspace_source_facts_missing("matching error-apply source snapshot")
+            })?;
+        if matches.next().is_some() {
+            return Err(CordialError::workspace_source_facts_missing(
+                "unambiguous error-apply source snapshot",
+            ));
+        }
+        Ok(entry.declarations.clone())
+    }
+}

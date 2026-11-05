@@ -1,6 +1,11 @@
 //! Read-only graph and typed evidence interface for pipeline consumers.
 
 use super::evidence;
+
+#[cfg(feature = "internal_error_chain")]
+mod error;
+mod source;
+mod workspace;
 use crate::error::CordialResult;
 use crate::ir::{ATTR_CRATE_KINDS, CrateKind, EdgeKind, NodeId, NodeRef, Query};
 use tracing::instrument;
@@ -51,209 +56,15 @@ pub trait IrView {
         evidence::optional(self, id, crate::ir::ATTR_FUNCTION_CALL_FLOW)
     }
 
-    /// Read complete loader-owned file-policy evidence, including inactive syntax.
-    #[cfg(any(
-        feature = "allows",
-        feature = "cfg_hygiene",
-        feature = "cfg_scatter",
-        feature = "glob_imports",
-        feature = "inline_tests",
-        feature = "modularity",
-        feature = "pageantry",
-        feature = "derives",
-        feature = "visibility",
-        feature = "cli_layout"
-    ))]
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn source_policy_inventory(&self) -> CordialResult<Option<crate::ir::SourcePolicyInventory>> {
-        evidence::optional(self, self.root()?, crate::ir::ATTR_SOURCE_POLICY_INVENTORY)
-    }
+    source::readers!();
 
-    /// Read file attribute evidence collected by the source loader.
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn source_file_attributes(
-        &self,
-        id: NodeId,
-    ) -> CordialResult<Option<crate::ir::SourceFileAttributes>> {
-        evidence::optional(self, id, crate::ir::ATTR_SOURCE_FILE_ATTRIBUTES)
-    }
-
-    /// Read loader-projected tracing declarations without accessing source syntax.
-    #[cfg(feature = "tracing")]
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn source_tracing_inventory(
-        &self,
-        id: NodeId,
-    ) -> CordialResult<Option<crate::ir::SourceTracingInventory>> {
-        evidence::optional(self, id, crate::ir::ATTR_SOURCE_TRACING_INVENTORY)
-    }
-
-    /// Read required architecture contracts without source or private caches.
     #[cfg(feature = "internal_error_chain")]
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn source_error_architecture(&self) -> CordialResult<crate::ir::SourceErrorArchitecture> {
-        evidence::required(
-            self,
-            crate::ir::ATTR_SOURCE_ERROR_ARCHITECTURE,
-            "source error-architecture inventory",
-        )
-    }
-
-    /// Read required conversion signatures without source or private caches.
-    #[cfg(feature = "internal_error_chain")]
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn source_error_signatures(&self) -> CordialResult<crate::ir::SourceErrorSignatures> {
-        evidence::required(
-            self,
-            crate::ir::ATTR_SOURCE_ERROR_SIGNATURES,
-            "source error-signature inventory",
-        )
-    }
-
-    /// Read required compliance evidence without syntax or private caches.
-    #[cfg(feature = "internal_error_chain")]
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn source_error_compliance(&self) -> CordialResult<crate::ir::SourceErrorCompliance> {
-        evidence::required(
-            self,
-            crate::ir::ATTR_SOURCE_ERROR_COMPLIANCE,
-            "source error-compliance inventory",
-        )
-    }
-
-    /// Read required type relationships without syntax or private caches.
-    #[cfg(feature = "internal_error_chain")]
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn source_error_types(&self) -> CordialResult<crate::ir::SourceErrorTypes> {
-        evidence::required(
-            self,
-            crate::ir::ATTR_SOURCE_ERROR_TYPES,
-            "source error-type inventory",
-        )
-    }
-
-    /// Read required chain evidence without source syntax or private caches.
-    #[cfg(feature = "error_chain")]
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn source_error_chains(&self) -> CordialResult<crate::ir::SourceErrorChains> {
-        evidence::required(
-            self,
-            crate::ir::ATTR_SOURCE_ERROR_CHAINS,
-            "source error-chain inventory",
-        )
-    }
-
-    /// Read required error-site evidence without accessing source syntax.
-    #[cfg(feature = "error_sites")]
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn source_error_sites(&self) -> CordialResult<crate::ir::SourceErrorSites> {
-        evidence::required(
-            self,
-            crate::ir::ATTR_SOURCE_ERROR_SITES,
-            "source error-site inventory",
-        )
-    }
-
-    /// Read required crate-wide tracing evidence; malformed evidence is an error.
-    #[cfg(feature = "tracing")]
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn source_observability(&self) -> CordialResult<crate::ir::SourceObservability> {
-        evidence::required(
-            self,
-            crate::ir::ATTR_SOURCE_OBSERVABILITY,
-            "source observability inventory",
-        )
-    }
-
-    /// Read the located syntax attached by the shared attribute enricher.
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn source_attribute(&self, id: NodeId) -> CordialResult<Option<crate::ir::SourceAttribute>> {
-        evidence::optional(self, id, crate::ir::ATTR_SOURCE_ATTRIBUTE)
-    }
-
-    /// Read namespace evidence collected by the source loader.
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn source_module_scope(
-        &self,
-        id: NodeId,
-    ) -> CordialResult<Option<crate::ir::SourceModuleScope>> {
-        evidence::optional(self, id, crate::ir::ATTR_SOURCE_MODULE_SCOPE)
-    }
-
-    /// Read declared function syntax without reparsing source or hiding corrupt facts.
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn function_source_syntax(
-        &self,
-        id: NodeId,
-    ) -> CordialResult<Option<crate::ir::FunctionSourceSyntax>> {
-        evidence::optional(self, id, crate::ir::ATTR_FUNCTION_SOURCE_SYNTAX)
-    }
+    error::required_readers!();
 
     /// Cargo package name this crate IR belongs to.
     fn crate_name(&self) -> &str;
-    /// Dependency survey facts collected once for the current workspace run.
-    #[cfg(feature = "dependency_freshness")]
-    fn workspace_dependency_freshness_records(
-        &self,
-    ) -> Option<&[crate::etiquettes::DependencySurveyRecord]> {
-        None
-    }
-    /// Merged std/core/alloc inventory retained for the current workspace run.
-    #[cfg(feature = "homecoming_std")]
-    fn workspace_framework_std_inventory(
-        &self,
-    ) -> Option<&[crate::framework_std::StdInventoryItem]> {
-        None
-    }
-    /// Proof harness facts retained for the current workspace run.
-    #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
-    fn workspace_proof_harness(
-        &self,
-    ) -> Option<std::sync::Arc<crate::proof_harness::ProofHarness>> {
-        None
-    }
-    /// Required, snapshot-bound panic and Kani proof evidence.
-    #[cfg(feature = "panics")]
-    fn source_panics(&self) -> CordialResult<crate::ir::SourcePanics> {
-        evidence::required(
-            self,
-            crate::ir::ATTR_SOURCE_PANICS,
-            "source panic inventory",
-        )
-    }
-    /// Required, snapshot-bound Verus dialect evidence on the shared graph.
-    #[cfg(feature = "verus_ir")]
-    fn source_verus(&self) -> CordialResult<crate::ir::SourceVerus> {
-        evidence::required(self, crate::ir::ATTR_SOURCE_VERUS, "source Verus inventory")
-    }
-    /// Required, snapshot-bound antipattern evidence independent of policy.
-    #[cfg(feature = "antipatterns")]
-    fn source_antipatterns(&self) -> CordialResult<crate::ir::SourceAntipatterns> {
-        evidence::required(
-            self,
-            crate::ir::ATTR_SOURCE_ANTIPATTERNS,
-            "source antipattern inventory",
-        )
-    }
-    /// Workspace antipattern evidence collected once per run.
-    #[cfg(feature = "antipatterns")]
-    fn workspace_antipattern_facts(
-        &self,
-    ) -> Option<std::sync::Arc<crate::etiquettes::antipatterns::AntipatternWorkspaceFacts>> {
-        None
-    }
-    /// Workspace path-splice and dependency facts, when collected.
-    #[cfg(feature = "derives")]
-    fn workspace_path_inclusions(&self) -> Option<std::sync::Arc<crate::PathInclusionFacts>> {
-        None
-    }
-    /// Workspace proof-only call reachability, when collected.
-    #[cfg(feature = "tracing")]
-    fn workspace_call_graph(
-        &self,
-    ) -> Option<std::sync::Arc<crate::etiquettes::tracing::CallGraphFacts>> {
-        None
-    }
+    workspace::readers!();
+
     /// Root node of this crate graph.
     fn root(&self) -> CordialResult<NodeId>;
     /// Borrow the node with this id, if it exists in this crate graph.

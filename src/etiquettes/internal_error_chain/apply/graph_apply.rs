@@ -26,7 +26,8 @@ mod lifetimes;
 mod plan;
 mod types;
 
-pub(super) use declarations::{DeclarationKind, GraphDeclarationFacts, GraphFields};
+pub(crate) use declarations::GraphDeclarationFacts;
+pub(super) use declarations::{DeclarationKind, GraphFields};
 pub(super) use expressions::GraphExprFacts;
 use expressions::GraphExprPlanner;
 pub(super) use lifetimes::GraphLifetimeFacts;

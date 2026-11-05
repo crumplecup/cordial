@@ -217,10 +217,10 @@ pub use etiquettes::{
 pub use etiquettes::{PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, scan_crate_proof_patterns};
 #[cfg(feature = "internal_error_chain")]
 pub use ir::{
-    ATTR_SOURCE_ERROR_ARCHITECTURE, ATTR_SOURCE_ERROR_COMPLIANCE, ATTR_SOURCE_ERROR_SIGNATURES,
-    ATTR_SOURCE_ERROR_TYPES, ErrorComplianceFile, ErrorSignatureAssessment, ErrorTypeSourceNode,
-    ErrorTypesFile, SourceErrorArchitecture, SourceErrorCompliance, SourceErrorSignatures,
-    SourceErrorTypes,
+    ATTR_SOURCE_ERROR_APPLY, ATTR_SOURCE_ERROR_ARCHITECTURE, ATTR_SOURCE_ERROR_COMPLIANCE,
+    ATTR_SOURCE_ERROR_SIGNATURES, ATTR_SOURCE_ERROR_TYPES, ErrorApplyFile, ErrorComplianceFile,
+    ErrorSignatureAssessment, ErrorTypeSourceNode, ErrorTypesFile, SourceErrorApply,
+    SourceErrorArchitecture, SourceErrorCompliance, SourceErrorSignatures, SourceErrorTypes,
 };
 #[cfg(feature = "verus_ir")]
 pub use ir::{ATTR_SOURCE_VERUS, SourceVerus, VerusFile};

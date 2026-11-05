@@ -28,6 +28,7 @@ mod patch;
 mod uses;
 mod write;
 
+pub(crate) use self::graph_apply::GraphDeclarationFacts;
 use self::graph_apply::{conversion_graphs_from_ir, enrich_conversion_graphs};
 pub use self::inventory::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
@@ -393,8 +394,14 @@ fn span_range(source: &str, span: proc_macro2::Span) -> Option<(usize, usize)> {
             .take(line.checked_sub(1)?)
             .map(str::len)
             .sum::<usize>();
-        let offset = start.checked_add(column)?;
-        source.is_char_boundary(offset).then_some(offset)
+        // proc_macro2 columns count characters; edits use byte offsets.
+        let tail = source.get(start..)?;
+        let column = tail
+            .char_indices()
+            .map(|(offset, _)| offset)
+            .chain(std::iter::once(tail.len()))
+            .nth(column)?;
+        start.checked_add(column)
     };
     Some((
         offset(span.start().line, span.start().column)?,

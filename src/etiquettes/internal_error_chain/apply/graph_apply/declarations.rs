@@ -7,12 +7,13 @@ use super::Shape;
 
 mod collect;
 mod desired;
+mod native;
 mod repairs;
 
 type Range = (usize, usize);
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub(in crate::etiquettes::internal_error_chain::apply) struct GraphDeclarationFacts {
+pub(crate) struct GraphDeclarationFacts {
     declarations: Vec<GraphDeclaration>,
 }
 
@@ -114,6 +115,35 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct GraphField {
 }
 
 impl GraphDeclarationFacts {
+    #[tracing::instrument(level = "trace", skip(self, getters))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn with_getters(
+        mut self,
+        getters: Option<&super::super::getters::GetterFields>,
+    ) -> Self {
+        for declaration in &mut self.declarations {
+            let GraphFields::Named(fields) = &mut declaration.fields else {
+                continue;
+            };
+            for field in fields {
+                let getter = getters.and_then(|getters| {
+                    getters.get(&(declaration.name.clone(), field.name.clone()?))
+                });
+                if field.candidate_storage.is_none()
+                    && getter.is_some_and(|getter| {
+                        getter.target() == crate::config::ErrorFieldStrategy::Owned
+                    })
+                {
+                    field.candidate_storage = Some(StringStorage::Borrowed {
+                        lifetime: Some("static".into()),
+                        mutable: false,
+                    });
+                }
+                field.getter_storage = getter.cloned();
+            }
+        }
+        self
+    }
+
     #[tracing::instrument(level = "trace", skip(self, resolve))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn resolved_incoming_edges(
         &self,

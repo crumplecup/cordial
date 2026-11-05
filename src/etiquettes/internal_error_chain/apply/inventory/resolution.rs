@@ -38,10 +38,11 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct CrateTypeIndex {
 }
 
 impl CrateTypeIndex {
-    #[instrument(level = "debug", skip(files))]
+    #[instrument(level = "debug", skip(files, source), err(level = "warn"))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn new(
         files: &[SharedParsedFile],
-    ) -> Self {
+        source: &crate::ir::SourceErrorApply,
+    ) -> crate::CordialResult<Self> {
         let getter_uses = super::super::getter_uses::collect(files);
         let getters = super::super::getters::collect_getter_storage(files, &getter_uses);
         let mut declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
@@ -119,22 +120,24 @@ impl CrateTypeIndex {
             file_syntax: files
                 .iter()
                 .map(|file| {
-                    (
+                    Ok((
                         file.path().to_path_buf(),
                         FileSyntaxFacts::collect(
                             file,
                             &tracked_names,
                             &tracked_fields,
-                            getters.get(file.path()),
+                            source
+                                .declarations_for(file)?
+                                .with_getters(getters.get(file.path())),
                         ),
-                    )
+                    ))
                 })
-                .collect(),
+                .collect::<crate::CordialResult<_>>()?,
             incoming_edges: Vec::new(),
             getter_uses,
         };
         index.incoming_edges = index.collect_incoming_edges(files);
-        index
+        Ok(index)
     }
 
     #[instrument(level = "debug", skip(self, files))]

@@ -1,12 +1,14 @@
 //! Typed declaration facts for source and Kind edges.
 
-use std::path::PathBuf;
-
 use syn::spanned::Spanned;
 use syn::{GenericArgument, PathArguments, Type};
 use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
+
+mod native;
+mod target;
+pub use target::{ErrorEdgeTarget, ErrorEdgeTargetKind};
 
 use super::super::span_range;
 use super::helpers::plain_type_path;
@@ -32,49 +34,6 @@ pub enum ErrorEdgeStorage {
         /// Lifetime named on the reference.
         lifetime: String,
     },
-}
-
-/// The kind of top-level declaration reached by a local error edge.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum ErrorEdgeTargetKind {
-    /// A struct declaration.
-    Struct,
-    /// An enum declaration.
-    Enum,
-}
-
-/// Identity and source snapshot of a private crate-local declaration candidate.
-#[derive(
-    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_getters::Getters,
-)]
-pub struct ErrorEdgeTarget {
-    declaration: PathBuf,
-    #[getter(copy)]
-    line: usize,
-    #[getter(copy)]
-    column: usize,
-    #[getter(copy)]
-    source_digest: [u8; 32],
-    #[getter(copy)]
-    kind: ErrorEdgeTargetKind,
-}
-
-impl ErrorEdgeTarget {
-    #[instrument(level = "debug", skip(file, kind))]
-    pub(super) fn from_shared_file(
-        file: &SharedParsedFile,
-        line: usize,
-        column: usize,
-        kind: ErrorEdgeTargetKind,
-    ) -> Self {
-        Self {
-            declaration: file.path().to_path_buf(),
-            line,
-            column,
-            source_digest: file.source_digest(),
-            kind,
-        }
-    }
 }
 
 /// Parsed edge facts from the shared source tree; the path is not yet resolved.
