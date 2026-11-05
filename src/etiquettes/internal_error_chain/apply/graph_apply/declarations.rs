@@ -9,6 +9,7 @@ mod collect;
 mod desired;
 mod native;
 mod repairs;
+mod resolution;
 
 type Range = (usize, usize);
 
@@ -32,6 +33,8 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct GraphDeclaration {
     visibility: Visibility,
     #[getter(skip)]
     allowed_attrs: bool,
+    #[getter(skip)]
+    linkable_attrs: bool,
     #[getter(copy)]
     error_impl: bool,
     #[getter(copy)]

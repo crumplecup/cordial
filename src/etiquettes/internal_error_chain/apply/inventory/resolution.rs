@@ -8,13 +8,11 @@
 use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 
-use syn::{Item, Visibility};
 use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
 
-use super::edges::{ErrorEdgeTarget, ErrorEdgeTargetKind};
-use super::helpers::derive_is_builtin;
+use super::edges::ErrorEdgeTarget;
 use super::syntax_facts::FileSyntaxFacts;
 
 mod getter_consumers;
@@ -24,7 +22,7 @@ mod paths;
 
 use paths::ModuleIdentity;
 pub(in crate::etiquettes::internal_error_chain::apply) use paths::{
-    absolute_path, module_identities, use_paths,
+    absolute_path, module_identities,
 };
 
 pub(in crate::etiquettes::internal_error_chain::apply) struct CrateTypeIndex {
@@ -43,59 +41,23 @@ impl CrateTypeIndex {
         files: &[SharedParsedFile],
         source: &crate::ir::SourceErrorApply,
     ) -> crate::CordialResult<Self> {
-        let getter_uses = super::super::getter_uses::collect(files);
+        let getter_uses = super::super::getter_uses::collect(files, source)?;
         let getters = super::super::getters::collect_getter_storage(files, &getter_uses);
         let mut declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
         let mut local: HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
-        let modules = module_identities(files);
+        let modules = module_identities(files, source)?;
         let mut imports = HashMap::new();
         let mut tracked_fields = BTreeSet::new();
         for file in files {
-            let mut file_imports = Vec::new();
-            for item in &file.syntax().items {
-                match item {
-                    Item::Struct(declaration) => tracked_fields.extend(
-                        declaration
-                            .fields
-                            .iter()
-                            .filter_map(|field| field.ident.as_ref().map(ToString::to_string)),
-                    ),
-                    Item::Enum(declaration) => {
-                        for variant in &declaration.variants {
-                            tracked_fields.extend(
-                                variant.fields.iter().filter_map(|field| {
-                                    field.ident.as_ref().map(ToString::to_string)
-                                }),
-                            );
-                        }
-                    }
-                    _ => {}
-                }
-                if let Item::Use(item) = item {
-                    use_paths(&item.tree, Vec::new(), &mut file_imports);
-                }
-                let (name, visibility, attrs, kind, location) = match item {
-                    Item::Struct(item) => (
-                        &item.ident,
-                        &item.vis,
-                        &item.attrs,
-                        ErrorEdgeTargetKind::Struct,
-                        item.ident.span().start(),
-                    ),
-                    Item::Enum(item) => (
-                        &item.ident,
-                        &item.vis,
-                        &item.attrs,
-                        ErrorEdgeTargetKind::Enum,
-                        item.ident.span().start(),
-                    ),
-                    _ => continue,
-                };
-                let target = (!matches!(visibility, Visibility::Public(_))
-                    && attrs.iter().all(derive_is_builtin))
-                .then(|| {
-                    ErrorEdgeTarget::from_shared_file(file, location.line, location.column, kind)
-                });
+            let namespace = source.namespace_for(file)?;
+            let facts = source.declarations_for(file)?;
+            tracked_fields.extend(facts.field_names());
+            let file_imports = namespace
+                .imports()
+                .iter()
+                .flat_map(|import| import.bindings().iter().cloned())
+                .collect();
+            for (name, target) in facts.resolution_targets(file) {
                 local
                     .entry((file.path().to_path_buf(), name.to_string()))
                     .or_default()

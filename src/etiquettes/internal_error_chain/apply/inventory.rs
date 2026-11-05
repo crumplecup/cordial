@@ -32,6 +32,7 @@ pub use edges::{
 };
 pub use from::ErrorFromEvidence;
 pub(crate) use graph::{conversion_units_from_ir, enrich_conversion_units};
+pub(super) use helpers::derive_is_builtin;
 pub(super) use resolution::CrateTypeIndex;
 pub use source_method::ErrorSourceMethodEvidence;
 pub use try_conversion::{ErrorTryEvidence, ErrorTryScope};

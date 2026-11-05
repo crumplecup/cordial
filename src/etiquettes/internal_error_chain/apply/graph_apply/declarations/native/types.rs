@@ -22,6 +22,13 @@ pub(super) fn start_line(file: &DatabaseSource<'_>, node: &SyntaxNode) -> usize 
 #[tracing::instrument(level = "trace", skip(owner))]
 pub(super) fn allowed_attrs(owner: &impl HasAttrs) -> bool {
     owner.attrs().all(|attr| {
+        if matches!(attr.meta(), Some(ast::Meta::UnsafeMeta(_)))
+            || attr
+                .path()
+                .is_some_and(|path| path.coloncolon_token().is_some())
+        {
+            return false;
+        }
         match attr.simple_name().as_deref() {
             Some("doc") => return true,
             Some("derive") => {}
@@ -58,6 +65,49 @@ pub(super) fn allowed_attrs(owner: &impl HasAttrs) -> bool {
         }
         true
     })
+}
+
+/// Identity links permit compiler derives only; doc attributes still block them.
+#[tracing::instrument(level = "trace", skip(owner))]
+pub(super) fn builtin_attrs(owner: &impl HasAttrs) -> bool {
+    owner.doc_comments().next().is_none()
+        && owner.attrs().all(|attr| {
+            if attr.simple_name().as_deref() != Some("derive")
+                || attr
+                    .path()
+                    .is_some_and(|path| path.coloncolon_token().is_some())
+            {
+                return false;
+            }
+            let Some(ast::Meta::TokenTreeMeta(meta)) = attr.meta() else {
+                return false;
+            };
+            let Some(tree) = meta.token_tree() else {
+                return false;
+            };
+            let tokens: Vec<_> = tree
+                .syntax()
+                .children_with_tokens()
+                .filter(|token| !token.kind().is_trivia())
+                .collect();
+            let [_, contents @ .., _] = tokens.as_slice() else {
+                return false;
+            };
+            let mut groups = contents.split(|token| token.to_string() == ",").peekable();
+            while let Some(group) = groups.next() {
+                if group.is_empty() && groups.peek().is_none() {
+                    continue;
+                }
+                let text: String = group.iter().map(ToString::to_string).collect();
+                if !matches!(
+                    text.strip_prefix("::").unwrap_or(&text),
+                    "Debug" | "Clone" | "Copy" | "PartialEq" | "Eq" | "Hash" | "PartialOrd" | "Ord"
+                ) {
+                    return false;
+                }
+            }
+            true
+        })
 }
 
 #[tracing::instrument(level = "trace", skip(value))]

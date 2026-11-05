@@ -33,6 +33,21 @@ struct Unsupported<'a> {
 #[derive(derive_getters::Getters)]
 struct Getters { message: String, source: Leaf }
 struct Unicode { /* é */ message: String }
+#[derive(Hash, PartialOrd, Ord, ::Debug)]
+struct Linkable;
+#[derive(custom::Debug)]
+struct Unlinkable;
+#[derive(Debug = "unsupported")]
+struct UnsupportedDerive;
+#[::derive(Debug)]
+struct AbsoluteAttribute;
+type LeafAlias = Leaf;
+use crate::{Leaf as RenamedLeaf, nested::{self, leaf::Nested as Deep}, *};
+use ::std::{self as standard, fmt::Debug as _};
+#[cfg(unix)]
+use crate::Kind as ConditionalKind;
+/// Import docs preserve unconditional identity.
+use self::Unit as DocumentedUnit;
 #[doc = "explicit"]
 struct Multiline {
     #[cfg(feature = "alternate")]

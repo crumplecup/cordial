@@ -6,6 +6,9 @@ use crate::{CordialError, CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+mod namespace;
+use namespace::ApplyNamespace;
+
 /// Required declaration evidence on the shared crate graph root.
 pub const ATTR_SOURCE_ERROR_APPLY: &str = "source_error_apply";
 
@@ -22,6 +25,8 @@ pub struct ErrorApplyFile {
     snapshot: FileSnapshot,
     #[getter(skip)]
     declarations: GraphDeclarationFacts,
+    #[getter(skip)]
+    namespace: ApplyNamespace,
 }
 
 impl SourceErrorApply {
@@ -37,6 +42,7 @@ impl SourceErrorApply {
                 files.push(ErrorApplyFile {
                     snapshot: FileSnapshot::new(path.to_path_buf(), file.source_digest()),
                     declarations: GraphDeclarationFacts::collect(&file),
+                    namespace: ApplyNamespace::collect(&file),
                 });
                 Ok(())
             },
@@ -70,6 +76,7 @@ impl SourceErrorApply {
         ErrorApplyFile {
             snapshot: FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
             declarations: GraphDeclarationFacts::collect_native(file),
+            namespace: ApplyNamespace::collect_native(file),
         }
     }
 
@@ -78,6 +85,16 @@ impl SourceErrorApply {
         &self,
         file: &SharedParsedFile,
     ) -> CordialResult<GraphDeclarationFacts> {
+        Ok(self.file_for(file)?.declarations.clone())
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
+    pub(crate) fn namespace_for(&self, file: &SharedParsedFile) -> CordialResult<&ApplyNamespace> {
+        Ok(&self.file_for(file)?.namespace)
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
+    fn file_for(&self, file: &SharedParsedFile) -> CordialResult<&ErrorApplyFile> {
         let mut matches = self
             .files
             .iter()
@@ -93,6 +110,6 @@ impl SourceErrorApply {
                 "unambiguous error-apply source snapshot",
             ));
         }
-        Ok(entry.declarations.clone())
+        Ok(entry)
     }
 }

@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use syn::{Item, UseTree};
 use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
@@ -17,10 +16,11 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct ModuleIdentity {
     unconditional: bool,
 }
 
-#[instrument(level = "debug", skip(files))]
+#[instrument(level = "debug", skip(files, source), err(level = "warn"))]
 pub(in crate::etiquettes::internal_error_chain::apply) fn module_identities(
     files: &[SharedParsedFile],
-) -> HashMap<PathBuf, ModuleIdentity> {
+    source: &crate::ir::SourceErrorApply,
+) -> crate::CordialResult<HashMap<PathBuf, ModuleIdentity>> {
     let mut by_module: HashMap<Vec<String>, Vec<&SharedParsedFile>> = HashMap::new();
     for file in files {
         if let Some(module) = module_path(file.path()) {
@@ -40,27 +40,15 @@ pub(in crate::etiquettes::internal_error_chain::apply) fn module_identities(
                 unconditional,
             },
         );
-        for item in &file.syntax().items {
-            let Item::Mod(item) = item else { continue };
-            if item.content.is_some()
-                || item
-                    .attrs
-                    .iter()
-                    .any(|attr| !attr.path().is_ident("doc") && !attr.path().is_ident("cfg"))
-            {
-                continue;
-            }
+        for item in source.namespace_for(file)?.modules() {
             let mut child = module.clone();
-            child.push(item.ident.to_string());
+            child.push(item.name().clone());
             if by_module.get(&child).is_some_and(|files| files.len() == 1) {
-                pending.push((
-                    child,
-                    unconditional && item.attrs.iter().all(|attr| attr.path().is_ident("doc")),
-                ));
+                pending.push((child, unconditional && item.unconditional()));
             }
         }
     }
-    identities
+    Ok(identities)
 }
 
 #[instrument(level = "debug", skip(path))]
@@ -102,35 +90,4 @@ pub(in crate::etiquettes::internal_error_chain::apply) fn absolute_path(
     }
     base.extend(rest.iter().cloned());
     Some(base)
-}
-
-#[instrument(level = "debug", skip(tree))]
-pub(in crate::etiquettes::internal_error_chain::apply) fn use_paths(
-    tree: &UseTree,
-    prefix: Vec<String>,
-    paths: &mut Vec<(String, Vec<String>)>,
-) {
-    match tree {
-        UseTree::Path(path) => {
-            let mut prefix = prefix;
-            prefix.push(path.ident.to_string());
-            use_paths(&path.tree, prefix, paths);
-        }
-        UseTree::Name(name) => {
-            let mut path = prefix;
-            path.push(name.ident.to_string());
-            paths.push((name.ident.to_string(), path));
-        }
-        UseTree::Rename(rename) => {
-            let mut path = prefix;
-            path.push(rename.ident.to_string());
-            paths.push((rename.rename.to_string(), path));
-        }
-        UseTree::Group(group) => {
-            for tree in &group.items {
-                use_paths(tree, prefix.clone(), paths);
-            }
-        }
-        UseTree::Glob(_) => {}
-    }
 }

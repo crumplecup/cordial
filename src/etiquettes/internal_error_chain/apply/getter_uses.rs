@@ -79,14 +79,17 @@ impl GetterUseFact {
     }
 }
 
-#[instrument(level = "debug", skip(files))]
+#[instrument(level = "debug", skip(files, source), err(level = "warn"))]
 #[hotpath::measure]
-pub(super) fn collect(files: &[SharedParsedFile]) -> Vec<GetterUseFact> {
-    let identities = Identities::collect(files);
-    files
+pub(super) fn collect(
+    files: &[SharedParsedFile],
+    source: &crate::ir::SourceErrorApply,
+) -> crate::CordialResult<Vec<GetterUseFact>> {
+    let identities = Identities::collect(files, source)?;
+    Ok(files
         .iter()
         .flat_map(|file| visit::collect(file, &identities))
-        .collect()
+        .collect())
 }
 
 #[instrument(level = "trace", skip(uses, path, usage, span))]

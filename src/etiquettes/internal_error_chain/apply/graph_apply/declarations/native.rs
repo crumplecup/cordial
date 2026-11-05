@@ -97,6 +97,7 @@ impl GraphDeclarationFacts {
                     kind,
                     visibility: types::visibility(visibility),
                     allowed_attrs: types::allowed_attrs(&owner),
+                    linkable_attrs: types::builtin_attrs(&owner),
                     error_impl: kind == DeclarationKind::Struct && error_impls.contains(&name_text),
                     derives_error: kind == DeclarationKind::Struct
                         && crate::ir::derives_error(&owner),

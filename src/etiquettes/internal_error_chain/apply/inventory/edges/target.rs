@@ -31,7 +31,7 @@ pub struct ErrorEdgeTarget {
 
 impl ErrorEdgeTarget {
     #[instrument(level = "debug", skip(file, kind))]
-    pub(in crate::etiquettes::internal_error_chain::apply::inventory) fn from_shared_file(
+    pub(in crate::etiquettes::internal_error_chain::apply) fn from_shared_file(
         file: &SharedParsedFile,
         line: usize,
         column: usize,

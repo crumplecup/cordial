@@ -36,6 +36,9 @@ impl GraphDeclarationFacts {
                         kind: DeclarationKind::Struct,
                         visibility: visibility(&item.vis),
                         allowed_attrs: allowed_attrs(&item.attrs),
+                        linkable_attrs: item.attrs.iter().all(
+                            crate::etiquettes::internal_error_chain::apply::inventory::derive_is_builtin,
+                        ),
                         error_impl: error_impls.contains(&item.ident.to_string()),
                         derives_error: item_derives_error(&item.attrs),
                         generics_empty: item.generics.params.is_empty(),
@@ -55,6 +58,9 @@ impl GraphDeclarationFacts {
                         kind: DeclarationKind::Enum,
                         visibility: visibility(&item.vis),
                         allowed_attrs: allowed_attrs(&item.attrs),
+                        linkable_attrs: item.attrs.iter().all(
+                            crate::etiquettes::internal_error_chain::apply::inventory::derive_is_builtin,
+                        ),
                         error_impl: false,
                         derives_error: false,
                         generics_empty: item.generics.params.is_empty(),

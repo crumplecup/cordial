@@ -634,7 +634,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
 | Error analysis | Sites, chain records, type relationships, expression compliance, signature-chain and architecture assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`, `SourceErrorArchitecture`). Apply collection remains. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
-| Error apply inventory | Both loaders project required `SourceErrorApply` declaration evidence. Expression, use, initializer and lifetime collection in `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` remains. | Complete declaration payloads include storage, source/Kind edges, generic and lifetime shapes, visibility, attributes and edit ranges. Collect the remaining uses and initializers into typed IR. Keep edit rendering text-only. |
+| Error apply inventory | Both loaders project required `SourceErrorApply` declaration and namespace evidence. Expression, getter-use, initializer and lifetime collection in `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` remains. | Declaration payloads include storage, source/Kind edges, generic and lifetime shapes, visibility, attributes and edit ranges. Module boundaries, import bindings and type-alias names drive graph and getter identity joins from IR. Collect the remaining uses and initializers into typed IR. Keep edit rendering text-only. |
 | Panic and proof collectors | Both loaders project required `SourceVerus`, `SourcePanics` and `SourceAntipatterns` graph evidence. Proof-pattern, panic and antipattern hooks consume IR alone. Native collection covers ordinary syntax, Kani proof graphs, embedded programs and Creusot/Kani/Verus contract clauses. | Canonical outer Rust plus memoized payload grammars. Retire compatibility collection with the production frontend; no fallback whole-file parser. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
 
@@ -1161,6 +1161,32 @@ characters while edits use bytes. The conversion now handles Unicode prefixes,
 with an exact-range regression assertion. Missing, malformed, duplicate and
 stale declaration inventories fail closed.
 Build-tier submit verified zero open items (list 66). The deep tier was not run.
+
+## Checkpoint: error/apply namespace projection
+
+Both loaders now collect module boundaries, import bindings and type-alias names
+into the required `SourceErrorApply` inventory. Native collection uses the
+canonical database tree. The crate graph index and getter receiver identity
+index consume this evidence, together with declaration identities and field
+names from the previous checkpoint. They no longer rescan source syntax for
+these joins. Snapshot validation applies to the whole per-file payload.
+
+The projection retains grouped and renamed imports, underscore bindings,
+conditional import blockers and conditional module boundaries. Declaration
+link eligibility preserves the existing distinction between compiler derives
+and attributes that make an identity unsafe to link. Missing namespace evidence
+fails closed rather than triggering a compatibility-tree reconstruction.
+
+Getter method/body analysis, expression safety, initializers and lifetime
+collection still use the shared compatibility tree. These are the next native
+collector groups; the namespace port does not complete production cutover.
+
+Validation on 2026-11-05: complete frontend parity and production-consumer
+tests pass with full features and with `internal_error_chain` alone. The full
+cross-file and getter round-trip suites pass. Consumer mutation tests verify
+that module boundaries govern executable graph edits and imports and aliases
+govern getter identities. Build-tier submit verified zero open items (list 68).
+The deep tier was not run.
 
 ## Current next step
 

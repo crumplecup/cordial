@@ -29,7 +29,7 @@ impl std::error::Error for Cause {}
 #[derive(Debug, Clone)]
 struct Parent<'a> { source: Cause, file: String, anchor: &'a () }
 impl std::error::Error for Parent<'_> {}
-#[derive(Debug, Display, Error, Getters)]
+#[derive(Debug, derive_more::Display, derive_more::Error, derive_getters::Getters)]
 pub struct Located { file: String, line: u32 }
 impl Located {
     #[track_caller]
@@ -44,10 +44,12 @@ impl Located {
     std::fs::write(
         root.join("src/child.rs"),
         r#"use std::panic::Location;
+use super::Located as ImportedLocated;
 #[track_caller]
 pub(super) fn make<'a>(source: &'a super::Cause, anchor: &'a ()) -> super::Parent<'a> {
     super::Parent { source: source.clone(), file: Location::caller().file().to_string(), anchor }
 }
+fn read(value: &ImportedLocated) -> &String { value.file() }
 "#,
     )
     .into_diagnostic()?;
@@ -71,11 +73,47 @@ pub(super) fn make<'a>(source: &'a super::Cause, anchor: &'a ()) -> super::Paren
             assert!(
                 actual["plans"]
                     .as_array()
-                    .is_some_and(|plans| !plans.is_empty()),
-                "cross-file graph must be planned"
+                    .is_some_and(|plans| plans.iter().any(|plan| plan["edits"].is_array())),
+                "cross-file graph must have executable edits"
             );
             let facts = serde_json::to_value(native.source_error_apply().into_diagnostic()?)
                 .into_diagnostic()?;
+            for boundary in ["imports", "modules"] {
+                let mut altered = facts.clone();
+                for file in altered["files"]
+                    .as_array_mut()
+                    .ok_or_else(|| miette::miette!("files"))?
+                {
+                    file["namespace"][boundary] = serde_json::json!([]);
+                }
+                let mut mutated = native.clone();
+                mutated
+                    .set_attr(mutated.root(), ATTR_SOURCE_ERROR_APPLY, altered)
+                    .into_diagnostic()?;
+                let materialized = apply_projection::materialized(mutated, root)?;
+                let section = if boundary == "modules" {
+                    "plans"
+                } else {
+                    "index"
+                };
+                assert_ne!(materialized[section], actual[section], "IR {boundary}");
+            }
+            let mut aliases = facts.clone();
+            for file in aliases["files"]
+                .as_array_mut()
+                .ok_or_else(|| miette::miette!("files"))?
+            {
+                file["namespace"]["aliases"] = serde_json::json!(["Located"]);
+            }
+            let mut ambiguous_alias = native.clone();
+            ambiguous_alias
+                .set_attr(ambiguous_alias.root(), ATTR_SOURCE_ERROR_APPLY, aliases)
+                .into_diagnostic()?;
+            assert_ne!(
+                apply_projection::materialized(ambiguous_alias, root)?,
+                actual,
+                "getter identities must respect aliases in the IR"
+            );
             let mut altered = facts.clone();
             for file in altered["files"]
                 .as_array_mut()

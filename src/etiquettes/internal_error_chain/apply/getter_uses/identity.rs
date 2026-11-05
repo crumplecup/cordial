@@ -8,7 +8,7 @@ use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
 
-use super::super::inventory::resolution::{absolute_path, module_identities, use_paths};
+use super::super::inventory::resolution::{absolute_path, module_identities};
 use super::{Receiver, TypeIdentity};
 
 pub(super) struct Identities {
@@ -20,9 +20,12 @@ pub(super) struct Identities {
 }
 
 impl Identities {
-    #[instrument(level = "debug", skip(files))]
-    pub(super) fn collect(files: &[SharedParsedFile]) -> Self {
-        let modules = module_identities(files)
+    #[instrument(level = "debug", skip(files, source), err(level = "warn"))]
+    pub(super) fn collect(
+        files: &[SharedParsedFile],
+        source: &crate::ir::SourceErrorApply,
+    ) -> crate::CordialResult<Self> {
+        let modules = module_identities(files, source)?
             .into_iter()
             .map(|(file, identity)| (file, identity.path().clone()))
             .collect();
@@ -34,60 +37,61 @@ impl Identities {
             associated: BTreeSet::new(),
         };
         for file in files {
-            index.declarations(file);
+            index.declarations(file, source)?;
         }
         for file in files {
             index.methods(file);
         }
-        index
+        Ok(index)
     }
 
-    #[instrument(level = "trace", skip(self, file))]
-    fn declarations(&mut self, file: &SharedParsedFile) {
+    #[instrument(level = "trace", skip(self, file, source), err(level = "warn"))]
+    fn declarations(
+        &mut self,
+        file: &SharedParsedFile,
+        source: &crate::ir::SourceErrorApply,
+    ) -> crate::CordialResult<()> {
         let Some(module) = self.modules.get(file.path()).cloned() else {
-            return;
+            return Ok(());
         };
-        for item in &file.syntax().items {
-            let name = match item {
-                Item::Struct(item) => Some(&item.ident),
-                Item::Enum(item) => Some(&item.ident),
-                // Aliases occupy the type namespace but do not prove a receiver.
-                Item::Type(item) => Some(&item.ident),
-                _ => None,
-            };
-            if let Some(name) = name {
+        let facts = source.declarations_for(file)?;
+        let namespace = source.namespace_for(file)?;
+        for (name, declared) in facts
+            .all()
+            .iter()
+            .map(|item| (item.name(), true))
+            .chain(namespace.aliases().iter().map(|name| (name, false)))
+        {
+            let mut key = module.clone();
+            key.push(name.clone());
+            let identity = declared.then(|| TypeIdentity {
+                declaration: file.path().to_path_buf(),
+                name: name.clone(),
+            });
+            self.declarations.entry(key).or_default().push(identity);
+        }
+        for import in namespace.imports() {
+            for (alias, written) in import.bindings() {
                 let mut key = module.clone();
-                key.push(name.to_string());
-                let identity = (!matches!(item, Item::Type(_))).then(|| TypeIdentity {
-                    declaration: file.path().to_path_buf(),
-                    name: name.to_string(),
-                });
-                self.declarations.entry(key).or_default().push(identity);
-            }
-            if let Item::Use(item) = item {
-                let mut imports = Vec::new();
-                use_paths(&item.tree, Vec::new(), &mut imports);
-                for (alias, written) in imports {
-                    let mut key = module.clone();
-                    key.push(alias);
-                    if item.attrs.iter().any(|attr| !attr.path().is_ident("doc")) {
-                        self.declarations.entry(key).or_default().push(None);
-                        continue;
-                    }
-                    if let Some(path) = absolute_path(&module, &written) {
-                        self.imports.entry(key.clone()).or_default().push(path);
-                    }
-                    // Rust 2018 `use module::Type` can start at the crate root.
-                    if !matches!(
-                        written.first().map(String::as_str),
-                        Some("crate" | "self" | "super")
-                    ) && !module.is_empty()
-                    {
-                        self.imports.entry(key).or_default().push(written);
-                    }
+                key.push(alias.clone());
+                if !import.unconditional() {
+                    self.declarations.entry(key).or_default().push(None);
+                    continue;
+                }
+                if let Some(path) = absolute_path(&module, written) {
+                    self.imports.entry(key.clone()).or_default().push(path);
+                }
+                // Rust 2018 `use module::Type` can start at the crate root.
+                if !matches!(
+                    written.first().map(String::as_str),
+                    Some("crate" | "self" | "super")
+                ) && !module.is_empty()
+                {
+                    self.imports.entry(key).or_default().push(written.clone());
                 }
             }
         }
+        Ok(())
     }
 
     #[instrument(level = "trace", skip(self, file))]

@@ -12,7 +12,9 @@ pub(super) fn derive_is_nonconstructing(attr: &syn::Attribute) -> bool {
 
 /// Restrict declaration links to compiler-provided derives.
 #[instrument(level = "debug", skip(attr))]
-pub(super) fn derive_is_builtin(attr: &syn::Attribute) -> bool {
+pub(in crate::etiquettes::internal_error_chain::apply) fn derive_is_builtin(
+    attr: &syn::Attribute,
+) -> bool {
     derive_matches(attr, false)
 }
 
