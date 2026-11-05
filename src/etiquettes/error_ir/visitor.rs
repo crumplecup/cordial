@@ -59,13 +59,13 @@ impl ErrorIrScanLayers {
         is_proc_macro_crate: false,
     };
 
-    #[cfg(feature = "error_chain")]
+    #[cfg(feature = "internal_error_chain")]
     #[instrument(level = "debug")]
     pub fn for_unified_file(under_src: bool, is_proc_macro_crate: bool) -> Self {
         Self {
             // The source loader has already collected the site census.
             sites: false,
-            chain: under_src,
+            chain: false,
             compliance: under_src,
             type_graph: under_src,
             is_proc_macro_crate,

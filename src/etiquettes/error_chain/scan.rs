@@ -11,25 +11,7 @@ use tracing::instrument;
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_error_chain(crate_root: &Path) -> CordialResult<Vec<ErrorChainRecord>> {
     let source = SourceLoadView::for_standalone_scan();
-    let src_root = crate_root.join("src");
-    let mut findings = Vec::new();
-    for file in source.parsed_rust_files_under(&src_root, "error-chain-standalone", |_| true)? {
-        findings.extend(scan_rust_syntax(
-            file.syntax(),
-            file.path(),
-            &src_root,
-            crate_root,
-        )?);
-    }
-
-    findings.sort_by(|a, b| {
-        a.file()
-            .cmp(b.file())
-            .then(a.line().cmp(&b.line()))
-            .then(a.rule_id().to_string().cmp(&b.rule_id().to_string()))
-    });
-
-    Ok(findings)
+    Ok(crate::ir::SourceErrorChains::collect(&source, crate_root)?.records())
 }
 
 /// Parse one source file (used by tests).
@@ -40,22 +22,20 @@ pub fn scan_rust_source(
     src_root: &Path,
     crate_root: &Path,
 ) -> CordialResult<Vec<ErrorChainRecord>> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    scan_rust_syntax(&syntax, file, src_root, crate_root)
+    let syntax = SourceLoadView::parse_fixture(file, source)?;
+    scan_rust_syntax(&syntax, src_root, crate_root)
 }
 
 /// Scan a pre-parsed file for error-chain probes (via unified error IR visitor).
-#[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
+#[instrument(level = "debug", skip(syntax), err(level = "warn"))]
 pub(crate) fn scan_rust_syntax(
-    syntax: &syn::File,
-    file: &Path,
+    syntax: &crate::SharedParsedFile,
     src_root: &Path,
     crate_root: &Path,
 ) -> CordialResult<Vec<ErrorChainRecord>> {
     Ok(crate::etiquettes::scan_rust_file_syntax(
-        syntax,
-        file,
+        syntax.syntax(),
+        syntax.path(),
         src_root,
         src_root,
         crate_root,

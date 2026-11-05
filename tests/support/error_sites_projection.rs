@@ -24,6 +24,16 @@ pub fn baseline(root: &Path, target: &CrateTarget) -> Result<CrateIr> {
 
 #[tracing::instrument(level = "debug", skip(graph), err(level = "warn"))]
 pub fn materialized(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> {
+    materialized_with(graph, root, &["error-site-inventory"], "error_site_kind")
+}
+
+#[tracing::instrument(level = "debug", skip(graph, hooks), err(level = "warn"))]
+pub fn materialized_with(
+    graph: &CrateIr,
+    root: &Path,
+    hooks: &[&str],
+    attribute: &str,
+) -> Result<Vec<serde_json::Value>> {
     let empty = tempfile::tempdir().into_diagnostic()?;
     let target = CrateTarget::new("empty", empty.path());
     let session = SessionBuilder::new(root).build();
@@ -38,14 +48,16 @@ pub fn materialized(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Valu
     let mut workspace = WorkspaceIr::default();
     workspace.insert_crate(graph.clone());
     let mut view = CrateViewMut::new(&mut workspace, graph.crate_name().into());
-    let hook = ERROR_IR_ENRICHERS
-        .iter()
-        .find(|hook| hook.id() == "error-site-inventory")
-        .ok_or_else(|| miette::miette!("site hook"))?;
-    hook.enrich(EnrichView::new(&mut view, source, &session))
-        .into_diagnostic()?;
+    for id in hooks {
+        let hook = ERROR_IR_ENRICHERS
+            .iter()
+            .find(|hook| hook.id() == *id)
+            .ok_or_else(|| miette::miette!("missing hook {id}"))?;
+        hook.enrich(EnrichView::new(&mut view, source, &session))
+            .into_diagnostic()?;
+    }
     let mut rows = Vec::new();
-    for node in view.nodes_matching(&QueryBuilder::new().has_attr("error_site_kind").build()) {
+    for node in view.nodes_matching(&QueryBuilder::new().has_attr(attribute).build()) {
         let attrs: std::collections::BTreeMap<_, _> =
             node.weight().attrs().iter().cloned().collect();
         rows.push(serde_json::json!({"attrs": attrs, "span": node.weight().span()}));

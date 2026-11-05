@@ -35,17 +35,12 @@ pub(super) fn scan_crate_error_ir_impl(
     field_strategy: crate::config::ErrorFieldStrategy,
     relative_paths: bool,
 ) -> CordialResult<ErrorIrScanReport> {
-    #[cfg(not(feature = "internal_error_chain"))]
-    let _ = (field_strategy, kind_fanout_max_call_sites);
     let src_root = crate_root.join("src");
     let is_proc_macro_crate = source.crate_kinds().contains(&CrateKind::ProcMacro);
     let mut report = ErrorIrScanReport::default();
 
-    #[cfg(feature = "internal_error_chain")]
     let mut type_graph_raw = Vec::<crate::etiquettes::internal_error_chain::RawTypeNode>::new();
-    #[cfg(feature = "internal_error_chain")]
     let mut error_impls = std::collections::BTreeSet::<String>::new();
-    #[cfg(feature = "internal_error_chain")]
     let mut signature_chain =
         crate::etiquettes::internal_error_chain::SignatureChainIndex::default();
 
@@ -68,7 +63,6 @@ pub(super) fn scan_crate_error_ir_impl(
 
             let under_src = path.starts_with(&src_root);
             let unit = source.parsed_file(path, "error-ir-scan")?;
-            #[cfg(feature = "internal_error_chain")]
             if under_src {
                 signature_chain.collect(unit.syntax(), path, &src_root);
             }
@@ -84,8 +78,6 @@ pub(super) fn scan_crate_error_ir_impl(
                 )
             })?;
 
-            report.chain.extend(file_scan.chain().iter().cloned());
-            #[cfg(feature = "internal_error_chain")]
             {
                 report
                     .compliance
@@ -96,7 +88,6 @@ pub(super) fn scan_crate_error_ir_impl(
         }
     }
 
-    #[cfg(feature = "internal_error_chain")]
     {
         type_graph_raw.retain(|node| {
             crate::etiquettes::internal_error_chain::type_path_is_error_related(
@@ -143,22 +134,5 @@ pub(super) fn scan_crate_error_ir_impl(
         }
     }
 
-    chain_sort::sort_chain(&mut report.chain);
-
     Ok(report)
-}
-
-mod chain_sort {
-    use crate::etiquettes::error_chain::ErrorChainRecord;
-    use tracing::instrument;
-
-    #[instrument(level = "debug", skip(chain))]
-    pub(super) fn sort_chain(chain: &mut [ErrorChainRecord]) {
-        chain.sort_by(|a, b| {
-            a.file()
-                .cmp(b.file())
-                .then(a.line().cmp(&b.line()))
-                .then(a.rule_id().to_string().cmp(&b.rule_id().to_string()))
-        });
-    }
 }

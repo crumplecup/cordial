@@ -128,6 +128,15 @@ impl SourceLoadView {
                 serde_json::to_value(inventory)?,
             )?;
         }
+        #[cfg(feature = "error_chain")]
+        if let Some(root) = self.src_root().parent() {
+            let inventory = crate::ir::SourceErrorChains::collect(self, root)?;
+            ir.set_attr(
+                ir.root(),
+                crate::ir::ATTR_SOURCE_ERROR_CHAINS,
+                serde_json::to_value(inventory)?,
+            )?;
+        }
         for file in self.files() {
             let syntax = self.parsed_file(file.path(), "source-ir")?;
             self.load_file(ir, root, &syntax)?;

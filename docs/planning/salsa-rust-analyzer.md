@@ -805,6 +805,25 @@ completed with zero open items; the deep tier remains for the plan milestone.
 Production source ownership remains with the compatibility frontend until the
 remaining collection groups and Cargo context are ready for the complete cutover.
 
+## Checkpoint: loader-owned error-chain contract
+
+Error-chain records now enter a required, snapshot-bound `SourceErrorChains`
+inventory during loading. The graph-only chain enricher joins those records to
+located site nodes; it neither reads source nor invokes the compatibility scan.
+The remaining source hook is compiled only for internal architecture/compliance
+and apply. Its unified walk no longer repeats chain collection. Standalone chain
+fixtures now obtain their trees through the shared loader as well.
+
+A regression compares standalone and loader records for all five chain rules,
+checks missing/corrupt evidence, and replays the production site/chain hooks after
+deleting original source files. The native collector is the immediate next step;
+this contract checkpoint does not switch production source ownership.
+
+Validation: the chain, flow, plugin and internal-error suites passed with full
+features (54 tests across the focused runs). The chain-only replay test passed
+without warnings after tightening the internal helper gate. Build-tier submit
+finished with zero open items; deep remains reserved for the plan milestone.
+
 ## Current next step
 
 Work toward the production cutover, completing native error analysis, error/apply

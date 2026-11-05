@@ -5,6 +5,8 @@
 //! instead of each etiquette declaring overlapping enrichers.
 
 use tracing::instrument;
+#[cfg(feature = "error_chain")]
+mod chains;
 mod inventory;
 mod scan;
 mod sites;
@@ -23,6 +25,9 @@ static SCOPE_ENRICHER: ScopeEnricher = ScopeEnricher;
 static ATTRIBUTE_ENRICHER: AttributeEnricher = AttributeEnricher;
 static ERROR_IR_SCAN: ErrorIrScanEnricher = ErrorIrScanEnricher;
 static ERROR_SITE_INVENTORY: ErrorSiteInventoryEnricher = ErrorSiteInventoryEnricher;
+#[cfg(feature = "error_chain")]
+static ERROR_CHAIN_INVENTORY: chains::ErrorChainInventoryEnricher =
+    chains::ErrorChainInventoryEnricher;
 static ERROR_FLOW: ErrorFlowEnricher = ErrorFlowEnricher;
 
 /// Foreign-error-attenuation inventory enricher, gated as a whole unit —
@@ -37,12 +42,14 @@ mod attenuation {
 
 /// Canonical enricher stack for error-handling runs (feature-gated layers).
 ///
-/// Order after session priority sort: scope → attribute (6) → site inventory (49) → error-ir-scan (50) →
+/// Order after session priority sort: scope → attribute (6) → site inventory (49) → chain inventory / error-ir-scan (50) →
 /// error-flow (51) → attenuation (52).
 pub static ERROR_IR_ENRICHERS: &[&'static dyn IrEnricher] = &[
     &SCOPE_ENRICHER,
     #[cfg(feature = "error_sites")]
     &ERROR_SITE_INVENTORY,
+    #[cfg(feature = "error_chain")]
+    &ERROR_CHAIN_INVENTORY,
     #[cfg(feature = "error_sites")]
     &ERROR_IR_SCAN,
     #[cfg(feature = "error_sites")]
@@ -63,6 +70,10 @@ pub fn error_ir_enricher_ids(layers: ErrorHandlingLayers) -> Vec<&'static str> {
             ids.push(ErrorIrScanEnricher::ID);
             ids.push(ErrorFlowEnricher::ID);
         }
+    }
+    #[cfg(feature = "error_chain")]
+    if layers.sites() || layers.chain() || layers.internal() {
+        ids.push(chains::ErrorChainInventoryEnricher::ID);
     }
     if layers.attenuation() {
         #[cfg(feature = "foreign_error_attenuation")]

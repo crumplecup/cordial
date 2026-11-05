@@ -27,26 +27,6 @@ pub struct ErrorIrScanReport {
     signature_checks: Vec<crate::etiquettes::internal_error_chain::SignatureChainCheck>,
 }
 
-impl ErrorIrScanReport {
-    /// Internal report.
-    #[instrument(level = "trace", skip(self))]
-    #[cfg(feature = "internal_error_chain")]
-    pub fn internal_report(
-        &self,
-        crate_name: &str,
-    ) -> crate::etiquettes::internal_error_chain::InternalErrorChainScanReport {
-        crate::etiquettes::internal_error_chain::InternalErrorChainScanReport::new(
-            crate_name.to_string(),
-            self.type_graph.clone(),
-            crate::etiquettes::internal_error_chain::InternalErrorComplianceReport::new(
-                crate_name.to_string(),
-                self.compliance.clone(),
-            ),
-            self.signature_checks.clone(),
-        )
-    }
-}
-
 /// Scan quality source trees using shared parses and loader-collected sites.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn scan_crate_error_ir(
@@ -55,14 +35,11 @@ pub fn scan_crate_error_ir(
 ) -> CordialResult<ErrorIrScanReport> {
     let source = SourceLoadView::for_standalone_scan();
     let sites = crate::ir::SourceErrorSites::collect(&source, crate_root)?.records();
-    #[cfg(feature = "error_chain")]
+    #[cfg(feature = "internal_error_chain")]
     let mut report = {
-        #[cfg(feature = "internal_error_chain")]
         let kind_fanout_max_call_sites =
             crate::config::InternalErrorChainThresholds::default().kind_fanout_max_call_sites();
-        #[cfg(not(feature = "internal_error_chain"))]
-        let kind_fanout_max_call_sites = 0;
-        scan_crate_error_ir_impl(
+        chain::scan_crate_error_ir_impl(
             crate_root,
             crate_name,
             &source,
@@ -71,22 +48,21 @@ pub fn scan_crate_error_ir(
             true,
         )?
     };
-    #[cfg(not(feature = "error_chain"))]
+    #[cfg(not(feature = "internal_error_chain"))]
     let mut report = {
         let _ = crate_name;
         ErrorIrScanReport::default()
     };
+    #[cfg(feature = "error_chain")]
+    {
+        report.chain = crate::ir::SourceErrorChains::collect(&source, crate_root)?.records();
+    }
     report.sites = sites;
     Ok(report)
 }
 
-#[cfg(feature = "error_chain")]
-mod chain;
-
-#[cfg(feature = "error_chain")]
-use chain::scan_crate_error_ir_impl;
-#[cfg(feature = "error_chain")]
-pub(super) use chain::scan_crate_error_ir_with_source;
+#[cfg(feature = "internal_error_chain")]
+pub(super) mod chain;
 
 #[cfg(feature = "internal_error_chain")]
 pub(super) mod compliance_sort {
@@ -97,7 +73,27 @@ pub(super) mod compliance_sort {
     use crate::loader::SourceLoadView;
     use tracing::instrument;
 
-    use super::{ErrorIrScanReport, scan_crate_error_ir_impl};
+    use super::ErrorIrScanReport;
+    use super::chain::scan_crate_error_ir_impl;
+
+    impl ErrorIrScanReport {
+        /// Internal report.
+        #[instrument(level = "trace", skip(self))]
+        pub fn internal_report(
+            &self,
+            crate_name: &str,
+        ) -> crate::etiquettes::internal_error_chain::InternalErrorChainScanReport {
+            crate::etiquettes::internal_error_chain::InternalErrorChainScanReport::new(
+                crate_name.to_string(),
+                self.type_graph.clone(),
+                crate::etiquettes::internal_error_chain::InternalErrorComplianceReport::new(
+                    crate_name.to_string(),
+                    self.compliance.clone(),
+                ),
+                self.signature_checks.clone(),
+            )
+        }
+    }
 
     #[instrument(level = "debug")]
     pub(crate) fn scan_crate_error_ir_with_absolute_paths(
@@ -115,6 +111,7 @@ pub(super) mod compliance_sort {
             false,
         )?;
         report.sites = sites;
+        report.chain = crate::ir::SourceErrorChains::collect(&source, crate_root)?.records();
         Ok(report)
     }
 

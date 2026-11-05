@@ -16,7 +16,11 @@ mod crate_kind;
 #[cfg(feature = "rustdoc")]
 mod crate_load;
 mod edge;
+#[cfg(feature = "error_chain")]
+mod error_chains_source;
 mod error_family;
+#[cfg(feature = "error_chain")]
+pub use error_chains_source::{ATTR_SOURCE_ERROR_CHAINS, ErrorChainsFile, SourceErrorChains};
 #[cfg(feature = "error_sites")]
 mod error_sites_source;
 #[cfg(feature = "error_sites")]

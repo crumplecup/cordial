@@ -116,8 +116,9 @@ pub use etiquettes::doc_warnings::{
 };
 #[cfg(feature = "error_chain")]
 pub use etiquettes::error_chain::{
-    ERROR_CHAIN_ETIQUETTE, ErrorChainProbeId, ErrorChainRecord, probe_counts,
-    scan_crate_error_chain, scan_rust_source as scan_error_chain_rust_source,
+    ATTR_SOURCE_ERROR_CHAINS, ERROR_CHAIN_ETIQUETTE, ErrorChainProbeId, ErrorChainRecord,
+    ErrorChainsFile, SourceErrorChains, probe_counts, scan_crate_error_chain,
+    scan_rust_source as scan_error_chain_rust_source,
 };
 #[cfg(feature = "error_sites")]
 pub use etiquettes::error_sites::{

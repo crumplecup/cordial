@@ -141,6 +141,20 @@ pub trait IrView {
             .transpose()?)
     }
 
+    /// Read required chain evidence without source syntax or private caches.
+    #[cfg(feature = "error_chain")]
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn source_error_chains(&self) -> CordialResult<super::SourceErrorChains> {
+        let root = self.root()?;
+        let value = self
+            .node(root)
+            .and_then(|node| node.attr(super::ATTR_SOURCE_ERROR_CHAINS).cloned())
+            .ok_or_else(|| {
+                crate::CordialError::workspace_source_facts_missing("source error-chain inventory")
+            })?;
+        Ok(serde_json::from_value(value)?)
+    }
+
     /// Read required error-site evidence without accessing source syntax.
     #[cfg(feature = "error_sites")]
     #[instrument(level = "trace", skip(self), err(level = "warn"))]

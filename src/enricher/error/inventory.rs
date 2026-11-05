@@ -1,13 +1,13 @@
-//! Compatibility hook for remaining error-chain evidence.
+//! Compatibility hook for remaining internal architecture and apply evidence.
 
 use crate::error::CordialResult;
 use crate::hooks::{SourceEnrichView, SourceEnricher};
 use tracing::instrument;
 
-#[cfg(feature = "error_chain")]
-mod chain;
+#[cfg(feature = "internal_error_chain")]
+mod internal;
 
-/// Collect remaining error facts and join chain annotations to located site nodes.
+/// Collect internal architecture, compliance and apply evidence pending migration.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ErrorIrScanEnricher;
 
@@ -29,9 +29,9 @@ impl SourceEnricher for ErrorIrScanEnricher {
 
     #[instrument(level = "trace", skip(self, view))]
     fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
-        #[cfg(feature = "error_chain")]
-        chain::enrich(view)?;
-        #[cfg(not(feature = "error_chain"))]
+        #[cfg(feature = "internal_error_chain")]
+        internal::enrich(view)?;
+        #[cfg(not(feature = "internal_error_chain"))]
         let _ = view;
         Ok(())
     }
