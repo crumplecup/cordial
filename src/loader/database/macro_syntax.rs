@@ -9,14 +9,17 @@ use ra_ap_syntax::{AstNode, Parse, SyntaxNode, ast};
 use std::collections::HashMap;
 
 #[salsa::interned]
-struct Payload<'db> {
+pub(super) struct Payload<'db> {
     text: String,
 }
 
 #[salsa::tracked(returns(ref))]
 #[tracing::instrument(level = "debug", skip(db, key))]
 #[hotpath::measure]
-fn expression<'db>(db: &'db dyn SemanticDatabase, key: Payload<'db>) -> Parse<ast::Expr> {
+pub(super) fn expression<'db>(
+    db: &'db dyn SemanticDatabase,
+    key: Payload<'db>,
+) -> Parse<ast::Expr> {
     ast::Expr::parse(key.text(db), ra_ap_syntax::Edition::CURRENT)
 }
 
@@ -37,6 +40,7 @@ impl DatabaseMacroSyntax {
             .unwrap_or_default()
     }
 
+    #[cfg(feature = "tracing")]
     #[tracing::instrument(level = "trace", skip(self, invocation))]
     pub(crate) fn items(&self, invocation: &ast::MacroCall) -> &[ast::Item] {
         self.items
@@ -61,7 +65,10 @@ impl DatabaseMacroSyntax {
                         | "debug_assert_eq"
                         | "debug_assert_ne"
                 )
-            ) {
+            ) || name
+                .as_deref()
+                .is_some_and(|name| name.rsplit("::").next() == Some("format"))
+            {
                 let arguments = file.macro_arguments(&invocation);
                 for arg in &arguments {
                     self.collect(file, arg.syntax());

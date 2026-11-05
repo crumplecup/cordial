@@ -2,6 +2,8 @@
 
 #[cfg(feature = "cli_layout")]
 mod cli_layout;
+#[cfg(feature = "internal_error_chain")]
+mod error_architecture;
 #[cfg(feature = "error_chain")]
 mod error_chains;
 #[cfg(feature = "internal_error_chain")]

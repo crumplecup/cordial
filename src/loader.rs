@@ -1,6 +1,8 @@
+#[cfg(any(feature = "cli_layout", feature = "internal_error_chain"))]
+pub(crate) use database::module_path as database_module_path;
 use tracing::instrument;
 mod database;
-#[cfg(feature = "tracing")]
+#[cfg(any(feature = "tracing", feature = "internal_error_chain"))]
 pub(crate) use database::DatabaseMacroSyntax;
 pub(crate) use database::DatabaseSource;
 pub use database::SourceDatabase;

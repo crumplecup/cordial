@@ -119,6 +119,12 @@ impl SourceDatabase {
             crate::ir::ATTR_SOURCE_ERROR_SIGNATURES,
             serde_json::to_value(self.project_error_signatures(target.crate_root())?)?,
         )?;
+        #[cfg(feature = "internal_error_chain")]
+        graph.set_attr(
+            graph.root(),
+            crate::ir::ATTR_SOURCE_ERROR_ARCHITECTURE,
+            serde_json::to_value(self.project_error_architecture(target)?)?,
+        )?;
         let mut projection = Projection::default();
         let sema = Semantics::new(&self.db);
         for path in paths {
@@ -135,7 +141,7 @@ impl SourceDatabase {
                 return Err(anyhow::Error::new(error.clone()).into());
             }
             let source = DatabaseSource::new(
-                #[cfg(feature = "tracing")]
+                #[cfg(any(feature = "tracing", feature = "internal_error_chain"))]
                 &self.db,
                 path,
                 text,

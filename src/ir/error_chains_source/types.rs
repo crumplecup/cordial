@@ -108,7 +108,7 @@ fn from_source(item: &ast::Impl) -> Option<ast::Type> {
 }
 
 #[tracing::instrument(level = "trace", skip(ty))]
-pub(in crate::ir) fn type_label(ty: &ast::Type) -> String {
+pub(crate) fn type_label(ty: &ast::Type) -> String {
     match ty {
         ast::Type::PathType(ty) => ty
             .path()

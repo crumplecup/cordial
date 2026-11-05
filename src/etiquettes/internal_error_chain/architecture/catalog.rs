@@ -10,6 +10,7 @@ use tracing::instrument;
 
 mod fanout;
 mod fields;
+mod native;
 mod visitor;
 
 pub(super) use fanout::{FanoutCall, FanoutTarget, FanoutWrapper};

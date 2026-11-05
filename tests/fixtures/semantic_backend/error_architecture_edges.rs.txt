@@ -1,0 +1,93 @@
+//! Architecture syntax policy remains independent of active Cargo cfgs.
+/// A real static alias, not a policy exemption.
+type Label = &'static str;
+type Duplicate = &'static str;
+#[cfg(other)]
+type Duplicate = &'static str;
+#[custom]
+type Opaque = &'static str;
+type Wrapped = (&'static str);
+
+/// The first doc comment is also the declaration span.
+#[derive(Error, Copy)]
+struct EdgeSource<'a, T, const N: usize> {
+    file: Label,
+    line: usize,
+    shadow: T,
+    duplicate: Duplicate,
+    opaque: Opaque,
+    wrapped: Wrapped,
+    qualified: ::std::string::String,
+    nested: Option<(&'a String, [u8; N])>,
+    slice: [&'a String],
+    pointer: *const &'a String,
+    function: fn() -> String,
+    assoc: <T as external::Trait>::Error,
+    unqualified_assoc: <T>::Error,
+    generic_args: GenericCopy<'a, N, Item = String>,
+    function_trait: dyn Fn(u32) -> String,
+}
+#[derive(some::Copy)]
+struct QualifiedCopy;
+impl Copy for ManualCopy {}
+struct ManualCopy;
+#[derive(Error)]
+enum RecordError {
+    /// Variant docs count in the source span.
+    Named { file: Label, value: QualifiedCopy },
+    Pair(ManualCopy, &'static String),
+    Empty,
+}
+#[cfg(test)]
+struct IgnoredSource { message: String }
+#[cfg(not(any()))]
+#[derive(Error)]
+struct InactiveSource { message: String }
+impl std::error::Error for ManualError {}
+struct ManualError { source: std::io::Error, file: Label, line: u32 }
+
+impl EdgeSource<'_, (), 2> {
+    /// Constructor docs are retained too.
+    #[track_caller]
+    #[custom::instrument(ret, skip(message), level = "trace")]
+    fn new(message: String) -> Self { arbitrary().caller(); todo!() }
+    #[tracing::instrument(ret(level = "trace"))]
+    fn with_location(file: u32, x: &std::panic::Location) -> Self { todo!() }
+    #[tracing::instrument(ret, bad =)]
+    fn malformed_meta() -> Self { todo!() }
+    #[tracing::instrument(field = Generic::<u8, u16>::new(), ret)]
+    fn generic_meta() -> Self { todo!() }
+    #[tracing::instrument(field = |x, y| x + y, ret)]
+    fn closure_meta() -> Self { todo!() }
+    fn ignored_receiver(&self) -> Self { todo!() }
+    fn wrap(message: &str) -> Self { Self::new(AnotherKind::Edge(EdgeSource::new(message))) }
+    fn semi(message: String) -> Self { EdgeSource::new(message); }
+}
+impl From<std::io::Error> for ManualError {
+    #[track_caller]
+    fn from(source: std::io::Error) -> Self { fn inner() { let _ = Location::caller; } todo!() }
+}
+trait Custom { fn method() { let _ = EdgeSource::new("trait"); } }
+#[cfg(test)]
+impl ManualError { fn nested() { let _ = EdgeSource::new("impl test still visited"); } }
+fn extras() {
+    let _ = AnotherKind::Edge((EdgeSource::new((r#"raw\text"#).to_owned())));
+    let _ = EdgeSource::new("bare".to_string());
+    let _ = EdgeSource::new(format!(("not a direct literal")));
+    let _ = EdgeSource::new(format!("value, {}", 2));
+    let _ = <ManualError as From<std::io::Error>>::from("qualified");
+    let _ = action().map_err(<ManualError as From<std::io::Error>>::from);
+    let _ = action().map_err((ManualError::from));
+    let _ = action().map_err(|e| ManualError::from(e));
+    opaque! { EdgeSource::new("not visited") }
+    fn inner(message: &str) -> ManualError { Outer::new(OtherSource::new(message)) }
+}
+#[cfg(test)]
+fn ignored() { let _ = EdgeSource::new("ignored"); }
+mod aliases {
+    type Label = &'static str;
+    #[derive(Error)]
+    struct Shadow<Label> { file: Label }
+    #[derive(Error)]
+    struct Nested { file: Label }
+}

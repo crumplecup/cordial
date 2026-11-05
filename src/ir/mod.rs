@@ -26,7 +26,11 @@ mod error_family;
 #[cfg(feature = "internal_error_chain")]
 mod error_signatures_source;
 #[cfg(feature = "internal_error_chain")]
-pub(crate) use {error_sites_source::native::excluded_module, error_types_source::derives_error};
+pub(crate) use {
+    error_chains_source::types::type_label as native_error_type_label,
+    error_sites_source::native::{excluded_module, path_label as native_error_path_label},
+    error_types_source::derives_error,
+};
 #[cfg(feature = "internal_error_chain")]
 mod error_types_source;
 #[cfg(feature = "error_chain")]

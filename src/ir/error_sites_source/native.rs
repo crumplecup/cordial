@@ -290,20 +290,23 @@ fn callee(expr: &ast::Expr) -> String {
 }
 
 #[tracing::instrument(level = "trace", skip(path))]
-pub(in crate::ir) fn path_label(path: &ast::Path) -> String {
+pub(crate) fn path_label(path: &ast::Path) -> String {
     let mut names = Vec::new();
     let mut current = Some(path.clone());
     while let Some(path) = current {
         if let Some(segment) = path.segment() {
             if let Some(name) = segment.name_ref() {
                 names.push(name.text().to_string());
-            } else if let Some(ast::PathSegmentKind::Type {
-                trait_ref: Some(trait_ref),
-                ..
-            }) = segment.kind()
-                && let Some(path) = trait_ref.path()
+            } else if let Some(anchor) = segment.type_anchor()
+                && anchor.as_token().is_some()
+                && let Some(trait_path) = anchor
+                    .syntax()
+                    .children()
+                    .filter_map(ast::PathType::cast)
+                    .last()
+                    .and_then(|ty| ty.path())
             {
-                names.push(path_label(&path));
+                names.push(path_label(&trait_path));
             }
         }
         current = path.qualifier();

@@ -1,6 +1,6 @@
 # A shared semantic backend with Salsa and rust-analyzer
 
-**Status:** Active again, 2026-10-31. The next milestone is the production
+**Status:** Active, 2026-11-05. The next milestone is the production
 frontend cutover: one rust-analyzer/Salsa database supplies collection and
 semantic evidence through the shared IR, and the replaced parsing ownership
 is removed. Tracing's remaining semantic work depends on this milestone.
@@ -633,7 +633,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity` and `pageantry` consume loader-projected IR | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
 | API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
-| Error analysis | Sites, chain records, type relationships, expression compliance and signature-chain assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`). Architecture policy consumes required `SourceErrorArchitecture` facts; its native collector and apply collection remain. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
+| Error analysis | Sites, chain records, type relationships, expression compliance, signature-chain and architecture assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`, `SourceErrorArchitecture`). Apply collection remains. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
 | Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |
 | Panic and proof collectors | `panics/{scan,kani_reach}`, `verus_ir/parse.rs`, `antipatterns/{scan,contract_bounds}` | Macro payloads, proof dialect syntax, Kani/Creusot/Verus contracts. No fallback whole-file parser. Resolve the dialect capability before retiring its current support. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
@@ -943,13 +943,27 @@ Regression coverage reassesses Owned/Borrowed and fan-out policy without
 recollection, checks complete serialization and required fields, mutates retained
 Copy evidence, and replays materialization after source deletion.
 
-The native architecture collector is next. Production retains the compatibility
-frontend until the remaining consumers and Cargo context support the cutover.
+The native architecture collector now produces the same contracts directly from
+canonical database trees. Library reachability follows virtual module revisions,
+including inline modules and explicit paths. Field aliases, generic shadowing,
+Copy requirements, qualified conversions, constructor attributes and opaque macro
+boundaries have complete payload parity coverage. Attribute values and literal
+fan-out macros use the loader's memoized grammar queries; collectors do not parse
+payloads privately. Assessment and materialization replay after source deletion
+and database disposal. Production retains the compatibility frontend until the
+remaining consumers and Cargo context support the cutover.
 
 Validation: the required-inventory regression and all 39 internal-error tests
 passed with only `internal_error_chain` enabled. The inventory regression also
 passed with full features. Tracing apply checked off both gate findings, and
 build-tier submit verified them with zero open items. The deep tier was not run.
+
+Native validation on 2026-11-05: complete architecture parity passed with the
+isolated etiquette and with full features, including generic and closure commas
+in attribute values. The full-feature CLI-layout, error-chain, error-site,
+signature-chain and internal-error suites passed with the shared grammar and
+module resolver changes. Tracing apply repaired two annotations; build-tier
+submit verified zero open items (list 45). The deep tier was not run.
 
 ## Current next step
 
