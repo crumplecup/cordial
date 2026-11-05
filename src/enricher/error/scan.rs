@@ -57,6 +57,11 @@ pub fn scan_crate_error_ir(
     {
         report.chain = crate::ir::SourceErrorChains::collect(&source, crate_root)?.records();
     }
+    #[cfg(feature = "internal_error_chain")]
+    {
+        report.type_graph =
+            crate::ir::SourceErrorTypes::collect(&source, crate_root)?.report(crate_name, true)?;
+    }
     report.sites = sites;
     Ok(report)
 }
@@ -110,6 +115,8 @@ pub(super) mod compliance_sort {
             crate::config::ErrorFieldStrategy::default(),
             false,
         )?;
+        report.type_graph =
+            crate::ir::SourceErrorTypes::collect(&source, crate_root)?.report(crate_name, false)?;
         report.sites = sites;
         report.chain = crate::ir::SourceErrorChains::collect(&source, crate_root)?.records();
         Ok(report)

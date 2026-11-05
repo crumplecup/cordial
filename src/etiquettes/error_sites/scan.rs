@@ -33,12 +33,10 @@ pub(crate) fn scan_rust_syntax(
     tree_root: &Path,
     crate_root: &Path,
 ) -> CordialResult<Vec<ErrorSiteRecord>> {
-    let src_root = crate_root.join("src");
     Ok(crate::etiquettes::scan_rust_file_syntax(
         file.syntax(),
         file.path(),
         tree_root,
-        &src_root,
         crate_root,
         "",
         crate::etiquettes::ErrorIrScanLayers::SITES_ONLY,

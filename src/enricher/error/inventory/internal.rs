@@ -54,68 +54,6 @@ fn materialize_error_ir(
     report: &crate::enricher::error::scan::ErrorIrScanReport,
 ) -> CordialResult<()> {
     {
-        for node in report.type_graph().nodes() {
-            let parent = resolve_parent(ir, node.type_path())?;
-            let file = crate_root.join(node.file());
-            let span = FileSpan::new(file.clone(), node.line(), 1);
-            let ir_node = ir.insert_node(
-                NodeWeight::new(NodeKind::Expr)
-                    .with_span(span.clone())
-                    .with_name(node.snippet().clone()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "internal_error_record_kind",
-                serde_json::Value::String("type_graph".to_string()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "type_path",
-                serde_json::Value::String(node.type_path().clone()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "node_class",
-                serde_json::Value::String(node.node_class().to_string()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "probe_id",
-                serde_json::Value::String(node.probe_id().to_string()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "source_target",
-                serde_json::Value::String(node.source_target().clone().unwrap_or_default()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "reaches_foreign",
-                serde_json::Value::Bool(node.reaches_foreign()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "chain_depth",
-                serde_json::Value::Number(node.chain_depth().into()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "snippet",
-                serde_json::Value::String(node.snippet().clone()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "file",
-                serde_json::Value::String(file.display().to_string()),
-            )?;
-            ir.set_attr(
-                ir_node,
-                "line",
-                serde_json::Value::Number(node.line().into()),
-            )?;
-            ir.insert_edge(parent, ir_node, EdgeKind::Contains)?;
-        }
-
         for finding in report.compliance() {
             let parent = resolve_parent(ir, finding.context())?;
             let file = crate_root.join(finding.file());

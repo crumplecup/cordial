@@ -40,8 +40,6 @@ pub struct ErrorIrScanLayers {
     chain: bool,
     #[getter(copy)]
     compliance: bool,
-    #[getter(copy)]
-    type_graph: bool,
     /// Whether the crate being scanned builds as a `proc-macro = true`
     /// library. Only meaningful to the `compliance` layer, which uses it
     /// to recognize `syn::Error` as that kind of crate's real diagnostic
@@ -55,7 +53,6 @@ impl ErrorIrScanLayers {
         sites: true,
         chain: false,
         compliance: false,
-        type_graph: false,
         is_proc_macro_crate: false,
     };
 
@@ -63,11 +60,10 @@ impl ErrorIrScanLayers {
     #[instrument(level = "debug")]
     pub fn for_unified_file(under_src: bool, is_proc_macro_crate: bool) -> Self {
         Self {
-            // The source loader has already collected the site census.
+            // The source loader has already collected sites, chains and type relationships.
             sites: false,
             chain: false,
             compliance: under_src,
-            type_graph: under_src,
             is_proc_macro_crate,
         }
     }
@@ -81,29 +77,10 @@ pub struct ErrorIrFileScan {
     chain: Vec<crate::etiquettes::error_chain::ErrorChainRecord>,
     #[cfg(feature = "internal_error_chain")]
     compliance: Vec<crate::etiquettes::internal_error_chain::InternalErrorComplianceFinding>,
-    #[cfg(feature = "internal_error_chain")]
-    type_graph_raw: Vec<crate::etiquettes::internal_error_chain::RawTypeNode>,
-    #[cfg(feature = "internal_error_chain")]
-    error_impls: std::collections::BTreeSet<String>,
 }
 
 impl ErrorIrFileScan {
-    #[instrument(level = "trace", skip(self, type_graph_raw, error_impls))]
-    #[cfg(feature = "internal_error_chain")]
-    pub(super) fn with_type_graph(
-        mut self,
-        type_graph_raw: Vec<crate::etiquettes::internal_error_chain::RawTypeNode>,
-        error_impls: std::collections::BTreeSet<String>,
-    ) -> Self {
-        self.type_graph_raw = type_graph_raw;
-        self.error_impls = error_impls;
-        self
-    }
-
-    #[instrument(
-        level = "debug",
-        skip(sites, chain, compliance, type_graph_raw, error_impls)
-    )]
+    #[instrument(level = "debug", skip(sites, chain, compliance))]
     pub(super) fn from_parts(
         sites: Vec<ErrorSiteRecord>,
         #[cfg(feature = "error_chain")] chain: Vec<
@@ -112,10 +89,6 @@ impl ErrorIrFileScan {
         #[cfg(feature = "internal_error_chain")] compliance: Vec<
             crate::etiquettes::internal_error_chain::InternalErrorComplianceFinding,
         >,
-        #[cfg(feature = "internal_error_chain")] type_graph_raw: Vec<
-            crate::etiquettes::internal_error_chain::RawTypeNode,
-        >,
-        #[cfg(feature = "internal_error_chain")] error_impls: std::collections::BTreeSet<String>,
     ) -> Self {
         Self {
             sites,
@@ -123,10 +96,6 @@ impl ErrorIrFileScan {
             chain,
             #[cfg(feature = "internal_error_chain")]
             compliance,
-            #[cfg(feature = "internal_error_chain")]
-            type_graph_raw,
-            #[cfg(feature = "internal_error_chain")]
-            error_impls,
         }
     }
 }
@@ -137,7 +106,6 @@ pub fn scan_rust_file_syntax(
     syntax: &syn::File,
     file: &Path,
     tree_root: &Path,
-    src_root: &Path,
     crate_root: &Path,
     crate_name: &str,
     layers: ErrorIrScanLayers,
@@ -152,15 +120,5 @@ pub fn scan_rust_file_syntax(
     );
     visitor.visit_file(syntax);
 
-    let scan = visitor.into_file_scan()?;
-
-    #[cfg(feature = "internal_error_chain")]
-    if layers.type_graph() {
-        let graph = crate::etiquettes::internal_error_chain::scan_error_rust_syntax_raw(
-            syntax, file, src_root,
-        )?;
-        return Ok(scan.with_type_graph(graph.nodes().clone(), graph.error_impls().clone()));
-    }
-
-    Ok(scan)
+    visitor.into_file_scan()
 }

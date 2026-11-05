@@ -6,6 +6,8 @@ mod cli_layout;
 mod error_chains;
 #[cfg(feature = "error_sites")]
 mod error_sites;
+#[cfg(feature = "internal_error_chain")]
+mod error_types;
 #[cfg(feature = "tracing")]
 mod observability;
 #[cfg(feature = "derives")]

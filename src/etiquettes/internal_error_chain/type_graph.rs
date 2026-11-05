@@ -25,10 +25,9 @@ pub fn scan_error_rust_source(
     error_root: &Path,
     crate_name: &str,
 ) -> CordialResult<Vec<InternalErrorTypeNode>> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    let syntax = crate::loader::SourceLoadView::parse_fixture(file, source)?;
     finalize_type_graph(
-        scan_error_rust_syntax_raw(&syntax, file, error_root)?
+        scan_error_rust_syntax_raw(&syntax, error_root)?
             .nodes()
             .clone(),
         crate_name,

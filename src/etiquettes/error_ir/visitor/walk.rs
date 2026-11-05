@@ -77,10 +77,6 @@ impl ErrorIrUnifiedVisitor {
             self.chain_layer.into_records()?,
             #[cfg(feature = "internal_error_chain")]
             self.compliance_layer.into_findings()?,
-            #[cfg(feature = "internal_error_chain")]
-            Vec::new(),
-            #[cfg(feature = "internal_error_chain")]
-            std::collections::BTreeSet::new(),
         ))
     }
 

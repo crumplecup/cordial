@@ -39,8 +39,6 @@ pub(super) fn scan_crate_error_ir_impl(
     let is_proc_macro_crate = source.crate_kinds().contains(&CrateKind::ProcMacro);
     let mut report = ErrorIrScanReport::default();
 
-    let mut type_graph_raw = Vec::<crate::etiquettes::internal_error_chain::RawTypeNode>::new();
-    let mut error_impls = std::collections::BTreeSet::<String>::new();
     let mut signature_chain =
         crate::etiquettes::internal_error_chain::SignatureChainIndex::default();
 
@@ -71,7 +69,6 @@ pub(super) fn scan_crate_error_ir_impl(
                     unit.syntax(),
                     path,
                     &tree_root,
-                    &src_root,
                     crate_root,
                     crate_name,
                     ErrorIrScanLayers::for_unified_file(under_src, is_proc_macro_crate),
@@ -82,33 +79,11 @@ pub(super) fn scan_crate_error_ir_impl(
                 report
                     .compliance
                     .extend(file_scan.compliance().iter().cloned());
-                type_graph_raw.extend(file_scan.type_graph_raw().iter().cloned());
-                error_impls.extend(file_scan.error_impls().iter().cloned());
             }
         }
     }
 
     {
-        type_graph_raw.retain(|node| {
-            crate::etiquettes::internal_error_chain::type_path_is_error_related(
-                node.type_path(),
-                &error_impls,
-            )
-        });
-        let mut nodes = crate::etiquettes::internal_error_chain::finalize_type_graph(
-            type_graph_raw,
-            crate_name,
-        )?;
-        if relative_paths {
-            for node in &mut nodes {
-                node.strip_file_prefix(crate_root);
-            }
-        }
-        report.type_graph =
-            crate::etiquettes::internal_error_chain::InternalErrorTypeGraphReport::new(
-                crate_name.to_string(),
-                nodes,
-            );
         report.compliance.extend(
             crate::etiquettes::internal_error_chain::scan_crate_error_architecture_with_source(
                 crate_root,

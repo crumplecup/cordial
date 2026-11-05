@@ -63,7 +63,7 @@ pub use scan::{
 pub(crate) use signature_chain::SignatureChainIndex;
 pub use signature_chain::{SignatureChainCheck, SignatureChainStatus};
 pub(crate) use type_graph::{
-    RawTypeNode, finalize_type_graph, for_each_shared_src_rust_file, scan_error_rust_syntax_raw,
+    finalize_type_graph, for_each_shared_src_rust_file, scan_error_rust_syntax_raw,
     type_path_is_error_related,
 };
 pub use types::{

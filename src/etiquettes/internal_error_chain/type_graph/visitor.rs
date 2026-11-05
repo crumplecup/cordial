@@ -9,7 +9,9 @@ use syn::{Fields, ItemEnum, ItemImpl, ItemMod, ItemStruct};
 
 use crate::enricher::is_cfg_test;
 use crate::error::CordialResult;
-use crate::loader::module_path_from_src_file;
+use crate::loader::{SharedParsedFile, module_path_from_src_file};
+
+pub(crate) use crate::ir::ErrorTypeSourceNode as RawTypeNode;
 
 use super::super::types::InternalErrorTypeProbeId;
 use super::walk::{
@@ -27,21 +29,20 @@ pub(crate) struct RawTypeGraphScan {
 }
 
 /// Collect raw type-graph nodes from a pre-parsed source file.
-#[instrument(level = "debug", skip(syntax, file))]
+#[instrument(level = "debug", skip(file))]
 pub(crate) fn scan_error_rust_syntax_raw(
-    syntax: &syn::File,
-    file: &Path,
+    file: &SharedParsedFile,
     module_root: &Path,
 ) -> CordialResult<RawTypeGraphScan> {
-    let module_prefix = module_path_from_src_file(module_root, file);
+    let module_prefix = module_path_from_src_file(module_root, file.path());
     let mut visitor = TypeGraphScanVisitor {
-        file: file.to_path_buf(),
+        file: file.path().to_path_buf(),
         module_prefix,
         raw_nodes: Vec::new(),
         error_impls: BTreeSet::new(),
         error: None,
     };
-    visitor.visit_file(syntax);
+    visitor.visit_file(file.syntax());
     if let Some(error) = visitor.error {
         return Err(error);
     }
@@ -49,27 +50,6 @@ pub(crate) fn scan_error_rust_syntax_raw(
         visitor.raw_nodes,
         visitor.error_impls,
     ))
-}
-
-#[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
-#[builder(build_fn(error = "crate::error::CordialError"))]
-pub(crate) struct RawTypeNode {
-    type_path: String,
-    #[getter(copy)]
-    probe_id: InternalErrorTypeProbeId,
-    source_target: Option<String>,
-    file: PathBuf,
-    #[getter(copy)]
-    line: u32,
-    snippet: String,
-}
-
-impl RawTypeNode {
-    /// Start a builder for this value.
-    #[instrument(level = "debug")]
-    pub fn builder() -> RawTypeNodeBuilder {
-        RawTypeNodeBuilder::default()
-    }
 }
 
 struct TypeGraphScanVisitor {

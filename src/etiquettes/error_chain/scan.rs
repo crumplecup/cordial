@@ -37,7 +37,6 @@ pub(crate) fn scan_rust_syntax(
         syntax.syntax(),
         syntax.path(),
         src_root,
-        src_root,
         crate_root,
         "",
         crate::etiquettes::ErrorIrScanLayers::chain_only()?,

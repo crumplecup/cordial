@@ -68,7 +68,6 @@ pub fn scan_compliance_rust_syntax_with_crate_kind(
         syntax,
         file,
         src_root,
-        src_root,
         src_root.parent().unwrap_or(src_root),
         crate_name,
         crate::etiquettes::ErrorIrScanLayers::compliance_only(is_proc_macro_crate)?,

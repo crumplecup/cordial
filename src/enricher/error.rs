@@ -10,6 +10,8 @@ mod chains;
 mod inventory;
 mod scan;
 mod sites;
+#[cfg(feature = "internal_error_chain")]
+mod types;
 
 pub use inventory::ErrorIrScanEnricher;
 #[cfg(feature = "internal_error_chain")]
@@ -42,7 +44,7 @@ mod attenuation {
 
 /// Canonical enricher stack for error-handling runs (feature-gated layers).
 ///
-/// Order after session priority sort: scope → attribute (6) → site inventory (49) → chain inventory / error-ir-scan (50) →
+/// Order after session priority sort: scope → attribute (6) → site inventory (49) → chain / type inventory / error-ir-scan (50) →
 /// error-flow (51) → attenuation (52).
 pub static ERROR_IR_ENRICHERS: &[&'static dyn IrEnricher] = &[
     &SCOPE_ENRICHER,
@@ -50,6 +52,8 @@ pub static ERROR_IR_ENRICHERS: &[&'static dyn IrEnricher] = &[
     &ERROR_SITE_INVENTORY,
     #[cfg(feature = "error_chain")]
     &ERROR_CHAIN_INVENTORY,
+    #[cfg(feature = "internal_error_chain")]
+    &types::ERROR_TYPE_INVENTORY,
     #[cfg(feature = "error_sites")]
     &ERROR_IR_SCAN,
     #[cfg(feature = "error_sites")]
@@ -74,6 +78,10 @@ pub fn error_ir_enricher_ids(layers: ErrorHandlingLayers) -> Vec<&'static str> {
     #[cfg(feature = "error_chain")]
     if layers.sites() || layers.chain() || layers.internal() {
         ids.push(chains::ErrorChainInventoryEnricher::ID);
+    }
+    #[cfg(feature = "internal_error_chain")]
+    if layers.sites() || layers.chain() || layers.internal() {
+        ids.push(types::ErrorTypeInventoryEnricher::ID);
     }
     if layers.attenuation() {
         #[cfg(feature = "foreign_error_attenuation")]

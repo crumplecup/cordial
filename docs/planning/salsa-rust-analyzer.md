@@ -633,7 +633,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity` and `pageantry` consume loader-projected IR | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
 | API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
-| Error analysis | Error sites consume loader-projected `SourceErrorSites` with native collection. Remaining: `enricher/error/scan.rs`, `error_chain`, `internal_error_chain/{architecture,type_graph}` | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
+| Error analysis | Sites, chain records and type relationships consume native loader projections (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`). Remaining: `enricher/error/scan.rs`, internal architecture, compliance and signature-chain collection. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
 | Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |
 | Panic and proof collectors | `panics/{scan,kani_reach}`, `verus_ir/parse.rs`, `antipatterns/{scan,contract_bounds}` | Macro payloads, proof dialect syntax, Kani/Creusot/Verus contracts. No fallback whole-file parser. Resolve the dialect capability before retiring its current support. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
@@ -843,6 +843,36 @@ Validation: complete native chain parity and virtual-revision tests passed with
 full features, alongside the chain and flow suites. Native site parity also
 passed after extracting their shared syntax helpers. The chain-only build was
 warning-free. Build-tier submit finished with zero open items.
+
+## Checkpoint: loader-owned and native error type relationships
+
+The shared loader now retains required `SourceErrorTypes` evidence: per-file
+snapshots, raw type relationships and error implementors, including empty files.
+Crate-wide filtering, graph metrics and expression materialization consume that
+inventory through `IrView`. The compatibility error scan no longer collects or
+materializes this type graph. Standalone fixtures use the shared parse carrier.
+
+The native collector reads the canonical database tree directly. It preserves
+the existing policy grammar, module names, source targets, spans and snippets;
+this port does not claim semantic resolution of those names. Complete raw
+payload and graph parity covers struct, enum and source-method relationships,
+derive and cross-file implementors, inactive code, nested modules, qualified
+types, opaque macros, test-module exclusions and Unicode. Virtual changes to
+an implementor invalidate the dependent graph without touching disk. Restoration
+recovers the original evidence, malformed inputs fail closed, and production
+materialization replays after source deletion and database disposal.
+
+Production source ownership still awaits the remaining error/apply and
+panic/proof collectors and the complete Cargo context driver. The compatibility
+frontend is retired at that cutover, not retained as an alternative backend.
+
+Validation: 51 focused tests passed with full features across the type parity,
+chain, flow and internal-error suites. Both type-inventory tests also passed
+with only `internal_error_chain` enabled, without compiler warnings.
+After consolidating the collector layout and feature registration, the full-feature
+type parity suite passed again. Build-tier submit verified all three organization
+fixes and finished with zero open items. The deep tier remains reserved for the
+end-of-plan milestone.
 
 ## Current next step
 

@@ -108,7 +108,7 @@ fn from_source(item: &ast::Impl) -> Option<ast::Type> {
 }
 
 #[tracing::instrument(level = "trace", skip(ty))]
-pub(super) fn type_label(ty: &ast::Type) -> String {
+pub(in crate::ir) fn type_label(ty: &ast::Type) -> String {
     match ty {
         ast::Type::PathType(ty) => ty
             .path()
@@ -127,7 +127,7 @@ pub(super) fn type_label(ty: &ast::Type) -> String {
 }
 
 #[tracing::instrument(level = "trace", skip(ty))]
-fn is_string(ty: &ast::Type) -> bool {
+pub(in crate::ir) fn is_string(ty: &ast::Type) -> bool {
     match ty {
         ast::Type::PathType(ty) => ty.path().is_some_and(|path| {
             path.qualifier().is_none()

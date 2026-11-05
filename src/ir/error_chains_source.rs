@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 mod expressions;
-mod types;
+pub(super) mod types;
 
 /// Required crate-wide chain inventory on the shared graph root.
 pub const ATTR_SOURCE_ERROR_CHAINS: &str = "source_error_chains";

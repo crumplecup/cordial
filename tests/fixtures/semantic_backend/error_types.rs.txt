@@ -1,0 +1,58 @@
+mod child;
+#[derive(thiserror::Error)]
+struct Wrapper { #[source] source: std::io::Error }
+impl std::error::Error for Wrapper {
+    fn source(&self) -> Option<&dyn std::error::Error> {
+        match self { _ => child::SOURCE }
+    }
+}
+struct CrossFile { source: Wrapper }
+struct Unrelated { source: std::io::Error }
+#[derive(Error)]
+enum Family {
+    Text(String),
+    Borrowed(&'static String),
+    Io(Wrapper),
+    Named { err: Wrapper, message: String },
+    Detail { detail: String },
+    Plain { path: &'static String },
+    StringSource { source: String, message: String },
+    Multi(Wrapper, String),
+    Unit,
+    Qualified(<Wrapper as Contract>::Source),
+    Parenthesized((Wrapper)),
+    Absolute(::std::io::Error),
+}
+#[cfg(any())]
+mod dormant {
+    #[derive(Error)] struct Inactive { source: ::std::io::Error }
+    mod inner {
+        #[derive(thiserror::Error)]
+        struct Nested { source: super::Inactive }
+    }
+}
+struct CordialError { kind: CordialErrorKind }
+impl core::error::Error for CordialError {}
+#[cfg(test)] mod excluded {
+    #[derive(Error)] enum Hidden { Text(String) }
+}
+macro_rules! opaque { () => { #[derive(Error)] enum Hidden { Text(String) } } }
+fn nested_types() {
+    #[derive(Error)] struct Local { source: std::io::Error }
+}
+// Unicode tests byte offsets without changing the line contract: λ
+#[derive(Debug, Error, Clone)]
+struct Unicode { source: Wrapper }
+impl std::error::Error for Unicode {
+    fn source(&self) -> Option<&dyn std::error::Error> {
+        let ignored = 1;
+        match self { _ => None }
+    }
+}
+struct CallOnly { source: Wrapper }
+impl std::error::Error for CallOnly {
+    fn source(&self) -> Option<&dyn std::error::Error> {
+        match self { _ => Some(&self.source) }
+    }
+}
+fn read() -> Result<(), Wrapper> { std::fs::read("x")?; Ok(()) }

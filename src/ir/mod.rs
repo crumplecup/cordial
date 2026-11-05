@@ -19,8 +19,14 @@ mod edge;
 #[cfg(feature = "error_chain")]
 mod error_chains_source;
 mod error_family;
+#[cfg(feature = "internal_error_chain")]
+mod error_types_source;
 #[cfg(feature = "error_chain")]
 pub use error_chains_source::{ATTR_SOURCE_ERROR_CHAINS, ErrorChainsFile, SourceErrorChains};
+#[cfg(feature = "internal_error_chain")]
+pub use error_types_source::{
+    ATTR_SOURCE_ERROR_TYPES, ErrorTypeSourceNode, ErrorTypesFile, SourceErrorTypes,
+};
 #[cfg(feature = "error_sites")]
 mod error_sites_source;
 #[cfg(feature = "error_sites")]
