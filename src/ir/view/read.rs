@@ -88,6 +88,17 @@ pub trait IrView {
         evidence::optional(self, id, crate::ir::ATTR_SOURCE_TRACING_INVENTORY)
     }
 
+    /// Read required architecture contracts without source or private caches.
+    #[cfg(feature = "internal_error_chain")]
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn source_error_architecture(&self) -> CordialResult<crate::ir::SourceErrorArchitecture> {
+        evidence::required(
+            self,
+            crate::ir::ATTR_SOURCE_ERROR_ARCHITECTURE,
+            "source error-architecture inventory",
+        )
+    }
+
     /// Read required conversion signatures without source or private caches.
     #[cfg(feature = "internal_error_chain")]
     #[instrument(level = "trace", skip(self), err(level = "warn"))]

@@ -1,0 +1,71 @@
+type FileName = &'static str;
+#[derive(Copy)]
+struct Token(u32);
+#[derive(Copy)]
+struct GenericCopy<T>(T);
+struct NotCopy;
+
+#[derive(thiserror::Error)]
+struct ParentError {
+    kind: Box<ParentKind>,
+    file: String,
+    line: u32,
+}
+enum ParentKind {
+    Native(NativeSource),
+    Io(IoSource),
+}
+#[derive(thiserror::Error)]
+struct NativeSource {
+    file: FileName,
+    line: u32,
+    message: String,
+    borrowed_string: Option<&'static String>,
+    token: Token,
+    generic: GenericCopy<u32>,
+    bad_generic: GenericCopy<String>,
+    pair: (u32, &'static NotCopy),
+    array: [u8; 4],
+    pointer: *const NotCopy,
+    source: std::io::Error,
+}
+#[derive(thiserror::Error)]
+struct IoSource(std::io::Error);
+
+impl ParentError {
+    #[track_caller]
+    #[tracing::instrument(ret)]
+    fn new(kind: ParentKind) -> Self {
+        let location = std::panic::Location::caller();
+        Self { kind: Box::new(kind), file: location.file().into(), line: location.line() }
+    }
+    fn native(message: String) -> Self {
+        Self::new(ParentKind::Native(NativeSource::new(message)))
+    }
+}
+impl NativeSource {
+    #[track_caller]
+    fn new(message: String) -> Self { todo!() }
+}
+impl From<std::io::Error> for IoSource {
+    fn from(source: std::io::Error) -> Self { Self(source) }
+}
+fn calls() {
+    let _ = ParentError::native("first".into());
+    let _ = ParentKind::Native(NativeSource::new(format!("second {}", 2)));
+    let _ = NativeSource::new(custom::format!("third {}", 3));
+    let _ = work().map_err(ParentError::new);
+}
+fn wrap(message: impl Into<String>) -> ParentError {
+    ParentError::new(ParentKind::Native(NativeSource::new(message)))
+}
+mod child {
+    type FileName = &'static str;
+    #[derive(Error)]
+    struct ChildSource<FileName> { file: FileName, line: u32 }
+}
+#[cfg(test)]
+mod tests {
+    #[derive(Error)]
+    struct Ignored { message: String }
+}

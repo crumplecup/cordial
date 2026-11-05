@@ -1,21 +1,23 @@
 //! Collected Error-implementing types for architecture lints.
 
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
-use syn::Type;
 
 use super::super::type_graph::last_ident;
 
 use tracing::instrument;
 
 mod fanout;
+mod fields;
 mod visitor;
 
 pub(super) use fanout::{FanoutCall, FanoutTarget, FanoutWrapper};
+use fields::FieldType;
 pub(super) use visitor::CatalogVisitor;
 
-#[derive(Debug, Clone, derive_getters::Getters)]
-pub(super) struct StructInfo {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub(crate) struct StructInfo {
     ident: String,
     type_path: String,
     file: PathBuf,
@@ -43,8 +45,8 @@ impl StructInfo {
     }
 }
 
-#[derive(Debug, Clone, derive_getters::Getters)]
-pub(super) struct VariantInfo {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub(crate) struct VariantInfo {
     name: String,
     #[getter(copy)]
     line: u32,
@@ -52,8 +54,8 @@ pub(super) struct VariantInfo {
     payloads: Vec<String>,
 }
 
-#[derive(Debug, Clone, derive_getters::Getters)]
-pub(super) struct EnumInfo {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub(crate) struct EnumInfo {
     ident: String,
     type_path: String,
     file: PathBuf,
@@ -63,8 +65,8 @@ pub(super) struct EnumInfo {
     variants: Vec<VariantInfo>,
 }
 
-#[derive(Debug, Clone, derive_getters::Getters)]
-pub(super) struct ConstructorRec {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub(crate) struct ConstructorRec {
     self_ident: String,
     name: String,
     #[getter(copy)]
@@ -82,8 +84,8 @@ pub(super) struct ConstructorRec {
     takes_location_arg: bool,
 }
 
-#[derive(Debug, Clone, derive_getters::Getters)]
-pub(super) struct MapErrSite {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub(crate) struct MapErrSite {
     type_ident: String,
     method: String,
     file: PathBuf,
@@ -91,19 +93,19 @@ pub(super) struct MapErrSite {
     line: u32,
 }
 
-#[derive(Debug, Clone, derive_getters::Getters)]
-pub(super) struct ErrorField {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub(crate) struct ErrorField {
     owner: String,
     name: String,
     context: String,
     file: PathBuf,
     #[getter(copy)]
     line: u32,
-    ty: Type,
+    ty: FieldType,
 }
 
-#[derive(Debug, Clone, derive_getters::Getters)]
-pub(super) struct Catalog {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+pub(crate) struct Catalog {
     crate_name: String,
     structs: BTreeMap<String, StructInfo>,
     enums: BTreeMap<String, EnumInfo>,
@@ -118,7 +120,7 @@ pub(super) struct Catalog {
 
 impl Catalog {
     #[instrument(level = "debug", fields(crate_name = crate_name))]
-    pub(super) fn new(crate_name: &str) -> Self {
+    pub(crate) fn new(crate_name: &str) -> Self {
         Self {
             crate_name: crate_name.to_string(),
             structs: BTreeMap::new(),

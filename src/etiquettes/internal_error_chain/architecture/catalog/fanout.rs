@@ -2,14 +2,24 @@
 
 use std::path::PathBuf;
 
+use crate::loader::{SharedMacroSyntax, SharedParsedFile};
+use serde::{Deserialize, Serialize};
 use syn::{
-    Expr, FnArg, GenericArgument, Lit, Pat, PathArguments, ReturnType, Signature, Stmt, Token,
-    Type, punctuated::Punctuated,
+    Expr, FnArg, GenericArgument, Lit, Pat, PathArguments, ReturnType, Signature, Stmt, Type,
 };
 use tracing::instrument;
 
 #[derive(
-    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, derive_new::new, derive_getters::Getters,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    derive_new::new,
+    derive_getters::Getters,
 )]
 pub(crate) struct FanoutTarget {
     kind: Option<String>,
@@ -23,7 +33,9 @@ pub(crate) struct FanoutTarget {
 /// `::invariant`, and similar) are deliberately defined once and
 /// called from every other file in the crate; keying the match on the
 /// definition site's file silently dropped every one of those calls.
-#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+)]
 pub(crate) struct FanoutWrapper {
     file: PathBuf,
     self_ty: Option<String>,
@@ -33,7 +45,9 @@ pub(crate) struct FanoutWrapper {
     target: FanoutTarget,
 }
 
-#[derive(Debug, Clone, derive_new::new, derive_getters::Getters)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+)]
 pub(crate) struct FanoutCall {
     file: PathBuf,
     #[getter(copy)]
@@ -114,8 +128,11 @@ fn forwarded_target(expr: &Expr, param: &str) -> Option<FanoutTarget> {
     Some(target)
 }
 
-#[instrument(level = "trace", skip(call))]
-pub(super) fn direct_target(call: &syn::ExprCall) -> Option<(FanoutTarget, String)> {
+#[instrument(level = "trace", skip(call, input))]
+pub(super) fn direct_target(
+    call: &syn::ExprCall,
+    input: &SharedParsedFile,
+) -> Option<(FanoutTarget, String)> {
     if call.args.len() != 1 {
         return None;
     }
@@ -135,7 +152,7 @@ pub(super) fn direct_target(call: &syn::ExprCall) -> Option<(FanoutTarget, Strin
     if name != "new" || !source.to_string().ends_with("Source") {
         return None;
     }
-    let literal = literal_string(source_call.args.first()?)?;
+    let literal = literal_string(source_call.args.first()?, input)?;
     Some((
         FanoutTarget::new(
             Some(kind.to_string()),
@@ -146,8 +163,11 @@ pub(super) fn direct_target(call: &syn::ExprCall) -> Option<(FanoutTarget, Strin
     ))
 }
 
-#[instrument(level = "trace", skip(call))]
-pub(super) fn direct_source_target(call: &syn::ExprCall) -> Option<(FanoutTarget, String)> {
+#[instrument(level = "trace", skip(call, input))]
+pub(super) fn direct_source_target(
+    call: &syn::ExprCall,
+    input: &SharedParsedFile,
+) -> Option<(FanoutTarget, String)> {
     if call.args.len() != 1 {
         return None;
     }
@@ -156,12 +176,12 @@ pub(super) fn direct_source_target(call: &syn::ExprCall) -> Option<(FanoutTarget
     if name != "new" || !source.to_string().ends_with("Source") {
         return None;
     }
-    let literal = literal_string(call.args.first()?)?;
+    let literal = literal_string(call.args.first()?, input)?;
     Some((FanoutTarget::new(None, None, source.to_string()), literal))
 }
 
-#[instrument(level = "trace", skip(expr))]
-pub(super) fn literal_string(expr: &Expr) -> Option<String> {
+#[instrument(level = "trace", skip(expr, source))]
+pub(super) fn literal_string(expr: &Expr, source: &SharedParsedFile) -> Option<String> {
     match peel(expr) {
         Expr::Lit(lit) => match &lit.lit {
             Lit::Str(value) => Some(value.value()),
@@ -173,7 +193,7 @@ pub(super) fn literal_string(expr: &Expr) -> Option<String> {
                     || call.method == "into"
                     || call.method == "to_string") =>
         {
-            literal_string(&call.receiver)
+            literal_string(&call.receiver, source)
         }
         // `format!("...", data)` is still one real call site worth
         // counting for fan-out, not a reason to drop the call from
@@ -188,10 +208,9 @@ pub(super) fn literal_string(expr: &Expr) -> Option<String> {
                 .last()
                 .is_some_and(|segment| segment.ident == "format") =>
         {
-            let args = mac
-                .mac
-                .parse_body_with(Punctuated::<Expr, Token![,]>::parse_terminated)
-                .ok()?;
+            let SharedMacroSyntax::Expressions(args) = source.macro_syntax(&mac.mac)? else {
+                return None;
+            };
             match args.first()? {
                 Expr::Lit(lit) => match &lit.lit {
                     Lit::Str(value) => Some(value.value()),

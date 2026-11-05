@@ -16,6 +16,8 @@ mod crate_kind;
 #[cfg(feature = "rustdoc")]
 mod crate_load;
 mod edge;
+#[cfg(feature = "internal_error_chain")]
+mod error_architecture_source;
 #[cfg(feature = "error_chain")]
 mod error_chains_source;
 #[cfg(feature = "internal_error_chain")]
@@ -31,6 +33,7 @@ mod error_types_source;
 pub use error_chains_source::{ATTR_SOURCE_ERROR_CHAINS, ErrorChainsFile, SourceErrorChains};
 #[cfg(feature = "internal_error_chain")]
 pub use {
+    error_architecture_source::{ATTR_SOURCE_ERROR_ARCHITECTURE, SourceErrorArchitecture},
     error_compliance_source::{
         ATTR_SOURCE_ERROR_COMPLIANCE, ErrorComplianceFile, SourceErrorCompliance,
     },

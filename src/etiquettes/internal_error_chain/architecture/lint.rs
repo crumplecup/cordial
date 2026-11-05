@@ -60,8 +60,8 @@ impl SiteClassifier {
 
 impl Catalog {
     #[instrument(level = "debug", skip(self, field_strategy))]
-    pub(super) fn into_findings(
-        self,
+    pub(crate) fn findings(
+        &self,
         kind_fanout_max_call_sites: usize,
         field_strategy: ErrorFieldStrategy,
     ) -> CordialResult<Vec<InternalErrorComplianceFinding>> {

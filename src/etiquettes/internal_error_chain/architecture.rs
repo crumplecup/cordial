@@ -1,77 +1,35 @@
-//! Rigid error architecture: library types that implement `Error` connect as
-//! parent boxes Kind, Kind variants are native sources. Bin-only modules
-//! (reachable only from `main.rs`) are not in the parent/Kind catalog; CLI
-//! layout lints cover clap types, `act`, thin `main`, and bin-only `Error`
-//! types instead.
+//! Shared architecture catalog collection; policy reads the retained catalog.
 
-use std::path::Path;
-
-use syn::visit::Visit;
-
-use crate::error::CordialResult;
 use crate::loader::module_path_from_src_file;
-
-use super::type_graph::for_each_shared_src_rust_file;
-use super::types::InternalErrorComplianceFinding;
-
+use crate::{CordialResult, SharedParsedFile};
+use std::path::Path;
+use syn::visit::Visit;
 use tracing::instrument;
 
 mod catalog;
 mod lint;
 
-use catalog::{Catalog, CatalogVisitor};
+pub(crate) use catalog::Catalog as ErrorArchitectureCatalog;
+use catalog::CatalogVisitor;
 
-/// Scan `src/**/*.rs` for the parent / Kind / native-source suite using the
-/// source view shared with the other error-handling analyses.
-/// Membership is `impl Error` / `#[derive(Error)]`, not the `src/error` path.
-#[instrument(level = "debug", skip(source, field_strategy), err(level = "warn"))]
-pub(crate) fn scan_crate_error_architecture_with_source(
-    crate_root: &Path,
-    crate_name: &str,
-    source: &crate::loader::SourceLoadView,
-    kind_fanout_max_call_sites: usize,
-    field_strategy: crate::config::ErrorFieldStrategy,
-) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
-    scan_crate_error_architecture_impl(
-        crate_root,
-        crate_name,
-        source,
-        kind_fanout_max_call_sites,
-        field_strategy,
-    )
-}
-
-#[instrument(level = "debug", skip(source, field_strategy), err(level = "warn"))]
-#[hotpath::measure]
-fn scan_crate_error_architecture_impl(
-    crate_root: &Path,
-    crate_name: &str,
-    source: &crate::loader::SourceLoadView,
-    kind_fanout_max_call_sites: usize,
-    field_strategy: crate::config::ErrorFieldStrategy,
-) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
-    let mut catalog = Catalog::new(crate_name);
-    for_each_shared_src_rust_file(source, crate_root, |path, src_root| {
-        load_src_file(&mut catalog, path, src_root, source)
-    })?;
-    catalog.into_findings(kind_fanout_max_call_sites, field_strategy)
-}
-
-#[instrument(level = "info", skip(catalog, file, source), err(level = "warn"))]
-fn load_src_file(
-    catalog: &mut Catalog,
-    file: &Path,
-    src_root: &Path,
-    source: &crate::loader::SourceLoadView,
-) -> CordialResult<()> {
-    let input = source.parsed_file(file, "error-architecture")?;
-    let syntax = input.syntax();
-    let module_prefix = module_path_from_src_file(src_root, file);
-    let mut visitor = CatalogVisitor::builder()
-        .file(file.to_path_buf())
-        .module_prefix(module_prefix)
-        .catalog(catalog)
-        .build()?;
-    crate::loader::source_walk(file, "error-architecture", || visitor.visit_file(syntax));
-    Ok(())
+impl ErrorArchitectureCatalog {
+    #[instrument(level = "debug", skip(self, input), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "ErrorArchitectureCatalog")]
+    pub(crate) fn collect(
+        &mut self,
+        input: &SharedParsedFile,
+        src_root: &Path,
+    ) -> CordialResult<()> {
+        let file = input.path();
+        let mut visitor = CatalogVisitor::builder()
+            .file(file.to_path_buf())
+            .source(input)
+            .module_prefix(module_path_from_src_file(src_root, file))
+            .catalog(self)
+            .build()?;
+        crate::loader::source_walk(file, "error-architecture", || {
+            visitor.visit_file(input.syntax())
+        });
+        Ok(())
+    }
 }

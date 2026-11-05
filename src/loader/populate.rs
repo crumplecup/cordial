@@ -139,6 +139,13 @@ impl SourceLoadView {
         }
         #[cfg(feature = "internal_error_chain")]
         if let Some(root) = self.src_root().parent() {
+            let architecture =
+                crate::ir::SourceErrorArchitecture::collect(self, root, ir.crate_name())?;
+            ir.set_attr(
+                ir.root(),
+                crate::ir::ATTR_SOURCE_ERROR_ARCHITECTURE,
+                serde_json::to_value(architecture)?,
+            )?;
             let signatures = crate::ir::SourceErrorSignatures::collect(self, root)?;
             ir.set_attr(
                 ir.root(),

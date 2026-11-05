@@ -49,7 +49,7 @@ pub use apply::{
     ErrorFileApplySummary, ErrorFromEvidence, ErrorSourceMethodEvidence, ErrorTryEvidence,
     ErrorTryScope, run_error_field_apply, run_error_file_apply,
 };
-pub(crate) use architecture::scan_crate_error_architecture_with_source;
+pub(crate) use architecture::ErrorArchitectureCatalog;
 pub use assessor::InternalErrorChainAssessor;
 pub use probe::InternalErrorChainProbe;
 pub use reporter::{

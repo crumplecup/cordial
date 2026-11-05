@@ -5,6 +5,8 @@
 //! instead of each etiquette declaring overlapping enrichers.
 
 use tracing::instrument;
+#[cfg(feature = "internal_error_chain")]
+mod architecture;
 #[cfg(feature = "error_chain")]
 mod chains;
 #[cfg(feature = "internal_error_chain")]
@@ -62,6 +64,8 @@ pub static ERROR_IR_ENRICHERS: &[&'static dyn IrEnricher] = &[
     &compliance::ERROR_COMPLIANCE_INVENTORY,
     #[cfg(feature = "internal_error_chain")]
     &signatures::ERROR_SIGNATURE_INVENTORY,
+    #[cfg(feature = "internal_error_chain")]
+    &architecture::ERROR_ARCHITECTURE_INVENTORY,
     #[cfg(feature = "error_sites")]
     &ERROR_IR_SCAN,
     #[cfg(feature = "error_sites")]
@@ -92,6 +96,7 @@ pub fn error_ir_enricher_ids(layers: ErrorHandlingLayers) -> Vec<&'static str> {
         ids.push(types::ErrorTypeInventoryEnricher::ID);
         ids.push(compliance::ErrorComplianceInventoryEnricher::ID);
         ids.push(signatures::ErrorSignatureInventoryEnricher::ID);
+        ids.push(architecture::ErrorArchitectureInventoryEnricher::ID);
     }
     if layers.attenuation() {
         #[cfg(feature = "foreign_error_attenuation")]

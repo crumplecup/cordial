@@ -25,6 +25,7 @@ mod record;
 #[setters(generate = false, borrow_self)]
 pub(in crate::etiquettes::internal_error_chain::architecture) struct CatalogVisitor<'a> {
     file: PathBuf,
+    source: &'a crate::loader::SharedParsedFile,
     module_prefix: Vec<String>,
     catalog: &'a mut Catalog,
     #[builder(default)]
@@ -76,7 +77,7 @@ impl<'ast> Visit<'ast> for CatalogVisitor<'_> {
 
     #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_call(&mut self, node: &'ast ExprCall) {
-        let direct = direct_target(node);
+        let direct = direct_target(node, self.source);
         if let Some((target, literal)) = &direct {
             self.catalog.fanout_calls.push(FanoutCall::new(
                 self.file.clone(),
@@ -87,7 +88,7 @@ impl<'ast> Visit<'ast> for CatalogVisitor<'_> {
                 literal.clone(),
             ));
         } else if !self.inside_kind_call
-            && let Some((target, literal)) = direct_source_target(node)
+            && let Some((target, literal)) = direct_source_target(node, self.source)
         {
             self.catalog.fanout_calls.push(FanoutCall::new(
                 self.file.clone(),
@@ -100,7 +101,9 @@ impl<'ast> Visit<'ast> for CatalogVisitor<'_> {
         } else if node.args.len() == 1
             && let (Some((owner, callee)), Some(literal)) = (
                 call_owner_and_name(&node.func),
-                node.args.first().and_then(literal_string),
+                node.args
+                    .first()
+                    .and_then(|expr| literal_string(expr, self.source)),
             )
         {
             self.catalog.fanout_calls.push(FanoutCall::new(

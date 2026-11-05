@@ -77,7 +77,8 @@ fn parse_payload(invocation: &syn::Macro) -> Option<SharedMacroSyntax> {
         .iter()
         .map(|part| part.ident.to_string())
         .collect();
-    if matches!(path.as_slice(), [name] if expression_arguments(name))
+    if path.last().is_some_and(|name| name == "format")
+        || matches!(path.as_slice(), [name] if expression_arguments(name))
         || matches!(path.as_slice(), [root, name] if matches!(root.as_str(), "std" | "core") && expression_arguments(name))
     {
         let expressions = Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated

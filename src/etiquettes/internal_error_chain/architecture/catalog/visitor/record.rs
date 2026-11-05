@@ -12,6 +12,7 @@ use tracing::instrument;
 use crate::enricher::is_cfg_test;
 
 use super::super::fanout::wrapper_target;
+use super::super::fields::FieldType;
 use super::super::{
     Catalog, ConstructorRec, EnumInfo, ErrorField, FanoutWrapper, StructInfo, VariantInfo,
 };
@@ -67,16 +68,15 @@ impl CatalogVisitor<'_> {
                 context,
                 file: self.file.clone(),
                 line: field.ty.span().start().line as u32,
-                ty: match &field.ty {
+                ty: FieldType::collect(match &field.ty {
                     Type::Path(path) if path.qself.is_none() => path
                         .path
                         .get_ident()
                         .filter(|name| !generics.type_params().any(|param| param.ident == **name))
                         .and_then(|name| self.static_aliases.get(&name.to_string()))
-                        .unwrap_or(&field.ty)
-                        .clone(),
-                    _ => field.ty.clone(),
-                },
+                        .unwrap_or(&field.ty),
+                    _ => &field.ty,
+                }),
             });
         }
     }
