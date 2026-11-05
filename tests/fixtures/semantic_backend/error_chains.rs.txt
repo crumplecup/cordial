@@ -1,0 +1,74 @@
+mod child;
+struct Wrapper {
+    #[cfg(any())]
+    source: std::io::Error,
+}
+struct StringWrapper { source: String }
+struct BorrowedStringWrapper { source: &'static String }
+struct QualifiedStringWrapper { source: std::string::String }
+struct QualifiedWrapper<T: Contract> { source: <T as Contract>::Source }
+enum ErrorKind {
+    Io(Wrapper),
+    Named { source: std::io::Error },
+    Text(String),
+    Unit,
+    Multiple(Wrapper, Wrapper),
+    Unknown([u8; 1]),
+}
+enum NotAnError { Io(std::io::Error) }
+impl From<std::io::Error> for Wrapper {
+    fn from(source: std::io::Error) -> Self { Self { source } }
+}
+impl From<String> for Wrapper { fn from(_: String) -> Self { unimplemented!() } }
+impl From<local::Error> for Wrapper { fn from(_: local::Error) -> Self { unimplemented!() } }
+impl From<Local> for Wrapper { fn from(_: Local) -> Self { unimplemented!() } }
+impl From<local::ErrorKind> for Wrapper { fn from(_: local::ErrorKind) -> Self { unimplemented!() } }
+#[cfg(any())]
+mod dormant {
+    struct Hidden { source: std::io::Error }
+    impl From<std::io::Error> for Hidden { fn from(source: std::io::Error) -> Self { Self { source } } }
+    fn inactive() -> Result<(), Wrapper> { std::fs::read("x")?; Ok(()) }
+}
+fn read() -> Result<(), Wrapper> {
+    std::fs::read("x")?;
+    std::fs::read("x").map_err(Wrapper::from)?;
+    std::fs::read("x").map_err(Into::into)?;
+    std::fs::read("x").map_err(Wrapper::wrap)?;
+    std::fs::read("x").map_err(|error| Wrapper::wrap(error))?;
+    std::fs::read("x").map_err(|e| { Wrapper::from(e) })?;
+    std::fs::read("x").map_err(|err| { Wrapper::wrap(err); })?;
+    std::fs::read("x").map_err(|e| Wrapper { source: e })?;
+    std::fs::read("x").map_err(|source| Wrapper { source })?;
+    std::fs::read("x").map_err(|err| (Wrapper { source: err }))?;
+    std::fs::read("x").map_err(|err| Wrapper::wrap(err.to_string()))?;
+    std::fs::read("x").map_err(|e| { e.to_string(); Wrapper::from(e) })?;
+    std::fs::read("x").map_err(|e| { let _ = e.to_string(); Wrapper::from(e) })?;
+    std::fs::read("x").map_err(Wrapper::invariant)?;
+    std::fs::read("x").map_err(Wrapper::from_str)?;
+    std::fs::read("x").map_err(|_| Wrapper::invariant("x"))?;
+    std::fs::read("x").map_err(Wrapper::from(factory()))?;
+    std::fs::read("x").map_err((Wrapper::from))?;
+    std::fs::read("x").ok()?;
+    std::fs::read("x").other()?;
+    sink(std::fs::read("x").map_err(Wrapper::from))?;
+    std::fs::read("x").map_err(Wrapper::from).finish()?;
+    let _ = || std::fs::read("x")?;
+    fn inner() -> Result<(), Wrapper> { std::fs::read("x")?; Ok(()) }
+    fn plain() { std::fs::read("x")?; }
+    fn option() -> Option<()> { std::fs::read("x")?; None }
+    fn foreign() -> std::io::Result<()> { std::fs::read("x")?; Ok(()) }
+    mod inside { fn nested() -> Result<(), Wrapper> { std::fs::read("x")?; Ok(()) } }
+    trait Nested { fn default() -> Result<(), Wrapper> { std::fs::read("x")?; Ok(()) } }
+    opaque!(std::fs::read("x")?);
+    std::fs::漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字()?;
+    Ok(())
+}
+impl Wrapper {
+    fn method() -> Result<(), Self> { std::fs::read("x")?; Ok(()) }
+}
+trait Contract {
+    type Source;
+    fn default() -> Result<(), Wrapper> { std::fs::read("x")?; Ok(()) }
+}
+#[cfg(test)] mod excluded { struct Hidden { source: std::io::Error } }
+#[cfg(all(test))] mod included { struct Hidden { source: std::io::Error } }

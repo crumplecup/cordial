@@ -6,7 +6,7 @@ use crate::{CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-mod native;
+pub(super) mod native;
 
 /// Required crate-wide error-site inventory on the shared graph root.
 pub const ATTR_SOURCE_ERROR_SITES: &str = "source_error_sites";

@@ -824,6 +824,26 @@ features (54 tests across the focused runs). The chain-only replay test passed
 without warnings after tightening the internal helper gate. Build-tier submit
 finished with zero open items; deep remains reserved for the plan milestone.
 
+## Checkpoint: native error-chain projection
+
+The canonical database now projects `SourceErrorChains` directly from its tracked
+rust-analyzer trees. All five chain rules share the loader contract and ordinary
+graph materialization; the native path does not invoke the compatibility parser
+or reconstruct evidence downstream.
+
+The parity fixture compares complete records, snapshots, empty-file coverage,
+materialized attributes and spans. It covers inactive code, nested contexts,
+qualified types, shorthand fields, preserving and stringifying converters,
+opaque macros and Unicode truncation. Virtual edits change and restore the
+inventory without modifying disk; malformed inventory-only inputs fail closed.
+The graph hooks also replay after source deletion. Production source ownership
+still changes only with the complete collection and Cargo context cutover.
+
+Validation: complete native chain parity and virtual-revision tests passed with
+full features, alongside the chain and flow suites. Native site parity also
+passed after extracting their shared syntax helpers. The chain-only build was
+warning-free. Build-tier submit finished with zero open items.
+
 ## Current next step
 
 Work toward the production cutover, completing native error analysis, error/apply

@@ -23,21 +23,7 @@ pub(super) fn collect(
         let WalkEvent::Enter(node) = event else {
             continue;
         };
-        if ast::Module::cast(node.clone()).is_some_and(|module| {
-            module.attrs().any(|attr| match attr.meta() {
-                Some(ast::Meta::CfgMeta(meta)) => meta.cfg_predicate().is_some_and(|predicate| {
-                    predicate
-                        .syntax()
-                        .descendants_with_tokens()
-                        .filter_map(|element| element.into_token())
-                        .filter(|token| !token.kind().is_trivia())
-                        .map(|token| token.text().to_owned())
-                        .collect::<String>()
-                        == "test"
-                }),
-                _ => false,
-            })
-        }) {
+        if excluded_module(&node) {
             walk.skip_subtree();
             continue;
         }
@@ -62,6 +48,25 @@ pub(super) fn collect(
         }
     }
     Ok(records)
+}
+
+#[tracing::instrument(level = "trace", skip(node))]
+pub(in crate::ir) fn excluded_module(node: &ra_ap_syntax::SyntaxNode) -> bool {
+    ast::Module::cast(node.clone()).is_some_and(|module| {
+        module.attrs().any(|attr| match attr.meta() {
+            Some(ast::Meta::CfgMeta(meta)) => meta.cfg_predicate().is_some_and(|predicate| {
+                predicate
+                    .syntax()
+                    .descendants_with_tokens()
+                    .filter_map(|element| element.into_token())
+                    .filter(|token| !token.kind().is_trivia())
+                    .map(|token| token.text().to_owned())
+                    .collect::<String>()
+                    == "test"
+            }),
+            _ => false,
+        })
+    })
 }
 
 #[tracing::instrument(level = "trace", skip(expression, file))]
@@ -158,7 +163,7 @@ fn is_err(path: &ast::Path) -> bool {
 }
 
 #[tracing::instrument(level = "trace", skip(node, prefix))]
-fn context(node: &ra_ap_syntax::SyntaxNode, prefix: &[String]) -> String {
+pub(in crate::ir) fn context(node: &ra_ap_syntax::SyntaxNode, prefix: &[String]) -> String {
     let ancestors: Vec<_> = node.ancestors().collect();
     let mut parts = prefix.to_vec();
     parts.extend(
@@ -229,7 +234,7 @@ fn short(expression: &ast::Expr) -> String {
 }
 
 #[tracing::instrument(level = "trace", skip(expression))]
-fn snippet(expression: &ast::Expr) -> String {
+pub(in crate::ir) fn snippet(expression: &ast::Expr) -> String {
     match expression {
         ast::Expr::MacroExpr(expr) => expr
             .macro_call()
@@ -285,7 +290,7 @@ fn callee(expr: &ast::Expr) -> String {
 }
 
 #[tracing::instrument(level = "trace", skip(path))]
-fn path_label(path: &ast::Path) -> String {
+pub(in crate::ir) fn path_label(path: &ast::Path) -> String {
     let mut names = Vec::new();
     let mut current = Some(path.clone());
     while let Some(path) = current {
@@ -308,7 +313,7 @@ fn path_label(path: &ast::Path) -> String {
 }
 
 #[tracing::instrument(level = "trace")]
-fn truncate(text: &str, max: usize) -> String {
+pub(in crate::ir) fn truncate(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         text.into()
     } else {
