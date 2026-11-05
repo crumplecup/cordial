@@ -1,5 +1,6 @@
 //! Effectful workspace loading stays in the driver, outside tracked queries.
 
+mod compiled;
 mod context;
 mod inputs;
 
@@ -89,17 +90,14 @@ impl SourceDatabase {
                         .canonicalize()
                         .is_ok_and(|resolved| resolved == path)
             });
-            let macro_input = context
-                .crates()
-                .iter()
-                .filter(|krate| *krate.proc_macro())
-                .any(|krate| {
-                    krate
-                        .root()
-                        .parent()
-                        .is_some_and(|directory| path.starts_with(directory))
-                });
-            if cargo_input || macro_input {
+            let compiled_input = context.compiled_inputs().iter().any(|input| {
+                input.path() == &path
+                    || input
+                        .path()
+                        .canonicalize()
+                        .is_ok_and(|resolved| resolved == path)
+            });
+            if cargo_input || compiled_input {
                 return Err(crate::CordialError::semantic_context_input(path));
             }
         }

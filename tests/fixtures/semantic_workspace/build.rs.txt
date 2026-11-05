@@ -1,4 +1,7 @@
+mod build_support;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    assert!(build_support::ready() && compiled_helper::ready());
     let error = std::env::var("CONTEXT_ERROR")?;
     let output = std::path::PathBuf::from(std::env::var_os("OUT_DIR").ok_or("missing OUT_DIR")?);
     std::fs::write(output.join("generated.rs"), format!("type GeneratedError = {error};"))?;

@@ -992,8 +992,8 @@ A failed build leaves explicit context gaps and unavailable error-formatting
 capabilities rather than proving a non-fallible contract.
 
 Remaining context work before production cutover: connect production target and
-configuration selection to this driver; track arbitrary build-script inputs and
-compiled macro dependencies for automatic reload; establish target-context
+configuration selection to this driver; track arbitrary non-Rust build-script
+and macro inputs for automatic reload; establish target-context
 selection where a file belongs to multiple crate instances. The driver freezes
 one loaded context; it is not yet a filesystem watcher or the production router.
 
@@ -1002,6 +1002,19 @@ the failure-path specimen and existing semantic revision/reuse test also passed
 without default features. Tracing apply repaired one annotation, and the
 build-tier submit verified all nine claims with zero open items (list 47).
 The deep tier was not run.
+
+Compiled-input invalidation now follows the HIR crate dependency closure rooted
+at build scripts and proc macros. Module definitions, explicit out-of-directory
+paths and `include!` inputs are retained with exact source digests in the shared
+workspace context. Virtual edits to those inputs require reload; disk changes
+are rejected before projection. This replaces the proc-macro folder heuristic.
+Toolchain library sources do not build these artifacts and are excluded from
+this compiled-source inventory. Ordinary application source remains editable.
+
+Validation: both Cargo-context tests passed with full features, including the
+`include!` input and compiled dependency guards; the earlier dependency/module
+specimen also passed without default features. Build-tier submit finished with
+zero open items (list 48). The deep tier was not run.
 
 ## Current next step
 

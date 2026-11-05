@@ -1,7 +1,11 @@
 use proc_macro::TokenStream;
+#[path = "../shared_macro.rs"]
+mod shared;
+include!("../included_macro.rs");
 
 #[proc_macro]
 pub fn fallible(_input: TokenStream) -> TokenStream {
+    assert!(shared::ready() && compiled_helper::ready() && included_ready());
     "pub fn macro_leaf() -> Result<u32, std::io::Error> { Ok(9) }"
         .parse()
         .expect("static valid Rust tokens")

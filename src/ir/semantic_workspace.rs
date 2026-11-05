@@ -58,6 +58,7 @@ pub struct SemanticCrateContext {
     environment_digest: [u8; 32],
     dependencies: Vec<PathBuf>,
     proc_macro: bool,
+    build_script: bool,
 }
 
 /// The frozen base loaded by the workspace driver. Virtual source revisions
@@ -90,6 +91,9 @@ pub struct SemanticWorkspaceContext {
     proc_macro_server: Option<PathBuf>,
     /// Manifests, lockfile and discovered Cargo/toolchain configuration files.
     configuration_inputs: Vec<SemanticConfigurationInput>,
+    /// Rust modules in build-script/proc-macro crates and their dependency
+    /// closure. These bytes produced compiled artifacts and require reload.
+    compiled_inputs: Vec<SemanticConfigurationInput>,
     /// Exact database text inputs, including dependencies and generated files,
     /// at initial load. Source revisions remain snapshot-local, not mutations
     /// to this base identity.
@@ -99,7 +103,7 @@ pub struct SemanticWorkspaceContext {
     gaps: Vec<SemanticContextGap>,
 }
 
-/// Presence and exact bytes of a Cargo configuration input. Absence matters:
+/// Presence and exact bytes of a workspace driver input. Absence matters:
 /// creating a new configuration file also requires a workspace reload.
 #[derive(
     Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters, derive_new::new,

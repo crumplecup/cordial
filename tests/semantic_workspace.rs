@@ -68,12 +68,33 @@ fn assert_context_guards(
     root: &std::path::Path,
     initial: &cordial::SemanticSnapshot,
 ) -> Result<()> {
-    for name in ["Cargo.toml", "build.rs", "macros/src/lib.rs"] {
+    for name in [
+        "Cargo.toml",
+        "build.rs",
+        "build_support.rs",
+        "macros/src/lib.rs",
+        "macros/shared_macro.rs",
+        "macros/included_macro.rs",
+        "compiled_helper/src/lib.rs",
+    ] {
         assert!(
             session
                 .change_file(&root.join(name), "// not a source-only edit".into())
                 .is_err()
         );
+    }
+    assert_eq!(&snapshot(&project(session, root)?)?, initial);
+    for name in [
+        "build_support.rs",
+        "macros/shared_macro.rs",
+        "macros/included_macro.rs",
+        "compiled_helper/src/lib.rs",
+    ] {
+        let path = root.join(name);
+        let text = std::fs::read_to_string(&path).into_diagnostic()?;
+        std::fs::write(&path, format!("{text}\n// changed compiled input\n")).into_diagnostic()?;
+        assert!(project(session, root).is_err(), "{name} requires a rebuild");
+        std::fs::write(path, text).into_diagnostic()?;
     }
     assert_eq!(&snapshot(&project(session, root)?)?, initial);
     let path = root.join(".cargo/config.toml");
@@ -130,6 +151,37 @@ fn assert_workspace_context(
             .crates()
             .iter()
             .any(|krate| *krate.proc_macro())
+    );
+    assert!(
+        initial
+            .workspace()
+            .crates()
+            .iter()
+            .any(|krate| *krate.build_script())
+    );
+    for name in [
+        "build.rs",
+        "build_support.rs",
+        "macros/src/lib.rs",
+        "macros/shared_macro.rs",
+        "macros/included_macro.rs",
+        "compiled_helper/src/lib.rs",
+    ] {
+        assert!(
+            initial
+                .workspace()
+                .compiled_inputs()
+                .iter()
+                .any(|input| input.path() == &root.join(name) && input.digest().is_some()),
+            "{name}"
+        );
+    }
+    assert!(
+        !initial
+            .workspace()
+            .compiled_inputs()
+            .iter()
+            .any(|input| input.path() == &root.join("src/lib.rs"))
     );
     assert!(
         initial

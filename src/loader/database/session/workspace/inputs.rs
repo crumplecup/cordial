@@ -93,7 +93,11 @@ fn environment_value(options: &SemanticCargoOptions, key: &str) -> Option<std::f
 /// Check configuration bytes and absence before using the old crate graph.
 #[instrument(level = "trace", skip(context), err(level = "warn"))]
 pub(super) fn validate(context: &crate::SemanticWorkspaceContext) -> CordialResult<()> {
-    for input in context.configuration_inputs() {
+    for input in context
+        .configuration_inputs()
+        .iter()
+        .chain(context.compiled_inputs())
+    {
         let current = match std::fs::read(input.path()) {
             Ok(bytes) => Some(Sha256::digest(bytes).into()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,

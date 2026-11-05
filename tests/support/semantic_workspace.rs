@@ -7,13 +7,13 @@ use std::path::Path;
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 pub(crate) fn specimen() -> Result<tempfile::TempDir> {
     let root = tempfile::tempdir().into_diagnostic()?;
-    for directory in ["src", "macros/src", "dependency/src"] {
+    for directory in ["src", "macros/src", "dependency/src", "compiled_helper/src"] {
         std::fs::create_dir_all(root.path().join(directory)).into_diagnostic()?;
     }
     for (path, text) in [
         (
             "Cargo.toml",
-            "[package]\nname='context_specimen'\nversion='0.1.0'\nedition='2024'\n[workspace]\nmembers=['macros','dependency']\n[features]\nalternate=[]\n[dependencies]\ncontext_macros={path='macros'}\ncontext_dependency={path='dependency'}\n",
+            "[package]\nname='context_specimen'\nversion='0.1.0'\nedition='2024'\n[workspace]\nmembers=['macros','dependency','compiled_helper']\n[features]\nalternate=[]\n[dependencies]\ncontext_macros={path='macros'}\ncontext_dependency={path='dependency'}\n[build-dependencies]\ncompiled_helper={path='compiled_helper'}\n",
         ),
         (
             "src/lib.rs",
@@ -23,21 +23,32 @@ pub(crate) fn specimen() -> Result<tempfile::TempDir> {
             "build.rs",
             include_str!("../fixtures/semantic_workspace/build.rs.txt"),
         ),
+        ("build_support.rs", "pub fn ready()->bool{true}\n"),
         (
             "macros/Cargo.toml",
-            "[package]\nname='context_macros'\nversion='0.1.0'\nedition='2024'\n[lib]\nproc-macro=true\n",
+            "[package]\nname='context_macros'\nversion='0.1.0'\nedition='2024'\n[lib]\nproc-macro=true\n[dependencies]\ncompiled_helper={path='../compiled_helper'}\n",
         ),
         (
             "macros/src/lib.rs",
             include_str!("../fixtures/semantic_workspace/macros.rs.txt"),
         ),
+        ("macros/shared_macro.rs", "pub fn ready()->bool{true}\n"),
+        (
+            "macros/included_macro.rs",
+            "fn included_ready()->bool{true}\n",
+        ),
+        (
+            "compiled_helper/Cargo.toml",
+            "[package]\nname='compiled_helper'\nversion='0.1.0'\nedition='2024'\n",
+        ),
+        ("compiled_helper/src/lib.rs", "pub fn ready()->bool{true}\n"),
         (
             "dependency/Cargo.toml",
             "[package]\nname='context_dependency'\nversion='0.1.0'\nedition='2024'\n",
         ),
         (
             "dependency/src/lib.rs",
-            "pub(crate) fn leaf()->Result<(),std::io::Error>{Ok(())}\n",
+            "pub fn leaf()->Result<(),std::io::Error>{Ok(())}\n",
         ),
     ] {
         std::fs::write(root.path().join(path), text).into_diagnostic()?;

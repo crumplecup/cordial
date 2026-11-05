@@ -1,16 +1,16 @@
 //! Freeze effective Cargo, toolchain and crate-graph evidence in the shared IR.
 
-use super::inputs;
+use super::{compiled, inputs};
 
 use crate::{
     CordialResult, SemanticCargoOptions, SemanticContextGap, SemanticCrateContext,
     SemanticWorkspaceContext,
 };
-use ra_ap_hir::Crate;
+use ra_ap_hir::{Crate, attach_db};
 use ra_ap_hir_expand::proc_macro::ProcMacros;
 use ra_ap_ide_db::{RootDatabase, base_db::SourceDatabase as RaSourceDatabase};
 use ra_ap_proc_macro_api::ProcMacroClient;
-use ra_ap_project_model::{ProjectWorkspace, ProjectWorkspaceKind};
+use ra_ap_project_model::{ProjectWorkspace, ProjectWorkspaceKind, TargetKind};
 use ra_ap_vfs::Vfs;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
@@ -22,6 +22,7 @@ pub(super) struct WorkspaceInputs {
     toolchain: Option<String>,
     sysroot: Option<PathBuf>,
     configuration: Vec<crate::SemanticConfigurationInput>,
+    build_scripts: Vec<PathBuf>,
     environment_digest: [u8; 32],
     gaps: Vec<SemanticContextGap>,
 }
@@ -54,6 +55,17 @@ impl WorkspaceInputs {
                 .root()
                 .map(|path| AsRef::<std::path::Path>::as_ref(path).to_path_buf()),
             configuration: inputs::configuration(workspace, options)?,
+            build_scripts: match &workspace.kind {
+                ProjectWorkspaceKind::Cargo { cargo, .. } => cargo
+                    .packages()
+                    .flat_map(|package| &cargo[package].targets)
+                    .filter(|target| cargo[**target].kind == TargetKind::BuildScript)
+                    .map(|target| {
+                        AsRef::<std::path::Path>::as_ref(&cargo[*target].root).to_path_buf()
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            },
             environment_digest: inputs::environment(options),
             gaps,
         })
@@ -90,7 +102,8 @@ impl WorkspaceInputs {
                 .map(|atom| atom.to_string())
                 .collect();
             cfg.sort();
-            let environment: Vec<(String, String)> = krate.base().env(db).clone().into();
+            let mut environment: Vec<(String, String)> = krate.base().env(db).clone().into();
+            environment.sort();
             let environment_digest = Sha256::digest(serde_json::to_vec(&environment)?).into();
             let mut dependencies: Vec<_> = krate
                 .dependencies(db)
@@ -102,6 +115,7 @@ impl WorkspaceInputs {
                 })
                 .collect();
             dependencies.sort();
+            let build_script = self.build_scripts.contains(&root);
             crates.push(SemanticCrateContext::new(
                 root,
                 krate.edition(db).to_string(),
@@ -109,6 +123,7 @@ impl WorkspaceInputs {
                 environment_digest,
                 dependencies,
                 proc_macro,
+                build_script,
             ));
         }
         crates.sort_by(|a, b| a.root().cmp(b.root()).then(a.cfg().cmp(b.cfg())));
@@ -123,6 +138,7 @@ impl WorkspaceInputs {
             .collect();
         sources.sort();
         let source_digest = Sha256::digest(serde_json::to_vec(&sources)?).into();
+        let compiled_inputs = attach_db(db, || compiled::collect(db, vfs, &self.build_scripts));
         let context = SemanticWorkspaceContext::new(
             [0; 32],
             self.root,
@@ -135,6 +151,7 @@ impl WorkspaceInputs {
             server
                 .map(|server| AsRef::<std::path::Path>::as_ref(server.server_path()).to_path_buf()),
             self.configuration,
+            compiled_inputs,
             source_digest,
             self.environment_digest,
             crates,
