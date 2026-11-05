@@ -55,18 +55,6 @@ impl ErrorIrScanLayers {
         compliance: false,
         is_proc_macro_crate: false,
     };
-
-    #[cfg(feature = "internal_error_chain")]
-    #[instrument(level = "debug")]
-    pub fn for_unified_file(under_src: bool, is_proc_macro_crate: bool) -> Self {
-        Self {
-            // The source loader has already collected sites, chains and type relationships.
-            sites: false,
-            chain: false,
-            compliance: under_src,
-            is_proc_macro_crate,
-        }
-    }
 }
 
 /// Combined scan output for one source file.

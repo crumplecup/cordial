@@ -7,6 +7,8 @@
 use tracing::instrument;
 #[cfg(feature = "error_chain")]
 mod chains;
+#[cfg(feature = "internal_error_chain")]
+mod compliance;
 mod inventory;
 mod scan;
 mod sites;
@@ -54,6 +56,8 @@ pub static ERROR_IR_ENRICHERS: &[&'static dyn IrEnricher] = &[
     &ERROR_CHAIN_INVENTORY,
     #[cfg(feature = "internal_error_chain")]
     &types::ERROR_TYPE_INVENTORY,
+    #[cfg(feature = "internal_error_chain")]
+    &compliance::ERROR_COMPLIANCE_INVENTORY,
     #[cfg(feature = "error_sites")]
     &ERROR_IR_SCAN,
     #[cfg(feature = "error_sites")]
@@ -82,6 +86,7 @@ pub fn error_ir_enricher_ids(layers: ErrorHandlingLayers) -> Vec<&'static str> {
     #[cfg(feature = "internal_error_chain")]
     if layers.sites() || layers.chain() || layers.internal() {
         ids.push(types::ErrorTypeInventoryEnricher::ID);
+        ids.push(compliance::ErrorComplianceInventoryEnricher::ID);
     }
     if layers.attenuation() {
         #[cfg(feature = "foreign_error_attenuation")]

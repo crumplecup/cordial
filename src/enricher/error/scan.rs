@@ -61,6 +61,11 @@ pub fn scan_crate_error_ir(
     {
         report.type_graph =
             crate::ir::SourceErrorTypes::collect(&source, crate_root)?.report(crate_name, true)?;
+        report.compliance.extend(
+            crate::ir::SourceErrorCompliance::collect(&source, crate_root, crate_name)?
+                .findings(true),
+        );
+        compliance_sort::sort_compliance(&mut report.compliance);
     }
     report.sites = sites;
     Ok(report)
@@ -117,6 +122,11 @@ pub(super) mod compliance_sort {
         )?;
         report.type_graph =
             crate::ir::SourceErrorTypes::collect(&source, crate_root)?.report(crate_name, false)?;
+        report.compliance.extend(
+            crate::ir::SourceErrorCompliance::collect(&source, crate_root, crate_name)?
+                .findings(false),
+        );
+        sort_compliance(&mut report.compliance);
         report.sites = sites;
         report.chain = crate::ir::SourceErrorChains::collect(&source, crate_root)?.records();
         Ok(report)

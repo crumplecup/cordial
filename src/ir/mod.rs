@@ -18,7 +18,13 @@ mod crate_load;
 mod edge;
 #[cfg(feature = "error_chain")]
 mod error_chains_source;
+#[cfg(feature = "internal_error_chain")]
+mod error_compliance_source;
 mod error_family;
+#[cfg(feature = "internal_error_chain")]
+pub use error_compliance_source::{
+    ATTR_SOURCE_ERROR_COMPLIANCE, ErrorComplianceFile, SourceErrorCompliance,
+};
 #[cfg(feature = "internal_error_chain")]
 mod error_types_source;
 #[cfg(feature = "error_chain")]

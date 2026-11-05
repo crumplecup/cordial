@@ -4,6 +4,8 @@
 mod cli_layout;
 #[cfg(feature = "error_chain")]
 mod error_chains;
+#[cfg(feature = "internal_error_chain")]
+mod error_compliance;
 #[cfg(feature = "error_sites")]
 mod error_sites;
 #[cfg(feature = "internal_error_chain")]

@@ -15,8 +15,7 @@ pub fn scan_compliance_rust_source(
     src_root: &Path,
     crate_name: &str,
 ) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    let syntax = crate::loader::SourceLoadView::parse_fixture(file, source)?;
     scan_compliance_rust_syntax(&syntax, file, src_root, crate_name)
 }
 
@@ -32,8 +31,7 @@ pub fn scan_compliance_rust_source_with_crate_kind(
     crate_name: &str,
     is_proc_macro_crate: bool,
 ) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
+    let syntax = crate::loader::SourceLoadView::parse_fixture(file, source)?;
     scan_compliance_rust_syntax_with_crate_kind(
         &syntax,
         file,
@@ -46,7 +44,7 @@ pub fn scan_compliance_rust_source_with_crate_kind(
 /// Scan a pre-parsed file for internal error compliance (via unified error IR visitor).
 #[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
 pub fn scan_compliance_rust_syntax(
-    syntax: &syn::File,
+    syntax: &crate::loader::SharedParsedFile,
     file: &Path,
     src_root: &Path,
     crate_name: &str,
@@ -58,14 +56,14 @@ pub fn scan_compliance_rust_syntax(
 /// [`scan_compliance_rust_source_with_crate_kind`] for `is_proc_macro_crate`.
 #[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
 pub fn scan_compliance_rust_syntax_with_crate_kind(
-    syntax: &syn::File,
+    syntax: &crate::loader::SharedParsedFile,
     file: &Path,
     src_root: &Path,
     crate_name: &str,
     is_proc_macro_crate: bool,
 ) -> CordialResult<Vec<InternalErrorComplianceFinding>> {
     Ok(crate::etiquettes::scan_rust_file_syntax(
-        syntax,
+        syntax.syntax(),
         file,
         src_root,
         src_root.parent().unwrap_or(src_root),

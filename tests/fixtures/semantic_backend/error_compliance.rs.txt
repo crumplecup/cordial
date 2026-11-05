@@ -1,0 +1,70 @@
+mod child;
+struct Local;
+impl Local {
+    fn losses(builder: Builder) {
+        std::fs::read("x").map_err(|_| Local::invariant("discard"));
+        std::fs::read("x").map_err(|err| Local::new(err.to_string()));
+        builder.build().map_err(|cause| { let message = format!("{cause}"); observe(cause); Local::new(message) });
+        builder.build().map_err(|cause| Local::new(cause.to_string()));
+        builder.build().map_err(|cause| (Local::new(format!("{cause:?}"))));
+        builder.build().map_err(|cause| { return Local::new(cause.to_string()); });
+        std::fs::read("x").map_err(|e| Local { message: e.to_string() });
+        if let Err(cause) = builder.build() { return Err(Local::new(format!("{cause}"))); }
+        if let Err(_) = std::fs::read("x") { return Err(Local::invariant("discard")); }
+        match builder.build() {
+            Err(cause) => Err(Local::new(cause.to_string())),
+            Ok(value) => Ok(value),
+        };
+        match std::fs::read("x") {
+            Err(err) => Err(Local::invariant("discard")),
+            Err(ref err) => Err(Local::new(format!("{err}"))),
+            Ok(value) => Ok(value),
+        };
+        return Err(Local::new(e.to_string()));
+    }
+    fn preserving(builder: Builder) {
+        builder.build().map_err(|err| Local::new(err, format!("{err}")));
+        builder.build().map_err(|err| Local { source: err, message: format!("{err}") });
+        builder.build().map_err(|source| Local { source, message: format!("{source}") });
+        builder.build().map_err(|cause| { let message = cause.to_string(); Local::new(cause, message) });
+        opaque!(builder.build().map_err(|cause| Local::new(cause.to_string())));
+    }
+}
+fn known_source() {
+    std::fs::read("x").map_err(Local::invariant);
+    std::fs::read("x").map_err(|e| { Local::invariant("discard") });
+    std::fs::read("x").map_err(|e| (Local::invariant("discard")));
+    std::fs::read("x").map_err(|e| Local::new(format!("{e}")));
+    std::fs::read("x").map_err(|e| Local::new(opaque!(e.to_string())));
+    std::fs::read("x").map_err(|e| Local::new(e.other().to_string()));
+    std::fs::read("x").map_err(|e| { let _ = e.to_string(); Local::new(e) });
+    std::fs::read("x").map_err(|_| Local::new(err.to_string()));
+    std::fs::read("x").map_err(|_| Local::new((format!("{error}"))));
+    std::fs::read("x").map_err(|_| Local::new(opaque!(/* to_string */ 42)));
+    builder.build().map_err(|cause| Local::new(format!("{}",
+        cause)));
+    let _ = || builder.build().map_err(|cause| Local::new(cause.to_string()));
+    fn nested() { builder.build().map_err(|err| Local::new(err.to_string())); }
+    mod inline { fn nested() { builder.build().map_err(|err| Local::new(err.to_string())); } }
+    trait T { fn default() { builder.build().map_err(|err| Local::new(err.to_string())); } }
+    std::fs::漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字漢字().map_err(|cause| Local::new(cause.to_string()));
+}
+fn macro_boundary(builder: Builder) {
+    builder.build().map_err(|reason| syn::Error::new(span(), format!("{reason}")));
+    builder.build().map_err(|cause| Error::new_spanned(input, cause.to_string()));
+    builder.build().map_err(|cause| Error::new2(input, cause.to_string()));
+    builder.build().map_err(|cause| Error::new(input, cause.to_string()));
+    builder.build().map_err(|cause| { let message = cause.to_string(); (syn::Error::new(span(), message)) });
+    if let Err(cause) = builder.build() { return Err(syn::Error::new(span(), cause.to_string())); }
+    match builder.build() { Err(cause) => Err(syn::Error::new(span(), cause.to_string())), Ok(x) => Ok(x) };
+}
+#[cfg(any())] mod dormant {
+    fn loss() { builder.build().map_err(|err| Local::new(err.to_string())); }
+}
+#[cfg(test)] mod excluded {
+    fn loss() { builder.build().map_err(|err| Local::new(err.to_string())); }
+}
+#[cfg(all(test))] mod included {
+    fn loss() { builder.build().map_err(|err| Local::new(err.to_string())); }
+}
+trait Trait { fn default() { builder.build().map_err(|err| Local::new(err.to_string())); } }

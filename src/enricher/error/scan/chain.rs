@@ -2,9 +2,7 @@
 
 use super::ErrorIrScanReport;
 use crate::error::CordialResult;
-use crate::etiquettes::{ErrorIrScanLayers, scan_rust_file_syntax};
-use crate::ir::CrateKind;
-use crate::loader::{SourceLoadView, path_has_fixtures, quality_scan_trees};
+use crate::loader::SourceLoadView;
 use std::path::Path;
 use tracing::instrument;
 
@@ -36,49 +34,21 @@ pub(super) fn scan_crate_error_ir_impl(
     relative_paths: bool,
 ) -> CordialResult<ErrorIrScanReport> {
     let src_root = crate_root.join("src");
-    let is_proc_macro_crate = source.crate_kinds().contains(&CrateKind::ProcMacro);
     let mut report = ErrorIrScanReport::default();
 
     let mut signature_chain =
         crate::etiquettes::internal_error_chain::SignatureChainIndex::default();
 
-    for tree_root in quality_scan_trees(crate_root) {
-        if !tree_root.is_dir() {
-            continue;
-        }
-        for entry in walkdir::WalkDir::new(&tree_root)
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(|entry| entry.file_type().is_file())
-        {
+    if src_root.is_dir() {
+        for entry in walkdir::WalkDir::new(&src_root).sort_by_file_name() {
+            let entry = entry.map_err(anyhow::Error::new)?;
             let path = entry.path();
-            if path.extension().is_none_or(|ext| ext != "rs") {
-                continue;
-            }
-            if path_has_fixtures(path, crate_root) {
-                continue;
-            }
-
-            let under_src = path.starts_with(&src_root);
-            let unit = source.parsed_file(path, "error-ir-scan")?;
-            if under_src {
-                signature_chain.collect(unit.syntax(), path, &src_root);
-            }
-            let file_scan = crate::loader::source_walk(path, "error-ir-scan", || {
-                scan_rust_file_syntax(
-                    unit.syntax(),
-                    path,
-                    &tree_root,
-                    crate_root,
-                    crate_name,
-                    ErrorIrScanLayers::for_unified_file(under_src, is_proc_macro_crate),
-                )
-            })?;
-
+            if entry.file_type().is_file()
+                && path.extension().is_some_and(|ext| ext == "rs")
+                && !crate::loader::path_has_fixtures(path, crate_root)
             {
-                report
-                    .compliance
-                    .extend(file_scan.compliance().iter().cloned());
+                let file = source.parsed_file(path, "error-signature-chain")?;
+                signature_chain.collect(file.syntax(), path, &src_root);
             }
         }
     }
