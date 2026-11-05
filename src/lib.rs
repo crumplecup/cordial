@@ -485,3 +485,6 @@ pub use {
     },
     rustdoc_loader::{RustdocLoadView, RustdocLoader, resolve_rustdoc_json},
 };
+
+#[cfg(feature = "panics")]
+pub use ir::{ATTR_SOURCE_PANICS, PanicProofGraph, SourcePanics};

@@ -174,6 +174,21 @@ impl SourceLoadView {
                 serde_json::to_value(crate::ir::SourceVerus::collect(self, root)?)?,
             )?;
         }
+        #[cfg(feature = "panics")]
+        if let Some(root) = self.src_root().parent() {
+            #[cfg(feature = "verus_ir")]
+            let verus = crate::IrView::source_verus(ir)?.facts();
+            ir.set_attr(
+                ir.root(),
+                crate::ir::ATTR_SOURCE_PANICS,
+                serde_json::to_value(crate::ir::SourcePanics::collect(
+                    self,
+                    root,
+                    #[cfg(feature = "verus_ir")]
+                    &verus,
+                )?)?,
+            )?;
+        }
         for file in self.files() {
             let syntax = self.parsed_file(file.path(), "source-ir")?;
             self.load_file(ir, root, &syntax)?;

@@ -33,7 +33,8 @@
 //! `#[cfg(not(kani))]`, which this deliberately does NOT treat as
 //! reachable) is not tracked -- no motivating case needed it.
 
-use std::collections::{HashMap, HashSet};
+use crate::ir::PanicProofGraph;
+use std::collections::{BTreeMap, BTreeSet};
 
 use proc_macro2::{Delimiter, TokenTree};
 use syn::visit::Visit;
@@ -112,7 +113,7 @@ fn exprs_inside_macro(tokens: proc_macro2::TokenStream) -> Vec<Expr> {
 /// closure. Bare identifiers, not qualified paths -- see module doc.
 #[derive(Debug, Default)]
 pub(super) struct KaniReachability {
-    reachable: HashSet<String>,
+    reachable: BTreeSet<String>,
 }
 
 impl KaniReachability {
@@ -127,9 +128,21 @@ impl KaniReachability {
 pub(super) fn build_kani_reachability<'a>(
     files: impl Iterator<Item = &'a File>,
 ) -> KaniReachability {
-    let mut graph: HashMap<String, Vec<String>> = HashMap::new();
-    let mut roots: HashSet<String> = HashSet::new();
+    let graph = collect_proof_graph(files);
+    reachability(&graph)
+}
 
+#[instrument(level = "debug", skip(graph))]
+pub(super) fn reachability(graph: &PanicProofGraph) -> KaniReachability {
+    KaniReachability {
+        reachable: graph.reachable(),
+    }
+}
+
+#[instrument(level = "debug", skip(files))]
+pub(super) fn collect_proof_graph<'a>(files: impl Iterator<Item = &'a File>) -> PanicProofGraph {
+    let mut graph = BTreeMap::new();
+    let mut roots = BTreeSet::new();
     for syntax in files {
         let mut visitor = GraphVisitor {
             fn_stack: Vec::new(),
@@ -139,28 +152,18 @@ pub(super) fn build_kani_reachability<'a>(
         };
         visitor.visit_file(syntax);
     }
-
-    let mut reachable: HashSet<String> = roots.clone();
-    let mut frontier: Vec<String> = roots.into_iter().collect();
-    while let Some(key) = frontier.pop() {
-        let Some(calls) = graph.get(&key) else {
-            continue;
-        };
-        for call in calls {
-            if reachable.insert(call.clone()) {
-                frontier.push(call.clone());
-            }
-        }
+    for calls in graph.values_mut() {
+        calls.sort();
+        calls.dedup();
     }
-
-    KaniReachability { reachable }
+    PanicProofGraph::new(graph, roots)
 }
 
 struct GraphVisitor<'a> {
     fn_stack: Vec<String>,
     in_cfg_kani: bool,
-    graph: &'a mut HashMap<String, Vec<String>>,
-    roots: &'a mut HashSet<String>,
+    graph: &'a mut BTreeMap<String, Vec<String>>,
+    roots: &'a mut BTreeSet<String>,
 }
 
 impl GraphVisitor<'_> {

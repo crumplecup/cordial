@@ -22,7 +22,8 @@ pub(super) fn optional<T: DeserializeOwned>(
     feature = "error_chain",
     feature = "internal_error_chain",
     feature = "tracing",
-    feature = "verus_ir"
+    feature = "verus_ir",
+    feature = "panics"
 ))]
 #[tracing::instrument(level = "trace", skip(view), err(level = "warn"))]
 pub(super) fn required<T: DeserializeOwned>(

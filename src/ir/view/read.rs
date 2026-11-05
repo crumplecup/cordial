@@ -212,6 +212,15 @@ pub trait IrView {
     ) -> Option<std::sync::Arc<crate::proof_harness::ProofHarness>> {
         None
     }
+    /// Required, snapshot-bound panic and Kani proof evidence.
+    #[cfg(feature = "panics")]
+    fn source_panics(&self) -> CordialResult<crate::ir::SourcePanics> {
+        evidence::required(
+            self,
+            crate::ir::ATTR_SOURCE_PANICS,
+            "source panic inventory",
+        )
+    }
     /// Required, snapshot-bound Verus dialect evidence on the shared graph.
     #[cfg(feature = "verus_ir")]
     fn source_verus(&self) -> CordialResult<crate::ir::SourceVerus> {

@@ -45,8 +45,9 @@ pub use assessor::PanicAssessor;
 pub use enricher::PanicInventoryEnricher;
 pub use probe::PanicSiteProbe;
 pub use reporter::{PanicChecklistReporter, PanicCsvReporter, PanicSummaryReporter};
+pub(crate) use scan::collect_panic_inventory;
 pub use scan::{scan_crate_panics, scan_rust_source, scan_source_tree};
-pub use types::PanicKind;
+pub use types::{PanicKind, PanicSiteRecord};
 
 use std::sync::LazyLock;
 

@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 
 use crate::error::CordialResult;
 use crate::loader::{SharedParsedFile, SourceLoadView, path_has_fixtures};
@@ -13,12 +12,7 @@ pub(super) struct ParsedFile {
     path: PathBuf,
     src_root: PathBuf,
     #[getter(skip)]
-    syntax: ParsedSyntax,
-}
-
-enum ParsedSyntax {
-    Shared(SharedParsedFile),
-    Standalone(Rc<syn::File>),
+    syntax: SharedParsedFile,
 }
 
 impl ParsedFile {
@@ -27,25 +21,18 @@ impl ParsedFile {
         Self {
             path: syntax.path().to_path_buf(),
             src_root,
-            syntax: ParsedSyntax::Shared(syntax),
+            syntax,
         }
     }
 
-    #[instrument(level = "debug", skip(path, syntax))]
-    pub(super) fn standalone(path: PathBuf, src_root: PathBuf, syntax: Rc<syn::File>) -> Self {
-        Self {
-            path,
-            src_root,
-            syntax: ParsedSyntax::Standalone(syntax),
-        }
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn snapshot(&self) -> crate::FileSnapshot {
+        crate::FileSnapshot::new(self.path.clone(), self.syntax.source_digest())
     }
 
-    #[instrument(level = "debug", skip(self))]
+    #[instrument(level = "trace", skip(self))]
     pub(super) fn syntax(&self) -> &syn::File {
-        match &self.syntax {
-            ParsedSyntax::Shared(file) => file.syntax(),
-            ParsedSyntax::Standalone(syntax) => syntax,
-        }
+        self.syntax.syntax()
     }
 }
 
@@ -60,11 +47,11 @@ pub(super) fn parse_source_tree(
         return Ok(parsed);
     }
 
-    for entry in walkdir::WalkDir::new(src_root)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-    {
+    for entry in walkdir::WalkDir::new(src_root).sort_by_file_name() {
+        let entry = entry.map_err(anyhow::Error::new)?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
         let path = entry.path();
         if path.extension().is_none_or(|ext| ext != "rs") || path_has_fixtures(path, crate_root) {
             continue;

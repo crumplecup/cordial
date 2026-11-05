@@ -70,7 +70,7 @@ impl Drop for ParsedSourceSession {
 
 impl SourceLoadView {
     /// Issue a shared tree for an explicitly supplied standalone source fixture.
-    #[cfg(any(feature = "tracing", feature = "error_sites"))]
+    #[cfg(any(feature = "tracing", feature = "error_sites", feature = "panics"))]
     #[instrument(level = "debug", skip(source, path), err(level = "warn"))]
     pub(crate) fn parse_fixture(path: &Path, source: &str) -> CordialResult<SharedParsedFile> {
         let view = Self::new(

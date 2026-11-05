@@ -217,3 +217,8 @@ pub(crate) use source_policy::{EntryItem, EntryKind, LayoutCatalog, TypeRec, Var
 mod verus_source;
 #[cfg(feature = "verus_ir")]
 pub use verus_source::{ATTR_SOURCE_VERUS, SourceVerus, VerusFile};
+
+#[cfg(feature = "panics")]
+mod panic_source;
+#[cfg(feature = "panics")]
+pub use panic_source::{ATTR_SOURCE_PANICS, PanicProofGraph, SourcePanics};

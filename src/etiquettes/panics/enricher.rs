@@ -1,10 +1,8 @@
-use crate::enricher::{member_crate_root, resolve_parent};
+use crate::enricher::resolve_parent;
 use crate::error::CordialResult;
-use crate::hooks::{SourceEnrichView, SourceEnricher};
+use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
-
-use super::scan::scan_crate_panics_with_source;
 
 use tracing::instrument;
 /// Materializes panic-site expression nodes in the IR graph.
@@ -15,7 +13,7 @@ impl PanicInventoryEnricher {
     pub const ID: &'static str = "panic-inventory";
 }
 
-impl SourceEnricher for PanicInventoryEnricher {
+impl IrEnricher for PanicInventoryEnricher {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
@@ -27,18 +25,11 @@ impl SourceEnricher for PanicInventoryEnricher {
     }
 
     #[instrument(level = "trace", skip(self, view))]
-    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
-        let (ir, source, session) = view.into_parts();
-
-        let crate_root = member_crate_root(source, session);
-        #[cfg(feature = "verus_ir")]
-        let verus = ir.source_verus()?.facts();
-        let records = scan_crate_panics_with_source(
-            &crate_root,
-            source,
-            #[cfg(feature = "verus_ir")]
-            &verus,
-        )?;
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir();
+        let inventory = ir.source_panics()?;
+        let crate_root = inventory.crate_root();
+        let records = inventory.records();
 
         for record in records {
             let parent = resolve_parent(ir, record.context())?;
