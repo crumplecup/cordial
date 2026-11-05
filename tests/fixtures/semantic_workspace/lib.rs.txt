@@ -1,0 +1,15 @@
+include!(concat!(env!("OUT_DIR"), "/generated.rs"));
+
+#[cfg(feature = "alternate")]
+type FeatureError = std::io::Error;
+#[cfg(not(feature = "alternate"))]
+type FeatureError = std::num::ParseIntError;
+
+pub fn generated() -> Result<u32, GeneratedError> { Ok(7) }
+pub fn feature_contract() -> Result<(), FeatureError> { Ok(()) }
+#[cfg(build_ready)]
+pub fn from_build_cfg() -> u32 { 9 }
+
+context_macros::fallible!();
+pub fn macro_call() { let _ = macro_leaf(); }
+pub fn dependency_call() { let _ = context_dependency::leaf(); }

@@ -20,6 +20,7 @@ impl SourceDatabase {
         target: &crate::CrateTarget,
         paths: &[PathBuf],
     ) -> CordialResult<CrateIr> {
+        self.projection_context()?;
         #[cfg(feature = "cfg_hygiene")]
         let declarations = {
             let workspace_root = self
@@ -201,7 +202,11 @@ impl SourceDatabase {
         graph.set_attr(
             graph.root(),
             crate::ATTR_SEMANTIC_SNAPSHOT,
-            serde_json::to_value(crate::SemanticSnapshot::new(self.revision, snapshots))?,
+            serde_json::to_value(crate::SemanticSnapshot::new(
+                self.revision,
+                snapshots,
+                self.projection_context()?,
+            ))?,
         )?;
         Ok(graph)
     }

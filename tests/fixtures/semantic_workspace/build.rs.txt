@@ -1,0 +1,10 @@
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let error = std::env::var("CONTEXT_ERROR")?;
+    let output = std::path::PathBuf::from(std::env::var_os("OUT_DIR").ok_or("missing OUT_DIR")?);
+    std::fs::write(output.join("generated.rs"), format!("type GeneratedError = {error};"))?;
+    println!("cargo::rustc-cfg=build_ready");
+    println!("cargo::rustc-check-cfg=cfg(build_ready)");
+    println!("cargo::rustc-env=BUILD_CONTEXT=ready");
+    println!("cargo::rerun-if-env-changed=CONTEXT_ERROR");
+    Ok(())
+}

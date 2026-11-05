@@ -56,8 +56,10 @@ derive_setters = "0.1"
 
 # Shared source database. Keep the rust-analyzer release cohort in lockstep.
 ra_ap_hir = "0.0.358"
+ra_ap_hir_expand = "0.0.358"
 ra_ap_ide_db = "0.0.358"
 ra_ap_load-cargo = "0.0.358"
+ra_ap_proc_macro_api = "0.0.358"
 ra_ap_project_model = "0.0.358"
 ra_ap_syntax = "0.0.358"
 ra_ap_vfs = "0.0.358"

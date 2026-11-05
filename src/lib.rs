@@ -359,12 +359,13 @@ pub use ir::{
     FunctionUnwrapSyntax, IrIndexes, IrMut, IrView, ItemKind, NestedScopeKind, NodeId, NodeKind,
     NodeView, NodeWeight, ORIGIN_RUSTDOC, ORIGIN_SOURCE, PanicSitesQuery, QualifiedPath, Query,
     QueryBuilder, ResolvedFunctionCall, ReturnValue, SemanticCall, SemanticCallTarget,
-    SemanticCapability, SemanticFormattingRole, SemanticFunction, SemanticItemId,
+    SemanticCapability, SemanticConfigurationInput, SemanticContextGap, SemanticCrateContext,
+    SemanticFeatures, SemanticFormattingRole, SemanticFunction, SemanticItemId,
     SemanticResultRecording, SemanticReturnContract, SemanticSnapshot, SemanticType,
-    SourceAttribute, SourceAttributeArgument, SourceAttributeArguments, SourceAttributedItem,
-    SourceByteRange, SourceCallResolution, SourceCallUse, SourceCrateLints, SourceEntryContract,
-    SourceFileAttributes, SourceInstrumentSyntax, SourceModuleScope, SourcePathUse,
-    SourceResultContract, SourceUseInventory, WorkspaceIr,
+    SemanticWorkspaceContext, SourceAttribute, SourceAttributeArgument, SourceAttributeArguments,
+    SourceAttributedItem, SourceByteRange, SourceCallResolution, SourceCallUse, SourceCrateLints,
+    SourceEntryContract, SourceFileAttributes, SourceInstrumentSyntax, SourceModuleScope,
+    SourcePathUse, SourceResultContract, SourceUseInventory, WorkspaceIr,
 };
 #[cfg(feature = "impl_coverage")]
 pub use ir::{
@@ -373,8 +374,9 @@ pub use ir::{
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use loader::path_has_fixtures;
 pub use loader::{
-    CrateTarget, LoadView, SharedMacroSyntax, SharedParsedFile, SourceDatabase, SourceFile,
-    SourceLoadView, SourceLoader, module_path_from_src_file, quality_scan_trees,
+    CrateTarget, LoadView, SemanticCargoOptions, SharedMacroSyntax, SharedParsedFile,
+    SourceDatabase, SourceFile, SourceLoadView, SourceLoader, module_path_from_src_file,
+    quality_scan_trees,
 };
 pub use objects::{
     Artifact, Disposition, FileSpan, Finding, FindingSink, IrAnchor, MapFindingSink, Marker,

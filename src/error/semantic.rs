@@ -53,3 +53,51 @@ impl std::error::Error for SemanticLoadSource {
         Some(self.source.as_ref())
     }
 }
+
+/// A source revision cannot rebuild a frozen Cargo input or compiled macro.
+#[derive(Debug, derive_getters::Getters)]
+pub struct SemanticContextInputSource {
+    path: std::path::PathBuf,
+    file: String,
+    #[getter(copy)]
+    line: u32,
+}
+
+impl SemanticContextInputSource {
+    #[track_caller]
+    #[instrument(level = "debug", skip(path))]
+    fn new(path: std::path::PathBuf) -> Self {
+        let location = Location::caller();
+        Self {
+            path,
+            file: location.file().to_owned(),
+            line: location.line(),
+        }
+    }
+}
+
+impl super::CordialError {
+    /// Reload the workspace driver before changing this Cargo context input.
+    #[track_caller]
+    #[instrument(level = "debug", skip(path))]
+    pub fn semantic_context_input(path: std::path::PathBuf) -> Self {
+        Self::from_kind(super::CordialErrorKind::SemanticContextInput(
+            SemanticContextInputSource::new(path),
+        ))
+    }
+}
+
+impl std::fmt::Display for SemanticContextInputSource {
+    #[instrument(level = "trace", skip(self, formatter))]
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "semantic Cargo context requires a workspace reload: {} ({}:{})",
+            self.path.display(),
+            self.file,
+            self.line
+        )
+    }
+}
+
+impl std::error::Error for SemanticContextInputSource {}

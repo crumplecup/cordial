@@ -5,7 +5,7 @@ mod database;
 #[cfg(any(feature = "tracing", feature = "internal_error_chain"))]
 pub(crate) use database::DatabaseMacroSyntax;
 pub(crate) use database::DatabaseSource;
-pub use database::SourceDatabase;
+pub use database::{SemanticCargoOptions, SourceDatabase};
 mod library_root;
 pub use library_root::library_root_rs;
 mod macro_syntax;

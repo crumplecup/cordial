@@ -1,0 +1,8 @@
+use proc_macro::TokenStream;
+
+#[proc_macro]
+pub fn fallible(_input: TokenStream) -> TokenStream {
+    "pub fn macro_leaf() -> Result<u32, std::io::Error> { Ok(9) }"
+        .parse()
+        .expect("static valid Rust tokens")
+}

@@ -71,6 +71,7 @@ mod query;
 #[cfg(feature = "rustdoc")]
 mod rustdoc_query;
 mod semantic;
+mod semantic_workspace;
 mod source_attributes;
 mod source_calls;
 #[cfg(any(
@@ -188,6 +189,10 @@ pub use semantic::{
     ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, SemanticCall, SemanticCallTarget,
     SemanticCapability, SemanticFormattingRole, SemanticFunction, SemanticItemId,
     SemanticResultRecording, SemanticReturnContract, SemanticSnapshot, SemanticType,
+};
+pub use semantic_workspace::{
+    SemanticConfigurationInput, SemanticContextGap, SemanticCrateContext, SemanticFeatures,
+    SemanticWorkspaceContext,
 };
 pub use source_calls::{
     ATTR_FUNCTION_CALL_FLOW, ATTR_SOURCE_MODULE_SCOPE, CallResolutionFailure, FunctionCallFlow,

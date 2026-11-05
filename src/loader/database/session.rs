@@ -21,14 +21,13 @@ mod path_inclusion;
 mod project;
 #[cfg(feature = "visibility")]
 mod visibility;
+mod workspace;
 
 use std::path::Path;
 
 use ra_ap_hir::ChangeWithProcMacros;
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
-use ra_ap_load_cargo::{LoadCargoConfig, ProcMacroServerChoice, load_workspace_at};
-use ra_ap_project_model::{CargoConfig, RustLibSource};
 use ra_ap_vfs::{Vfs, VfsPath};
 use tracing::instrument;
 
@@ -41,6 +40,10 @@ pub struct SourceDatabase {
     db: RootDatabase,
     vfs: Vfs,
     revision: u64,
+    workspace: Option<crate::SemanticWorkspaceContext>,
+    cargo_options: Option<crate::SemanticCargoOptions>,
+    // Keep the expansion service alive for this entire analysis session.
+    proc_macro_server: Option<ra_ap_proc_macro_api::ProcMacroClient>,
     #[cfg(feature = "cfg_hygiene")]
     workspace_root: Option<std::path::PathBuf>,
 }
@@ -54,6 +57,9 @@ impl SourceDatabase {
             db: RootDatabase::new(None),
             vfs: Vfs::default(),
             revision: 1,
+            workspace: None,
+            cargo_options: None,
+            proc_macro_server: None,
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: None,
         }
@@ -103,40 +109,11 @@ impl SourceDatabase {
         }
     }
 
-    /// Load Cargo metadata, sysroot and source once for semantic collection.
-    /// Build-script outputs and proc macros are not loaded yet. Their absence
-    /// must remain a gap until workspace configuration migrates here.
-    #[instrument(level = "debug", skip(root), err(level = "warn"))]
-    #[hotpath::measure]
-    pub fn load(root: &Path) -> CordialResult<Self> {
-        let config = CargoConfig {
-            sysroot: Some(RustLibSource::Discover),
-            metadata_extra_args: vec!["--offline".into()],
-            ..CargoConfig::default()
-        };
-        let load_config = LoadCargoConfig {
-            load_out_dirs_from_check: false,
-            with_proc_macro_server: ProcMacroServerChoice::None,
-            prefill_caches: false,
-            num_worker_threads: 1,
-            proc_macro_processes: 0,
-        };
-        let (db, vfs, _server) = load_workspace_at(root, &config, &load_config, &|message| {
-            tracing::debug!(%message, "semantic workspace load");
-        })?;
-        Ok(Self {
-            db,
-            vfs,
-            revision: 1,
-            #[cfg(feature = "cfg_hygiene")]
-            workspace_root: Some(root.to_path_buf()),
-        })
-    }
-
     /// Change one already-loaded source input without reloading Cargo or writing
     /// the file. Unsupported/new paths fail before changing database state.
     #[instrument(level = "debug", skip(self, path, text), err(level = "warn"))]
     pub fn change_file(&mut self, path: &Path, text: String) -> CordialResult<()> {
+        self.check_virtual_input(path)?;
         let file = self.file_id(path)?;
         let mut change = ChangeWithProcMacros::default();
         change.change_file(file, Some(text));

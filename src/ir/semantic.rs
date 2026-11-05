@@ -14,6 +14,7 @@ pub const ATTR_SEMANTIC_SNAPSHOT: &str = "semantic_snapshot";
 pub struct SemanticSnapshot {
     revision: u64,
     sources: Vec<super::FileSnapshot>,
+    workspace: super::SemanticWorkspaceContext,
 }
 
 /// Function evidence produced by the canonical semantic database.

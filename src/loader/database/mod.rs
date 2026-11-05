@@ -8,6 +8,7 @@ mod modules;
 pub(crate) use modules::module_path;
 #[cfg(feature = "internal_error_chain")]
 mod meta_syntax;
+mod options;
 mod populate;
 mod queries;
 mod recording;
@@ -17,5 +18,6 @@ mod types;
 
 #[cfg(any(feature = "tracing", feature = "internal_error_chain"))]
 pub(crate) use macro_syntax::DatabaseMacroSyntax;
+pub use options::SemanticCargoOptions;
 pub use session::SourceDatabase;
 pub(crate) use source::DatabaseSource;

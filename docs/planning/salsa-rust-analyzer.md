@@ -644,11 +644,11 @@ entry points; some are documentation, fixture helpers, generation, or proposed
 edit validation. Classify each before removal. A text search count is not proof
 that every production path has been migrated.
 
-Complete the input/context driver before semantic facts authorize transforms:
-selected target/features/cfg, build-script outputs, proc macros, manifest and
-lockfile identity. Current Cargo loading covers ordinary Rust library fixtures
-without running build scripts or proc-macro servers. Missing expansion and
-unsupported call/type evidence must stay incomplete.
+Complete production integration of the input/context driver before semantic
+facts authorize transforms: selected target/features/cfg, build-script outputs,
+proc macros, manifest and lockfile identity. Native sessions now load build
+outputs and retain the proc-macro service, as recorded below. Missing expansion
+and unsupported call/type evidence must stay incomplete.
 
 The file policies now share a typed, snapshot-bound
 `SourcePolicyInventory` on the crate root. Enrichers consume this inventory
@@ -965,10 +965,48 @@ signature-chain and internal-error suites passed with the shared grammar and
 module resolver changes. Tracing apply repaired two annotations; build-tier
 submit verified zero open items (list 45). The deep tier was not run.
 
+### Cargo context driver checkpoint
+
+Native `SourceDatabase::load_with` now uses one explicit Cargo configuration for
+metadata, build outputs and database loading. It supports feature selection,
+target, all-target collection, test cfg and environment overrides. Build scripts
+run outside tracked queries, their outputs enter the same database, and the
+session retains the proc-macro client for subsequent semantic queries.
+
+Each `SemanticSnapshot` carries typed workspace evidence: effective crate cfg,
+edition and dependency roots; toolchain, sysroot and macro-service paths;
+configuration presence and digests; environment digests without secret values;
+the initial database-source digest; and explicit loading gaps. Identity covers
+that complete frozen context. Virtual source revisions remain separate.
+
+Manifest, lockfile, discovered Cargo/toolchain configuration and build-script
+entry bytes are checked before projection. Newly created configuration files
+and changed ambient environment require reload. Virtual edits cannot pretend to
+rebuild a Cargo input or a proc-macro crate. Reload builds a replacement first;
+failure preserves the previous database and revision.
+
+The workspace specimen exercises build-generated aliases, cfg, local dependency
+calls, actual proc-macro expansion, feature/environment reloads, source-only
+virtual changes, complete snapshot serialization and failed reload restoration.
+A failed build leaves explicit context gaps and unavailable error-formatting
+capabilities rather than proving a non-fallible contract.
+
+Remaining context work before production cutover: connect production target and
+configuration selection to this driver; track arbitrary build-script inputs and
+compiled macro dependencies for automatic reload; establish target-context
+selection where a file belongs to multiple crate instances. The driver freezes
+one loaded context; it is not yet a filesystem watcher or the production router.
+
+Validation on 2026-11-05: the Cargo-context specimen passed with full features;
+the failure-path specimen and existing semantic revision/reuse test also passed
+without default features. Tracing apply repaired one annotation, and the
+build-tier submit verified all nine claims with zero open items (list 47).
+The deep tier was not run.
+
 ## Current next step
 
-Work toward the production cutover, completing native error analysis, error/apply
-inventory and panic/proof collection against the inventory above. Derives,
+Work toward the production cutover, completing native error/apply inventory and
+panic/proof collection against the inventory above. Derives,
 visibility, CLI layout, module splices, attribute materialization and the complete
 file-policy and tracing groups now consume loader projections.
 Preserve inactive-code policy coverage and golden findings.

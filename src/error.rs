@@ -68,6 +68,8 @@ pub struct CordialError {
 pub enum CordialErrorKind {
     /// The shared semantic workspace loader failed.
     SemanticLoad(semantic::SemanticLoadSource),
+    /// A Cargo context input cannot be changed as an ordinary source revision.
+    SemanticContextInput(semantic::SemanticContextInputSource),
     /// A requested clean was refused or incomplete.
     Clean(CleanSource),
     /// Filesystem I/O failed.
@@ -179,6 +181,7 @@ impl std::error::Error for CordialError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self.kind.as_ref() {
             CordialErrorKind::SemanticLoad(source) => Some(source),
+            CordialErrorKind::SemanticContextInput(source) => Some(source),
             CordialErrorKind::Clean(source) => Some(source),
             CordialErrorKind::Io(source) => Some(source),
             CordialErrorKind::Json(source) => Some(source),
@@ -229,6 +232,7 @@ impl Display for CordialErrorKind {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::SemanticLoad(source) => source.fmt(formatter),
+            Self::SemanticContextInput(source) => source.fmt(formatter),
             Self::Clean(source) => source.fmt(formatter),
             Self::Io(source) => source.fmt(formatter),
             Self::Json(source) => source.fmt(formatter),
