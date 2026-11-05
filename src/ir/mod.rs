@@ -22,16 +22,24 @@ mod error_chains_source;
 mod error_compliance_source;
 mod error_family;
 #[cfg(feature = "internal_error_chain")]
-pub use error_compliance_source::{
-    ATTR_SOURCE_ERROR_COMPLIANCE, ErrorComplianceFile, SourceErrorCompliance,
-};
+mod error_signatures_source;
+#[cfg(feature = "internal_error_chain")]
+pub(crate) use {error_sites_source::native::excluded_module, error_types_source::derives_error};
 #[cfg(feature = "internal_error_chain")]
 mod error_types_source;
 #[cfg(feature = "error_chain")]
 pub use error_chains_source::{ATTR_SOURCE_ERROR_CHAINS, ErrorChainsFile, SourceErrorChains};
 #[cfg(feature = "internal_error_chain")]
-pub use error_types_source::{
-    ATTR_SOURCE_ERROR_TYPES, ErrorTypeSourceNode, ErrorTypesFile, SourceErrorTypes,
+pub use {
+    error_compliance_source::{
+        ATTR_SOURCE_ERROR_COMPLIANCE, ErrorComplianceFile, SourceErrorCompliance,
+    },
+    error_signatures_source::{
+        ATTR_SOURCE_ERROR_SIGNATURES, ErrorSignatureAssessment, SourceErrorSignatures,
+    },
+    error_types_source::{
+        ATTR_SOURCE_ERROR_TYPES, ErrorTypeSourceNode, ErrorTypesFile, SourceErrorTypes,
+    },
 };
 #[cfg(feature = "error_sites")]
 mod error_sites_source;

@@ -1,0 +1,92 @@
+use crate::{helpers, SourceError, MessageError, ChainError};
+use crate::helpers::{drop_source as drop_alias, self as helper_module};
+use std::error::Error as StdError;
+use crate::helpers::drop_source as _;
+
+#[derive(thiserror::Error)]
+struct Generic<'a, T, const N: usize> {
+    #[source]
+    nested: T,
+    name: &'a str,
+    bytes: [u8; N],
+}
+#[derive(thiserror::Error)]
+struct Tuple(#[from] SourceError);
+#[derive(thiserror::Error)]
+enum Derived<T> {
+    Tuple(#[from] T),
+    Record { source: T },
+    Ignored(String, String),
+}
+enum RecordSource {
+    Source { source: SourceError },
+    Renamed { source: SourceError },
+    Other,
+}
+impl StdError for RecordSource {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        match self {
+            Self::Source { source } => Some(source),
+            Self::Renamed { source: ref inner } => Some(inner),
+            Self::Other => None,
+        }
+    }
+}
+struct Opaque { source: SourceError }
+impl StdError for Opaque {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> { Some((&self.source)) }
+}
+struct Semicolon { source: SourceError }
+impl StdError for Semicolon {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> { Some(&self.source); }
+}
+impl BeforeDeclaration {
+    fn new(source: SourceError) -> Self { Self { source } }
+}
+struct BeforeDeclaration { source: SourceError }
+impl StdError for BeforeDeclaration {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> { Some(&self.source) }
+}
+fn signatures<'a, T, const N: usize>(
+    r#type: &'a (Result<(), SourceError>),
+    _tuple: (T, SourceError),
+    _qualified: <T as Iterator>::Item,
+    _callback: dyn Fn(SourceError) -> MessageError,
+) -> Result<&'a str, Generic<'a, T, N>> { todo!() }
+
+fn conversions(result: Result<(), SourceError>) {
+    result.map_err(|err| drop_alias(err));
+    result.map_err(|err| { helper_module::drop_source(err); });
+    result.map_err(|err| (helpers::drop_source(err)));
+    result.map_err(|err| { let nested = helpers::drop_source(err); nested });
+    result.map_err(|err| { helpers::drop_source(err); let last = 0; });
+    result.map_err(|err: SourceError| helpers::drop_source(err));
+    result.map_err(|ref err| helpers::drop_source(err));
+    result.map_err(|err| opaque!(helpers::drop_source(err)));
+    result.map_err(|err| async { helpers::drop_source(err) });
+    result.map_err(|err| unsafe { helpers::drop_source(err) });
+    result.map_err(|err| const { helpers::drop_source(err) });
+    result.map_err(|err| 'label: { helpers::drop_source(err) });
+    result.map_err(|err| ::qualified::drop_source(err));
+    result.map_err(|err| <T as Convert>::drop_source(err));
+    result.map_err(|err| <T>::drop_source(err));
+    // Nested declarations are not registered but their conversion sites are visited.
+    fn inner(result: Result<(), SourceError>) {
+        result.map_err(|err| helpers::drop_source(err));
+    }
+}
+#[cfg(any())]
+mod dormant {
+    use super::*;
+    fn convert(result: Result<(), SourceError>) { result.map_err(|err| helpers::drop_source(err)); }
+}
+#[cfg(test)]
+mod excluded {
+    fn excluded(result: Result<(), SourceError>) { result.map_err(|err| drop_alias(err)); }
+}
+#[cfg(any(test))]
+mod included {
+    use crate::helpers::drop_source;
+    fn included(result: Result<(), crate::SourceError>) { result.map_err(|err| drop_source(err)); }
+}
+macro_rules! opaque { ($($tokens:tt)*) => {} }

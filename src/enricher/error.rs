@@ -11,6 +11,8 @@ mod chains;
 mod compliance;
 mod inventory;
 mod scan;
+#[cfg(feature = "internal_error_chain")]
+mod signatures;
 mod sites;
 #[cfg(feature = "internal_error_chain")]
 mod types;
@@ -58,6 +60,8 @@ pub static ERROR_IR_ENRICHERS: &[&'static dyn IrEnricher] = &[
     &types::ERROR_TYPE_INVENTORY,
     #[cfg(feature = "internal_error_chain")]
     &compliance::ERROR_COMPLIANCE_INVENTORY,
+    #[cfg(feature = "internal_error_chain")]
+    &signatures::ERROR_SIGNATURE_INVENTORY,
     #[cfg(feature = "error_sites")]
     &ERROR_IR_SCAN,
     #[cfg(feature = "error_sites")]
@@ -87,6 +91,7 @@ pub fn error_ir_enricher_ids(layers: ErrorHandlingLayers) -> Vec<&'static str> {
     if layers.sites() || layers.chain() || layers.internal() {
         ids.push(types::ErrorTypeInventoryEnricher::ID);
         ids.push(compliance::ErrorComplianceInventoryEnricher::ID);
+        ids.push(signatures::ErrorSignatureInventoryEnricher::ID);
     }
     if layers.attenuation() {
         #[cfg(feature = "foreign_error_attenuation")]

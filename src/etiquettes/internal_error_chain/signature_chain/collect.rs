@@ -3,6 +3,7 @@ use std::path::Path;
 
 use syn::{Fields, FnArg, Item, ItemImpl, ItemUse, ReturnType, Signature, Type, UseTree};
 
+use super::facts::{lower_path, lower_type};
 use super::syntax::{
     scoped, source_fields, source_returns_named_field, source_returns_variants, type_params,
 };
@@ -40,14 +41,14 @@ impl SignatureChainIndex {
                     self.errors.entry(path).or_default().push(ErrorType {
                         scope: scope.to_vec(),
                         params: type_params(&item_struct.generics),
-                        sources,
+                        sources: sources.iter().map(lower_type).collect(),
                         variant_sources: BTreeMap::new(),
                         error_impl: item_derives_error(&item_struct.attrs),
                     });
                 }
                 Item::Enum(item_enum) => {
                     let path = scoped(scope, &item_enum.ident.to_string());
-                    let sources = item_enum
+                    let sources: Vec<_> = item_enum
                         .variants
                         .iter()
                         .flat_map(|v| source_fields(&v.fields))
@@ -69,13 +70,13 @@ impl SignatureChainIndex {
                                 }
                                 _ => None,
                             }?;
-                            Some((variant.ident.to_string(), ty))
+                            Some((variant.ident.to_string(), lower_type(&ty)))
                         })
                         .collect();
                     self.errors.entry(path).or_default().push(ErrorType {
                         scope: scope.to_vec(),
                         params: type_params(&item_enum.generics),
-                        sources,
+                        sources: sources.iter().map(lower_type).collect(),
                         variant_sources,
                         error_impl: item_derives_error(&item_enum.attrs),
                     });
@@ -88,7 +89,7 @@ impl SignatureChainIndex {
     #[tracing::instrument(level = "debug", skip(self, item, file))]
     fn collect_impl(&mut self, item: &ItemImpl, scope: &[String], file: &Path) {
         let self_ty = self
-            .resolve_type(&item.self_ty, scope, &BTreeMap::new(), None)
+            .resolve_type(&lower_type(&item.self_ty), scope, &BTreeMap::new(), None)
             .or_else(|| match item.self_ty.as_ref() {
                 Type::Path(path) if path.path.segments.len() == 1 => Some(Ty {
                     path: scoped(scope, &path.path.segments[0].ident.to_string()),
@@ -98,7 +99,7 @@ impl SignatureChainIndex {
             });
         if let Some((trait_path, _)) = &item.trait_
             && self
-                .resolve_path(trait_path, scope, None)
+                .resolve_path(&lower_path(trait_path), scope, None)
                 .is_some_and(|path| {
                     matches!(path.as_str(), "std::error::Error" | "core::error::Error")
                 })
@@ -146,7 +147,7 @@ impl SignatureChainIndex {
             .inputs
             .iter()
             .filter_map(|arg| match arg {
-                FnArg::Typed(typed) => Some((*typed.ty).clone()),
+                FnArg::Typed(typed) => Some(lower_type(&typed.ty)),
                 FnArg::Receiver(_) => None,
             })
             .collect();
@@ -156,7 +157,7 @@ impl SignatureChainIndex {
             .push(Function {
                 scope: scope.to_vec(),
                 params,
-                output: (**output).clone(),
+                output: lower_type(output),
                 generics: type_params(&sig.generics).into_iter().collect(),
                 self_ty,
             });
@@ -192,7 +193,7 @@ impl SignatureChainIndex {
         let mut imports = Vec::new();
         walk(&item.tree, Vec::new(), &mut imports);
         self.imports
-            .entry(scope.to_vec())
+            .entry(scope.join("::"))
             .or_default()
             .extend(imports);
     }

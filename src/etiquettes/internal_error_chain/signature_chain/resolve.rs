@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use syn::{Expr, ExprCall, GenericArgument, PathArguments, Type};
+use super::facts::{Expr, Path, Type};
 
-use super::syntax::{bind_generics, has_bound_call, is_binding, scoped};
+use super::syntax::{bind_generics, scoped};
 use super::{
     Conversion, Function, ManualSource, SignatureChainCheck, SignatureChainIndex,
     SignatureChainStatus, Ty,
@@ -24,7 +24,7 @@ impl SignatureChainIndex {
         let mut findings = Vec::new();
         let mut checks = Vec::new();
         for site in &self.conversions {
-            if !has_bound_call(&site.body, &site.binding) {
+            if !site.has_bound_call {
                 continue;
             }
             let hint = self.receiver_error(site);
@@ -73,11 +73,10 @@ impl SignatureChainIndex {
     #[tracing::instrument(level = "debug", skip(self, site))]
     fn receiver_error(&self, site: &Conversion) -> Option<Ty> {
         let ty = match &site.receiver {
-            Expr::Call(call) => {
-                let Expr::Path(path) = call.func.as_ref() else {
-                    return None;
-                };
-                let function = self.function(&path.path, &site.scope)?;
+            Expr::Call {
+                path: Some(path), ..
+            } => {
+                let function = self.function(path, &site.scope)?;
                 self.resolve_type(
                     &function.output,
                     &function.scope,
@@ -86,7 +85,7 @@ impl SignatureChainIndex {
                 )?
             }
             Expr::Path(path) => {
-                let name = path.path.get_ident()?.to_string();
+                let name = path.ident()?.to_string();
                 self.resolve_type(site.params.get(&name)?, &site.scope, &BTreeMap::new(), None)?
             }
             _ => return None,
@@ -105,35 +104,31 @@ impl SignatureChainIndex {
         hint: Option<&Ty>,
     ) -> Option<Flow> {
         match expr {
-            Expr::Block(block) => match block.block.stmts.last()? {
-                syn::Stmt::Expr(tail, _) => self.flow(tail, binding, scope, hint),
-                _ => None,
-            },
-            Expr::Paren(paren) => self.flow(&paren.expr, binding, scope, hint),
-            Expr::Group(group) => self.flow(&group.expr, binding, scope, hint),
-            Expr::Call(call) => self.call_flow(call, binding, scope, hint),
+            Expr::Transparent(inner) => self.flow(inner, binding, scope, hint),
+            Expr::Call {
+                path: Some(path),
+                args,
+            } => self.call_flow(path, args, binding, scope, hint),
             _ => None,
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, call, hint))]
+    #[tracing::instrument(level = "debug", skip(self, path, args, hint))]
     fn call_flow(
         &self,
-        call: &ExprCall,
+        path: &Path,
+        args: &[Expr],
         binding: &str,
         scope: &[String],
         hint: Option<&Ty>,
     ) -> Option<Flow> {
-        let Expr::Path(path) = call.func.as_ref() else {
-            return None;
-        };
-        let function = self.function(&path.path, scope)?;
-        if call.args.len() != function.params.len() {
+        let function = self.function(path, scope)?;
+        if args.len() != function.params.len() {
             return None;
         }
         let mut selected = None;
-        for (arg, formal) in call.args.iter().zip(&function.params) {
-            let inner = if is_binding(arg, binding) {
+        for (arg, formal) in args.iter().zip(&function.params) {
+            let inner = if matches!(arg, Expr::Path(path) if path.ident() == Some(binding)) {
                 Some((hint.cloned(), None))
             } else {
                 self.flow(arg, binding, scope, hint)
@@ -178,7 +173,7 @@ impl SignatureChainIndex {
     }
 
     #[tracing::instrument(level = "debug", skip(self, path))]
-    fn function(&self, path: &syn::Path, scope: &[String]) -> Option<&Function> {
+    fn function(&self, path: &Path, scope: &[String]) -> Option<&Function> {
         let key = self.resolve_path(path, scope, None)?;
         let functions = self.functions.get(&key)?;
         (functions.len() == 1).then(|| &functions[0])
@@ -193,44 +188,31 @@ impl SignatureChainIndex {
         self_ty: Option<&Ty>,
     ) -> Option<Ty> {
         match ty {
-            Type::Reference(reference) => {
-                self.resolve_type(&reference.elem, scope, bindings, self_ty)
-            }
-            Type::Paren(paren) => self.resolve_type(&paren.elem, scope, bindings, self_ty),
-            Type::Group(group) => self.resolve_type(&group.elem, scope, bindings, self_ty),
+            Type::Transparent(inner) => self.resolve_type(inner, scope, bindings, self_ty),
             Type::Tuple(tuple) => Some(Ty {
                 path: "tuple".to_string(),
                 args: tuple
-                    .elems
                     .iter()
                     .map(|elem| self.resolve_type(elem, scope, bindings, self_ty))
                     .collect::<Option<Vec<_>>>()?,
             }),
-            Type::Path(path) if path.qself.is_none() => {
-                let first = path.path.segments.first()?.ident.to_string();
-                if path.path.segments.len() == 1 {
-                    if let Some(bound) = bindings.get(&first) {
+            Type::Path(path) => {
+                let first = path.parts().first()?;
+                if path.parts().len() == 1 {
+                    if let Some(bound) = bindings.get(first) {
                         return Some(bound.clone());
                     }
                     if first == "Self" {
                         return self_ty.cloned();
                     }
                 }
-                let resolved = self.resolve_path(&path.path, scope, self_ty)?;
-                let args = match &path.path.segments.last()?.arguments {
-                    PathArguments::AngleBracketed(list) => list
-                        .args
-                        .iter()
-                        .filter_map(|arg| match arg {
-                            GenericArgument::Type(ty) => {
-                                Some(self.resolve_type(ty, scope, bindings, self_ty))
-                            }
-                            _ => None,
-                        })
-                        .collect::<Option<Vec<_>>>()?,
-                    PathArguments::None => Vec::new(),
-                    _ => return None,
-                };
+                let resolved = self.resolve_path(path, scope, self_ty)?;
+                let args = path
+                    .args()
+                    .as_ref()?
+                    .iter()
+                    .map(|ty| self.resolve_type(ty, scope, bindings, self_ty))
+                    .collect::<Option<Vec<_>>>()?;
                 Some(Ty {
                     path: resolved,
                     args,
@@ -243,15 +225,11 @@ impl SignatureChainIndex {
     #[tracing::instrument(level = "trace", skip(self, path, self_ty))]
     pub(super) fn resolve_path(
         &self,
-        path: &syn::Path,
+        path: &Path,
         scope: &[String],
         self_ty: Option<&Ty>,
     ) -> Option<String> {
-        let parts: Vec<String> = path
-            .segments
-            .iter()
-            .map(|part| part.ident.to_string())
-            .collect();
+        let parts = path.parts();
         let first = parts.first()?;
         if first == "Self" {
             let ty = self_ty?;
@@ -276,7 +254,7 @@ impl SignatureChainIndex {
         }
         if let Some(imported) = self
             .imports
-            .get(scope)
+            .get(&scope.join("::"))
             .and_then(|imports| imports.get(first))
         {
             let base = if let Some(rest) = imported.strip_prefix("crate::") {

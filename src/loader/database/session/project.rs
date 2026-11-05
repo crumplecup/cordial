@@ -113,6 +113,12 @@ impl SourceDatabase {
             crate::ir::ATTR_SOURCE_ERROR_COMPLIANCE,
             serde_json::to_value(self.project_error_compliance(target)?)?,
         )?;
+        #[cfg(feature = "internal_error_chain")]
+        graph.set_attr(
+            graph.root(),
+            crate::ir::ATTR_SOURCE_ERROR_SIGNATURES,
+            serde_json::to_value(self.project_error_signatures(target.crate_root())?)?,
+        )?;
         let mut projection = Projection::default();
         let sema = Semantics::new(&self.db);
         for path in paths {

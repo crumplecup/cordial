@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 
 mod declarations;
 mod variants;
+pub(crate) use declarations::derives_error;
 
 /// Required error-type evidence on the shared crate graph root.
 pub const ATTR_SOURCE_ERROR_TYPES: &str = "source_error_types";

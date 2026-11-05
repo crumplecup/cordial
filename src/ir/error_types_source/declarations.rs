@@ -98,7 +98,7 @@ pub(super) fn source_impl(item: &ast::Impl, implementors: &mut BTreeSet<String>)
 }
 
 #[tracing::instrument(level = "trace", skip(owner))]
-pub(super) fn derives_error(owner: &impl HasAttrs) -> bool {
+pub(crate) fn derives_error(owner: &impl HasAttrs) -> bool {
     owner.attrs().any(|attr| {
         if attr.simple_name().as_deref() != Some("derive") {
             return false;

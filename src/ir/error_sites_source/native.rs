@@ -51,7 +51,7 @@ pub(super) fn collect(
 }
 
 #[tracing::instrument(level = "trace", skip(node))]
-pub(in crate::ir) fn excluded_module(node: &ra_ap_syntax::SyntaxNode) -> bool {
+pub(crate) fn excluded_module(node: &ra_ap_syntax::SyntaxNode) -> bool {
     ast::Module::cast(node.clone()).is_some_and(|module| {
         module.attrs().any(|attr| match attr.meta() {
             Some(ast::Meta::CfgMeta(meta)) => meta.cfg_predicate().is_some_and(|predicate| {

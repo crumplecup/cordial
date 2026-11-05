@@ -7,15 +7,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use syn::{Expr, Type};
+use facts::{Expr, Type};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 struct Ty {
     path: String,
     args: Vec<Ty>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Function {
     scope: Vec<String>,
     params: Vec<Type>,
@@ -24,7 +25,7 @@ struct Function {
     self_ty: Option<Ty>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct ErrorType {
     scope: Vec<String>,
     params: Vec<String>,
@@ -33,7 +34,7 @@ struct ErrorType {
     error_impl: bool,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum ManualSource {
     Default,
     NamedField,
@@ -41,10 +42,11 @@ enum ManualSource {
     Opaque,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Conversion {
     scope: Vec<String>,
     receiver: Expr,
+    has_bound_call: bool,
     body: Expr,
     binding: String,
     params: BTreeMap<String, Type>,
@@ -53,7 +55,7 @@ struct Conversion {
 }
 
 /// Result of resolving one conversion against the verified source graph.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SignatureChainStatus {
     /// The output error type can retain the caught error as a source.
     Preserved,
@@ -64,7 +66,7 @@ pub enum SignatureChainStatus {
 }
 
 /// Signature-level assessment of a conversion site.
-#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct SignatureChainCheck {
     file: PathBuf,
     #[getter(copy)]
@@ -85,15 +87,17 @@ impl SignatureChainCheck {
 }
 
 /// Signature and verified source relationships gathered from the shared syntax trees.
-#[derive(Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct SignatureChainIndex {
     functions: BTreeMap<String, Vec<Function>>,
     errors: BTreeMap<String, Vec<ErrorType>>,
     manual_impls: BTreeMap<String, Vec<ManualSource>>,
-    imports: BTreeMap<Vec<String>, BTreeMap<String, String>>,
+    imports: BTreeMap<String, BTreeMap<String, String>>,
     conversions: Vec<Conversion>,
 }
 
 mod collect;
+mod facts;
+mod native;
 mod resolve;
 mod syntax;

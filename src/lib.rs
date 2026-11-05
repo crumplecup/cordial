@@ -217,8 +217,9 @@ pub use etiquettes::{
 pub use etiquettes::{PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, scan_crate_proof_patterns};
 #[cfg(feature = "internal_error_chain")]
 pub use ir::{
-    ATTR_SOURCE_ERROR_COMPLIANCE, ATTR_SOURCE_ERROR_TYPES, ErrorComplianceFile,
-    ErrorTypeSourceNode, ErrorTypesFile, SourceErrorCompliance, SourceErrorTypes,
+    ATTR_SOURCE_ERROR_COMPLIANCE, ATTR_SOURCE_ERROR_SIGNATURES, ATTR_SOURCE_ERROR_TYPES,
+    ErrorComplianceFile, ErrorSignatureAssessment, ErrorTypeSourceNode, ErrorTypesFile,
+    SourceErrorCompliance, SourceErrorSignatures, SourceErrorTypes,
 };
 #[cfg(feature = "verus_ir")]
 pub use verus_ir::{

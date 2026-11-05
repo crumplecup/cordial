@@ -633,7 +633,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity` and `pageantry` consume loader-projected IR | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
 | API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
-| Error analysis | Sites, chain records, type relationships and expression compliance consume native loader projections (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`). Remaining: `enricher/error/scan.rs`, internal architecture and signature-chain collection. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
+| Error analysis | Sites, chain records, type relationships, expression compliance and signature-chain assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`). Remaining: internal architecture/apply collection. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
 | Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |
 | Panic and proof collectors | `panics/{scan,kani_reach}`, `verus_ir/parse.rs`, `antipatterns/{scan,contract_bounds}` | Macro payloads, proof dialect syntax, Kani/Creusot/Verus contracts. No fallback whole-file parser. Resolve the dialect capability before retiring its current support. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
@@ -899,6 +899,32 @@ the public IR view trait and concrete graph storage. The build-tier submit
 passed with zero open items.
 Production still uses compatibility collection until the remaining collectors
 and Cargo context driver are ready for the complete ownership cutover.
+
+## Checkpoint: signature-chain evidence joins the shared graph
+
+`SourceErrorSignatures` retains file snapshots and the complete declaration,
+import, source-relationship and conversion inventory. Parser nodes are lowered
+to a closed typed grammar before entering shared IR. The signature materializer
+assesses those graph facts through `IrView`, without reading source or keeping
+an auxiliary index. Required inventory fields fail closed; unsupported shapes
+remain unknown. The existing resolution grammar is preserved rather than
+expanded during migration.
+
+Contract coverage compares all eight existing conversion outcomes and complete
+serialized facts, checks source-free materialization, and mutates a retained
+source contract to prove assessment consumes that evidence. The native collector
+now obtains the same inventory from canonical database trees. Complete payload
+comparisons cover generic declarations, imports, source implementations, inactive
+code, nested functions, qualified paths and opaque macro boundaries. Virtual
+source-contract changes invalidate assessments, restoration recovers all facts,
+and malformed input fails closed. Cargo context integration still gates
+production semantic authority.
+
+Validation: the native parity fixture and all 39 internal-error tests passed
+with full features. Native parity and required-inventory replay also passed
+with only `internal_error_chain` enabled. The build-tier submit finished with
+zero open items after clearing encapsulation, modularity and cfg grouping
+findings. The deep tier was not rerun.
 
 ## Current next step
 

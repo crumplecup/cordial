@@ -5,6 +5,7 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprCall, ExprClosure, ExprMethodCall, Fields, FnArg, Pat, Signature, Type};
 
+use super::facts::{lower_expr, lower_type};
 use super::{Conversion, SignatureChainIndex, Ty};
 
 #[tracing::instrument(level = "debug")]
@@ -153,17 +154,16 @@ pub(super) fn has_bound_call(expr: &Expr, binding: &str) -> bool {
 
 #[tracing::instrument(level = "debug", skip(formal, actual, generics, bindings))]
 pub(super) fn bind_generics(
-    formal: &Type,
+    formal: &super::facts::Type,
     actual: &Ty,
     generics: &BTreeSet<String>,
     bindings: &mut BTreeMap<String, Ty>,
 ) -> Option<()> {
-    let Type::Path(path) = formal else {
+    let super::facts::Type::Path(path) = formal else {
         return Some(());
     };
-    if path.path.segments.len() == 1 && generics.contains(&path.path.segments[0].ident.to_string())
-    {
-        bindings.insert(path.path.segments[0].ident.to_string(), actual.clone());
+    if path.parts().len() == 1 && generics.contains(&path.parts()[0]) {
+        bindings.insert(path.parts()[0].clone(), actual.clone());
     }
     Some(())
 }
@@ -171,7 +171,7 @@ pub(super) fn bind_generics(
 struct ConversionVisitor {
     scope: Vec<String>,
     file: PathBuf,
-    params: BTreeMap<String, Type>,
+    params: BTreeMap<String, super::facts::Type>,
     conversions: Vec<Conversion>,
 }
 
@@ -189,7 +189,7 @@ impl SignatureChainIndex {
             .iter()
             .filter_map(|arg| match arg {
                 FnArg::Typed(typed) => match typed.pat.as_ref() {
-                    Pat::Ident(ident) => Some((ident.ident.to_string(), (*typed.ty).clone())),
+                    Pat::Ident(ident) => Some((ident.ident.to_string(), lower_type(&typed.ty))),
                     _ => None,
                 },
                 FnArg::Receiver(_) => None,
@@ -215,8 +215,9 @@ impl<'ast> Visit<'ast> for ConversionVisitor {
         {
             self.conversions.push(Conversion {
                 scope: self.scope.clone(),
-                receiver: (*call.receiver).clone(),
-                body: (**body).clone(),
+                receiver: lower_expr(&call.receiver),
+                has_bound_call: has_bound_call(body, &binding.ident.to_string()),
+                body: lower_expr(body),
                 binding: binding.ident.to_string(),
                 params: self.params.clone(),
                 file: self.file.clone(),
