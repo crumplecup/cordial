@@ -83,7 +83,13 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
             );
             let facts = serde_json::to_value(native.source_error_apply().into_diagnostic()?)
                 .into_diagnostic()?;
-            for boundary in ["name_audit", "static_strings", "namespace", "declarations"] {
+            for boundary in [
+                "name_audit",
+                "static_strings",
+                "namespace",
+                "declarations",
+                "uses",
+            ] {
                 let mut incomplete = facts.clone();
                 incomplete["files"][0]
                     .as_object_mut()
@@ -123,6 +129,28 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
                     apply_projection::materialized(mutated, root)?[section],
                     actual[section],
                     "IR {boundary}"
+                );
+            }
+            for guard in ["has_cfg", "macro_names", "paths"] {
+                let mut altered = facts.clone();
+                for file in altered["files"]
+                    .as_array_mut()
+                    .ok_or_else(|| miette::miette!("files"))?
+                {
+                    file["uses"][guard] = match guard {
+                        "has_cfg" => serde_json::json!(true),
+                        "macro_names" => serde_json::json!(["Cause", "Parent", "Located"]),
+                        _ => serde_json::json!([]),
+                    };
+                }
+                let mut mutated = native.clone();
+                mutated
+                    .set_attr(mutated.root(), ATTR_SOURCE_ERROR_APPLY, altered)
+                    .into_diagnostic()?;
+                assert_ne!(
+                    apply_projection::materialized(mutated, root)?["plans"],
+                    actual["plans"],
+                    "IR uses {guard}"
                 );
             }
             for boundary in ["imports", "modules"] {

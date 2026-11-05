@@ -5,7 +5,6 @@
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
-use syn::visit::Visit;
 use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
@@ -49,33 +48,46 @@ impl FileSyntaxFacts {
         graph_declarations: GraphDeclarationFacts,
         source: &crate::ir::SourceErrorApply,
     ) -> crate::CordialResult<Self> {
-        let mut collector = Collector {
-            facts: Self {
-                path: file.path().to_path_buf(),
-                source_digest: file.source_digest(),
-                source_identifiers: file
-                    .source()
-                    .split(|ch: char| !ch.is_alphanumeric() && ch != '_')
-                    .filter(|part| tracked_names.contains(*part))
-                    .map(str::to_string)
-                    .collect(),
-                static_strings: source.static_strings_for(file)?.clone(),
-                identifiers: BTreeSet::new(),
-                declarations: BTreeSet::new(),
-                paths: Vec::new(),
-                macro_names: BTreeSet::new(),
-                has_cfg: false,
-                name_audit: source.name_audit_for(file)?.clone(),
-                expressions: GraphExprFacts::collect(file, tracked_names, tracked_fields),
-                lifetimes: GraphLifetimeFacts::collect(file, tracked_names),
-                local_lifetimes: LifetimeFileFacts::collect(file, tracked_names),
-                graph_declarations,
-            },
-            module_depth: 0,
-            tracked_names,
-        };
-        collector.visit_file(file.syntax());
-        Ok(collector.facts)
+        let uses = source.uses_for(file)?;
+        Ok(Self {
+            path: file.path().to_path_buf(),
+            source_digest: file.source_digest(),
+            source_identifiers: uses
+                .source_identifiers()
+                .intersection(tracked_names)
+                .cloned()
+                .collect(),
+            static_strings: source.static_strings_for(file)?.clone(),
+            identifiers: uses
+                .identifiers()
+                .iter()
+                .filter(|(name, _, _)| tracked_names.contains(name))
+                .cloned()
+                .collect(),
+            declarations: uses
+                .declarations()
+                .iter()
+                .filter(|(name, _, _)| tracked_names.contains(name))
+                .cloned()
+                .collect(),
+            paths: uses
+                .paths()
+                .iter()
+                .filter(|((name, _, _), _)| tracked_names.contains(name))
+                .cloned()
+                .collect(),
+            macro_names: uses
+                .macro_names()
+                .intersection(tracked_names)
+                .cloned()
+                .collect(),
+            has_cfg: uses.has_cfg(),
+            name_audit: source.name_audit_for(file)?.clone(),
+            expressions: GraphExprFacts::collect(file, tracked_names, tracked_fields),
+            lifetimes: GraphLifetimeFacts::collect(file, tracked_names),
+            local_lifetimes: LifetimeFileFacts::collect(file, tracked_names),
+            graph_declarations,
+        })
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -87,102 +99,5 @@ impl FileSyntaxFacts {
     #[instrument(level = "trace", skip(self, name))]
     pub(super) fn source_mentions(&self, name: &str) -> bool {
         self.source_identifiers.contains(name)
-    }
-}
-
-struct Collector<'a> {
-    facts: FileSyntaxFacts,
-    module_depth: usize,
-    tracked_names: &'a BTreeSet<String>,
-}
-
-impl<'ast> Visit<'ast> for Collector<'_> {
-    #[instrument(level = "debug", skip(self, item))]
-    fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
-        self.module_depth += 1;
-        syn::visit::visit_item_mod(self, item);
-        self.module_depth -= 1;
-    }
-
-    #[instrument(level = "debug", skip(self, item))]
-    fn visit_item_struct(&mut self, item: &'ast syn::ItemStruct) {
-        if self.tracked_names.contains(&item.ident.to_string()) {
-            self.facts.declarations.insert(located(&item.ident));
-        }
-        syn::visit::visit_item_struct(self, item);
-    }
-
-    #[instrument(level = "debug", skip(self, item))]
-    fn visit_item_enum(&mut self, item: &'ast syn::ItemEnum) {
-        if self.tracked_names.contains(&item.ident.to_string()) {
-            self.facts.declarations.insert(located(&item.ident));
-        }
-        syn::visit::visit_item_enum(self, item);
-    }
-
-    #[instrument(level = "debug", skip(self, item))]
-    fn visit_attribute(&mut self, item: &'ast syn::Attribute) {
-        self.facts.has_cfg |= item.path().is_ident("cfg") || item.path().is_ident("cfg_attr");
-        syn::visit::visit_attribute(self, item);
-    }
-
-    #[instrument(level = "debug", skip(self, ident))]
-    fn visit_ident(&mut self, ident: &'ast proc_macro2::Ident) {
-        if self.tracked_names.contains(&ident.to_string()) {
-            self.facts.identifiers.insert(located(ident));
-        }
-    }
-
-    #[instrument(level = "debug", skip(self, path))]
-    fn visit_path(&mut self, path: &'ast syn::Path) {
-        if self.module_depth == 0 {
-            let mut prefix = Vec::new();
-            for segment in &path.segments {
-                prefix.push(segment.ident.to_string());
-                if self.tracked_names.contains(&segment.ident.to_string()) {
-                    self.facts
-                        .paths
-                        .push((located(&segment.ident), prefix.clone()));
-                }
-            }
-        }
-        syn::visit::visit_path(self, path);
-    }
-
-    #[instrument(level = "debug", skip(self, item))]
-    fn visit_macro(&mut self, item: &'ast syn::Macro) {
-        collect_token_idents(
-            &item.tokens,
-            self.tracked_names,
-            &mut self.facts.macro_names,
-        );
-        syn::visit::visit_macro(self, item);
-    }
-}
-
-#[instrument(level = "debug", skip(ident))]
-fn located(ident: &proc_macro2::Ident) -> LocatedName {
-    let start = ident.span().start();
-    (ident.to_string(), start.line, start.column)
-}
-
-#[instrument(level = "debug", skip(tokens, tracked_names, names))]
-fn collect_token_idents(
-    tokens: &proc_macro2::TokenStream,
-    tracked_names: &BTreeSet<String>,
-    names: &mut BTreeSet<String>,
-) {
-    for tree in tokens.clone() {
-        match tree {
-            proc_macro2::TokenTree::Ident(ident) => {
-                if tracked_names.contains(&ident.to_string()) {
-                    names.insert(ident.to_string());
-                }
-            }
-            proc_macro2::TokenTree::Group(group) => {
-                collect_token_idents(&group.stream(), tracked_names, names)
-            }
-            _ => {}
-        }
     }
 }

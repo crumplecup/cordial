@@ -1,4 +1,4 @@
-//! Loader-owned declaration evidence for error strategy transformations.
+//! Loader-owned snapshot evidence for error strategy transformations.
 
 use crate::etiquettes::internal_error_chain::{GraphDeclarationFacts, NameAudit};
 use crate::loader::{DatabaseSource, SharedParsedFile, SourceLoadView};
@@ -9,12 +9,14 @@ use std::path::{Path, PathBuf};
 
 mod namespace;
 mod static_strings;
+mod uses;
 use namespace::ApplyNamespace;
+use uses::ApplyUses;
 
-/// Required declaration evidence on the shared crate graph root.
+/// Required transformation evidence on the shared crate graph root.
 pub const ATTR_SOURCE_ERROR_APPLY: &str = "source_error_apply";
 
-/// Error graph declarations, bound to every inspected source snapshot.
+/// Error graph declarations and safety facts for every inspected snapshot.
 #[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub struct SourceErrorApply {
     crate_root: PathBuf,
@@ -33,6 +35,8 @@ pub struct ErrorApplyFile {
     name_audit: NameAudit,
     #[getter(skip)]
     static_strings: BTreeSet<String>,
+    #[getter(skip)]
+    uses: ApplyUses,
 }
 
 impl SourceErrorApply {
@@ -51,6 +55,7 @@ impl SourceErrorApply {
                     namespace: ApplyNamespace::collect(&file),
                     name_audit: NameAudit::collect(&file),
                     static_strings: static_strings::collect(&file),
+                    uses: ApplyUses::collect(&file),
                 });
                 Ok(())
             },
@@ -87,6 +92,7 @@ impl SourceErrorApply {
             namespace: ApplyNamespace::collect_native(file),
             name_audit: NameAudit::collect_native(file),
             static_strings: static_strings::collect_native(file),
+            uses: ApplyUses::collect_native(file),
         }
     }
 
@@ -134,5 +140,10 @@ impl SourceErrorApply {
             ));
         }
         Ok(entry)
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
+    pub(crate) fn uses_for(&self, file: &SharedParsedFile) -> CordialResult<&ApplyUses> {
+        Ok(&self.file_for(file)?.uses)
     }
 }

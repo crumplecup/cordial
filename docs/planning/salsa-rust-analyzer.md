@@ -634,7 +634,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
 | Error analysis | Sites, chain records, type relationships, expression compliance, signature-chain and architecture assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`, `SourceErrorArchitecture`). Apply collection remains. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
-| Error apply inventory | Both loaders project required `SourceErrorApply` declaration, namespace and name/initializer safety evidence. Expression, getter-use, initializer and lifetime collection in `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` remains. | Declaration payloads include storage, source/Kind edges, generic and lifetime shapes, visibility, attributes and edit ranges. Module boundaries, import bindings and type-alias names drive graph and getter identity joins from IR. Name-shadowing guards and unambiguous immutable string declarations also come from loader evidence. Collect the remaining uses and initializers into typed IR. Keep edit rendering text-only. |
+| Error apply inventory | Both loaders project required `SourceErrorApply` declaration, namespace, name/initializer safety and located graph-use evidence. Expression, getter-use, initializer and lifetime collection in `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` remains. | Declaration payloads include storage, source/Kind edges, generic and lifetime shapes, visibility, attributes and edit ranges. Module boundaries, import bindings and type-alias names drive graph and getter identity joins from IR. Name-shadowing guards, immutable string declarations and located graph-closure uses also come from loader evidence. Collect the remaining expressions, getter uses, initializers and lifetimes into typed IR. Keep edit rendering text-only. |
 | Panic and proof collectors | Both loaders project required `SourceVerus`, `SourcePanics` and `SourceAntipatterns` graph evidence. Proof-pattern, panic and antipattern hooks consume IR alone. Native collection covers ordinary syntax, Kani proof graphs, embedded programs and Creusot/Kani/Verus contract clauses. | Canonical outer Rust plus memoized payload grammars. Retire compatibility collection with the production frontend; no fallback whole-file parser. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
 
@@ -1213,6 +1213,30 @@ All 47 existing error-apply tests pass with full features. Consumer mutation
 tests verify that name guards change graph plans and immutable-source evidence
 changes conversion units; missing required fields fail closed. Build-tier submit
 verified zero open items (list 70). The deep tier was not run.
+
+## Checkpoint: error/apply graph-closure uses
+
+Both loaders collect candidate-independent written-use evidence in the required,
+snapshot-bound `SourceErrorApply` inventory. Apply selects its tracked names from
+that evidence rather than running another syntax visitor. This includes located
+identifiers and struct/enum declarations, path prefixes outside inline modules,
+macro identifiers, cfg blockers and conservative textual mentions.
+
+Path records are sorted and deduplicated because graph closure consumes membership
+rather than visitor order. Native collection preserves raw names, character-based
+columns, qualified-self paths, shorthand fields, documentation attributes and typed
+receiver paths. Macro inputs stay opaque: their identifiers block transformations
+without becoming ordinary uses.
+
+Expression, getter, initializer-expression and lifetime ports still remain before
+production cutover, together with Cargo-context and compatibility-owner retirement.
+
+Validation on 2026-11-05: the 22-case located-use parity fixture and complete
+safety parity pass with full features, alongside all 47 error-apply regressions.
+Consumer mutations verify that cfg blockers, macro mentions and path records
+affect graph plans; missing required evidence fails closed. Tracing apply resolved
+the two new instrumentation findings, and build-tier submit verified zero open
+items (list 72). The deep tier was not run.
 
 ## Current next step
 
