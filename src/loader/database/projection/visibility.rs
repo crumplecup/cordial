@@ -23,7 +23,8 @@ impl SourceDatabase {
                 #[cfg(any(
                     feature = "tracing",
                     feature = "internal_error_chain",
-                    feature = "verus_ir"
+                    feature = "verus_ir",
+                    feature = "panics"
                 ))]
                 &self.db,
                 path,

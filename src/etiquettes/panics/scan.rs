@@ -5,6 +5,8 @@ mod snippets;
 mod source;
 #[cfg(feature = "verus_ir")]
 mod verus_panics;
+#[cfg(feature = "verus_ir")]
+pub(crate) use verus_panics::findings as verus_findings;
 #[cfg(not(feature = "verus_ir"))]
 mod verus_recovery;
 mod visit;

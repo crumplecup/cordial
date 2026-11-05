@@ -5,8 +5,11 @@
 //! Recognizing Rust syntax does not establish a macro's expansion semantics.
 
 use super::{super::database::SemanticDatabase, DatabaseSource};
-use ra_ap_syntax::{AstNode, Parse, SyntaxNode, ast};
+use ra_ap_syntax::{AstNode, Parse, ast};
 use std::collections::HashMap;
+
+#[cfg(feature = "panics")]
+mod panic;
 
 #[salsa::interned]
 pub(super) struct Payload<'db> {
@@ -21,6 +24,18 @@ pub(super) fn expression<'db>(
     key: Payload<'db>,
 ) -> Parse<ast::Expr> {
     ast::Expr::parse(key.text(db), ra_ap_syntax::Edition::CURRENT)
+}
+
+#[cfg(feature = "panics")]
+#[salsa::tracked(returns(ref))]
+#[tracing::instrument(level = "debug", skip(db, key))]
+#[hotpath::measure]
+pub(super) fn program<'db>(
+    db: &'db dyn SemanticDatabase,
+    key: Payload<'db>,
+) -> Parse<ast::SourceFile> {
+    tracing::debug!(target: "cordial::semantic::queries", function = "payload", query = "rust_program", "semantic query executed");
+    ast::SourceFile::parse(key.text(db), ra_ap_syntax::Edition::CURRENT)
 }
 
 /// Loader-issued syntax only. Lookups use canonical AST identity; a foreign
@@ -40,7 +55,7 @@ impl DatabaseMacroSyntax {
             .unwrap_or_default()
     }
 
-    #[cfg(feature = "tracing")]
+    #[cfg(any(feature = "tracing", feature = "panics"))]
     #[tracing::instrument(level = "trace", skip(self, invocation))]
     pub(crate) fn items(&self, invocation: &ast::MacroCall) -> &[ast::Item] {
         self.items
@@ -49,8 +64,9 @@ impl DatabaseMacroSyntax {
             .unwrap_or_default()
     }
 
+    #[cfg(any(feature = "tracing", feature = "internal_error_chain"))]
     #[tracing::instrument(level = "debug", skip(self, file, root))]
-    fn collect(&mut self, file: &DatabaseSource<'_>, root: &SyntaxNode) {
+    fn collect(&mut self, file: &DatabaseSource<'_>, root: &ra_ap_syntax::SyntaxNode) {
         for invocation in root.descendants().filter_map(ast::MacroCall::cast) {
             let name = invocation
                 .path()
@@ -87,6 +103,7 @@ impl DatabaseMacroSyntax {
 
 impl DatabaseSource<'_> {
     /// Project opaque islands only from this snapshot and its issued islands.
+    #[cfg(any(feature = "tracing", feature = "internal_error_chain"))]
     #[tracing::instrument(level = "debug", skip(self))]
     pub(crate) fn proof_macro_syntax(&self) -> DatabaseMacroSyntax {
         let mut syntax = DatabaseMacroSyntax::default();
@@ -95,7 +112,7 @@ impl DatabaseSource<'_> {
     }
 
     #[tracing::instrument(level = "debug", skip(self, invocation))]
-    fn macro_arguments(&self, invocation: &ast::MacroCall) -> Vec<ast::Expr> {
+    pub(super) fn macro_arguments(&self, invocation: &ast::MacroCall) -> Vec<ast::Expr> {
         let Some(tree) = invocation.token_tree() else {
             return Vec::new();
         };
@@ -117,8 +134,9 @@ impl DatabaseSource<'_> {
 
     /// Items from the last top-level braced argument, matching the workspace
     /// proof-harness syntax contract. Unknown/malformed payloads remain opaque.
+    #[cfg(any(feature = "tracing", feature = "internal_error_chain"))]
     #[tracing::instrument(level = "debug", skip(self, invocation))]
-    fn macro_items(&self, invocation: &ast::MacroCall) -> Vec<ast::Item> {
+    pub(super) fn macro_items(&self, invocation: &ast::MacroCall) -> Vec<ast::Item> {
         let Some(body) = invocation.token_tree().and_then(|tree| {
             tree.syntax()
                 .children_with_tokens()

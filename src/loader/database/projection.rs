@@ -16,6 +16,8 @@ mod error_sites;
 mod error_types;
 #[cfg(feature = "tracing")]
 mod observability;
+#[cfg(feature = "panics")]
+mod panics;
 #[cfg(feature = "derives")]
 mod path_inclusion;
 #[cfg(feature = "verus_ir")]
@@ -118,6 +120,16 @@ impl SourceDatabase {
             crate::ir::ATTR_SOURCE_VERUS,
             serde_json::to_value(self.project_verus(target.crate_root())?)?,
         )?;
+        #[cfg(feature = "panics")]
+        graph.set_attr(
+            graph.root(),
+            crate::ir::ATTR_SOURCE_PANICS,
+            serde_json::to_value(self.project_panics(
+                target.crate_root(),
+                #[cfg(feature = "verus_ir")]
+                &crate::IrView::source_verus(&graph)?.facts(),
+            )?)?,
+        )?;
         let mut snapshots = Vec::new();
         #[cfg(feature = "error_sites")]
         graph.set_attr(
@@ -174,7 +186,8 @@ impl SourceDatabase {
                 #[cfg(any(
                     feature = "tracing",
                     feature = "internal_error_chain",
-                    feature = "verus_ir"
+                    feature = "verus_ir",
+                    feature = "panics"
                 ))]
                 &self.db,
                 path,

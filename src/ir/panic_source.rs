@@ -1,10 +1,18 @@
 //! Snapshot-bound panic and proof-exemption evidence retained by the loader.
 
 use crate::etiquettes::panics::PanicSiteRecord;
+use crate::loader::DatabaseSource;
 use crate::{CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+mod assertions;
+mod embedded;
+mod native;
+mod proof;
+mod sites;
+mod syntax;
 
 /// Required panic inventory on the crate graph root.
 pub const ATTR_SOURCE_PANICS: &str = "source_panics";
@@ -72,4 +80,22 @@ impl SourcePanics {
             Some(verus),
         )
     }
+}
+
+#[derive(Clone, Default)]
+struct Context {
+    modules: Vec<String>,
+    implementation: Option<String>,
+    functions: Vec<String>,
+    cfg_test: bool,
+    not_kani: bool,
+}
+
+struct Scanner<'a, 'db> {
+    source: &'a DatabaseSource<'db>,
+    root: &'a Path,
+    reachable: &'a BTreeSet<String>,
+    embedded: bool,
+    assertion_lines: BTreeSet<u32>,
+    records: Vec<PanicSiteRecord>,
 }

@@ -46,6 +46,8 @@ pub use enricher::PanicInventoryEnricher;
 pub use probe::PanicSiteProbe;
 pub use reporter::{PanicChecklistReporter, PanicCsvReporter, PanicSummaryReporter};
 pub(crate) use scan::collect_panic_inventory;
+#[cfg(feature = "verus_ir")]
+pub(crate) use scan::verus_findings;
 pub use scan::{scan_crate_panics, scan_rust_source, scan_source_tree};
 pub use types::{PanicKind, PanicSiteRecord};
 

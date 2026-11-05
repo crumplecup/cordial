@@ -4,11 +4,28 @@ use tracing::instrument;
 mod database;
 mod native_syntax;
 pub use database::{SemanticCargoOptions, SourceDatabase};
-#[cfg(any(feature = "tracing", feature = "internal_error_chain"))]
+#[cfg(any(
+    feature = "tracing",
+    feature = "internal_error_chain",
+    feature = "panics"
+))]
 pub(crate) use native_syntax::DatabaseMacroSyntax;
 pub(crate) use native_syntax::DatabaseSource;
 #[cfg(all(feature = "verus_ir", feature = "visibility"))]
 pub(crate) use native_syntax::DatabaseVerusSyntax;
+#[cfg(any(
+    feature = "panics",
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "visibility",
+    feature = "cli_layout",
+))]
+pub(crate) use native_syntax::token_text as database_token_text;
 mod library_root;
 pub use library_root::library_root_rs;
 mod macro_syntax;

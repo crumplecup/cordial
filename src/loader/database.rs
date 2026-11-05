@@ -12,7 +12,8 @@ pub use options::SemanticCargoOptions;
 #[cfg(any(
     feature = "tracing",
     feature = "internal_error_chain",
-    feature = "verus_ir"
+    feature = "verus_ir",
+    feature = "panics"
 ))]
 pub(super) use queries::SemanticDatabase;
 /// Canonical source database shared by source collection and semantic queries.

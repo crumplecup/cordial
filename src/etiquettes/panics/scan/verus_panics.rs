@@ -22,7 +22,7 @@ use super::{PanicKind, PanicSiteRecord};
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
-pub(super) fn findings(
+pub(crate) fn findings(
     ir: &crate::verus_ir::VerusCrateIr,
     crate_root: &Path,
 ) -> CordialResult<Vec<PanicSiteRecord>> {

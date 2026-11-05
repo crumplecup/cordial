@@ -12,7 +12,8 @@ pub(crate) struct DatabaseSource<'db> {
     #[cfg(any(
         feature = "tracing",
         feature = "internal_error_chain",
-        feature = "verus_ir"
+        feature = "verus_ir",
+        feature = "panics"
     ))]
     database: &'db ra_ap_ide_db::RootDatabase,
     path: &'db Path,
@@ -29,7 +30,8 @@ impl<'db> DatabaseSource<'db> {
         #[cfg(any(
             feature = "tracing",
             feature = "internal_error_chain",
-            feature = "verus_ir"
+            feature = "verus_ir",
+            feature = "panics"
         ))]
         database: &'db ra_ap_ide_db::RootDatabase,
         path: &'db Path,
@@ -41,7 +43,8 @@ impl<'db> DatabaseSource<'db> {
             #[cfg(any(
                 feature = "tracing",
                 feature = "internal_error_chain",
-                feature = "verus_ir"
+                feature = "verus_ir",
+                feature = "panics"
             ))]
             database,
             path,
