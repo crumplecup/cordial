@@ -24,10 +24,6 @@ pub struct WorkspaceIr {
     #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
     #[getter(skip)]
     proof_harness: Option<std::sync::Arc<crate::proof_harness::ProofHarness>>,
-    /// Parsed Verus macro facts for each crate in this run.
-    #[cfg(feature = "verus_ir")]
-    #[getter(skip)]
-    verus_facts: HashMap<String, std::sync::Arc<crate::VerusCrateIr>>,
     /// Workspace manifest and contract evidence used by the antipattern enricher.
     #[cfg(feature = "antipatterns")]
     #[getter(skip)]
@@ -102,29 +98,6 @@ impl WorkspaceIr {
         &self,
     ) -> Option<std::sync::Arc<crate::proof_harness::ProofHarness>> {
         self.proof_harness.clone()
-    }
-
-    #[cfg(all(
-        feature = "verus_ir",
-        any(
-            feature = "panics",
-            feature = "proof_patterns",
-            feature = "verus_warnings"
-        )
-    ))]
-    #[instrument(level = "trace", skip(self, facts))]
-    pub(crate) fn set_verus_facts(&mut self, crate_name: String, facts: crate::VerusCrateIr) {
-        self.verus_facts
-            .insert(crate_name, std::sync::Arc::new(facts));
-    }
-
-    #[cfg(feature = "verus_ir")]
-    #[instrument(level = "trace", skip(self))]
-    pub(crate) fn verus_facts(
-        &self,
-        crate_name: &str,
-    ) -> Option<std::sync::Arc<crate::VerusCrateIr>> {
-        self.verus_facts.get(crate_name).cloned()
     }
 
     #[cfg(feature = "antipatterns")]

@@ -84,7 +84,7 @@ fn scan_crate_panics_impl(
         let verus = if let Some(verus) = verus {
             verus
         } else {
-            standalone = crate::verus_ir::scan_crate_verus_ir_with_source(crate_root, source)?;
+            standalone = crate::ir::SourceVerus::collect(source, crate_root)?.facts();
             &standalone
         };
         findings.extend(verus_panics::findings(verus, crate_root)?);

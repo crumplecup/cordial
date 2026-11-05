@@ -12,7 +12,7 @@ use crate::{SemanticCall, SemanticCallTarget, SemanticFunction, SemanticReturnCo
 use super::{recording, types};
 
 #[salsa::db]
-pub(super) trait SemanticDatabase: salsa::Database {
+pub(crate) trait SemanticDatabase: salsa::Database {
     fn root_database(&self) -> &RootDatabase;
 }
 

@@ -55,22 +55,6 @@ pub fn scan_crate_verus_ir(crate_root: &Path) -> crate::error::CordialResult<Ver
     facts::build_crate_ir(blocks)
 }
 
-/// Build Verus macro facts from the shared source snapshot. The session
-/// retains the result in its workspace IR for all consumers.
-#[cfg(any(
-    feature = "panics",
-    feature = "proof_patterns",
-    feature = "verus_warnings"
-))]
-#[instrument(level = "debug", skip(source), err(level = "warn"))]
-pub(crate) fn scan_crate_verus_ir_with_source(
-    crate_root: &Path,
-    source: &crate::loader::SourceLoadView,
-) -> crate::error::CordialResult<VerusCrateIr> {
-    let blocks = parse::collect_verus_blocks_with_source(crate_root, source)?;
-    facts::build_crate_ir(blocks)
-}
-
 /// Parse every `verus! { .. }` block in one already-read source string
 /// and extract real per-function facts from each -- a direct entry
 /// point for testing against one file's content without a real crate
@@ -96,4 +80,38 @@ pub(crate) fn scan_verus_rust_syntax(
     module_path: &str,
 ) -> crate::error::CordialResult<VerusCrateIr> {
     facts::build_crate_ir(parse::blocks_in_syntax(syntax, file, module_path))
+}
+
+/// Context-free facts and visibility counts from one memoized dialect parse.
+#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
+pub(crate) struct VerusPayloadFacts {
+    facts: VerusCrateIr,
+    #[cfg(feature = "visibility")]
+    #[getter(copy)]
+    visible_names: (usize, usize),
+}
+
+/// Extract a loader-issued dialect payload once, independent of consumer context.
+#[tracing::instrument(level = "debug", skip(payload))]
+pub(crate) fn payload_facts(payload: &str) -> Option<VerusPayloadFacts> {
+    let block = parse::block_in_payload(payload, Path::new(""), "", false)?;
+    #[cfg(feature = "visibility")]
+    let visible_names = block.visible_names();
+    Some(VerusPayloadFacts {
+        facts: facts::collect_crate_ir(vec![block]),
+        #[cfg(feature = "visibility")]
+        visible_names,
+    })
+}
+
+#[tracing::instrument(level = "debug", skip(file), err(level = "warn"))]
+pub(crate) fn shared_file_facts(
+    file: &crate::loader::SharedParsedFile,
+    module_path: &str,
+) -> crate::CordialResult<VerusCrateIr> {
+    facts::build_crate_ir(parse::blocks_in_syntax(
+        file.syntax(),
+        file.path(),
+        module_path,
+    ))
 }

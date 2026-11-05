@@ -43,12 +43,6 @@ impl IrView for CrateView<'_> {
         self.workspace.proof_harness()
     }
 
-    #[cfg(feature = "verus_ir")]
-    #[instrument(level = "trace", skip(self))]
-    fn verus_facts(&self) -> Option<std::sync::Arc<crate::VerusCrateIr>> {
-        self.workspace.verus_facts(&self.crate_name)
-    }
-
     #[cfg(feature = "antipatterns")]
     #[instrument(level = "trace", skip(self))]
     fn workspace_antipattern_facts(
@@ -176,12 +170,6 @@ impl IrView for CrateViewMut<'_> {
         &self,
     ) -> Option<std::sync::Arc<crate::proof_harness::ProofHarness>> {
         self.workspace.proof_harness()
-    }
-
-    #[cfg(feature = "verus_ir")]
-    #[instrument(level = "trace", skip(self))]
-    fn verus_facts(&self) -> Option<std::sync::Arc<crate::VerusCrateIr>> {
-        self.workspace.verus_facts(&self.crate_name)
     }
 
     #[cfg(feature = "antipatterns")]

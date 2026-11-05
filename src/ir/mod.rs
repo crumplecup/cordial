@@ -212,3 +212,8 @@ pub use wrapper_query::{
 pub use source_policy::CliLayoutFacts;
 #[cfg(feature = "cli_layout")]
 pub(crate) use source_policy::{EntryItem, EntryKind, LayoutCatalog, TypeRec, VariantShape};
+
+#[cfg(feature = "verus_ir")]
+mod verus_source;
+#[cfg(feature = "verus_ir")]
+pub use verus_source::{ATTR_SOURCE_VERUS, SourceVerus, VerusFile};

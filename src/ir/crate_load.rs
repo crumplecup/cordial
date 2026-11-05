@@ -57,18 +57,7 @@ pub fn load_crate_ir_if_missing(
 
     workspace.insert_crate(crate_ir);
 
-    #[cfg(any(
-        feature = "derives",
-        feature = "antipatterns",
-        all(
-            feature = "verus_ir",
-            any(
-                feature = "panics",
-                feature = "proof_patterns",
-                feature = "verus_warnings"
-            )
-        )
-    ))]
+    #[cfg(any(feature = "derives", feature = "antipatterns"))]
     if let Some(source) = load_views
         .get(&format!("{crate_name}:{}", SourceLoader::ID))
         .and_then(|view| view.as_any().downcast_ref::<SourceLoadView>())

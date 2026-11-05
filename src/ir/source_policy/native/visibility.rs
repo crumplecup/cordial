@@ -28,16 +28,22 @@ impl SourcePolicyInventory {
         file: &DatabaseSource<'_>,
     ) -> CordialResult<(VisibilityBody, FileSnapshot)> {
         Ok((
-            items(file.tree().items(), file)?,
+            items(
+                file.tree().items(),
+                file,
+                #[cfg(feature = "verus_ir")]
+                &file.verus_visibility(),
+            )?,
             FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
         ))
     }
 }
 
-#[tracing::instrument(level = "debug", skip(input, file), err(level = "warn"))]
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
 fn items(
     input: impl Iterator<Item = ast::Item>,
     file: &DatabaseSource<'_>,
+    #[cfg(feature = "verus_ir")] dialect: &crate::loader::DatabaseVerusSyntax,
 ) -> CordialResult<VisibilityBody> {
     let (mut leaf_pub, mut leaf_crate, mut children) = (0, 0, Vec::new());
     for item in input {
@@ -51,7 +57,12 @@ fn items(
                 .text()
                 .to_string();
             let content = if let Some(list) = module.item_list() {
-                VisibilityChildBody::Inline(items(list.items(), file)?)
+                VisibilityChildBody::Inline(items(
+                    list.items(),
+                    file,
+                    #[cfg(feature = "verus_ir")]
+                    dialect,
+                )?)
             } else {
                 VisibilityChildBody::External(path_attr(module)?)
             };
@@ -63,18 +74,10 @@ fn items(
             ));
         } else if let ast::Item::MacroCall(invocation) = &item {
             #[cfg(feature = "verus_ir")]
-            if invocation
-                .path()
-                .is_some_and(|path| super::tokens::render(path.syntax()) == "verus")
             {
-                // Rust's token tree cannot establish Verus declarations. No parser fallback.
-                return Err(CordialError::not_found(
-                    format!(
-                        "native Verus visibility evidence: {}",
-                        file.path().display()
-                    )
-                    .into(),
-                ));
+                let (public, internal) = dialect.visible_names(invocation);
+                leaf_pub += public;
+                leaf_crate += internal;
             }
             let _ = invocation;
         } else {

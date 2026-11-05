@@ -19,7 +19,11 @@ impl SourceDatabase {
                 return Err(anyhow::Error::new(error.clone()).into());
             }
             let source = DatabaseSource::new(
-                #[cfg(any(feature = "tracing", feature = "internal_error_chain"))]
+                #[cfg(any(
+                    feature = "tracing",
+                    feature = "internal_error_chain",
+                    feature = "verus_ir"
+                ))]
                 &self.db,
                 path,
                 self.db.file_text(file).text(&self.db),

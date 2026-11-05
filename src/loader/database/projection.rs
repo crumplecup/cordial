@@ -1,5 +1,28 @@
 //! Project canonical database source and semantic facts into shared IR.
 
+#[cfg(feature = "cli_layout")]
+mod cli_layout;
+#[cfg(feature = "internal_error_chain")]
+mod error_architecture;
+#[cfg(feature = "error_chain")]
+mod error_chains;
+#[cfg(feature = "internal_error_chain")]
+mod error_compliance;
+#[cfg(feature = "internal_error_chain")]
+mod error_signatures;
+#[cfg(feature = "error_sites")]
+mod error_sites;
+#[cfg(feature = "internal_error_chain")]
+mod error_types;
+#[cfg(feature = "tracing")]
+mod observability;
+#[cfg(feature = "derives")]
+mod path_inclusion;
+#[cfg(feature = "verus_ir")]
+mod verus;
+#[cfg(feature = "visibility")]
+mod visibility;
+
 use super::SourceDatabase;
 use crate::loader::database::{DatabaseSource, populate::Projection};
 use crate::{CordialResult, CrateIr};
@@ -89,6 +112,12 @@ impl SourceDatabase {
             crate::ir::ATTR_SOURCE_OBSERVABILITY,
             serde_json::to_value(self.project_observability(target.crate_root())?)?,
         )?;
+        #[cfg(feature = "verus_ir")]
+        graph.set_attr(
+            graph.root(),
+            crate::ir::ATTR_SOURCE_VERUS,
+            serde_json::to_value(self.project_verus(target.crate_root())?)?,
+        )?;
         let mut snapshots = Vec::new();
         #[cfg(feature = "error_sites")]
         graph.set_attr(
@@ -142,7 +171,11 @@ impl SourceDatabase {
                 return Err(anyhow::Error::new(error.clone()).into());
             }
             let source = DatabaseSource::new(
-                #[cfg(any(feature = "tracing", feature = "internal_error_chain"))]
+                #[cfg(any(
+                    feature = "tracing",
+                    feature = "internal_error_chain",
+                    feature = "verus_ir"
+                ))]
                 &self.db,
                 path,
                 text,

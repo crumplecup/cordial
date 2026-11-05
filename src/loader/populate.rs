@@ -166,6 +166,14 @@ impl SourceLoadView {
                 serde_json::to_value(inventory)?,
             )?;
         }
+        #[cfg(feature = "verus_ir")]
+        if let Some(root) = self.src_root().parent() {
+            ir.set_attr(
+                ir.root(),
+                crate::ir::ATTR_SOURCE_VERUS,
+                serde_json::to_value(crate::ir::SourceVerus::collect(self, root)?)?,
+            )?;
+        }
         for file in self.files() {
             let syntax = self.parsed_file(file.path(), "source-ir")?;
             self.load_file(ir, root, &syntax)?;

@@ -44,18 +44,7 @@ pub(crate) fn prepare_workspace_proof_harness(
     Ok(())
 }
 
-#[cfg(any(
-    feature = "derives",
-    feature = "antipatterns",
-    all(
-        feature = "verus_ir",
-        any(
-            feature = "panics",
-            feature = "proof_patterns",
-            feature = "verus_warnings"
-        )
-    )
-))]
+#[cfg(any(feature = "derives", feature = "antipatterns"))]
 #[tracing::instrument(level = "debug", skip(workspace, source, session, enrichers))]
 pub(crate) fn prepare_workspace_source_facts(
     workspace: &mut WorkspaceIr,
@@ -63,42 +52,6 @@ pub(crate) fn prepare_workspace_source_facts(
     session: &dyn SessionView,
     enrichers: &[&dyn IrEnricher],
 ) -> CordialResult<()> {
-    #[cfg(all(
-        feature = "verus_ir",
-        any(
-            feature = "panics",
-            feature = "proof_patterns",
-            feature = "verus_warnings"
-        )
-    ))]
-    {
-        let needs_verus = enrichers.iter().any(|enricher| {
-            #[cfg(feature = "panics")]
-            if enricher.id() == crate::etiquettes::panics::PanicInventoryEnricher::ID {
-                return true;
-            }
-            #[cfg(feature = "proof_patterns")]
-            if enricher.id() == crate::etiquettes::ProofPatternInventoryEnricher::ID {
-                return true;
-            }
-            #[cfg(feature = "verus_warnings")]
-            if enricher.id() == crate::etiquettes::verus_warnings::VerusWarningInventoryEnricher::ID
-            {
-                return true;
-            }
-            false
-        });
-        if needs_verus && workspace.verus_facts(source.crate_name()).is_none() {
-            let crate_root = source
-                .src_root()
-                .parent()
-                .unwrap_or_else(|| session.project_root());
-            workspace.set_verus_facts(
-                source.crate_name().to_string(),
-                crate::verus_ir::scan_crate_verus_ir_with_source(crate_root, source)?,
-            );
-        }
-    }
     #[cfg(feature = "antipatterns")]
     if enrichers.iter().any(|enricher| {
         enricher.id() == crate::etiquettes::antipatterns::AntipatternInventoryEnricher::ID

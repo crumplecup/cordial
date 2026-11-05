@@ -223,6 +223,8 @@ pub use ir::{
     SourceErrorTypes,
 };
 #[cfg(feature = "verus_ir")]
+pub use ir::{ATTR_SOURCE_VERUS, SourceVerus, VerusFile};
+#[cfg(feature = "verus_ir")]
 pub use verus_ir::{
     VerusCrateIr, VerusEnumFacts, VerusEnumVariantFacts, VerusFnFacts, VerusFnMode, VerusPanicKind,
     VerusPanicSite, VerusPublish, scan_crate_verus_ir, scan_verus_rust_source,

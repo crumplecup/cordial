@@ -4,7 +4,7 @@
 //! payload once, with ownership in the source database, rather than in a lint.
 //! Recognizing Rust syntax does not establish a macro's expansion semantics.
 
-use super::{DatabaseSource, queries::SemanticDatabase};
+use super::{super::database::SemanticDatabase, DatabaseSource};
 use ra_ap_syntax::{AstNode, Parse, SyntaxNode, ast};
 use std::collections::HashMap;
 

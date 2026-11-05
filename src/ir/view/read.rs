@@ -212,10 +212,10 @@ pub trait IrView {
     ) -> Option<std::sync::Arc<crate::proof_harness::ProofHarness>> {
         None
     }
-    /// Verus macro facts collected once for this crate's source snapshot.
+    /// Required, snapshot-bound Verus dialect evidence on the shared graph.
     #[cfg(feature = "verus_ir")]
-    fn verus_facts(&self) -> Option<std::sync::Arc<crate::VerusCrateIr>> {
-        None
+    fn source_verus(&self) -> CordialResult<crate::ir::SourceVerus> {
+        evidence::required(self, crate::ir::ATTR_SOURCE_VERUS, "source Verus inventory")
     }
     /// Workspace antipattern evidence collected once per run.
     #[cfg(feature = "antipatterns")]

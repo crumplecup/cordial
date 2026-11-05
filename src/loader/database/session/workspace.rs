@@ -1,8 +1,6 @@
 //! Effectful workspace loading stays in the driver, outside tracked queries.
 
-mod compiled;
-mod context;
-mod inputs;
+use super::{context, inputs};
 
 use super::SourceDatabase;
 use crate::{CordialResult, SemanticCargoOptions, SemanticContextGap};
@@ -105,7 +103,9 @@ impl SourceDatabase {
     }
 
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    pub(super) fn projection_context(&self) -> CordialResult<crate::SemanticWorkspaceContext> {
+    pub(in crate::loader::database) fn projection_context(
+        &self,
+    ) -> CordialResult<crate::SemanticWorkspaceContext> {
         let context = self.workspace.as_ref().ok_or_else(|| {
             crate::CordialError::workspace_source_facts_missing("semantic_workspace_context")
         })?;

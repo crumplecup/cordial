@@ -1,6 +1,6 @@
-use crate::enricher::{member_crate_root, resolve_parent};
+use crate::enricher::resolve_parent;
 use crate::error::CordialResult;
-use crate::hooks::{SourceEnrichView, SourceEnricher};
+use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
 
@@ -16,21 +16,19 @@ impl ProofPatternInventoryEnricher {
     pub const ID: &'static str = "proof-pattern-inventory";
 }
 
-impl SourceEnricher for ProofPatternInventoryEnricher {
+impl IrEnricher for ProofPatternInventoryEnricher {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
     #[instrument(level = "trace", skip(self, view))]
-    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
-        let (ir, source, session) = view.into_parts();
-
-        let crate_root = member_crate_root(source, session);
-        let verus = ir.verus_facts().ok_or_else(|| {
-            crate::error::CordialError::workspace_source_facts_missing("Verus macro facts")
-        })?;
-        let records = scan_crate_proof_patterns_with_ir(&crate_root, &verus)?;
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let ir = view.ir();
+        let inventory = ir.source_verus()?;
+        let crate_root = inventory.crate_root();
+        let verus = inventory.facts();
+        let records = scan_crate_proof_patterns_with_ir(crate_root, &verus)?;
 
         for record in records {
             let parent = resolve_parent(ir, record.context())?;

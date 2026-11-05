@@ -1,11 +1,14 @@
 #[cfg(any(feature = "cli_layout", feature = "internal_error_chain"))]
-pub(crate) use database::module_path as database_module_path;
+pub(crate) use native_syntax::module_path as database_module_path;
 use tracing::instrument;
 mod database;
-#[cfg(any(feature = "tracing", feature = "internal_error_chain"))]
-pub(crate) use database::DatabaseMacroSyntax;
-pub(crate) use database::DatabaseSource;
+mod native_syntax;
 pub use database::{SemanticCargoOptions, SourceDatabase};
+#[cfg(any(feature = "tracing", feature = "internal_error_chain"))]
+pub(crate) use native_syntax::DatabaseMacroSyntax;
+pub(crate) use native_syntax::DatabaseSource;
+#[cfg(all(feature = "verus_ir", feature = "visibility"))]
+pub(crate) use native_syntax::DatabaseVerusSyntax;
 mod library_root;
 pub use library_root::library_root_rs;
 mod macro_syntax;

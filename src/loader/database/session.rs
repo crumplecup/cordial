@@ -1,30 +1,13 @@
 //! Canonical source inputs and semantic queries for the shared source loader.
 
-#[cfg(feature = "cli_layout")]
-mod cli_layout;
-#[cfg(feature = "internal_error_chain")]
-mod error_architecture;
-#[cfg(feature = "error_chain")]
-mod error_chains;
-#[cfg(feature = "internal_error_chain")]
-mod error_compliance;
-#[cfg(feature = "internal_error_chain")]
-mod error_signatures;
-#[cfg(feature = "error_sites")]
-mod error_sites;
-#[cfg(feature = "internal_error_chain")]
-mod error_types;
-#[cfg(feature = "tracing")]
-mod observability;
-#[cfg(feature = "derives")]
-mod path_inclusion;
-mod project;
-#[cfg(feature = "visibility")]
-mod visibility;
+mod compiled;
+mod context;
+mod inputs;
 mod workspace;
 
 use std::path::Path;
 
+use super::SourceDatabase;
 use ra_ap_hir::ChangeWithProcMacros;
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
@@ -32,21 +15,6 @@ use ra_ap_vfs::{Vfs, VfsPath};
 use tracing::instrument;
 
 use crate::{CordialError, CordialResult};
-
-/// Canonical source database shared by source collection and semantic queries.
-/// Revisions are serial; virtual changes never write to the loaded project.
-#[derive(Debug)]
-pub struct SourceDatabase {
-    db: RootDatabase,
-    vfs: Vfs,
-    revision: u64,
-    workspace: Option<crate::SemanticWorkspaceContext>,
-    cargo_options: Option<crate::SemanticCargoOptions>,
-    // Keep the expansion service alive for this entire analysis session.
-    proc_macro_server: Option<ra_ap_proc_macro_api::ProcMacroClient>,
-    #[cfg(feature = "cfg_hygiene")]
-    workspace_root: Option<std::path::PathBuf>,
-}
 
 impl SourceDatabase {
     /// Create the source-input owner before Cargo context is available.
@@ -123,7 +91,7 @@ impl SourceDatabase {
     }
 
     #[instrument(level = "trace", skip(self, path), err(level = "warn"))]
-    fn file_id(&self, path: &Path) -> CordialResult<ra_ap_vfs::FileId> {
+    pub(super) fn file_id(&self, path: &Path) -> CordialResult<ra_ap_vfs::FileId> {
         let path = path.canonicalize()?;
         // VfsPath takes an absolute UTF-8 path. Refuse unsupported filesystem
         // names before crossing the upstream API's assertion boundary.

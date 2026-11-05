@@ -77,7 +77,9 @@ pub enum VerusPanicKind {
 }
 
 /// One abort site found inside a function's body.
-#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters, derive_new::new,
+)]
 pub struct VerusPanicSite {
     /// Abort kind (`panic!`, `unwrap`, …).
     #[getter(copy)]
@@ -111,7 +113,17 @@ pub struct VerusPanicSite {
 /// back to text; `uses_assume`/`uses_admit`/`is_external_body` are real
 /// soundness-relevant signals -- code paths where a claim is trusted
 /// rather than checked.
-#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_builder::Builder)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_getters::Getters,
+    derive_builder::Builder,
+    derive_new::new,
+)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct VerusFnFacts {
     /// The function's own name.
@@ -212,7 +224,9 @@ impl VerusFnFacts {
 }
 
 /// One variant of an `enum` found inside a `verus! { .. }` block.
-#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters, derive_new::new,
+)]
 pub struct VerusEnumVariantFacts {
     /// The variant's own name.
     name: String,
@@ -236,7 +250,9 @@ pub struct VerusEnumVariantFacts {
 /// line* with nothing real to attach a doc comment to. Confirmed against
 /// a real `verus` invocation, not assumed: neither a doc comment on the
 /// variant nor on the individual data field cleared the warning.
-#[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters, derive_new::new,
+)]
 pub struct VerusEnumFacts {
     /// The enum's own name.
     name: String,
@@ -286,7 +302,17 @@ impl VerusEnumFacts {
 
 /// Every `VerusFnFacts`/[`VerusEnumFacts`] recovered from one crate's
 /// real `verus! { .. }` blocks.
-#[derive(Debug, Clone, Default, PartialEq, Eq, derive_getters::Getters, derive_new::new)]
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_getters::Getters,
+    derive_new::new,
+)]
 pub struct VerusCrateIr {
     /// Verus functions inventoried in this crate.
     functions: Vec<VerusFnFacts>,
@@ -295,6 +321,23 @@ pub struct VerusCrateIr {
 }
 
 impl VerusCrateIr {
+    /// Bind memoized payload facts to the canonical invocation that issued them.
+    #[tracing::instrument(level = "debug", skip(self, file))]
+    pub(crate) fn in_context(&self, file: &Path, module_path: &str, cfg_test: bool) -> Self {
+        let mut facts = self.clone();
+        for function in &mut facts.functions {
+            function.span = FileSpan::new(file, function.span.line(), function.span.column());
+            function.module_path = module_path.to_owned();
+            function.cfg_test = cfg_test;
+        }
+        for item in &mut facts.enums {
+            item.span = FileSpan::new(file, item.span.line(), item.span.column());
+            item.module_path = module_path.to_owned();
+            item.cfg_test = cfg_test;
+        }
+        facts
+    }
+
     /// Every function resting on a real, local soundness escape hatch --
     /// see [`VerusFnFacts::is_trusted_not_proven`].
     #[instrument(level = "trace", skip(self))]

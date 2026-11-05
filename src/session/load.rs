@@ -182,18 +182,7 @@ pub(super) fn load_and_probe(
             workspace.insert_crate(crate_ir);
         }
 
-        #[cfg(any(
-            feature = "derives",
-            feature = "antipatterns",
-            all(
-                feature = "verus_ir",
-                any(
-                    feature = "panics",
-                    feature = "proof_patterns",
-                    feature = "verus_warnings"
-                )
-            )
-        ))]
+        #[cfg(any(feature = "derives", feature = "antipatterns"))]
         if let Some(source) = load_views
             .get(&format!("{}:{}", target.crate_name(), SourceLoader::ID))
             .and_then(|view| view.as_any().downcast_ref::<SourceLoadView>())

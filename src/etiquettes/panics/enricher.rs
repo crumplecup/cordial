@@ -32,9 +32,7 @@ impl SourceEnricher for PanicInventoryEnricher {
 
         let crate_root = member_crate_root(source, session);
         #[cfg(feature = "verus_ir")]
-        let verus = ir.verus_facts().ok_or_else(|| {
-            crate::error::CordialError::workspace_source_facts_missing("Verus macro facts")
-        })?;
+        let verus = ir.source_verus()?.facts();
         let records = scan_crate_panics_with_source(
             &crate_root,
             source,

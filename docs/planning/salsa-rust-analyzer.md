@@ -635,7 +635,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
 | Error analysis | Sites, chain records, type relationships, expression compliance, signature-chain and architecture assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`, `SourceErrorArchitecture`). Apply collection remains. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
 | Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |
-| Panic and proof collectors | `panics/{scan,kani_reach}`, `verus_ir/parse.rs`, `antipatterns/{scan,contract_bounds}` | Macro payloads, proof dialect syntax, Kani/Creusot/Verus contracts. No fallback whole-file parser. Resolve the dialect capability before retiring its current support. |
+| Panic and proof collectors | Verus dialect inventory is projected into required `SourceVerus` graph evidence by both loaders; proof-pattern hooks consume IR alone. Ordinary panic/Kani and antipattern collectors remain: `panics/{scan,kani_reach}`, `antipatterns/{scan,contract_bounds}`. | Canonical outer Rust plus a memoized Verus payload grammar, shared with native visibility. Finish ordinary panic/Kani, embedded programs and contract coverage before cutover; no fallback whole-file parser. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
 
 Macro islands and snippet parsers need their own inventory in addition to shared
@@ -1015,6 +1015,37 @@ Validation: both Cargo-context tests passed with full features, including the
 `include!` input and compiled dependency guards; the earlier dependency/module
 specimen also passed without default features. Build-tier submit finished with
 zero open items (list 48). The deep tier was not run.
+
+### Verus dialect ownership checkpoint
+
+The loader now projects `SourceVerus` onto the crate graph root. Each scanned
+file carries its source fingerprint and serialized function, panic and enum
+facts, including empty files. `IrView` requires this evidence and rejects
+missing or malformed payloads. The old workspace Verus map, preparatory scan
+and cache accessors are removed. Panic and verifier-warning enrichers read the
+graph inventory; proof-pattern enrichment no longer requires a source view.
+
+The native path selects macro bodies from canonical database syntax. A Salsa
+query parses each Verus payload with its required dialect grammar and retains
+context-free facts plus visibility counts. The loader binds them to the issuing
+snapshot, module and test context; native visibility uses the same query.
+The dialect grammar does not parse the outer Rust file. Invalid outer syntax
+fails projection. Existing best-effort handling of malformed dialect bodies
+and exclusion of qualified macro paths are preserved.
+
+Canonical syntax carriers and macro grammar adapters now live together under
+`loader/native_syntax`; Cargo sessions, semantic queries and graph orchestration
+remain under `loader/database`. Normal execution still uses the compatibility
+frontend. Its dialect adapters remain until that frontend is retired; this
+checkpoint does not claim that production cutover is complete.
+
+Validation on 2026-11-05: complete serialized Verus and visibility payloads
+match the compatibility frontend. Virtual edits, restoration, malformed outer
+syntax, missing evidence and source removal are covered. Query metrics confirm
+that repeated projection reuses the dialect parse. The parity and Verus tests
+passed with full features and with only `verus_ir`; panic and proof-pattern
+tests passed with full features. Build-tier submit cleared all structural
+findings and finished with zero open items (list 52). The deep tier was not run.
 
 ## Current next step
 
