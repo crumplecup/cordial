@@ -226,6 +226,15 @@ pub trait IrView {
     fn source_verus(&self) -> CordialResult<crate::ir::SourceVerus> {
         evidence::required(self, crate::ir::ATTR_SOURCE_VERUS, "source Verus inventory")
     }
+    /// Required, snapshot-bound antipattern evidence independent of policy.
+    #[cfg(feature = "antipatterns")]
+    fn source_antipatterns(&self) -> CordialResult<crate::ir::SourceAntipatterns> {
+        evidence::required(
+            self,
+            crate::ir::ATTR_SOURCE_ANTIPATTERNS,
+            "source antipattern inventory",
+        )
+    }
     /// Workspace antipattern evidence collected once per run.
     #[cfg(feature = "antipatterns")]
     fn workspace_antipattern_facts(

@@ -7,14 +7,13 @@ use crate::config::{ErrorFieldStrategy, StaticRefStrategy};
 use crate::error::CordialResult;
 use crate::loader::SourceLoadView;
 
-use super::contract_bounds::{fetch_contract_records, scan_crate_contract_bounds_with_source};
-use super::scan::scan_shared_crate_trees;
+use super::contract_bounds::{ContractClause, fetch_contract_records};
 use super::types::AntipatternSiteRecord;
 use super::version_in_member::scan_workspace_version_in_member;
 use tracing::instrument;
 
 /// Workspace evidence shared by every member's antipattern inventory.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_new::new)]
 pub struct AntipatternWorkspaceFacts {
     registry: Vec<super::contract_bounds::ContractRecordDump>,
     version_by_crate: HashMap<String, Vec<AntipatternSiteRecord>>,
@@ -47,7 +46,6 @@ pub fn scan_crate_antipatterns(
         &facts,
         StaticRefStrategy::default(),
         ErrorFieldStrategy::default(),
-        &HashMap::new(),
     )
 }
 
@@ -69,13 +67,12 @@ pub fn scan_crate_antipatterns_with_static_ref_strategy(
         &facts,
         static_ref_strategy,
         ErrorFieldStrategy::default(),
-        &HashMap::new(),
     )
 }
 
 #[instrument(
     level = "debug",
-    skip(source, facts, static_ref_strategy, error_field_strategy, skip_paths),
+    skip(source, facts, static_ref_strategy, error_field_strategy),
     err(level = "warn")
 )]
 pub(super) fn scan_shared_crate_antipatterns(
@@ -85,44 +82,25 @@ pub(super) fn scan_shared_crate_antipatterns(
     facts: &AntipatternWorkspaceFacts,
     static_ref_strategy: StaticRefStrategy,
     error_field_strategy: ErrorFieldStrategy,
-    skip_paths: &HashMap<String, Vec<String>>,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    let findings = scan_shared_crate_trees(
-        source,
-        crate_root,
-        static_ref_strategy,
-        error_field_strategy,
-        skip_paths,
-    )?;
-    finish_crate_antipattern_scan(findings, crate_root, crate_name, facts, source)
+    let catalog = super::catalog::AntipatternCatalog::collect(source, crate_root, crate_name)?;
+    catalog.assess(crate_name, facts, static_ref_strategy, error_field_strategy)
 }
 
-#[instrument(level = "debug", skip(findings, facts, source), err(level = "warn"))]
-fn finish_crate_antipattern_scan(
-    mut findings: Vec<AntipatternSiteRecord>,
-    crate_root: &Path,
-    crate_name: &str,
-    facts: &AntipatternWorkspaceFacts,
-    source: &SourceLoadView,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    findings.extend(scan_crate_contract_bounds_with_source(
-        crate_root,
-        crate_name,
-        &facts.registry,
-        source,
-    )?);
-
-    if let Some(version_findings) = facts.version_by_crate.get(crate_name) {
-        findings.extend(version_findings.iter().cloned());
+impl AntipatternWorkspaceFacts {
+    #[instrument(level = "trace", skip(self, clauses))]
+    pub(super) fn assess_contracts(
+        &self,
+        clauses: &[ContractClause],
+    ) -> Vec<AntipatternSiteRecord> {
+        super::contract_bounds::assess_contracts(clauses, &self.registry)
     }
 
-    findings.sort_by(|a, b| {
-        a.file()
-            .cmp(b.file())
-            .then(a.line().cmp(&b.line()))
-            .then(a.context().cmp(b.context()))
-            .then(a.snippet().cmp(b.snippet()))
-    });
-
-    Ok(findings)
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn version_records(&self, crate_name: &str) -> &[AntipatternSiteRecord] {
+        self.version_by_crate
+            .get(crate_name)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
 }

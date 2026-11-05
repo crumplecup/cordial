@@ -8,8 +8,8 @@ use syn::{
     Fields, ItemEnum, ItemFn, ItemImpl, ItemMod, ItemStruct, ItemTrait, ItemType, TraitItem, Type,
 };
 
-use crate::config::{ErrorFieldStrategy, StaticRefStrategy};
 use crate::enricher::is_cfg_test;
+use crate::etiquettes::antipatterns::catalog::{AntipatternCandidate, AntipatternSyntaxFacts};
 
 use super::preds::{
     cfg_sibling_real_param_names_in_impl_items, cfg_sibling_real_param_names_in_items, type_label,
@@ -35,28 +35,15 @@ pub(super) struct AntipatternScanVisitor<'a> {
     local_trait_names: &'a HashSet<String>,
     error_type_names: &'a HashSet<String>,
     const_placed_types: &'a HashSet<String>,
-    static_ref_strategy: StaticRefStrategy,
-    error_field_strategy: ErrorFieldStrategy,
-    /// `[antipatterns] skip_paths`: rule id to crate-relative path
-    /// prefixes exempt from that rule. See [`path_is_skipped`].
-    skip_paths: &'a HashMap<String, Vec<String>>,
     cfg_sibling_real_params: HashMap<String, HashSet<String>>,
-    findings: Vec<AntipatternSiteRecord>,
+    findings: Vec<AntipatternCandidate>,
     error: Option<crate::error::CordialError>,
 }
 
 impl<'a> AntipatternScanVisitor<'a> {
     #[instrument(
         level = "debug",
-        skip(
-            file,
-            local_trait_names,
-            error_type_names,
-            const_placed_types,
-            static_ref_strategy,
-            error_field_strategy,
-            skip_paths
-        )
+        skip(file, local_trait_names, error_type_names, const_placed_types)
     )]
     pub(super) fn new(
         file: PathBuf,
@@ -65,9 +52,6 @@ impl<'a> AntipatternScanVisitor<'a> {
         local_trait_names: &'a HashSet<String>,
         error_type_names: &'a HashSet<String>,
         const_placed_types: &'a HashSet<String>,
-        static_ref_strategy: StaticRefStrategy,
-        error_field_strategy: ErrorFieldStrategy,
-        skip_paths: &'a HashMap<String, Vec<String>>,
     ) -> Self {
         Self {
             file,
@@ -80,9 +64,6 @@ impl<'a> AntipatternScanVisitor<'a> {
             local_trait_names,
             error_type_names,
             const_placed_types,
-            static_ref_strategy,
-            error_field_strategy,
-            skip_paths,
             cfg_sibling_real_params: HashMap::new(),
             findings: Vec::new(),
             error: None,
@@ -90,11 +71,11 @@ impl<'a> AntipatternScanVisitor<'a> {
     }
 
     #[instrument(level = "debug", skip(self))]
-    pub(super) fn into_findings(self) -> CordialResult<Vec<AntipatternSiteRecord>> {
+    pub(super) fn into_facts(self) -> CordialResult<AntipatternSyntaxFacts> {
         if let Some(error) = self.error {
             return Err(error);
         }
-        Ok(self.findings)
+        Ok(AntipatternSyntaxFacts::new(self.findings))
     }
 }
 
@@ -125,9 +106,6 @@ impl AntipatternScanVisitor<'_> {
             return;
         }
         let rel_file = self.rel_file();
-        if path_is_skipped(self.skip_paths, rule_id, &rel_file) {
-            return;
-        }
         match AntipatternSiteRecord::builder()
             .rule_id(rule_id)
             .context(context)
@@ -136,7 +114,7 @@ impl AntipatternScanVisitor<'_> {
             .snippet(snippet)
             .build()
         {
-            Ok(record) => self.findings.push(record),
+            Ok(record) => self.findings.push(AntipatternCandidate::Record(record)),
             Err(error) => self.error = Some(error),
         }
     }
@@ -271,23 +249,4 @@ impl<'ast> Visit<'ast> for AntipatternScanVisitor<'_> {
         self.check_string_error_type(node);
         syn::visit::visit_type(self, node);
     }
-}
-
-/// Whether `rel_file` is exempt from `rule_id` under `[antipatterns]
-/// skip_paths`. Matched as an exact file or a path prefix -- the same
-/// folder-or-file idiom `ModularityThresholds::is_generated_file` and
-/// `mod_thin_skip_matches` already use.
-#[instrument(level = "debug", skip(skip_paths, rule_id), ret)]
-fn path_is_skipped(
-    skip_paths: &HashMap<String, Vec<String>>,
-    rule_id: AntipatternRuleId,
-    rel_file: &Path,
-) -> bool {
-    let Some(entries) = skip_paths.get(rule_id.as_str()) else {
-        return false;
-    };
-    entries.iter().any(|entry| {
-        let prefix = Path::new(entry);
-        rel_file == prefix || rel_file.starts_with(prefix)
-    })
 }

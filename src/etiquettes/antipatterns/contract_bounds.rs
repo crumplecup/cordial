@@ -45,7 +45,7 @@
 //!
 //! A clause is accepted not by matching its *text* against a registered
 //! fragment, but by recognizing its *shape* as a real call to a
-//! registered contract's predicate — see [`ContractIndex::matches_named_call`]
+//! registered contract's predicate — see [`ContractClause`]
 //! for the two call shapes this recognizes (`Type::ensures(...)` for
 //! Kani, bare `name(...)` for Creusot/Verus). This deliberately replaced
 //! an earlier text-equality design: matching literal call-site text
@@ -70,6 +70,8 @@ use crate::etiquettes::antipatterns::types::{AntipatternRuleId, AntipatternSiteR
 use crate::loader::SourceLoadView;
 
 mod creusot;
+mod facts;
+pub(crate) use facts::ContractClause;
 mod index;
 mod kani;
 mod registry;
@@ -105,77 +107,77 @@ pub fn scan_crate_contract_bounds(
 }
 
 #[instrument(level = "debug", skip(registry, source), err(level = "warn"))]
-pub(super) fn scan_crate_contract_bounds_with_source(
-    crate_root: &Path,
-    crate_name: &str,
-    registry: &[ContractRecordDump],
-    source: &SourceLoadView,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    scan_crate_contract_bounds_impl(crate_root, crate_name, registry, source)
-}
-
-#[instrument(level = "debug", skip(registry, source), err(level = "warn"))]
 fn scan_crate_contract_bounds_impl(
     crate_root: &Path,
     crate_name: &str,
     registry: &[ContractRecordDump],
     source: &SourceLoadView,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
+    let index = index::ContractIndex::build(registry);
+    Ok(
+        collect_crate_contract_bounds(crate_root, crate_name, source, &mut Vec::new())?
+            .iter()
+            .filter_map(|clause| clause.finding(&index))
+            .collect(),
+    )
+}
+
+#[instrument(level = "debug", skip(source, snapshots), err(level = "warn"))]
+pub(super) fn collect_crate_contract_bounds(
+    crate_root: &Path,
+    crate_name: &str,
+    source: &SourceLoadView,
+    snapshots: &mut Vec<crate::FileSnapshot>,
+) -> CordialResult<Vec<ContractClause>> {
     let Some(verifier) = verifier_for_crate(crate_name) else {
         return Ok(Vec::new());
     };
-
     let src_root = crate_root.join("src");
-    if !src_root.is_dir() {
-        return Ok(Vec::new());
-    }
-
-    let index = index::ContractIndex::build(registry);
-    let mut findings = Vec::new();
-
+    let mut clauses = Vec::new();
     for entry in WalkDir::new(&src_root)
         .into_iter()
-        .filter_entry(|e| !is_gallery_dir(e))
+        .filter_entry(|entry| !is_gallery_dir(entry))
         .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_file())
+        .filter(|entry| entry.file_type().is_file())
     {
         let path = entry.path();
         if path.extension().is_none_or(|ext| ext != "rs") {
             continue;
         }
         let parsed = source.parsed_file(path, "antipattern-contract-bounds")?;
-        let mut file_findings = match verifier {
-            "creusot" => creusot::scan_creusot_shared(&parsed, &src_root, &index)?,
-            "verus" => verus::scan_verus_shared(&parsed, &src_root, &index)?,
-            "kani" => kani::scan_kani_shared(&parsed, &src_root, &index)?,
+        snapshots.push(crate::FileSnapshot::new(
+            path.to_path_buf(),
+            parsed.source_digest(),
+        ));
+        clauses.extend(match verifier {
+            "creusot" => creusot::collect_creusot_shared(&parsed, &src_root)?,
+            "verus" => verus::collect_verus_shared(&parsed, &src_root)?,
+            "kani" => kani::collect_kani_shared(&parsed, &src_root)?,
             _ => Vec::new(),
-        };
-        findings.append(&mut file_findings);
+        });
     }
-
-    findings.sort_by(|a, b| {
-        a.file()
-            .cmp(b.file())
-            .then(a.line().cmp(&b.line()))
-            .then(a.snippet().cmp(b.snippet()))
+    clauses.sort_by(|a, b| {
+        a.site()
+            .file()
+            .cmp(b.site().file())
+            .then(a.site().line().cmp(&b.site().line()))
+            .then(a.site().snippet().cmp(b.site().snippet()))
     });
+    for clause in &mut clauses {
+        clause.strip_file_prefix(crate_root);
+    }
+    Ok(clauses)
+}
 
-    findings
-        .into_iter()
-        .map(|finding| {
-            let file = finding
-                .file()
-                .strip_prefix(crate_root)
-                .map(Path::to_path_buf)
-                .unwrap_or_else(|_| finding.file().clone());
-            AntipatternSiteRecord::builder()
-                .rule_id(finding.rule_id())
-                .context(finding.context().clone())
-                .file(file)
-                .line(finding.line())
-                .snippet(finding.snippet().clone())
-                .build()
-        })
+#[instrument(level = "debug", skip(clauses, registry))]
+pub(super) fn assess_contracts(
+    clauses: &[ContractClause],
+    registry: &[ContractRecordDump],
+) -> Vec<AntipatternSiteRecord> {
+    let index = index::ContractIndex::build(registry);
+    clauses
+        .iter()
+        .filter_map(|clause| clause.finding(&index))
         .collect()
 }
 

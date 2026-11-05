@@ -1,10 +1,8 @@
-use crate::enricher::{member_crate_root, resolve_parent};
+use crate::enricher::resolve_parent;
 use crate::error::CordialResult;
-use crate::hooks::{SourceEnrichView, SourceEnricher};
+use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
-
-use super::scan_crate::scan_shared_crate_antipatterns;
 
 use tracing::instrument;
 /// Materializes antipattern-site expression nodes in the IR graph.
@@ -15,29 +13,26 @@ impl AntipatternInventoryEnricher {
     pub const ID: &'static str = "antipattern-inventory";
 }
 
-impl SourceEnricher for AntipatternInventoryEnricher {
+impl IrEnricher for AntipatternInventoryEnricher {
     #[instrument(level = "trace", skip(self))]
     fn id(&self) -> &str {
         Self::ID
     }
 
     #[instrument(level = "trace", skip(self, view))]
-    fn enrich_source(&self, view: SourceEnrichView<'_>) -> CordialResult<()> {
-        let (ir, source, session) = view.into_parts();
-
-        let crate_root = member_crate_root(source, session);
+    fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
+        let (ir, _load, session) = view.into_parts();
+        let inventory = ir.source_antipatterns()?;
+        let crate_root = inventory.crate_root();
         let config = crate::load_session_config(session);
         let facts = ir.workspace_antipattern_facts().ok_or_else(|| {
             crate::error::CordialError::workspace_source_facts_missing("antipatterns")
         })?;
-        let records = scan_shared_crate_antipatterns(
-            source,
-            &crate_root,
+        let records = inventory.assess(
             ir.crate_name(),
             &facts,
             config.antipatterns().static_refs().strategy(),
             config.internal_error_chain().field_strategy(),
-            &std::collections::HashMap::new(),
         )?;
 
         for record in records {

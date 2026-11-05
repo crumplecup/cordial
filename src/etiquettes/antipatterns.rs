@@ -33,6 +33,8 @@
 //! add`). Register [`ANTIPATTERNS_ETIQUETTE`].
 
 mod assessor;
+mod catalog;
+pub(crate) use catalog::AntipatternCatalog;
 mod contract_bounds;
 mod enricher;
 mod probe;

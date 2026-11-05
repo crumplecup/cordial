@@ -110,6 +110,18 @@ impl SourceLoadView {
                 serde_json::to_value(inventory)?,
             )?;
         }
+        #[cfg(feature = "antipatterns")]
+        if let Some(root) = self.src_root().parent() {
+            ir.set_attr(
+                ir.root(),
+                crate::ir::ATTR_SOURCE_ANTIPATTERNS,
+                serde_json::to_value(crate::ir::SourceAntipatterns::collect(
+                    self,
+                    root,
+                    ir.crate_name(),
+                )?)?,
+            )?;
+        }
         #[cfg(feature = "tracing")]
         if let Some(root) = self.src_root().parent() {
             let inventory = crate::ir::SourceObservability::collect(self, root)?;

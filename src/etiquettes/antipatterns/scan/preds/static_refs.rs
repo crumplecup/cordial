@@ -4,9 +4,8 @@ use std::collections::HashSet;
 
 use syn::{PathArguments, Type, TypeParamBound, TypeTraitObject};
 
-use crate::config::StaticRefStrategy;
-
-use super::labels::{truncate_snippet, type_label};
+use super::labels::type_label;
+use crate::etiquettes::antipatterns::catalog::StaticFieldShape;
 
 use tracing::instrument;
 
@@ -134,17 +133,14 @@ pub(in crate::etiquettes::antipatterns::scan) fn type_is_location_capture(ty: &T
     }
 }
 
-#[instrument(level = "debug", skip(ty, strategy))]
-pub(in crate::etiquettes::antipatterns::scan) fn static_ref_field_snippet(
-    ty: &Type,
-    strategy: StaticRefStrategy,
-) -> String {
+#[instrument(level = "debug", skip(ty))]
+pub(in crate::etiquettes::antipatterns::scan) fn static_field_shape(ty: &Type) -> StaticFieldShape {
     if type_is_location_capture(ty) {
-        "copy `file` and `line` from Location; do not store &'static Location".to_string()
+        StaticFieldShape::Location
     } else if type_contains_static_str_ref(ty) {
-        static_str_field_snippet(ty, strategy)
+        StaticFieldShape::String
     } else {
-        owned_static_ref_snippet(ty, strategy)
+        StaticFieldShape::Other
     }
 }
 
@@ -202,49 +198,8 @@ fn type_is_str(ty: &Type) -> bool {
     }
 }
 
-#[instrument(level = "debug", skip(ty, strategy))]
-fn static_str_field_snippet(ty: &Type, strategy: StaticRefStrategy) -> String {
-    let found = static_ref_snippet(ty);
-    let message = match strategy {
-        StaticRefStrategy::String => {
-            format!("{found}; replace &'static str fields with owned String data")
-        }
-        StaticRefStrategy::Cow => {
-            format!("{found}; replace &'static str fields with Cow<'static, str>")
-        }
-        StaticRefStrategy::Const => {
-            format!(
-                "{found}; const/static only for const-only types; otherwise use Cow<'static, str>"
-            )
-        }
-    };
-    truncate_snippet(&message, 128)
-}
-
-#[instrument(level = "debug", skip(ty, strategy))]
-fn owned_static_ref_snippet(ty: &Type, strategy: StaticRefStrategy) -> String {
-    let found = static_ref_snippet(ty);
-    let message = match strategy {
-        StaticRefStrategy::String => {
-            format!("{found}; replace static reference fields with owned data")
-        }
-        StaticRefStrategy::Cow => {
-            format!("{found}; use Cow or a domain wrapper only when borrowing is intentional")
-        }
-        StaticRefStrategy::Const => {
-            format!("{found}; const/static only for const-only types; otherwise own the data")
-        }
-    };
-    truncate_snippet(&message, 128)
-}
-
 #[instrument(level = "debug", skip(ty))]
-fn static_ref_snippet(ty: &Type) -> String {
-    truncate_snippet(&type_label_with_lifetime(ty), 96)
-}
-
-#[instrument(level = "debug", skip(ty))]
-fn type_label_with_lifetime(ty: &Type) -> String {
+pub(in crate::etiquettes::antipatterns::scan) fn type_label_with_lifetime(ty: &Type) -> String {
     match ty {
         Type::Reference(reference) => {
             let mut out = String::from("&");

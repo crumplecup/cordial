@@ -11,7 +11,9 @@ use crate::error::{CordialError, CordialResult};
 use crate::etiquettes::antipatterns::types::AntipatternSiteRecord;
 use crate::loader::{SharedParsedFile, module_path_from_src_file};
 
+use super::ContractClause;
 use super::index::{ContractIndex, is_trivial, normalize_tokens};
+
 use super::{harness_macro_item_fn, make_finding, site_context};
 
 #[instrument(level = "debug", skip(source, file, index), err(level = "warn"))]
@@ -21,33 +23,32 @@ pub(super) fn scan_creusot_source(
     src_root: &Path,
     index: &ContractIndex,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| CordialError::syn_parse(file.display().to_string(), err))?;
-    scan_creusot_syntax(&syntax, file, src_root, index)
+    let parsed = crate::SourceLoadView::parse_fixture(file, source)?;
+    Ok(collect_creusot_syntax(parsed.syntax(), file, src_root)?
+        .iter()
+        .filter_map(|clause| clause.finding(index))
+        .collect())
 }
 
-#[instrument(level = "debug", skip(parsed, index), err(level = "warn"))]
-pub(super) fn scan_creusot_shared(
+#[instrument(level = "debug", skip(parsed), err(level = "warn"))]
+pub(super) fn collect_creusot_shared(
     parsed: &SharedParsedFile,
     src_root: &Path,
-    index: &ContractIndex,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    scan_creusot_syntax(parsed.syntax(), parsed.path(), src_root, index)
+) -> CordialResult<Vec<ContractClause>> {
+    collect_creusot_syntax(parsed.syntax(), parsed.path(), src_root)
 }
 
-#[instrument(level = "debug", skip(syntax, file, index), err(level = "warn"))]
-fn scan_creusot_syntax(
+#[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
+fn collect_creusot_syntax(
     syntax: &syn::File,
     file: &Path,
     src_root: &Path,
-    index: &ContractIndex,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
+) -> CordialResult<Vec<ContractClause>> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut visitor = CreusotVisitor {
         file: file.to_path_buf(),
         module_prefix,
         fn_stack: Vec::new(),
-        index,
         findings: Vec::new(),
         error: None,
     };
@@ -58,16 +59,15 @@ fn scan_creusot_syntax(
     Ok(visitor.findings)
 }
 
-struct CreusotVisitor<'a> {
+struct CreusotVisitor {
     file: PathBuf,
     module_prefix: Vec<String>,
     fn_stack: Vec<String>,
-    index: &'a ContractIndex,
-    findings: Vec<AntipatternSiteRecord>,
+    findings: Vec<ContractClause>,
     error: Option<CordialError>,
 }
 
-impl CreusotVisitor<'_> {
+impl CreusotVisitor {
     #[instrument(level = "debug", skip(self, attrs))]
     fn check_attrs(&mut self, attrs: &[Attribute]) {
         for attr in attrs {
@@ -82,11 +82,7 @@ impl CreusotVisitor<'_> {
                 continue;
             };
             let normalized = normalize_tokens(list.tokens.clone());
-            if is_trivial(&normalized)
-                || self
-                    .index
-                    .matches_named_call("creusot", kind, list.tokens.clone())
-            {
+            if is_trivial(&normalized) {
                 continue;
             }
             let context = site_context(&self.module_prefix, &self.fn_stack.join("::"));
@@ -99,14 +95,20 @@ impl CreusotVisitor<'_> {
                 attr.span().start().line as u32,
                 &normalized,
             ) {
-                Ok(record) => self.findings.push(record),
+                Ok(record) => self.findings.push(ContractClause::collect(
+                    record,
+                    "creusot",
+                    kind,
+                    list.tokens.clone(),
+                    Vec::new(),
+                )),
                 Err(error) => self.error = Some(error),
             }
         }
     }
 }
 
-impl<'ast> Visit<'ast> for CreusotVisitor<'_> {
+impl<'ast> Visit<'ast> for CreusotVisitor {
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         self.fn_stack.push(node.sig.ident.to_string());

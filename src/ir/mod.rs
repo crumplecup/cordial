@@ -10,6 +10,10 @@
 //! built-in loaders and tests can construct snapshots, but hook code should
 //! prefer the view traits.
 
+#[cfg(feature = "antipatterns")]
+mod antipattern_source;
+#[cfg(feature = "antipatterns")]
+pub use antipattern_source::{ATTR_SOURCE_ANTIPATTERNS, SourceAntipatterns};
 #[cfg(feature = "rustdoc")]
 mod attrs;
 mod crate_kind;

@@ -15,7 +15,9 @@ use crate::error::{CordialError, CordialResult};
 use crate::etiquettes::antipatterns::types::AntipatternSiteRecord;
 use crate::loader::{SharedParsedFile, module_path_from_src_file};
 
+use super::ContractClause;
 use super::index::{ContractIndex, is_trivial, normalize_tokens};
+
 use super::{harness_macro_item_fn, make_finding, site_context};
 
 #[instrument(level = "debug", skip(source, file, index), err(level = "warn"))]
@@ -25,34 +27,33 @@ pub(super) fn scan_kani_source(
     src_root: &Path,
     index: &ContractIndex,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| CordialError::syn_parse(file.display().to_string(), err))?;
-    scan_kani_syntax(&syntax, file, src_root, index)
+    let parsed = crate::SourceLoadView::parse_fixture(file, source)?;
+    Ok(collect_kani_syntax(parsed.syntax(), file, src_root)?
+        .iter()
+        .filter_map(|clause| clause.finding(index))
+        .collect())
 }
 
-#[instrument(level = "debug", skip(parsed, index), err(level = "warn"))]
-pub(super) fn scan_kani_shared(
+#[instrument(level = "debug", skip(parsed), err(level = "warn"))]
+pub(super) fn collect_kani_shared(
     parsed: &SharedParsedFile,
     src_root: &Path,
-    index: &ContractIndex,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    scan_kani_syntax(parsed.syntax(), parsed.path(), src_root, index)
+) -> CordialResult<Vec<ContractClause>> {
+    collect_kani_syntax(parsed.syntax(), parsed.path(), src_root)
 }
 
-#[instrument(level = "debug", skip(syntax, file, index), err(level = "warn"))]
-fn scan_kani_syntax(
+#[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
+fn collect_kani_syntax(
     syntax: &syn::File,
     file: &Path,
     src_root: &Path,
-    index: &ContractIndex,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
+) -> CordialResult<Vec<ContractClause>> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut visitor = KaniVisitor {
         file: file.to_path_buf(),
         module_prefix,
         fn_stack: Vec::new(),
         in_kani_proof: false,
-        index,
         findings: Vec::new(),
         error: None,
     };
@@ -63,17 +64,16 @@ fn scan_kani_syntax(
     Ok(visitor.findings)
 }
 
-struct KaniVisitor<'a> {
+struct KaniVisitor {
     file: PathBuf,
     module_prefix: Vec<String>,
     fn_stack: Vec<String>,
     in_kani_proof: bool,
-    index: &'a ContractIndex,
-    findings: Vec<AntipatternSiteRecord>,
+    findings: Vec<ContractClause>,
     error: Option<CordialError>,
 }
 
-impl KaniVisitor<'_> {
+impl KaniVisitor {
     #[instrument(level = "trace", skip(attrs), ret)]
     fn is_kani_proof(attrs: &[Attribute]) -> bool {
         attrs.iter().any(|attr| {
@@ -91,7 +91,7 @@ impl KaniVisitor<'_> {
     #[instrument(level = "debug", skip(self, clause))]
     fn check_clause(&mut self, kind: &str, clause: TokenStream, line: u32) {
         let normalized = normalize_tokens(clause.clone());
-        if is_trivial(&normalized) || self.index.matches_named_call("kani", kind, clause) {
+        if is_trivial(&normalized) {
             return;
         }
         let context = site_context(&self.module_prefix, &self.fn_stack.join("::"));
@@ -99,7 +99,13 @@ impl KaniVisitor<'_> {
             return;
         }
         match make_finding(context, &self.file, line, &normalized) {
-            Ok(record) => self.findings.push(record),
+            Ok(record) => self.findings.push(ContractClause::collect(
+                record,
+                "kani",
+                kind,
+                clause,
+                Vec::new(),
+            )),
             Err(error) => self.error = Some(error),
         }
     }
@@ -195,7 +201,7 @@ impl KaniVisitor<'_> {
     }
 }
 
-impl<'ast> Visit<'ast> for KaniVisitor<'_> {
+impl<'ast> Visit<'ast> for KaniVisitor {
     #[instrument(level = "debug", skip(self, node))]
     fn visit_item_fn(&mut self, node: &'ast ItemFn) {
         if self.error.is_some() {

@@ -12,7 +12,9 @@ use crate::loader::{
     quality_scan_trees,
 };
 
+use super::catalog::AntipatternSyntaxFacts;
 use super::types::AntipatternSiteRecord;
+use crate::FileSnapshot;
 
 use tracing::instrument;
 mod constructions;
@@ -27,18 +29,11 @@ use visitor::{
 
 pub(crate) use preds::truncate_snippet;
 
-#[instrument(
-    level = "debug",
-    skip(source, static_ref_strategy, error_field_strategy, skip_paths),
-    err(level = "warn")
-)]
-pub(super) fn scan_shared_crate_trees(
+#[instrument(level = "debug", skip(source), err(level = "warn"))]
+pub(super) fn collect_shared_crate_trees(
     source: &SourceLoadView,
     crate_root: &Path,
-    static_ref_strategy: StaticRefStrategy,
-    error_field_strategy: ErrorFieldStrategy,
-    skip_paths: &HashMap<String, Vec<String>>,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
+) -> CordialResult<(AntipatternSyntaxFacts, Vec<FileSnapshot>)> {
     let mut parsed: Vec<(SharedParsedFile, PathBuf)> = Vec::new();
     let mut local_trait_names = HashSet::new();
     let mut error_type_names = HashSet::new();
@@ -65,48 +60,39 @@ pub(super) fn scan_shared_crate_trees(
         error_type_names.extend(kinds);
     }
 
-    let mut findings = Vec::new();
+    let mut facts = AntipatternSyntaxFacts::new(Vec::new());
+    let mut snapshots = Vec::new();
     for (file, tree_root) in parsed {
-        findings.extend(scan_shared_file(
+        snapshots.push(FileSnapshot::new(
+            file.path().to_path_buf(),
+            file.source_digest(),
+        ));
+        facts.extend(collect_shared_file(
             &file,
             &tree_root,
             crate_root,
             &local_trait_names,
             &error_type_names,
             &const_placed_types,
-            static_ref_strategy,
-            error_field_strategy,
-            skip_paths,
         )?);
     }
-    Ok(findings)
+    Ok((facts, snapshots))
 }
 
 #[instrument(
     level = "debug",
-    skip(
-        file,
-        local_trait_names,
-        error_type_names,
-        const_placed_types,
-        static_ref_strategy,
-        error_field_strategy,
-        skip_paths
-    ),
+    skip(file, local_trait_names, error_type_names, const_placed_types),
     err(level = "warn")
 )]
-fn scan_shared_file(
+fn collect_shared_file(
     file: &SharedParsedFile,
     tree_root: &Path,
     crate_root: &Path,
     local_trait_names: &HashSet<String>,
     error_type_names: &HashSet<String>,
     const_placed_types: &HashSet<String>,
-    static_ref_strategy: StaticRefStrategy,
-    error_field_strategy: ErrorFieldStrategy,
-    skip_paths: &HashMap<String, Vec<String>>,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    scan_parsed(
+) -> CordialResult<AntipatternSyntaxFacts> {
+    collect_parsed(
         file.syntax(),
         file.path(),
         tree_root,
@@ -114,9 +100,6 @@ fn scan_shared_file(
         local_trait_names,
         error_type_names,
         const_placed_types,
-        static_ref_strategy,
-        error_field_strategy,
-        skip_paths,
     )
 }
 
@@ -196,45 +179,34 @@ pub fn scan_rust_source_with_skip_paths(
     error_field_strategy: ErrorFieldStrategy,
     skip_paths: &HashMap<String, Vec<String>>,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    let local_trait_names = collect_local_trait_names(&syntax);
-    let mut error_type_names = collect_error_type_names(&syntax);
-    let kinds = collect_error_kind_names(&syntax, &error_type_names);
+    let parsed = SourceLoadView::parse_fixture(file, source)?;
+    let syntax = parsed.syntax();
+    let local_trait_names = collect_local_trait_names(syntax);
+    let mut error_type_names = collect_error_type_names(syntax);
+    let kinds = collect_error_kind_names(syntax, &error_type_names);
     error_type_names.extend(kinds);
     let mut const_constructed = HashSet::new();
     let mut runtime_constructed = HashSet::new();
-    collect_constructions(&syntax, &mut const_constructed, &mut runtime_constructed);
+    collect_constructions(syntax, &mut const_constructed, &mut runtime_constructed);
     let const_placed_types =
         types_only_constructed_in_const(&const_constructed, &runtime_constructed);
-    scan_parsed(
-        &syntax,
+    collect_parsed(
+        syntax,
         file,
         src_root,
         crate_root,
         &local_trait_names,
         &error_type_names,
         &const_placed_types,
-        static_ref_strategy,
-        error_field_strategy,
-        skip_paths,
-    )
+    )?
+    .assess(static_ref_strategy, error_field_strategy, skip_paths)
 }
 
 #[instrument(
     level = "debug",
-    skip(
-        syntax,
-        file,
-        local_trait_names,
-        error_type_names,
-        const_placed_types,
-        static_ref_strategy,
-        error_field_strategy,
-        skip_paths
-    )
+    skip(syntax, file, local_trait_names, error_type_names, const_placed_types)
 )]
-fn scan_parsed(
+fn collect_parsed(
     syntax: &syn::File,
     file: &Path,
     src_root: &Path,
@@ -242,10 +214,7 @@ fn scan_parsed(
     local_trait_names: &HashSet<String>,
     error_type_names: &HashSet<String>,
     const_placed_types: &HashSet<String>,
-    static_ref_strategy: StaticRefStrategy,
-    error_field_strategy: ErrorFieldStrategy,
-    skip_paths: &HashMap<String, Vec<String>>,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
+) -> CordialResult<AntipatternSyntaxFacts> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut visitor = AntipatternScanVisitor::new(
         file.to_path_buf(),
@@ -254,10 +223,7 @@ fn scan_parsed(
         local_trait_names,
         error_type_names,
         const_placed_types,
-        static_ref_strategy,
-        error_field_strategy,
-        skip_paths,
     );
     visitor.visit_file(syntax);
-    visitor.into_findings()
+    visitor.into_facts()
 }

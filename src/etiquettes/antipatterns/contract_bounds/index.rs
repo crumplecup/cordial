@@ -4,7 +4,7 @@ mod clauses;
 mod dump;
 mod fragments;
 mod matching;
-mod tokens;
+pub(super) mod tokens;
 
 pub(super) use clauses::{is_builtin_contract_inspection, is_trivial};
 pub(super) use dump::RegistryDump;

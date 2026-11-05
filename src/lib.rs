@@ -73,8 +73,8 @@ pub use etiquettes::allows::{
 };
 #[cfg(feature = "antipatterns")]
 pub use etiquettes::antipatterns::{
-    ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, AntipatternSiteRecord, ContractRecordDump,
-    ContractRecordDumpBuilder, scan_crate_antipatterns,
+    ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, AntipatternSiteRecord, AntipatternWorkspaceFacts,
+    ContractRecordDump, ContractRecordDumpBuilder, scan_crate_antipatterns,
     scan_crate_antipatterns_with_static_ref_strategy, scan_crate_contract_bounds,
     scan_creusot_contract_bounds_source, scan_kani_contract_bounds_source,
     scan_rust_source as scan_antipatterns_rust_source,
@@ -486,5 +486,7 @@ pub use {
     rustdoc_loader::{RustdocLoadView, RustdocLoader, resolve_rustdoc_json},
 };
 
+#[cfg(feature = "antipatterns")]
+pub use ir::{ATTR_SOURCE_ANTIPATTERNS, SourceAntipatterns};
 #[cfg(feature = "panics")]
 pub use ir::{ATTR_SOURCE_PANICS, PanicProofGraph, SourcePanics};

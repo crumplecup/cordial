@@ -184,7 +184,16 @@ impl Finding for AntipatternFinding {
 }
 
 /// Raw scan row used while building IR nodes.
-#[derive(Debug, Clone, PartialEq, Eq, derive_builder::Builder, derive_getters::Getters)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_builder::Builder,
+    derive_getters::Getters,
+)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct AntipatternSiteRecord {
     /// Stable probe rule identifier.
@@ -202,6 +211,13 @@ pub struct AntipatternSiteRecord {
 }
 
 impl AntipatternSiteRecord {
+    #[instrument(level = "trace", skip(self))]
+    pub(crate) fn strip_file_prefix(&mut self, root: &std::path::Path) {
+        if let Ok(relative) = self.file.strip_prefix(root) {
+            self.file = relative.to_path_buf();
+        }
+    }
+
     /// Start a builder for this value.
     #[instrument(level = "debug")]
     pub fn builder() -> AntipatternSiteRecordBuilder {

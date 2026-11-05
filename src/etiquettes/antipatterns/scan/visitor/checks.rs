@@ -4,14 +4,16 @@ use syn::spanned::Spanned;
 use syn::{Attribute, Block, Fields, FnArg, Signature, Type};
 use tracing::instrument;
 
-use crate::config::ErrorFieldStrategy;
+use crate::etiquettes::antipatterns::catalog::{AntipatternCandidate, StaticField};
 use crate::etiquettes::antipatterns::types::AntipatternRuleId;
+use crate::etiquettes::antipatterns::types::AntipatternSiteRecord;
 
 use super::super::preds::{
     box_dyn_error_snippet, box_dyn_error_trait_object, has_proc_macro_abi_attr,
     is_creusot_opaque_logic_stub, is_stringish_error_type, result_error_type,
-    result_string_error_snippet, static_ref_field_snippet, truncate_snippet,
-    type_contains_disallowed_static_ref, type_is_location_capture, unused_argument_bindings,
+    result_string_error_snippet, static_field_shape, truncate_snippet,
+    type_contains_disallowed_static_ref, type_is_location_capture, type_label_with_lifetime,
+    unused_argument_bindings,
 };
 use super::AntipatternScanVisitor;
 
@@ -48,24 +50,29 @@ impl AntipatternScanVisitor<'_> {
     #[instrument(level = "debug", skip(self, ty))]
     fn check_adt_field(&mut self, owner: &str, field_name: &str, ty: &Type) {
         let type_name = owner.split("::").next().unwrap_or(owner);
-        if self.error_field_strategy == ErrorFieldStrategy::Borrowed
-            && self.error_type_names.contains(type_name)
-            && !type_is_location_capture(ty)
-        {
-            return;
-        }
         if !type_contains_disallowed_static_ref(ty, self.local_trait_names) {
             return;
         }
         if !type_is_location_capture(ty) && self.const_placed_types.contains(type_name) {
             return;
         }
-        self.push_record(
-            AntipatternRuleId::StructStaticRef001,
-            self.adt_field_context(owner, field_name),
-            ty.span().start().line as u32,
-            static_ref_field_snippet(ty, self.static_ref_strategy),
-        );
+        let site = AntipatternSiteRecord::builder()
+            .rule_id(AntipatternRuleId::StructStaticRef001)
+            .context(self.adt_field_context(owner, field_name))
+            .file(self.rel_file())
+            .line(ty.span().start().line as u32)
+            .snippet(truncate_snippet(&type_label_with_lifetime(ty), 96))
+            .build();
+        match site {
+            Ok(site) => self
+                .findings
+                .push(AntipatternCandidate::StaticField(StaticField::new(
+                    site,
+                    self.error_type_names.contains(type_name),
+                    static_field_shape(ty),
+                ))),
+            Err(error) => self.error = Some(error),
+        }
     }
 
     #[instrument(level = "debug", skip(self, variant))]

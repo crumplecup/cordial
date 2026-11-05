@@ -17,6 +17,7 @@ pub(super) use errors::{
 pub(crate) use labels::truncate_snippet;
 pub(super) use labels::type_label;
 pub(super) use static_refs::{
-    static_ref_field_snippet, type_contains_disallowed_static_ref, type_is_location_capture,
+    static_field_shape, type_contains_disallowed_static_ref, type_is_location_capture,
+    type_label_with_lifetime,
 };
 pub(super) use unused_args::unused_argument_bindings;

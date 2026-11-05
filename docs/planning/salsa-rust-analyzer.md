@@ -635,7 +635,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
 | Error analysis | Sites, chain records, type relationships, expression compliance, signature-chain and architecture assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`, `SourceErrorArchitecture`). Apply collection remains. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
 | Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |
-| Panic and proof collectors | Verus dialect inventory is projected into required `SourceVerus` graph evidence by both loaders; proof-pattern hooks consume IR alone. Panic sites, source fingerprints and the Kani exemption graph now live in required `SourcePanics` evidence; the panic enricher consumes IR alone. Native ordinary panic/Kani and embedded-program collection now project the same inventory. Antipattern collectors remain: `antipatterns/{scan,contract_bounds}`. | Canonical outer Rust plus memoized payload grammars. Finish antipattern and contract coverage before cutover; no fallback whole-file parser. |
+| Panic and proof collectors | Verus dialect inventory is projected into required `SourceVerus` graph evidence by both loaders; proof-pattern hooks consume IR alone. Panic sites, source fingerprints and the Kani exemption graph now live in required `SourcePanics` evidence; the panic enricher consumes IR alone. Native ordinary panic/Kani and embedded-program collection now project the same inventory. Antipattern ordinary and proof-clause facts now live in required `SourceAntipatterns` graph evidence; the antipattern enricher consumes IR alone. Native antipattern projection remains: `antipatterns/{scan,contract_bounds}`. | Canonical outer Rust plus memoized payload grammars. Finish antipattern and contract coverage before cutover; no fallback whole-file parser. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
 
 Macro islands and snippet parsers need their own inventory in addition to shared
@@ -1083,6 +1083,28 @@ restoration and source deletion. Query metrics verify reuse on unchanged
 projection. Invalid outer syntax fails projection. Compatibility production
 ownership remains until the remaining collector and Cargo-context work is done.
 Build-tier submit verified zero open items (list 57). The deep tier was not run.
+
+## Checkpoint: antipattern policy consumes retained source facts
+
+Antipattern collection now retains a required `SourceAntipatterns` inventory on
+the crate graph. It includes inspected-file fingerprints, ordinary candidates,
+static-field type shapes and error-type membership, and proof-clause call shapes,
+canonical bodies and sibling relationships. The antipattern enricher is an
+`IrEnricher`: it evaluates current policy and workspace registry evidence without
+source access or reconstructing source syntax. Registry fragments remain external
+workspace inputs; they are not substitutes for source evidence.
+
+Borrowed error policy, static-reference guidance, named contract recognition and
+workspace version findings retain their existing behavior. Standalone source
+entry points obtain loader-issued shared trees. Native projection of these facts
+is still required before retiring the compatibility frontend.
+
+Validation on 2026-11-05: isolated `antipatterns` coverage passes all existing
+ordinary and contract-shape cases. New regressions round-trip the complete
+inventory, reject absent or malformed evidence, and evaluate all six policy
+combinations and changed registries for Kani, Creusot and Verus after source
+removal. Full-feature checks pass, and build-tier submit verified zero open items
+(list 59). The deep tier was not run.
 
 ## Current next step
 

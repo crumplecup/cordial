@@ -6,14 +6,16 @@ use proc_macro2::{Delimiter, TokenStream, TokenTree};
 use syn::ItemMacro;
 use tracing::instrument;
 
-use crate::error::{CordialError, CordialResult};
+use crate::error::CordialResult;
 use crate::etiquettes::antipatterns::types::AntipatternSiteRecord;
 use crate::loader::{SharedParsedFile, module_path_from_src_file};
 
+use super::ContractClause;
 use super::index::{
     ContractIndex, is_builtin_contract_inspection, is_trivial, normalize_tokens,
     split_top_level_commas,
 };
+
 use super::{make_finding, site_context};
 
 #[instrument(level = "debug", skip(source, file, index), err(level = "warn"))]
@@ -23,27 +25,27 @@ pub(super) fn scan_verus_source(
     src_root: &Path,
     index: &ContractIndex,
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| CordialError::syn_parse(file.display().to_string(), err))?;
-    scan_verus_syntax(&syntax, file, src_root, index)
+    let parsed = crate::SourceLoadView::parse_fixture(file, source)?;
+    Ok(collect_verus_syntax(parsed.syntax(), file, src_root)?
+        .iter()
+        .filter_map(|clause| clause.finding(index))
+        .collect())
 }
 
-#[instrument(level = "debug", skip(parsed, index), err(level = "warn"))]
-pub(super) fn scan_verus_shared(
+#[instrument(level = "debug", skip(parsed), err(level = "warn"))]
+pub(super) fn collect_verus_shared(
     parsed: &SharedParsedFile,
     src_root: &Path,
-    index: &ContractIndex,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    scan_verus_syntax(parsed.syntax(), parsed.path(), src_root, index)
+) -> CordialResult<Vec<ContractClause>> {
+    collect_verus_syntax(parsed.syntax(), parsed.path(), src_root)
 }
 
-#[instrument(level = "debug", skip(syntax, file, index), err(level = "warn"))]
-fn scan_verus_syntax(
+#[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
+fn collect_verus_syntax(
     syntax: &syn::File,
     file: &Path,
     src_root: &Path,
-    index: &ContractIndex,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
+) -> CordialResult<Vec<ContractClause>> {
     let module_prefix = module_path_from_src_file(src_root, file);
     let mut findings = Vec::new();
 
@@ -64,17 +66,7 @@ fn scan_verus_syntax(
         for (kind, clauses, harness) in clause_groups {
             for (idx, clause) in clauses.iter().cloned().enumerate() {
                 let normalized = normalize_tokens(clause.clone());
-                if is_trivial(&normalized)
-                    || is_builtin_contract_inspection(kind, clause.clone())
-                    || index.matches_named_call("verus", kind, clause.clone())
-                    || index.is_raw_duplicate_of_named_sibling(
-                        "verus",
-                        kind,
-                        clause.clone(),
-                        &clauses,
-                        idx,
-                    )
-                {
+                if is_trivial(&normalized) || is_builtin_contract_inspection(kind, clause.clone()) {
                     continue;
                 }
                 let line = clause
@@ -89,7 +81,19 @@ fn scan_verus_syntax(
                     format!("verus!::{harness}")
                 };
                 let context = site_context(&module_prefix, &leaf);
-                findings.push(make_finding(context, file, line, &normalized)?);
+                let sibling_names = clauses
+                    .iter()
+                    .enumerate()
+                    .filter(|(other, _)| *other != idx)
+                    .filter_map(|(_, sibling)| ContractClause::sibling_name(sibling.clone()))
+                    .collect();
+                findings.push(ContractClause::collect(
+                    make_finding(context, file, line, &normalized)?,
+                    "verus",
+                    kind,
+                    clause,
+                    sibling_names,
+                ));
             }
         }
     }
@@ -123,7 +127,7 @@ fn scan_verus_syntax(
 /// together as a single group (rather than flattened into the output one
 /// clause at a time) so a caller can recognize a raw equation that only
 /// restates a *sibling* clause in the same list — see
-/// [`super::index::ContractIndex::is_raw_duplicate_of_named_sibling`].
+/// [`ContractClause`].
 /// Whether `items[idx]` is immediately preceded by a `.` — a dotted
 /// method call (`H::default.ensures((), result)`, Verus's own builtin
 /// function-item contract-inspection method) spells its method name
