@@ -74,10 +74,13 @@ mod facts;
 pub(crate) use facts::ContractClause;
 mod index;
 mod kani;
+mod native;
+pub(super) use native::collect_native;
+pub(crate) use native::collect_payload;
 mod registry;
 mod verus;
 
-use index::verifier_for_crate;
+pub(crate) use index::verifier_for_crate;
 pub use index::{ContractRecordDump, ContractRecordDumpBuilder};
 pub use registry::fetch_contract_records;
 

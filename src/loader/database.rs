@@ -13,7 +13,8 @@ pub use options::SemanticCargoOptions;
     feature = "tracing",
     feature = "internal_error_chain",
     feature = "verus_ir",
-    feature = "panics"
+    feature = "panics",
+    feature = "antipatterns"
 ))]
 pub(super) use queries::SemanticDatabase;
 /// Canonical source database shared by source collection and semantic queries.

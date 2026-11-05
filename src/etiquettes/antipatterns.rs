@@ -37,6 +37,7 @@ mod catalog;
 pub(crate) use catalog::AntipatternCatalog;
 mod contract_bounds;
 mod enricher;
+mod native;
 mod probe;
 mod reporter;
 mod scan;
@@ -46,6 +47,8 @@ mod version_in_member;
 mod version_reporter;
 
 pub use assessor::AntipatternAssessor;
+pub(crate) use contract_bounds::verifier_for_crate as antipattern_contract_verifier;
+pub(crate) use contract_bounds::{ContractClause, collect_payload as antipattern_contract_payload};
 pub use contract_bounds::{
     ContractRecordDump, ContractRecordDumpBuilder, scan_crate_contract_bounds,
     scan_creusot_contract_bounds_source, scan_kani_contract_bounds_source,

@@ -1,5 +1,7 @@
 //! Project canonical database source and semantic facts into shared IR.
 
+#[cfg(feature = "antipatterns")]
+mod antipatterns;
 #[cfg(feature = "cli_layout")]
 mod cli_layout;
 #[cfg(feature = "internal_error_chain")]
@@ -130,6 +132,12 @@ impl SourceDatabase {
                 &crate::IrView::source_verus(&graph)?.facts(),
             )?)?,
         )?;
+        #[cfg(feature = "antipatterns")]
+        graph.set_attr(
+            graph.root(),
+            crate::ir::ATTR_SOURCE_ANTIPATTERNS,
+            serde_json::to_value(self.project_antipatterns(target)?)?,
+        )?;
         let mut snapshots = Vec::new();
         #[cfg(feature = "error_sites")]
         graph.set_attr(
@@ -187,7 +195,8 @@ impl SourceDatabase {
                     feature = "tracing",
                     feature = "internal_error_chain",
                     feature = "verus_ir",
-                    feature = "panics"
+                    feature = "panics",
+                    feature = "antipatterns"
                 ))]
                 &self.db,
                 path,

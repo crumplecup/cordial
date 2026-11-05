@@ -3,6 +3,7 @@ mod source;
 pub(crate) use source::DatabaseSource;
 #[cfg(any(
     feature = "panics",
+    feature = "antipatterns",
     feature = "allows",
     feature = "cfg_hygiene",
     feature = "cfg_scatter",
@@ -16,6 +17,7 @@ pub(crate) use source::DatabaseSource;
 mod tokens;
 #[cfg(any(
     feature = "panics",
+    feature = "antipatterns",
     feature = "allows",
     feature = "cfg_hygiene",
     feature = "cfg_scatter",
@@ -27,16 +29,20 @@ mod tokens;
     feature = "cli_layout",
 ))]
 pub(crate) use tokens::render as token_text;
+#[cfg(feature = "antipatterns")]
+pub(crate) use tokens::render_excluding as token_text_excluding;
 #[cfg(any(
     feature = "tracing",
     feature = "internal_error_chain",
-    feature = "panics"
+    feature = "panics",
+    feature = "antipatterns"
 ))]
 mod macro_syntax;
 #[cfg(any(
     feature = "tracing",
     feature = "internal_error_chain",
-    feature = "panics"
+    feature = "panics",
+    feature = "antipatterns"
 ))]
 pub(crate) use macro_syntax::DatabaseMacroSyntax;
 #[cfg(feature = "internal_error_chain")]
@@ -49,3 +55,6 @@ pub(crate) use modules::module_path;
 mod verus_syntax;
 #[cfg(all(feature = "verus_ir", feature = "visibility"))]
 pub(crate) use verus_syntax::DatabaseVerusSyntax;
+
+#[cfg(feature = "antipatterns")]
+mod antipatterns;

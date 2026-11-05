@@ -15,7 +15,7 @@ pub(super) use tokens::{normalize_tokens, split_top_level_commas};
 /// Which verifier a crate name maps to, if any -- the only crates this rule
 /// applies to.
 #[tracing::instrument(level = "debug")]
-pub(super) fn verifier_for_crate(crate_name: &str) -> Option<&'static str> {
+pub(crate) fn verifier_for_crate(crate_name: &str) -> Option<&'static str> {
     match crate_name {
         "amenable_creusot" => Some("creusot"),
         "amenable_verus" => Some("verus"),

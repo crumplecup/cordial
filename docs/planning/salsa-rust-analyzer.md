@@ -635,7 +635,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
 | Error analysis | Sites, chain records, type relationships, expression compliance, signature-chain and architecture assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`, `SourceErrorArchitecture`). Apply collection remains. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
 | Error apply inventory | `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` | One collection of declarations, all uses, initializers, lifetimes, expansion provenance and ranges into existing typed IR. Keep edit rendering text-only. |
-| Panic and proof collectors | Verus dialect inventory is projected into required `SourceVerus` graph evidence by both loaders; proof-pattern hooks consume IR alone. Panic sites, source fingerprints and the Kani exemption graph now live in required `SourcePanics` evidence; the panic enricher consumes IR alone. Native ordinary panic/Kani and embedded-program collection now project the same inventory. Antipattern ordinary and proof-clause facts now live in required `SourceAntipatterns` graph evidence; the antipattern enricher consumes IR alone. Native antipattern projection remains: `antipatterns/{scan,contract_bounds}`. | Canonical outer Rust plus memoized payload grammars. Finish antipattern and contract coverage before cutover; no fallback whole-file parser. |
+| Panic and proof collectors | Both loaders project required `SourceVerus`, `SourcePanics` and `SourceAntipatterns` graph evidence. Proof-pattern, panic and antipattern hooks consume IR alone. Native collection covers ordinary syntax, Kani proof graphs, embedded programs and Creusot/Kani/Verus contract clauses. | Canonical outer Rust plus memoized payload grammars. Retire compatibility collection with the production frontend; no fallback whole-file parser. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
 
 Macro islands and snippet parsers need their own inventory in addition to shared
@@ -1106,10 +1106,40 @@ combinations and changed registries for Kani, Creusot and Verus after source
 removal. Full-feature checks pass, and build-tier submit verified zero open items
 (list 59). The deep tier was not run.
 
+## Checkpoint: native antipattern collection
+
+The database now projects the complete `SourceAntipatterns` inventory from its
+canonical syntax carriers: ordinary candidates, field storage shapes and error
+membership, inspected-file fingerprints, and Kani, Creusot and Verus clauses.
+The existing IR-only assessment consumes the same payload from either loader.
+Inactive declarations, cfg siblings, foreign signatures, fixture exclusions and
+proof-specific scan roots retain their existing policy coverage.
+
+Opaque contract dialects use loader-owned, tracked grammar queries. Kani call
+shapes come from canonical Rust expressions. Proof harnesses share the memoized
+embedded-program grammar with the other native collectors; their source carriers
+bind the original file coordinates to the exact issued body. Nested item
+harnesses preserve their context and locations. Statement harnesses remain
+opaque, as required by the existing contract policy.
+
+The parity regression compares the complete serialized inventory against all
+ordinary specimens and all three proof dialects. It checks virtual edits,
+restoration, invalid outer syntax, retained evidence after source deletion and
+database disposal, and grammar-query reuse on unchanged projection. Production
+ownership still awaits the remaining error/apply collectors and Cargo-context
+integration; this checkpoint does not switch the production frontend.
+
+Validation on 2026-11-05: all 44 isolated antipattern tests pass, including
+complete native/compatibility payload parity and the ordinary, graph-evidence
+and contract-shape suites. Full-feature native parity passes for antipatterns,
+panics, tracing proof evidence and error architecture. Panic-only parity also
+passes, with a warning-free isolated compilation. Build-tier submit cleared all
+findings and verified zero open items (list 62). The deep tier was not run.
+
 ## Current next step
 
-Work toward the production cutover, completing native error/apply inventory and
-antipattern/proof collection against the inventory above. Derives,
+Work toward the production cutover, completing native error/apply inventory
+against the inventory above. Derives,
 visibility, CLI layout, module splices, attribute materialization and the complete
 file-policy and tracing groups now consume loader projections.
 Preserve inactive-code policy coverage and golden findings.

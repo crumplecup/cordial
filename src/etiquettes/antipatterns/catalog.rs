@@ -9,7 +9,9 @@ use crate::{CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters, derive_new::new,
+)]
 pub(crate) struct AntipatternCatalog {
     snapshots: Vec<FileSnapshot>,
     syntax: AntipatternSyntaxFacts,

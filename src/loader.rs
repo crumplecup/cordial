@@ -7,7 +7,8 @@ pub use database::{SemanticCargoOptions, SourceDatabase};
 #[cfg(any(
     feature = "tracing",
     feature = "internal_error_chain",
-    feature = "panics"
+    feature = "panics",
+    feature = "antipatterns"
 ))]
 pub(crate) use native_syntax::DatabaseMacroSyntax;
 pub(crate) use native_syntax::DatabaseSource;
@@ -15,6 +16,7 @@ pub(crate) use native_syntax::DatabaseSource;
 pub(crate) use native_syntax::DatabaseVerusSyntax;
 #[cfg(any(
     feature = "panics",
+    feature = "antipatterns",
     feature = "allows",
     feature = "cfg_hygiene",
     feature = "cfg_scatter",
@@ -26,6 +28,8 @@ pub(crate) use native_syntax::DatabaseVerusSyntax;
     feature = "cli_layout",
 ))]
 pub(crate) use native_syntax::token_text as database_token_text;
+#[cfg(feature = "antipatterns")]
+pub(crate) use native_syntax::token_text_excluding as database_token_text_excluding;
 mod library_root;
 pub use library_root::library_root_rs;
 mod macro_syntax;

@@ -61,40 +61,52 @@ fn collect_verus_syntax(
         {
             continue;
         }
-        let mut clause_groups = Vec::new();
-        walk_verus_tokens(mac.tokens.clone(), &mut clause_groups);
-        for (kind, clauses, harness) in clause_groups {
-            for (idx, clause) in clauses.iter().cloned().enumerate() {
-                let normalized = normalize_tokens(clause.clone());
-                if is_trivial(&normalized) || is_builtin_contract_inspection(kind, clause.clone()) {
-                    continue;
-                }
-                let line = clause
-                    .clone()
-                    .into_iter()
-                    .next()
-                    .map(|tt| tt.span().start().line as u32)
-                    .unwrap_or(0);
-                let leaf = if harness.is_empty() {
-                    "verus!".to_string()
-                } else {
-                    format!("verus!::{harness}")
-                };
-                let context = site_context(&module_prefix, &leaf);
-                let sibling_names = clauses
-                    .iter()
-                    .enumerate()
-                    .filter(|(other, _)| *other != idx)
-                    .filter_map(|(_, sibling)| ContractClause::sibling_name(sibling.clone()))
-                    .collect();
-                findings.push(ContractClause::collect(
-                    make_finding(context, file, line, &normalized)?,
-                    "verus",
-                    kind,
-                    clause,
-                    sibling_names,
-                ));
+        findings.extend(collect_payload(mac.tokens.clone(), file, &module_prefix)?);
+    }
+
+    Ok(findings)
+}
+
+#[instrument(level = "debug", skip(tokens, file), err(level = "warn"))]
+pub(super) fn collect_payload(
+    tokens: TokenStream,
+    file: &Path,
+    module_prefix: &[String],
+) -> CordialResult<Vec<ContractClause>> {
+    let mut findings = Vec::new();
+    let mut clause_groups = Vec::new();
+    walk_verus_tokens(tokens, &mut clause_groups);
+    for (kind, clauses, harness) in clause_groups {
+        for (idx, clause) in clauses.iter().cloned().enumerate() {
+            let normalized = normalize_tokens(clause.clone());
+            if is_trivial(&normalized) || is_builtin_contract_inspection(kind, clause.clone()) {
+                continue;
             }
+            let line = clause
+                .clone()
+                .into_iter()
+                .next()
+                .map(|tt| tt.span().start().line as u32)
+                .unwrap_or(0);
+            let leaf = if harness.is_empty() {
+                "verus!".to_string()
+            } else {
+                format!("verus!::{harness}")
+            };
+            let context = site_context(module_prefix, &leaf);
+            let sibling_names = clauses
+                .iter()
+                .enumerate()
+                .filter(|(other, _)| *other != idx)
+                .filter_map(|(_, sibling)| ContractClause::sibling_name(sibling.clone()))
+                .collect();
+            findings.push(ContractClause::collect(
+                make_finding(context, file, line, &normalized)?,
+                "verus",
+                kind,
+                clause,
+                sibling_names,
+            ));
         }
     }
 

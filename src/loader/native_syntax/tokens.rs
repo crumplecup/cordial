@@ -1,12 +1,23 @@
 //! Render existing syntax tokens without parsing their text again.
-use ra_ap_syntax::{SyntaxNode, SyntaxToken};
+use ra_ap_syntax::{SyntaxNode, SyntaxToken, TextRange};
 
 #[tracing::instrument(level = "trace", skip(node))]
 pub(crate) fn render(node: &SyntaxNode) -> String {
+    render_excluding(node, &[])
+}
+
+/// Render retained tokens while omitting explicitly selected syntax ranges.
+#[tracing::instrument(level = "trace", skip(node, excluded))]
+pub(crate) fn render_excluding(node: &SyntaxNode, excluded: &[TextRange]) -> String {
     let tokens: Vec<_> = node
         .descendants_with_tokens()
         .filter_map(|element| element.into_token())
         .filter(|token| !token.kind().is_trivia())
+        .filter(|token| {
+            !excluded
+                .iter()
+                .any(|range| range.contains_range(token.text_range()))
+        })
         .collect();
     sequence(&tokens, &mut 0, None)
 }
