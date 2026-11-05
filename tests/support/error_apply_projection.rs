@@ -1,7 +1,7 @@
 //! Exercise the production apply collector with supplied loader evidence.
 use cordial::{
-    CrateIr, CrateTarget, ErrorIrScanEnricher, IrView, LoadContext, Loader, SessionBuilder,
-    SourceEnrichView, SourceEnricher, SourceLoadView, SourceLoader,
+    CrateIr, CrateTarget, ErrorIrScanEnricher, IrView, LoadContext, Loader, QueryBuilder,
+    SessionBuilder, SourceEnrichView, SourceEnricher, SourceLoadView, SourceLoader,
 };
 use miette::{IntoDiagnostic, Result};
 use std::path::Path;
@@ -20,6 +20,20 @@ pub fn materialized(mut graph: CrateIr, root: &Path) -> Result<serde_json::Value
     ErrorIrScanEnricher
         .enrich_source(SourceEnrichView::new(&mut graph, source, &session))
         .into_diagnostic()?;
+    let mut units = graph
+        .nodes_matching(
+            &QueryBuilder::new()
+                .has_attr("error_conversion_unit")
+                .build(),
+        )
+        .into_iter()
+        .map(|node| {
+            node.attr("error_conversion_unit")
+                .cloned()
+                .ok_or_else(|| miette::miette!("conversion unit"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    units.sort_by_key(serde_json::Value::to_string);
     let root = graph
         .node(graph.root())
         .ok_or_else(|| miette::miette!("root node"))?;
@@ -44,5 +58,5 @@ pub fn materialized(mut graph: CrateIr, root: &Path) -> Result<serde_json::Value
         .attr("error_apply_graph_plans")
         .cloned()
         .ok_or_else(|| miette::miette!("graph plans"))?;
-    Ok(serde_json::json!({"index": index, "plans": plans}))
+    Ok(serde_json::json!({"index": index, "plans": plans, "units": units}))
 }

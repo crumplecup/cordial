@@ -1,12 +1,14 @@
 //! Loader-owned declaration evidence for error strategy transformations.
 
-use crate::etiquettes::internal_error_chain::GraphDeclarationFacts;
+use crate::etiquettes::internal_error_chain::{GraphDeclarationFacts, NameAudit};
 use crate::loader::{DatabaseSource, SharedParsedFile, SourceLoadView};
 use crate::{CordialError, CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 mod namespace;
+mod static_strings;
 use namespace::ApplyNamespace;
 
 /// Required declaration evidence on the shared crate graph root.
@@ -27,6 +29,10 @@ pub struct ErrorApplyFile {
     declarations: GraphDeclarationFacts,
     #[getter(skip)]
     namespace: ApplyNamespace,
+    #[getter(skip)]
+    name_audit: NameAudit,
+    #[getter(skip)]
+    static_strings: BTreeSet<String>,
 }
 
 impl SourceErrorApply {
@@ -43,6 +49,8 @@ impl SourceErrorApply {
                     snapshot: FileSnapshot::new(path.to_path_buf(), file.source_digest()),
                     declarations: GraphDeclarationFacts::collect(&file),
                     namespace: ApplyNamespace::collect(&file),
+                    name_audit: NameAudit::collect(&file),
+                    static_strings: static_strings::collect(&file),
                 });
                 Ok(())
             },
@@ -77,6 +85,8 @@ impl SourceErrorApply {
             snapshot: FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
             declarations: GraphDeclarationFacts::collect_native(file),
             namespace: ApplyNamespace::collect_native(file),
+            name_audit: NameAudit::collect_native(file),
+            static_strings: static_strings::collect_native(file),
         }
     }
 
@@ -91,6 +101,19 @@ impl SourceErrorApply {
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
     pub(crate) fn namespace_for(&self, file: &SharedParsedFile) -> CordialResult<&ApplyNamespace> {
         Ok(&self.file_for(file)?.namespace)
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
+    pub(crate) fn name_audit_for(&self, file: &SharedParsedFile) -> CordialResult<&NameAudit> {
+        Ok(&self.file_for(file)?.name_audit)
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
+    pub(crate) fn static_strings_for(
+        &self,
+        file: &SharedParsedFile,
+    ) -> CordialResult<&BTreeSet<String>> {
+        Ok(&self.file_for(file)?.static_strings)
     }
 
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]

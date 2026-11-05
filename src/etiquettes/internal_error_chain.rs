@@ -48,7 +48,7 @@ pub use apply::{
     ErrorFileApplySummary, ErrorFromEvidence, ErrorSourceMethodEvidence, ErrorTryEvidence,
     ErrorTryScope, run_error_field_apply, run_error_file_apply,
 };
-pub(crate) use apply::{GraphDeclarationFacts, enrich_error_apply_evidence};
+pub(crate) use apply::{GraphDeclarationFacts, NameAudit, enrich_error_apply_evidence};
 pub(crate) use architecture::ErrorArchitectureCatalog;
 pub use assessor::InternalErrorChainAssessor;
 pub use probe::InternalErrorChainProbe;

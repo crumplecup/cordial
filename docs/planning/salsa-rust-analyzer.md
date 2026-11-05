@@ -634,7 +634,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
 | Error analysis | Sites, chain records, type relationships, expression compliance, signature-chain and architecture assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`, `SourceErrorArchitecture`). Apply collection remains. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
-| Error apply inventory | Both loaders project required `SourceErrorApply` declaration and namespace evidence. Expression, getter-use, initializer and lifetime collection in `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` remains. | Declaration payloads include storage, source/Kind edges, generic and lifetime shapes, visibility, attributes and edit ranges. Module boundaries, import bindings and type-alias names drive graph and getter identity joins from IR. Collect the remaining uses and initializers into typed IR. Keep edit rendering text-only. |
+| Error apply inventory | Both loaders project required `SourceErrorApply` declaration, namespace and name/initializer safety evidence. Expression, getter-use, initializer and lifetime collection in `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` remains. | Declaration payloads include storage, source/Kind edges, generic and lifetime shapes, visibility, attributes and edit ranges. Module boundaries, import bindings and type-alias names drive graph and getter identity joins from IR. Name-shadowing guards and unambiguous immutable string declarations also come from loader evidence. Collect the remaining uses and initializers into typed IR. Keep edit rendering text-only. |
 | Panic and proof collectors | Both loaders project required `SourceVerus`, `SourcePanics` and `SourceAntipatterns` graph evidence. Proof-pattern, panic and antipattern hooks consume IR alone. Native collection covers ordinary syntax, Kani proof graphs, embedded programs and Creusot/Kani/Verus contract clauses. | Canonical outer Rust plus memoized payload grammars. Retire compatibility collection with the production frontend; no fallback whole-file parser. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
 
@@ -1187,6 +1187,32 @@ cross-file and getter round-trip suites pass. Consumer mutation tests verify
 that module boundaries govern executable graph edits and imports and aliases
 govern getter identities. Build-tier submit verified zero open items (list 68).
 The deep tier was not run.
+
+## Checkpoint: error/apply name and initializer safety
+
+Both loaders retain name-shadowing guards and immutable file-level string
+declarations in the required, snapshot-bound `SourceErrorApply` inventory.
+Production apply consumes those records when building its crate index and
+conversion units. It no longer reconstructs these guards from source syntax.
+The native collector reads the canonical database tree.
+
+Name guards preserve protected declarations, generic type parameters, constructor
+aliases, grouped imports, wildcard blockers and the boundary around inline
+modules. Free declarations remain distinct from associated and foreign items.
+String initializer sources require one unconditional, immutable declaration
+with the supported static string reference type; duplicate, conditional,
+mutable or documented declarations do not establish that evidence.
+
+Remaining located-use, expression, getter, initializer-expression and lifetime
+collectors still use the shared compatibility tree. Production cutover remains
+pending those ports and the Cargo-context obligations above.
+
+Validation on 2026-11-05: complete safety parity and production-consumer
+regressions pass with full features and with `internal_error_chain` alone.
+All 47 existing error-apply tests pass with full features. Consumer mutation
+tests verify that name guards change graph plans and immutable-source evidence
+changes conversion units; missing required fields fail closed. Build-tier submit
+verified zero open items (list 70). The deep tier was not run.
 
 ## Current next step
 

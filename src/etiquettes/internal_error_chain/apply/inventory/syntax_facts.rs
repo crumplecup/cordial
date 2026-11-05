@@ -2,7 +2,7 @@
 //! Graph closure uses these facts through the crate index instead of visiting
 //! each file again for every candidate graph.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 use syn::visit::Visit;
@@ -11,9 +11,8 @@ use tracing::instrument;
 use crate::loader::SharedParsedFile;
 
 use super::super::graph_apply::{GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts};
-use super::super::is_static_str;
 use super::super::lifetime::LifetimeFileFacts;
-use super::super::names::{NameAudit, audit_names};
+use super::super::names::NameAudit;
 
 pub(super) type LocatedName = (String, usize, usize);
 
@@ -40,14 +39,16 @@ pub(super) struct FileSyntaxFacts {
 impl FileSyntaxFacts {
     #[instrument(
         level = "debug",
-        skip(file, tracked_names, tracked_fields, graph_declarations)
+        skip(file, tracked_names, tracked_fields, graph_declarations, source),
+        err(level = "warn")
     )]
     pub(super) fn collect(
         file: &SharedParsedFile,
         tracked_names: &BTreeSet<String>,
         tracked_fields: &BTreeSet<String>,
         graph_declarations: GraphDeclarationFacts,
-    ) -> Self {
+        source: &crate::ir::SourceErrorApply,
+    ) -> crate::CordialResult<Self> {
         let mut collector = Collector {
             facts: Self {
                 path: file.path().to_path_buf(),
@@ -58,13 +59,13 @@ impl FileSyntaxFacts {
                     .filter(|part| tracked_names.contains(*part))
                     .map(str::to_string)
                     .collect(),
-                static_strings: collect_static_strings(file.syntax()),
+                static_strings: source.static_strings_for(file)?.clone(),
                 identifiers: BTreeSet::new(),
                 declarations: BTreeSet::new(),
                 paths: Vec::new(),
                 macro_names: BTreeSet::new(),
                 has_cfg: false,
-                name_audit: audit_names(file.syntax()),
+                name_audit: source.name_audit_for(file)?.clone(),
                 expressions: GraphExprFacts::collect(file, tracked_names, tracked_fields),
                 lifetimes: GraphLifetimeFacts::collect(file, tracked_names),
                 local_lifetimes: LifetimeFileFacts::collect(file, tracked_names),
@@ -74,7 +75,7 @@ impl FileSyntaxFacts {
             tracked_names,
         };
         collector.visit_file(file.syntax());
-        collector.facts
+        Ok(collector.facts)
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -87,33 +88,6 @@ impl FileSyntaxFacts {
     pub(super) fn source_mentions(&self, name: &str) -> bool {
         self.source_identifiers.contains(name)
     }
-}
-
-/// Only unambiguous, immutable file-level string declarations are safe
-/// initializer sources. Record them with the other source facts in the IR.
-#[instrument(level = "debug", skip(syntax))]
-fn collect_static_strings(syntax: &syn::File) -> BTreeSet<String> {
-    let mut declarations: BTreeMap<String, Vec<bool>> = BTreeMap::new();
-    for item in &syntax.items {
-        let (name, ty, attrs, immutable) = match item {
-            syn::Item::Const(item) => (&item.ident, &item.ty, &item.attrs, true),
-            syn::Item::Static(item) => (
-                &item.ident,
-                &item.ty,
-                &item.attrs,
-                matches!(item.mutability, syn::StaticMutability::None),
-            ),
-            _ => continue,
-        };
-        declarations
-            .entry(name.to_string())
-            .or_default()
-            .push(immutable && attrs.is_empty() && is_static_str(ty));
-    }
-    declarations
-        .into_iter()
-        .filter_map(|(name, declarations)| (declarations.as_slice() == [true]).then_some(name))
-        .collect()
 }
 
 struct Collector<'a> {

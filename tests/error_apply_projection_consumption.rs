@@ -23,6 +23,11 @@ fn native_declarations_drive_apply_and_reject_missing_or_stale_evidence() -> Res
     std::fs::write(
         root.join("src/lib.rs"),
         r#"mod child;
+const MESSAGE: &'static str = "message";
+#[derive(Debug)]
+struct MessageError { message: String }
+impl std::error::Error for MessageError {}
+impl MessageError { fn new() -> Self { Self { message: String::from(self::MESSAGE) } } }
 #[derive(Debug, Clone)]
 struct Cause;
 impl std::error::Error for Cause {}
@@ -78,6 +83,48 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
             );
             let facts = serde_json::to_value(native.source_error_apply().into_diagnostic()?)
                 .into_diagnostic()?;
+            for boundary in ["name_audit", "static_strings", "namespace", "declarations"] {
+                let mut incomplete = facts.clone();
+                incomplete["files"][0]
+                    .as_object_mut()
+                    .ok_or_else(|| miette::miette!("file facts"))?
+                    .remove(boundary);
+                let mut mutated = native.clone();
+                mutated
+                    .set_attr(mutated.root(), ATTR_SOURCE_ERROR_APPLY, incomplete)
+                    .into_diagnostic()?;
+                assert!(
+                    apply_projection::materialized(mutated, root).is_err(),
+                    "missing {boundary}"
+                );
+            }
+            for boundary in ["name_audit", "static_strings"] {
+                let mut altered = facts.clone();
+                for file in altered["files"]
+                    .as_array_mut()
+                    .ok_or_else(|| miette::miette!("files"))?
+                {
+                    if boundary == "name_audit" {
+                        file[boundary]["ambiguous"] = serde_json::json!(true);
+                    } else {
+                        file[boundary] = serde_json::json!([]);
+                    }
+                }
+                let mut mutated = native.clone();
+                mutated
+                    .set_attr(mutated.root(), ATTR_SOURCE_ERROR_APPLY, altered)
+                    .into_diagnostic()?;
+                let section = if boundary == "name_audit" {
+                    "plans"
+                } else {
+                    "units"
+                };
+                assert_ne!(
+                    apply_projection::materialized(mutated, root)?[section],
+                    actual[section],
+                    "IR {boundary}"
+                );
+            }
             for boundary in ["imports", "modules"] {
                 let mut altered = facts.clone();
                 for file in altered["files"]

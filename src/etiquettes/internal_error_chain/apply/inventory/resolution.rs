@@ -91,7 +91,8 @@ impl CrateTypeIndex {
                             source
                                 .declarations_for(file)?
                                 .with_getters(getters.get(file.path())),
-                        ),
+                            source,
+                        )?,
                     ))
                 })
                 .collect::<crate::CordialResult<_>>()?,
