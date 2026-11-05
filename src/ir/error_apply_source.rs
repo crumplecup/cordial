@@ -1,6 +1,6 @@
 //! Loader-owned snapshot evidence for error strategy transformations.
 
-use crate::etiquettes::internal_error_chain::{GraphDeclarationFacts, NameAudit};
+use crate::etiquettes::internal_error_chain::{GraphDeclarationFacts, GraphExprFacts, NameAudit};
 use crate::loader::{DatabaseSource, SharedParsedFile, SourceLoadView};
 use crate::{CordialError, CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
@@ -37,6 +37,8 @@ pub struct ErrorApplyFile {
     static_strings: BTreeSet<String>,
     #[getter(skip)]
     uses: ApplyUses,
+    #[getter(skip)]
+    expressions: GraphExprFacts,
 }
 
 impl SourceErrorApply {
@@ -56,6 +58,7 @@ impl SourceErrorApply {
                     name_audit: NameAudit::collect(&file),
                     static_strings: static_strings::collect(&file),
                     uses: ApplyUses::collect(&file),
+                    expressions: GraphExprFacts::collect(&file),
                 });
                 Ok(())
             },
@@ -93,6 +96,7 @@ impl SourceErrorApply {
             name_audit: NameAudit::collect_native(file),
             static_strings: static_strings::collect_native(file),
             uses: ApplyUses::collect_native(file),
+            expressions: GraphExprFacts::collect_native(file),
         }
     }
 
@@ -145,5 +149,12 @@ impl SourceErrorApply {
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
     pub(crate) fn uses_for(&self, file: &SharedParsedFile) -> CordialResult<&ApplyUses> {
         Ok(&self.file_for(file)?.uses)
+    }
+    #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
+    pub(crate) fn expressions_for(
+        &self,
+        file: &SharedParsedFile,
+    ) -> CordialResult<&GraphExprFacts> {
+        Ok(&self.file_for(file)?.expressions)
     }
 }

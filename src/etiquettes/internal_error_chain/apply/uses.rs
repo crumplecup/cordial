@@ -1,15 +1,19 @@
 //! Conservative use-site guard for type-changing error field edits.
 
+use crate::loader::{SharedMacroSyntax, SharedParsedFile};
 use proc_macro2::{TokenStream, TokenTree};
-use syn::parse::Parser;
-use syn::punctuated::Punctuated;
 use syn::visit::Visit;
-use syn::{Expr, ExprField, Macro, Member, PatStruct, Token};
+use syn::{Expr, ExprField, Macro, Member, PatStruct};
 use tracing::instrument;
 
-#[instrument(level = "debug", skip(mac))]
-pub(super) fn macro_has_unhandled_field_use(mac: &Macro, field_name: &str) -> bool {
+#[instrument(level = "debug", skip(file, mac))]
+pub(super) fn macro_has_unhandled_field_use(
+    file: &SharedParsedFile,
+    mac: &Macro,
+    field_name: &str,
+) -> bool {
     let mut visitor = FieldUseVisitor {
+        file,
         type_name: "",
         field_name,
         unhandled: false,
@@ -19,6 +23,7 @@ pub(super) fn macro_has_unhandled_field_use(mac: &Macro, field_name: &str) -> bo
 }
 
 struct FieldUseVisitor<'a> {
+    file: &'a SharedParsedFile,
     type_name: &'a str,
     field_name: &'a str,
     unhandled: bool,
@@ -75,8 +80,7 @@ impl<'ast> Visit<'ast> for FieldUseVisitor<'_> {
             self.unhandled = true;
             return;
         }
-        let Ok(args) = Punctuated::<Expr, Token![,]>::parse_terminated.parse2(mac.tokens.clone())
-        else {
+        let Some(SharedMacroSyntax::Expressions(args)) = self.file.macro_syntax(mac) else {
             self.unhandled = true;
             return;
         };
@@ -87,7 +91,7 @@ impl<'ast> Visit<'ast> for FieldUseVisitor<'_> {
             return;
         }
         for (index, arg) in args.iter().enumerate() {
-            if !expr_accesses_field(arg, self.field_name) {
+            if !expr_accesses_field(self.file, arg, self.field_name) {
                 continue;
             }
             if index < 2 || !is_direct_self_field(arg, self.field_name) {
@@ -111,9 +115,10 @@ fn is_direct_self_field(expr: &Expr, field_name: &str) -> bool {
         && matches!(&*field.base, Expr::Path(path) if path.path.is_ident("self"))
 }
 
-#[instrument(level = "debug", skip(expr))]
-fn expr_accesses_field(expr: &Expr, field_name: &str) -> bool {
+#[instrument(level = "debug", skip(file, expr))]
+fn expr_accesses_field(file: &SharedParsedFile, expr: &Expr, field_name: &str) -> bool {
     let mut visitor = FieldUseVisitor {
+        file,
         type_name: "",
         field_name,
         unhandled: false,

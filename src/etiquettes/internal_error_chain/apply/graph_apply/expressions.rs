@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
@@ -9,10 +10,8 @@ use crate::config::ErrorFieldStrategy;
 use super::super::Edit;
 use super::{Change, Shape, VariantChange};
 
-mod facts;
-
-pub(in crate::etiquettes::internal_error_chain::apply) use facts::GraphExprFacts;
-use facts::{GraphExprEvent, GraphValueFact, SourceArgument};
+mod compatibility;
+mod native;
 
 type Range = (usize, usize);
 
@@ -270,5 +269,138 @@ impl<'a> GraphExprPlanner<'a> {
                 }
             }
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+pub(crate) struct GraphExprFacts {
+    events: Vec<GraphExprEvent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) enum GraphExprEvent {
+    Struct {
+        name: String,
+        has_rest: bool,
+        fields: Vec<(String, GraphValueFact)>,
+    },
+    Variant {
+        owner: String,
+        variant: String,
+        args: Vec<GraphValueFact>,
+    },
+    SourceMethod {
+        owner: String,
+        argument: SourceArgument,
+    },
+    KindAsRef {
+        owner: String,
+        receiver: Option<Range>,
+        whole: Option<Range>,
+    },
+    KindMatch {
+        owner: String,
+        subject: Option<Range>,
+    },
+    FieldUse {
+        owner: String,
+        field: String,
+        self_base: bool,
+        range: Option<Range>,
+    },
+    Pattern {
+        name: String,
+        fields: BTreeSet<String>,
+    },
+    Macro {
+        constructed_types: BTreeSet<String>,
+        unhandled_fields: BTreeSet<String>,
+        mentioned_types: BTreeSet<String>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) enum SourceArgument {
+    BorrowedReference {
+        field: Option<Range>,
+        reference: Option<Range>,
+    },
+    OwnedField {
+        field: Option<Range>,
+    },
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+pub(super) struct GraphValueFact {
+    #[getter(copy)]
+    range: Option<Range>,
+    #[getter(copy)]
+    borrowed_string: Option<Range>,
+    #[getter(copy)]
+    borrowed_value: Option<Range>,
+    #[getter(copy)]
+    borrowed_boxed: Option<Range>,
+    anchored_lifetimes: BTreeSet<String>,
+}
+
+impl GraphExprFacts {
+    /// Select candidate names from already collected evidence, without syntax access.
+    #[instrument(level = "debug", skip(self, tracked_names, tracked_fields))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn select(
+        &self,
+        tracked_names: &BTreeSet<String>,
+        tracked_fields: &BTreeSet<String>,
+    ) -> Self {
+        let events = self
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                GraphExprEvent::Struct { name, .. } | GraphExprEvent::Pattern { name, .. }
+                    if !tracked_names.contains(name) =>
+                {
+                    None
+                }
+                GraphExprEvent::Variant { owner, .. } if !tracked_names.contains(owner) => None,
+                GraphExprEvent::FieldUse { field, .. } if !tracked_fields.contains(field) => None,
+                GraphExprEvent::Macro {
+                    constructed_types,
+                    unhandled_fields,
+                    mentioned_types,
+                } => {
+                    let self_constructor = constructed_types.contains("Self");
+                    let constructed_types: BTreeSet<_> = if self_constructor {
+                        tracked_names.clone()
+                    } else {
+                        constructed_types
+                            .intersection(tracked_names)
+                            .cloned()
+                            .collect()
+                    };
+                    let unhandled_fields: BTreeSet<_> = if self_constructor {
+                        tracked_fields.clone()
+                    } else {
+                        unhandled_fields
+                            .intersection(tracked_fields)
+                            .cloned()
+                            .collect()
+                    };
+                    let mentioned_types: BTreeSet<_> = mentioned_types
+                        .intersection(tracked_names)
+                        .cloned()
+                        .collect();
+                    (!constructed_types.is_empty()
+                        || !unhandled_fields.is_empty()
+                        || !mentioned_types.is_empty())
+                    .then_some(GraphExprEvent::Macro {
+                        constructed_types,
+                        unhandled_fields,
+                        mentioned_types,
+                    })
+                }
+                _ => Some(event.clone()),
+            })
+            .collect();
+        Self { events }
     }
 }

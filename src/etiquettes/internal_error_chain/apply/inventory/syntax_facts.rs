@@ -83,7 +83,9 @@ impl FileSyntaxFacts {
                 .collect(),
             has_cfg: uses.has_cfg(),
             name_audit: source.name_audit_for(file)?.clone(),
-            expressions: GraphExprFacts::collect(file, tracked_names, tracked_fields),
+            expressions: source
+                .expressions_for(file)?
+                .select(tracked_names, tracked_fields),
             lifetimes: GraphLifetimeFacts::collect(file, tracked_names),
             local_lifetimes: LifetimeFileFacts::collect(file, tracked_names),
             graph_declarations,

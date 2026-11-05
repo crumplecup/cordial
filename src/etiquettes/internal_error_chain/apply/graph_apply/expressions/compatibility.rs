@@ -1,105 +1,20 @@
-//! Strategy-independent expression sites collected from one shared source tree.
-
-use std::collections::{BTreeMap, BTreeSet};
-
-use serde::{Deserialize, Serialize};
-use syn::Expr;
-use syn::spanned::Spanned;
-use syn::visit::Visit;
-use tracing::instrument;
-
-use crate::loader::SharedParsedFile;
-
+//! Compatibility collection at the loader's shared-tree boundary.
 use super::super::super::span_range;
 use super::super::super::uses::macro_has_unhandled_field_use;
 use super::super::lifetimes::{anchored_parameters, constructor_origin};
 use super::super::types::type_name;
-
-type Range = (usize, usize);
-
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
-pub(in crate::etiquettes::internal_error_chain::apply) struct GraphExprFacts {
-    events: Vec<GraphExprEvent>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) enum GraphExprEvent {
-    Struct {
-        name: String,
-        has_rest: bool,
-        fields: Vec<(String, GraphValueFact)>,
-    },
-    Variant {
-        owner: String,
-        variant: String,
-        args: Vec<GraphValueFact>,
-    },
-    SourceMethod {
-        owner: String,
-        argument: SourceArgument,
-    },
-    KindAsRef {
-        owner: String,
-        receiver: Option<Range>,
-        whole: Option<Range>,
-    },
-    KindMatch {
-        owner: String,
-        subject: Option<Range>,
-    },
-    FieldUse {
-        owner: String,
-        field: String,
-        self_base: bool,
-        range: Option<Range>,
-    },
-    Pattern {
-        name: String,
-        fields: BTreeSet<String>,
-    },
-    Macro {
-        constructed_types: BTreeSet<String>,
-        unhandled_fields: BTreeSet<String>,
-        mentioned_types: BTreeSet<String>,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) enum SourceArgument {
-    BorrowedReference {
-        field: Option<Range>,
-        reference: Option<Range>,
-    },
-    OwnedField {
-        field: Option<Range>,
-    },
-    Unsupported,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
-pub(super) struct GraphValueFact {
-    #[getter(copy)]
-    range: Option<Range>,
-    #[getter(copy)]
-    borrowed_string: Option<Range>,
-    #[getter(copy)]
-    borrowed_value: Option<Range>,
-    #[getter(copy)]
-    borrowed_boxed: Option<Range>,
-    anchored_lifetimes: BTreeSet<String>,
-}
+use super::{GraphExprEvent, GraphExprFacts, GraphValueFact, Range, SourceArgument};
+use crate::loader::SharedParsedFile;
+use std::collections::{BTreeMap, BTreeSet};
+use syn::{Expr, spanned::Spanned, visit::Visit};
+use tracing::instrument;
 
 impl GraphExprFacts {
-    #[instrument(level = "debug", skip(file, tracked_names, tracked_fields))]
-    pub(in crate::etiquettes::internal_error_chain::apply) fn collect(
-        file: &SharedParsedFile,
-        tracked_names: &BTreeSet<String>,
-        tracked_fields: &BTreeSet<String>,
-    ) -> Self {
+    #[instrument(level = "debug", skip(file))]
+    #[hotpath::measure(impl_type = "GraphExprFacts")]
+    pub(crate) fn collect(file: &SharedParsedFile) -> Self {
         let mut collector = Collector {
             file,
-            tracked_names,
-            tracked_fields,
             facts: Self { events: Vec::new() },
             current_impl: None,
             current_error_trait: false,
@@ -112,8 +27,6 @@ impl GraphExprFacts {
 
 struct Collector<'a> {
     file: &'a SharedParsedFile,
-    tracked_names: &'a BTreeSet<String>,
-    tracked_fields: &'a BTreeSet<String>,
     facts: GraphExprFacts,
     current_impl: Option<String>,
     current_error_trait: bool,
@@ -270,7 +183,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         } else {
             name
         };
-        if let Some(name) = name.filter(|name| self.tracked_names.contains(name)) {
+        if let Some(name) = name {
             let fields = item
                 .fields
                 .iter()
@@ -299,9 +212,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
                 .iter()
                 .map(|segment| segment.ident.to_string())
                 .collect();
-            if let [.., owner, variant] = names.as_slice()
-                && self.tracked_names.contains(owner)
-            {
+            if let [.., owner, variant] = names.as_slice() {
                 let args = item.args.iter().map(|arg| self.value(arg)).collect();
                 self.facts.events.push(GraphExprEvent::Variant {
                     owner: owner.clone(),
@@ -338,9 +249,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 
     #[instrument(level = "trace", skip(self, item))]
     fn visit_expr_field(&mut self, item: &'ast syn::ExprField) {
-        if let syn::Member::Named(name) = &item.member
-            && self.tracked_fields.contains(&name.to_string())
-        {
+        if let syn::Member::Named(name) = &item.member {
             self.facts.events.push(GraphExprEvent::FieldUse {
                 owner: self.current_impl.clone().unwrap_or_default(),
                 field: name.to_string(),
@@ -363,7 +272,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         } else {
             name
         };
-        if let Some(name) = name.filter(|name| self.tracked_names.contains(name)) {
+        if let Some(name) = name {
             let fields = item
                 .fields
                 .iter()
@@ -382,41 +291,15 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     #[instrument(level = "trace", skip(self, item))]
     fn visit_macro(&mut self, item: &'ast syn::Macro) {
         let tokens = MacroTokens::collect(&item.tokens);
-        let mentioned_types: BTreeSet<_> = self
-            .tracked_names
-            .intersection(&tokens.identifiers)
-            .cloned()
-            .collect();
-        let constructed_types: BTreeSet<_> = if tokens.constructed.contains("Self") {
-            self.tracked_names.clone()
-        } else {
-            self.tracked_names
-                .intersection(&tokens.constructed)
-                .cloned()
-                .collect()
-        };
-        let possible_fields: BTreeSet<_> = if tokens.constructed.contains("Self") {
-            self.tracked_fields.clone()
-        } else {
-            self.tracked_fields
-                .intersection(&tokens.accessed_fields)
-                .cloned()
-                .collect()
-        };
-        let unhandled_fields: BTreeSet<_> = possible_fields
-            .into_iter()
-            .filter(|field| macro_has_unhandled_field_use(item, field))
-            .collect();
-        if !constructed_types.is_empty()
-            || !unhandled_fields.is_empty()
-            || !mentioned_types.is_empty()
-        {
-            self.facts.events.push(GraphExprEvent::Macro {
-                constructed_types,
-                unhandled_fields,
-                mentioned_types,
-            });
-        }
+        self.facts.events.push(GraphExprEvent::Macro {
+            constructed_types: tokens.constructed,
+            unhandled_fields: tokens
+                .accessed_fields
+                .into_iter()
+                .filter(|field| macro_has_unhandled_field_use(self.file, item, field))
+                .collect(),
+            mentioned_types: tokens.identifiers,
+        });
         syn::visit::visit_macro(self, item);
     }
 }

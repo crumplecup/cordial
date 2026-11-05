@@ -89,6 +89,7 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
                 "namespace",
                 "declarations",
                 "uses",
+                "expressions",
             ] {
                 let mut incomplete = facts.clone();
                 incomplete["files"][0]
@@ -153,6 +154,22 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
                     "IR uses {guard}"
                 );
             }
+            let mut no_expressions = facts.clone();
+            for file in no_expressions["files"]
+                .as_array_mut()
+                .ok_or_else(|| miette::miette!("files"))?
+            {
+                file["expressions"]["events"] = serde_json::json!([]);
+            }
+            let mut mutated = native.clone();
+            mutated
+                .set_attr(mutated.root(), ATTR_SOURCE_ERROR_APPLY, no_expressions)
+                .into_diagnostic()?;
+            assert_ne!(
+                apply_projection::materialized(mutated, root)?["plans"],
+                actual["plans"],
+                "IR expression evidence"
+            );
             for boundary in ["imports", "modules"] {
                 let mut altered = facts.clone();
                 for file in altered["files"]

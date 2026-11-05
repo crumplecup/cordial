@@ -65,7 +65,7 @@ fn macro_rust_islands_share_the_source_snapshot() -> miette::Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
     let path = fixture.path().join("src/lib.rs");
-    let text = "amenable_derive::gallery_harness! { kani, SOURCE, { fn proof() { assert!(true); } } }\nunknown!(arbitrary tokens);\nunknown! { args, { fn fragment() {} } }\namenable_derive::harness! { wrong_header, { fn fragment() {} } }";
+    let text = "amenable_derive::gallery_harness! { kani, SOURCE, { fn proof() { assert!(true); write!(out, \"{}\", self.source); } } }\nunknown!(arbitrary tokens);\nunknown! { args, { fn fragment() {} } }\namenable_derive::harness! { wrong_header, { fn fragment() {} } }";
     fs::write(&path, text).into_diagnostic()?;
     let session = SessionBuilder::new(fixture.path()).build();
     let target = CrateTarget::new("fixture", fixture.path());
@@ -96,6 +96,19 @@ fn macro_rust_islands_share_the_source_snapshot() -> miette::Result<()> {
         matches!(first.macro_syntax(&assertion.mac), Some(SharedMacroSyntax::Expressions(expressions)) if expressions.len() == 1)
     );
     let second = view.parsed_file(&path, "second").into_diagnostic()?;
+    let syn::Stmt::Macro(write) = &function.block.stmts[1] else {
+        return Err(miette::miette!("expected formatting macro"));
+    };
+    let arguments = first
+        .macro_syntax(&write.mac)
+        .ok_or_else(|| miette::miette!("missing formatting arguments"))?;
+    assert!(matches!(arguments, SharedMacroSyntax::Expressions(args) if args.len() == 3));
+    assert!(std::ptr::eq(
+        arguments,
+        second
+            .macro_syntax(&write.mac)
+            .ok_or_else(|| miette::miette!("missing reused formatting arguments"))?
+    ));
     assert!(std::ptr::eq(
         payload,
         second

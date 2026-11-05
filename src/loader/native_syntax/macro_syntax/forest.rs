@@ -1,4 +1,4 @@
-//! Canonical macro forest shared by proof-aware collectors.
+//! Canonical macro islands issued to proof and error-apply collectors.
 
 use super::{DatabaseMacroSyntax, DatabaseSource};
 use ra_ap_syntax::{AstNode, ast};
@@ -46,6 +46,41 @@ impl DatabaseSource<'_> {
     pub(crate) fn proof_macro_syntax(&self) -> DatabaseMacroSyntax {
         let mut syntax = DatabaseMacroSyntax::default();
         syntax.collect(self, self.tree().syntax());
+        syntax
+    }
+}
+
+#[cfg(feature = "internal_error_chain")]
+impl DatabaseMacroSyntax {
+    #[tracing::instrument(level = "debug", skip(self, file, root))]
+    fn collect_error_apply(&mut self, file: &DatabaseSource<'_>, root: &ra_ap_syntax::SyntaxNode) {
+        for invocation in root.descendants().filter_map(ast::MacroCall::cast) {
+            let is_write = invocation.path().is_some_and(|path| {
+                path.qualifier().is_none()
+                    && path.coloncolon_token().is_none()
+                    && path
+                        .segment()
+                        .and_then(|segment| segment.name_ref())
+                        .is_some_and(|name| matches!(name.text(), "write" | "writeln"))
+            });
+            if is_write {
+                let arguments = file.macro_arguments(&invocation);
+                for arg in &arguments {
+                    self.collect_error_apply(file, arg.syntax());
+                }
+                self.arguments.insert(invocation, arguments);
+            }
+        }
+    }
+}
+
+#[cfg(feature = "internal_error_chain")]
+impl DatabaseSource<'_> {
+    /// Formatting arguments issued only from this snapshot's canonical syntax.
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub(crate) fn error_apply_macro_syntax(&self) -> DatabaseMacroSyntax {
+        let mut syntax = DatabaseMacroSyntax::default();
+        syntax.collect_error_apply(self, self.tree().syntax());
         syntax
     }
 }

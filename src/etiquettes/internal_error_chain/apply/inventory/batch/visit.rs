@@ -338,8 +338,8 @@ impl<'ast> Visit<'ast> for BatchInventoryVisitor<'_> {
                 {
                     continue;
                 }
-                let resolved =
-                    !constructs && !macro_has_unhandled_field_use(item, &candidate.field_name);
+                let resolved = !constructs
+                    && !macro_has_unhandled_field_use(self.file, item, &candidate.field_name);
                 self.record(index, ErrorConversionSiteKind::Macro, item.span(), resolved);
             }
         }

@@ -130,5 +130,7 @@ fn expression_arguments(name: &str) -> bool {
             | "vec"
             | "format"
             | "format_args"
+            | "write"
+            | "writeln"
     )
 }
