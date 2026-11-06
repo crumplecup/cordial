@@ -1465,6 +1465,21 @@ Build-tier submit verified zero open items (list 91); the deep tier was not run.
 Production routing and compatibility-owner retirement remain pending; custom
 entry module trees outside the existing scan roots still need explicit coverage.
 
+## Checkpoint: remaining text-only syntax requests removed
+
+Tracing apply and crate-attribute apply now obtain frozen text through edit
+views checked against the snapshots retained in their IR inventories. Neither
+requests a compatibility syntax handle to read source text. Tracing also rejects
+disk changes between collection and edit planning. Proof-harness collection
+reads database-owned text directly without acquiring a syntax tree.
+
+Regression coverage records source access, verifies both apply paths avoid
+their former syntax requests, checks concurrent-edit rejection and asserts
+proof collection requests no syntax handle. The tracing apply, crate-attribute
+and proof-harness suites pass, as does a reduced feature build containing tracing
+and crate attributes without the error-chain feature. Build-tier submit verified
+zero open items (list 93); the deep tier was not run.
+
 ## Current next step
 
 Load the Cargo context into the production session-owned database and route

@@ -99,9 +99,13 @@ pub fn run_crate_attrs_apply(
             summary.skipped_existing += 1;
             continue;
         }
-        let file = source_view.parsed_file(&lib, "crate-attrs-apply")?;
+        let facts = super::scan::library_facts(&ir, &lib)?.ok_or_else(|| {
+            crate::CordialError::workspace_source_facts_missing("library attributes")
+        })?;
+        let snapshot = crate::FileSnapshot::new(lib.clone(), facts.source_digest());
+        let file = source_view.edit_file(&snapshot)?;
         let patched = insert_crate_attrs(file.source(), insert_at, &to_insert);
-        if patched == file.source() {
+        if patched == *file.source() {
             summary.skipped_existing += 1;
             continue;
         }

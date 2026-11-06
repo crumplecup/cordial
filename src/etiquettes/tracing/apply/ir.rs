@@ -16,8 +16,8 @@ use super::InstrumentGap;
 use super::instrument::{ApplyRecipeRecord, file_matches};
 
 /// Run the same source loader and function enricher used by quality. The
-/// caller holds a parsed-source session across this build and the edit pass,
-/// so reading a file to edit reuses its exact source snapshot and syntax tree.
+/// caller holds a source session across this build and the edit pass. Edit
+/// planning reads frozen text checked against the graph's snapshot identity.
 #[tracing::instrument(level = "debug", skip(targets, by_file), err(level = "warn"))]
 pub(super) fn build_apply_ir(
     project_root: &Path,
@@ -128,6 +128,38 @@ pub(super) fn gaps_from_ir(
         }
     }
     Ok(gaps)
+}
+
+/// Recover the source identity from the same inventory that supplied recipes.
+#[tracing::instrument(level = "debug", skip(workspace, path), err(level = "warn"))]
+pub(super) fn snapshot_for_file(
+    workspace: &WorkspaceIr,
+    crate_name: &str,
+    path: &Path,
+) -> CordialResult<crate::FileSnapshot> {
+    use crate::objects::SourceSpan;
+    let view = CrateView::new(workspace, crate_name.to_string());
+    for node in view.nodes_matching(
+        &crate::QueryBuilder::new()
+            .has_attr(crate::ir::ATTR_SOURCE_TRACING_INVENTORY)
+            .build(),
+    ) {
+        if node
+            .weight()
+            .span()
+            .as_ref()
+            .is_some_and(|span| span.file() == path)
+        {
+            let inventory = view
+                .source_tracing_inventory(node.id())?
+                .ok_or_else(missing_recipe_fact)?;
+            return Ok(crate::FileSnapshot::new(
+                path.to_path_buf(),
+                inventory.source_digest(),
+            ));
+        }
+    }
+    Err(missing_recipe_fact())
 }
 
 /// Recover only the recipes for one checklist file from the enriched IR.

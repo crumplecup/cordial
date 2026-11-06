@@ -65,7 +65,10 @@ impl SourceDatabase {
     #[cfg(any(
         feature = "cfg_hygiene",
         feature = "tracing",
-        feature = "internal_error_chain"
+        feature = "internal_error_chain",
+        feature = "crate_attrs",
+        feature = "impl_coverage",
+        feature = "amenable_std"
     ))]
     #[instrument(level = "debug", skip(self, path, supplied), err(level = "warn"))]
     pub(crate) fn captured_text(

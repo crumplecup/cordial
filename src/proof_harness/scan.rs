@@ -103,13 +103,13 @@ pub(crate) fn collect_proof_harness_with_source(
     path: &Path,
     source: &SourceLoadView,
 ) -> CordialResult<ProofHarness> {
-    let parsed = source.parsed_file(path, "proof-harness")?;
+    let text = source.source_text(path)?;
 
     let mut non_empty_types: HashSet<String> = HashSet::new();
     let mut composition_pairs: Vec<(String, String)> = Vec::new();
     let mut proof_chain_subjects: HashSet<String> = HashSet::new();
 
-    for line in parsed.source().lines() {
+    for line in text.lines() {
         let trimmed = line.trim();
 
         if let Some(ty) = extract_turbofish_arg(trimmed, "assert_proofs_non_empty") {
@@ -120,9 +120,9 @@ pub(crate) fn collect_proof_harness_with_source(
             composition_pairs.push((outer, inner));
         }
     }
-    collect_string_args(parsed.source(), "proof_chain", &mut proof_chain_subjects);
+    collect_string_args(&text, "proof_chain", &mut proof_chain_subjects);
     collect_string_args(
-        parsed.source(),
+        &text,
         "proof_chain_for_verifiers",
         &mut proof_chain_subjects,
     );

@@ -18,7 +18,11 @@ use super::macro_syntax as macros;
 use cache::CacheToken;
 pub(crate) use cache::ParsedSourceSession;
 pub use macros::SharedMacroSyntax;
-#[cfg(feature = "internal_error_chain")]
+#[cfg(any(
+    feature = "internal_error_chain",
+    feature = "tracing",
+    feature = "crate_attrs"
+))]
 mod edit;
 #[cfg(feature = "internal_error_chain")]
 pub(crate) use edit::{SourceEditView, SourceSnapshot};

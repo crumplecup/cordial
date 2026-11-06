@@ -154,9 +154,15 @@ impl SourceLoadView {
     }
 
     /// Read frozen database text for an IR snapshot without requesting syntax.
-    #[cfg(feature = "internal_error_chain")]
+    #[cfg(any(
+        feature = "internal_error_chain",
+        feature = "tracing",
+        feature = "crate_attrs",
+        feature = "impl_coverage",
+        feature = "amenable_std"
+    ))]
     #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
-    pub(super) fn source_text(&self, path: &Path) -> CordialResult<String> {
+    pub(crate) fn source_text(&self, path: &Path) -> CordialResult<String> {
         PARSED.with(|parsed| {
             let mut parsed = parsed.borrow_mut();
             parsed.retain(|_, run| run.token.strong_count() != 0);

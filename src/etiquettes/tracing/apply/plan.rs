@@ -15,7 +15,7 @@ use super::instrument::{
     GapApplyOutcome, InstrumentAttrStyle, apply_gap, attr_style, ensure_use_instrument,
     recipe_for_gap, strip_instrument,
 };
-use super::ir::recipes_for_file;
+use super::ir::{recipes_for_file, snapshot_for_file};
 use super::lint_policy::ApplyLintPolicy;
 use super::{
     InstrumentApplySummary, InstrumentGap, TracingApplyPolicy, dedupe_gaps,
@@ -57,10 +57,12 @@ impl FilePlanner<'_> {
             return Ok(None);
         }
 
-        let parsed = self
-            .source_view
-            .parsed_file(&path, "tracing-instrument-apply")?;
-        let source = parsed.source();
+        let snapshot = snapshot_for_file(self.workspace, crate_name, &path)?;
+        let edit = self.source_view.edit_file(&snapshot)?;
+        if !edit.matches_disk()? {
+            return Err(crate::CordialError::stale_source_snapshot(&path));
+        }
+        let source = edit.source();
         let crlf = source.matches("\r\n").count();
         if crlf > 0 && crlf != source.bytes().filter(|byte| *byte == b'\n').count() {
             tracing::warn!(path = %path.display(), "mixed line endings require a byte-preserving edit path");
