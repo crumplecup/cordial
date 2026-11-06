@@ -6,6 +6,27 @@ use super::{
 use ra_ap_syntax::{AstNode, NodeOrToken, SyntaxElement, SyntaxKind, ast};
 
 impl DatabaseSource<'_> {
+    /// Expression arguments of an attribute issued by this canonical file.
+    #[tracing::instrument(level = "trace", skip(self, meta))]
+    pub(crate) fn meta_expressions(&self, meta: &ast::TokenTreeMeta) -> Option<Vec<ast::Expr>> {
+        if meta.syntax().ancestors().last().as_ref() != Some(self.tree().syntax()) {
+            return None;
+        }
+        let tree = meta.token_tree()?;
+        let text = tree.syntax().text().to_string();
+        let inner = text.get(1..text.len().checked_sub(1)?)?;
+        let key = Payload::new(self.database(), format!("({inner})"));
+        let parsed = expression(self.database(), key);
+        if !parsed.errors().is_empty() {
+            return None;
+        }
+        match ast::Expr::cast(parsed.syntax_node())? {
+            ast::Expr::TupleExpr(tuple) => Some(tuple.fields().collect()),
+            ast::Expr::ParenExpr(paren) => Some(paren.expr().into_iter().collect()),
+            _ => None,
+        }
+    }
+
     #[tracing::instrument(level = "trace", skip(self, attr))]
     pub(crate) fn meta_has_argument(&self, attr: &ast::Attr, wanted: &str) -> bool {
         if attr.syntax().ancestors().last().as_ref() != Some(self.tree().syntax()) {

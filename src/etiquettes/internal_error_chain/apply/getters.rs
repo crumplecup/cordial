@@ -14,9 +14,65 @@ mod alias;
 mod collect;
 mod derives;
 mod names;
+mod native;
 
 pub(super) use collect::collect_getter_storage;
 pub(super) use derives::known_derive;
+
+/// Snapshot-bound source contracts; planning supplies crate-wide names and uses.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct GetterContractFacts {
+    names: names::Names,
+    fields: Vec<GetterFieldContract>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct GetterFieldContract {
+    owner: String,
+    field: String,
+    storage: GetterContract,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+enum GetterContract {
+    Owned {
+        insertion: Option<GetterInsertion>,
+    },
+    Generated {
+        alias: String,
+        edits: Option<Vec<Edit>>,
+    },
+    Borrowed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct GetterInsertion {
+    declaration_start: usize,
+    field_start: usize,
+    cfg: String,
+}
+
+impl GetterInsertion {
+    #[instrument(level = "trace", skip(self))]
+    fn edits(&self, owner: &str, field: &str, name: &str) -> Vec<Edit> {
+        vec![
+            Edit {
+                start: self.declaration_start,
+                end: self.declaration_start,
+                replacement: format!(
+                    "\n/// {}\n{}type {name} = &'static str;\n",
+                    alias::marker(owner, field),
+                    self.cfg
+                ),
+            },
+            Edit {
+                start: self.field_start,
+                end: self.field_start,
+                replacement: "#[getter(copy)] ".to_string(),
+            },
+        ]
+    }
+}
 
 pub(super) type GetterFields = BTreeMap<(String, String), GetterStorageFacts>;
 pub(super) type GetterFiles = BTreeMap<PathBuf, GetterFields>;

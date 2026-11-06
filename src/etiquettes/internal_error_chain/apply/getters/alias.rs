@@ -7,8 +7,8 @@ use crate::loader::SharedParsedFile;
 
 use super::super::inventory::call_site_attribute_is_stable;
 use super::super::{Edit, is_static_str, span_range};
+use super::GetterInsertion;
 use super::derives::known_derive;
-use super::names::Names;
 
 #[instrument(level = "trace")]
 pub(super) fn marker(owner: &str, field: &str) -> String {
@@ -32,8 +32,7 @@ pub(super) fn forward(
     file: &SharedParsedFile,
     item: &syn::ItemStruct,
     field: &syn::Field,
-    name: &str,
-) -> Option<Vec<Edit>> {
+) -> Option<GetterInsertion> {
     if item.attrs.iter().any(|attr| {
         attr.path().is_ident("cfg")
             || (attr.path().is_ident("cfg_attr")
@@ -42,8 +41,6 @@ pub(super) fn forward(
     {
         return None;
     }
-    let owner = item.ident.to_string();
-    let field_name = field.ident.as_ref()?.to_string();
     let (start, _) = span_range(file.source(), item.span())?;
     let (field_start, _) = span_range(file.source(), field.span())?;
     let cfg = cfg_attrs(file, &field.attrs)?.join("\n");
@@ -52,33 +49,21 @@ pub(super) fn forward(
     } else {
         format!("{cfg}\n")
     };
-    Some(vec![
-        Edit {
-            start,
-            end: start,
-            replacement: format!(
-                "\n/// {}\n{cfg}type {name} = &'static str;\n",
-                marker(&owner, &field_name)
-            ),
-        },
-        Edit {
-            start: field_start,
-            end: field_start,
-            replacement: "#[getter(copy)] ".to_string(),
-        },
-    ])
+    Some(GetterInsertion {
+        declaration_start: start,
+        field_start,
+        cfg,
+    })
 }
 
-#[instrument(level = "debug", skip(file, owner, item, field, names))]
+#[instrument(level = "debug", skip(file, owner, item, field))]
 pub(super) fn reverse(
     file: &SharedParsedFile,
     owner: &syn::ItemStruct,
     item: &syn::ItemType,
     field: &syn::Field,
-    names: &Names,
 ) -> Option<Vec<Edit>> {
     if !field_attrs_stable(file, owner, field, true)
-        || names.count(&item.ident.to_string()) != 2
         || !matches!(item.vis, syn::Visibility::Inherited)
         || !item.generics.params.is_empty()
         || item

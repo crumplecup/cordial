@@ -2,24 +2,33 @@
 
 use std::collections::BTreeMap;
 
-use syn::visit::Visit;
+use quote::ToTokens;
 use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
 
-#[derive(Default)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) struct Names {
     counts: BTreeMap<String, usize>,
 }
 
 impl Names {
-    #[instrument(level = "debug", skip(files))]
-    pub(super) fn collect(files: &[SharedParsedFile]) -> Self {
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn record(&mut self, name: &str) {
+        *self.counts.entry(name.to_string()).or_default() += 1;
+    }
+    #[instrument(level = "debug", skip(file))]
+    pub(super) fn collect(file: &SharedParsedFile) -> Self {
         let mut names = Self::default();
-        for file in files {
-            names.visit_file(file.syntax());
-        }
+        names.tokens(file.syntax().to_token_stream());
         names
+    }
+
+    #[instrument(level = "trace", skip(self, other))]
+    pub(super) fn extend(&mut self, other: &Self) {
+        for (name, count) in &other.counts {
+            *self.counts.entry(name.clone()).or_default() += count;
+        }
     }
 
     #[instrument(level = "trace", skip(self))]
@@ -54,31 +63,10 @@ impl Names {
     fn tokens(&mut self, tokens: proc_macro2::TokenStream) {
         for token in tokens {
             match token {
-                proc_macro2::TokenTree::Ident(ident) => self.visit_ident(&ident),
+                proc_macro2::TokenTree::Ident(ident) => self.record(&ident.to_string()),
                 proc_macro2::TokenTree::Group(group) => self.tokens(group.stream()),
                 _ => {}
             }
         }
-    }
-}
-
-impl<'ast> Visit<'ast> for Names {
-    #[instrument(level = "trace", skip(self, ident))]
-    fn visit_ident(&mut self, ident: &'ast proc_macro2::Ident) {
-        *self.counts.entry(ident.to_string()).or_default() += 1;
-    }
-
-    #[instrument(level = "trace", skip(self, item))]
-    fn visit_macro(&mut self, item: &'ast syn::Macro) {
-        self.tokens(item.tokens.clone());
-        syn::visit::visit_path(self, &item.path);
-    }
-
-    #[instrument(level = "trace", skip(self, item))]
-    fn visit_attribute(&mut self, item: &'ast syn::Attribute) {
-        if let syn::Meta::List(list) = &item.meta {
-            self.tokens(list.tokens.clone());
-        }
-        syn::visit::visit_attribute(self, item);
     }
 }

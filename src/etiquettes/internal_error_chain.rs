@@ -49,7 +49,7 @@ pub use apply::{
     ErrorTryScope, run_error_field_apply, run_error_file_apply,
 };
 pub(crate) use apply::{
-    GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts, NameAudit,
+    GetterContractFacts, GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts, NameAudit,
     enrich_error_apply_evidence,
 };
 pub(crate) use architecture::ErrorArchitectureCatalog;

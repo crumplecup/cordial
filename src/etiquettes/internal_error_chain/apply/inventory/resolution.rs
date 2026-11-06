@@ -42,7 +42,7 @@ impl CrateTypeIndex {
         source: &crate::ir::SourceErrorApply,
     ) -> crate::CordialResult<Self> {
         let getter_uses = super::super::getter_uses::collect(files, source)?;
-        let getters = super::super::getters::collect_getter_storage(files, &getter_uses);
+        let getters = super::super::getters::collect_getter_storage(files, &getter_uses, source)?;
         let mut declarations: HashMap<Vec<String>, Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
         let mut local: HashMap<(PathBuf, String), Vec<Option<ErrorEdgeTarget>>> = HashMap::new();
         let modules = module_identities(files, source)?;

@@ -43,6 +43,15 @@ impl Located {
         Self { file: loc.file().to_string(), line: loc.line() }
     }
 }
+#[derive(Debug, derive_more::Display, derive_more::Error, derive_getters::Getters)]
+pub struct Fresh { file: String, line: u32 }
+impl Fresh {
+    #[track_caller]
+    pub fn new() -> Self {
+        let loc = std::panic::Location::caller();
+        Self { file: loc.file().to_string(), line: loc.line() }
+    }
+}
 "#,
     )
     .into_diagnostic()?;
@@ -91,6 +100,7 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
                 "uses",
                 "expressions",
                 "lifetimes",
+                "getters",
             ] {
                 let mut incomplete = facts.clone();
                 incomplete["files"][0]
@@ -104,6 +114,30 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
                 assert!(
                     apply_projection::materialized(mutated, root).is_err(),
                     "missing {boundary}"
+                );
+            }
+            assert!(actual.to_string().contains("CordialFreshFileStorage"));
+            for boundary in ["fields", "names"] {
+                let mut altered = facts.clone();
+                for file in altered["files"]
+                    .as_array_mut()
+                    .ok_or_else(|| miette::miette!("files"))?
+                {
+                    if boundary == "fields" {
+                        file["getters"]["fields"] = serde_json::json!([]);
+                    } else {
+                        file["getters"]["names"]["counts"]["CordialFreshFileStorage"] =
+                            serde_json::json!(1);
+                    }
+                }
+                let mut mutated = native.clone();
+                mutated
+                    .set_attr(mutated.root(), ATTR_SOURCE_ERROR_APPLY, altered)
+                    .into_diagnostic()?;
+                assert_ne!(
+                    apply_projection::materialized(mutated, root)?,
+                    actual,
+                    "IR getter {boundary}"
                 );
             }
             for boundary in ["name_audit", "static_strings"] {
