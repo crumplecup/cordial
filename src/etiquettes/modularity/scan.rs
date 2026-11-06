@@ -3,7 +3,7 @@ use super::types::ModularitySiteRecord;
 use crate::{CordialResult, ModularityKind, ModularityThresholds};
 use std::path::Path;
 
-/// Scan a standalone source using the loader's compatibility collector.
+/// Scan supplied source through the loader-owned native database.
 #[tracing::instrument(level = "debug", skip(source, thresholds, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,

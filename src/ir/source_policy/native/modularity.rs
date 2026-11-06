@@ -154,10 +154,15 @@ fn record(
     lines: u32,
     inline: bool,
 ) -> CordialResult<ModularitySiteRecord> {
+    let relative = if root == Path::new(".") && file.path().is_relative() {
+        file.path()
+    } else {
+        file.path().strip_prefix(root)?
+    };
     ModularitySiteRecord::builder()
         .kind(kind)
         .context(context)
-        .file(file.path().strip_prefix(root)?.to_path_buf())
+        .file(relative.to_path_buf())
         .line(line)
         .lines(lines)
         .inline(inline)

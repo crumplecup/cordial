@@ -1,5 +1,5 @@
 //! Visibility names from the parsed Verus dialect body.
-use super::{Items, VerusBlock};
+use super::VerusBlock;
 use tracing::instrument;
 
 impl VerusBlock {
@@ -7,28 +7,6 @@ impl VerusBlock {
     pub(in crate::verus_ir) fn visible_names(&self) -> (usize, usize) {
         count_item_names(&self.items)
     }
-}
-
-/// Count real, externally-visible names among the items inside one
-/// `verus! { .. }` invocation's own token stream: `pub` items count
-/// toward a crate's externally reachable API surface, `pub(crate)`/
-/// `pub(in ..)` toward its crate-internal one, `pub(super)` toward
-/// neither -- the exact question `crate::etiquettes::visibility`'s
-/// thin-module check asks of ordinary Rust items, which `syn::visit::
-/// Visit` can never ask of anything inside a macro's own token stream
-/// (and couldn't parse as plain Rust even if it tried to -- Verus's
-/// `spec fn`/`open`/`closed`/`requires`/`ensures` aren't valid `syn`
-/// grammar). Returns `(pub_names, pub_crate_names)`; a block that fails
-/// to parse (a real syntax error, or a `verus_syn` version mismatch
-/// against the toolchain that generated the source) contributes
-/// `(0, 0)` -- the same best-effort posture as every other `verus_ir`
-/// entry point.
-#[instrument(level = "debug", skip(tokens))]
-pub(crate) fn count_verus_item_names(tokens: proc_macro2::TokenStream) -> (usize, usize) {
-    let Ok(parsed) = verus_syn::parse2::<Items>(tokens) else {
-        return (0, 0);
-    };
-    count_item_names(&parsed.items)
 }
 
 #[tracing::instrument(level = "debug", skip(items))]

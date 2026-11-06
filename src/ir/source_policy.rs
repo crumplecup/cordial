@@ -7,7 +7,6 @@ use std::path::Path;
 
 #[cfg(feature = "cli_layout")]
 mod cli_layout;
-mod compatibility;
 #[cfg(feature = "cli_layout")]
 pub use cli_layout::CliLayoutFacts;
 #[cfg(feature = "cli_layout")]
@@ -20,29 +19,29 @@ mod native;
 #[cfg(feature = "visibility")]
 mod visibility;
 #[cfg(feature = "derives")]
-pub use compatibility::scan_derives_source;
-#[cfg(feature = "derives")]
 pub use derive_facts::{
     DeriveFieldFacts, DeriveFieldRead, DeriveFileFacts, DeriveImplFacts, DeriveItemFacts,
     DeriveMethodFacts, DeriveMethodFlags, DeriveModuleFacts, DeriveSetterShape, DeriveStructFacts,
 };
+#[cfg(feature = "derives")]
+pub use native::fixtures::scan_derives_source;
 #[cfg(feature = "visibility")]
 pub use visibility::{VisibilityFacts, VisibilityKind, VisibilityModule};
 
 #[cfg(feature = "allows")]
-pub use compatibility::scan_allows_source;
+pub use native::fixtures::scan_allows_source;
 #[cfg(feature = "cfg_hygiene")]
-pub use compatibility::scan_cfg_hygiene_source;
+pub use native::fixtures::scan_cfg_hygiene_source;
 #[cfg(feature = "cfg_scatter")]
-pub use compatibility::scan_cfg_scatter_source;
+pub use native::fixtures::scan_cfg_scatter_source;
 #[cfg(feature = "glob_imports")]
-pub use compatibility::scan_glob_imports_source;
+pub use native::fixtures::scan_glob_imports_source;
 #[cfg(feature = "inline_tests")]
-pub use compatibility::scan_inline_tests_source;
+pub use native::fixtures::scan_inline_tests_source;
 #[cfg(feature = "modularity")]
-pub use compatibility::scan_modularity_source;
+pub use native::fixtures::scan_modularity_source;
 #[cfg(feature = "pageantry")]
-pub use compatibility::scan_pageantry_source;
+pub use native::fixtures::scan_pageantry_source;
 
 /// Complete policy collection for a crate's quality scan trees.
 pub const ATTR_SOURCE_POLICY_INVENTORY: &str = "source_policy_inventory";
@@ -78,7 +77,7 @@ pub struct SourcePolicyInventory {
 }
 
 impl SourcePolicyInventory {
-    /// Collect once while the loader owns the compatibility syntax snapshots.
+    /// Collect policy facts from the loader-owned native syntax snapshots.
     #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourcePolicyInventory")]
     pub(crate) fn collect(source: &SourceLoadView, crate_root: &Path) -> CordialResult<Self> {
@@ -97,70 +96,29 @@ impl SourcePolicyInventory {
             {
                 continue;
             }
-            for file in source.parsed_rust_files_under(&tree, "source-policy", |path| {
-                (is_source
-                    && cfg!(any(
-                        feature = "cfg_hygiene",
-                        feature = "cfg_scatter",
-                        feature = "modularity",
-                        feature = "derives"
-                    )))
-                    || !crate::loader::path_has_fixtures(path, crate_root)
-            })? {
-                inventory.snapshots.push(FileSnapshot::new(
-                    file.path().to_path_buf(),
-                    file.source_digest(),
-                ));
-                #[cfg(feature = "allows")]
-                if !crate::loader::path_has_fixtures(file.path(), crate_root) {
-                    inventory
-                        .allows
-                        .extend(compatibility::collect_allows(&file, &tree, crate_root)?);
+            for entry in walkdir::WalkDir::new(&tree)
+                .into_iter()
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_type().is_file())
+            {
+                let path = entry.path();
+                if path.extension().is_none_or(|extension| extension != "rs") {
+                    continue;
                 }
-                #[cfg(feature = "glob_imports")]
-                if !crate::loader::path_has_fixtures(file.path(), crate_root) {
-                    inventory
-                        .glob_imports
-                        .extend(compatibility::collect_glob_imports(
-                            &file, &tree, crate_root,
-                        )?);
+                if crate::loader::path_has_fixtures(path, crate_root)
+                    && !(is_source
+                        && cfg!(any(
+                            feature = "cfg_hygiene",
+                            feature = "cfg_scatter",
+                            feature = "modularity",
+                            feature = "derives"
+                        )))
+                {
+                    continue;
                 }
-                #[cfg(feature = "pageantry")]
-                if !crate::loader::path_has_fixtures(file.path(), crate_root) {
-                    inventory
-                        .pageantry
-                        .extend(compatibility::collect_pageantry(&file, &tree, crate_root)?);
-                }
-                if is_source {
-                    #[cfg(feature = "derives")]
-                    inventory
-                        .derives
-                        .push(compatibility::collect_derives(&file, &tree, crate_root)?);
-                    #[cfg(feature = "modularity")]
-                    inventory
-                        .modularity
-                        .extend(compatibility::collect_modularity(&file, &tree, crate_root)?);
-                    #[cfg(feature = "inline_tests")]
-                    if !crate::loader::path_has_fixtures(file.path(), crate_root) {
-                        inventory
-                            .inline_tests
-                            .extend(compatibility::collect_inline_tests(
-                                &file, &tree, crate_root,
-                            )?);
-                    }
-                    #[cfg(feature = "cfg_hygiene")]
-                    inventory
-                        .cfg_names
-                        .extend(compatibility::collect_cfg_hygiene(
-                            &file, &tree, crate_root,
-                        )?);
-                    #[cfg(feature = "cfg_scatter")]
-                    inventory
-                        .cfg_groups
-                        .extend(compatibility::collect_cfg_scatter(
-                            &file, &tree, crate_root,
-                        )?);
-                }
+                source.collect_native_file(path, |file| {
+                    inventory.collect_native_file(file, crate_root)
+                })?;
             }
         }
         #[cfg(feature = "cfg_hygiene")]

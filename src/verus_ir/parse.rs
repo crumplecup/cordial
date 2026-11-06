@@ -16,13 +16,10 @@
 //! own token stream -- `verus_syn` expects to parse that content
 //! directly, not a whole ordinary Rust file with an embedded macro call.
 
-#[cfg(feature = "visibility")]
-mod visibility;
-#[cfg(feature = "visibility")]
-pub(crate) use visibility::count_verus_item_names;
-
 mod finder;
 pub(super) use finder::blocks_in_syntax;
+#[cfg(feature = "visibility")]
+mod visibility;
 
 use std::path::{Path, PathBuf};
 

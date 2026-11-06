@@ -1,6 +1,5 @@
 //! Snapshot-bound CLI layout evidence from the loader's canonical source trees.
 mod catalog;
-mod compatibility;
 mod native;
 use crate::{CordialResult, FileSnapshot, loader::SourceLoadView};
 pub(crate) use catalog::{LayoutCatalog, TypeRec, VariantShape};
@@ -59,14 +58,16 @@ pub enum EntryKind {
     Impl,
 }
 impl super::SourcePolicyInventory {
-    /// Collect through the shipping loader's shared syntax boundary.
+    /// Collect through the loader-owned native syntax boundary.
     #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
     pub fn collect_cli_layout(
         source: &SourceLoadView,
         root: &Path,
         name: &str,
     ) -> CordialResult<CliLayoutFacts> {
-        compatibility::collect(source, root, name)
+        Self::collect_native_cli_layout(root, name, |path| {
+            source.collect_native_file(path, |file| Self::native_cli_layout_file(file, name))
+        })
     }
     #[tracing::instrument(level = "trace", skip(self, facts))]
     pub(crate) fn set_cli_layout(&mut self, root: &Path, facts: CliLayoutFacts) {

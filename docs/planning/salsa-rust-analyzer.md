@@ -1525,6 +1525,25 @@ error-site, chain, internal-chain, stdio, subscriber and executable-boundary
 suites pass. Minimal feature checks cover the affected collection boundaries.
 Build-tier submit verified zero open items (list 98); the deep tier was not run.
 
+## Checkpoint: production file policies use native syntax
+
+Normal loader collection now routes all file-policy inventories, visibility
+module trees and CLI layout through the session-owned native database. The
+public standalone policy scans use the same source owner for supplied text,
+including paths that do not exist. Inactive syntax, quality-tree selection and
+fixture exclusions retain their existing policy meaning.
+
+The compatibility policy and CLI collectors are removed, along with their
+unused parsing entry points. Shared Verus payload visibility counting remains;
+its retired standalone token parser is removed. Regression coverage checks that
+policy collection shares the loader's native query and frozen input, and that
+all eight standalone policy collectors avoid the compatibility parser.
+
+Validation: affected etiquette suites and complete policy, derive, visibility
+and CLI payload tests pass, including virtual edits and native Verus visibility
+counts. Isolated allows, visibility and CLI feature builds pass without warnings.
+Build-tier submit verified zero open items (list 99); the deep tier was not run.
+
 ## Current next step
 
 Load the Cargo context into the production session-owned database and route

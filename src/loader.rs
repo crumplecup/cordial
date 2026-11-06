@@ -56,21 +56,6 @@ pub use source::{SharedMacroSyntax, SharedParsedFile, SourceFile, SourceLoadView
 #[cfg(feature = "internal_error_chain")]
 pub(crate) use source::{SourceEditView, SourceSnapshot};
 #[cfg(any(
-    feature = "allows",
-    feature = "glob_imports",
-    feature = "inline_tests",
-    feature = "modularity",
-    feature = "pageantry",
-    feature = "derives"
-))]
-pub(crate) use source_work::parse as source_parse;
-#[cfg(any(
-    feature = "allows",
-    feature = "glob_imports",
-    feature = "inline_tests",
-    feature = "modularity",
-    feature = "pageantry",
-    feature = "derives",
     feature = "panics",
     feature = "error_chain",
     feature = "tracing",

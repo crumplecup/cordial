@@ -18,12 +18,8 @@ impl super::SourcePolicyInventory {
         source: &SourceLoadView,
         root: &Path,
     ) -> CordialResult<VisibilityFacts> {
-        collect(root, |path| {
-            let file = source.parsed_file(path, "visibility-inventory")?;
-            Ok((
-                super::compatibility::collect_visibility(&file)?,
-                FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
-            ))
+        Self::collect_native_visibility(root, |path| {
+            source.collect_native_file(path, Self::native_visibility_file)
         })
     }
 }

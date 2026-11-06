@@ -234,10 +234,20 @@ fn visibility_tree_and_policy_survive_backend_changes_and_virtual_edits() -> Res
                 "verus! { pub open spec fn proof() -> bool { true } }".into(),
             )
             .into_diagnostic()?;
-        assert!(
-            database.project(&target, &[path.clone()]).is_err(),
-            "unsupported dialect must not undercount silently"
-        );
+        let projected = database
+            .project(&target, &[path.clone()])
+            .into_diagnostic()?;
+        let inventory = projected
+            .source_policy_inventory()
+            .into_diagnostic()?
+            .ok_or_else(|| miette::miette!("missing dialect inventory"))?;
+        let tree = inventory
+            .visibility()
+            .root()
+            .as_ref()
+            .ok_or_else(|| miette::miette!("missing dialect module"))?;
+        assert_eq!(tree.leaf_pub(), 1, "shared dialect public name");
+        assert_eq!(tree.leaf_crate(), 1, "shared dialect crate-visible name");
     }
     database
         .change_file(&path, SOURCE.into())

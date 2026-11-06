@@ -1,9 +1,9 @@
 //! Native syntax collection through the run's canonical source database.
 
-use super::{PARSED, ParsedRun, SourceFile, SourceLoadView};
+use super::{PARSED, ParsedRun, SourceLoadView};
 use crate::{CordialResult, loader::DatabaseSource};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 impl SourceLoadView {
@@ -35,12 +35,27 @@ impl SourceLoadView {
     }
 
     /// Supplied text uses the ordinary session owner, even when no file exists.
+    #[cfg(any(
+        feature = "error_sites",
+        feature = "tracing",
+        feature = "allows",
+        feature = "cfg_hygiene",
+        feature = "cfg_scatter",
+        feature = "glob_imports",
+        feature = "inline_tests",
+        feature = "modularity",
+        feature = "pageantry",
+        feature = "derives"
+    ))]
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
     pub(crate) fn collect_native_fixture<T>(
         path: &Path,
         source: &str,
         collect: impl FnOnce(&DatabaseSource<'_>) -> CordialResult<T>,
     ) -> CordialResult<T> {
+        use super::SourceFile;
+        use std::path::PathBuf;
+
         Self::new(
             String::new(),
             PathBuf::new(),

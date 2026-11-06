@@ -4,7 +4,20 @@ mod compiled;
 mod context;
 mod inputs;
 mod packages;
-#[cfg(any(feature = "error_sites", feature = "tracing"))]
+#[cfg(any(
+    feature = "error_sites",
+    feature = "tracing",
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives",
+    feature = "visibility",
+    feature = "cli_layout"
+))]
 mod source;
 mod workspace;
 

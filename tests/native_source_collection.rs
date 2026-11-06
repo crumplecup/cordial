@@ -156,6 +156,22 @@ fn loader_inventories_share_a_parse_and_keep_their_frozen_input() -> Result<()> 
         first.source_observability().into_diagnostic()?,
         repeated.source_observability().into_diagnostic()?
     );
+    #[cfg(any(
+        feature = "allows",
+        feature = "cfg_hygiene",
+        feature = "cfg_scatter",
+        feature = "glob_imports",
+        feature = "inline_tests",
+        feature = "modularity",
+        feature = "pageantry",
+        feature = "derives",
+        feature = "visibility",
+        feature = "cli_layout"
+    ))]
+    assert_eq!(
+        first.source_policy_inventory().into_diagnostic()?,
+        repeated.source_policy_inventory().into_diagnostic()?
+    );
     let fresh = SourceLoader
         .load(LoadContext::new(&session, &target))
         .into_diagnostic()?;
@@ -174,5 +190,95 @@ fn loader_inventories_share_a_parse_and_keep_their_frozen_input() -> Result<()> 
         changed.source_observability().into_diagnostic()?
     );
     assert_eq!(access.native.load(Ordering::Relaxed), 2);
+    Ok(())
+}
+
+#[test]
+#[cfg(all(
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives"
+))]
+fn standalone_policy_fixtures_use_native_syntax_without_disk_inputs() -> Result<()> {
+    cordial::init_cli_tracing();
+    let access = Parses::default();
+    let _subscriber =
+        tracing::subscriber::set_default(tracing_subscriber::registry().with(access.clone()));
+    let fixture = tempfile::tempdir().into_diagnostic()?;
+    let tree = fixture.path().join("src");
+    let file = tree.join("lib.rs");
+    let source = r#"#![allow(unused)]
+#[cfg(feature = "inactive")]
+mod dormant {
+    use other::*;
+    pub struct Value { pub value: u8 }
+    #[cfg(feature = "inactive")] fn work() {}
+    #[cfg(test)] mod tests { #[test] fn works() {} }
+}
+"#;
+    assert!(
+        !cordial::scan_allows_rust_source(source, &file, &tree, fixture.path())
+            .into_diagnostic()?
+            .is_empty()
+    );
+    assert!(
+        !cordial::scan_cfg_hygiene_rust_source(source, &file, &tree, fixture.path())
+            .into_diagnostic()?
+            .is_empty()
+    );
+    assert!(
+        !cordial::scan_cfg_scatter_rust_source(source, &file, &tree, fixture.path())
+            .into_diagnostic()?
+            .is_empty()
+    );
+    assert!(
+        !cordial::scan_glob_imports_rust_source(source, &file, &tree, fixture.path())
+            .into_diagnostic()?
+            .is_empty()
+    );
+    assert!(
+        !cordial::scan_inline_tests_rust_source(source, &file, &tree, fixture.path())
+            .into_diagnostic()?
+            .is_empty()
+    );
+    assert!(
+        !cordial::scan_modularity_rust_source(
+            source,
+            &file,
+            &tree,
+            fixture.path(),
+            &cordial::ModularityThresholds::default(),
+        )
+        .into_diagnostic()?
+        .is_empty()
+    );
+    assert!(
+        !cordial::scan_pageantry_rust_source(
+            source,
+            &file,
+            &tree,
+            fixture.path(),
+            &cordial::PageantryThresholds::default(),
+        )
+        .into_diagnostic()?
+        .is_empty()
+    );
+    cordial::scan_derives_rust_source(
+        source,
+        &file,
+        &tree,
+        fixture.path(),
+        cordial::DerivesThresholds::default(),
+        &cordial::PathInclusionFacts::default(),
+    )
+    .into_diagnostic()?;
+    assert!(!file.exists());
+    assert_eq!(access.native.load(Ordering::Relaxed), 8);
+    assert_eq!(access.compatibility.load(Ordering::Relaxed), 0);
     Ok(())
 }

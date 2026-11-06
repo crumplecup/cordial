@@ -17,6 +17,18 @@ use crate::{CordialResult, FileSnapshot};
 use ra_ap_syntax::{AstNode, SyntaxNode, ast};
 use std::path::Path;
 
+#[cfg(any(
+    feature = "allows",
+    feature = "cfg_hygiene",
+    feature = "cfg_scatter",
+    feature = "glob_imports",
+    feature = "inline_tests",
+    feature = "modularity",
+    feature = "pageantry",
+    feature = "derives"
+))]
+pub(super) mod fixtures;
+
 #[cfg(feature = "allows")]
 mod allows;
 #[cfg(feature = "cfg_hygiene")]
