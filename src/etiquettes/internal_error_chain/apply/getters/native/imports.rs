@@ -147,7 +147,9 @@ pub(super) fn segments(path: &ast::Path) -> Option<Vec<String>> {
 
 /// Derive paths occupy canonical token-tree arguments, with no nested options.
 #[tracing::instrument(level = "trace", skip(attr))]
-pub(super) fn paths(attr: &ast::Attr) -> Option<Vec<Vec<String>>> {
+pub(in crate::etiquettes::internal_error_chain::apply) fn paths(
+    attr: &ast::Attr,
+) -> Option<Vec<Vec<String>>> {
     let ast::Meta::TokenTreeMeta(meta) = attr.meta()? else {
         return None;
     };

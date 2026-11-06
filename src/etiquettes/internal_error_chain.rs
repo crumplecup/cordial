@@ -41,17 +41,17 @@ mod source_shape;
 mod type_graph;
 mod types;
 
+pub(crate) use apply::{
+    ConversionFileFacts, GetterConsumerFacts, GetterContractFacts, GraphDeclarationFacts,
+    GraphExprFacts, GraphLifetimeFacts, InitializerFileFacts, LifetimeFileFacts, NameAudit,
+    enrich_error_apply_evidence,
+};
 pub use apply::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
     ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind, ErrorFieldApplyBlocker,
     ErrorFieldApplyBlockerReason, ErrorFieldApplyRepair, ErrorFieldApplySummary,
     ErrorFileApplySummary, ErrorFromEvidence, ErrorSourceMethodEvidence, ErrorTryEvidence,
     ErrorTryScope, run_error_field_apply, run_error_file_apply,
-};
-pub(crate) use apply::{
-    GetterConsumerFacts, GetterContractFacts, GraphDeclarationFacts, GraphExprFacts,
-    GraphLifetimeFacts, InitializerFileFacts, LifetimeFileFacts, NameAudit,
-    enrich_error_apply_evidence,
 };
 pub(crate) use architecture::ErrorArchitectureCatalog;
 pub use assessor::InternalErrorChainAssessor;

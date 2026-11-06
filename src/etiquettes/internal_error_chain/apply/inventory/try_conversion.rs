@@ -25,7 +25,14 @@ pub enum ErrorTryScope {
 /// These are syntax facts only. The operand's error type and the identity of
 /// either written path still require type resolution.
 #[derive(
-    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_getters::Getters,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_getters::Getters,
+    derive_new::new,
 )]
 pub struct ErrorTryEvidence {
     #[getter(copy)]

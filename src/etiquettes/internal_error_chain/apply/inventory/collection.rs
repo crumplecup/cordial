@@ -1,4 +1,4 @@
-//! Identify conversion candidates and visit each shared file once for sites.
+//! Identify conversion candidates and select sites from shared IR contracts.
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
@@ -9,7 +9,6 @@ use crate::config::ErrorFieldStrategy;
 use crate::error::{CordialError, CordialResult};
 use crate::loader::SharedParsedFile;
 
-use super::batch::BatchInventoryVisitor;
 use super::resolution::CrateTypeIndex;
 use super::{
     ConversionCandidate, ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit,
@@ -43,7 +42,10 @@ pub(super) fn collect_conversion_units(
         if relevant.is_empty() {
             continue;
         }
-        let mut sites = BatchInventoryVisitor::collect(file, &candidates, &relevant, declarations);
+        let mut sites = declarations
+            .conversion_site_facts(file)
+            .ok_or_else(|| CordialError::stale_source_snapshot(file.path()))?
+            .select(file, &candidates, &relevant, declarations);
         for index in relevant {
             let candidate = &candidates[index];
             let external = file.path() != candidate.declaration;

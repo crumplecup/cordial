@@ -5,8 +5,11 @@ use ra_ap_syntax::ast::{self, HasAttrs, HasModuleItem, HasName};
 
 mod alias;
 mod attrs;
-pub(super) mod imports;
+mod imports;
 mod names;
+
+pub(in crate::etiquettes::internal_error_chain::apply) use attrs::{named, stable_conditional};
+pub(in crate::etiquettes::internal_error_chain::apply) use imports::{has_derive, known, paths};
 
 impl GetterContractFacts {
     #[tracing::instrument(level = "debug", skip(file))]

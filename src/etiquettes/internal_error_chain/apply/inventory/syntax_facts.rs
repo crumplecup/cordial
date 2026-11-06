@@ -34,6 +34,7 @@ pub(super) struct FileSyntaxFacts {
     lifetimes: GraphLifetimeFacts,
     local_lifetimes: LifetimeFileFacts,
     initializers: InitializerFileFacts,
+    conversion_sites: super::sites::ConversionFileFacts,
     graph_declarations: GraphDeclarationFacts,
 }
 
@@ -93,6 +94,7 @@ impl FileSyntaxFacts {
                 .local_lifetimes_for(file)?
                 .select_names(tracked_names),
             initializers: source.initializers_for(file)?.clone(),
+            conversion_sites: source.conversion_sites_for(file)?.clone(),
             graph_declarations,
         })
     }

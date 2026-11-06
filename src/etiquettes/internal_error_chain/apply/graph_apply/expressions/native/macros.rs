@@ -2,7 +2,7 @@
 use super::super::GraphExprEvent;
 use super::syntax;
 use crate::loader::DatabaseMacroSyntax;
-use ra_ap_syntax::{AstNode, NodeOrToken, SyntaxElement, SyntaxKind, ast};
+use ra_ap_syntax::{AstNode, NodeOrToken, SyntaxElement, SyntaxKind, ast, ast::HasGenericArgs};
 use std::collections::BTreeSet;
 use tracing::instrument;
 
@@ -113,6 +113,9 @@ fn unhandled(invocation: &ast::MacroCall, field: &str, syntax: &DatabaseMacroSyn
     if !tokens.accessed_fields.contains(field) {
         return false;
     }
+    if !formatting(invocation) {
+        return true;
+    }
     let args = syntax.arguments(invocation);
     if args.len() < 3
         || !matches!(args.get(1), Some(ast::Expr::Literal(lit)) if matches!(lit.kind(), ast::LiteralKind::String(_)))
@@ -153,5 +156,43 @@ fn accesses(expr: &ast::Expr, field: &str, syntax: &DatabaseMacroSyntax) -> bool
             }
         }
         ast::MacroCall::cast(node).is_some_and(|invocation| unhandled(&invocation, field, syntax))
+    })
+}
+
+impl super::super::GraphExprFacts {
+    #[instrument(level = "trace", skip(tree, invocation, syntax))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn conversion_macro(
+        tree: Option<ast::TokenTree>,
+        invocation: Option<&ast::MacroCall>,
+        syntax: &DatabaseMacroSyntax,
+    ) -> (BTreeSet<String>, BTreeSet<String>, BTreeSet<String>) {
+        let mut tokens = Tokens::default();
+        if let Some(tree) = tree {
+            tokens.visit(&tree);
+        }
+        let unhandled = tokens
+            .accessed_fields
+            .iter()
+            .filter(|field| {
+                invocation.is_none_or(|invocation| unhandled(invocation, field, syntax))
+            })
+            .cloned()
+            .collect();
+        (tokens.constructed, tokens.accessed_fields, unhandled)
+    }
+}
+
+#[instrument(level = "trace", skip(invocation))]
+fn formatting(invocation: &ast::MacroCall) -> bool {
+    invocation.path().is_some_and(|path| {
+        path.qualifier().is_none()
+            && path.coloncolon_token().is_none()
+            && path.segment().is_some_and(|segment| {
+                segment.coloncolon_token().is_none()
+                    && segment.generic_arg_list().is_none()
+                    && segment
+                        .name_ref()
+                        .is_some_and(|name| matches!(name.text(), "write" | "writeln"))
+            })
     })
 }

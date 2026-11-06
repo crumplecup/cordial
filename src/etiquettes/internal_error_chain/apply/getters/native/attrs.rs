@@ -7,7 +7,10 @@ use ra_ap_syntax::{
 };
 
 #[tracing::instrument(level = "trace", skip(attr))]
-pub(super) fn named(attr: &ast::Attr, name: &str) -> bool {
+pub(in crate::etiquettes::internal_error_chain::apply) fn named(
+    attr: &ast::Attr,
+    name: &str,
+) -> bool {
     !matches!(attr.meta(), Some(ast::Meta::UnsafeMeta(_)))
         && attr.simple_name().as_deref() == Some(name)
         && attr.path().is_none_or(|path| {
@@ -87,7 +90,7 @@ pub(super) fn field_stable(
 }
 
 #[tracing::instrument(level = "trace", skip(file, owner, meta))]
-pub(super) fn stable_conditional(
+pub(in crate::etiquettes::internal_error_chain::apply) fn stable_conditional(
     file: &DatabaseSource<'_>,
     owner: &ast::Struct,
     meta: &ast::Meta,

@@ -33,12 +33,14 @@ pub(crate) use self::getters::GetterContractFacts;
 pub(crate) use self::graph_apply::{GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts};
 use self::graph_apply::{conversion_graphs_from_ir, enrich_conversion_graphs};
 pub(crate) use self::initializers::InitializerFileFacts;
+pub(crate) use self::inventory::{
+    ConversionFileFacts, conversion_units_from_ir, enrich_conversion_units,
+};
 pub use self::inventory::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
     ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind, ErrorFromEvidence,
     ErrorSourceMethodEvidence, ErrorTryEvidence, ErrorTryScope,
 };
-pub(crate) use self::inventory::{conversion_units_from_ir, enrich_conversion_units};
 pub(crate) use self::lifetime::LifetimeFileFacts;
 pub(crate) use self::names::NameAudit;
 use self::patch::patch_file;

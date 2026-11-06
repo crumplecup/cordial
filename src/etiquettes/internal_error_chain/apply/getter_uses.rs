@@ -95,18 +95,18 @@ pub(super) struct GetterUseFact {
 
 impl GetterUseFact {
     /// A proven field receiver belongs to another declaration; unknown stays open.
-    #[instrument(level = "trace", skip(self, path, span))]
+    #[instrument(level = "trace", skip(self, path, start))]
     pub(super) fn unrelated_field(
         &self,
         path: &Path,
         owner: &str,
         usage: &Path,
-        span: proc_macro2::Span,
+        start: (usize, usize),
     ) -> bool {
         self.path == usage
             && self.kind == UseKind::Field
-            && self.line == span.start().line
-            && self.column == span.start().column
+            && self.line == start.0
+            && self.column == start.1
             && matches!(&self.receiver, Receiver::Declaration(identity)
                 if identity.declaration != path || identity.name != owner)
     }
@@ -157,28 +157,27 @@ pub(super) fn collect(
         .collect())
 }
 
-#[instrument(level = "trace", skip(uses, path, usage, span))]
+#[instrument(level = "trace", skip(uses, path, usage, start))]
 pub(super) fn unrelated_field(
     uses: &[GetterUseFact],
     path: &Path,
     owner: &str,
     usage: &Path,
-    span: proc_macro2::Span,
+    start: (usize, usize),
 ) -> bool {
     uses.iter()
-        .any(|fact| fact.unrelated_field(path, owner, usage, span))
+        .any(|fact| fact.unrelated_field(path, owner, usage, start))
 }
 
-#[instrument(level = "trace", skip(uses, path, usage, span))]
+#[instrument(level = "trace", skip(uses, path, usage, start, end))]
 pub(super) fn unrelated_macro(
     uses: &[GetterUseFact],
     path: &Path,
     owner: &str,
     usage: &Path,
-    span: proc_macro2::Span,
+    start: (usize, usize),
+    end: (usize, usize),
 ) -> bool {
-    let start = (span.start().line, span.start().column);
-    let end = (span.end().line, span.end().column);
     let known = uses.iter().any(|fact| {
         fact.path == usage
             && fact.kind == UseKind::Macro

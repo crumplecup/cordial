@@ -7,25 +7,26 @@ use super::super::super::getter_uses;
 use super::CrateTypeIndex;
 
 impl CrateTypeIndex {
-    #[instrument(level = "trace", skip(self, path, usage, span))]
+    #[instrument(level = "trace", skip(self, path, usage, start))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn unrelated_getter_field(
         &self,
         path: &Path,
         owner: &str,
         usage: &Path,
-        span: proc_macro2::Span,
+        start: (usize, usize),
     ) -> bool {
-        getter_uses::unrelated_field(&self.getter_uses, path, owner, usage, span)
+        getter_uses::unrelated_field(&self.getter_uses, path, owner, usage, start)
     }
 
-    #[instrument(level = "trace", skip(self, path, usage, span))]
+    #[instrument(level = "trace", skip(self, path, usage, start, end))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn unrelated_getter_macro(
         &self,
         path: &Path,
         owner: &str,
         usage: &Path,
-        span: proc_macro2::Span,
+        start: (usize, usize),
+        end: (usize, usize),
     ) -> bool {
-        getter_uses::unrelated_macro(&self.getter_uses, path, owner, usage, span)
+        getter_uses::unrelated_macro(&self.getter_uses, path, owner, usage, start, end)
     }
 }

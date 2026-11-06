@@ -1,8 +1,8 @@
 //! Loader-owned snapshot evidence for error strategy transformations.
 
 use crate::etiquettes::internal_error_chain::{
-    GetterConsumerFacts, GetterContractFacts, GraphDeclarationFacts, GraphExprFacts,
-    GraphLifetimeFacts, InitializerFileFacts, LifetimeFileFacts, NameAudit,
+    ConversionFileFacts, GetterConsumerFacts, GetterContractFacts, GraphDeclarationFacts,
+    GraphExprFacts, GraphLifetimeFacts, InitializerFileFacts, LifetimeFileFacts, NameAudit,
 };
 use crate::loader::{DatabaseSource, SharedParsedFile, SourceLoadView};
 use crate::{CordialError, CordialResult, FileSnapshot};
@@ -52,9 +52,19 @@ pub struct ErrorApplyFile {
     local_lifetimes: LifetimeFileFacts,
     #[getter(skip)]
     initializers: InitializerFileFacts,
+    #[getter(skip)]
+    conversion_sites: ConversionFileFacts,
 }
 
 impl SourceErrorApply {
+    #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
+    pub(crate) fn conversion_sites_for(
+        &self,
+        file: &SharedParsedFile,
+    ) -> CordialResult<&ConversionFileFacts> {
+        Ok(&self.file_for(file)?.conversion_sites)
+    }
+
     #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourceErrorApply")]
     pub(crate) fn collect(source: &SourceLoadView, root: &Path) -> CordialResult<Self> {
@@ -77,6 +87,7 @@ impl SourceErrorApply {
                     getter_uses: GetterConsumerFacts::collect(&file),
                     local_lifetimes: LifetimeFileFacts::collect(&file),
                     initializers: InitializerFileFacts::collect(&file),
+                    conversion_sites: ConversionFileFacts::collect(&file),
                 });
                 Ok(())
             },
@@ -120,6 +131,7 @@ impl SourceErrorApply {
             getter_uses: GetterConsumerFacts::collect_native(file),
             local_lifetimes: LifetimeFileFacts::collect_native(file),
             initializers: InitializerFileFacts::collect_native(file),
+            conversion_sites: ConversionFileFacts::collect_native(file),
         }
     }
 

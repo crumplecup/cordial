@@ -15,6 +15,13 @@ use super::CrateTypeIndex;
 use super::paths::absolute_path;
 
 impl CrateTypeIndex {
+    #[instrument(level = "trace", skip(self, file))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn conversion_site_facts(
+        &self,
+        file: &impl SourceSnapshot,
+    ) -> Option<&super::super::sites::ConversionFileFacts> {
+        self.syntax_for(file).map(FileSyntaxFacts::conversion_sites)
+    }
     /// Private fields are visible in the declaring module and its descendants.
     /// An unknown module stays inside the audit rather than being assumed safe.
     #[instrument(level = "trace", skip(self, declaration, usage))]

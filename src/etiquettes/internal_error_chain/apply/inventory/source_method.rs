@@ -14,7 +14,14 @@ use super::super::span_range;
 /// The trait path and body uses still require name and flow resolution before
 /// they can justify a storage change.
 #[derive(
-    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_getters::Getters,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_getters::Getters,
+    derive_new::new,
 )]
 pub struct ErrorSourceMethodEvidence {
     trait_path: Vec<String>,
@@ -23,6 +30,10 @@ pub struct ErrorSourceMethodEvidence {
 }
 
 impl ErrorSourceMethodEvidence {
+    #[instrument(level = "trace", skip(self, name))]
+    pub(super) fn record_field_name(&mut self, name: String) {
+        self.self_field_uses.insert(name);
+    }
     #[instrument(level = "debug", skip(file, method, trait_path))]
     pub(super) fn from_method(
         file: &SharedParsedFile,

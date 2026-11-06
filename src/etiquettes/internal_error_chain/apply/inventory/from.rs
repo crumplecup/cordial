@@ -11,7 +11,14 @@ use super::helpers::plain_type_path;
 /// signature uses a shape such as a reference or associated type that this
 /// inventory does not yet describe.
 #[derive(
-    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, derive_getters::Getters,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    derive_getters::Getters,
+    derive_new::new,
 )]
 pub struct ErrorFromEvidence {
     trait_path: Vec<String>,

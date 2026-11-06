@@ -633,8 +633,8 @@ possible so consumer stages do not need a simultaneous rewrite.
 | Attributes and file policy | Attribute materialization, `crate_attrs`, `allows`, `cfg_scatter`, `cfg_hygiene`, `glob_imports`, `inline_tests`, `modularity` and `pageantry` consume loader-projected IR | Unexpanded syntax including inactive items, token/range fidelity, nested attributes. Keep normalization and golden findings tests. |
 | API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
-| Error analysis | Sites, chain records, type relationships, expression compliance, signature-chain and architecture assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`, `SourceErrorArchitecture`). Apply collection remains. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
-| Error apply inventory | Both loaders project required `SourceErrorApply` declaration, namespace, name/initializer safety, located graph-use, graph-expression, graph-lifetime, getter storage, getter consumer, local lifetime and constructor-initializer contracts. Conversion-site dispatch in `internal_error_chain/apply/inventory/batch` remains. | Declaration payloads include storage, source/Kind edges, generic and lifetime shapes, visibility, attributes and edit ranges. Module boundaries, import bindings and type-alias names drive graph and getter identity joins from IR. Name-shadowing guards, immutable string declarations, graph-closure uses, constructor values, field accesses, macro guards and expression lifetime origins also come from loader evidence. Graph lifetime evidence includes declaration and signature ranges, storage requirements, constructor anchors and safe forwarding returns. Getter storage contracts retain alias ownership, collision counts, conditional Display guards and exact insertion/removal edits. Getter consumer recipes preserve lexical receiver scopes, method contracts and exact macro payload origins; the crate-wide identity join consumes IR alone. Local lifetime contracts retain constructor, forwarding, allowed type-use and exact edit-range evidence. Constructor-initializer recipes retain immutable binding provenance, caller aliases, cfg-paired tuple origins, impl lifetime requirements and exact expression ranges. Collect the remaining conversion-site recipes into typed IR. Keep edit rendering text-only. |
+| Error analysis | Sites, chain records, type relationships, expression compliance, signature-chain and architecture assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`, `SourceErrorArchitecture`). Error apply now also has native loader projections as described below. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
+| Error apply inventory | Both loaders project required `SourceErrorApply` declaration, namespace, name/initializer safety, located graph-use, graph-expression, graph-lifetime, getter storage, getter consumer, local lifetime, constructor-initializer and conversion-site contracts. Conversion-site selection consumes required IR records; the original batch syntax visitor is removed. | Declaration payloads include storage, source/Kind edges, generic and lifetime shapes, visibility, attributes and edit ranges. Module boundaries, import bindings and type-alias names drive graph and getter identity joins from IR. Name-shadowing guards, immutable string declarations, graph-closure uses, constructor values, field accesses, macro guards and expression lifetime origins also come from loader evidence. Graph lifetime evidence includes declaration and signature ranges, storage requirements, constructor anchors and safe forwarding returns. Getter storage contracts retain alias ownership, collision counts, conditional Display guards and exact insertion/removal edits. Getter consumer recipes preserve lexical receiver scopes, method contracts and exact macro payload origins; the crate-wide identity join consumes IR alone. Local lifetime contracts retain constructor, forwarding, allowed type-use and exact edit-range evidence. Constructor-initializer recipes retain immutable binding provenance, caller aliases, cfg-paired tuple origins, impl lifetime requirements and exact expression ranges. Conversion-site recipes preserve ordered uses, return scopes, From/source/try evidence, generated-constructor guards and macro field uses. Keep edit rendering text-only. |
 | Panic and proof collectors | Both loaders project required `SourceVerus`, `SourcePanics` and `SourceAntipatterns` graph evidence. Proof-pattern, panic and antipattern hooks consume IR alone. Native collection covers ordinary syntax, Kani proof graphs, embedded programs and Creusot/Kani/Verus contract clauses. | Canonical outer Rust plus memoized payload grammars. Retire compatibility collection with the production frontend; no fallback whole-file parser. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
 
@@ -1400,10 +1400,39 @@ expression ranges from IR. The 47 error-field apply tests and 14 getter apply
 tests pass. Build-tier submit verified zero open items (list 86). The deep tier
 was not run.
 
+## Checkpoint: error/apply conversion-site contracts
+
+Both loaders project required, snapshot-bound conversion-site events in
+`SourceErrorApply`. Candidate selection and crate-wide getter exclusions consume
+these records through the IR index. The former batch syntax visitor is removed.
+The payload retains constructor and pattern paths, associated-call callee guards,
+module and impl scope, return contracts, From/source/try evidence, aliases,
+generated-constructor guards, macro field uses and exact source positions.
+Candidate-independent collection preserves traversal order and keeps macro
+argument grammar loader-owned.
+
+Cargo-context production routing and compatibility-owner retirement remain.
+This port does not switch production parser ownership or make handwritten
+resolution authoritative for new semantic transformations.
+
+Validation: complete conversion-event and source-error/apply payload parity
+passes across scoped returns, generic signatures, source methods, macro guards,
+aliases and generated attributes. Materialized type indexes, graph plans and
+conversion units agree; same-snapshot event mutation changes executable units.
+Missing conversion payloads are rejected. The 47 error-field apply tests,
+14 getter apply tests and both projection-consumption tests pass. Adversarial
+macro coverage also corrected the native expression collector's formatting
+exemption: qualified and unrelated macros remain unresolved.
+Complete expression payload parity passes after that correction. The final
+conversion-site parity run also passes after the module split. Build-tier
+submit verified zero open items (list 88); the deep tier was not run.
+
 ## Current next step
 
-Work toward the production cutover, completing native error/apply inventory
-against the inventory above. Derives,
+Work toward the production cutover by auditing remaining compatibility-tree
+carriers and original-syntax consumers against the inventory above, then loading
+the Cargo context into the production session-owned database. Error/apply
+conversion-site selection now consumes projected contracts. Derives,
 visibility, CLI layout, module splices, attribute materialization and the complete
 file-policy and tracing groups now consume loader projections.
 Preserve inactive-code policy coverage and golden findings.
