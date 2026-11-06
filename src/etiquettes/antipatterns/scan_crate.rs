@@ -1,4 +1,4 @@
-//! Merge per-crate antipattern scans (syn, contract bounds, version-in-member).
+//! Merge database-owned antipattern facts, contract bounds and workspace versions.
 
 use std::collections::HashMap;
 use std::path::Path;

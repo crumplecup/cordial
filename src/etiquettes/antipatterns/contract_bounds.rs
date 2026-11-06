@@ -11,32 +11,15 @@
 //!
 //! Each backend states a requires/ensures bound in a different shape:
 //!
-//! - **Creusot**: `#[requires(...)]`/`#[ensures(...)]` attributes on real
-//!   `fn`/`impl fn` items — ordinary Rust attribute syntax, but their
-//!   *contents* are Pearlite, not plain Rust (`c@ <= 0xD7FF`, `==>`, …),
-//!   which plain `syn::Expr` parsing rejects. Comparison here works at the
-//!   token level, not the expression-AST level, specifically to avoid
-//!   needing to understand Pearlite's grammar.
-//! - **Verus**: `requires ..., ensures ...,` clauses live inside a
-//!   `verus! { ... }` function-like macro invocation. `syn::parse_file`
-//!   succeeds on the whole file (a macro body is always an opaque token
-//!   group to `syn`), but the clauses themselves are invisible to ordinary
-//!   `syn::visit::Visit` — they're walked directly as a raw
-//!   `proc_macro2::TokenStream` instead.
-//! - **Kani**: proofs have no requires/ensures attribute at all — the same
-//!   bound is expressed as `assert!(EXPR, ..)` or `assert_eq!(A, B, ..)`
-//!   (ensures-equivalent; `assert_eq!` synthesizes the clause `A == B` —
-//!   a direct transcription of its two comparands, not a guess) or
-//!   `kani::assume(EXPR)` (requires-equivalent) inside a `#[kani::proof]`
-//!   function body. `kani::assume` is a plain function call, not a macro
-//!   invocation (`kani::assume` has no `!`), so it needs its own
-//!   `syn::ExprCall` visitor rather than living alongside the
-//!   `assert!`/`assert_eq!` macro-node visitor. A bound staged through an
-//!   intermediate `let` binding before being asserted (as in
-//!   `rust_std::char`'s own
-//!   `verify_char_try_from_fails_exactly_for_surrogates_and_out_of_range`)
-//!   is not detected — tracking that would need real dataflow analysis,
-//!   not a syntactic probe.
+//! - **Creusot**: `#[requires(...)]`/`#[ensures(...)]` attributes are
+//!   selected from the shared Rust tree. Their Pearlite payloads use the
+//!   database's memoized dialect query rather than a second whole-file parse.
+//! - **Verus**: `requires`/`ensures` clauses inside `verus!` are opaque to
+//!   the Rust tree. Their tokens use the same memoized dialect boundary.
+//! - **Kani**: `assert!`, `assert_eq!` and `kani::assume` inside proof
+//!   functions are collected from canonical syntax, including the shared
+//!   embedded-program query for `amenable_derive::harness!`. Intermediate
+//!   bindings require dataflow analysis and are not followed by this policy.
 //!
 //! Any `gallery` directory (structural convention, not a per-project
 //! config option) is pruned from the walk entirely: it holds verifier
@@ -59,21 +42,16 @@
 
 use std::path::Path;
 
-use proc_macro2::{Delimiter, TokenTree};
-use syn::{ItemFn, ItemMacro};
 use tracing::instrument;
-use walkdir::WalkDir;
 
 use crate::error::CordialResult;
 use crate::etiquettes::antipatterns::scan::truncate_snippet;
 use crate::etiquettes::antipatterns::types::{AntipatternRuleId, AntipatternSiteRecord};
 use crate::loader::SourceLoadView;
 
-mod creusot;
 mod facts;
 pub(crate) use facts::ContractClause;
 mod index;
-mod kani;
 mod native;
 pub(super) use native::collect_native;
 pub(crate) use native::collect_payload;
@@ -83,18 +61,6 @@ mod verus;
 pub(crate) use index::verifier_for_crate;
 pub use index::{ContractRecordDump, ContractRecordDumpBuilder};
 pub use registry::fetch_contract_records;
-
-/// A `gallery` directory holds verifier experiments, not production
-/// proofs (see e.g. `amenable_kani::gallery`'s own doc comment: "the
-/// gallery answers a different question" than the production queue).
-/// Its `assert!`/`#[ensures]`/`requires` clauses are deliberately
-/// throwaway probes, not reusable bounds worth a named contract type,
-/// so the whole subtree is pruned from this rule's walk rather than
-/// flagged and then hand-excepted site by site.
-#[instrument(level = "trace", skip(entry), ret)]
-fn is_gallery_dir(entry: &walkdir::DirEntry) -> bool {
-    entry.file_type().is_dir() && entry.file_name() == "gallery"
-}
 
 /// Scan one crate's `src/**/*.rs` tree for the backend it's written for.
 /// Returns no findings for any other crate — this rule only applies to
@@ -132,44 +98,22 @@ pub(super) fn collect_crate_contract_bounds(
     source: &SourceLoadView,
     snapshots: &mut Vec<crate::FileSnapshot>,
 ) -> CordialResult<Vec<ContractClause>> {
-    let Some(verifier) = verifier_for_crate(crate_name) else {
+    if verifier_for_crate(crate_name).is_none() {
         return Ok(Vec::new());
-    };
-    let src_root = crate_root.join("src");
-    let mut clauses = Vec::new();
-    for entry in WalkDir::new(&src_root)
-        .into_iter()
-        .filter_entry(|entry| !is_gallery_dir(entry))
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-    {
-        let path = entry.path();
-        if path.extension().is_none_or(|ext| ext != "rs") {
-            continue;
-        }
-        let parsed = source.parsed_file(path, "antipattern-contract-bounds")?;
-        snapshots.push(crate::FileSnapshot::new(
-            path.to_path_buf(),
-            parsed.source_digest(),
-        ));
-        clauses.extend(match verifier {
-            "creusot" => creusot::collect_creusot_shared(&parsed, &src_root)?,
-            "verus" => verus::collect_verus_shared(&parsed, &src_root)?,
-            "kani" => kani::collect_kani_shared(&parsed, &src_root)?,
-            _ => Vec::new(),
-        });
     }
-    clauses.sort_by(|a, b| {
-        a.site()
-            .file()
-            .cmp(b.site().file())
-            .then(a.site().line().cmp(&b.site().line()))
-            .then(a.site().snippet().cmp(b.site().snippet()))
-    });
-    for clause in &mut clauses {
-        clause.strip_file_prefix(crate_root);
-    }
-    Ok(clauses)
+    let src = crate_root.join("src");
+    let paths = super::native::input_paths(crate_root, true)?;
+    let inputs: Vec<_> = paths
+        .iter()
+        .filter(|(_, path)| {
+            path.starts_with(&src) && !path.components().any(|part| part.as_os_str() == "gallery")
+        })
+        .map(|(_, path)| path.clone())
+        .collect();
+    source.collect_native_files(&inputs, |sources| {
+        let files: Vec<_> = sources.iter().map(|source| (src.clone(), source)).collect();
+        collect_native(crate_root, crate_name, &files, snapshots)
+    })
 }
 
 #[instrument(level = "debug", skip(clauses, registry))]
@@ -216,12 +160,13 @@ pub fn scan_creusot_contract_bounds_source(
     src_root: &Path,
     registry: &[ContractRecordDump],
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    creusot::scan_creusot_source(
-        source,
-        file,
-        src_root,
-        &index::ContractIndex::build(registry),
-    )
+    SourceLoadView::collect_native_fixture(file, source, |source| {
+        let index = index::ContractIndex::build(registry);
+        Ok(native::collect_file(source, src_root, "creusot")?
+            .iter()
+            .filter_map(|clause| clause.finding(&index))
+            .collect())
+    })
 }
 
 /// Scan one Verus source string (used by tests).
@@ -232,12 +177,13 @@ pub fn scan_verus_contract_bounds_source(
     src_root: &Path,
     registry: &[ContractRecordDump],
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    verus::scan_verus_source(
-        source,
-        file,
-        src_root,
-        &index::ContractIndex::build(registry),
-    )
+    SourceLoadView::collect_native_fixture(file, source, |source| {
+        let index = index::ContractIndex::build(registry);
+        Ok(native::collect_file(source, src_root, "verus")?
+            .iter()
+            .filter_map(|clause| clause.finding(&index))
+            .collect())
+    })
 }
 
 /// Scan one Kani source string (used by tests).
@@ -248,48 +194,11 @@ pub fn scan_kani_contract_bounds_source(
     src_root: &Path,
     registry: &[ContractRecordDump],
 ) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    kani::scan_kani_source(
-        source,
-        file,
-        src_root,
-        &index::ContractIndex::build(registry),
-    )
-}
-
-/// `amenable_derive::harness!(cfg_name, CONST_NAME, { item })` wraps nearly
-/// every real Kani and Creusot proof in this workspace — `syn::parse_file`
-/// sees the whole invocation as one opaque `Item::Macro`, the same blind
-/// spot `verus!{}` has, so the wrapped `fn` is otherwise invisible to
-/// `syn::visit::Visit`. Extracts and parses the trailing brace-delimited
-/// group (`{ item }`) as a real `ItemFn`, so it can be fed back into the
-/// same visitor logic that already handles top-level functions.
-#[instrument(level = "debug", skip(node))]
-pub(super) fn harness_macro_item_fn(node: &ItemMacro) -> Option<ItemFn> {
-    if node
-        .mac
-        .path
-        .segments
-        .last()
-        .is_none_or(|seg| seg.ident != "harness")
-    {
-        return None;
-    }
-    let group = node
-        .mac
-        .tokens
-        .clone()
-        .into_iter()
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .find_map(|tt| {
-            if let TokenTree::Group(group) = tt
-                && group.delimiter() == Delimiter::Brace
-            {
-                Some(group)
-            } else {
-                None
-            }
-        })?;
-    syn::parse2::<ItemFn>(group.stream()).ok()
+    SourceLoadView::collect_native_fixture(file, source, |source| {
+        let index = index::ContractIndex::build(registry);
+        Ok(native::collect_file(source, src_root, "kani")?
+            .iter()
+            .filter_map(|clause| clause.finding(&index))
+            .collect())
+    })
 }

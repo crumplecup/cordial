@@ -3,69 +3,16 @@
 use std::path::Path;
 
 use proc_macro2::{Delimiter, TokenStream, TokenTree};
-use syn::ItemMacro;
 use tracing::instrument;
 
 use crate::error::CordialResult;
-use crate::etiquettes::antipatterns::types::AntipatternSiteRecord;
-use crate::loader::{SharedParsedFile, module_path_from_src_file};
 
 use super::ContractClause;
 use super::index::{
-    ContractIndex, is_builtin_contract_inspection, is_trivial, normalize_tokens,
-    split_top_level_commas,
+    is_builtin_contract_inspection, is_trivial, normalize_tokens, split_top_level_commas,
 };
 
 use super::{make_finding, site_context};
-
-#[instrument(level = "debug", skip(source, file, index), err(level = "warn"))]
-pub(super) fn scan_verus_source(
-    source: &str,
-    file: &Path,
-    src_root: &Path,
-    index: &ContractIndex,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    let parsed = crate::SourceLoadView::parse_fixture(file, source)?;
-    Ok(collect_verus_syntax(parsed.syntax(), file, src_root)?
-        .iter()
-        .filter_map(|clause| clause.finding(index))
-        .collect())
-}
-
-#[instrument(level = "debug", skip(parsed), err(level = "warn"))]
-pub(super) fn collect_verus_shared(
-    parsed: &SharedParsedFile,
-    src_root: &Path,
-) -> CordialResult<Vec<ContractClause>> {
-    collect_verus_syntax(parsed.syntax(), parsed.path(), src_root)
-}
-
-#[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
-fn collect_verus_syntax(
-    syntax: &syn::File,
-    file: &Path,
-    src_root: &Path,
-) -> CordialResult<Vec<ContractClause>> {
-    let module_prefix = module_path_from_src_file(src_root, file);
-    let mut findings = Vec::new();
-
-    for item in &syntax.items {
-        let syn::Item::Macro(ItemMacro { mac, .. }) = item else {
-            continue;
-        };
-        if mac
-            .path
-            .segments
-            .last()
-            .is_none_or(|seg| seg.ident != "verus")
-        {
-            continue;
-        }
-        findings.extend(collect_payload(mac.tokens.clone(), file, &module_prefix)?);
-    }
-
-    Ok(findings)
-}
 
 #[instrument(level = "debug", skip(tokens, file), err(level = "warn"))]
 pub(super) fn collect_payload(

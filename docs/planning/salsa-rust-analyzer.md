@@ -1544,6 +1544,25 @@ and CLI payload tests pass, including virtual edits and native Verus visibility
 counts. Isolated allows, visibility and CLI feature builds pass without warnings.
 Build-tier submit verified zero open items (list 99); the deep tier was not run.
 
+## Checkpoint: antipatterns and verifier contracts use native syntax
+
+Production antipattern inventories and standalone source/crate scans now consume
+native syntax from the session-owned database. Crate-wide trait membership,
+error kinds and constant placement are still collected before assessing fields
+and function signatures. Kani, Creusot and Verus contract adapters use the same
+native collector and memoized dialect queries as Cargo-backed projection.
+
+Batch collection freezes all selected inputs before issuing trees, then retains
+syntax only within the database collection callback. Completed facts and source
+snapshots enter the shared IR. The compatibility antipattern visitors and the
+standalone contract parsers are removed, including their harness reparse path.
+
+Validation: 48 focused tests pass, covering complete inventories and virtual
+revisions for all three verifier families, the existing antipattern and contract
+shape matrices, frozen loader inputs and zero compatibility parses in standalone
+adapters. An isolated antipatterns feature build passes without warnings.
+Build-tier submit verified zero open items (list 100); the deep tier was not run.
+
 ## Current next step
 
 Load the Cargo context into the production session-owned database and route

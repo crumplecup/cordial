@@ -172,6 +172,11 @@ fn loader_inventories_share_a_parse_and_keep_their_frozen_input() -> Result<()> 
         first.source_policy_inventory().into_diagnostic()?,
         repeated.source_policy_inventory().into_diagnostic()?
     );
+    #[cfg(feature = "antipatterns")]
+    assert_eq!(
+        first.source_antipatterns().into_diagnostic()?,
+        repeated.source_antipatterns().into_diagnostic()?
+    );
     let fresh = SourceLoader
         .load(LoadContext::new(&session, &target))
         .into_diagnostic()?;
@@ -279,6 +284,59 @@ mod dormant {
     .into_diagnostic()?;
     assert!(!file.exists());
     assert_eq!(access.native.load(Ordering::Relaxed), 8);
+    assert_eq!(access.compatibility.load(Ordering::Relaxed), 0);
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "antipatterns")]
+fn antipattern_and_contract_fixtures_use_only_native_inputs() -> Result<()> {
+    cordial::init_cli_tracing();
+    let access = Parses::default();
+    let _subscriber =
+        tracing::subscriber::set_default(tracing_subscriber::registry().with(access.clone()));
+    let fixture = tempfile::tempdir().into_diagnostic()?;
+    let tree = fixture.path().join("src");
+    let file = tree.join("missing.rs");
+    let sites = cordial::scan_antipatterns_rust_source(
+        "fn run(_unused: u8) -> Result<(), String> { Ok(()) }",
+        &file,
+        &tree,
+        fixture.path(),
+    )
+    .into_diagnostic()?;
+    assert_eq!(sites.len(), 2);
+    assert!(sites.iter().all(|site| site.context() == "missing::run"
+        && site.file() == std::path::Path::new("src/missing.rs")
+        && site.line() == 1));
+    let creusot = cordial::scan_creusot_contract_bounds_source(
+        "#[requires(x > 0)] fn run(x: i32) {}",
+        &file,
+        &tree,
+        &[],
+    )
+    .into_diagnostic()?;
+    let kani = cordial::scan_kani_contract_bounds_source(
+        "#[kani::proof] fn run() { assert!(x > 0); }",
+        &file,
+        &tree,
+        &[],
+    )
+    .into_diagnostic()?;
+    let verus = cordial::scan_verus_contract_bounds_source(
+        "verus! { fn run(x: int) requires x > 0, {} }",
+        &file,
+        &tree,
+        &[],
+    )
+    .into_diagnostic()?;
+    for sites in [creusot, kani, verus] {
+        assert_eq!(sites.len(), 1);
+        assert_eq!(sites[0].file(), &file);
+        assert_eq!(sites[0].line(), 1);
+    }
+    assert!(!file.exists());
+    assert_eq!(access.native.load(Ordering::Relaxed), 4);
     assert_eq!(access.compatibility.load(Ordering::Relaxed), 0);
     Ok(())
 }

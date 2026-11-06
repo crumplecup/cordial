@@ -51,19 +51,18 @@ impl AntipatternCatalog {
         root: &std::path::Path,
         crate_name: &str,
     ) -> CordialResult<Self> {
-        let (syntax, mut snapshots) = super::scan::collect_shared_crate_trees(source, root)?;
-        let contracts = super::contract_bounds::collect_crate_contract_bounds(
+        let paths = super::native::input_paths(
             root,
-            crate_name,
-            source,
-            &mut snapshots,
+            super::contract_bounds::verifier_for_crate(crate_name).is_some(),
         )?;
-        snapshots.sort_by(|a, b| a.path().cmp(b.path()));
-        snapshots.dedup();
-        Ok(Self {
-            snapshots,
-            syntax,
-            contracts,
+        let inputs: Vec<_> = paths.iter().map(|(_, path)| path.clone()).collect();
+        source.collect_native_files(&inputs, |sources| {
+            let files: Vec<_> = paths
+                .iter()
+                .zip(sources)
+                .map(|((tree, _), source)| (tree.clone(), source))
+                .collect();
+            Self::collect_native(root, crate_name, &files)
         })
     }
 
@@ -92,11 +91,6 @@ impl AntipatternCatalog {
 }
 
 impl AntipatternSyntaxFacts {
-    #[tracing::instrument(level = "debug", skip(self, other))]
-    pub(super) fn extend(&mut self, other: Self) {
-        self.sites.extend(other.sites);
-    }
-
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
     pub(super) fn assess(
         &self,

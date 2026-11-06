@@ -34,8 +34,41 @@ impl SourceLoadView {
         })
     }
 
+    /// Collect crate-wide facts after freezing every selected database input.
+    #[cfg(feature = "antipatterns")]
+    #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    pub(crate) fn collect_native_files<T>(
+        &self,
+        paths: &[std::path::PathBuf],
+        collect: impl FnOnce(&[DatabaseSource<'_>]) -> CordialResult<T>,
+    ) -> CordialResult<T> {
+        PARSED.with(|parsed| {
+            let mut parsed = parsed.borrow_mut();
+            parsed.retain(|_, run| run.token.strong_count() != 0);
+            let run = parsed
+                .entry(self.cache_token.0)
+                .or_insert_with(|| ParsedRun {
+                    token: Arc::downgrade(&self.cache_token),
+                    database: crate::loader::SourceDatabase::new(),
+                    files: HashMap::new(),
+                });
+            for path in paths {
+                let supplied = self
+                    .files
+                    .iter()
+                    .find(|file| file.path() == path)
+                    .map(|file| file.source().as_str());
+                run.database
+                    .captured_text(path, supplied)?
+                    .ok_or_else(|| crate::CordialError::not_found(path.clone()))?;
+            }
+            run.database.collect_sources(paths, collect)
+        })
+    }
+
     /// Supplied text uses the ordinary session owner, even when no file exists.
     #[cfg(any(
+        feature = "antipatterns",
         feature = "error_sites",
         feature = "tracing",
         feature = "allows",

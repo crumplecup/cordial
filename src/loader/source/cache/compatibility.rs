@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 impl SourceLoadView {
     /// Issue a shared tree for an explicitly supplied standalone source fixture.
-    #[cfg(any(feature = "error_chain", feature = "panics", feature = "antipatterns"))]
+    #[cfg(any(feature = "error_chain", feature = "panics"))]
     #[tracing::instrument(level = "debug", skip(source, path), err(level = "warn"))]
     pub(crate) fn parse_fixture(path: &Path, source: &str) -> CordialResult<SharedParsedFile> {
         use crate::loader::source::SourceFile;

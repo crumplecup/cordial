@@ -5,6 +5,7 @@ mod context;
 mod inputs;
 mod packages;
 #[cfg(any(
+    feature = "antipatterns",
     feature = "error_sites",
     feature = "tracing",
     feature = "allows",

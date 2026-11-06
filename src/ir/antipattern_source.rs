@@ -25,7 +25,7 @@ impl SourceAntipatterns {
     pub(crate) fn collect_native(
         root: &Path,
         crate_name: &str,
-        files: &[(PathBuf, crate::loader::DatabaseSource<'_>)],
+        files: &[(PathBuf, &crate::loader::DatabaseSource<'_>)],
     ) -> CordialResult<Self> {
         Ok(Self {
             crate_root: root.into(),

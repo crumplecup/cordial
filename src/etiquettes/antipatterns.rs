@@ -38,6 +38,7 @@ pub(crate) use catalog::AntipatternCatalog;
 mod contract_bounds;
 mod enricher;
 mod native;
+pub(crate) use native::input_paths as native_input_paths;
 mod probe;
 mod reporter;
 mod scan;
