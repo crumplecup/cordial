@@ -14,6 +14,8 @@ use std::collections::HashMap;
     feature = "antipatterns"
 ))]
 mod forest;
+#[cfg(feature = "internal_error_chain")]
+mod getters;
 mod grammar;
 #[cfg(feature = "panics")]
 mod panic;
@@ -50,9 +52,31 @@ pub(super) fn program<'db>(
 pub(crate) struct DatabaseMacroSyntax {
     arguments: HashMap<ast::MacroCall, Vec<ast::Expr>>,
     items: HashMap<ast::MacroCall, Vec<ast::Item>>,
+    #[cfg(feature = "internal_error_chain")]
+    getter_offsets: HashMap<ast::MacroCall, usize>,
 }
 
 impl DatabaseMacroSyntax {
+    /// Relative grammar origin, preserving locations when identical memoized
+    /// payloads occur at different call sites or inside other payloads.
+    #[cfg(feature = "internal_error_chain")]
+    #[tracing::instrument(level = "trace", skip(self, invocation))]
+    pub(crate) fn getter_payload(
+        &self,
+        invocation: &ast::MacroCall,
+    ) -> Option<(usize, &[ast::Expr], &[ast::Item])> {
+        Some((
+            *self.getter_offsets.get(invocation)?,
+            self.arguments
+                .get(invocation)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+            self.items
+                .get(invocation)
+                .map(Vec::as_slice)
+                .unwrap_or_default(),
+        ))
+    }
     #[tracing::instrument(level = "trace", skip(self, invocation))]
     pub(crate) fn arguments(&self, invocation: &ast::MacroCall) -> &[ast::Expr] {
         self.arguments

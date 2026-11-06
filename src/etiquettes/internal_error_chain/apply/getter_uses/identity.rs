@@ -3,7 +3,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-use syn::{Item, Type};
 use tracing::instrument;
 
 use crate::loader::SharedParsedFile;
@@ -40,7 +39,14 @@ impl Identities {
             index.declarations(file, source)?;
         }
         for file in files {
-            index.methods(file);
+            for method in &source.getter_uses_for(file)?.methods {
+                if let Receiver::Declaration(owner) = index.receiver(file, &method.owner) {
+                    index.associated.insert(owner.clone());
+                    if method.has_receiver {
+                        index.methods.insert(owner);
+                    }
+                }
+            }
         }
         Ok(index)
     }
@@ -94,70 +100,6 @@ impl Identities {
         Ok(())
     }
 
-    #[instrument(level = "trace", skip(self, file))]
-    fn methods(&mut self, file: &SharedParsedFile) {
-        for item in &file.syntax().items {
-            if let Item::Impl(item) = item {
-                if item.trait_.is_some()
-                    || !item.generics.params.is_empty()
-                    || conditional(&item.attrs)
-                {
-                    continue;
-                }
-                let Receiver::Declaration(owner) = self.ty(file, &item.self_ty) else {
-                    continue;
-                };
-                for member in &item.items {
-                    if let syn::ImplItem::Fn(method) = member
-                        && method.sig.ident == "file"
-                        && !conditional(&method.attrs)
-                    {
-                        self.associated.insert(owner.clone());
-                        if method.sig.receiver().is_some() {
-                            self.methods.insert(owner.clone());
-                        }
-                    }
-                }
-            }
-            if let Item::Struct(item) = item {
-                let getters = item
-                    .attrs
-                    .iter()
-                    .filter(|attr| attr.path().is_ident("derive"))
-                    .any(|attr| {
-                        let mut known = false;
-                        attr.parse_nested_meta(|meta| {
-                            known |= super::super::getters::known_derive(
-                                file.syntax(),
-                                &meta.path,
-                                "derive_getters",
-                                "Getters",
-                            );
-                            Ok(())
-                        })
-                        .is_ok()
-                            && known
-                    });
-                if getters
-                    && item.fields.iter().any(|field| {
-                        field.ident.as_ref().is_some_and(|name| name == "file")
-                            && !field
-                                .attrs
-                                .iter()
-                                .any(|attr| attr.path().is_ident("getter"))
-                    })
-                {
-                    let owner = TypeIdentity {
-                        declaration: file.path().to_path_buf(),
-                        name: item.ident.to_string(),
-                    };
-                    self.associated.insert(owner.clone());
-                    self.methods.insert(owner);
-                }
-            }
-        }
-    }
-
     #[instrument(level = "trace", skip(self, receiver))]
     pub(super) fn method_owner(&self, receiver: Receiver, associated: bool) -> Receiver {
         let owners = if associated {
@@ -171,47 +113,38 @@ impl Identities {
         }
     }
 
-    #[instrument(level = "trace", skip(self, file, ty))]
-    pub(super) fn ty(&self, file: &SharedParsedFile, ty: &Type) -> Receiver {
-        match ty {
-            Type::Reference(reference) => self.ty(file, &reference.elem),
-            Type::Path(path) if path.qself.is_none() => self.path(file, &path.path),
-            _ => Receiver::Unknown,
-        }
-    }
-
-    #[instrument(level = "trace", skip(self, file, path))]
-    pub(super) fn path(&self, file: &SharedParsedFile, path: &syn::Path) -> Receiver {
-        let written: Vec<_> = path
-            .segments
-            .iter()
-            .map(|part| part.ident.to_string())
-            .collect();
-        let Some(module) = self.modules.get(file.path()) else {
-            return Receiver::Unknown;
-        };
-        if matches!(written.as_slice(), [root, panic, location] if matches!(root.as_str(), "std" | "core") && panic == "panic" && location == "Location")
-        {
-            let root = &written[0];
-            if !unshadowed(file, root) {
-                return Receiver::Unknown;
+    #[instrument(level = "trace", skip(self, file, recipe))]
+    pub(super) fn receiver(
+        &self,
+        file: &SharedParsedFile,
+        recipe: &super::ReceiverRecipe,
+    ) -> Receiver {
+        use super::ReceiverRecipe;
+        match recipe {
+            ReceiverRecipe::Unknown => Receiver::Unknown,
+            ReceiverRecipe::Location if self.modules.contains_key(file.path()) => {
+                Receiver::Location
             }
-            return Receiver::Location;
+            ReceiverRecipe::Location => Receiver::Unknown,
+            ReceiverRecipe::Declaration(name) => Receiver::Declaration(TypeIdentity {
+                declaration: file.path().to_path_buf(),
+                name: name.clone(),
+            }),
+            ReceiverRecipe::Method {
+                receiver,
+                associated,
+            } => self.method_owner(self.receiver(file, receiver), *associated),
+            ReceiverRecipe::Path(written) => {
+                let Some(module) = self.modules.get(file.path()) else {
+                    return Receiver::Unknown;
+                };
+                let Some(key) = absolute_path(module, written) else {
+                    return Receiver::Unknown;
+                };
+                self.resolve(&key, &mut BTreeSet::new())
+                    .map_or(Receiver::Unknown, Receiver::Declaration)
+            }
         }
-        // A method on Wrapper<u8> does not prove a method on Wrapper<u16>.
-        // Until generic instantiations participate in identity, keep them open.
-        if path
-            .segments
-            .iter()
-            .any(|part| !matches!(part.arguments, syn::PathArguments::None))
-        {
-            return Receiver::Unknown;
-        }
-        let Some(key) = absolute_path(module, &written) else {
-            return Receiver::Unknown;
-        };
-        self.resolve(&key, &mut BTreeSet::new())
-            .map_or(Receiver::Unknown, Receiver::Declaration)
     }
 
     #[instrument(level = "trace", skip(self, key, visited))]
@@ -237,66 +170,4 @@ impl Identities {
         let target = targets.next()?;
         targets.next().is_none().then_some(target)
     }
-}
-
-/// Unknown imports and local namespace bindings cannot establish a standard name.
-#[instrument(level = "trace", skip(file))]
-pub(super) fn unshadowed(file: &SharedParsedFile, name: &str) -> bool {
-    !file.syntax().items.iter().any(|item| match item {
-        Item::Mod(item) => item.ident == name,
-        Item::Struct(item) => item.ident == name,
-        Item::Enum(item) => item.ident == name,
-        Item::Type(item) => item.ident == name,
-        Item::ExternCrate(item) => {
-            item.rename
-                .as_ref()
-                .map(|(_, alias)| alias)
-                .unwrap_or(&item.ident)
-                == name
-        }
-        Item::Use(item) => shadows(&item.tree, name),
-        _ => false,
-    })
-}
-
-#[instrument(level = "trace", skip(tree))]
-fn shadows(tree: &syn::UseTree, name: &str) -> bool {
-    match tree {
-        syn::UseTree::Path(path) => shadows(&path.tree, name),
-        syn::UseTree::Name(binding) => binding.ident == name,
-        syn::UseTree::Rename(binding) => binding.rename == name,
-        syn::UseTree::Group(group) => group.items.iter().any(|tree| shadows(tree, name)),
-        syn::UseTree::Glob(_) => true,
-    }
-}
-
-/// Conditional instrumentation preserves a method; conditional existence does not.
-#[instrument(level = "trace", skip(attrs))]
-fn conditional(attrs: &[syn::Attribute]) -> bool {
-    attrs.iter().any(|attr| {
-        let path: Vec<_> = attr.path().segments.iter().map(|part| part.ident.to_string()).collect();
-        if !matches!(path.as_slice(), [name] if matches!(name.as_str(), "cfg" | "cfg_attr" | "doc" | "inline" | "track_caller" | "cold" | "must_use" | "deprecated"))
-            && path != ["tracing", "instrument"]
-        {
-            return true;
-        }
-        attr.path().is_ident("cfg")
-            || (attr.path().is_ident("cfg_attr")
-                && !attr
-                    .parse_args_with(
-                        syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
-                    )
-                    .is_ok_and(|args| {
-                        args.len() >= 2
-                            && args.iter().skip(1).all(|meta| {
-                                let path: Vec<_> = meta
-                                    .path()
-                                    .segments
-                                    .iter()
-                                    .map(|part| part.ident.to_string())
-                                    .collect();
-                                path == ["tracing", "instrument"]
-                            })
-                    }))
-    })
 }

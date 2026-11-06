@@ -9,33 +9,31 @@ use tracing::instrument;
 
 use crate::loader::{SharedMacroSyntax, SharedParsedFile};
 
-use super::{GetterUseFact, Identities, Receiver, UseKind};
+use super::{ConsumerSite, ReceiverRecipe, UseKind};
 
 #[derive(Clone)]
 struct Scope {
-    bindings: BTreeMap<String, Receiver>,
-    functions: BTreeMap<String, Receiver>,
-    owner: Receiver,
+    bindings: BTreeMap<String, ReceiverRecipe>,
+    functions: BTreeMap<String, ReceiverRecipe>,
+    owner: ReceiverRecipe,
     local_types: bool,
 }
 
 struct Collector<'a> {
     file: &'a SharedParsedFile,
-    identities: &'a Identities,
     scope: Scope,
-    facts: Vec<GetterUseFact>,
+    facts: Vec<ConsumerSite>,
 }
 
-#[instrument(level = "debug", skip(file, identities))]
-pub(super) fn collect(file: &SharedParsedFile, identities: &Identities) -> Vec<GetterUseFact> {
+#[instrument(level = "debug", skip(file))]
+pub(super) fn collect(file: &SharedParsedFile) -> Vec<ConsumerSite> {
     let mut collector = Collector {
         file,
-        identities,
         facts: Vec::new(),
         scope: Scope {
             bindings: BTreeMap::new(),
             functions: BTreeMap::new(),
-            owner: Receiver::Unknown,
+            owner: ReceiverRecipe::Unknown,
             local_types: false,
         },
     };
@@ -45,9 +43,8 @@ pub(super) fn collect(file: &SharedParsedFile, identities: &Identities) -> Vec<G
 
 impl Collector<'_> {
     #[instrument(level = "debug", skip(self, span, receiver, kind))]
-    fn record(&mut self, span: proc_macro2::Span, receiver: Receiver, kind: UseKind) {
-        self.facts.push(GetterUseFact {
-            path: self.file.path().to_path_buf(),
+    fn record(&mut self, span: proc_macro2::Span, receiver: ReceiverRecipe, kind: UseKind) {
+        self.facts.push(ConsumerSite {
             line: span.start().line,
             column: span.start().column,
             receiver,
@@ -58,59 +55,59 @@ impl Collector<'_> {
     }
 
     #[instrument(level = "trace", skip(self, ty))]
-    fn ty(&self, ty: &syn::Type) -> Receiver {
+    fn ty(&self, ty: &syn::Type) -> ReceiverRecipe {
         if self.scope.local_types {
-            return Receiver::Unknown;
+            return ReceiverRecipe::Unknown;
         }
         if matches!(ty, syn::Type::Path(path) if path.path.is_ident("Self")) {
             self.scope.owner.clone()
         } else {
-            self.identities.ty(self.file, ty)
+            super::source::ty(self.file, ty)
         }
     }
 
     #[instrument(level = "trace", skip(self, expr))]
-    fn receiver(&self, expr: &Expr) -> Receiver {
+    fn receiver(&self, expr: &Expr) -> ReceiverRecipe {
         match expr {
             Expr::Path(path) if path.qself.is_none() => path
                 .path
                 .get_ident()
                 .and_then(|name| self.scope.bindings.get(&name.to_string()))
                 .cloned()
-                .unwrap_or(Receiver::Unknown),
+                .unwrap_or(ReceiverRecipe::Unknown),
             Expr::Reference(reference) => self.receiver(&reference.expr),
             Expr::Paren(paren) => self.receiver(&paren.expr),
             Expr::Call(call) => {
                 let Expr::Path(path) = &*call.func else {
-                    return Receiver::Unknown;
+                    return ReceiverRecipe::Unknown;
                 };
                 if path.qself.is_some() {
-                    return Receiver::Unknown;
+                    return ReceiverRecipe::Unknown;
                 }
                 if let Some(name) = path.path.get_ident() {
                     if self.scope.bindings.contains_key(&name.to_string()) {
-                        return Receiver::Unknown;
+                        return ReceiverRecipe::Unknown;
                     }
                     return self
                         .scope
                         .functions
                         .get(&name.to_string())
                         .cloned()
-                        .unwrap_or(Receiver::Unknown);
+                        .unwrap_or(ReceiverRecipe::Unknown);
                 }
                 let mut owner = path.path.clone();
                 let method = owner.segments.pop();
                 if method.is_some_and(|part| part.ident == "caller")
                     && call.args.is_empty()
                     && !self.scope.local_types
-                    && self.identities.path(self.file, &owner) == Receiver::Location
+                    && super::source::path(self.file, &owner) == ReceiverRecipe::Location
                 {
-                    Receiver::Location
+                    ReceiverRecipe::Location
                 } else {
-                    Receiver::Unknown
+                    ReceiverRecipe::Unknown
                 }
             }
-            _ => Receiver::Unknown,
+            _ => ReceiverRecipe::Unknown,
         }
     }
 
@@ -146,7 +143,7 @@ impl Collector<'_> {
                 proc_macro2::TokenTree::Ident(name) if name == "file" && index > 0 => {
                     if matches!(&tokens[index - 1], proc_macro2::TokenTree::Punct(punct) if matches!(punct.as_char(), '.' | ':'))
                     {
-                        self.record(name.span(), Receiver::Unknown, UseKind::Getter);
+                        self.record(name.span(), ReceiverRecipe::Unknown, UseKind::Getter);
                     }
                 }
                 _ => {}
@@ -175,7 +172,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 
     #[instrument(level = "trace", skip(self, item))]
     fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
-        let owner = std::mem::replace(&mut self.scope.owner, Receiver::Unknown);
+        let owner = std::mem::replace(&mut self.scope.owner, ReceiverRecipe::Unknown);
         self.function(&item.sig, &item.block);
         self.scope.owner = owner;
     }
@@ -206,13 +203,13 @@ impl<'ast> Visit<'ast> for Collector<'_> {
                     ReturnType::Type(_, ty) if item.sig.generics.type_params().next().is_none() => {
                         self.ty(ty)
                     }
-                    _ => Receiver::Unknown,
+                    _ => ReceiverRecipe::Unknown,
                 };
                 let key = item.sig.ident.to_string();
                 self.scope
                     .functions
                     .entry(key)
-                    .and_modify(|receiver| *receiver = Receiver::Unknown)
+                    .and_modify(|receiver| *receiver = ReceiverRecipe::Unknown)
                     .or_insert(output);
             }
         }
@@ -225,7 +222,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         let receiver = match (&local.pat, &local.init) {
             (Pat::Type(typed), _) => self.ty(&typed.ty),
             (_, Some(init)) => self.receiver(&init.expr),
-            _ => Receiver::Unknown,
+            _ => ReceiverRecipe::Unknown,
         };
         syn::visit::visit_local(self, local);
         bind(&mut self.scope.bindings, &local.pat, receiver);
@@ -235,7 +232,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_pat_ident(&mut self, pat: &'ast syn::PatIdent) {
         self.scope
             .bindings
-            .insert(pat.ident.to_string(), Receiver::Unknown);
+            .insert(pat.ident.to_string(), ReceiverRecipe::Unknown);
         syn::visit::visit_pat_ident(self, pat);
     }
 
@@ -243,7 +240,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_expr_closure(&mut self, closure: &'ast syn::ExprClosure) {
         let previous = self.scope.clone();
         for input in &closure.inputs {
-            bind(&mut self.scope.bindings, input, Receiver::Unknown);
+            bind(&mut self.scope.bindings, input, ReceiverRecipe::Unknown);
         }
         syn::visit::visit_expr_closure(self, closure);
         self.scope = previous;
@@ -260,9 +257,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     #[instrument(level = "trace", skip(self, item))]
     fn visit_expr_method_call(&mut self, item: &'ast syn::ExprMethodCall) {
         if item.method == "file" {
-            let receiver = self
-                .identities
-                .method_owner(self.receiver(&item.receiver), false);
+            let receiver = self.receiver(&item.receiver).method(false);
             self.record(item.span(), receiver, UseKind::Getter);
         }
         syn::visit::visit_expr_method_call(self, item);
@@ -280,17 +275,13 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             let mut path = item.path.clone();
             path.segments.pop();
             let receiver = if self.scope.local_types || item.qself.is_some() {
-                Receiver::Unknown
+                ReceiverRecipe::Unknown
             } else if path.is_ident("Self") {
                 self.scope.owner.clone()
             } else {
-                self.identities.path(self.file, &path)
+                super::source::path(self.file, &path)
             };
-            self.record(
-                item.span(),
-                self.identities.method_owner(receiver, true),
-                UseKind::Getter,
-            );
+            self.record(item.span(), receiver.method(true), UseKind::Getter);
         }
         syn::visit::visit_expr_path(self, item);
     }
@@ -300,14 +291,14 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         if !self.scope.local_types && macro_contract(self.file, invocation) {
             match self.file.macro_syntax(invocation) {
                 Some(SharedMacroSyntax::Expressions(expressions)) => {
-                    self.record(invocation.span(), Receiver::Unknown, UseKind::Macro);
+                    self.record(invocation.span(), ReceiverRecipe::Unknown, UseKind::Macro);
                     for expression in expressions {
                         self.visit_expr(expression);
                     }
                     return;
                 }
                 Some(SharedMacroSyntax::Items(items)) => {
-                    self.record(invocation.span(), Receiver::Unknown, UseKind::Macro);
+                    self.record(invocation.span(), ReceiverRecipe::Unknown, UseKind::Macro);
                     for item in items {
                         self.visit_item(item);
                     }
@@ -321,7 +312,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 }
 
 #[instrument(level = "trace", skip(bindings, pat, receiver))]
-fn bind(bindings: &mut BTreeMap<String, Receiver>, pat: &Pat, receiver: Receiver) {
+fn bind(bindings: &mut BTreeMap<String, ReceiverRecipe>, pat: &Pat, receiver: ReceiverRecipe) {
     match pat {
         Pat::Ident(binding) => {
             let value = if binding.mutability.is_none()
@@ -330,14 +321,14 @@ fn bind(bindings: &mut BTreeMap<String, Receiver>, pat: &Pat, receiver: Receiver
             {
                 receiver
             } else {
-                Receiver::Unknown
+                ReceiverRecipe::Unknown
             };
             bindings.insert(binding.ident.to_string(), value);
         }
         Pat::Type(typed) => bind(bindings, &typed.pat, receiver),
         Pat::Tuple(tuple) => {
             for pat in &tuple.elems {
-                bind(bindings, pat, Receiver::Unknown);
+                bind(bindings, pat, ReceiverRecipe::Unknown);
             }
         }
         _ => {}
@@ -363,7 +354,7 @@ fn macro_contract(file: &SharedParsedFile, invocation: &syn::Macro) -> bool {
             &name,
         );
     }
-    (invocation.path.segments.len() == 1 && super::identity::unshadowed(file, &name))
+    (invocation.path.segments.len() == 1 && super::source::unshadowed(file, &name))
         || super::super::getters::known_derive(file.syntax(), &invocation.path, "std", &name)
         || super::super::getters::known_derive(file.syntax(), &invocation.path, "core", &name)
 }

@@ -49,8 +49,8 @@ pub use apply::{
     ErrorTryScope, run_error_field_apply, run_error_file_apply,
 };
 pub(crate) use apply::{
-    GetterContractFacts, GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts, NameAudit,
-    enrich_error_apply_evidence,
+    GetterConsumerFacts, GetterContractFacts, GraphDeclarationFacts, GraphExprFacts,
+    GraphLifetimeFacts, NameAudit, enrich_error_apply_evidence,
 };
 pub(crate) use architecture::ErrorArchitectureCatalog;
 pub use assessor::InternalErrorChainAssessor;

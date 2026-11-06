@@ -5,7 +5,7 @@ use ra_ap_syntax::ast::{self, HasAttrs, HasModuleItem, HasName};
 
 mod alias;
 mod attrs;
-mod imports;
+pub(super) mod imports;
 mod names;
 
 impl GetterContractFacts {

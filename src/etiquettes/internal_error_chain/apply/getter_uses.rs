@@ -8,9 +8,56 @@ use tracing::instrument;
 use crate::loader::SharedParsedFile;
 
 mod identity;
+mod native;
+mod source;
 mod visit;
 
 use identity::Identities;
+
+/// Candidate-independent receiver evidence, collected before crate-wide joins.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct GetterConsumerFacts {
+    methods: Vec<MethodContract>,
+    uses: Vec<ConsumerSite>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct MethodContract {
+    owner: ReceiverRecipe,
+    has_receiver: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+enum ReceiverRecipe {
+    Unknown,
+    Location,
+    Declaration(String),
+    Path(Vec<String>),
+    Method {
+        receiver: Box<Self>,
+        associated: bool,
+    },
+}
+
+impl ReceiverRecipe {
+    #[instrument(level = "trace", skip(self))]
+    fn method(self, associated: bool) -> Self {
+        Self::Method {
+            receiver: Box::new(self),
+            associated,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct ConsumerSite {
+    line: usize,
+    column: usize,
+    receiver: ReceiverRecipe,
+    kind: UseKind,
+    end_line: usize,
+    end_column: usize,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 struct TypeIdentity {
@@ -88,7 +135,25 @@ pub(super) fn collect(
     let identities = Identities::collect(files, source)?;
     Ok(files
         .iter()
-        .flat_map(|file| visit::collect(file, &identities))
+        .map(|file| {
+            Ok(source
+                .getter_uses_for(file)?
+                .uses
+                .iter()
+                .map(|site| GetterUseFact {
+                    path: file.path().to_path_buf(),
+                    line: site.line,
+                    column: site.column,
+                    receiver: identities.receiver(file, &site.receiver),
+                    kind: site.kind,
+                    end_line: site.end_line,
+                    end_column: site.end_column,
+                })
+                .collect::<Vec<_>>())
+        })
+        .collect::<crate::CordialResult<Vec<_>>>()?
+        .into_iter()
+        .flatten()
         .collect())
 }
 

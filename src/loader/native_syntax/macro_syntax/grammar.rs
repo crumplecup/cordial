@@ -4,27 +4,31 @@ use super::{DatabaseSource, Payload, expression};
 use ra_ap_syntax::{AstNode, ast};
 
 impl DatabaseSource<'_> {
-    #[tracing::instrument(level = "debug", skip(self, invocation))]
+    #[tracing::instrument(level = "trace", skip(self, invocation))]
     pub(in crate::loader::native_syntax) fn macro_arguments(
         &self,
         invocation: &ast::MacroCall,
     ) -> Vec<ast::Expr> {
-        let Some(tree) = invocation.token_tree() else {
-            return Vec::new();
-        };
+        self.try_macro_arguments(invocation).unwrap_or_default()
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, invocation))]
+    pub(super) fn try_macro_arguments(
+        &self,
+        invocation: &ast::MacroCall,
+    ) -> Option<Vec<ast::Expr>> {
+        let tree = invocation.token_tree()?;
         let text = tree.syntax().text().to_string();
-        let Some(inner) = text.get(1..text.len().saturating_sub(1)) else {
-            return Vec::new();
-        };
+        let inner = text.get(1..text.len().saturating_sub(1))?;
         let key = Payload::new(self.database(), format!("({inner})"));
         let parsed = expression(self.database(), key);
         if !parsed.errors().is_empty() {
-            return Vec::new();
+            return None;
         }
         match ast::Expr::cast(parsed.syntax_node()) {
-            Some(ast::Expr::TupleExpr(tuple)) => tuple.fields().collect(),
-            Some(ast::Expr::ParenExpr(paren)) => paren.expr().into_iter().collect(),
-            _ => Vec::new(),
+            Some(ast::Expr::TupleExpr(tuple)) => Some(tuple.fields().collect()),
+            Some(ast::Expr::ParenExpr(paren)) => Some(paren.expr().into_iter().collect()),
+            _ => None,
         }
     }
 

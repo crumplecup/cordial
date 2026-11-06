@@ -101,6 +101,7 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
                 "expressions",
                 "lifetimes",
                 "getters",
+                "getter_uses",
             ] {
                 let mut incomplete = facts.clone();
                 incomplete["files"][0]
@@ -138,6 +139,24 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
                     apply_projection::materialized(mutated, root)?,
                     actual,
                     "IR getter {boundary}"
+                );
+            }
+            for boundary in ["uses", "methods"] {
+                let mut altered = facts.clone();
+                for file in altered["files"]
+                    .as_array_mut()
+                    .ok_or_else(|| miette::miette!("files"))?
+                {
+                    file["getter_uses"][boundary] = serde_json::json!([]);
+                }
+                let mut mutated = native.clone();
+                mutated
+                    .set_attr(mutated.root(), ATTR_SOURCE_ERROR_APPLY, altered)
+                    .into_diagnostic()?;
+                assert_ne!(
+                    apply_projection::materialized(mutated, root)?,
+                    actual,
+                    "IR getter consumers {boundary}"
                 );
             }
             for boundary in ["name_audit", "static_strings"] {

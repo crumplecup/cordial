@@ -634,7 +634,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
 | Error analysis | Sites, chain records, type relationships, expression compliance, signature-chain and architecture assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`, `SourceErrorArchitecture`). Apply collection remains. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
-| Error apply inventory | Both loaders project required `SourceErrorApply` declaration, namespace, name/initializer safety, located graph-use, graph-expression, graph-lifetime and getter storage contracts. Getter-use, initializer and local lifetime collection in `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` remains. | Declaration payloads include storage, source/Kind edges, generic and lifetime shapes, visibility, attributes and edit ranges. Module boundaries, import bindings and type-alias names drive graph and getter identity joins from IR. Name-shadowing guards, immutable string declarations, graph-closure uses, constructor values, field accesses, macro guards and expression lifetime origins also come from loader evidence. Graph lifetime evidence includes declaration and signature ranges, storage requirements, constructor anchors and safe forwarding returns. Getter storage contracts retain alias ownership, collision counts, conditional Display guards and exact insertion/removal edits. Collect the remaining getter uses, initializers and local lifetime structure into typed IR. Keep edit rendering text-only. |
+| Error apply inventory | Both loaders project required `SourceErrorApply` declaration, namespace, name/initializer safety, located graph-use, graph-expression, graph-lifetime, getter storage and getter consumer contracts. Initializer and local lifetime collection in `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` remains. | Declaration payloads include storage, source/Kind edges, generic and lifetime shapes, visibility, attributes and edit ranges. Module boundaries, import bindings and type-alias names drive graph and getter identity joins from IR. Name-shadowing guards, immutable string declarations, graph-closure uses, constructor values, field accesses, macro guards and expression lifetime origins also come from loader evidence. Graph lifetime evidence includes declaration and signature ranges, storage requirements, constructor anchors and safe forwarding returns. Getter storage contracts retain alias ownership, collision counts, conditional Display guards and exact insertion/removal edits. Getter consumer recipes preserve lexical receiver scopes, method contracts and exact macro payload origins; the crate-wide identity join consumes IR alone. Collect the remaining initializers and local lifetime structure into typed IR. Keep edit rendering text-only. |
 | Panic and proof collectors | Both loaders project required `SourceVerus`, `SourcePanics` and `SourceAntipatterns` graph evidence. Proof-pattern, panic and antipattern hooks consume IR alone. Native collection covers ordinary syntax, Kani proof graphs, embedded programs and Creusot/Kani/Verus contract clauses. | Canonical outer Rust plus memoized payload grammars. Retire compatibility collection with the production frontend; no fallback whole-file parser. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
 
@@ -1316,6 +1316,25 @@ round-trip regressions. Missing getter inventory fails closed; removing contract
 or adding a reserved alias to the projected name counts changes executable plans
 without changing source snapshots. Build-tier submit verified zero open items
 (list 79). The deep tier was not run.
+
+## Checkpoint: error/apply getter consumers
+
+Both loaders project required, snapshot-bound getter consumer recipes and method
+contracts in `SourceErrorApply`. Crate-wide identity joins resolve these records
+without visiting source syntax. The native collector preserves lexical binding,
+shadowing, trait-default and conditional-method guards, UFCS uses and exact edit
+locations. Opaque standard and amenable harness payloads use loader-owned memoized
+grammar queries, with relative origins for nested and repeated identical payloads.
+
+Initializer expressions and local lifetime planning remain before Cargo-context
+production integration and retirement of the compatibility source owner. This
+checkpoint does not switch production ownership.
+
+Validation on 2026-11-05: complete getter-consumer payload parity passes with full
+features and with `internal_error_chain` alone. Both IR-consumer tests and all
+14 getter compilation and round-trip regressions pass. Required-payload rejection
+and same-snapshot mutation checks exercise the executable apply consumer. Build-tier submit verified zero open items
+(list 81). The deep tier was not run.
 
 ## Current next step
 

@@ -6,7 +6,7 @@ use ra_ap_syntax::{
 };
 
 #[tracing::instrument(level = "trace", skip(file, owner))]
-pub(super) fn has_derive(
+pub(in crate::etiquettes::internal_error_chain::apply) fn has_derive(
     file: &DatabaseSource<'_>,
     owner: &impl HasAttrs,
     package: &str,
@@ -33,7 +33,12 @@ pub(super) fn has_display(file: &DatabaseSource<'_>, owner: &ast::Struct) -> boo
 }
 
 #[tracing::instrument(level = "trace", skip(file, path))]
-pub(super) fn known(file: &DatabaseSource<'_>, path: &[String], package: &str, name: &str) -> bool {
+pub(in crate::etiquettes::internal_error_chain::apply) fn known(
+    file: &DatabaseSource<'_>,
+    path: &[String],
+    package: &str,
+    name: &str,
+) -> bool {
     for item in file.tree().items() {
         let shadow = match item {
             ast::Item::Module(item) => item.name().is_some_and(|name| name.text() == package),

@@ -18,6 +18,7 @@ mod native;
 
 pub(super) use collect::collect_getter_storage;
 pub(super) use derives::known_derive;
+pub(super) use native::imports::{has_derive as has_native_derive, known as known_native_derive};
 
 /// Snapshot-bound source contracts; planning supplies crate-wide names and uses.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
