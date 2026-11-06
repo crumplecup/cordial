@@ -1448,6 +1448,23 @@ rejects mismatched fresh snapshots. Build-tier submit verified zero open items
 (list 89); the deep tier was not run. Compatibility collection remains until
 production workspace routing and ownership retirement are complete.
 
+## Checkpoint: native package input selection
+
+`SourceDatabase::project_target` now selects package inputs without a caller's
+file list. It retains inactive and unreferenced `src/` files and custom library
+and binary entry files. Integration tests contribute policy evidence without
+entering the library call graph; fixture exclusions follow the policy collector.
+The projected graph retains Cargo target identities and rejects a target whose
+manifest snapshot differs from the loaded workspace context.
+
+Tests cover custom entries, inactive syntax, test policies, fixture exclusions,
+virtual policy edits and stale manifest identities. Complete source-policy and
+declaration payload parity passes. Build-script edits now correctly assert that
+the Cargo context must be reloaded. A minimal-feature library check also passes.
+Build-tier submit verified zero open items (list 91); the deep tier was not run.
+Production routing and compatibility-owner retirement remain pending; custom
+entry module trees outside the existing scan roots still need explicit coverage.
+
 ## Current next step
 
 Load the Cargo context into the production session-owned database and route

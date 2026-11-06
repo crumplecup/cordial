@@ -4,6 +4,7 @@
 mod antipatterns;
 #[cfg(feature = "cli_layout")]
 mod cli_layout;
+mod declarations;
 #[cfg(feature = "internal_error_chain")]
 mod error_apply;
 #[cfg(feature = "internal_error_chain")]
@@ -24,24 +25,22 @@ mod observability;
 mod panics;
 #[cfg(feature = "derives")]
 mod path_inclusion;
+mod selection;
 #[cfg(feature = "verus_ir")]
 mod verus;
 #[cfg(feature = "visibility")]
 mod visibility;
 
 use super::SourceDatabase;
-use crate::loader::database::{DatabaseSource, populate::Projection};
 use crate::{CordialResult, CrateIr};
-use ra_ap_hir::{Semantics, attach_db};
-use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
-use sha2::{Digest, Sha256};
+use ra_ap_hir::attach_db;
 use std::path::PathBuf;
 use tracing::instrument;
 
 impl SourceDatabase {
     /// Materialize tracked semantic facts into the ordinary shared graph.
-    /// The source selection must belong to one library target and Cargo
-    /// configuration. Broader target contexts are part of loader migration.
+    /// Source paths belong to the target's loaded Cargo configuration. Use
+    /// `project_target` to collect package scan roots and declared entry files.
     #[instrument(level = "debug", skip(self, paths, target), err(level = "warn"))]
     #[hotpath::measure]
     pub fn project(
@@ -49,7 +48,18 @@ impl SourceDatabase {
         target: &crate::CrateTarget,
         paths: &[PathBuf],
     ) -> CordialResult<CrateIr> {
-        self.projection_context()?;
+        self.project_selection(target, paths, paths)
+    }
+
+    #[instrument(level = "debug", skip_all, err(level = "warn"))]
+    fn project_selection(
+        &mut self,
+        target: &crate::CrateTarget,
+        paths: &[PathBuf],
+        policy_paths: &[PathBuf],
+    ) -> CordialResult<CrateIr> {
+        let context = self.projection_context()?;
+        selection::validate_target(target, &context)?;
         #[cfg(feature = "cfg_hygiene")]
         let declarations = {
             let workspace_root = self
@@ -66,6 +76,7 @@ impl SourceDatabase {
             self.project_attached(
                 target,
                 paths,
+                policy_paths,
                 #[cfg(feature = "cfg_hygiene")]
                 declarations,
             )
@@ -77,9 +88,11 @@ impl SourceDatabase {
         &self,
         target: &crate::CrateTarget,
         paths: &[PathBuf],
+        policy_paths: &[PathBuf],
         #[cfg(feature = "cfg_hygiene")] declarations: crate::ir::SourcePolicyInventory,
     ) -> CordialResult<CrateIr> {
         let mut graph = CrateIr::new(target.crate_name());
+        selection::target_attributes(target, &mut graph)?;
         #[cfg(any(
             feature = "allows",
             feature = "cfg_hygiene",
@@ -140,7 +153,6 @@ impl SourceDatabase {
             crate::ir::ATTR_SOURCE_ANTIPATTERNS,
             serde_json::to_value(self.project_antipatterns(target)?)?,
         )?;
-        let mut snapshots = Vec::new();
         #[cfg(feature = "error_sites")]
         graph.set_attr(
             graph.root(),
@@ -183,64 +195,7 @@ impl SourceDatabase {
             crate::ir::ATTR_SOURCE_ERROR_APPLY,
             serde_json::to_value(self.project_error_apply(target.crate_root())?)?,
         )?;
-        let mut projection = Projection::default();
-        let sema = Semantics::new(&self.db);
-        for path in paths {
-            let file = self.file_id(path)?;
-            let text = self.db.file_text(file).text(&self.db);
-            snapshots.push(crate::ir::FileSnapshot::new(
-                path.canonicalize()?,
-                Sha256::digest(text.as_bytes()).into(),
-            ));
-            let edition = sema.attach_first_edition(file);
-            // This consults the same memoized parse used by Semantics. Parser
-            // recovery must not turn invalid syntax into complete edit facts.
-            if let Some(error) = edition.parse(&self.db).errors().first() {
-                return Err(anyhow::Error::new(error.clone()).into());
-            }
-            let source = DatabaseSource::new(
-                #[cfg(any(
-                    feature = "tracing",
-                    feature = "internal_error_chain",
-                    feature = "verus_ir",
-                    feature = "panics",
-                    feature = "antipatterns"
-                ))]
-                &self.db,
-                path,
-                text,
-                sema.parse(edition),
-                ra_ap_ide_db::line_index(&self.db, file),
-            );
-            let module_path = sema
-                .file_to_module_defs(file)
-                .next()
-                .map(|module| {
-                    module
-                        .path_to_root(&self.db)
-                        .into_iter()
-                        .rev()
-                        .filter_map(|module| module.name(&self.db))
-                        .map(|name| name.as_str().to_owned())
-                        .collect::<Vec<_>>()
-                        .join("::")
-                })
-                .unwrap_or_else(|| path.display().to_string());
-            #[cfg(any(
-                feature = "allows",
-                feature = "cfg_hygiene",
-                feature = "cfg_scatter",
-                feature = "glob_imports",
-                feature = "inline_tests",
-                feature = "modularity",
-                feature = "pageantry",
-                feature = "derives",
-                feature = "visibility",
-                feature = "cli_layout"
-            ))]
-            policies.collect_native_file(&source, target.crate_root())?;
-            projection.populate(&self.db, &sema, &source, &module_path, &mut graph)?;
-        }
+        let snapshots = self.project_declarations(paths, &mut graph)?;
         #[cfg(any(
             feature = "allows",
             feature = "cfg_hygiene",
@@ -253,15 +208,43 @@ impl SourceDatabase {
             feature = "visibility",
             feature = "cli_layout"
         ))]
-        {
+        let snapshots = {
+            let mut snapshots = snapshots;
+            let sema = ra_ap_hir::Semantics::new(&self.db);
+            for path in policy_paths {
+                let source = self.policy_source(path, &sema)?;
+                policies.collect_native_file(&source, target.crate_root())?;
+                if !snapshots
+                    .iter()
+                    .any(|snapshot| snapshot.path() == source.path())
+                {
+                    snapshots.push(crate::FileSnapshot::new(
+                        source.path().to_path_buf(),
+                        source.source_digest(),
+                    ));
+                }
+            }
             policies.sort();
             graph.set_attr(
                 graph.root(),
                 crate::ir::ATTR_SOURCE_POLICY_INVENTORY,
                 serde_json::to_value(policies)?,
             )?;
-        }
-        projection.connect(&mut graph)?;
+            snapshots
+        };
+        #[cfg(not(any(
+            feature = "allows",
+            feature = "cfg_hygiene",
+            feature = "cfg_scatter",
+            feature = "glob_imports",
+            feature = "inline_tests",
+            feature = "modularity",
+            feature = "pageantry",
+            feature = "derives",
+            feature = "visibility",
+            feature = "cli_layout"
+        )))]
+        let _ = policy_paths;
         graph.set_attr(
             graph.root(),
             crate::ATTR_SEMANTIC_SNAPSHOT,

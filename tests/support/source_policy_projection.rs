@@ -46,7 +46,7 @@ pub fn verify() -> Result<()> {
     let legacy = load(root.path(), &target)?;
     let mut database = SourceDatabase::load(root.path()).into_diagnostic()?;
     let paths = [path.clone(), integration, source_fixture];
-    let native = database.project(&target, &paths).into_diagnostic()?;
+    let native = database.project_target(&target).into_diagnostic()?;
     let expected = legacy
         .source_policy_inventory()
         .into_diagnostic()?
@@ -183,12 +183,15 @@ pub fn verify() -> Result<()> {
                 ),
         )
         .into_diagnostic()?;
-    database
-        .change_file(
-            &build,
-            "fn main() { println!(\"cargo::rustc-check-cfg=cfg(changed_build)\"); }\n".into(),
-        )
-        .into_diagnostic()?;
+    assert!(
+        database
+            .change_file(
+                &build,
+                "fn main() { println!(\"cargo::rustc-check-cfg=cfg(changed_build)\"); }\n".into(),
+            )
+            .is_err(),
+        "build-script revisions require a Cargo context reload"
+    );
     let revised = database.project(&target, &paths).into_diagnostic()?;
     let revised = revised
         .source_policy_inventory()
@@ -206,8 +209,8 @@ pub fn verify() -> Result<()> {
             .iter()
             .any(|site| site.name() == "unknown")
     );
-    assert!(revised.known_cfg_names().contains("changed_build"));
-    assert!(!revised.known_cfg_names().contains("from_build"));
+    assert!(!revised.known_cfg_names().contains("changed_build"));
+    assert!(revised.known_cfg_names().contains("from_build"));
     #[cfg(feature = "glob_imports")]
     {
         assert!(
@@ -267,9 +270,6 @@ pub fn verify() -> Result<()> {
     assert_ne!(actual.snapshots(), revised.snapshots());
     database
         .change_file(&path, SOURCE.into())
-        .into_diagnostic()?;
-    database
-        .change_file(&build, build_source.into())
         .into_diagnostic()?;
     let restored = database.project(&target, &paths).into_diagnostic()?;
     assert_eq!(
