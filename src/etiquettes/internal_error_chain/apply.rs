@@ -28,7 +28,7 @@ mod patch;
 mod uses;
 mod write;
 
-pub(crate) use self::graph_apply::{GraphDeclarationFacts, GraphExprFacts};
+pub(crate) use self::graph_apply::{GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts};
 use self::graph_apply::{conversion_graphs_from_ir, enrich_conversion_graphs};
 pub use self::inventory::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,

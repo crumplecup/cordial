@@ -6,7 +6,9 @@ use ra_ap_syntax::{
 use tracing::instrument;
 
 #[instrument(level = "trace", skip(path))]
-pub(super) fn names(path: ast::Path) -> Vec<String> {
+pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn names(
+    path: ast::Path,
+) -> Vec<String> {
     let mut names = path.qualifier().map(names).unwrap_or_default();
     if let Some(segment) = path.segment() {
         if let Some(name) = segment.name_ref() {
@@ -29,20 +31,29 @@ pub(super) fn names(path: ast::Path) -> Vec<String> {
 }
 
 #[instrument(level = "trace", skip(expr, name))]
-pub(super) fn bare_path(expr: &ast::Expr, name: &str) -> bool {
+pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn bare_path(
+    expr: &ast::Expr,
+    name: &str,
+) -> bool {
     matches!(expr, ast::Expr::PathExpr(expr) if expr.path().is_some_and(|path|
         path.qualifier().is_none() && path.coloncolon_token().is_none() && path.segment().is_some_and(|segment|
             segment.generic_arg_list().is_none() && segment.name_ref().is_some_and(|value| value.text() == name))))
 }
 
 #[instrument(level = "trace", skip(expr, field_name))]
-pub(super) fn self_field(expr: &ast::Expr, field_name: &str) -> bool {
+pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn self_field(
+    expr: &ast::Expr,
+    field_name: &str,
+) -> bool {
     matches!(expr, ast::Expr::FieldExpr(field) if field.expr().is_some_and(|expr| bare_path(&expr, "self"))
         && field.name_ref().is_some_and(|name| name.text() == field_name))
 }
 
 #[instrument(level = "trace", skip(call, name))]
-pub(super) fn method(call: &ast::MethodCallExpr, name: &str) -> bool {
+pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn method(
+    call: &ast::MethodCallExpr,
+    name: &str,
+) -> bool {
     call.name_ref().is_some_and(|value| value.text() == name)
         && call
             .arg_list()
@@ -50,7 +61,10 @@ pub(super) fn method(call: &ast::MethodCallExpr, name: &str) -> bool {
 }
 
 #[instrument(level = "trace", skip(call))]
-pub(super) fn boxed_call(call: &ast::CallExpr, exact: bool) -> bool {
+pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn boxed_call(
+    call: &ast::CallExpr,
+    exact: bool,
+) -> bool {
     if !call.arg_list().is_some_and(|list| list.args().count() == 1) {
         return false;
     }
@@ -64,7 +78,10 @@ pub(super) fn boxed_call(call: &ast::CallExpr, exact: bool) -> bool {
 }
 
 #[instrument(level = "trace", skip(path, owner))]
-pub(super) fn record_name(path: Option<ast::Path>, owner: Option<&str>) -> Option<String> {
+pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn record_name(
+    path: Option<ast::Path>,
+    owner: Option<&str>,
+) -> Option<String> {
     let name = names(path?).pop()?;
     if name == "Self" {
         owner.map(str::to_string)
@@ -74,7 +91,9 @@ pub(super) fn record_name(path: Option<ast::Path>, owner: Option<&str>) -> Optio
 }
 
 #[instrument(level = "trace", skip(ty))]
-pub(super) fn type_name(ty: ast::Type) -> Option<String> {
+pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn type_name(
+    ty: ast::Type,
+) -> Option<String> {
     match ty {
         ast::Type::RefType(reference) => type_name(reference.ty()?),
         ast::Type::PathType(ty) => {
@@ -98,7 +117,9 @@ pub(super) fn type_name(ty: ast::Type) -> Option<String> {
 }
 
 #[instrument(level = "trace", skip(function))]
-pub(super) fn is_source_method(function: &ast::Fn) -> bool {
+pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn is_source_method(
+    function: &ast::Fn,
+) -> bool {
     if !function.name().is_some_and(|name| name.text() == "source") {
         return false;
     }

@@ -24,13 +24,14 @@ mod distributed;
 mod expressions;
 mod lifetimes;
 mod plan;
+mod syntax;
 mod types;
 
 pub(crate) use declarations::GraphDeclarationFacts;
 pub(super) use declarations::{DeclarationKind, GraphFields};
 pub(crate) use expressions::GraphExprFacts;
 use expressions::GraphExprPlanner;
-pub(super) use lifetimes::GraphLifetimeFacts;
+pub(crate) use lifetimes::GraphLifetimeFacts;
 use plan::plan_file;
 
 const GRAPH_ATTR: &str = "error_apply_graph_plans";

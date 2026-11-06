@@ -634,7 +634,7 @@ possible so consumer stages do not need a simultaneous rewrite.
 | API and layout | Derive, visibility and CLI layout policy consume loader-projected typed IR with native collectors. Module-splice collection also has shared IR evidence and native parity. | Item signatures, visibility, derives, `#[path]`, inline/out-of-line modules and Cargo roots. |
 | Tracing | Function inventory, subscriber/boundary/stdio policy and workspace proof reachability consume loader-projected typed IR with native collectors. | Preserve inactive syntax, macro inputs, executable boundaries, apply ranges and worklist accounting. Replace the existing name-based reachability policy with semantic evidence after Cargo context is complete. |
 | Error analysis | Sites, chain records, type relationships, expression compliance, signature-chain and architecture assessment consume loader projections with native collectors (`SourceErrorSites`, `SourceErrorChains`, `SourceErrorTypes`, `SourceErrorCompliance`, `SourceErrorSignatures`, `SourceErrorArchitecture`). Apply collection remains. | Error/source identity, signatures, conversions, return contracts, owned/borrowed storage and source-chain evidence. |
-| Error apply inventory | Both loaders project required `SourceErrorApply` declaration, namespace, name/initializer safety, located graph-use and graph-expression evidence. Getter-use, initializer and lifetime collection in `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` remains. | Declaration payloads include storage, source/Kind edges, generic and lifetime shapes, visibility, attributes and edit ranges. Module boundaries, import bindings and type-alias names drive graph and getter identity joins from IR. Name-shadowing guards, immutable string declarations, graph-closure uses, constructor values, field accesses, macro guards and expression lifetime origins also come from loader evidence. Collect the remaining getter uses, initializers and lifetime structure into typed IR. Keep edit rendering text-only. |
+| Error apply inventory | Both loaders project required `SourceErrorApply` declaration, namespace, name/initializer safety, located graph-use, graph-expression and graph-lifetime evidence. Getter-use, initializer and local lifetime collection in `internal_error_chain/apply/{inventory,getters,getter_uses,initializers,lifetime,graph_apply}` remains. | Declaration payloads include storage, source/Kind edges, generic and lifetime shapes, visibility, attributes and edit ranges. Module boundaries, import bindings and type-alias names drive graph and getter identity joins from IR. Name-shadowing guards, immutable string declarations, graph-closure uses, constructor values, field accesses, macro guards and expression lifetime origins also come from loader evidence. Graph lifetime evidence includes declaration and signature ranges, storage requirements, constructor anchors and safe forwarding returns. Collect the remaining getter uses, initializers and local lifetime structure into typed IR. Keep edit rendering text-only. |
 | Panic and proof collectors | Both loaders project required `SourceVerus`, `SourcePanics` and `SourceAntipatterns` graph evidence. Proof-pattern, panic and antipattern hooks consume IR alone. Native collection covers ordinary syntax, Kani proof graphs, embedded programs and Creusot/Kani/Verus contract clauses. | Canonical outer Rust plus memoized payload grammars. Retire compatibility collection with the production frontend; no fallback whole-file parser. |
 | Candidate validation and generation | source-write/transform validators, test/compliance scan helpers | Separate proposed-output validation and token generation from original-source collection. Port validators deliberately; do not mistake fixture-only parsing for production input ownership. |
 
@@ -1263,6 +1263,32 @@ removing expression events changes executable graph plans. Shared formatting
 argument reuse is also covered. Full-feature parity, consumer and shared-source
 checks pass as well. Build-tier submit verified zero open items (list 75). The
 deep tier was not run.
+
+## Checkpoint: error/apply graph lifetimes
+
+Both loaders retain candidate-independent graph lifetime evidence in the required,
+snapshot-bound `SourceErrorApply` inventory. Production apply selects tracked
+names from this payload instead of visiting the compatibility syntax tree.
+Records include declaration and generic ranges, retained field lifetimes,
+implementation and method contracts, constructor anchors, safe forwarding
+returns, located type uses and expression-generic blockers.
+
+Native collection preserves module and signature scope, qualified-self paths,
+trait-bound distinctions and exact byte ranges. Trait paths are not editable
+type-use records; their nested generic arguments remain visible. Both frontends
+sort type uses by source range to give the planner deterministic evidence.
+Missing lifetime inventory fails closed rather than rebuilding it downstream.
+
+Getter contracts and uses, initializer-expression and local lifetime planning
+still need native collection. Cargo-context integration and retirement of the
+compatibility source owner also remain before production cutover.
+
+Validation on 2026-11-05: the 22-case complete lifetime parity fixture and both
+production-consumer tests pass with `internal_error_chain` alone and with full
+features. All 47 error-apply regressions pass. Missing lifetime inventory fails
+closed; mutating declaration, implementation or expression-blocker evidence
+changes executable graph plans. Build-tier submit verified zero open items
+(list 78). The deep tier was not run.
 
 ## Current next step
 

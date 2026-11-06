@@ -1,5 +1,6 @@
 //! Conservative macro guards, using only loader-issued argument syntax.
-use super::{GraphExprEvent, paths};
+use super::super::GraphExprEvent;
+use super::syntax;
 use crate::loader::DatabaseMacroSyntax;
 use ra_ap_syntax::{AstNode, NodeOrToken, SyntaxElement, SyntaxKind, ast};
 use std::collections::BTreeSet;
@@ -119,7 +120,7 @@ fn unhandled(invocation: &ast::MacroCall, field: &str, syntax: &DatabaseMacroSyn
         return true;
     }
     args.iter().enumerate().any(|(index, arg)| {
-        accesses(arg, field, syntax) && (index < 2 || !paths::self_field(arg, field))
+        accesses(arg, field, syntax) && (index < 2 || !syntax::self_field(arg, field))
     })
 }
 
@@ -134,7 +135,7 @@ fn accesses(expr: &ast::Expr, field: &str, syntax: &DatabaseMacroSyntax) -> bool
         if let Some(pattern) = ast::RecordPat::cast(node.clone()) {
             if pattern
                 .path()
-                .is_some_and(|path| paths::names(path) == ["Self"])
+                .is_some_and(|path| syntax::names(path) == ["Self"])
                 && pattern.record_pat_field_list().is_some_and(|list| {
                     list.fields().any(|value| {
                         value.name_ref().is_some_and(|name| name.text() == field)

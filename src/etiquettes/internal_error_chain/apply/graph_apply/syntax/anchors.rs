@@ -8,7 +8,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use tracing::instrument;
 
 #[instrument(level = "debug", skip(function))]
-pub(super) fn parameters(function: &ast::Fn) -> BTreeMap<String, BTreeSet<String>> {
+pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn parameters(
+    function: &ast::Fn,
+) -> BTreeMap<String, BTreeSet<String>> {
     let body = function.body().map(|body| body.syntax().text_range());
     let lifetimes: BTreeSet<_> = function
         .syntax()
@@ -75,7 +77,10 @@ fn collect_parameter(pat: ast::Pat, ty: ast::Type, lifetime: &str, names: &mut B
 }
 
 #[instrument(level = "trace", skip(expr, parameters))]
-pub(super) fn origin(expr: &ast::Expr, parameters: &BTreeSet<String>) -> bool {
+pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn origin(
+    expr: &ast::Expr,
+    parameters: &BTreeSet<String>,
+) -> bool {
     match expr {
         ast::Expr::PathExpr(expr) => expr.path().is_some_and(|path| {
             let names = paths::names(path);

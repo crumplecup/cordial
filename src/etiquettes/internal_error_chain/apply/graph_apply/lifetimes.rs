@@ -14,6 +14,7 @@ use super::super::inventory::CrateTypeIndex;
 use super::types::{is_copy_shape, storage_shape, type_name};
 
 mod collect;
+mod native;
 mod plan;
 mod provenance;
 
@@ -22,7 +23,7 @@ pub(super) use provenance::{anchored_parameters, constructor_origin};
 type Range = (usize, usize);
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub(in crate::etiquettes::internal_error_chain::apply) struct GraphLifetimeFacts {
+pub(crate) struct GraphLifetimeFacts {
     declarations: Vec<Declaration>,
     impls: Vec<ImplSite>,
     functions: Vec<FunctionSite>,
@@ -130,6 +131,44 @@ impl GraphLifetimePlan {
 }
 
 impl GraphLifetimeFacts {
+    /// Select graph candidates from required loader evidence without visiting syntax.
+    #[instrument(level = "debug", skip(self, tracked_names))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn select_names(
+        &self,
+        tracked_names: &BTreeSet<String>,
+    ) -> Self {
+        let mut selected = self.clone();
+        selected
+            .declarations
+            .retain(|site| tracked_names.contains(&site.name));
+        selected
+            .type_paths
+            .retain(|site| tracked_names.contains(&site.name));
+        selected
+            .expr_path_blockers
+            .retain(|name| tracked_names.contains(name));
+        for site in &mut selected.impls {
+            if !site
+                .name
+                .as_ref()
+                .is_some_and(|name| tracked_names.contains(name))
+            {
+                site.methods.clear();
+            }
+        }
+        for site in &mut selected.functions {
+            site.return_names
+                .retain(|name| tracked_names.contains(name));
+            for names in site.safe_returns.values_mut() {
+                names.retain(|name| tracked_names.contains(name));
+            }
+        }
+        selected
+            .functions
+            .retain(|site| !site.return_names.is_empty());
+        selected
+    }
+
     #[instrument(level = "trace", skip(self, names))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn anchors_for(
         &self,

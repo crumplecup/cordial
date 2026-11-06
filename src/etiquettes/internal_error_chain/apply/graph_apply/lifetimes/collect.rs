@@ -25,27 +25,24 @@ trait VisitTarget<'ast> {
 }
 
 impl GraphLifetimeFacts {
-    #[instrument(level = "debug", skip(file, tracked_names))]
-    pub(in crate::etiquettes::internal_error_chain::apply) fn collect(
-        file: &SharedParsedFile,
-        tracked_names: &BTreeSet<String>,
-    ) -> Self {
+    #[instrument(level = "debug", skip(file))]
+    #[hotpath::measure(impl_type = "GraphLifetimeFacts")]
+    pub(crate) fn collect(file: &SharedParsedFile) -> Self {
         let mut collector = Collector {
             file,
-            tracked_names,
             facts: Self::default(),
             module_depth: 0,
             scope_lifetimes: BTreeSet::new(),
             conditional_scope: None,
         };
         collector.visit_file(file.syntax());
+        collector.facts.type_paths.sort_by_key(|site| site.range);
         collector.facts
     }
 }
 
 struct Collector<'a> {
     file: &'a SharedParsedFile,
-    tracked_names: &'a BTreeSet<String>,
     facts: GraphLifetimeFacts,
     module_depth: usize,
     scope_lifetimes: BTreeSet<String>,
@@ -75,27 +72,25 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     #[instrument(level = "trace", skip(self, item))]
     fn visit_item_struct(&mut self, item: &'ast syn::ItemStruct) {
         let name = item.ident.to_string();
-        if self.tracked_names.contains(&name) {
-            self.facts.declarations.push(Declaration {
-                name: name.clone(),
-                is_enum: false,
-                module_depth: self.module_depth,
-                ident_end: self.end(item.ident.span()),
-                generics_empty: item.generics.params.is_empty(),
-                one_lifetime: one_lifetime(&item.generics),
-                generics_range: self.range(item.generics.span()),
-                where_clause: item.generics.where_clause.is_some(),
-                needs_borrowed: item
-                    .fields
-                    .iter()
-                    .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Borrowed)),
-                needs_owned: item
-                    .fields
-                    .iter()
-                    .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Owned)),
-                retained_lifetimes: retained_lifetimes(item.fields.iter()),
-            });
-        }
+        self.facts.declarations.push(Declaration {
+            name: name.clone(),
+            is_enum: false,
+            module_depth: self.module_depth,
+            ident_end: self.end(item.ident.span()),
+            generics_empty: item.generics.params.is_empty(),
+            one_lifetime: one_lifetime(&item.generics),
+            generics_range: self.range(item.generics.span()),
+            where_clause: item.generics.where_clause.is_some(),
+            needs_borrowed: item
+                .fields
+                .iter()
+                .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Borrowed)),
+            needs_owned: item
+                .fields
+                .iter()
+                .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Owned)),
+            retained_lifetimes: retained_lifetimes(item.fields.iter()),
+        });
         let previous = self.conditional_scope.replace(ConditionalScope {
             owner: name,
             borrowed_only: false,
@@ -107,33 +102,31 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     #[instrument(level = "trace", skip(self, item))]
     fn visit_item_enum(&mut self, item: &'ast syn::ItemEnum) {
         let name = item.ident.to_string();
-        if self.tracked_names.contains(&name) {
-            self.facts.declarations.push(Declaration {
-                name: name.clone(),
-                is_enum: true,
-                module_depth: self.module_depth,
-                ident_end: self.end(item.ident.span()),
-                generics_empty: item.generics.params.is_empty(),
-                one_lifetime: one_lifetime(&item.generics),
-                generics_range: self.range(item.generics.span()),
-                where_clause: item.generics.where_clause.is_some(),
-                needs_borrowed: item
-                    .variants
+        self.facts.declarations.push(Declaration {
+            name: name.clone(),
+            is_enum: true,
+            module_depth: self.module_depth,
+            ident_end: self.end(item.ident.span()),
+            generics_empty: item.generics.params.is_empty(),
+            one_lifetime: one_lifetime(&item.generics),
+            generics_range: self.range(item.generics.span()),
+            where_clause: item.generics.where_clause.is_some(),
+            needs_borrowed: item
+                .variants
+                .iter()
+                .flat_map(|variant| variant.fields.iter())
+                .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Borrowed)),
+            needs_owned: item
+                .variants
+                .iter()
+                .flat_map(|variant| variant.fields.iter())
+                .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Owned)),
+            retained_lifetimes: retained_lifetimes(
+                item.variants
                     .iter()
-                    .flat_map(|variant| variant.fields.iter())
-                    .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Borrowed)),
-                needs_owned: item
-                    .variants
-                    .iter()
-                    .flat_map(|variant| variant.fields.iter())
-                    .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Owned)),
-                retained_lifetimes: retained_lifetimes(
-                    item.variants
-                        .iter()
-                        .flat_map(|variant| variant.fields.iter()),
-                ),
-            });
-        }
+                    .flat_map(|variant| variant.fields.iter()),
+            ),
+        });
         let previous = self.conditional_scope.replace(ConditionalScope {
             owner: name,
             borrowed_only: false,
@@ -148,10 +141,6 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         let methods = item
             .items
             .iter()
-            .filter(|_| {
-                name.as_ref()
-                    .is_some_and(|name| self.tracked_names.contains(name))
-            })
             .filter_map(|member| match member {
                 syn::ImplItem::Fn(method) => Some(method),
                 _ => None,
@@ -233,10 +222,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 
     #[instrument(level = "trace", skip(self, item))]
     fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
-        let return_names: BTreeSet<_> = return_type_names(&item.sig.output)
-            .intersection(self.tracked_names)
-            .cloned()
-            .collect();
+        let return_names = return_type_names(&item.sig.output);
         let mut safe_returns = BTreeMap::new();
         for lifetime in all_lifetimes(&item.sig) {
             let safe: BTreeSet<_> = return_names
@@ -274,9 +260,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 
     #[instrument(level = "trace", skip(self, item))]
     fn visit_type_path(&mut self, item: &'ast syn::TypePath) {
-        if let Some(segment) = item.path.segments.last()
-            && self.tracked_names.contains(&segment.ident.to_string())
-        {
+        if let Some(segment) = item.path.segments.last() {
             let arguments = match &segment.arguments {
                 PathArguments::None => TypeArguments::None,
                 PathArguments::AngleBracketed(arguments) if arguments.args.len() == 1 => {
@@ -312,10 +296,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             item.path
                 .segments
                 .iter()
-                .filter(|segment| {
-                    self.tracked_names.contains(&segment.ident.to_string())
-                        && !matches!(segment.arguments, PathArguments::None)
-                })
+                .filter(|segment| !matches!(segment.arguments, PathArguments::None))
                 .map(|segment| segment.ident.to_string()),
         );
         syn::visit::visit_expr_path(self, item);
