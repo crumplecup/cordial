@@ -72,7 +72,7 @@ pub(super) fn plan(
     let mut constructors = 0;
     let mut constructor_name = None;
     for &implementation in index
-        .impls
+        .impls()
         .get(&item.ident.to_string())
         .map(Vec::as_slice)
         .unwrap_or(&[])
@@ -124,7 +124,7 @@ pub(super) fn plan(
         return None;
     }
     let mut return_facts = Vec::new();
-    for &function in &index.functions {
+    for &function in index.functions() {
         if let Some(site) = forwarding_return(
             file,
             function,

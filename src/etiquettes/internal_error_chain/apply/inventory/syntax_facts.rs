@@ -87,7 +87,9 @@ impl FileSyntaxFacts {
                 .expressions_for(file)?
                 .select(tracked_names, tracked_fields),
             lifetimes: source.lifetimes_for(file)?.select_names(tracked_names),
-            local_lifetimes: LifetimeFileFacts::collect(file, tracked_names),
+            local_lifetimes: source
+                .local_lifetimes_for(file)?
+                .select_names(tracked_names),
             graph_declarations,
         })
     }

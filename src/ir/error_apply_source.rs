@@ -2,7 +2,7 @@
 
 use crate::etiquettes::internal_error_chain::{
     GetterConsumerFacts, GetterContractFacts, GraphDeclarationFacts, GraphExprFacts,
-    GraphLifetimeFacts, NameAudit,
+    GraphLifetimeFacts, LifetimeFileFacts, NameAudit,
 };
 use crate::loader::{DatabaseSource, SharedParsedFile, SourceLoadView};
 use crate::{CordialError, CordialResult, FileSnapshot};
@@ -48,6 +48,8 @@ pub struct ErrorApplyFile {
     getters: GetterContractFacts,
     #[getter(skip)]
     getter_uses: GetterConsumerFacts,
+    #[getter(skip)]
+    local_lifetimes: LifetimeFileFacts,
 }
 
 impl SourceErrorApply {
@@ -71,6 +73,7 @@ impl SourceErrorApply {
                     lifetimes: GraphLifetimeFacts::collect(&file),
                     getters: GetterContractFacts::collect(&file),
                     getter_uses: GetterConsumerFacts::collect(&file),
+                    local_lifetimes: LifetimeFileFacts::collect(&file),
                 });
                 Ok(())
             },
@@ -112,6 +115,7 @@ impl SourceErrorApply {
             lifetimes: GraphLifetimeFacts::collect_native(file),
             getters: GetterContractFacts::collect_native(file),
             getter_uses: GetterConsumerFacts::collect_native(file),
+            local_lifetimes: LifetimeFileFacts::collect_native(file),
         }
     }
 
@@ -186,6 +190,14 @@ impl SourceErrorApply {
         file: &SharedParsedFile,
     ) -> CordialResult<&GetterContractFacts> {
         Ok(&self.file_for(file)?.getters)
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
+    pub(crate) fn local_lifetimes_for(
+        &self,
+        file: &SharedParsedFile,
+    ) -> CordialResult<&LifetimeFileFacts> {
+        Ok(&self.file_for(file)?.local_lifetimes)
     }
 
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]

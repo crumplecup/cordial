@@ -1,22 +1,25 @@
 //! A closed lifetime migration for one dynamic field and scalar context.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
-use syn::{Item, ItemFn, ItemImpl, ItemStruct, Type};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
-use crate::loader::SharedParsedFile;
 
+use super::Edit;
 use super::initializers::InitializerFacts;
-use super::{Edit, is_string, simple_type_name};
 
 mod forwarding;
 mod methods;
+mod native;
+mod native_forwarding;
+mod native_methods;
+mod native_syntax;
 mod planner;
+mod source;
 
-use planner::plan;
+use source::{LifetimeFileIndex, scalar_copy_name};
 
 type Range = (usize, usize);
 
@@ -44,38 +47,21 @@ pub(super) struct LifetimeSiteFacts {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub(super) struct LifetimeFileFacts {
+pub(crate) struct LifetimeFileFacts {
     sites: Vec<LifetimeSiteFacts>,
 }
 
 impl LifetimeFileFacts {
-    #[instrument(level = "debug", skip(file, tracked_names))]
-    pub(super) fn collect(file: &SharedParsedFile, tracked_names: &BTreeSet<String>) -> Self {
-        let index = LifetimeFileIndex::new(file.syntax());
-        let mut sites = Vec::new();
-        for (name, item) in &index.structs {
-            if !tracked_names.contains(name) {
-                continue;
-            }
-            let syn::Fields::Named(fields) = &item.fields else {
-                continue;
-            };
-            for field in &fields.named {
-                let Some(field_name) = field.ident.as_ref().map(ToString::to_string) else {
-                    continue;
-                };
-                let strategy = if is_string(&field.ty) {
-                    ErrorFieldStrategy::Borrowed
-                } else {
-                    ErrorFieldStrategy::Owned
-                };
-                if let Some(mut facts) = plan(file, &index, item, &field_name, strategy) {
-                    facts.field_name = field_name;
-                    sites.push(facts);
-                }
-            }
+    #[instrument(level = "trace", skip(self, names))]
+    pub(crate) fn select_names(&self, names: &BTreeSet<String>) -> Self {
+        Self {
+            sites: self
+                .sites
+                .iter()
+                .filter(|site| names.contains(&site.plan.type_name))
+                .cloned()
+                .collect(),
         }
-        Self { sites }
     }
 
     #[instrument(level = "debug", skip(self, strategy, sites, initializers))]
@@ -208,68 +194,4 @@ impl LifetimePlanFacts {
             ErrorFieldStrategy::Owned => self.type_name.clone(),
         }
     }
-}
-
-/// Top-level syntax facts shared by every lifetime candidate in one file.
-pub(super) struct LifetimeFileIndex<'a> {
-    structs: HashMap<String, &'a ItemStruct>,
-    impls: HashMap<String, Vec<&'a ItemImpl>>,
-    functions: Vec<&'a ItemFn>,
-}
-
-impl<'a> LifetimeFileIndex<'a> {
-    #[instrument(level = "debug", skip(syntax))]
-    pub(super) fn new(syntax: &'a syn::File) -> Self {
-        let mut index = Self {
-            structs: HashMap::new(),
-            impls: HashMap::new(),
-            functions: Vec::new(),
-        };
-        for item in &syntax.items {
-            match item {
-                Item::Struct(item) => {
-                    index.structs.entry(item.ident.to_string()).or_insert(item);
-                }
-                Item::Impl(item) => {
-                    if let Some(name) = simple_type_name(&item.self_ty) {
-                        index.impls.entry(name).or_default().push(item);
-                    }
-                }
-                Item::Fn(item) => index.functions.push(item),
-                _ => {}
-            }
-        }
-        index
-    }
-}
-
-#[instrument(level = "trace", skip(ty))]
-fn scalar_copy_name(ty: &Type) -> Option<&syn::Ident> {
-    let Type::Path(path) = ty else {
-        return None;
-    };
-    if path.qself.is_some() || path.path.segments.len() != 1 {
-        return None;
-    }
-    let segment = path.path.segments.first()?;
-    (matches!(
-        segment.ident.to_string().as_str(),
-        "bool"
-            | "char"
-            | "u8"
-            | "u16"
-            | "u32"
-            | "u64"
-            | "u128"
-            | "usize"
-            | "i8"
-            | "i16"
-            | "i32"
-            | "i64"
-            | "i128"
-            | "isize"
-            | "f32"
-            | "f64"
-    ) && matches!(segment.arguments, syn::PathArguments::None))
-    .then_some(&segment.ident)
 }

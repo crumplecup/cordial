@@ -50,7 +50,7 @@ pub use apply::{
 };
 pub(crate) use apply::{
     GetterConsumerFacts, GetterContractFacts, GraphDeclarationFacts, GraphExprFacts,
-    GraphLifetimeFacts, NameAudit, enrich_error_apply_evidence,
+    GraphLifetimeFacts, LifetimeFileFacts, NameAudit, enrich_error_apply_evidence,
 };
 pub(crate) use architecture::ErrorArchitectureCatalog;
 pub use assessor::InternalErrorChainAssessor;

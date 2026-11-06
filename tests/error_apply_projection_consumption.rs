@@ -102,6 +102,7 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
                 "lifetimes",
                 "getters",
                 "getter_uses",
+                "local_lifetimes",
             ] {
                 let mut incomplete = facts.clone();
                 incomplete["files"][0]

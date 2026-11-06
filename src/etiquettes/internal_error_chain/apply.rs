@@ -38,6 +38,7 @@ pub use self::inventory::{
     ErrorSourceMethodEvidence, ErrorTryEvidence, ErrorTryScope,
 };
 pub(crate) use self::inventory::{conversion_units_from_ir, enrich_conversion_units};
+pub(crate) use self::lifetime::LifetimeFileFacts;
 pub(crate) use self::names::NameAudit;
 use self::patch::patch_file;
 use self::write::write_planned_files;

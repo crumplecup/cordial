@@ -16,7 +16,12 @@ pub(super) fn constructor_lifetime(
     type_name: &str,
 ) -> Option<String> {
     let mut found = None;
-    for &implementation in index.impls.get(type_name).map(Vec::as_slice).unwrap_or(&[]) {
+    for &implementation in index
+        .impls()
+        .get(type_name)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+    {
         if implementation.trait_.is_some() {
             continue;
         }
