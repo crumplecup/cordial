@@ -18,8 +18,10 @@ fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Re
         "[package]\nname = 'target_selection'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n[lib]\npath = 'library/api.rs'\n[[bin]]\nname = 'custom_cli'\npath = 'cli/entry.rs'\n",
     ).into_diagnostic()?;
     for (path, text) in [
-        ("library/api.rs", "pub fn library_entry() {}\n"),
-        ("cli/entry.rs", "fn main() {}\n"),
+        ("library/api.rs", "mod child; pub fn library_entry() {}\n"),
+        ("library/child.rs", "pub fn library_child() {}\n"),
+        ("cli/entry.rs", "mod command; fn main() {}\n"),
+        ("cli/command.rs", "pub fn command() {}\n"),
         ("src/detached.rs", "#[cfg(any())] fn inactive() {}\n"),
         (
             "tests/integration.rs",
@@ -96,13 +98,67 @@ fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Re
     assert_eq!(
         paths,
         [
+            "cli/command.rs",
             "cli/entry.rs",
             "library/api.rs",
+            "library/child.rs",
             "src/detached.rs",
             "tests/integration.rs"
         ]
         .map(std::path::PathBuf::from)
     );
+    let package = snapshot
+        .workspace()
+        .packages()
+        .iter()
+        .find(|package| package.name() == "target_selection")
+        .ok_or_else(|| miette::miette!("missing package identity"))?;
+    assert_eq!(package.root(), root.path());
+    assert_eq!(
+        package.source_entries(),
+        &[
+            root.path().join("cli/entry.rs"),
+            root.path().join("library/api.rs")
+        ]
+    );
+    #[cfg(feature = "derives")]
+    {
+        let workspace = database.project_path_inclusions().into_diagnostic()?;
+        let mut paths: Vec<_> = workspace
+            .sources()
+            .iter()
+            .map(|source| source.snapshot().path().clone())
+            .collect();
+        paths.sort();
+        assert_eq!(
+            paths,
+            [
+                "cli/command.rs",
+                "cli/entry.rs",
+                "library/api.rs",
+                "library/child.rs",
+                "src/detached.rs"
+            ]
+            .map(|path| root.path().join(path))
+        );
+        #[cfg(feature = "tracing")]
+        for (file, function) in [
+            ("library/child.rs", "child::library_child"),
+            ("cli/command.rs", "command::command"),
+        ] {
+            let source = workspace
+                .sources()
+                .iter()
+                .find(|source| source.snapshot().path() == &root.path().join(file))
+                .ok_or_else(|| miette::miette!("missing custom module source"))?;
+            assert!(
+                source
+                    .proof_calls()
+                    .iter()
+                    .any(|call| call.qualified_name() == function)
+            );
+        }
+    }
     let policy = graph
         .source_policy_inventory()
         .into_diagnostic()?

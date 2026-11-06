@@ -1,6 +1,7 @@
 //! Frozen Cargo context behind a semantic projection. No backend handles escape.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 /// Feature selection used by both Cargo metadata and build-script collection.
@@ -61,6 +62,21 @@ pub struct SemanticCrateContext {
     build_script: bool,
 }
 
+/// Editable workspace package selected by the loaded Cargo configuration.
+/// Enabled dependency edges use normalized package names, including renamed
+/// dependencies. Entries are library and binary roots, excluding integration
+/// tests and build scripts.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters, derive_new::new,
+)]
+#[new(visibility = "pub(crate)")]
+pub struct SemanticPackageContext {
+    name: String,
+    root: PathBuf,
+    dependencies: BTreeSet<String>,
+    source_entries: Vec<PathBuf>,
+}
+
 /// The frozen base loaded by the workspace driver. Virtual source revisions
 /// are identified separately by `SemanticSnapshot`; changing Cargo inputs
 /// requires a driver reload, not a source-text edit in the old crate graph.
@@ -99,6 +115,7 @@ pub struct SemanticWorkspaceContext {
     /// to this base identity.
     loaded_sources_digest: [u8; 32],
     environment_digest: [u8; 32],
+    packages: Vec<SemanticPackageContext>,
     crates: Vec<SemanticCrateContext>,
     gaps: Vec<SemanticContextGap>,
 }

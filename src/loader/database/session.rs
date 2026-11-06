@@ -3,6 +3,7 @@
 mod compiled;
 mod context;
 mod inputs;
+mod packages;
 mod workspace;
 
 use std::path::Path;

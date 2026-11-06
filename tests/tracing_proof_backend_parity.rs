@@ -60,9 +60,7 @@ fn canonical_proof_evidence_matches_and_reachability_uses_only_ir() -> Result<()
     let root = fixture.path();
     let legacy = cordial::workspace_path_inclusions(root).into_diagnostic()?;
     let mut database = SourceDatabase::load(root).into_diagnostic()?;
-    let native = database
-        .project_path_inclusions(&legacy)
-        .into_diagnostic()?;
+    let native = database.project_path_inclusions().into_diagnostic()?;
     assert_eq!(
         legacy, native,
         "entire workspace payload, not only function IDs"
@@ -137,9 +135,7 @@ fn canonical_proof_evidence_matches_and_reachability_uses_only_ir() -> Result<()
             PROOFS.replace("assertion_target()", "opaque_only()"),
         )
         .into_diagnostic()?;
-    let changed_calls = database
-        .project_path_inclusions(&native)
-        .into_diagnostic()?;
+    let changed_calls = database.project_path_inclusions().into_diagnostic()?;
     for (before, after) in native.sources().iter().zip(changed_calls.sources()) {
         assert_eq!(
             before
@@ -169,9 +165,7 @@ fn canonical_proof_evidence_matches_and_reachability_uses_only_ir() -> Result<()
             format!("{PROOFS}\nfn ordinary() {{ bridge(); }}\n"),
         )
         .into_diagnostic()?;
-    let revised = database
-        .project_path_inclusions(&native)
-        .into_diagnostic()?;
+    let revised = database.project_path_inclusions().into_diagnostic()?;
     assert_ne!(revised, native);
     let revised_exclusions = exclusions(&revised, "kani")?;
     assert!(
@@ -191,15 +185,13 @@ fn canonical_proof_evidence_matches_and_reachability_uses_only_ir() -> Result<()
         .change_file(&proofs, PROOFS.into())
         .into_diagnostic()?;
     assert_eq!(
-        database
-            .project_path_inclusions(&native)
-            .into_diagnostic()?,
+        database.project_path_inclusions().into_diagnostic()?,
         native
     );
     database
         .change_file(&proofs, "mod {".into())
         .into_diagnostic()?;
-    assert!(database.project_path_inclusions(&native).is_err());
+    assert!(database.project_path_inclusions().is_err());
 
     // Re-evaluation must need neither source files nor a live semantic database.
     drop(database);

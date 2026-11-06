@@ -199,7 +199,7 @@ pub use semantic::{
 };
 pub use semantic_workspace::{
     SemanticConfigurationInput, SemanticContextGap, SemanticCrateContext, SemanticFeatures,
-    SemanticWorkspaceContext,
+    SemanticPackageContext, SemanticWorkspaceContext,
 };
 pub use source_calls::{
     ATTR_FUNCTION_CALL_FLOW, ATTR_SOURCE_MODULE_SCOPE, CallResolutionFailure, FunctionCallFlow,

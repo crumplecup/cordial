@@ -1480,6 +1480,31 @@ and proof-harness suites pass, as does a reduced feature build containing tracin
 and crate attributes without the error-chain feature. Build-tier submit verified
 zero open items (list 93); the deep tier was not run.
 
+## Checkpoint: Cargo-owned workspace input selection
+
+The frozen semantic workspace now retains package roots, library/binary entries
+and enabled dependency edges alongside the crate graph. Native workspace splice
+and proof projection selects its own inputs from that context; it no longer
+requires a compatibility projection to supply members or source paths.
+
+Package selection includes native module descendants of custom library and
+binary entry files outside `src/`. Unreferenced and inactive files under `src/`
+remain policy inputs. Inactive module trees outside that scan root still need
+coverage before claiming complete inactive-source selection. Custom-entry proof
+names use native module identities. Cargo context validation rejects changed
+configuration, invalid source and files absent from the loaded database.
+
+Resolved dependencies intentionally replace all-declared dependency lists in
+the native projection: a disabled optional dependency cannot make a generated
+derive or verifier contract valid. Renamed dependencies retain the dependency
+package identity, normalized for Rust names. Tests cover that distinction,
+reload isolation, complete workspace evidence parity, custom entry descendants
+and virtual edits without supplying compatibility selection evidence.
+
+Validation: custom-target selection, optional dependency reload, complete splice
+and proof payload parity tests pass. The library builds without default features.
+Build-tier submit verified zero open items (list 94); the deep tier was not run.
+
 ## Current next step
 
 Load the Cargo context into the production session-owned database and route

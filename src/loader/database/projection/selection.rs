@@ -13,16 +13,16 @@ impl SourceDatabase {
     #[hotpath::measure]
     pub fn project_target(&mut self, target: &CrateTarget) -> CordialResult<CrateIr> {
         let root = target.crate_root();
-        let mut graph = rust_files(&root.join("src"));
-        if let Some(library) = crate::loader::library_root_rs(root)
-            && library.is_file()
-        {
-            graph.insert(library);
-        }
-        // Cargo can declare binary entry paths outside src/.
-        graph.extend(target.binary_entries().iter().cloned());
+        let context = self.projection_context()?;
+        let root = root.canonicalize()?;
+        let package = context
+            .packages()
+            .iter()
+            .find(|package| package.root() == &root)
+            .ok_or_else(|| crate::CordialError::not_found(root.clone()))?;
+        let graph = self.package_sources(package);
         let mut policies = BTreeSet::new();
-        for tree in crate::loader::quality_scan_trees(root) {
+        for tree in crate::loader::quality_scan_trees(&root) {
             let is_source = tree == root.join("src");
             if !is_source
                 && !cfg!(any(
@@ -41,7 +41,7 @@ impl SourceDatabase {
                         feature = "modularity",
                         feature = "derives"
                     )))
-                    || !is_fixture(&path, root)
+                    || !is_fixture(&path, &root)
                 {
                     policies.insert(path);
                 }
@@ -52,6 +52,41 @@ impl SourceDatabase {
             &graph.into_iter().collect::<Vec<_>>(),
             &policies.into_iter().collect::<Vec<_>>(),
         )
+    }
+
+    /// Union policy scan roots with source modules selected by Cargo entry
+    /// identities. Semantic module lookup reuses this database's canonical tree.
+    #[tracing::instrument(level = "debug", skip(self, package))]
+    pub(super) fn package_sources(
+        &self,
+        package: &crate::SemanticPackageContext,
+    ) -> BTreeSet<PathBuf> {
+        ra_ap_hir::attach_db(&self.db, || {
+            let mut files = rust_files(&package.root().join("src"));
+            files.extend(package.source_entries().iter().cloned());
+            for krate in ra_ap_hir::Crate::all(&self.db) {
+                let Some(root) = self.vfs.file_path(krate.root_file(&self.db)).as_path() else {
+                    continue;
+                };
+                if !package
+                    .source_entries()
+                    .iter()
+                    .any(|entry| entry == AsRef::<Path>::as_ref(root))
+                {
+                    continue;
+                }
+                for module in krate.modules(&self.db) {
+                    let file = module
+                        .definition_source_file_id(&self.db)
+                        .original_file_respecting_includes(&self.db)
+                        .file_id(&self.db);
+                    if let Some(path) = self.vfs.file_path(file).as_path() {
+                        files.insert(AsRef::<Path>::as_ref(path).to_path_buf());
+                    }
+                }
+            }
+            files
+        })
     }
 }
 

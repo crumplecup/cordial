@@ -91,9 +91,7 @@ fn workspace_splices_use_canonical_trees_and_preserve_complete_evidence() -> Res
     let root = fixture.path();
     let legacy = workspace_path_inclusions(root).into_diagnostic()?;
     let mut database = SourceDatabase::load(root).into_diagnostic()?;
-    let native = database
-        .project_path_inclusions(&legacy)
-        .into_diagnostic()?;
+    let native = database.project_path_inclusions().into_diagnostic()?;
     assert_eq!(
         legacy, native,
         "full source payloads, digests, members and indexes"
@@ -145,9 +143,7 @@ fn workspace_splices_use_canonical_trees_and_preserve_complete_evidence() -> Res
     database
         .change_file(&fixture_source, "// no fixture splices\n".into())
         .into_diagnostic()?;
-    let changed = database
-        .project_path_inclusions(&native)
-        .into_diagnostic()?;
+    let changed = database.project_path_inclusions().into_diagnostic()?;
     assert_eq!(changed.members(), native.members(), "Cargo context reused");
     assert!(changed.splice_consumers(&shared, &owner).is_empty());
     assert!(
@@ -170,32 +166,27 @@ fn workspace_splices_use_canonical_trees_and_preserve_complete_evidence() -> Res
         )
         .into_diagnostic()?;
     assert_eq!(
-        database
-            .project_path_inclusions(&native)
-            .into_diagnostic()?,
+        database.project_path_inclusions().into_diagnostic()?,
         native
     );
     database
         .change_file(&consumer, "mod {".into())
         .into_diagnostic()?;
     assert!(
-        database.project_path_inclusions(&native).is_err(),
+        database.project_path_inclusions().is_err(),
         "invalid virtual syntax cannot authorize a partial graph"
     );
     database
         .change_file(&consumer, CONSUMER.into())
         .into_diagnostic()?;
     assert_eq!(
-        database
-            .project_path_inclusions(&native)
-            .into_diagnostic()?,
+        database.project_path_inclusions().into_diagnostic()?,
         native
     );
 
     // A path discovered after database loading must not disappear silently.
     std::fs::write(root.join("consumer/src/late.rs"), "mod late {}\n").into_diagnostic()?;
-    let wider = workspace_path_inclusions(root).into_diagnostic()?;
-    assert!(database.project_path_inclusions(&wider).is_err());
+    assert!(database.project_path_inclusions().is_err());
     Ok(())
 }
 

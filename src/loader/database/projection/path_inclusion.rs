@@ -1,6 +1,6 @@
 //! Native workspace splice projection from canonical database inputs.
 use super::SourceDatabase;
-use crate::ir::{PathInclusionFacts, PathInclusionSource};
+use crate::ir::{PathInclusionFacts, PathInclusionMember, PathInclusionSource};
 use crate::{CordialResult, FileSnapshot};
 use ra_ap_hir::{Semantics, attach_db};
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
@@ -8,62 +8,114 @@ use ra_ap_syntax::ast::{self, HasAttrs, HasModuleItem};
 use sha2::{Digest, Sha256};
 
 impl SourceDatabase {
-    /// Project module splices for a captured workspace input selection.
-    /// Member dependencies and source paths come from workspace IR; module
-    /// targets and digests come from this database revision's canonical trees.
-    /// Missing inputs fail instead of presenting a partial splice graph.
-    #[tracing::instrument(level = "debug", skip(self, context), err(level = "warn"))]
+    /// Project workspace splices and proof calls without compatibility evidence.
+    /// Cargo supplies members, enabled dependency edges and entry points; source
+    /// selection retains unreferenced src files and native entry module trees.
+    /// Missing inputs fail instead of presenting a partial workspace graph.
+    #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
     #[hotpath::measure]
-    pub fn project_path_inclusions(
-        &self,
-        context: &PathInclusionFacts,
-    ) -> CordialResult<PathInclusionFacts> {
+    pub fn project_path_inclusions(&self) -> CordialResult<PathInclusionFacts> {
+        let context = self.projection_context()?;
+        if context
+            .gaps()
+            .contains(&crate::SemanticContextGap::CargoMetadata)
+        {
+            return Err(crate::CordialError::workspace_source_facts_missing(
+                "complete Cargo metadata",
+            ));
+        }
+        let members = context
+            .packages()
+            .iter()
+            .map(|package| {
+                PathInclusionMember::new(
+                    package.name().clone(),
+                    package.root().clone(),
+                    package.dependencies().clone(),
+                )
+            })
+            .collect();
         attach_db(&self.db, || {
             let sema = Semantics::new(&self.db);
             let mut sources = Vec::new();
-            for input in context.sources() {
-                let path = input.snapshot().path();
-                let id = self.file_id(path)?;
-                let edition = sema.attach_first_edition(id);
-                if let Some(error) = edition.parse(&self.db).errors().first() {
-                    return Err(anyhow::Error::new(error.clone()).into());
+            for package in context.packages() {
+                for path in self.package_sources(package) {
+                    let path = &path;
+                    let id = self.file_id(path)?;
+                    let edition = sema.attach_first_edition(id);
+                    if let Some(error) = edition.parse(&self.db).errors().first() {
+                        return Err(anyhow::Error::new(error.clone()).into());
+                    }
+                    let text = self.db.file_text(id).text(&self.db);
+                    let tree = sema.parse(edition);
+                    sources.push(PathInclusionSource::new(
+                        package.name().clone(),
+                        FileSnapshot::new(
+                            path.to_path_buf(),
+                            Sha256::digest(text.as_bytes()).into(),
+                        ),
+                        targets(tree.items()),
+                        #[cfg(feature = "tracing")]
+                        {
+                            let source = super::super::DatabaseSource::new(
+                                &self.db,
+                                path,
+                                text,
+                                tree,
+                                ra_ap_ide_db::line_index(&self.db, id),
+                            );
+                            crate::ir::SourceProofFunction::collect_native(
+                                &source,
+                                &self.proof_module_path(&sema, id, package, path)?,
+                            )
+                        },
+                    ));
                 }
-                let text = self.db.file_text(id).text(&self.db);
-                let tree = sema.parse(edition);
-                sources.push(PathInclusionSource::new(
-                    input.crate_name().clone(),
-                    FileSnapshot::new(path.to_path_buf(), Sha256::digest(text.as_bytes()).into()),
-                    targets(tree.items()),
-                    #[cfg(feature = "tracing")]
-                    {
-                        let source = super::super::DatabaseSource::new(
-                            &self.db,
-                            path,
-                            text,
-                            tree,
-                            ra_ap_ide_db::line_index(&self.db, id),
-                        );
-                        let root = context
-                            .crate_roots()
-                            .find(|(name, _)| *name == input.crate_name())
-                            .map(|(_, root)| root)
-                            .ok_or_else(|| {
-                                crate::CordialError::workspace_source_facts_missing(
-                                    "proof source crate root",
-                                )
-                            })?;
-                        crate::ir::SourceProofFunction::collect_native(
-                            &source,
-                            &crate::loader::module_path_from_src_file(&root.join("src"), path),
-                        )
-                    },
-                ));
             }
-            Ok(PathInclusionFacts::from_evidence(
-                context.members().clone(),
-                sources,
-            ))
+            Ok(PathInclusionFacts::from_evidence(members, sources))
         })
+    }
+
+    #[cfg(feature = "tracing")]
+    #[tracing::instrument(level = "trace", skip_all, err(level = "warn"))]
+    fn proof_module_path(
+        &self,
+        sema: &Semantics<'_, ra_ap_ide_db::RootDatabase>,
+        file: ra_ap_vfs::FileId,
+        package: &crate::SemanticPackageContext,
+        path: &std::path::Path,
+    ) -> CordialResult<Vec<String>> {
+        let src = package.root().join("src");
+        if path.starts_with(&src) {
+            return Ok(crate::loader::module_path_from_src_file(&src, path));
+        }
+        if package.source_entries().iter().any(|entry| entry == path) {
+            return Ok(Vec::new());
+        }
+        sema.file_to_module_defs(file)
+            .find(|module| {
+                self.vfs
+                    .file_path(module.krate(&self.db).root_file(&self.db))
+                    .as_path()
+                    .is_some_and(|root| {
+                        package
+                            .source_entries()
+                            .iter()
+                            .any(|entry| entry == AsRef::<std::path::Path>::as_ref(root))
+                    })
+            })
+            .map(|module| {
+                module
+                    .path_to_root(&self.db)
+                    .into_iter()
+                    .rev()
+                    .filter_map(|module| module.name(&self.db))
+                    .map(|name| name.as_str().to_owned())
+                    .collect()
+            })
+            .ok_or_else(|| {
+                crate::CordialError::workspace_source_facts_missing("proof source module identity")
+            })
     }
 }
 

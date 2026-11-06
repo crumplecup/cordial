@@ -1,6 +1,6 @@
 //! Freeze effective Cargo, toolchain and crate-graph evidence in the shared IR.
 
-use super::{compiled, inputs};
+use super::{compiled, inputs, packages};
 
 use crate::{
     CordialResult, SemanticCargoOptions, SemanticContextGap, SemanticCrateContext,
@@ -23,6 +23,7 @@ pub(super) struct WorkspaceInputs {
     sysroot: Option<PathBuf>,
     configuration: Vec<crate::SemanticConfigurationInput>,
     build_scripts: Vec<PathBuf>,
+    packages: Vec<crate::SemanticPackageContext>,
     environment_digest: [u8; 32],
     gaps: Vec<SemanticContextGap>,
 }
@@ -55,6 +56,7 @@ impl WorkspaceInputs {
                 .root()
                 .map(|path| AsRef::<std::path::Path>::as_ref(path).to_path_buf()),
             configuration: inputs::configuration(workspace, options)?,
+            packages: packages::collect(workspace),
             build_scripts: match &workspace.kind {
                 ProjectWorkspaceKind::Cargo { cargo, .. } => cargo
                     .packages()
@@ -154,6 +156,7 @@ impl WorkspaceInputs {
             compiled_inputs,
             source_digest,
             self.environment_digest,
+            self.packages,
             crates,
             self.gaps,
         );
