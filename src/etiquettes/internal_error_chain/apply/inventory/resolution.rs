@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use tracing::instrument;
 
-use crate::loader::SharedParsedFile;
+use crate::FileSnapshot;
 
 use super::edges::ErrorEdgeTarget;
 use super::syntax_facts::FileSyntaxFacts;
@@ -38,7 +38,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct CrateTypeIndex {
 impl CrateTypeIndex {
     #[instrument(level = "debug", skip(files, source), err(level = "warn"))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn new(
-        files: &[SharedParsedFile],
+        files: &[FileSnapshot],
         source: &crate::ir::SourceErrorApply,
     ) -> crate::CordialResult<Self> {
         let getter_uses = super::super::getter_uses::collect(files, source)?;
@@ -104,7 +104,7 @@ impl CrateTypeIndex {
     }
 
     #[instrument(level = "debug", skip(self, files))]
-    fn collect_incoming_edges(&self, files: &[SharedParsedFile]) -> Vec<(String, ErrorEdgeTarget)> {
+    fn collect_incoming_edges(&self, files: &[FileSnapshot]) -> Vec<(String, ErrorEdgeTarget)> {
         let mut incoming = Vec::new();
         for file in files {
             if let Some(facts) = self.graph_declarations(file) {

@@ -1,13 +1,18 @@
 //! Exercise the production apply collector with supplied loader evidence.
 use cordial::{
     CrateIr, CrateTarget, ErrorIrScanEnricher, IrView, LoadContext, Loader, QueryBuilder,
-    SessionBuilder, SourceEnrichView, SourceEnricher, SourceLoadView, SourceLoader,
+    SessionBuilder, SessionView, SourceEnrichView, SourceEnricher, SourceLoadView, SourceLoader,
 };
 use miette::{IntoDiagnostic, Result};
 use std::path::Path;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
+use tracing_subscriber::{Layer, layer::Context, prelude::*};
 
 #[tracing::instrument(level = "debug", skip(graph), err(level = "warn"))]
-pub fn materialized(mut graph: CrateIr, root: &Path) -> Result<serde_json::Value> {
+pub fn materialized(graph: CrateIr, root: &Path) -> Result<serde_json::Value> {
     let target = CrateTarget::new(graph.crate_name(), root);
     let session = SessionBuilder::new(root).build();
     let loaded = SourceLoader
@@ -17,9 +22,26 @@ pub fn materialized(mut graph: CrateIr, root: &Path) -> Result<serde_json::Value
         .as_any()
         .downcast_ref::<SourceLoadView>()
         .ok_or_else(|| miette::miette!("source view"))?;
+    materialized_with_source(graph, source, &session)
+}
+
+#[tracing::instrument(level = "debug", skip(graph, source, session), err(level = "warn"))]
+pub fn materialized_with_source(
+    mut graph: CrateIr,
+    source: &SourceLoadView,
+    session: &dyn SessionView,
+) -> Result<serde_json::Value> {
+    let syntax = SyntaxRequests::default();
+    let subscriber = tracing_subscriber::registry().with(syntax.clone());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
     ErrorIrScanEnricher
-        .enrich_source(SourceEnrichView::new(&mut graph, source, &session))
+        .enrich_source(SourceEnrichView::new(&mut graph, source, session))
         .into_diagnostic()?;
+    assert_eq!(
+        syntax.0.load(Ordering::Relaxed),
+        0,
+        "apply enrichment must not request compatibility syntax"
+    );
     let mut units = graph
         .nodes_matching(
             &QueryBuilder::new()
@@ -59,4 +81,23 @@ pub fn materialized(mut graph: CrateIr, root: &Path) -> Result<serde_json::Value
         .cloned()
         .ok_or_else(|| miette::miette!("graph plans"))?;
     Ok(serde_json::json!({"index": index, "plans": plans, "units": units}))
+}
+
+/// Observe the existing loader boundary without introducing a production counter.
+#[derive(Clone, Default)]
+struct SyntaxRequests(Arc<AtomicUsize>);
+
+impl<S: tracing::Subscriber> Layer<S> for SyntaxRequests {
+    fn on_new_span(
+        &self,
+        attributes: &tracing::span::Attributes<'_>,
+        _id: &tracing::Id,
+        _context: Context<'_, S>,
+    ) {
+        let metadata = attributes.metadata();
+        if metadata.target() == "cordial::loader::source::cache" && metadata.name() == "parsed_file"
+        {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+    }
 }

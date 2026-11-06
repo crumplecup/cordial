@@ -1427,12 +1427,32 @@ Complete expression payload parity passes after that correction. The final
 conversion-site parity run also passes after the module split. Build-tier
 submit verified zero open items (list 88); the deep tier was not run.
 
+## Checkpoint: error/apply consumers use identities and text
+
+Error/apply enrichment and planning now receive `FileSnapshot` identities from
+`SourceErrorApply`, rather than compatibility syntax handles. The inventory's
+file universe, namespace joins, getter identities, conversion selection and
+graph plans come from retained IR records. The second directory walk and parse
+handle acquisition in error enrichment and apply are removed.
+
+Edit views contain snapshot identity and database-owned frozen text, without
+retaining an AST. Issuing a view checks the text digest against its IR snapshot;
+source-write checks still reject changed disk inputs. The session database can
+seed unseen text from the loader's frozen bytes without parsing it.
+
+Validation covers complete native/compatibility conversion payloads and plans,
+47 error-field apply tests and 14 getter round-trip tests. Projection-consumption
+tests assert that materialization never requests a compatibility parse, uses
+frozen loader bytes despite later disk changes, ignores newly added files and
+rejects mismatched fresh snapshots. Build-tier submit verified zero open items
+(list 89); the deep tier was not run. Compatibility collection remains until
+production workspace routing and ownership retirement are complete.
+
 ## Current next step
 
-Work toward the production cutover by auditing remaining compatibility-tree
-carriers and original-syntax consumers against the inventory above, then loading
-the Cargo context into the production session-owned database. Error/apply
-conversion-site selection now consumes projected contracts. Derives,
+Load the Cargo context into the production session-owned database and route
+source collection through its native projection. Error/apply consumers now use
+IR identities and text without compatibility syntax carriers. Derives,
 visibility, CLI layout, module splices, attribute materialization and the complete
 file-policy and tracing groups now consume loader projections.
 Preserve inactive-code policy coverage and golden findings.

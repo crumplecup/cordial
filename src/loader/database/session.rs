@@ -57,6 +57,22 @@ impl SourceDatabase {
     #[cfg(any(feature = "cfg_hygiene", feature = "tracing"))]
     #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
     pub(crate) fn input_text(&mut self, path: &Path) -> CordialResult<Option<String>> {
+        self.captured_text(path, None)
+    }
+
+    /// Return frozen database text, seeding an unseen input from supplied loader
+    /// bytes before consulting disk. This path never requests a syntax tree.
+    #[cfg(any(
+        feature = "cfg_hygiene",
+        feature = "tracing",
+        feature = "internal_error_chain"
+    ))]
+    #[instrument(level = "debug", skip(self, path, supplied), err(level = "warn"))]
+    pub(crate) fn captured_text(
+        &mut self,
+        path: &Path,
+        supplied: Option<&str>,
+    ) -> CordialResult<Option<String>> {
         use std::io::ErrorKind;
         let absolute = match path.canonicalize() {
             Ok(path) => path,
@@ -69,6 +85,9 @@ impl SourceDatabase {
         let vfs_path = VfsPath::new_real_path(text_path.to_owned());
         if let Some((file, _excluded)) = self.vfs.file_id(&vfs_path) {
             return Ok(Some(self.db.file_text(file).text(&self.db).to_string()));
+        }
+        if let Some(text) = supplied {
+            return Ok(Some(self.capture(&absolute, text)?));
         }
         match std::fs::read_to_string(&absolute) {
             Ok(text) => Ok(Some(self.capture(&absolute, &text)?)),

@@ -1,6 +1,6 @@
 //! Snapshot-bound identities for private declaration candidates.
 
-use crate::loader::SharedParsedFile;
+use crate::loader::SourceSnapshot;
 use std::path::PathBuf;
 use tracing::instrument;
 
@@ -31,8 +31,8 @@ pub struct ErrorEdgeTarget {
 
 impl ErrorEdgeTarget {
     #[instrument(level = "debug", skip(file, kind))]
-    pub(in crate::etiquettes::internal_error_chain::apply) fn from_shared_file(
-        file: &SharedParsedFile,
+    pub(in crate::etiquettes::internal_error_chain::apply) fn from_snapshot(
+        file: &impl SourceSnapshot,
         line: usize,
         column: usize,
         kind: ErrorEdgeTargetKind,

@@ -10,12 +10,12 @@ use tracing::instrument;
 use crate::config::ErrorFieldStrategy;
 use crate::config::load_cordial_config;
 use crate::error::CordialResult;
-use crate::ir::{CrateIr, IrMut};
-use crate::loader::{SharedParsedFile, SourceLoadView};
+use crate::ir::{CrateIr, IrMut, IrView};
+use crate::loader::{SourceEditView, SourceLoadView};
 use crate::session::RunAll;
 use crate::targets::discover_crate_targets;
 
-use super::type_graph::{for_each_shared_src_rust_file, trait_is_std_error};
+use super::type_graph::trait_is_std_error;
 
 mod getter_uses;
 pub(super) mod getters;
@@ -149,14 +149,25 @@ pub use ErrorFieldApplySummary as ErrorFileApplySummary;
 
 /// Add the strategy-independent conversion facts and the selected graph plan
 /// to the same crate IR used by the normal error scan and by apply.
-#[instrument(level = "debug", skip(ir, files, strategy), err(level = "warn"))]
+#[instrument(level = "debug", skip(ir, source, strategy), err(level = "warn"))]
 pub(crate) fn enrich_error_apply_evidence(
     ir: &mut dyn IrMut,
-    files: &[SharedParsedFile],
+    source: &SourceLoadView,
     strategy: ErrorFieldStrategy,
 ) -> CordialResult<()> {
-    enrich_conversion_units(ir, files)?;
-    enrich_conversion_graphs(ir, files, strategy)
+    let files = edit_files(ir, source)?;
+    enrich_conversion_units(ir)?;
+    enrich_conversion_graphs(ir, &files, strategy)
+}
+
+/// Load only the text for the exact files represented by required IR evidence.
+#[instrument(level = "debug", skip(ir, source), err(level = "warn"))]
+fn edit_files(ir: &dyn IrView, source: &SourceLoadView) -> CordialResult<Vec<SourceEditView>> {
+    ir.source_error_apply()?
+        .files()
+        .iter()
+        .map(|file| source.edit_file(file.snapshot()))
+        .collect()
 }
 
 /// Convert simple string fields to the configured owned or borrowed form.
@@ -199,16 +210,11 @@ pub fn run_error_field_apply(
         let source = SourceLoadView::for_target(&target)?;
         let mut ir = CrateIr::new(target.crate_name());
         source.populate_ir(&mut ir)?;
-        let mut files = Vec::new();
-        for_each_shared_src_rust_file(&source, target.crate_root(), |path, _| {
-            files.push(source.parsed_file(path, "error-file-apply")?);
-            Ok(())
-        })?;
-        enrich_error_apply_evidence(&mut ir, &files, policy.field_strategy())?;
+        enrich_error_apply_evidence(&mut ir, &source, policy.field_strategy())?;
         let units = conversion_units_from_ir(&ir)?;
         let graphs = conversion_graphs_from_ir(&ir)?;
         let index = inventory::CrateTypeIndex::from_ir(&ir)?;
-        let edit_files: Vec<_> = files.iter().map(|file| file.edit_view()).collect();
+        let edit_files = edit_files(&ir, &source)?;
         let mut results = Vec::new();
         for file in &edit_files {
             let plan = patch_file(file, policy.field_strategy(), &units, &graphs, dry_run)?;

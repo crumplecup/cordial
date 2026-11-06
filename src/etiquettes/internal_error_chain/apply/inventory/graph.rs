@@ -5,9 +5,9 @@ use std::path::PathBuf;
 
 use tracing::instrument;
 
+use crate::FileSnapshot;
 use crate::error::CordialResult;
 use crate::ir::{EdgeKind, IrMut, IrView, ItemKind, NodeKind, NodeWeight, QueryBuilder};
-use crate::loader::SharedParsedFile;
 use crate::objects::FileSpan;
 
 use super::collection::collect_conversion_units;
@@ -18,19 +18,22 @@ const CONVERSION_UNIT_ATTR: &str = "error_conversion_unit";
 const ERROR_DECLARATION_ATTR: &str = "error_apply_declaration";
 
 /// Collect conversion evidence before apply and materialize it in the shared IR.
-#[instrument(level = "debug", skip(ir, files), err(level = "warn"))]
-pub(crate) fn enrich_conversion_units(
-    ir: &mut dyn IrMut,
-    files: &[SharedParsedFile],
-) -> CordialResult<()> {
-    let index = CrateTypeIndex::new(files, &ir.source_error_apply()?)?;
-    enrich_conversion_units_with_index(ir, files, &index)
+#[instrument(level = "debug", skip(ir), err(level = "warn"))]
+pub(crate) fn enrich_conversion_units(ir: &mut dyn IrMut) -> CordialResult<()> {
+    let source = ir.source_error_apply()?;
+    let files: Vec<_> = source
+        .files()
+        .iter()
+        .map(|file| file.snapshot().clone())
+        .collect();
+    let index = CrateTypeIndex::new(&files, &source)?;
+    enrich_conversion_units_with_index(ir, &files, &index)
 }
 
 #[instrument(level = "debug", skip(ir, files, index), err(level = "warn"))]
 pub(in crate::etiquettes::internal_error_chain::apply) fn enrich_conversion_units_with_index(
     ir: &mut dyn IrMut,
-    files: &[SharedParsedFile],
+    files: &[FileSnapshot],
     index: &CrateTypeIndex,
 ) -> CordialResult<()> {
     index.write_to_ir(ir)?;

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use tracing::instrument;
 
-use crate::loader::SharedParsedFile;
+use crate::FileSnapshot;
 
 use super::super::inventory::resolution::{absolute_path, module_identities};
 use super::{Receiver, TypeIdentity};
@@ -21,7 +21,7 @@ pub(super) struct Identities {
 impl Identities {
     #[instrument(level = "debug", skip(files, source), err(level = "warn"))]
     pub(super) fn collect(
-        files: &[SharedParsedFile],
+        files: &[FileSnapshot],
         source: &crate::ir::SourceErrorApply,
     ) -> crate::CordialResult<Self> {
         let modules = module_identities(files, source)?
@@ -54,7 +54,7 @@ impl Identities {
     #[instrument(level = "trace", skip(self, file, source), err(level = "warn"))]
     fn declarations(
         &mut self,
-        file: &SharedParsedFile,
+        file: &FileSnapshot,
         source: &crate::ir::SourceErrorApply,
     ) -> crate::CordialResult<()> {
         let Some(module) = self.modules.get(file.path()).cloned() else {
@@ -114,11 +114,7 @@ impl Identities {
     }
 
     #[instrument(level = "trace", skip(self, file, recipe))]
-    pub(super) fn receiver(
-        &self,
-        file: &SharedParsedFile,
-        recipe: &super::ReceiverRecipe,
-    ) -> Receiver {
+    pub(super) fn receiver(&self, file: &FileSnapshot, recipe: &super::ReceiverRecipe) -> Receiver {
         use super::ReceiverRecipe;
         match recipe {
             ReceiverRecipe::Unknown => Receiver::Unknown,

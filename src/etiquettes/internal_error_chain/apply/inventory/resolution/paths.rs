@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use tracing::instrument;
 
-use crate::loader::SharedParsedFile;
+use crate::FileSnapshot;
 
 /// A cfg can remove a module without changing its privacy boundary when present.
 /// Conditional identities do not establish an unconditional type-resolution path.
@@ -18,10 +18,10 @@ pub(in crate::etiquettes::internal_error_chain::apply) struct ModuleIdentity {
 
 #[instrument(level = "debug", skip(files, source), err(level = "warn"))]
 pub(in crate::etiquettes::internal_error_chain::apply) fn module_identities(
-    files: &[SharedParsedFile],
+    files: &[FileSnapshot],
     source: &crate::ir::SourceErrorApply,
 ) -> crate::CordialResult<HashMap<PathBuf, ModuleIdentity>> {
-    let mut by_module: HashMap<Vec<String>, Vec<&SharedParsedFile>> = HashMap::new();
+    let mut by_module: HashMap<Vec<String>, Vec<&FileSnapshot>> = HashMap::new();
     for file in files {
         if let Some(module) = module_path(file.path()) {
             by_module.entry(module).or_default().push(file);

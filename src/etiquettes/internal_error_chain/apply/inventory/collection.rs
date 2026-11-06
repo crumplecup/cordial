@@ -5,9 +5,10 @@ use std::path::Path;
 
 use tracing::instrument;
 
+use crate::FileSnapshot;
 use crate::config::ErrorFieldStrategy;
 use crate::error::{CordialError, CordialResult};
-use crate::loader::SharedParsedFile;
+use crate::loader::SourceSnapshot;
 
 use super::resolution::CrateTypeIndex;
 use super::{
@@ -22,7 +23,7 @@ use crate::etiquettes::internal_error_chain::apply::initializers::{
 /// Return one conversion unit and declaration line per candidate field.
 #[instrument(level = "debug", skip(files, declarations))]
 pub(super) fn collect_conversion_units(
-    files: &[SharedParsedFile],
+    files: &[FileSnapshot],
     declarations: &CrateTypeIndex,
 ) -> CordialResult<Vec<(ErrorConversionUnit, u32)>> {
     let candidates = find_candidates(files, declarations)?;
@@ -32,7 +33,7 @@ pub(super) fn collect_conversion_units(
             .iter()
             .enumerate()
             .filter_map(|(index, candidate)| {
-                (file.path() == candidate.declaration
+                (file.path() == &candidate.declaration
                     || (candidate.field.kind == FieldKind::CallSiteFile
                         && declarations.field_accessible_from(&candidate.declaration, file.path()))
                     || declarations.source_mentions(file, &candidate.type_name))
@@ -48,7 +49,7 @@ pub(super) fn collect_conversion_units(
             .select(file, &candidates, &relevant, declarations);
         for index in relevant {
             let candidate = &candidates[index];
-            let external = file.path() != candidate.declaration;
+            let external = file.path() != &candidate.declaration;
             if !external
                 && candidate.name_ambiguous
                 && !sites[index]
@@ -96,8 +97,10 @@ pub(super) fn collect_conversion_units(
             )
         })
         .collect();
-    let files_by_path: HashMap<&Path, &SharedParsedFile> =
-        files.iter().map(|file| (file.path(), file)).collect();
+    let files_by_path: HashMap<&Path, &FileSnapshot> = files
+        .iter()
+        .map(|file| (file.path().as_path(), file))
+        .collect();
     for (unit, _) in &mut units {
         for site in &mut unit.sites {
             site.field_accessible =
@@ -159,7 +162,7 @@ pub(super) fn collect_conversion_units(
 
 #[instrument(level = "debug", skip(files, index), err(level = "warn"))]
 fn find_candidates(
-    files: &[SharedParsedFile],
+    files: &[FileSnapshot],
     index: &CrateTypeIndex,
 ) -> CordialResult<Vec<ConversionCandidate>> {
     let mut candidates = Vec::new();
@@ -328,7 +331,7 @@ fn find_candidates(
 }
 
 #[instrument(level = "debug", skip(file, kind))]
-fn unresolved_site(file: &SharedParsedFile, kind: ErrorConversionSiteKind) -> ErrorConversionSite {
+fn unresolved_site(file: &FileSnapshot, kind: ErrorConversionSiteKind) -> ErrorConversionSite {
     ErrorConversionSite {
         path: file.path().to_path_buf(),
         line: 0,

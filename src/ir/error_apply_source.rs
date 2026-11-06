@@ -4,7 +4,7 @@ use crate::etiquettes::internal_error_chain::{
     ConversionFileFacts, GetterConsumerFacts, GetterContractFacts, GraphDeclarationFacts,
     GraphExprFacts, GraphLifetimeFacts, InitializerFileFacts, LifetimeFileFacts, NameAudit,
 };
-use crate::loader::{DatabaseSource, SharedParsedFile, SourceLoadView};
+use crate::loader::{DatabaseSource, SourceLoadView, SourceSnapshot};
 use crate::{CordialError, CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -60,7 +60,7 @@ impl SourceErrorApply {
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
     pub(crate) fn conversion_sites_for(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
     ) -> CordialResult<&ConversionFileFacts> {
         Ok(&self.file_for(file)?.conversion_sites)
     }
@@ -138,31 +138,34 @@ impl SourceErrorApply {
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
     pub(crate) fn declarations_for(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
     ) -> CordialResult<GraphDeclarationFacts> {
         Ok(self.file_for(file)?.declarations.clone())
     }
 
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
-    pub(crate) fn namespace_for(&self, file: &SharedParsedFile) -> CordialResult<&ApplyNamespace> {
+    pub(crate) fn namespace_for(
+        &self,
+        file: &impl SourceSnapshot,
+    ) -> CordialResult<&ApplyNamespace> {
         Ok(&self.file_for(file)?.namespace)
     }
 
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
-    pub(crate) fn name_audit_for(&self, file: &SharedParsedFile) -> CordialResult<&NameAudit> {
+    pub(crate) fn name_audit_for(&self, file: &impl SourceSnapshot) -> CordialResult<&NameAudit> {
         Ok(&self.file_for(file)?.name_audit)
     }
 
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
     pub(crate) fn static_strings_for(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
     ) -> CordialResult<&BTreeSet<String>> {
         Ok(&self.file_for(file)?.static_strings)
     }
 
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
-    fn file_for(&self, file: &SharedParsedFile) -> CordialResult<&ErrorApplyFile> {
+    fn file_for(&self, file: &impl SourceSnapshot) -> CordialResult<&ErrorApplyFile> {
         let mut matches = self
             .files
             .iter()
@@ -182,20 +185,20 @@ impl SourceErrorApply {
     }
 
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
-    pub(crate) fn uses_for(&self, file: &SharedParsedFile) -> CordialResult<&ApplyUses> {
+    pub(crate) fn uses_for(&self, file: &impl SourceSnapshot) -> CordialResult<&ApplyUses> {
         Ok(&self.file_for(file)?.uses)
     }
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
     pub(crate) fn expressions_for(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
     ) -> CordialResult<&GraphExprFacts> {
         Ok(&self.file_for(file)?.expressions)
     }
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
     pub(crate) fn lifetimes_for(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
     ) -> CordialResult<&GraphLifetimeFacts> {
         Ok(&self.file_for(file)?.lifetimes)
     }
@@ -203,7 +206,7 @@ impl SourceErrorApply {
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
     pub(crate) fn getters_for(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
     ) -> CordialResult<&GetterContractFacts> {
         Ok(&self.file_for(file)?.getters)
     }
@@ -211,7 +214,7 @@ impl SourceErrorApply {
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
     pub(crate) fn local_lifetimes_for(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
     ) -> CordialResult<&LifetimeFileFacts> {
         Ok(&self.file_for(file)?.local_lifetimes)
     }
@@ -219,7 +222,7 @@ impl SourceErrorApply {
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
     pub(crate) fn initializers_for(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
     ) -> CordialResult<&InitializerFileFacts> {
         Ok(&self.file_for(file)?.initializers)
     }
@@ -227,7 +230,7 @@ impl SourceErrorApply {
     #[tracing::instrument(level = "trace", skip(self, file), err(level = "warn"))]
     pub(crate) fn getter_uses_for(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
     ) -> CordialResult<&GetterConsumerFacts> {
         Ok(&self.file_for(file)?.getter_uses)
     }

@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::loader::SharedParsedFile;
+use crate::loader::SourceSnapshot;
 
 use super::super::graph_apply::{GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts};
 use super::super::initializers::InitializerFileFacts;
@@ -45,7 +45,7 @@ impl FileSyntaxFacts {
         err(level = "warn")
     )]
     pub(super) fn collect(
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
         tracked_names: &BTreeSet<String>,
         tracked_fields: &BTreeSet<String>,
         graph_declarations: GraphDeclarationFacts,

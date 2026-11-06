@@ -153,6 +153,31 @@ impl SourceLoadView {
         })
     }
 
+    /// Read frozen database text for an IR snapshot without requesting syntax.
+    #[cfg(feature = "internal_error_chain")]
+    #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
+    pub(super) fn source_text(&self, path: &Path) -> CordialResult<String> {
+        PARSED.with(|parsed| {
+            let mut parsed = parsed.borrow_mut();
+            parsed.retain(|_, run| run.token.strong_count() != 0);
+            let run = parsed
+                .entry(self.cache_token.0)
+                .or_insert_with(|| ParsedRun {
+                    token: Arc::downgrade(&self.cache_token),
+                    database: crate::loader::SourceDatabase::new(),
+                    files: HashMap::new(),
+                });
+            let supplied = self
+                .files
+                .iter()
+                .find(|file| file.path() == path)
+                .map(|file| file.source().as_str());
+            run.database
+                .captured_text(path, supplied)?
+                .ok_or_else(|| crate::CordialError::not_found(path.to_path_buf()))
+        })
+    }
+
     /// Return the same parsed file to every hook scanning this path.
     /// Callers own tree discovery and fixture filtering.
     #[tracing::instrument(level = "debug", skip(self, path))]

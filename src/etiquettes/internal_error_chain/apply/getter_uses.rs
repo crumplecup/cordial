@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use crate::loader::SharedParsedFile;
+use crate::FileSnapshot;
 
 mod identity;
 mod native;
@@ -129,7 +129,7 @@ impl GetterUseFact {
 #[instrument(level = "debug", skip(files, source), err(level = "warn"))]
 #[hotpath::measure]
 pub(super) fn collect(
-    files: &[SharedParsedFile],
+    files: &[FileSnapshot],
     source: &crate::ir::SourceErrorApply,
 ) -> crate::CordialResult<Vec<GetterUseFact>> {
     let identities = Identities::collect(files, source)?;

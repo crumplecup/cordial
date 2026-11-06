@@ -13,7 +13,7 @@ use super::{GetterFiles, GetterStorageFacts};
 
 #[instrument(level = "debug", skip(files, uses, source), err(level = "warn"))]
 pub(in crate::etiquettes::internal_error_chain::apply) fn collect_getter_storage(
-    files: &[SharedParsedFile],
+    files: &[crate::FileSnapshot],
     uses: &[super::super::getter_uses::GetterUseFact],
     source: &crate::ir::SourceErrorApply,
 ) -> crate::CordialResult<GetterFiles> {

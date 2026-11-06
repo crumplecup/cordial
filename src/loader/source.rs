@@ -136,7 +136,7 @@ impl SharedParsedFile {
     /// Whether the file still contains the bytes used to build this snapshot.
     #[instrument(level = "debug", skip(self), err(level = "warn"))]
     pub fn matches_disk(&self) -> CordialResult<bool> {
-        matches_snapshot(&self.inner)
+        matches_snapshot(self.path(), self.source_digest())
     }
 
     /// Syntax tree parsed from this file's source text.
@@ -156,11 +156,11 @@ impl SharedParsedFile {
     }
 }
 
-#[instrument(level = "debug", skip(snapshot), err(level = "warn"))]
-fn matches_snapshot(snapshot: &ParsedSource) -> CordialResult<bool> {
-    let current = std::fs::read(&snapshot.path)?;
+#[instrument(level = "debug", skip(path), err(level = "warn"))]
+fn matches_snapshot(path: &Path, expected: [u8; 32]) -> CordialResult<bool> {
+    let current = std::fs::read(path)?;
     let digest: [u8; 32] = Sha256::digest(current).into();
-    Ok(digest == snapshot.digest)
+    Ok(digest == expected)
 }
 
 impl LoadView for SourceLoadView {

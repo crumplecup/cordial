@@ -4,21 +4,21 @@ use super::{DeclarationKind, GraphDeclarationFacts, Visibility};
 use crate::etiquettes::internal_error_chain::apply::inventory::{
     ErrorEdgeTarget, ErrorEdgeTargetKind,
 };
-use crate::loader::SharedParsedFile;
+use crate::loader::SourceSnapshot;
 use std::collections::BTreeSet;
 
 impl GraphDeclarationFacts {
     #[tracing::instrument(level = "trace", skip(self, file))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn resolution_targets(
         &self,
-        file: &SharedParsedFile,
+        file: &impl SourceSnapshot,
     ) -> Vec<(String, Option<ErrorEdgeTarget>)> {
         self.declarations
             .iter()
             .map(|item| {
                 let target =
                     (item.visibility != Visibility::Public && item.linkable_attrs).then(|| {
-                        ErrorEdgeTarget::from_shared_file(
+                        ErrorEdgeTarget::from_snapshot(
                             file,
                             item.line,
                             item.column,
