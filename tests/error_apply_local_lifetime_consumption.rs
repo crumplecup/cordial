@@ -59,6 +59,31 @@ fn make<'a>(message: &'a str, line: u32) -> Failure { Failure::new(message, line
         assert!(unit["lifetime"]["facts"].is_object(), "{strategy}: {unit}");
         let facts = serde_json::to_value(native.source_error_apply().into_diagnostic()?)
             .into_diagnostic()?;
+        for boundary in ["records", "lifetime_context", "value"] {
+            let mut altered = facts.clone();
+            let evidence = &mut altered["files"][0]["initializers"];
+            match boundary {
+                "records" => evidence[boundary] = serde_json::json!([]),
+                "lifetime_context" => evidence["records"][0][boundary] = serde_json::json!(false),
+                _ => {
+                    evidence["records"][0]["fields"][0]["string"]["fact"][boundary] =
+                        serde_json::json!([0, 0])
+                }
+            }
+            let mut mutated = native.clone();
+            mutated
+                .set_attr(mutated.root(), ATTR_SOURCE_ERROR_APPLY, altered)
+                .into_diagnostic()?;
+            let changed = apply_projection::materialized(mutated, root)?;
+            let changed_unit = changed["units"]
+                .as_array()
+                .and_then(|units| units.iter().find(|unit| unit["field_name"] == "message"))
+                .ok_or_else(|| miette::miette!("mutated message unit"))?;
+            assert_ne!(
+                changed_unit["lifetime"]["facts"], unit["lifetime"]["facts"],
+                "{strategy}: changing IR initializer {boundary} must change executable plans"
+            );
+        }
         for boundary in ["sites", "allowed_type_uses", "returns", "field_type"] {
             let mut altered = facts.clone();
             let evidence = &mut altered["files"][0]["local_lifetimes"];

@@ -17,7 +17,7 @@ use super::{
 };
 use crate::etiquettes::internal_error_chain::apply::graph_apply::{DeclarationKind, GraphFields};
 use crate::etiquettes::internal_error_chain::apply::initializers::{
-    FieldKind, InitializerBatchInput, InitializerFacts, collect_initializer_facts,
+    FieldKind, InitializerBatchInput, InitializerFacts,
 };
 
 /// Return one conversion unit and declaration line per candidate field.
@@ -310,7 +310,10 @@ fn find_candidates(
                 &candidate.field.cfg_attrs,
             ));
         }
-        let facts = collect_initializer_facts(file, &inputs, static_strings);
+        let facts = index
+            .initializer_facts(file)
+            .ok_or_else(|| CordialError::stale_source_snapshot(file.path()))?
+            .select(&inputs, static_strings);
         let (ordinary, lifetime_facts) = facts.split_at(ordinary_count);
         for (candidate, initializer_facts) in candidates[start..].iter_mut().zip(ordinary) {
             candidate.initializer.facts = initializer_facts.clone();

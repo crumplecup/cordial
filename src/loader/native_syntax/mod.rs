@@ -46,6 +46,8 @@ mod macro_syntax;
 ))]
 pub(crate) use macro_syntax::DatabaseMacroSyntax;
 #[cfg(feature = "internal_error_chain")]
+mod cfg_syntax;
+#[cfg(feature = "internal_error_chain")]
 mod meta_syntax;
 #[cfg(any(feature = "cli_layout", feature = "internal_error_chain"))]
 mod modules;

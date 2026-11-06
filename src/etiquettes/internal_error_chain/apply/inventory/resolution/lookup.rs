@@ -7,6 +7,7 @@ use tracing::instrument;
 use crate::loader::SourceSnapshot;
 
 use super::super::super::graph_apply::{GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts};
+use super::super::super::initializers::InitializerFileFacts;
 use super::super::super::lifetime::LifetimeFileFacts;
 use super::super::edges::ErrorEdgeTarget;
 use super::super::syntax_facts::FileSyntaxFacts;
@@ -63,6 +64,13 @@ impl CrateTypeIndex {
         file: &impl SourceSnapshot,
     ) -> Option<&LifetimeFileFacts> {
         self.syntax_for(file).map(FileSyntaxFacts::local_lifetimes)
+    }
+    #[instrument(level = "trace", skip(self, file))]
+    pub(in crate::etiquettes::internal_error_chain::apply) fn initializer_facts(
+        &self,
+        file: &impl SourceSnapshot,
+    ) -> Option<&InitializerFileFacts> {
+        self.syntax_for(file).map(FileSyntaxFacts::initializers)
     }
     #[instrument(level = "trace", skip(self, file, name))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn file_mentions(

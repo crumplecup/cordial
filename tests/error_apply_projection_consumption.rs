@@ -103,6 +103,7 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
                 "getters",
                 "getter_uses",
                 "local_lifetimes",
+                "initializers",
             ] {
                 let mut incomplete = facts.clone();
                 incomplete["files"][0]
@@ -119,6 +120,23 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
                 );
             }
             assert!(actual.to_string().contains("CordialFreshFileStorage"));
+            let mut altered = facts.clone();
+            for file in altered["files"]
+                .as_array_mut()
+                .ok_or_else(|| miette::miette!("files"))?
+            {
+                file["initializers"]["records"] = serde_json::json!([]);
+            }
+            let mut mutated = native.clone();
+            mutated
+                .set_attr(mutated.root(), ATTR_SOURCE_ERROR_APPLY, altered)
+                .into_diagnostic()?;
+            assert_ne!(
+                apply_projection::materialized(mutated, root)?["units"],
+                actual["units"],
+                "initializer evidence must come from the IR"
+            );
+
             for boundary in ["fields", "names"] {
                 let mut altered = facts.clone();
                 for file in altered["files"]

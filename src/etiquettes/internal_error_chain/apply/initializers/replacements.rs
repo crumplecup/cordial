@@ -15,7 +15,7 @@ use super::FieldKind;
 type Range = (usize, usize);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-enum StorageForm {
+pub(super) enum StorageForm {
     Bare,
     Method,
     StringFrom,
@@ -23,14 +23,14 @@ enum StorageForm {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-enum ValueSource {
+pub(super) enum ValueSource {
     CallSiteFile,
     StaticString { local_binding: bool },
     EmptyFile,
 }
 
 /// One expression and the provenance needed to rewrite either storage form.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new)]
 pub(super) struct InitializerExpressionFact {
     whole: Range,
     value: Range,
@@ -224,8 +224,24 @@ fn string_from_argument(expr: &Expr) -> Option<&Expr> {
     call.args.first()
 }
 
+#[instrument(level = "trace", skip(expr))]
+pub(super) fn value_expression(expr: &Expr) -> &Expr {
+    let expr = without_parens(expr);
+    without_parens(match expr {
+        Expr::MethodCall(method)
+            if matches!(
+                method.method.to_string().as_str(),
+                "to_string" | "to_owned" | "into"
+            ) && method.args.is_empty() =>
+        {
+            &method.receiver
+        }
+        _ => string_from_argument(expr).unwrap_or(expr),
+    })
+}
+
 #[instrument(level = "debug", skip(expr))]
-fn without_parens(mut expr: &Expr) -> &Expr {
+pub(super) fn without_parens(mut expr: &Expr) -> &Expr {
     while let Expr::Paren(paren) = expr {
         expr = &paren.expr;
     }

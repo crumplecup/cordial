@@ -32,6 +32,7 @@ pub(crate) use self::getter_uses::GetterConsumerFacts;
 pub(crate) use self::getters::GetterContractFacts;
 pub(crate) use self::graph_apply::{GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts};
 use self::graph_apply::{conversion_graphs_from_ir, enrich_conversion_graphs};
+pub(crate) use self::initializers::InitializerFileFacts;
 pub use self::inventory::{
     ErrorConversionSite, ErrorConversionSiteKind, ErrorConversionUnit, ErrorEdgeEvidence,
     ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind, ErrorFromEvidence,

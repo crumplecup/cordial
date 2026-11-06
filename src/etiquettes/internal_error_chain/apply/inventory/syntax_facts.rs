@@ -10,6 +10,7 @@ use tracing::instrument;
 use crate::loader::SharedParsedFile;
 
 use super::super::graph_apply::{GraphDeclarationFacts, GraphExprFacts, GraphLifetimeFacts};
+use super::super::initializers::InitializerFileFacts;
 use super::super::lifetime::LifetimeFileFacts;
 use super::super::names::NameAudit;
 
@@ -32,6 +33,7 @@ pub(super) struct FileSyntaxFacts {
     expressions: GraphExprFacts,
     lifetimes: GraphLifetimeFacts,
     local_lifetimes: LifetimeFileFacts,
+    initializers: InitializerFileFacts,
     graph_declarations: GraphDeclarationFacts,
 }
 
@@ -90,6 +92,7 @@ impl FileSyntaxFacts {
             local_lifetimes: source
                 .local_lifetimes_for(file)?
                 .select_names(tracked_names),
+            initializers: source.initializers_for(file)?.clone(),
             graph_declarations,
         })
     }
