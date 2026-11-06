@@ -4,6 +4,8 @@ mod compiled;
 mod context;
 mod inputs;
 mod packages;
+#[cfg(any(feature = "error_sites", feature = "tracing"))]
+mod source;
 mod workspace;
 
 use std::path::Path;
@@ -63,14 +65,6 @@ impl SourceDatabase {
 
     /// Return frozen database text, seeding an unseen input from supplied loader
     /// bytes before consulting disk. This path never requests a syntax tree.
-    #[cfg(any(
-        feature = "cfg_hygiene",
-        feature = "tracing",
-        feature = "internal_error_chain",
-        feature = "crate_attrs",
-        feature = "impl_coverage",
-        feature = "amenable_std"
-    ))]
     #[instrument(level = "debug", skip(self, path, supplied), err(level = "warn"))]
     pub(crate) fn captured_text(
         &mut self,
@@ -115,7 +109,13 @@ impl SourceDatabase {
 
     #[instrument(level = "trace", skip(self, path), err(level = "warn"))]
     pub(super) fn file_id(&self, path: &Path) -> CordialResult<ra_ap_vfs::FileId> {
-        let path = path.canonicalize()?;
+        let path = match path.canonicalize() {
+            Ok(path) => path,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                std::path::absolute(path)?
+            }
+            Err(error) => return Err(error.into()),
+        };
         // VfsPath takes an absolute UTF-8 path. Refuse unsupported filesystem
         // names before crossing the upstream API's assertion boundary.
         let text = path

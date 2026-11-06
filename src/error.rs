@@ -47,6 +47,7 @@ use local::{
 };
 pub use parse::TokenStreamParseError;
 use parse::{ConfigSource, JsonParseSource, JsonSource, SynParseSource};
+mod rust_parse;
 use scan::ScanError;
 use store_lock::StoreLockError;
 use targets::TargetsError;
@@ -91,6 +92,8 @@ pub enum CordialErrorKind {
     Config(ConfigSource),
     /// `syn` failed to parse a Rust file.
     SynParse(SynParseSource),
+    /// A canonical rust-analyzer source input failed syntax validation.
+    RustParse(rust_parse::RustParseSource),
     /// A match arm (or equivalent control path) that must not execute.
     Unreachable(UnreachableSource),
     /// `apply_gap` was called for `TracingApplyPolicy::Skip`.
@@ -195,6 +198,7 @@ impl std::error::Error for CordialError {
             CordialErrorKind::Clock(source) => Some(source),
             CordialErrorKind::Config(source) => Some(source),
             CordialErrorKind::SynParse(source) => Some(source),
+            CordialErrorKind::RustParse(source) => Some(source),
             CordialErrorKind::CargoMetadata(source) => Some(source),
             CordialErrorKind::Fmt(source) => Some(source),
             CordialErrorKind::TokenStreamParse(source) => Some(source),
@@ -246,6 +250,7 @@ impl Display for CordialErrorKind {
             Self::Clock(source) => source.fmt(formatter),
             Self::Config(source) => source.fmt(formatter),
             Self::SynParse(source) => source.fmt(formatter),
+            Self::RustParse(source) => source.fmt(formatter),
             Self::Unreachable(source) => source.fmt(formatter),
             Self::ApplyGapWriteOnly(source) => source.fmt(formatter),
             Self::Builder(source) => source.fmt(formatter),

@@ -41,7 +41,6 @@ pub use reporter::{
     ErrorSitesChecklistReporter, ErrorSitesCsvReporter, ErrorSitesPartitionSummaryReporter,
     ErrorSitesPartitionedCsvReporter, ErrorSitesSummaryReporter,
 };
-pub(crate) use scan::scan_rust_syntax;
 pub use scan::{scan_crate_error_sites, scan_rust_source};
 pub use types::{
     ErrorOriginClass, ErrorSiteKind, ErrorSiteRecord, ErrorSiteScanRow, ForeignErrorRecordKind,

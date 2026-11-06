@@ -1,12 +1,11 @@
-//! Walk a parsed file and collect sites plus gated chain/compliance facts.
+//! Walk a shared compatibility tree for chain and compliance facts.
 
 use std::path::PathBuf;
 
+#[cfg(feature = "internal_error_chain")]
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{
-    Expr, ExprIf, ExprMatch, ExprMethodCall, ExprReturn, ExprTry, ItemFn, ItemImpl, ItemMod,
-};
+use syn::{ExprIf, ExprMatch, ExprMethodCall, ExprReturn, ExprTry, ItemFn, ItemImpl, ItemMod};
 
 use crate::enricher::is_cfg_test;
 use crate::error::CordialResult;
@@ -14,14 +13,10 @@ use crate::error::CordialResult;
 use crate::etiquettes::error_ir::chain_layer::ChainLayer;
 #[cfg(feature = "internal_error_chain")]
 use crate::etiquettes::error_ir::compliance_layer::ComplianceLayer;
-use crate::etiquettes::error_sites::{ErrorSiteKind, ErrorSiteRecord};
 use tracing::instrument;
 
 use super::ErrorIrScanLayers;
-use super::expr::{
-    if_let_err_source, impl_type_label, match_has_err_arm, sites_err_payload, sites_expr_snippet,
-    truncate_snippet,
-};
+use super::expr::impl_type_label;
 pub(super) struct ErrorIrUnifiedVisitor {
     layers: ErrorIrScanLayers,
     #[cfg(feature = "internal_error_chain")]
@@ -31,7 +26,6 @@ pub(super) struct ErrorIrUnifiedVisitor {
     module_prefix: Vec<String>,
     impl_type: Option<String>,
     fn_stack: Vec<String>,
-    sites: Vec<ErrorSiteRecord>,
     #[cfg(feature = "error_chain")]
     chain_layer: ChainLayer,
     #[cfg(feature = "internal_error_chain")]
@@ -57,7 +51,6 @@ impl ErrorIrUnifiedVisitor {
             module_prefix,
             impl_type: None,
             fn_stack: Vec::new(),
-            sites: Vec::new(),
             #[cfg(feature = "error_chain")]
             chain_layer: ChainLayer::new(),
             #[cfg(feature = "internal_error_chain")]
@@ -72,7 +65,6 @@ impl ErrorIrUnifiedVisitor {
             return Err(error);
         }
         Ok(super::ErrorIrFileScan::from_parts(
-            self.sites,
             #[cfg(feature = "error_chain")]
             self.chain_layer.into_records()?,
             #[cfg(feature = "internal_error_chain")]
@@ -129,25 +121,6 @@ impl ErrorIrUnifiedVisitor {
                 self.error = Some(error);
                 None
             }
-        }
-    }
-
-    #[instrument(level = "debug", skip(self, kind, source))]
-    fn push_site(&mut self, kind: ErrorSiteKind, line: u32, source: &Expr, site: String) {
-        if self.error.is_some() {
-            return;
-        }
-        match ErrorSiteRecord::builder()
-            .kind(kind)
-            .context(self.site_context())
-            .file(self.rel_file())
-            .line(line)
-            .source_snippet(sites_expr_snippet(source))
-            .site_snippet(truncate_snippet(&site, 96))
-            .build()
-        {
-            Ok(record) => self.sites.push(record),
-            Err(error) => self.error = Some(error),
         }
     }
 
@@ -251,16 +224,6 @@ impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
 
     #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_try(&mut self, node: &'ast ExprTry) {
-        if self.layers.sites() {
-            let site = format!("{}?", sites_expr_snippet(&node.expr));
-            self.push_site(
-                ErrorSiteKind::QuestionMark,
-                node.span().start().line as u32,
-                &node.expr,
-                truncate_snippet(&site, 96),
-            );
-        }
-
         #[cfg(feature = "error_chain")]
         if self.layers.chain()
             && let Some(ctx) = self.site_ctx_or_record()
@@ -273,26 +236,6 @@ impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
 
     #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_method_call(&mut self, node: &'ast ExprMethodCall) {
-        if self.layers.sites() {
-            if node.method == "map_err" {
-                let site = format!("{}.map_err(…)", sites_expr_snippet(&node.receiver));
-                self.push_site(
-                    ErrorSiteKind::MapErr,
-                    node.span().start().line as u32,
-                    &node.receiver,
-                    truncate_snippet(&site, 96),
-                );
-            } else if node.method == "ok_or" || node.method == "ok_or_else" {
-                let site = format!("{}.{}(…)", sites_expr_snippet(&node.receiver), node.method);
-                self.push_site(
-                    ErrorSiteKind::OkOr,
-                    node.span().start().line as u32,
-                    &node.receiver,
-                    truncate_snippet(&site, 96),
-                );
-            }
-        }
-
         #[cfg(feature = "error_chain")]
         if self.layers.chain()
             && node.method == "map_err"
@@ -320,40 +263,19 @@ impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
 
     #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_return(&mut self, node: &'ast ExprReturn) {
-        if let Some(expr) = &node.expr {
-            if self.layers.sites()
-                && let Some(inner) = sites_err_payload(expr)
-            {
-                self.push_site(
-                    ErrorSiteKind::ReturnErr,
-                    node.span().start().line as u32,
-                    inner,
-                    "return Err(…)".to_string(),
-                );
-            }
-            #[cfg(feature = "internal_error_chain")]
-            if self.layers.compliance()
-                && let Some(ctx) = self.site_ctx_or_record()
-            {
-                self.compliance_layer
-                    .on_return_err(expr, node.span().start().line as u32, &ctx);
-            }
+        #[cfg(feature = "internal_error_chain")]
+        if let Some(expr) = &node.expr
+            && self.layers.compliance()
+            && let Some(ctx) = self.site_ctx_or_record()
+        {
+            self.compliance_layer
+                .on_return_err(expr, node.span().start().line as u32, &ctx);
         }
         syn::visit::visit_expr_return(self, node);
     }
 
     #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_if(&mut self, node: &'ast ExprIf) {
-        if self.layers.sites()
-            && let Some(source) = if_let_err_source(&node.cond)
-        {
-            self.push_site(
-                ErrorSiteKind::IfLetErr,
-                node.cond.span().start().line as u32,
-                source,
-                format!("if let Err(…) = {}", sites_expr_snippet(source)),
-            );
-        }
         #[cfg(feature = "internal_error_chain")]
         if self.layers.compliance()
             && let Some(ctx) = self.site_ctx_or_record()
@@ -365,14 +287,6 @@ impl<'ast> Visit<'ast> for ErrorIrUnifiedVisitor {
 
     #[instrument(level = "debug", skip(self, node))]
     fn visit_expr_match(&mut self, node: &'ast ExprMatch) {
-        if self.layers.sites() && match_has_err_arm(&node.arms) {
-            self.push_site(
-                ErrorSiteKind::MatchErr,
-                node.span().start().line as u32,
-                &node.expr,
-                format!("match {} {{ Err(…) => … }}", sites_expr_snippet(&node.expr)),
-            );
-        }
         #[cfg(feature = "internal_error_chain")]
         if self.layers.compliance()
             && let Some(ctx) = self.site_ctx_or_record()

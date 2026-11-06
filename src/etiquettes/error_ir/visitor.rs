@@ -1,7 +1,7 @@
-//! Unified syn visitor for error-handling IR scans (sites, chain, compliance).
+//! Compatibility syn visitor for chain and compliance IR scans.
 //!
-//! `error_sites` logic lives here unconditionally. `error_chain` and
-//! `internal_error_chain` logic live in their own modules
+//! Error sites use the native source database. `error_chain` and
+//! `internal_error_chain` logic still live in their own modules
 //! (`chain_layer`, `compliance_layer`), each gated as a whole unit by a
 //! single `#[cfg(feature = ...)]` on the `mod` declaration in
 //! `error_ir/mod.rs`. This file only needs a handful of cfg attributes at
@@ -13,7 +13,6 @@ use std::path::Path;
 use syn::visit::Visit;
 
 use crate::error::CordialResult;
-use crate::etiquettes::error_sites::ErrorSiteRecord;
 use crate::loader::module_path_from_src_file;
 use tracing::instrument;
 
@@ -35,8 +34,6 @@ use walk::ErrorIrUnifiedVisitor;
 #[builder(default, build_fn(error = "crate::error::CordialError"))]
 pub struct ErrorIrScanLayers {
     #[getter(copy)]
-    sites: bool,
-    #[getter(copy)]
     chain: bool,
     #[getter(copy)]
     compliance: bool,
@@ -48,19 +45,9 @@ pub struct ErrorIrScanLayers {
     is_proc_macro_crate: bool,
 }
 
-impl ErrorIrScanLayers {
-    pub const SITES_ONLY: Self = Self {
-        sites: true,
-        chain: false,
-        compliance: false,
-        is_proc_macro_crate: false,
-    };
-}
-
 /// Combined scan output for one source file.
 #[derive(Debug, Default, derive_getters::Getters)]
 pub struct ErrorIrFileScan {
-    sites: Vec<ErrorSiteRecord>,
     #[cfg(feature = "error_chain")]
     chain: Vec<crate::etiquettes::error_chain::ErrorChainRecord>,
     #[cfg(feature = "internal_error_chain")]
@@ -68,9 +55,8 @@ pub struct ErrorIrFileScan {
 }
 
 impl ErrorIrFileScan {
-    #[instrument(level = "debug", skip(sites, chain, compliance))]
+    #[instrument(level = "debug", skip(chain, compliance))]
     pub(super) fn from_parts(
-        sites: Vec<ErrorSiteRecord>,
         #[cfg(feature = "error_chain")] chain: Vec<
             crate::etiquettes::error_chain::ErrorChainRecord,
         >,
@@ -79,7 +65,6 @@ impl ErrorIrFileScan {
         >,
     ) -> Self {
         Self {
-            sites,
             #[cfg(feature = "error_chain")]
             chain,
             #[cfg(feature = "internal_error_chain")]
@@ -88,7 +73,7 @@ impl ErrorIrFileScan {
     }
 }
 
-/// Scan a pre-parsed file for error-handling IR facts (one AST walk for sites/chain/compliance).
+/// Scan a shared compatibility tree for chain and compliance facts.
 #[instrument(level = "debug", skip(syntax, file, layers))]
 pub fn scan_rust_file_syntax(
     syntax: &syn::File,

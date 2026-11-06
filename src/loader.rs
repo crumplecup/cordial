@@ -72,7 +72,7 @@ pub(crate) use source_work::parse as source_parse;
     feature = "pageantry",
     feature = "derives",
     feature = "panics",
-    feature = "error_sites",
+    feature = "error_chain",
     feature = "tracing",
     feature = "internal_error_chain"
 ))]

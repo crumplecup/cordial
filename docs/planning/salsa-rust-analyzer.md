@@ -1505,6 +1505,26 @@ Validation: custom-target selection, optional dependency reload, complete splice
 and proof payload parity tests pass. The library builds without default features.
 Build-tier submit verified zero open items (list 94); the deep tier was not run.
 
+## Checkpoint: production error sites and observability use native syntax
+
+Normal loader collection and standalone error-site and observability scans now
+consume the canonical database's native syntax. Manifest-free projects and
+explicitly supplied fixture bytes use that same owner, including fixtures whose
+paths do not exist. Syntax-only collection does not claim Cargo semantic proof.
+The observability compatibility collector and retired error-site visitor layer
+are removed; chain and compliance compatibility collection remains.
+
+Native parser failures preserve the upstream syntax error and input path in a
+typed error chain. Compatibility consumers now reuse frozen database bytes
+instead of replacing an input already captured by native collection.
+
+Regression tests verify native query reuse across both inventories, complete
+inventory equality after disk changes within one loader view, fresh input on a
+new view, nonexistent supplied paths and the diagnostic source chain. Existing
+error-site, chain, internal-chain, stdio, subscriber and executable-boundary
+suites pass. Minimal feature checks cover the affected collection boundaries.
+Build-tier submit verified zero open items (list 98); the deep tier was not run.
+
 ## Current next step
 
 Load the Cargo context into the production session-owned database and route

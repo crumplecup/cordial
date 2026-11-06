@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 mod body;
-mod compatibility;
 mod native;
 
 /// Crate-wide tracing evidence attached to the shared graph root.
@@ -90,12 +89,14 @@ impl SourceObservability {
         tree: &Path,
         root: &Path,
     ) -> CordialResult<Self> {
-        let file = SourceLoadView::parse_fixture(file, source)?;
+        let file = SourceLoadView::collect_native_fixture(file, source, |file| {
+            Ok(Self::native_file(file, tree, root))
+        })?;
         Ok(Self {
             crate_root: root.to_path_buf(),
             has_lib: false,
             has_bin: false,
-            files: vec![compatibility::collect(&file, tree, root)],
+            files: vec![file],
         })
     }
 
@@ -103,11 +104,11 @@ impl SourceObservability {
     #[hotpath::measure(impl_type = "SourceObservability")]
     pub(crate) fn collect(source: &SourceLoadView, root: &Path) -> CordialResult<Self> {
         Self::collect_with(root, |path, tree| {
-            match source.parsed_file(path, "source-observability") {
-                Ok(file) => Ok(compatibility::collect(&file, tree, root)),
+            match source.collect_native_file(path, |file| Ok(Self::native_file(file, tree, root))) {
+                Ok(file) => Ok(file),
                 Err(error)
                     if crate::loader::path_has_fixtures(path, root)
-                        && matches!(error.kind(), crate::CordialErrorKind::SynParse(_)) =>
+                        && matches!(error.kind(), crate::CordialErrorKind::RustParse(_)) =>
                 {
                     let text = source
                         .input_text(path)?

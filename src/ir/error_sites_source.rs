@@ -30,13 +30,7 @@ impl SourceErrorSites {
     #[hotpath::measure(impl_type = "SourceErrorSites")]
     pub(crate) fn collect(source: &SourceLoadView, root: &Path) -> CordialResult<Self> {
         Self::collect_with(root, |path, tree| {
-            let file = source.parsed_file(path, "source-error-sites")?;
-            Ok(ErrorSitesFile {
-                snapshot: FileSnapshot::new(path.to_path_buf(), file.source_digest()),
-                sites: crate::loader::source_walk(path, "source-error-sites", || {
-                    crate::etiquettes::error_sites::scan_rust_syntax(&file, tree, root)
-                })?,
-            })
+            source.collect_native_file(path, |file| Self::native_file(file, tree, root))
         })
     }
 

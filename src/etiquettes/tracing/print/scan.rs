@@ -78,7 +78,7 @@ fn file_findings(
     Ok(findings)
 }
 
-/// Scan one Rust source fixture through the loader's compatibility projection.
+/// Scan one Rust source fixture through the canonical source database.
 #[instrument(level = "debug", skip(source, policy, file), err(level = "warn"))]
 pub fn scan_rust_source(
     source: &str,

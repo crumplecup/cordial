@@ -12,7 +12,7 @@ use super::stringified_binding::{
     discards_stringified_binding, map_err_discards_stringified_binding,
 };
 use super::syn_error_terminus::builds_syn_error;
-use super::visitor::expr::{pat_is_err, raw_expr_snippet, truncate_snippet};
+use super::visitor::expr::{raw_expr_snippet, truncate_snippet};
 use super::visitor::{ErrorIrScanLayers, ErrorIrScanLayersBuilder, SiteCtx};
 use crate::error::CordialResult;
 use crate::etiquettes::error_sites::infer_foreign_error_type;
@@ -468,6 +468,15 @@ fn path_is_err(path: &ExprPath) -> bool {
         .segments
         .last()
         .is_some_and(|segment| segment.ident == "Err")
+}
+
+#[instrument(level = "debug", skip(pat))]
+fn pat_is_err(pat: &Pat) -> bool {
+    match pat {
+        Pat::TupleStruct(tuple) => tuple.path.is_ident("Err"),
+        Pat::Path(path) => path.path.is_ident("Err"),
+        _ => false,
+    }
 }
 
 impl ErrorIrScanLayers {

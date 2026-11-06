@@ -3,12 +3,12 @@
 //! **What.** One `syn` walk of a file produces the layers consumed by the
 //! error-handling family.
 //!
-//! **Why.** Sites, chain preservation, internal graph shape, foreign types,
-//! and attenuation must agree on the same rows. A shared scan avoids each
+//! **Why.** Chain preservation and internal graph shape must agree on the
+//! same input. A shared scan avoids each
 //! etiquette re-walking source with a slightly different visitor.
 //!
-//! **Flags.** This module does not emit user-facing findings. It builds site
-//! rows unconditionally for `error_sites`, chain-preservation rows when
+//! **Flags.** This module does not emit user-facing findings. It builds
+//! chain-preservation rows when
 //! `error_chain` is on, and internal-compliance rows when
 //! `internal_error_chain` is on.
 //!
@@ -17,8 +17,9 @@
 //!
 //! **Outputs.** In-memory error IR layers attached to the shared graph.
 //!
-//! **Config.** Not a CLI etiquette. Enable `error_sites` and optional
-//! downstream error features. `chain_layer` and `compliance_layer` are gated
+//! **Config.** Not a CLI etiquette. Enable `error_chain` or
+//! `internal_error_chain`. Error sites already use the native source database.
+//! `chain_layer` and `compliance_layer` are gated
 //! wholesale at the module boundary instead of scattering feature cfgs across
 //! their internals.
 

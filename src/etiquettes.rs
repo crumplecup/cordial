@@ -77,7 +77,7 @@ mod dependency_freshness;
 pub(crate) mod derives;
 #[cfg(feature = "doc_warnings")]
 pub(crate) mod doc_warnings;
-#[cfg(feature = "error_sites")]
+#[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
 mod error_ir;
 #[cfg(feature = "feature_warnings")]
 pub(crate) mod feature_warnings;
@@ -89,7 +89,7 @@ pub(crate) mod inline_tests;
 pub(crate) mod verus_warnings;
 #[cfg(feature = "visibility")]
 pub(crate) mod visibility;
-#[cfg(feature = "error_sites")]
+#[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
 pub(crate) use error_ir::{ErrorIrScanLayers, scan_rust_file_syntax};
 #[cfg(feature = "error_chain")]
 pub(crate) mod error_chain;
