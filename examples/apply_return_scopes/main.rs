@@ -1,4 +1,16 @@
 //! Return discovery keeps nested execution scopes separate from their parent.
+//!
+//! This specimen deliberately contains non-idiomatic control flow: a `loop` that
+//! breaks with a value on its first pass, and an empty diverging `loop {}`. The
+//! return transform must handle every valid Rust program, not only those that
+//! pass `clippy -D warnings`, and `tests/strategy_return_lift.rs` and
+//! `tests/strategy_specimens.rs` exercise these exact shapes. Rewriting them
+//! would remove what the tests cover.
+#![allow(clippy::never_loop, clippy::empty_loop)]
+//
+// EXCEPTION AUTHORIZED BY: Erik Rose (human), 2026-11-07. This `allow` is
+// scoped to this specimen crate only. It is not precedent: agents must not add
+// or widen `allow` attributes anywhere without explicit human authorization.
 
 fn scoped(early: bool) -> u32 {
     let closure = || {

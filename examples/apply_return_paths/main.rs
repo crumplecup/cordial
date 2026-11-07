@@ -1,4 +1,16 @@
 //! Independent success adapters, observed through a Debug boundary.
+//!
+//! This specimen deliberately contains non-idiomatic return shapes: tail-position
+//! `return`s in `if`/`else` chains and `match` arms, `return if ..`, and a
+//! `let` immediately returned. The success-exit transform must handle every valid
+//! Rust program, not only those that pass `clippy -D warnings`, and
+//! `tests/strategy_return_paths.rs` asserts these exact shapes. Rewriting them
+//! into idiomatic forms would remove what the test covers.
+#![allow(clippy::needless_return, clippy::let_and_return)]
+//
+// EXCEPTION AUTHORIZED BY: Erik Rose (human), 2026-11-07. This `allow` is
+// scoped to this specimen crate only. It is not precedent: agents must not add
+// or widen `allow` attributes anywhere without explicit human authorization.
 
 fn branch(which: u8) -> u32 {
     if which == 0 {
