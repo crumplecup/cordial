@@ -91,8 +91,13 @@ impl Collector<'_, '_> {
             (start, end)
         };
         let position = |offset| {
-            let value = self.file.line_index().line_col(offset);
-            (value.line as usize + 1, value.col as usize)
+            // Columns count chars, matching `proc_macro2` spans; rust-analyzer's are UTF-8 bytes.
+            let index = self.file.line_index();
+            let value = index.line_col(offset);
+            let column = index
+                .to_wide(ra_ap_ide_db::line_index::WideEncoding::Utf32, value)
+                .map_or(value.col, |wide| wide.col);
+            (value.line as usize + 1, column as usize)
         };
         self.events.push(Event::new(
             position(start),
@@ -116,24 +121,23 @@ impl Collector<'_, '_> {
         }
         let context = self.context(node, inherited);
         self.site(node, &context);
-        if let Some(call) = ast::CallExpr::cast(node.clone()) {
-            if let Some(ast::Expr::PathExpr(callee)) = call.expr() {
-                if let Some(callee_path) = callee.path() {
-                    let fact = path(&callee_path);
-                    self.record(node, &context, Kind::Caller(fact.clone()));
-                    let mut guarded = context.clone();
-                    guarded
-                        .guards
-                        .push(CalleeGuard::new(fact, context.owner.clone()));
-                    self.node(callee.syntax(), &guarded);
-                    if let Some(args) = call.arg_list() {
-                        for arg in args.args() {
-                            self.node(arg.syntax(), &context);
-                        }
-                    }
-                    return;
+        if let Some(call) = ast::CallExpr::cast(node.clone())
+            && let Some(ast::Expr::PathExpr(callee)) = call.expr()
+            && let Some(callee_path) = callee.path()
+        {
+            let fact = path(&callee_path);
+            self.record(node, &context, Kind::Caller(fact.clone()));
+            let mut guarded = context.clone();
+            guarded
+                .guards
+                .push(CalleeGuard::new(fact, context.owner.clone()));
+            self.node(callee.syntax(), &guarded);
+            if let Some(args) = call.arg_list() {
+                for arg in args.args() {
+                    self.node(arg.syntax(), &context);
                 }
             }
+            return;
         }
         self.children(node, &context);
     }
@@ -173,71 +177,70 @@ impl Collector<'_, '_> {
     }
     #[tracing::instrument(level = "trace", skip(self, node, context))]
     fn site(&mut self, node: &SyntaxNode, context: &Context) {
-        if let Some(record) = ast::RecordExpr::cast(node.clone()) {
-            if let Some(path_node) = record.path() {
-                let rest = record
-                    .record_expr_field_list()
-                    .is_some_and(|fields| fields.spread().is_some());
-                self.record(
-                    node,
-                    context,
-                    Kind::Record {
-                        path: path(&path_node),
-                        rest,
-                    },
-                );
-            }
+        if let Some(record) = ast::RecordExpr::cast(node.clone())
+            && let Some(path_node) = record.path()
+        {
+            let rest = record
+                .record_expr_field_list()
+                .is_some_and(|fields| fields.spread().is_some());
+            self.record(
+                node,
+                context,
+                Kind::Record {
+                    path: path(&path_node),
+                    rest,
+                },
+            );
         }
-        if let Some(expression) = ast::PathExpr::cast(node.clone()) {
-            if let Some(path_node) = expression.path() {
-                self.record(node, context, Kind::Associated(path(&path_node)));
-            }
+        if let Some(expression) = ast::PathExpr::cast(node.clone())
+            && let Some(path_node) = expression.path()
+        {
+            self.record(node, context, Kind::Associated(path(&path_node)));
         }
-        if let Some(field) = ast::FieldExpr::cast(node.clone()) {
-            if let Some(name) = field.name_ref() {
-                let name = name.text().to_string();
-                let self_base = field.expr().is_some_and(|expr| matches!(expr, ast::Expr::PathExpr(expr) if expr.path().is_some_and(|value| { let fact = path(&value); fact.bare && fact.names == ["self"] })));
-                if self_base {
-                    if let Some(index) = context.source_site {
-                        if let Kind::Source(evidence) = &mut self.events[index].kind {
-                            evidence.record_field_name(name.clone());
-                        }
-                    }
-                }
-                self.record(node, context, Kind::Field(name));
+        if let Some(field) = ast::FieldExpr::cast(node.clone())
+            && let Some(name) = field.name_ref()
+        {
+            let name = name.text().to_string();
+            let self_base = field.expr().is_some_and(|expr| matches!(expr, ast::Expr::PathExpr(expr) if expr.path().is_some_and(|value| { let fact = path(&value); fact.bare && fact.names == ["self"] })));
+            if self_base
+                && let Some(index) = context.source_site
+                && let Kind::Source(evidence) = &mut self.events[index].kind
+            {
+                evidence.record_field_name(name.clone());
             }
+            self.record(node, context, Kind::Field(name));
         }
-        if let Some(pattern) = ast::RecordPat::cast(node.clone()) {
-            if let Some(path_node) = pattern.path() {
-                let fields = pattern
-                    .record_pat_field_list()
-                    .map(|list| {
-                        list.fields()
-                            .filter_map(|field| {
-                                field
-                                    .name_ref()
-                                    .map(|name| name.text().to_string())
-                                    .or_else(|| {
-                                        field.pat().and_then(|pat| match pat {
-                                            ast::Pat::IdentPat(pat) => {
-                                                pat.name().map(|name| name.text().to_string())
-                                            }
-                                            _ => None,
-                                        })
+        if let Some(pattern) = ast::RecordPat::cast(node.clone())
+            && let Some(path_node) = pattern.path()
+        {
+            let fields = pattern
+                .record_pat_field_list()
+                .map(|list| {
+                    list.fields()
+                        .filter_map(|field| {
+                            field
+                                .name_ref()
+                                .map(|name| name.text().to_string())
+                                .or_else(|| {
+                                    field.pat().and_then(|pat| match pat {
+                                        ast::Pat::IdentPat(pat) => {
+                                            pat.name().map(|name| name.text().to_string())
+                                        }
+                                        _ => None,
                                     })
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                self.record(
-                    node,
-                    context,
-                    Kind::Pattern {
-                        path: path(&path_node),
-                        fields,
-                    },
-                );
-            }
+                                })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            self.record(
+                node,
+                context,
+                Kind::Pattern {
+                    path: path(&path_node),
+                    fields,
+                },
+            );
         }
         if ast::TryExpr::can_cast(node.kind()) {
             self.record(
@@ -249,12 +252,11 @@ impl Collector<'_, '_> {
                 },
             );
         }
-        if let Some(ty) = ast::PathType::cast(node.clone()) {
-            if signatures::is_type_path(node) {
-                if let Some(path_node) = ty.path() {
-                    self.record(node, context, Kind::Type(path(&path_node)));
-                }
-            }
+        if let Some(ty) = ast::PathType::cast(node.clone())
+            && signatures::is_type_path(node)
+            && let Some(path_node) = ty.path()
+        {
+            self.record(node, context, Kind::Type(path(&path_node)));
         }
         if let Some(alias) = ast::TypeAlias::cast(node.clone()).filter(|_| {
             !node

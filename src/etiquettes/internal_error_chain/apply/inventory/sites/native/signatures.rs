@@ -23,18 +23,17 @@ pub(super) fn path(value: &ast::Path) -> PathFact {
             }
             if let Some(anchor) = segment.type_anchor() {
                 qualified = true;
-                if anchor.as_token().is_some() {
-                    if let Some(path) = anchor
+                if anchor.as_token().is_some()
+                    && let Some(path) = anchor
                         .syntax()
                         .children()
                         .filter_map(ast::PathType::cast)
                         .last()
                         .and_then(|ty| ty.path())
-                    {
-                        let mut names = self::path(&path).names;
-                        names.reverse();
-                        parts.extend(names);
-                    }
+                {
+                    let mut names = self::path(&path).names;
+                    names.reverse();
+                    parts.extend(names);
                 }
             }
             if value.qualifier().is_none() {
@@ -133,8 +132,12 @@ pub(super) fn imports(tree: &ast::UseTree, names: &mut BTreeSet<String>, glob: &
     if let Some(value) = tree.path() {
         names.extend(path(&value).names);
     }
-    if let Some(rename) = tree.rename().and_then(|rename| rename.name()) {
-        names.insert(rename.text().to_string());
+    if let Some(rename) = tree.rename() {
+        if let Some(name) = rename.name() {
+            names.insert(name.text().to_string());
+        } else if rename.underscore_token().is_some() {
+            names.insert("_".to_string());
+        }
     }
     *glob |= tree.star_token().is_some();
     if let Some(list) = tree.use_tree_list() {
