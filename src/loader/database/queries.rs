@@ -152,10 +152,10 @@ fn collect_reachable(db: &dyn SemanticDatabase, key: FunctionKey<'_>) -> Option<
         for output in std::iter::once(direct.facts.output())
             .chain(direct.facts.calls().iter().map(|call| call.output()))
         {
-            if let SemanticReturnContract::Result { error, .. } = output {
-                if !reachable_result_errors.contains(error) {
-                    reachable_result_errors.push(error.clone());
-                }
+            if let SemanticReturnContract::Result { error, .. } = output
+                && !reachable_result_errors.contains(error)
+            {
+                reachable_result_errors.push(error.clone());
             }
         }
         pending.extend(&direct.source_targets);

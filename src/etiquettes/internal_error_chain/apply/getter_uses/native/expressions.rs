@@ -13,13 +13,12 @@ impl Collector<'_, '_> {
         if self.scope.local_types {
             return ReceiverRecipe::Unknown;
         }
-        if let ast::Type::PathType(value) = ty {
-            if value
+        if let ast::Type::PathType(value) = ty
+            && value
                 .path()
                 .is_some_and(|path| bare(&path).as_deref() == Some("Self"))
-            {
-                return self.scope.owner.clone();
-            }
+        {
+            return self.scope.owner.clone();
         }
         contracts::ty_recipe(self.file, ty)
     }

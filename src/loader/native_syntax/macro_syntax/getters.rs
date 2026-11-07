@@ -78,14 +78,13 @@ impl DatabaseMacroSyntax {
                     }
                 }
             } else if matches!(names.as_slice(), [root, name] if root == "amenable_derive" && matches!(name.as_str(), "harness" | "gallery_harness"))
+                && let Some((offset, items)) = file.getter_harness_items(&invocation)
             {
-                if let Some((offset, items)) = file.getter_harness_items(&invocation) {
-                    for item in &items {
-                        self.collect_getters(file, item.syntax());
-                    }
-                    self.getter_offsets.insert(invocation.clone(), offset);
-                    self.items.insert(invocation, items);
+                for item in &items {
+                    self.collect_getters(file, item.syntax());
                 }
+                self.getter_offsets.insert(invocation.clone(), offset);
+                self.items.insert(invocation, items);
             }
         }
     }

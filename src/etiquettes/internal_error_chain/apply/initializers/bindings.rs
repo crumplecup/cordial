@@ -169,10 +169,10 @@ pub(super) struct BindingCounts {
 impl<'ast> Visit<'ast> for BindingCounts {
     #[instrument(level = "debug", skip(self, path))]
     fn visit_expr_path(&mut self, path: &'ast syn::ExprPath) {
-        if path.qself.is_none() {
-            if let Some(name) = path.path.get_ident() {
-                *self.uses.entry(name.to_string()).or_default() += 1;
-            }
+        if path.qself.is_none()
+            && let Some(name) = path.path.get_ident()
+        {
+            *self.uses.entry(name.to_string()).or_default() += 1;
         }
         syn::visit::visit_expr_path(self, path);
     }

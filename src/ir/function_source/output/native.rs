@@ -106,9 +106,7 @@ fn segments(path: &ast::Path) -> Option<Vec<String>> {
         if let Some(qualifier) = current.qualifier() {
             current = qualifier;
         } else {
-            if segment.coloncolon_token().is_none() {
-                return None;
-            }
+            segment.coloncolon_token()?;
             break;
         }
     }

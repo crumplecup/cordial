@@ -95,10 +95,10 @@ impl FunctionReturnFlow {
             {
                 self.native_boundary(FunctionBoundary::LoopControl);
             }
-            if let Some(attr) = ast::Attr::cast(node) {
-                if !attr.simple_name().is_some_and(|name| name == "doc") {
-                    self.native_boundary(FunctionBoundary::Attribute);
-                }
+            if let Some(attr) = ast::Attr::cast(node)
+                && !attr.simple_name().is_some_and(|name| name == "doc")
+            {
+                self.native_boundary(FunctionBoundary::Attribute);
             }
         }
         success::native::collect_block(body, &mut self.success_exits);

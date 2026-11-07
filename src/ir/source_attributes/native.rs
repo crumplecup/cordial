@@ -18,10 +18,10 @@ impl SourceFileAttributes {
         collect_items(file, file.tree().items(), &[], &mut items);
         let mut lints = SourceCrateLints::default();
         for attr in file.tree().attrs() {
-            if attr.excl_token().is_some() {
-                if let Some(meta) = attr.meta() {
-                    apply_meta(&meta, &mut lints);
-                }
+            if attr.excl_token().is_some()
+                && let Some(meta) = attr.meta()
+            {
+                apply_meta(&meta, &mut lints);
             }
         }
         Self {

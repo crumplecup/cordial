@@ -42,7 +42,7 @@ impl FilePlanner<'_> {
         mut file_gaps: Vec<InstrumentGap>,
         summary: &mut InstrumentApplySummary,
     ) -> CordialResult<Option<(SourceWrite, Vec<InstrumentGap>)>> {
-        let path = crate_root.join(&rel_path);
+        let path = crate_root.join(rel_path);
         let controls = ApplyLintPolicy::new(
             self.config,
             crate::LintLocation::new(self.project_root, Some(crate_root), crate_name, Some(&path)),

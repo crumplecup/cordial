@@ -98,25 +98,25 @@ impl Collector<'_, '_> {
                 return;
             }
         }
-        if let Some(record) = ast::RecordExpr::cast(node.clone()) {
-            if let Some(path) = record.path() {
-                let fields = record.record_expr_field_list();
-                self.records.push(Record::new(
-                    names(&path),
-                    bare(&path).is_some(),
-                    self.owner.clone(),
-                    self.impl_lifetime.clone(),
-                    self.lifetime_context,
-                    fields
-                        .as_ref()
-                        .is_some_and(|fields| fields.dotdot_token().is_some()),
-                    fields
-                        .into_iter()
-                        .flat_map(|fields| fields.fields())
-                        .filter_map(|field| self.field(&field))
-                        .collect(),
-                ));
-            }
+        if let Some(record) = ast::RecordExpr::cast(node.clone())
+            && let Some(path) = record.path()
+        {
+            let fields = record.record_expr_field_list();
+            self.records.push(Record::new(
+                names(&path),
+                bare(&path).is_some(),
+                self.owner.clone(),
+                self.impl_lifetime.clone(),
+                self.lifetime_context,
+                fields
+                    .as_ref()
+                    .is_some_and(|fields| fields.dotdot_token().is_some()),
+                fields
+                    .into_iter()
+                    .flat_map(|fields| fields.fields())
+                    .filter_map(|field| self.field(&field))
+                    .collect(),
+            ));
         }
         for child in node.children() {
             self.visit(&child);

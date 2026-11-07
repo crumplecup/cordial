@@ -94,8 +94,9 @@ pub(crate) fn payload_facts(payload: &str) -> Option<VerusPayloadFacts> {
     let block = parse::block_in_payload(payload, Path::new(""), "", false)?;
     #[cfg(feature = "visibility")]
     let visible_names = block.visible_names();
+    let facts = facts::collect_crate_ir(vec![block]).ok()?;
     Some(VerusPayloadFacts {
-        facts: facts::collect_crate_ir(vec![block]),
+        facts,
         #[cfg(feature = "visibility")]
         visible_names,
     })

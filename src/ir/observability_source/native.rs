@@ -22,36 +22,35 @@ impl SourceObservability {
         let mut functions = Vec::new();
         let mut prints = Vec::new();
         for node in file.tree().syntax().descendants() {
-            if let Some(function) = ast::Fn::cast(node.clone()) {
-                if !is_trait_member(&function)
-                    && let Some(body) = function.body()
-                    && let Some(name) = function.name()
-                {
-                    let mut facts = body_facts(&body);
-                    facts.is_fallible = function
-                        .ret_type()
-                        .and_then(|ty| ty.ty())
-                        .is_some_and(|ty| is_result(&ty));
-                    facts.has_err_instrument = function
-                        .attrs()
-                        .filter_map(|attr| {
-                            crate::ir::SourceInstrumentSyntax::from_native_attribute(&attr)
-                        })
-                        .any(|syntax| has_err_instrument(&syntax));
-                    functions.push(ObservabilityFunction {
-                        name: name.text().to_string(),
-                        modules: modules(function.syntax()),
-                        line: file.line(function.syntax().text_range().start()),
-                        test: function.attrs().any(|attr| {
-                            attr.meta()
-                                .and_then(|meta| meta.path())
-                                .and_then(|path| path.segment())
-                                .and_then(|seg| seg.name_ref())
-                                .is_some_and(|name| name.text() == "test")
-                        }),
-                        body: facts,
-                    });
-                }
+            if let Some(function) = ast::Fn::cast(node.clone())
+                && !is_trait_member(&function)
+                && let Some(body) = function.body()
+                && let Some(name) = function.name()
+            {
+                let mut facts = body_facts(&body);
+                facts.is_fallible = function
+                    .ret_type()
+                    .and_then(|ty| ty.ty())
+                    .is_some_and(|ty| is_result(&ty));
+                facts.has_err_instrument = function
+                    .attrs()
+                    .filter_map(|attr| {
+                        crate::ir::SourceInstrumentSyntax::from_native_attribute(&attr)
+                    })
+                    .any(|syntax| has_err_instrument(&syntax));
+                functions.push(ObservabilityFunction {
+                    name: name.text().to_string(),
+                    modules: modules(function.syntax()),
+                    line: file.line(function.syntax().text_range().start()),
+                    test: function.attrs().any(|attr| {
+                        attr.meta()
+                            .and_then(|meta| meta.path())
+                            .and_then(|path| path.segment())
+                            .and_then(|seg| seg.name_ref())
+                            .is_some_and(|name| name.text() == "test")
+                    }),
+                    body: facts,
+                });
             }
             if let Some(call) = ast::MacroCall::cast(node)
                 && let Some(path) = call.path()

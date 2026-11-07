@@ -202,31 +202,30 @@ impl Collector<'_, '_> {
                     .extend(function.name().map(|name| name.text().to_string()));
                 self.function(&function, &context)?;
             }
-        } else if let Some(alias) = ast::TypeAlias::cast(node.clone()) {
-            if !alias
+        } else if let Some(alias) = ast::TypeAlias::cast(node.clone())
+            && !alias
                 .syntax()
                 .parent()
                 .is_some_and(|parent| ast::AssocItemList::can_cast(parent.kind()))
-            {
-                context
-                    .functions
-                    .extend(alias.name().map(|name| name.text().to_string()));
-            }
+        {
+            context
+                .functions
+                .extend(alias.name().map(|name| name.text().to_string()));
         }
         if let Some(adt) = ast::Struct::cast(node.clone()) {
             if let Some(name) = adt.name() {
-                self.fields(adt.field_list(), &name.text().to_string(), &context)?;
+                self.fields(adt.field_list(), name.text(), &context)?;
             }
-        } else if let Some(adt) = ast::Enum::cast(node.clone()) {
-            if let (Some(name), Some(list)) = (adt.name(), adt.variant_list()) {
-                for variant in list.variants() {
-                    if let Some(variant_name) = variant.name() {
-                        self.fields(
-                            variant.field_list(),
-                            &format!("{}::{}", name.text(), variant_name.text()),
-                            &context,
-                        )?;
-                    }
+        } else if let Some(adt) = ast::Enum::cast(node.clone())
+            && let (Some(name), Some(list)) = (adt.name(), adt.variant_list())
+        {
+            for variant in list.variants() {
+                if let Some(variant_name) = variant.name() {
+                    self.fields(
+                        variant.field_list(),
+                        &format!("{}::{}", name.text(), variant_name.text()),
+                        &context,
+                    )?;
                 }
             }
         }

@@ -16,11 +16,10 @@ pub(in crate::ir::function_source) fn collect_block(
         collect_value(&tail, exits);
     } else if !statements.statements().last().is_some_and(|statement| {
         matches!(statement, ast::Stmt::ExprStmt(statement) if statement.expr().as_ref().is_some_and(always_returns))
-    }) {
-        if let Some(close) = statements.r_curly_token() {
+    })
+        && let Some(close) = statements.r_curly_token() {
             exits.push(FunctionSuccessExit::BlockUnit { offset: usize::from(close.text_range().start()) });
         }
-    }
 }
 
 #[tracing::instrument(level = "trace", skip(expression, exits))]

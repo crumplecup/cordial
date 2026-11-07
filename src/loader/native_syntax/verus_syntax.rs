@@ -66,7 +66,7 @@ impl DatabaseSource<'_> {
     fn verus_payload(&self, invocation: &ast::MacroCall) -> Option<&VerusPayloadFacts> {
         if invocation
             .path()
-            .is_none_or(|path| path.syntax().text().to_string() != "verus")
+            .is_none_or(|path| path.syntax().text() != "verus")
         {
             return None;
         }

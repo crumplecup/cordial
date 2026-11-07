@@ -77,14 +77,13 @@ pub(super) fn location_caller(call: &ast::CallExpr) -> bool {
 #[instrument(level = "trace", skip(expr))]
 fn value(expr: ast::Expr) -> Option<(StorageForm, ast::Expr)> {
     let expr = without_parens(expr)?;
-    if let ast::Expr::MethodCallExpr(method) = &expr {
-        if method
+    if let ast::Expr::MethodCallExpr(method) = &expr
+        && method
             .name_ref()
             .is_some_and(|name| matches!(name.text(), "to_string" | "to_owned" | "into"))
-            && method.arg_list()?.args().next().is_none()
-        {
-            return Some((StorageForm::Method, without_parens(method.receiver()?)?));
-        }
+        && method.arg_list()?.args().next().is_none()
+    {
+        return Some((StorageForm::Method, without_parens(method.receiver()?)?));
     }
     if let ast::Expr::CallExpr(call) = &expr {
         let args: Vec<_> = call.arg_list()?.args().collect();

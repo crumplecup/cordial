@@ -50,16 +50,16 @@ pub(super) fn discover<'a>(
         .graph_declarations(root_file)?
         .all()
         .iter()
-        .filter_map(|item| {
-            (item.kind() == DeclarationKind::Struct
+        .filter(|&item| {
+            item.kind() == DeclarationKind::Struct
                 && item.error_impl()
                 && item.is_inherited()
                 && item
                     .fields()
                     .iter()
-                    .any(|field| matches!(field.name(), Some("kind" | "source"))))
-            .then(|| item.name().to_string())
+                    .any(|field| matches!(field.name(), Some("kind" | "source")))
         })
+        .map(|item| item.name().to_string())
         .collect();
     let [root_name] = roots.as_slice() else {
         return None;

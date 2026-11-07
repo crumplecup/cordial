@@ -6,7 +6,9 @@ use std::sync::Arc;
 use clap::Subcommand;
 
 use super::gate_args::GateSelectionArgs;
-use super::run::{execute_quality_apply, execute_run_plugins, view_store_file};
+use super::run::{
+    QualityApplyOptions, execute_quality_apply, execute_run_plugins, view_store_file,
+};
 use crate::{
     CordialResult, DEFAULT_EXCEPTIONS_REGISTRY, ProgressSink, StoreLayout, all_plugins,
     quality_plugins,
@@ -357,14 +359,12 @@ impl Commands {
             } => {
                 if apply {
                     execute_quality_apply(
-                        &ctx.project_root,
-                        &ctx.store,
-                        ctx.crate_name.as_deref(),
-                        ctx.store_home.clone(),
-                        checklist.as_deref(),
-                        ctx.progress.clone(),
-                        dry_run,
-                        selection.etiquette(),
+                        &ctx,
+                        QualityApplyOptions::new(
+                            checklist.as_deref(),
+                            dry_run,
+                            selection.etiquette(),
+                        ),
                     )
                 } else {
                     execute_run_plugins(

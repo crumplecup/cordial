@@ -204,15 +204,13 @@ fn collect_function(
         .syntax()
         .parent()
         .is_some_and(|parent| ast::SourceFile::can_cast(parent.kind()))
-    {
-        if let Some(facts) =
+        && let Some(facts) =
             crate::ir::FunctionSourceSyntax::collect_native(source, function.syntax().text_range())
-        {
-            weight.set_attr(
-                crate::ir::ATTR_FUNCTION_SOURCE_SYNTAX,
-                serde_json::to_value(facts)?,
-            );
-        }
+    {
+        weight.set_attr(
+            crate::ir::ATTR_FUNCTION_SOURCE_SYNTAX,
+            serde_json::to_value(facts)?,
+        );
     }
     if let Some(definition) = sema.to_def(function) {
         let key = queries::FunctionKey::new(db, definition);

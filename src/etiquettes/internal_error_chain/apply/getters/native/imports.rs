@@ -85,10 +85,10 @@ pub(in crate::etiquettes::internal_error_chain::apply) fn known(
 fn imports(file: &DatabaseSource<'_>, binding: &str) -> Vec<Vec<String>> {
     let mut found = Vec::new();
     for item in file.tree().items() {
-        if let ast::Item::Use(item) = item {
-            if let Some(tree) = item.use_tree() {
-                bindings(&tree, Vec::new(), binding, &mut found);
-            }
+        if let ast::Item::Use(item) = item
+            && let Some(tree) = item.use_tree()
+        {
+            bindings(&tree, Vec::new(), binding, &mut found);
         }
     }
     found
@@ -154,9 +154,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) fn paths(
         return None;
     };
     let tree = meta.token_tree()?;
-    if tree.l_paren_token().is_none() {
-        return None;
-    }
+    tree.l_paren_token()?;
     let tokens: Vec<_> = tree
         .syntax()
         .children_with_tokens()

@@ -110,17 +110,19 @@ impl Catalog {
             .values()
             .filter(|item| self.is_error_kind(item))
             .flat_map(|item| {
-                item.variants().iter().filter_map(move |variant| {
-                    (variant.payloads().len() == 1
-                        && Self::last_ident(&variant.payloads()[0]) == target.source())
-                    .then(|| {
+                item.variants()
+                    .iter()
+                    .filter(|&variant| {
+                        variant.payloads().len() == 1
+                            && Self::last_ident(&variant.payloads()[0]) == target.source()
+                    })
+                    .map(|variant| {
                         FanoutTarget::new(
                             Some(item.ident().clone()),
                             Some(variant.name().clone()),
                             target.source().clone(),
                         )
                     })
-                })
             });
         match (matches.next(), matches.next()) {
             (Some(first), None) => Some(first),

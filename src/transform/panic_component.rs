@@ -22,7 +22,7 @@ pub struct PanicSiteSelection {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PanicComponentDecision {
     /// A coherent preview up to an explicitly selected observation boundary.
-    Ready(PanicComponentPreview),
+    Ready(Box<PanicComponentPreview>),
     /// The selected panic site no longer exists.
     NoCandidate,
     /// No partial preview is returned for an unsupported obligation.

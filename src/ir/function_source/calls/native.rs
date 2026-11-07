@@ -71,10 +71,10 @@ pub(in crate::ir::function_source) fn collect(
                 usage: Some(call_usage(&call)),
             });
         }
-        if let Some(method) = ast::MethodCallExpr::cast(node.clone()) {
-            if let Some(candidate) = unwrap_candidate(file, &method) {
-                unwraps.push(candidate);
-            }
+        if let Some(method) = ast::MethodCallExpr::cast(node.clone())
+            && let Some(candidate) = unwrap_candidate(file, &method)
+        {
+            unwraps.push(candidate);
         }
     }
     for call in &mut calls {
@@ -148,10 +148,10 @@ fn call_usage(call: &ast::CallExpr) -> SourceCallUse {
     let Some(parent) = call.syntax().parent() else {
         return SourceCallUse::Value;
     };
-    if let Some(method) = ast::MethodCallExpr::cast(parent.clone()) {
-        if method.receiver().as_ref().map(AstNode::syntax) == Some(call.syntax()) {
-            return method_usage(&method).unwrap_or(SourceCallUse::Value);
-        }
+    if let Some(method) = ast::MethodCallExpr::cast(parent.clone())
+        && method.receiver().as_ref().map(AstNode::syntax) == Some(call.syntax())
+    {
+        return method_usage(&method).unwrap_or(SourceCallUse::Value);
     }
     if ast::TryExpr::can_cast(parent.kind()) {
         SourceCallUse::Residual
@@ -167,7 +167,7 @@ fn method_usage(method: &ast::MethodCallExpr) -> Option<SourceCallUse> {
     }
     let name = method.name_ref()?;
     let count = method.arg_list()?.args().count();
-    match (&*name.text(), count) {
+    match (name.text(), count) {
         ("unwrap", 0) => Some(SourceCallUse::Unwrap),
         ("unwrap_or", 1) | ("unwrap_or_default" | "is_ok" | "is_err", 0) => {
             Some(SourceCallUse::HandledResult)

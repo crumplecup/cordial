@@ -24,17 +24,16 @@ pub(super) fn methods(file: &DatabaseSource<'_>) -> Vec<MethodContract> {
                     .into_iter()
                     .flat_map(|list| list.assoc_items())
                 {
-                    if let ast::AssocItem::Fn(method) = method {
-                        if method.name().is_some_and(|name| name.text() == "file")
-                            && !conditional(&method)
-                        {
-                            methods.push(MethodContract {
-                                owner: owner.clone(),
-                                has_receiver: method
-                                    .param_list()
-                                    .is_some_and(|list| list.self_param().is_some()),
-                            });
-                        }
+                    if let ast::AssocItem::Fn(method) = method
+                        && method.name().is_some_and(|name| name.text() == "file")
+                        && !conditional(&method)
+                    {
+                        methods.push(MethodContract {
+                            owner: owner.clone(),
+                            has_receiver: method
+                                .param_list()
+                                .is_some_and(|list| list.self_param().is_some()),
+                        });
                     }
                 }
             }
@@ -55,13 +54,11 @@ pub(super) fn methods(file: &DatabaseSource<'_>) -> Vec<MethodContract> {
                     }),
                     _ => false,
                 };
-                if field {
-                    if let Some(name) = item.name() {
-                        methods.push(MethodContract {
-                            owner: ReceiverRecipe::Declaration(name.text().to_string()),
-                            has_receiver: true,
-                        });
-                    }
+                if field && let Some(name) = item.name() {
+                    methods.push(MethodContract {
+                        owner: ReceiverRecipe::Declaration(name.text().to_string()),
+                        has_receiver: true,
+                    });
                 }
             }
             _ => {}

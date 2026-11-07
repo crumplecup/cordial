@@ -21,7 +21,7 @@ impl NameAudit {
             if let Some(parameter) = ast::TypeParam::cast(node.clone()) {
                 visitor.ambiguous |= parameter
                     .name()
-                    .is_some_and(|name| protected_name(&name.text()));
+                    .is_some_and(|name| protected_name(name.text()));
             }
             // syn distinguishes free items from associated and foreign items.
             if node.parent().is_some_and(|parent| {
@@ -66,15 +66,12 @@ impl NameAudit {
                 return;
             }
             ast::Item::TypeAlias(item) => {
-                if let (Some(name), Some(ast::Type::PathType(ty))) = (item.name(), item.ty()) {
-                    if let Some(path) = ty.path().filter(|path| !has_type_anchor(path)) {
-                        if let Some(target) = path.segment().and_then(|segment| segment.name_ref())
-                        {
-                            if name.text() != target.text() {
-                                self.aliased_types.insert(target.text().to_string());
-                            }
-                        }
-                    }
+                if let (Some(name), Some(ast::Type::PathType(ty))) = (item.name(), item.ty())
+                    && let Some(path) = ty.path().filter(|path| !has_type_anchor(path))
+                    && let Some(target) = path.segment().and_then(|segment| segment.name_ref())
+                    && name.text() != target.text()
+                {
+                    self.aliased_types.insert(target.text().to_string());
                 }
                 item.name()
             }
@@ -86,7 +83,7 @@ impl NameAudit {
             }
             _ => None,
         };
-        self.ambiguous |= name.is_some_and(|name| protected_name(&name.text()));
+        self.ambiguous |= name.is_some_and(|name| protected_name(name.text()));
     }
 
     #[tracing::instrument(level = "trace", skip(self, tree, prefix))]

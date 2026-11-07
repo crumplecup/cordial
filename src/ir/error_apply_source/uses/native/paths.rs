@@ -33,16 +33,15 @@ pub(super) fn collect(file: &DatabaseSource<'_>, paths: &mut Vec<(LocatedName, V
                 ));
             }
         }
-        if let Some(field) = ast::RecordExprField::cast(node) {
-            if field.colon_token().is_none() {
-                if let Some(name) = field.name_ref() {
-                    let label = name.text().to_string();
-                    paths.push((
-                        located(file, label.clone(), name.syntax().text_range().start()),
-                        vec![label],
-                    ));
-                }
-            }
+        if let Some(field) = ast::RecordExprField::cast(node)
+            && field.colon_token().is_none()
+            && let Some(name) = field.name_ref()
+        {
+            let label = name.text().to_string();
+            paths.push((
+                located(file, label.clone(), name.syntax().text_range().start()),
+                vec![label],
+            ));
         }
     }
 }
@@ -53,18 +52,16 @@ fn segments(path: ast::Path) -> Vec<ast::NameRef> {
     if let Some(segment) = path.segment() {
         if let Some(name) = segment.name_ref() {
             prefix.push(name);
-        } else if let Some(anchor) = segment.type_anchor() {
-            if anchor.as_token().is_some() {
-                if let Some(path) = anchor
-                    .syntax()
-                    .children()
-                    .filter_map(ast::PathType::cast)
-                    .last()
-                    .and_then(|ty| ty.path())
-                {
-                    prefix.extend(segments(path));
-                }
-            }
+        } else if let Some(anchor) = segment.type_anchor()
+            && anchor.as_token().is_some()
+            && let Some(path) = anchor
+                .syntax()
+                .children()
+                .filter_map(ast::PathType::cast)
+                .last()
+                .and_then(|ty| ty.path())
+        {
+            prefix.extend(segments(path));
         }
     }
     prefix

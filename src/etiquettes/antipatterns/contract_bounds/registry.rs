@@ -29,7 +29,8 @@ pub fn fetch_contract_records(workspace_root: &Path, store_root: &Path) -> Vec<C
     // own incremental build keeps a no-op re-run cheap, so there's no
     // real cost to paying this correctly every time -- the per-process
     // The run-scoped workspace IR retains the result for all member crates.
-    let records = if workspace_has_amenable(workspace_root) {
+
+    if workspace_has_amenable(workspace_root) {
         if run_amenable_dump_registry(workspace_root, &dump_path).is_ok() {
             load_registry_dump(&dump_path).unwrap_or_default()
         } else if dump_path.is_file() {
@@ -42,9 +43,7 @@ pub fn fetch_contract_records(workspace_root: &Path, store_root: &Path) -> Vec<C
         }
     } else {
         Vec::new()
-    };
-
-    records
+    }
 }
 
 #[instrument(level = "info", skip(path), err(level = "warn"))]

@@ -122,12 +122,13 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     #[tracing::instrument(level = "trace", skip(self, item))]
     fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
         let previous_source = self.source_site.take();
-        if item.sig.ident == "source" && self.owner.is_some() {
-            if let Some(path) = &self.error_trait {
-                let evidence = ErrorSourceMethodEvidence::from_method(self.file, item, path);
-                self.source_site = Some(self.events.len());
-                self.record(item.span(), Kind::Source(evidence));
-            }
+        if item.sig.ident == "source"
+            && self.owner.is_some()
+            && let Some(path) = &self.error_trait
+        {
+            let evidence = ErrorSourceMethodEvidence::from_method(self.file, item, path);
+            self.source_site = Some(self.events.len());
+            self.record(item.span(), Kind::Source(evidence));
         }
         let previous = self.enter(Some(&item.sig.output), ErrorTryScope::Function);
         syn::visit::visit_impl_item_fn(self, item);
@@ -200,12 +201,10 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_expr_field(&mut self, item: &'ast syn::ExprField) {
         if let syn::Member::Named(name) = &item.member {
             if matches!(&*item.base, syn::Expr::Path(path) if path.qself.is_none() && path.path.is_ident("self"))
+                && let Some(index) = self.source_site
+                && let Kind::Source(evidence) = &mut self.events[index].kind
             {
-                if let Some(index) = self.source_site {
-                    if let Kind::Source(evidence) = &mut self.events[index].kind {
-                        evidence.record_self_field(name);
-                    }
-                }
+                evidence.record_self_field(name);
             }
             self.record(item.span(), Kind::Field(name.to_string()));
         }
@@ -412,11 +411,10 @@ fn tokens(stream: proc_macro2::TokenStream, names: &mut BTreeSet<String>) {
 fn constructions(stream: proc_macro2::TokenStream, names: &mut BTreeSet<String>) {
     let parts: Vec<_> = stream.into_iter().collect();
     for (index, part) in parts.iter().enumerate() {
-        if let proc_macro2::TokenTree::Ident(name) = part {
-            if matches!(parts.get(index + 1), Some(proc_macro2::TokenTree::Group(group)) if group.delimiter() == proc_macro2::Delimiter::Brace)
-            {
-                names.insert(name.to_string());
-            }
+        if let proc_macro2::TokenTree::Ident(name) = part
+            && matches!(parts.get(index + 1), Some(proc_macro2::TokenTree::Group(group)) if group.delimiter() == proc_macro2::Delimiter::Brace)
+        {
+            names.insert(name.to_string());
         }
         if let proc_macro2::TokenTree::Group(group) = part {
             constructions(group.stream(), names);

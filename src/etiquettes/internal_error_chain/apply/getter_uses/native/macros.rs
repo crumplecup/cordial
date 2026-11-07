@@ -8,26 +8,27 @@ use ra_ap_syntax::{
 impl Collector<'_, '_> {
     #[tracing::instrument(level = "trace", skip(self, invocation))]
     pub(super) fn invocation(&mut self, invocation: &ast::MacroCall, offset: usize) {
-        if !self.scope.local_types && macro_contract(self.file, invocation) {
-            if let Some((origin, arguments, items)) = self.syntax.getter_payload(invocation) {
-                let arguments = arguments.to_vec();
-                let items = items.to_vec();
-                if let (Some(path), Some(tree)) = (invocation.path(), invocation.token_tree()) {
-                    self.record(
-                        offset + usize::from(path.syntax().text_range().start()),
-                        offset + usize::from(tree.syntax().text_range().end()),
-                        ReceiverRecipe::Unknown,
-                        UseKind::Macro,
-                    );
-                }
-                for argument in arguments {
-                    self.visit(argument.syntax(), offset + origin);
-                }
-                for item in items {
-                    self.visit(item.syntax(), offset + origin);
-                }
-                return;
+        if !self.scope.local_types
+            && macro_contract(self.file, invocation)
+            && let Some((origin, arguments, items)) = self.syntax.getter_payload(invocation)
+        {
+            let arguments = arguments.to_vec();
+            let items = items.to_vec();
+            if let (Some(path), Some(tree)) = (invocation.path(), invocation.token_tree()) {
+                self.record(
+                    offset + usize::from(path.syntax().text_range().start()),
+                    offset + usize::from(tree.syntax().text_range().end()),
+                    ReceiverRecipe::Unknown,
+                    UseKind::Macro,
+                );
             }
+            for argument in arguments {
+                self.visit(argument.syntax(), offset + origin);
+            }
+            for item in items {
+                self.visit(item.syntax(), offset + origin);
+            }
+            return;
         }
         if let Some(tree) = invocation.token_tree() {
             self.opaque(&tree, offset);

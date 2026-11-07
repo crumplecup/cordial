@@ -24,10 +24,9 @@ impl CrateFacts {
             }
             if let Some(adt) = ast::Adt::cast(node.clone())
                 && derives_error(&adt)
+                && let Some(name) = adt.name()
             {
-                if let Some(name) = adt.name() {
-                    self.errors.insert(name.text().to_string());
-                }
+                self.errors.insert(name.text().to_string());
             }
         }
         self.placement(source.tree().syntax(), false);
@@ -38,7 +37,7 @@ impl CrateFacts {
         for structure in node.descendants().filter_map(ast::Struct::cast) {
             if structure
                 .name()
-                .is_none_or(|name| !self.errors.contains(&name.text().to_string()))
+                .is_none_or(|name| !self.errors.contains(name.text()))
             {
                 continue;
             }

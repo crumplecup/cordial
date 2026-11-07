@@ -97,7 +97,7 @@ impl Assessor for ExtAssessor {
                     &items,
                     &registry,
                     &skip_map,
-                    &proof_chain_subjects,
+                    proof_chain_subjects,
                 ),
             )?);
         }
@@ -119,7 +119,7 @@ impl Assessor for ExtAssessor {
             &ExtExpansionInputs::new(
                 &resolver,
                 &registry,
-                &proof_chain_subjects,
+                proof_chain_subjects,
                 &skip_map,
                 config.amenable_ext(),
                 target,

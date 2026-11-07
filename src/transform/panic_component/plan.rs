@@ -117,7 +117,7 @@ pub fn plan_owned_panic_group(
         return Ok(Refused(Blocker::InvalidEvidence));
     }
     let origin = declaration.plan();
-    Ok(Ready(PanicComponentPreview::new(
+    Ok(Ready(Box::new(PanicComponentPreview::new(
         FunctionEditPlan::new(
             leaf,
             origin.path().clone(),
@@ -128,5 +128,5 @@ pub fn plan_owned_panic_group(
         boundary,
         declaration.names().clone(),
         sites,
-    )))
+    ))))
 }

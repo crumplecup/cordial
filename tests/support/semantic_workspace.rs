@@ -76,10 +76,10 @@ pub(crate) fn function(ir: &dyn IrView, label: &str) -> Result<SemanticFunction>
             .has_attr(cordial::ATTR_SEMANTIC_FUNCTION)
             .build(),
     ) {
-        if let Some(function) = ir.semantic_function(node.id()).into_diagnostic()? {
-            if function.label() == label {
-                return Ok(function);
-            }
+        if let Some(function) = ir.semantic_function(node.id()).into_diagnostic()?
+            && function.label() == label
+        {
+            return Ok(function);
         }
     }
     Err(miette::miette!("missing function {label}"))

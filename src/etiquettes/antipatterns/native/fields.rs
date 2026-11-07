@@ -71,7 +71,7 @@ impl Collector<'_, '_> {
 #[tracing::instrument(level = "trace", skip(ty))]
 fn static_ref(ty: &ast::RefType) -> bool {
     ty.lifetime()
-        .is_some_and(|lifetime| lifetime.syntax().text().to_string() == "'static")
+        .is_some_and(|lifetime| lifetime.syntax().text() == "'static")
 }
 
 #[tracing::instrument(level = "trace", skip(ty, traits))]

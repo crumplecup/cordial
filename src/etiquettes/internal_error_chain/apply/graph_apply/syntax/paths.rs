@@ -13,18 +13,16 @@ pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn names(
     if let Some(segment) = path.segment() {
         if let Some(name) = segment.name_ref() {
             names.push(name.text().to_string());
-        } else if let Some(anchor) = segment.type_anchor() {
-            if anchor.as_token().is_some() {
-                if let Some(path) = anchor
-                    .syntax()
-                    .children()
-                    .filter_map(ast::PathType::cast)
-                    .last()
-                    .and_then(|ty| ty.path())
-                {
-                    names.extend(self::names(path));
-                }
-            }
+        } else if let Some(anchor) = segment.type_anchor()
+            && anchor.as_token().is_some()
+            && let Some(path) = anchor
+                .syntax()
+                .children()
+                .filter_map(ast::PathType::cast)
+                .last()
+                .and_then(|ty| ty.path())
+        {
+            names.extend(self::names(path));
         }
     }
     names

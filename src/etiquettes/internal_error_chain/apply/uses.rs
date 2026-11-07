@@ -42,21 +42,19 @@ impl<'ast> Visit<'ast> for FieldUseVisitor<'_> {
 
     #[instrument(level = "debug", skip(self, pat))]
     fn visit_pat_struct(&mut self, pat: &'ast PatStruct) {
-        if pat.path.is_ident(self.type_name)
+        if (pat.path.is_ident(self.type_name)
             || pat.path.is_ident("Self")
             || pat
                 .path
                 .segments
                 .last()
-                .is_some_and(|part| part.ident == self.type_name)
-        {
-            if pat
+                .is_some_and(|part| part.ident == self.type_name))
+            && pat
                 .fields
                 .iter()
                 .any(|field| member_is_field(&field.member, self.field_name))
-            {
-                self.unhandled = true;
-            }
+        {
+            self.unhandled = true;
         }
         syn::visit::visit_pat_struct(self, pat);
     }
@@ -85,7 +83,7 @@ impl<'ast> Visit<'ast> for FieldUseVisitor<'_> {
             return;
         };
         if args.len() < 3
-            || !matches!(args.iter().nth(1), Some(Expr::Lit(lit)) if matches!(lit.lit, syn::Lit::Str(_)))
+            || !matches!(args.get(1), Some(Expr::Lit(lit)) if matches!(lit.lit, syn::Lit::Str(_)))
         {
             self.unhandled = true;
             return;
@@ -131,10 +129,10 @@ fn expr_accesses_field(file: &SharedParsedFile, expr: &Expr, field_name: &str) -
 pub(super) fn tokens_access_field(tokens: &TokenStream, field_name: &str) -> bool {
     let trees: Vec<_> = tokens.clone().into_iter().collect();
     for (index, tree) in trees.iter().enumerate() {
-        if let TokenTree::Group(group) = tree {
-            if tokens_access_field(&group.stream(), field_name) {
-                return true;
-            }
+        if let TokenTree::Group(group) = tree
+            && tokens_access_field(&group.stream(), field_name)
+        {
+            return true;
         }
         if matches!(tree, TokenTree::Punct(dot) if dot.as_char() == '.')
             && matches!(trees.get(index + 1), Some(TokenTree::Ident(name)) if name == field_name)
@@ -150,10 +148,10 @@ pub(super) fn tokens_access_field(tokens: &TokenStream, field_name: &str) -> boo
 pub(super) fn tokens_construct_type(tokens: &TokenStream, type_name: &str) -> bool {
     let trees: Vec<_> = tokens.clone().into_iter().collect();
     for (index, tree) in trees.iter().enumerate() {
-        if let TokenTree::Group(group) = tree {
-            if tokens_construct_type(&group.stream(), type_name) {
-                return true;
-            }
+        if let TokenTree::Group(group) = tree
+            && tokens_construct_type(&group.stream(), type_name)
+        {
+            return true;
         }
         if matches!(tree, TokenTree::Ident(name) if name == type_name || name == "Self")
             && matches!(trees.get(index + 1), Some(TokenTree::Group(group)) if group.delimiter() == proc_macro2::Delimiter::Brace)

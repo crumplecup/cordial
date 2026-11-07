@@ -15,6 +15,14 @@ mod native;
 
 type Range = (usize, usize);
 
+/// Edits, validity, then the constructed structs and enum variants.
+pub(super) type ExpressionOutcome = (
+    Vec<Edit>,
+    bool,
+    BTreeSet<(String, String)>,
+    BTreeSet<(String, String)>,
+);
+
 pub(super) struct GraphExprPlanner<'a> {
     source: &'a str,
     facts: &'a GraphExprFacts,
@@ -68,14 +76,7 @@ impl<'a> GraphExprPlanner<'a> {
     }
 
     #[instrument(level = "debug", skip(self))]
-    pub(super) fn finish(
-        self,
-    ) -> (
-        Vec<Edit>,
-        bool,
-        BTreeSet<(String, String)>,
-        BTreeSet<(String, String)>,
-    ) {
+    pub(super) fn finish(self) -> ExpressionOutcome {
         (
             self.edits,
             self.valid,

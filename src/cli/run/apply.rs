@@ -1,9 +1,10 @@
 //! Source transformations and the worklist claims produced by successful edits.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
-use crate::{CordialResult, ProgressSink, StoreLayout, default_store_home};
+use crate::cli::commands::ActCtx;
+use crate::{CordialResult, StoreLayout, default_store_home};
 use tracing::instrument;
 
 #[cfg(feature = "internal_error_chain")]
@@ -13,17 +14,29 @@ mod panics;
 #[cfg(feature = "quality")]
 mod worklist;
 
-#[instrument(level = "debug", skip(store, progress), err(level = "warn"))]
-pub(in crate::cli) fn execute_quality_apply(
-    project_root: &Path,
-    store: &StoreLayout,
-    crate_name: Option<&str>,
-    store_home: Option<PathBuf>,
-    checklist: Option<&Path>,
-    progress: Arc<dyn ProgressSink>,
+/// What a quality apply run should do, beyond the shared command context.
+#[derive(Debug, Clone, Copy, derive_new::new)]
+pub(in crate::cli) struct QualityApplyOptions<'a> {
+    checklist: Option<&'a Path>,
     dry_run: bool,
-    only_etiquette: Option<&str>,
+    only_etiquette: Option<&'a str>,
+}
+
+#[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+pub(in crate::cli) fn execute_quality_apply(
+    ctx: &ActCtx,
+    options: QualityApplyOptions<'_>,
 ) -> CordialResult<()> {
+    let project_root = ctx.project_root().as_path();
+    let store = ctx.store();
+    let crate_name = ctx.crate_name().as_deref();
+    let store_home = ctx.store_home().clone();
+    let progress = Arc::clone(ctx.progress());
+    let QualityApplyOptions {
+        checklist,
+        dry_run,
+        only_etiquette,
+    } = options;
     let _worklist_lock =
         crate::WorklistLock::exclusive(store, "quality --apply", progress.as_ref())?;
     #[cfg(not(any(

@@ -122,7 +122,6 @@ pub struct VerusPanicSite {
     Deserialize,
     derive_getters::Getters,
     derive_builder::Builder,
-    derive_new::new,
 )]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct VerusFnFacts {

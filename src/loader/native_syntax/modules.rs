@@ -61,6 +61,6 @@ pub(crate) fn module_path(file: &Path, module: &ast::Module) -> CordialResult<Op
     if flat.is_file() {
         return Ok(Some(flat));
     }
-    let nested = dir.join(name.text().to_string()).join("mod.rs");
+    let nested = dir.join(name.text()).join("mod.rs");
     Ok(nested.is_file().then_some(nested))
 }

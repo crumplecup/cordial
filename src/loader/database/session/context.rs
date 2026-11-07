@@ -141,25 +141,27 @@ impl WorkspaceInputs {
         sources.sort();
         let source_digest = Sha256::digest(serde_json::to_vec(&sources)?).into();
         let compiled_inputs = attach_db(db, || compiled::collect(db, vfs, &self.build_scripts));
-        let context = SemanticWorkspaceContext::new(
-            [0; 32],
-            self.root,
-            self.options.features().clone(),
-            self.options.target().clone(),
-            *self.options.all_targets(),
-            *self.options.test_cfg(),
-            self.toolchain,
-            self.sysroot,
-            server
-                .map(|server| AsRef::<std::path::Path>::as_ref(server.server_path()).to_path_buf()),
-            self.configuration,
-            compiled_inputs,
-            source_digest,
-            self.environment_digest,
-            self.packages,
-            crates,
-            self.gaps,
-        );
+        let context =
+            SemanticWorkspaceContext::builder()
+                .identity([0; 32])
+                .root(self.root)
+                .features(self.options.features().clone())
+                .target(self.options.target().clone())
+                .all_targets(*self.options.all_targets())
+                .test_cfg(*self.options.test_cfg())
+                .toolchain(self.toolchain)
+                .sysroot(self.sysroot)
+                .proc_macro_server(server.map(|server| {
+                    AsRef::<std::path::Path>::as_ref(server.server_path()).to_path_buf()
+                }))
+                .configuration_inputs(self.configuration)
+                .compiled_inputs(compiled_inputs)
+                .loaded_sources_digest(source_digest)
+                .environment_digest(self.environment_digest)
+                .packages(self.packages)
+                .crates(crates)
+                .gaps(self.gaps)
+                .build()?;
         let identity = Sha256::digest(serde_json::to_vec(&context)?).into();
         Ok(context.with_identity(identity))
     }

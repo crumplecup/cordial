@@ -8,7 +8,9 @@ use syn::{Expr, FieldValue, Meta, Pat};
 use tracing::instrument;
 
 use super::bindings::{BindingCounts, caller_aliases};
-use super::replacements::{InitializerExpressionFact, inspect_empty_file, inspect_initializer};
+use super::replacements::{
+    InitializerExpressionFact, StaticNames, inspect_empty_file, inspect_initializer,
+};
 use super::{FieldKind, cfg_text, span_range};
 
 #[derive(Clone, Debug, Default)]
@@ -173,10 +175,12 @@ fn tuple_fact(source: &str, expr: &Expr) -> Option<(InitializerExpressionFact, b
         "file",
         false,
         FieldKind::CallSiteFile,
-        &aliases,
-        &BTreeSet::new(),
-        &BTreeSet::new(),
-        &BTreeMap::new(),
+        StaticNames::new(
+            &aliases,
+            &BTreeSet::new(),
+            &BTreeSet::new(),
+            &BTreeMap::new(),
+        ),
     )
     .map(|fact| (fact, true))
 }

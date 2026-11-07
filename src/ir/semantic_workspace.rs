@@ -88,10 +88,10 @@ pub struct SemanticPackageContext {
     Serialize,
     Deserialize,
     derive_getters::Getters,
-    derive_new::new,
+    derive_builder::Builder,
     derive_setters::Setters,
 )]
-#[new(visibility = "pub(crate)")]
+#[builder(build_fn(error = "crate::error::CordialError"), pattern = "owned")]
 #[setters(generate = false, prefix = "with_")]
 pub struct SemanticWorkspaceContext {
     /// Identity of this complete frozen Cargo context.
@@ -118,6 +118,14 @@ pub struct SemanticWorkspaceContext {
     packages: Vec<SemanticPackageContext>,
     crates: Vec<SemanticCrateContext>,
     gaps: Vec<SemanticContextGap>,
+}
+
+impl SemanticWorkspaceContext {
+    /// Start a builder for this value.
+    #[tracing::instrument(level = "debug")]
+    pub(crate) fn builder() -> SemanticWorkspaceContextBuilder {
+        SemanticWorkspaceContextBuilder::default()
+    }
 }
 
 /// Presence and exact bytes of a workspace driver input. Absence matters:

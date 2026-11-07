@@ -127,10 +127,11 @@ fn resolved_use(
     }
     let mut owners = Vec::new();
     for owner in ir.children(module, EdgeKind::Contains) {
-        if let Some(facts) = ir.function_source_syntax(owner)? {
-            if facts.source_digest() == digest && facts.signature_range() == signature {
-                owners.push((owner, facts))
-            }
+        if let Some(facts) = ir.function_source_syntax(owner)?
+            && facts.source_digest() == digest
+            && facts.signature_range() == signature
+        {
+            owners.push((owner, facts))
         }
     }
     let [(owner, facts)] = owners.as_slice() else {
@@ -164,12 +165,10 @@ fn coverage(
             if let SourceCallResolution::Source {
                 function: target, ..
             } = call.resolution()
+                && component.functions().contains(target)
+                && !seen.contains(&(*function, call.range().start(), call.range().end()))
             {
-                if component.functions().contains(target)
-                    && !seen.contains(&(*function, call.range().start(), call.range().end()))
-                {
-                    return Ok(Some(Blocker::IncompleteUseEvidence(*function)));
-                }
+                return Ok(Some(Blocker::IncompleteUseEvidence(*function)));
             }
         }
     }

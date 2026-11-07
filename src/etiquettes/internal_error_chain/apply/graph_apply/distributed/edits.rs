@@ -13,7 +13,7 @@ use super::super::VariantChange;
 use super::super::declarations::DeclarationKind;
 use super::super::expressions::GraphExprPlanner;
 use super::super::lifetimes;
-use super::super::plan::plan_struct_fields;
+use super::super::plan::{FieldScope, plan_struct_fields};
 use super::{CrateTypeIndex, Declarations, ErrorEdgeTarget, ErrorGraphPlan, GraphDeclaration};
 
 #[instrument(level = "debug", skip(declarations, files, strategy, index))]
@@ -107,11 +107,9 @@ pub(super) fn plan(
             file,
             strategy,
             index,
-            structs,
-            &names,
+            &FieldScope::new(structs, &names, true),
             graph_lifetime,
             &changing_generics,
-            true,
         );
         let (fields, edits, field_changes, valid) = fields.into_parts();
         if !valid {
@@ -142,10 +140,10 @@ pub(super) fn plan(
             &variants,
         )
         .strict_external();
-        if strategy == ErrorFieldStrategy::Borrowed {
-            if let Some(lifetime) = &lifetime {
-                visitor = visitor.require_anchored(lifetime.lifetime());
-            }
+        if strategy == ErrorFieldStrategy::Borrowed
+            && let Some(lifetime) = &lifetime
+        {
+            visitor = visitor.require_anchored(lifetime.lifetime());
         }
         visitor.run();
         let (edits, complete, found, found_variants) = visitor.finish();

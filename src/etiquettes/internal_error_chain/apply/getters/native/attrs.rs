@@ -123,13 +123,12 @@ pub(in crate::etiquettes::internal_error_chain::apply) fn stable_conditional(
                 return false;
             }
             args.iter().skip(1).all(|expr| {
-                if let ast::Expr::PathExpr(path) = expr {
-                    if path
+                if let ast::Expr::PathExpr(path) = expr
+                    && path
                         .path()
                         .is_some_and(|path| path.syntax().text() == "file")
-                    {
-                        return true;
-                    }
+                {
+                    return true;
                 }
                 !expr
                     .syntax()

@@ -36,7 +36,7 @@ pub(super) fn collect(node: &SyntaxNode) -> BTreeMap<String, ast::Type> {
                 && reference.mut_token().is_none()
                 && reference
                     .lifetime()
-                    .is_some_and(|l| l.syntax().text().to_string() == "'static")
+                    .is_some_and(|l| l.syntax().text() == "'static")
                 && reference
                     .ty()
                     .and_then(|t| syntax::simple_type(&t))

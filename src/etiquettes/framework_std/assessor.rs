@@ -149,10 +149,10 @@ mod amenable {
                         marker.field("type_kind").unwrap_or(""),
                         marker.field("is_generic") == Some("true"),
                         item.and_then(|item| item.alias_target().as_deref()),
-                        &merged_items,
+                        merged_items,
                         &registry,
                         &skip_map,
-                        &proof_chain_subjects,
+                        proof_chain_subjects,
                     ),
                 )?;
                 let (missing_layers, action) = amenable_gap_fields(&entry, AMENABLE_IMPL_CRATE);

@@ -82,11 +82,9 @@ pub(super) fn plan_file(
         file,
         strategy,
         index,
-        &structs,
-        &names,
+        &FieldScope::new(&structs, &names, false),
         graph_lifetime,
         &changing_generics,
-        false,
     );
     fields.extend(field_plan.fields);
     edits.extend(field_plan.edits);
@@ -147,13 +145,7 @@ fn discover_graph<'a>(
     roots: Vec<String>,
     graph_lifetime: Option<&str>,
     changing_generics: &BTreeSet<String>,
-) -> (
-    BTreeSet<String>,
-    Vec<(String, String)>,
-    Vec<Edit>,
-    BTreeMap<(String, String), VariantChange>,
-    bool,
-) {
+) -> GraphDiscovery {
     let mut names = BTreeSet::new();
     let mut fields = Vec::new();
     let mut edits = Vec::new();
@@ -182,12 +174,11 @@ fn discover_graph<'a>(
         };
         for field in named {
             let field_name = field.name();
-            if field_name.as_deref() == Some("source") {
-                if let Some(target) = field.type_name() {
-                    if structs.contains_key(target) {
-                        pending.push(target.to_string());
-                    }
-                }
+            if field_name == Some("source")
+                && let Some(target) = field.type_name()
+                && structs.contains_key(target)
+            {
+                pending.push(target.to_string());
             }
             if field_name != Some("kind") {
                 continue;
@@ -231,10 +222,10 @@ fn discover_graph<'a>(
                     valid = false;
                     continue;
                 };
-                if let Some(source) = structs.get(payload) {
-                    if source.is_inherited() {
-                        pending.push(payload.to_string());
-                    }
+                if let Some(source) = structs.get(payload)
+                    && source.is_inherited()
+                {
+                    pending.push(payload.to_string());
                 }
                 if let Some(replacement) = field.desired_type(
                     strategy,
@@ -268,6 +259,23 @@ fn discover_graph<'a>(
     (names, fields, edits, variants, valid)
 }
 
+/// Field renames, edits, per-variant changes and validity of a [`FieldPlan`].
+pub(super) type FieldPlanParts = (
+    Vec<(String, String)>,
+    Vec<Edit>,
+    BTreeMap<(String, String), Change>,
+    bool,
+);
+
+/// Reachable names, field renames, edits, variant changes and validity.
+type GraphDiscovery = (
+    BTreeSet<String>,
+    Vec<(String, String)>,
+    Vec<Edit>,
+    BTreeMap<(String, String), VariantChange>,
+    bool,
+);
+
 pub(super) struct FieldPlan {
     fields: Vec<(String, String)>,
     edits: Vec<Edit>,
@@ -277,32 +285,33 @@ pub(super) struct FieldPlan {
 
 impl FieldPlan {
     #[instrument(level = "trace", skip(self))]
-    pub(super) fn into_parts(
-        self,
-    ) -> (
-        Vec<(String, String)>,
-        Vec<Edit>,
-        BTreeMap<(String, String), Change>,
-        bool,
-    ) {
+    pub(super) fn into_parts(self) -> FieldPlanParts {
         (self.fields, self.edits, self.changes, self.valid)
     }
 }
 
-#[instrument(
-    level = "debug",
-    skip(file, strategy, index, structs, names, changing_generics)
-)]
+/// The structs whose fields are planned, and whether targets outside the file are allowed.
+#[derive(derive_new::new)]
+pub(super) struct FieldScope<'a, 'b> {
+    structs: &'a BTreeMap<String, &'b GraphDeclaration>,
+    names: &'a BTreeSet<String>,
+    allow_external: bool,
+}
+
+#[instrument(level = "debug", skip(file, strategy, index, scope, changing_generics))]
 pub(super) fn plan_struct_fields(
     file: &SourceEditView,
     strategy: ErrorFieldStrategy,
     index: &CrateTypeIndex,
-    structs: &BTreeMap<String, &GraphDeclaration>,
-    names: &BTreeSet<String>,
+    scope: &FieldScope<'_, '_>,
     graph_lifetime: Option<&str>,
     changing_generics: &BTreeSet<String>,
-    allow_external: bool,
 ) -> FieldPlan {
+    let FieldScope {
+        structs,
+        names,
+        allow_external,
+    } = *scope;
     let mut fields = Vec::new();
     let mut edits = Vec::new();
     let mut valid = true;
@@ -386,7 +395,7 @@ pub(super) fn plan_struct_fields(
                 item.only_lifetime(),
                 Some(field_name),
                 graph_lifetime,
-                &changing_generics,
+                changing_generics,
             ) else {
                 if field.wants_change(strategy == ErrorFieldStrategy::Borrowed) {
                     valid = false;

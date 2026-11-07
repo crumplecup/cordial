@@ -18,7 +18,7 @@ pub use write::{PanicMigrationApplySummary, apply_closed_panic_migration};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClosedPanicDecision {
     /// All written uses are accounted for within the supported binary contract.
-    Ready(ClosedPanicMigration),
+    Ready(Box<ClosedPanicMigration>),
     /// The selected panic site no longer exists.
     NoCandidate,
     /// No closed plan is exposed when an obligation is unresolved.
@@ -89,7 +89,7 @@ pub fn plan_closed_owned_panic_group(
     main: NodeId,
 ) -> CordialResult<ClosedPanicDecision> {
     let component = match plan_owned_panic_group(ir, sites, main)? {
-        PanicComponentDecision::Ready(component) => component,
+        PanicComponentDecision::Ready(component) => *component,
         PanicComponentDecision::NoCandidate => return Ok(ClosedPanicDecision::NoCandidate),
         PanicComponentDecision::Refused(reason) => {
             return Ok(ClosedPanicDecision::Refused(ClosedPanicBlocker::Component(
@@ -140,9 +140,9 @@ pub fn plan_closed_owned_panic_group(
             ClosedPanicBlocker::IncompleteUseEvidence(main),
         ));
     }
-    Ok(ClosedPanicDecision::Ready(ClosedPanicMigration {
+    Ok(ClosedPanicDecision::Ready(Box::new(ClosedPanicMigration {
         component,
         inputs,
         source_root,
-    }))
+    })))
 }

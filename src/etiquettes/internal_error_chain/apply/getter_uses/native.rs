@@ -129,22 +129,22 @@ impl Collector<'_, '_> {
                 _ => false,
             });
             for stmt in block.statements() {
-                if let ast::Stmt::Item(ast::Item::Fn(function)) = stmt {
-                    if let Some(name) = function.name() {
-                        let value = if type_parameters(&function) {
-                            ReceiverRecipe::Unknown
-                        } else {
-                            function
-                                .ret_type()
-                                .and_then(|ret| ret.ty())
-                                .map_or(ReceiverRecipe::Unknown, |ty| self.ty(&ty))
-                        };
-                        self.scope
-                            .functions
-                            .entry(name.text().to_string())
-                            .and_modify(|v| *v = ReceiverRecipe::Unknown)
-                            .or_insert(value);
-                    }
+                if let ast::Stmt::Item(ast::Item::Fn(function)) = stmt
+                    && let Some(name) = function.name()
+                {
+                    let value = if type_parameters(&function) {
+                        ReceiverRecipe::Unknown
+                    } else {
+                        function
+                            .ret_type()
+                            .and_then(|ret| ret.ty())
+                            .map_or(ReceiverRecipe::Unknown, |ty| self.ty(&ty))
+                    };
+                    self.scope
+                        .functions
+                        .entry(name.text().to_string())
+                        .and_modify(|v| *v = ReceiverRecipe::Unknown)
+                        .or_insert(value);
                 }
             }
             true
@@ -176,12 +176,12 @@ impl Collector<'_, '_> {
             }
             return;
         }
-        if let Some(pat) = ast::IdentPat::cast(node.clone()) {
-            if let Some(name) = pat.name() {
-                self.scope
-                    .bindings
-                    .insert(name.text().to_string(), ReceiverRecipe::Unknown);
-            }
+        if let Some(pat) = ast::IdentPat::cast(node.clone())
+            && let Some(name) = pat.name()
+        {
+            self.scope
+                .bindings
+                .insert(name.text().to_string(), ReceiverRecipe::Unknown);
         }
         self.expression(node, offset);
         for child in node.children() {

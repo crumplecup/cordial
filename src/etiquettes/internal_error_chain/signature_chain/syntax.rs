@@ -81,10 +81,10 @@ pub(super) fn source_returns_variants(method: &syn::ImplItemFn) -> Option<Vec<St
     }
     let mut variants = Vec::new();
     for arm in &matched.arms {
-        if let Expr::Path(none) = arm.body.as_ref() {
-            if none.path.is_ident("None") {
-                continue;
-            }
+        if let Expr::Path(none) = arm.body.as_ref()
+            && none.path.is_ident("None")
+        {
+            continue;
         }
         let Expr::Call(some) = arm.body.as_ref() else {
             return None;

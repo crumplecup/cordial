@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use tracing::instrument;
 
 mod apply;
-pub(super) use apply::execute_quality_apply;
+pub(super) use apply::{QualityApplyOptions, execute_quality_apply};
 
 mod pipeline;
 pub(super) use pipeline::execute_run_plugins;

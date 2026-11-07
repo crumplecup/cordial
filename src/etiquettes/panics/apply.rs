@@ -64,7 +64,7 @@ pub fn run_panic_apply(
         let selections: Vec<_> = candidates.iter().map(|(_, selection)| *selection).collect();
         let decision = if let Some(main) = ir.node_by_path("main") {
             match crate::plan_closed_owned_panic_group(&ir, &selections, main)? {
-                ClosedPanicDecision::Ready(migration) => Ok(migration),
+                ClosedPanicDecision::Ready(migration) => Ok(*migration),
                 ClosedPanicDecision::Refused(reason) => Err(PanicApplyBlocker::Closure(reason)),
                 ClosedPanicDecision::NoCandidate => Err(PanicApplyBlocker::UnsupportedSite),
             }

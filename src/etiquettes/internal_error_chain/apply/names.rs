@@ -38,10 +38,10 @@ impl NameAudit {
     #[instrument(level = "debug", skip(self, path))]
     fn check_binding(&mut self, binding: &str, path: &[String]) {
         self.imported_names.insert(binding.to_string());
-        if let Some(target) = path.last() {
-            if target != binding {
-                self.aliased_types.insert(target.clone());
-            }
+        if let Some(target) = path.last()
+            && target != binding
+        {
+            self.aliased_types.insert(target.clone());
         }
         if !protected_name(binding) {
             return;

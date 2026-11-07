@@ -3,7 +3,7 @@ use super::bindings::{
     BindingCounts, caller_aliases, impl_uses_lifetime, static_string_locals, static_string_params,
 };
 use super::projection::{Field, InitializerFileFacts, Record, StringOrigin, StringProof};
-use super::replacements::{inspect_initializer, value_expression};
+use super::replacements::{StaticNames, inspect_initializer, value_expression};
 use super::tuples::{TupleFileOrigins, tuple_file_origins};
 use super::{FieldKind, cfg_text, simple_type_name};
 use crate::loader::SharedParsedFile;
@@ -65,10 +65,10 @@ impl Collector<'_> {
                 _ => None,
             }))
         {
-            if let syn::Type::Reference(reference) = node {
-                if let Some(lifetime) = &reference.lifetime {
-                    lifetimes.insert(lifetime.ident.to_string());
-                }
+            if let syn::Type::Reference(reference) = node
+                && let Some(lifetime) = &reference.lifetime
+            {
+                lifetimes.insert(lifetime.ident.to_string());
             }
         }
         let mut bindings = BTreeMap::new();
@@ -141,10 +141,7 @@ impl Collector<'_> {
             &name,
             field.colon_token.is_none(),
             FieldKind::StaticString,
-            &empty,
-            &constants,
-            &empty,
-            &locals,
+            StaticNames::new(&empty, &constants, &empty, &locals),
         )
         .map(|fact| {
             let origin = if let Some(constant) = constant {
@@ -167,10 +164,7 @@ impl Collector<'_> {
             &name,
             field.colon_token.is_none(),
             FieldKind::CallSiteFile,
-            &self.context.aliases,
-            &empty,
-            &empty,
-            &BTreeMap::new(),
+            StaticNames::new(&self.context.aliases, &empty, &empty, &BTreeMap::new()),
         );
         let file = direct.map(|fact| vec![fact]).or_else(|| {
             matches!(&field.expr, Expr::Path(path) if path.qself.is_none() && path.path.is_ident("file"))

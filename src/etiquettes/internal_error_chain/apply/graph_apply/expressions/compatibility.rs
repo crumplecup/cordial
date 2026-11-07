@@ -82,9 +82,8 @@ impl Collector<'_> {
             anchored_lifetimes: self
                 .anchor_params
                 .iter()
-                .filter_map(|(lifetime, params)| {
-                    constructor_origin(expr, params).then(|| lifetime.clone())
-                })
+                .filter(|&(_lifetime, params)| constructor_origin(expr, params))
+                .map(|(lifetime, _params)| lifetime.clone())
                 .collect(),
         }
     }

@@ -38,8 +38,16 @@ pub struct DeriveModuleFacts {
 
 /// Fields, derive attributes, and visibility evidence for one struct.
 #[derive(
-    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_builder::Builder,
+    derive_getters::Getters,
 )]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct DeriveStructFacts {
     name: String,
     #[getter(copy)]
@@ -52,6 +60,14 @@ pub struct DeriveStructFacts {
     clap_schema: bool,
     #[getter(copy)]
     creusot_only: bool,
+}
+
+impl DeriveStructFacts {
+    /// Start a builder for this value.
+    #[tracing::instrument(level = "debug")]
+    pub(crate) fn builder() -> DeriveStructFactsBuilder {
+        DeriveStructFactsBuilder::default()
+    }
 }
 
 /// Field wrapper and visibility facts used by getter policy.

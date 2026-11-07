@@ -69,7 +69,7 @@ fn validate_inputs(migration: &ClosedPanicMigration) -> CordialResult<()> {
     // It detects new uses omitted by an earlier, otherwise unchanged inventory.
     let mut current = BTreeSet::new();
     for entry in walkdir::WalkDir::new(migration.source_root()) {
-        let entry = entry.map_err(|error| std::io::Error::other(error))?;
+        let entry = entry.map_err(std::io::Error::other)?;
         if entry.file_type().is_symlink() {
             return Err(std::io::Error::from(std::io::ErrorKind::Unsupported).into());
         }

@@ -35,7 +35,7 @@ impl Probe for HomecomingStdScopeProbe {
         let anchor = crate::objects::NodeAnchor::new(ir.root()?);
         let probe_id = Self::ID.to_string();
 
-        let markers = framework_std_type_items(&merged_items, options.include_nightly())
+        let markers = framework_std_type_items(merged_items, options.include_nightly())
             .map(|item| {
                 Box::new(FrameworkStdScopeMarker::new(
                     anchor,
@@ -91,7 +91,7 @@ mod amenable {
             let anchor = crate::objects::NodeAnchor::new(ir.root()?);
             let probe_id = Self::ID.to_string();
 
-            let markers = framework_std_type_items(&merged_items, options.include_nightly())
+            let markers = framework_std_type_items(merged_items, options.include_nightly())
                 .map(|item| {
                     Box::new(FrameworkStdScopeMarker::new(
                         anchor,

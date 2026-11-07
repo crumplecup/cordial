@@ -58,10 +58,10 @@ impl SourceModuleScope {
                 uses.opaque_ranges
                     .push(std::ops::Range::<usize>::from(node.text_range()).into());
             }
-            if let Some(expression) = ast::PathExpr::cast(node.clone()) {
-                if let Some(path) = expression.path() {
-                    uses.paths.push(path_use(&expression, path));
-                }
+            if let Some(expression) = ast::PathExpr::cast(node.clone())
+                && let Some(path) = expression.path()
+            {
+                uses.paths.push(path_use(&expression, path));
             }
         }
         self.uses = Some(uses);

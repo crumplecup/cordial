@@ -45,18 +45,22 @@ fn items(
                     .filter(|needle| attrs::has_derive(&item, needle))
                     .map(str::to_string)
                     .collect();
-                out.push(DeriveItemFacts::Struct(DeriveStructFacts::new(
-                    name.clone(),
-                    file.line(item.syntax().text_range().start()),
-                    derives,
-                    fields,
-                    exposed,
-                    attrs::builder_names(&item, &name),
-                    ["Parser", "Args", "Subcommand"]
-                        .iter()
-                        .any(|needle| attrs::has_derive(&item, needle)),
-                    attrs::gate(&item, "creusot"),
-                )));
+                out.push(DeriveItemFacts::Struct(
+                    DeriveStructFacts::builder()
+                        .name(name.clone())
+                        .line(file.line(item.syntax().text_range().start()))
+                        .derives(derives)
+                        .fields(fields)
+                        .exposed_fields(exposed)
+                        .generated_builders(attrs::builder_names(&item, &name))
+                        .clap_schema(
+                            ["Parser", "Args", "Subcommand"]
+                                .iter()
+                                .any(|needle| attrs::has_derive(&item, needle)),
+                        )
+                        .creusot_only(attrs::gate(&item, "creusot"))
+                        .build()?,
+                ));
             }
             ast::Item::Impl(item) => {
                 let ty = item

@@ -35,28 +35,28 @@ impl Collector<'_, '_> {
                 })
                 .map(|ty| path(&ty).names)
                 .filter(|names| names.last().is_some_and(|name| name == "Error"));
-            if let Some(ast::Type::PathType(ty)) = item.trait_() {
-                if let Some(trait_path) = ty.path() {
-                    let parts = path(&trait_path).names;
-                    if parts.last().is_some_and(|name| name == "From") {
-                        let input = signatures::single_type_argument(&trait_path)
-                            .and_then(|ty| plain_path(&ty));
-                        let output = item.self_ty().and_then(|ty| plain_path(&ty));
-                        // The trait itself isn't a TypePath in the compatibility AST.
-                        let names = trait_path
-                            .syntax()
-                            .children()
-                            .flat_map(|child| mentions(&child))
-                            .collect();
-                        self.record(
-                            node,
-                            &context,
-                            Kind::From {
-                                mentions: names,
-                                evidence: ErrorFromEvidence::new(parts, input, output),
-                            },
-                        );
-                    }
+            if let Some(ast::Type::PathType(ty)) = item.trait_()
+                && let Some(trait_path) = ty.path()
+            {
+                let parts = path(&trait_path).names;
+                if parts.last().is_some_and(|name| name == "From") {
+                    let input = signatures::single_type_argument(&trait_path)
+                        .and_then(|ty| plain_path(&ty));
+                    let output = item.self_ty().and_then(|ty| plain_path(&ty));
+                    // The trait itself isn't a TypePath in the compatibility AST.
+                    let names = trait_path
+                        .syntax()
+                        .children()
+                        .flat_map(|child| mentions(&child))
+                        .collect();
+                    self.record(
+                        node,
+                        &context,
+                        Kind::From {
+                            mentions: names,
+                            evidence: ErrorFromEvidence::new(parts, input, output),
+                        },
+                    );
                 }
             }
         }
@@ -75,23 +75,22 @@ impl Collector<'_, '_> {
                 context.source_site = None;
                 if function.name().is_some_and(|name| name.text() == "source")
                     && context.owner.is_some()
+                    && let Some(trait_path) = &context.error_trait
                 {
-                    if let Some(trait_path) = &context.error_trait {
-                        let text = function
-                            .ret_type()
-                            .and_then(|ty| ty.ty())
-                            .map(|ty| self.file.text(ty.syntax()).to_string());
-                        context.source_site = Some(self.events.len());
-                        self.record(
-                            node,
-                            &context,
-                            Kind::Source(ErrorSourceMethodEvidence::new(
-                                trait_path.clone(),
-                                text,
-                                BTreeSet::new(),
-                            )),
-                        );
-                    }
+                    let text = function
+                        .ret_type()
+                        .and_then(|ty| ty.ty())
+                        .map(|ty| self.file.text(ty.syntax()).to_string());
+                    context.source_site = Some(self.events.len());
+                    self.record(
+                        node,
+                        &context,
+                        Kind::Source(ErrorSourceMethodEvidence::new(
+                            trait_path.clone(),
+                            text,
+                            BTreeSet::new(),
+                        )),
+                    );
                 }
             }
             if !trait_or_foreign {

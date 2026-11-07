@@ -25,7 +25,7 @@ fn migration(root: &std::path::Path) -> miette::Result<ClosedPanicMigration> {
     else {
         miette::bail!("missing closed migration");
     };
-    Ok(plan)
+    Ok(*plan)
 }
 
 #[test]

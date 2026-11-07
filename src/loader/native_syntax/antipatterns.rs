@@ -25,8 +25,8 @@ fn contract_facts<'db>(
     let tokens = key.text(db).parse::<proc_macro2::TokenStream>().ok()?;
     crate::etiquettes::antipatterns::antipattern_contract_payload(
         tokens,
-        &key.file(db),
-        &key.modules(db),
+        key.file(db),
+        key.modules(db),
         key.context(db),
         key.kind(db),
         *key.line(db),

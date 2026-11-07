@@ -71,10 +71,9 @@ impl Counts {
         // Also count shorthand when the parser exposes a direct name reference.
         if let Some(field) =
             ast::RecordExprField::cast(node.clone()).filter(|field| field.expr().is_none())
+            && let Some(name) = field.name_ref()
         {
-            if let Some(name) = field.name_ref() {
-                *self.uses.entry(name.text().to_string()).or_default() += 1;
-            }
+            *self.uses.entry(name.text().to_string()).or_default() += 1;
         }
         for child in node.children() {
             self.visit(&child);
@@ -166,10 +165,11 @@ pub(super) fn strings(
             continue;
         };
         arguments.insert(name.clone());
-        if pat.pat().is_none() && !counts.names.contains_key(&name) {
-            if let Some(lifetime) = param.ty().and_then(string_lifetime) {
-                bindings.insert(name, (lifetime, 0));
-            }
+        if pat.pat().is_none()
+            && !counts.names.contains_key(&name)
+            && let Some(lifetime) = param.ty().and_then(string_lifetime)
+        {
+            bindings.insert(name, (lifetime, 0));
         }
     }
     for stmt in block
@@ -213,10 +213,11 @@ pub(super) fn strings(
             }
             _ => None,
         };
-        if let Some((name, lifetime, end)) = found {
-            if !arguments.contains(&name) && counts.names.get(&name) == Some(&1) {
-                bindings.insert(name, (lifetime, end));
-            }
+        if let Some((name, lifetime, end)) = found
+            && !arguments.contains(&name)
+            && counts.names.get(&name) == Some(&1)
+        {
+            bindings.insert(name, (lifetime, end));
         }
     }
     bindings

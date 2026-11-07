@@ -59,8 +59,7 @@ pub(super) fn repair(
         }
         if controls.enabled(TracingRuleKind::SkipMissing)
             && !args.entries().iter().any(|arg| arg.name() == "skip_all")
-        {
-            if !merge_list(
+            && !merge_list(
                 args,
                 "skip",
                 recipe
@@ -71,9 +70,9 @@ pub(super) fn repair(
                     .collect(),
                 &mut additions,
                 &mut edits,
-            ) {
-                return GapApplyOutcome::Unresolved;
-            }
+            )
+        {
+            return GapApplyOutcome::Unresolved;
         }
         if controls.enabled(TracingRuleKind::FieldsMissing)
             && !merge_list(

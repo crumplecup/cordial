@@ -22,8 +22,7 @@ fn static_str(ty: &ast::Type) -> bool {
     match ty {
         ast::Type::RefType(t) => {
             t.mut_token().is_none()
-                && t.lifetime()
-                    .is_some_and(|l| l.syntax().text().to_string() == "'static")
+                && t.lifetime().is_some_and(|l| l.syntax().text() == "'static")
                 && t.ty().and_then(|t| simple_type(&t)).as_deref() == Some("str")
         }
         ast::Type::ParenType(t) => t.ty().is_some_and(|t| static_str(&t)),

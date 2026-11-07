@@ -14,6 +14,9 @@ use super::paths::ModuleIdentity;
 
 const TYPE_INDEX_ATTR: &str = "error_apply_type_index";
 
+/// Names imported by one file, each with its path segments.
+type ImportFacts = Vec<(String, Vec<String>)>;
+
 /// Sequence entries keep path and position keys valid JSON without
 /// stringifying identities or parsing source again when the planner reads them.
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -21,7 +24,7 @@ struct CrateTypeIndexFacts {
     declarations: Vec<(Vec<String>, Vec<Option<ErrorEdgeTarget>>)>,
     local: Vec<(PathBuf, String, Vec<Option<ErrorEdgeTarget>>)>,
     modules: Vec<(PathBuf, ModuleIdentity)>,
-    imports: Vec<(PathBuf, Vec<(String, Vec<String>)>)>,
+    imports: Vec<(PathBuf, ImportFacts)>,
     file_syntax: Vec<FileSyntaxFacts>,
     incoming_edges: Vec<(String, ErrorEdgeTarget)>,
     getter_uses: Vec<super::super::super::getter_uses::GetterUseFact>,

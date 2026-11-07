@@ -105,29 +105,46 @@ pub(super) fn inspect_empty_file(source: &str, expr: &Expr) -> Option<Initialize
     })
 }
 
-#[instrument(
-    level = "debug",
-    skip(
-        source,
-        expr,
-        kind,
-        aliases,
-        static_strings,
-        static_params,
-        static_locals
-    )
-)]
+/// Names whose values are known statically where an initializer is inspected.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct StaticNames<'a> {
+    aliases: &'a BTreeSet<String>,
+    strings: &'a BTreeSet<String>,
+    params: &'a BTreeSet<String>,
+    locals: &'a BTreeMap<String, usize>,
+}
+
+impl<'a> StaticNames<'a> {
+    pub(super) fn new(
+        aliases: &'a BTreeSet<String>,
+        strings: &'a BTreeSet<String>,
+        params: &'a BTreeSet<String>,
+        locals: &'a BTreeMap<String, usize>,
+    ) -> Self {
+        Self {
+            aliases,
+            strings,
+            params,
+            locals,
+        }
+    }
+}
+
+#[instrument(level = "debug", skip(source, expr, kind, names))]
 pub(super) fn inspect_initializer(
     source: &str,
     expr: &Expr,
     field_name: &str,
     shorthand: bool,
     kind: FieldKind,
-    aliases: &BTreeSet<String>,
-    static_strings: &BTreeSet<String>,
-    static_params: &BTreeSet<String>,
-    static_locals: &BTreeMap<String, usize>,
+    names: StaticNames<'_>,
 ) -> Option<InitializerExpressionFact> {
+    let StaticNames {
+        aliases,
+        strings: static_strings,
+        params: static_params,
+        locals: static_locals,
+    } = names;
     let whole = span_range(source, expr.span())?;
     let expr = without_parens(expr);
     let (form, value) = match expr {

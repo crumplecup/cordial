@@ -113,11 +113,10 @@ pub(super) fn builds_syn_error(expr: &ast::Expr) -> bool {
     match expr {
         ast::Expr::CallExpr(call) => call.expr().as_ref().and_then(path).is_some_and(|path| {
             let parts: Vec<_> = path.split("::").collect();
-            match parts.as_slice() {
-                [.., "Error", "new_spanned" | "new2"] => true,
-                [.., "syn", "Error", "new"] => true,
-                _ => false,
-            }
+            matches!(
+                parts.as_slice(),
+                [.., "Error", "new_spanned" | "new2"] | [.., "syn", "Error", "new"]
+            )
         }),
         ast::Expr::ClosureExpr(expr) => expr.body().as_ref().is_some_and(builds_syn_error),
         ast::Expr::BlockExpr(expr) => last_expr(expr).as_ref().is_some_and(builds_syn_error),

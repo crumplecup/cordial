@@ -34,17 +34,16 @@ impl Tokens {
                     self.constructed.insert(name);
                 }
             }
-            if part.kind() == SyntaxKind::DOT {
-                if let Some(name) = parts.get(index + 1).and_then(identifier) {
-                    if !parts.get(index + 2).is_some_and(|part| group(part, false)) {
-                        self.accessed_fields.insert(name);
-                    }
-                }
+            if part.kind() == SyntaxKind::DOT
+                && let Some(name) = parts.get(index + 1).and_then(identifier)
+                && !parts.get(index + 2).is_some_and(|part| group(part, false))
+            {
+                self.accessed_fields.insert(name);
             }
-            if let NodeOrToken::Node(node) = part {
-                if let Some(tree) = ast::TokenTree::cast(node.clone()) {
-                    self.visit(&tree);
-                }
+            if let NodeOrToken::Node(node) = part
+                && let Some(tree) = ast::TokenTree::cast(node.clone())
+            {
+                self.visit(&tree);
             }
             if matches!(
                 part.kind(),
@@ -130,30 +129,29 @@ fn unhandled(invocation: &ast::MacroCall, field: &str, syntax: &DatabaseMacroSyn
 #[instrument(level = "debug", skip(expr, field, syntax))]
 fn accesses(expr: &ast::Expr, field: &str, syntax: &DatabaseMacroSyntax) -> bool {
     expr.syntax().descendants().any(|node| {
-        if let Some(value) = ast::FieldExpr::cast(node.clone()) {
-            if value.name_ref().is_some_and(|name| name.text() == field) {
-                return true;
-            }
+        if let Some(value) = ast::FieldExpr::cast(node.clone())
+            && value.name_ref().is_some_and(|name| name.text() == field)
+        {
+            return true;
         }
-        if let Some(pattern) = ast::RecordPat::cast(node.clone()) {
-            if pattern
+        if let Some(pattern) = ast::RecordPat::cast(node.clone())
+            && pattern
                 .path()
                 .is_some_and(|path| syntax::names(path) == ["Self"])
-                && pattern.record_pat_field_list().is_some_and(|list| {
-                    list.fields().any(|value| {
-                        value.name_ref().is_some_and(|name| name.text() == field)
-                            || value.pat().is_some_and(|pat| match pat {
-                                ast::Pat::IdentPat(pat) => {
-                                    use ast::HasName;
-                                    pat.name().is_some_and(|name| name.text() == field)
-                                }
-                                _ => false,
-                            })
-                    })
+            && pattern.record_pat_field_list().is_some_and(|list| {
+                list.fields().any(|value| {
+                    value.name_ref().is_some_and(|name| name.text() == field)
+                        || value.pat().is_some_and(|pat| match pat {
+                            ast::Pat::IdentPat(pat) => {
+                                use ast::HasName;
+                                pat.name().is_some_and(|name| name.text() == field)
+                            }
+                            _ => false,
+                        })
                 })
-            {
-                return true;
-            }
+            })
+        {
+            return true;
         }
         ast::MacroCall::cast(node).is_some_and(|invocation| unhandled(&invocation, field, syntax))
     })

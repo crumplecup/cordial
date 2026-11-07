@@ -104,7 +104,7 @@ pub(super) fn enrich_conversion_graphs(
                         .iter()
                         .find(|file| file.path() == candidate.plan.path())?;
                     index
-                        .resolve(home, &[name.clone()])
+                        .resolve(home, std::slice::from_ref(name))
                         .map(|target| (name.clone(), target))
                 })
                 .collect();

@@ -55,7 +55,7 @@ impl Scanner<'_, '_> {
         let Some(path) = invocation.path() else {
             return Ok(());
         };
-        if path.syntax().text().to_string() == "verus" {
+        if path.syntax().text() == "verus" {
             #[cfg(not(feature = "verus_ir"))]
             self.recovered_verus(invocation, context)?;
             return Ok(());

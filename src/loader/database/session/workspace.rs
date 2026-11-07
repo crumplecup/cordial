@@ -119,12 +119,12 @@ impl SourceDatabase {
                 context.root().clone(),
             ));
         }
-        if let Some(server) = &self.proc_macro_server {
-            if server.exited().is_some() {
-                return Err(crate::CordialError::semantic_context_input(
-                    AsRef::<std::path::Path>::as_ref(server.server_path()).to_path_buf(),
-                ));
-            }
+        if let Some(server) = &self.proc_macro_server
+            && server.exited().is_some()
+        {
+            return Err(crate::CordialError::semantic_context_input(
+                AsRef::<std::path::Path>::as_ref(server.server_path()).to_path_buf(),
+            ));
         }
         Ok(context.clone())
     }

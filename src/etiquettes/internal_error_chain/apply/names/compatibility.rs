@@ -51,10 +51,10 @@ impl<'ast> Visit<'ast> for NameAudit {
         if protected_name(&item.ident.to_string()) {
             self.ambiguous = true;
         }
-        if let Some(target) = type_name(&item.ty) {
-            if item.ident != target {
-                self.aliased_types.insert(target);
-            }
+        if let Some(target) = type_name(&item.ty)
+            && item.ident != target
+        {
+            self.aliased_types.insert(target);
         }
         syn::visit::visit_item_type(self, item);
     }

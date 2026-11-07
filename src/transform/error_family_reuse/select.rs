@@ -37,13 +37,13 @@ fn choose(
 ) -> Disposition {
     if policy == SourceErrorReuse::Forbidden {
         for (selected_group, group) in selected.iter().enumerate() {
-            if group.disposition == Disposition::Selected {
-                if let Some(conflict) = conflict(&group.members, &candidate.members) {
-                    return Disposition::Overlap {
-                        selected_group,
-                        conflict,
-                    };
-                }
+            if group.disposition == Disposition::Selected
+                && let Some(conflict) = conflict(&group.members, &candidate.members)
+            {
+                return Disposition::Overlap {
+                    selected_group,
+                    conflict,
+                };
             }
         }
     }
