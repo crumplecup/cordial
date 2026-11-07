@@ -30,19 +30,21 @@ default:
 install:
     {{cargo}} install --path {{justfile_directory()}} --bin cordial --force --locked --profile release --features {{features}}
 
-# Routine test run. Deliberately `--features full`, not `--all-features`:
-# `--all-features` unconditionally enables `slow_tests` too (inherent to
-# what --all-features means -- no feature declaration can opt out of it),
-# which pulls in tests too expensive/environment-dependent for routine
-# verification (see Cargo.toml's own comment on that feature).
+# Routine test run through cargo-nextest (`cargo install cargo-nextest`), which
+# runs tests from all binaries in parallel. The default `quick` feature is on,
+# so tests over 60s are not compiled, and `--all-features` is quick-safe too
+# since it enables `quick`. nextest does not run doctests, so they run after.
 test:
-    {{cargo}} test --features {{features}}
+    {{cargo}} nextest run --features {{features}}
+    {{cargo}} test --doc --features {{features}}
 
-# Full run including `slow_tests` -- real subprocess/heavy-parse tests,
-# minutes not seconds. Run deliberately, not as part of routine
-# verification.
+# Full run including the slow tests (over 60s each; real database loads and
+# dogfood scans -- minutes, not seconds). Features cannot subtract, so this
+# drops the defaults (and with them `quick`) instead of adding a feature.
+# Run deliberately, not as part of routine verification.
 test-slow:
-    {{cargo}} test --features {{features}},slow_tests
+    {{cargo}} nextest run --profile slow --no-default-features --features {{features}}
+    {{cargo}} test --doc --no-default-features --features {{features}}
 
 fmt:
     {{cargo}} fmt --all --check
@@ -58,7 +60,7 @@ check-all:
 
 # Feature-powerset compile check. Depth 2: each unit and each pair.
 # Umbrellas (`full`, `quality`, `elicitation`) are already compiled by
-# `just check-all`. `slow_tests` stays off. Independent etiquette flags
+# `just check-all`. `quick` is excluded. Independent etiquette flags
 # that do not pull crates are grouped so the pair count stays runner-
 # sized (~80 `cargo check`s, not C(30, 2)). `--no-dev-deps` temporarily
 # edits Cargo.toml (restored on exit). Needs cargo-hack.
@@ -78,7 +80,7 @@ check-features:
         --depth 2 \
         --no-dev-deps \
         --keep-going \
-        --exclude-features slow_tests,full,quality,elicitation,hotpath,_quality_support,_attribute_scan,_etiquette_plugins \
+        --exclude-features quick,full,quality,elicitation,hotpath,_quality_support,_attribute_scan,_etiquette_plugins \
         --group-features allows,modularity,derives,cfg_scatter,visibility,cli_layout,doc_warnings,feature_warnings,glob_imports,inline_tests,pageantry,verus_warnings,creusot_diagnostics \
         --group-features error_sites,error_chain,internal_error_chain,foreign_error_types,foreign_error_attenuation \
         --group-features rustdoc,impl_coverage,trenchcoat,shadow,homecoming_std,amenable_std,amenable_ext

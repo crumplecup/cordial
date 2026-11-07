@@ -1,0 +1,19 @@
+# cargo-nextest configuration (https://nexte.st). Install with `cargo install cargo-nextest`.
+# `just test` and `just test-slow` run through nextest, which schedules every
+# test across all binaries at once instead of one binary at a time.
+
+[profile.default]
+# 60s matches libtest's own "has been running for over 60 seconds" warning and
+# is the line between the quick and slow test sets (see the `quick` feature in
+# Cargo.toml). A test marked SLOW in a quick run belongs behind
+# `#[cfg(not(feature = "quick"))]`.
+slow-timeout = { period = "60s" }
+# Show every failure from a run, not just the first.
+fail-fast = false
+failure-output = "final"
+
+[profile.slow]
+# `just test-slow`: these tests are expected to take minutes, so only flag
+# one that has run for a long time, and stop one that is plainly hung.
+inherits = "default"
+slow-timeout = { period = "300s", terminate-after = 4 }
