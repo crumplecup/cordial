@@ -1,6 +1,8 @@
 //! Architecture policy replays from complete IR without syntax or source.
 #![cfg(feature = "internal_error_chain")]
 
+#[path = "support/error_sites_default.rs"]
+mod default_sites;
 #[path = "support/error_sites_projection.rs"]
 mod projection;
 
@@ -158,7 +160,7 @@ fn architecture_is_required_and_reassessed_without_source() -> Result<()> {
     let rows = projection::materialized_with(&graph, root, HOOKS, ATTR)?;
     assert!(!rows.is_empty());
     std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
-    assert!(!projection::materialized(&graph, root)?.is_empty());
+    assert!(!default_sites::materialized(&graph, root)?.is_empty());
     assert_eq!(
         inventory
             .assess(0, ErrorFieldStrategy::Borrowed, false)

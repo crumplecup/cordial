@@ -1,7 +1,7 @@
 #![cfg(feature = "homecoming_std")]
 
 use cordial::{SysrootCache, default_store_home};
-#[cfg(feature = "slow_tests")]
+#[cfg(not(feature = "quick"))]
 use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
@@ -27,10 +27,10 @@ fn sysroot_cache_default_matches_from_home() {
 // sysroot cache for `core` exists, this parses and processes the whole
 // thing (100+MB in practice) -- confirmed the hard way, over 60s pinning
 // a core at ~100% CPU under a plain `cargo test --all-features` run,
-// with zero opt-in signal. Gated behind `slow_tests` (see Cargo.toml's
+// with zero opt-in signal. Gated on the absence of `quick` (see Cargo.toml's
 // own comment on that feature) so routine verification doesn't pay this
 // cost. Run explicitly with `just test-slow`.
-#[cfg(feature = "slow_tests")]
+#[cfg(not(feature = "quick"))]
 #[test]
 fn merged_std_inventory_excludes_unstable_simd_from_stable_scope() -> miette::Result<()> {
     cordial::init_tracing();

@@ -68,7 +68,7 @@ salsa = { version = "0.28.5", default-features = false, features = ["macros", "i
 anyhow = "1"
 
 [features]
-default = ["full"]
+default = ["full", "quick"]
 # Opt-in profiling. The dependency's macros are no-ops without this feature.
 hotpath = ["hotpath/hotpath"]
 # Private features (leading `_`): never enabled by a user, only by other
@@ -139,17 +139,16 @@ amenable_ext = ["amenable_std", "shadow"]
 # Umbrella: all elicitation coverage plugins.
 elicitation = ["impl_coverage", "trenchcoat", "shadow"]
 # Every built-in plugin. Default for `cargo install` / `cargo test`.
-# `slow_tests` stays off (see that feature).
+# `quick` is a separate default, deliberately outside `full` (see that feature).
 full = ["quality", "elicitation", "homecoming_std", "amenable_std", "amenable_ext", "cli", "verus_ir"]
-# Opt-in gate for tests too expensive/environment-dependent for routine
-# `cargo test`/`cargo test --features full` runs -- deliberately NOT
-# part of `full` (or any other bundle), so it's off by default even
-# under a broad feature set. `--all-features` still enables it, same as
-# every other feature; that's inherent to what --all-features means, not
-# something a feature declaration can opt out of -- routine verification
-# should use `--features full` instead, reserving `--all-features` for a
-# deliberate, occasional full pass. See `just test-slow`.
-slow_tests = []
+# Routine-run marker, on by default. Tests that take over 60s (libtest's own
+# long-running warning) are compiled only when `quick` is OFF, so the default
+# loop and `--all-features` -- which enables every feature, `quick` included --
+# both skip them. Features cannot subtract, so slow runs drop the defaults:
+# `cargo test --no-default-features --features full` (see `just test-slow`).
+# `quick` is deliberately NOT part of `full` or any other bundle: if it were,
+# `--no-default-features --features full` would switch it back on.
+quick = []
 
 [[test]]
 name = "custom_plugins"

@@ -1,5 +1,7 @@
 //! Native panic collection preserves the complete policy and snapshot payload.
 #![cfg(feature = "panics")]
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 mod support {
     pub mod semantic_metrics;
 }
@@ -16,8 +18,11 @@ use tracing_subscriber::prelude::*;
 fn native_panics_preserve_complete_policy_across_revisions() -> Result<()> {
     cordial::init_tracing();
     let metrics = support::semantic_metrics::QueryMetrics::default();
-    let _subscriber =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(metrics.clone()));
+    let _subscriber = tracing::subscriber::set_default(
+        tracing_subscriber::registry()
+            .with(metrics.clone())
+            .with(cordial::tracing_fmt_layer()),
+    );
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     std::fs::create_dir_all(root.join("src")).into_diagnostic()?;

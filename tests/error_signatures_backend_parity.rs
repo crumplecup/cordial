@@ -1,6 +1,10 @@
 //! Native signature evidence preserves contracts through virtual revisions.
 #![cfg(feature = "internal_error_chain")]
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 
+#[path = "support/error_sites_default.rs"]
+mod default_sites;
 #[path = "support/error_sites_projection.rs"]
 mod projection;
 
@@ -14,7 +18,6 @@ const ATTR: &str = "internal_error_record_kind";
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn canonical_signatures_match_complete_facts_and_virtual_contracts() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
@@ -112,7 +115,7 @@ fn canonical_signatures_match_complete_facts_and_virtual_contracts() -> Result<(
     assert!(database.project(&target, &[]).is_err());
     drop(database);
     std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
-    assert!(!projection::materialized(&native, root)?.is_empty());
+    assert!(!default_sites::materialized(&native, root)?.is_empty());
     assert_eq!(
         actual.assess("signature_parity", false).into_diagnostic()?,
         assessment

@@ -1,15 +1,20 @@
 //! Module hierarchy evidence, graph-only visibility policy and revision recovery.
 #![cfg(feature = "visibility")]
+// Used only by the slow tests, which are compiled without `quick`.
+#[cfg(not(feature = "quick"))]
 use cordial::{
     CrateIr, CrateTarget, CrateViewMut, IrView, LoadContext, Loader, QueryBuilder, SessionBuilder,
     SourceDatabase, SourceEnrichView, SourceEnricher, SourceLoadView, SourceLoader,
     VisibilityInventoryEnricher, WorkspaceIr,
 };
 use miette::{IntoDiagnostic, Result};
+#[cfg(not(feature = "quick"))]
 use std::path::Path;
 
+#[cfg(not(feature = "quick"))]
 const SOURCE: &str = include_str!("fixtures/semantic_backend/visibility.rs.txt");
 
+#[cfg(not(feature = "quick"))]
 #[tracing::instrument(level = "debug", skip(target), err(level = "warn"))]
 fn baseline(root: &Path, target: &CrateTarget) -> Result<CrateIr> {
     let session = SessionBuilder::new(root).build();
@@ -25,6 +30,7 @@ fn baseline(root: &Path, target: &CrateTarget) -> Result<CrateIr> {
     Ok(graph)
 }
 
+#[cfg(not(feature = "quick"))]
 #[tracing::instrument(level = "debug", skip(graph), err(level = "warn"))]
 fn materialize(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> {
     let empty = tempfile::tempdir().into_diagnostic()?;
@@ -54,11 +60,12 @@ fn materialize(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> {
     Ok(rows)
 }
 
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#[cfg(not(feature = "quick"))]
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn visibility_tree_and_policy_survive_backend_changes_and_virtual_edits() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let root = tempfile::tempdir().into_diagnostic()?;
     std::fs::create_dir_all(root.path().join("src/external")).into_diagnostic()?;
     std::fs::write(root.path().join("Cargo.toml"), "[package]\nname = \"visibility_parity\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n").into_diagnostic()?;
@@ -81,7 +88,7 @@ fn visibility_tree_and_policy_survive_backend_changes_and_virtual_edits() -> Res
     // The module collector follows the target tree using the same database,
     // including external bodies outside the generic src scan selection.
     let native = database
-        .project(&target, &[path.clone()])
+        .project(&target, std::slice::from_ref(&path))
         .into_diagnostic()?;
     let expected = legacy
         .source_policy_inventory()
@@ -189,7 +196,7 @@ fn visibility_tree_and_policy_survive_backend_changes_and_virtual_edits() -> Res
         )
         .into_diagnostic()?;
     let revised = database
-        .project(&target, &[path.clone()])
+        .project(&target, std::slice::from_ref(&path))
         .into_diagnostic()?;
     assert_ne!(
         native
@@ -206,7 +213,7 @@ fn visibility_tree_and_policy_survive_backend_changes_and_virtual_edits() -> Res
         .change_file(&external, "pub struct Leaf;\npub mod child;\n".into())
         .into_diagnostic()?;
     let restored = database
-        .project(&target, &[path.clone()])
+        .project(&target, std::slice::from_ref(&path))
         .into_diagnostic()?;
     assert_eq!(
         native
@@ -222,7 +229,11 @@ fn visibility_tree_and_policy_survive_backend_changes_and_virtual_edits() -> Res
     database
         .change_file(&external, "pub mod broken {".into())
         .into_diagnostic()?;
-    assert!(database.project(&target, &[path.clone()]).is_err());
+    assert!(
+        database
+            .project(&target, std::slice::from_ref(&path))
+            .is_err()
+    );
     database
         .change_file(&external, "pub struct Leaf;\npub mod child;\n".into())
         .into_diagnostic()?;
@@ -235,7 +246,7 @@ fn visibility_tree_and_policy_survive_backend_changes_and_virtual_edits() -> Res
             )
             .into_diagnostic()?;
         let projected = database
-            .project(&target, &[path.clone()])
+            .project(&target, std::slice::from_ref(&path))
             .into_diagnostic()?;
         let inventory = projected
             .source_policy_inventory()
@@ -255,7 +266,7 @@ fn visibility_tree_and_policy_survive_backend_changes_and_virtual_edits() -> Res
     assert_eq!(
         materialize(
             &database
-                .project(&target, &[path.clone()])
+                .project(&target, std::slice::from_ref(&path))
                 .into_diagnostic()?,
             root.path()
         )?,

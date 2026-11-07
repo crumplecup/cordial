@@ -1,9 +1,13 @@
 //! Exercise the production apply collector with supplied loader evidence.
 use cordial::{
-    CrateIr, CrateTarget, ErrorIrScanEnricher, IrView, LoadContext, Loader, QueryBuilder,
-    SessionBuilder, SessionView, SourceEnrichView, SourceEnricher, SourceLoadView, SourceLoader,
+    CrateIr, ErrorIrScanEnricher, IrView, QueryBuilder, SessionView, SourceEnrichView,
+    SourceEnricher, SourceLoadView,
 };
+// Used only by the slow tests, which are compiled without `quick`.
+#[cfg(not(feature = "quick"))]
+use cordial::{CrateTarget, LoadContext, Loader, SessionBuilder, SourceLoader};
 use miette::{IntoDiagnostic, Result};
+#[cfg(not(feature = "quick"))]
 use std::path::Path;
 use std::sync::{
     Arc,
@@ -11,6 +15,8 @@ use std::sync::{
 };
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
 
+// Used only by the slow tests, which are compiled without `quick`.
+#[cfg(not(feature = "quick"))]
 #[tracing::instrument(level = "debug", skip(graph), err(level = "warn"))]
 pub fn materialized(graph: CrateIr, root: &Path) -> Result<serde_json::Value> {
     let target = CrateTarget::new(graph.crate_name(), root);
@@ -32,7 +38,9 @@ pub fn materialized_with_source(
     session: &dyn SessionView,
 ) -> Result<serde_json::Value> {
     let syntax = SyntaxRequests::default();
-    let subscriber = tracing_subscriber::registry().with(syntax.clone());
+    let subscriber = tracing_subscriber::registry()
+        .with(syntax.clone())
+        .with(cordial::tracing_fmt_layer());
     let _subscriber = tracing::subscriber::set_default(subscriber);
     ErrorIrScanEnricher
         .enrich_source(SourceEnrichView::new(&mut graph, source, session))

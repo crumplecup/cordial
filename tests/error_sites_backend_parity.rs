@@ -1,6 +1,10 @@
 //! Error-site payload parity, virtual revisions and source-independent replay.
 #![cfg(feature = "error_sites")]
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 
+#[path = "support/error_sites_default.rs"]
+mod default_sites;
 #[path = "support/error_sites_projection.rs"]
 mod projection;
 
@@ -15,7 +19,6 @@ const LIB: &str = include_str!("fixtures/semantic_backend/error_sites.rs.txt");
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn canonical_error_sites_match_and_replay_without_source() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     for dir in ["src", "tests/fixtures", "tests/parity", "examples"] {
@@ -89,8 +92,8 @@ fn canonical_error_sites_match_and_replay_without_source() -> Result<()> {
             .any(|row| row.context().contains("excluded"))
     );
     assert_eq!(
-        projection::materialized(&legacy, root)?,
-        projection::materialized(&native, root)?,
+        default_sites::materialized(&legacy, root)?,
+        default_sites::materialized(&native, root)?,
         "all materialized node attributes and spans"
     );
 
@@ -173,8 +176,8 @@ fn canonical_error_sites_match_and_replay_without_source() -> Result<()> {
         expected.records()
     );
     assert_eq!(
-        projection::materialized(&native, root)?,
-        projection::materialized(&legacy, root)?
+        default_sites::materialized(&native, root)?,
+        default_sites::materialized(&legacy, root)?
     );
     Ok(())
 }

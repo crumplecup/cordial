@@ -1,6 +1,8 @@
 //! Compliance contracts preserve complete evidence and source-free replay.
 #![cfg(feature = "internal_error_chain")]
 
+#[path = "support/error_sites_default.rs"]
+mod default_sites;
 #[path = "support/error_sites_projection.rs"]
 mod projection;
 
@@ -72,7 +74,7 @@ fn loader_compliance_is_required_and_replays_without_source() -> Result<()> {
     assert!(CrateIr::new("empty").source_error_compliance().is_err());
     std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
     assert_eq!(inventory.findings(false), findings);
-    assert!(!projection::materialized(&graph, root)?.is_empty());
+    assert!(!default_sites::materialized(&graph, root)?.is_empty());
     assert_eq!(
         projection::materialized_with(&graph, root, HOOKS, ATTR)?,
         rows
@@ -80,11 +82,12 @@ fn loader_compliance_is_required_and_replays_without_source() -> Result<()> {
     Ok(())
 }
 
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#[cfg(not(feature = "quick"))]
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn canonical_compliance_payloads_follow_virtual_revisions() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     std::fs::create_dir_all(root.join("src")).into_diagnostic()?;

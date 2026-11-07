@@ -1,6 +1,8 @@
 //! Signature assessments replay from complete loader evidence without source.
 #![cfg(feature = "internal_error_chain")]
 
+#[path = "support/error_sites_default.rs"]
+mod default_sites;
 #[path = "support/error_sites_projection.rs"]
 mod projection;
 
@@ -106,7 +108,7 @@ fn signatures_are_required_complete_and_replay_without_source() -> Result<()> {
     let rows = projection::materialized_with(&graph, root, HOOKS, ATTR)?;
     assert_eq!(rows.len(), 4);
     std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
-    assert!(!projection::materialized(&graph, root)?.is_empty());
+    assert!(!default_sites::materialized(&graph, root)?.is_empty());
     assert_eq!(
         inventory
             .assess("signature_replay", false)

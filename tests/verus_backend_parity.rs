@@ -1,5 +1,7 @@
 //! Verus dialect facts survive projection, virtual revisions, and IR persistence.
 #![cfg(feature = "verus_ir")]
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 mod support {
     pub mod semantic_metrics;
 }
@@ -16,8 +18,11 @@ use tracing_subscriber::prelude::*;
 fn dialect_evidence_matches_complete_payload_and_virtual_revisions() -> Result<()> {
     cordial::init_tracing();
     let metrics = support::semantic_metrics::QueryMetrics::default();
-    let _subscriber =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(metrics.clone()));
+    let _subscriber = tracing::subscriber::set_default(
+        tracing_subscriber::registry()
+            .with(metrics.clone())
+            .with(cordial::tracing_fmt_layer()),
+    );
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
@@ -52,13 +57,24 @@ fn dialect_evidence_matches_complete_payload_and_virtual_revisions() -> Result<(
     let mut baseline = CrateIr::new("verus_parity");
     loader.populate_ir(&mut baseline).into_diagnostic()?;
     let expected = baseline.source_verus().into_diagnostic()?;
+    // The baseline loader parses through its own database now, so count only
+    // what the database under test adds.
+    let baseline_payloads = metrics
+        .snapshot()
+        .get("verus_dialect:payload")
+        .copied()
+        .unwrap_or_default();
     let mut database = SourceDatabase::load(root).into_diagnostic()?;
     let native = database.project(&target, &[]).into_diagnostic()?;
     let actual = native.source_verus().into_diagnostic()?;
     let counts = metrics.snapshot();
     assert_eq!(
-        counts.get("verus_dialect:payload"),
-        Some(&9),
+        counts
+            .get("verus_dialect:payload")
+            .copied()
+            .unwrap_or_default()
+            - baseline_payloads,
+        9,
         "seven fixture blocks plus two bare edge blocks parse once, including the malformed body"
     );
     database.project(&target, &[]).into_diagnostic()?;

@@ -84,11 +84,12 @@ fn loader_type_inventory_is_required_and_replays_without_source() -> Result<()> 
     Ok(())
 }
 
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#[cfg(not(feature = "quick"))]
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn canonical_type_payloads_follow_virtual_revisions() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
@@ -190,6 +191,14 @@ fn canonical_type_payloads_follow_virtual_revisions() -> Result<()> {
         rows
     );
     // Both shared materializers work without access to their source carrier.
-    assert!(!projection::materialized(&native, root)?.is_empty());
+    assert!(
+        !projection::materialized_with(
+            &native,
+            root,
+            &["error-site-inventory"],
+            "error_site_kind"
+        )?
+        .is_empty()
+    );
     Ok(())
 }

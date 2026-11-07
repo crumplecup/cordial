@@ -1,5 +1,7 @@
 //! Complete derive evidence, graph-only consumers and revision recovery.
 #![cfg(feature = "derives")]
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 use cordial::{
     CrateIr, CrateTarget, CrateViewMut, DeriveInventoryEnricher, IrView, LoadContext, Loader,
     PathInclusionFacts, QueryBuilder, SessionBuilder, SourceDatabase, SourceEnrichView,
@@ -59,7 +61,6 @@ fn materialize(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> {
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn derive_facts_and_policy_survive_backend_changes_and_virtual_edits() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let root = tempfile::tempdir().into_diagnostic()?;
     std::fs::create_dir_all(root.path().join("src/fixtures")).into_diagnostic()?;
     std::fs::create_dir(root.path().join("tests")).into_diagnostic()?;

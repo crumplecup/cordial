@@ -1,5 +1,7 @@
 //! Workspace membership and usable dependency edges share Cargo configuration.
 #![cfg(feature = "derives")]
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 
 use cordial::{SemanticCargoOptions, SemanticFeatures, SourceDatabase};
 use miette::{IntoDiagnostic, Result};
@@ -8,7 +10,6 @@ use miette::{IntoDiagnostic, Result};
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn optional_renamed_dependency_edges_follow_loaded_features() -> Result<()> {
     cordial::init_cli_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let root = tempfile::tempdir().into_diagnostic()?;
     std::fs::write(
         root.path().join("Cargo.toml"),

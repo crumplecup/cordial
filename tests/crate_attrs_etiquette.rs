@@ -504,6 +504,8 @@ fn crate_attrs_default_thresholds() {
     assert!(thresholds.allow_missing_docs().is_empty());
 }
 
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#[cfg(not(feature = "quick"))]
 #[test]
 fn dogfood_cordial_library_root() -> miette::Result<()> {
     cordial::init_tracing();

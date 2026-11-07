@@ -1,12 +1,15 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use cordial::{
-    DOC_WARNINGS_ETIQUETTE, DocWarningRuleId, DocWarningsThresholds, RunAll, Session,
-    SessionBuilder, load_cordial_config, parse_doc_compiler_output, scan_crate_doc_warnings,
+    DOC_WARNINGS_ETIQUETTE, DocWarningRuleId, RunAll, Session, SessionBuilder, load_cordial_config,
+    parse_doc_compiler_output, scan_crate_doc_warnings,
 };
 use miette::{IntoDiagnostic, WrapErr};
+// Used only by the slow dogfood test, which is compiled without `quick`.
+#[cfg(not(feature = "quick"))]
+use {cordial::DocWarningsThresholds, std::path::Path};
 
 const CANARY: &str = include_str!("fixtures/quality/doc_warnings/canary.jsonl");
 
@@ -245,6 +248,8 @@ fn session_writes_checklist_from_injected_cargo() -> miette::Result<()> {
     Ok(())
 }
 
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#[cfg(not(feature = "quick"))]
 #[test]
 fn dogfood_cordial_has_no_rustdoc_warnings() -> miette::Result<()> {
     cordial::init_tracing();

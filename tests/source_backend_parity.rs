@@ -1,4 +1,6 @@
 //! Migration checks compare complete source payloads from independent sessions.
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 
 use std::path::Path;
 
@@ -197,7 +199,6 @@ fn assert_virtual_attribute_policies(database: &mut SourceDatabase, path: &Path)
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn database_projects_the_existing_source_contract_and_inactive_syntax() -> Result<()> {
     cordial::init_cli_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let root = tempfile::tempdir().into_diagnostic()?;
     std::fs::create_dir(root.path().join("src")).into_diagnostic()?;
     std::fs::write(root.path().join("Cargo.toml"), "[package]\nname = \"source_parity\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n").into_diagnostic()?;

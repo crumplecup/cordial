@@ -1,5 +1,7 @@
 //! Target-driven projection retains Cargo identities and complete policy inputs.
 #![cfg(all(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 
 use cordial::{CrateKind, IrView, QueryBuilder, RunAll, SourceDatabase, SourceSpan};
 use miette::{IntoDiagnostic, Result};
@@ -8,7 +10,6 @@ use miette::{IntoDiagnostic, Result};
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Result<()> {
     cordial::init_cli_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let root = tempfile::tempdir().into_diagnostic()?;
     for dir in ["src", "library", "cli", "tests/fixtures"] {
         std::fs::create_dir_all(root.path().join(dir)).into_diagnostic()?;

@@ -1,5 +1,7 @@
 //! Complete closed local-lifetime contracts agree across frontends.
 #![cfg(feature = "internal_error_chain")]
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 #[path = "support/source_projection.rs"]
 mod projection;
 use cordial::{CrateTarget, IrView};
@@ -9,7 +11,6 @@ use miette::{IntoDiagnostic, Result};
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn native_local_lifetimes_preserve_closed_units_and_precise_edits() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     std::fs::create_dir(root.join("src")).into_diagnostic()?;

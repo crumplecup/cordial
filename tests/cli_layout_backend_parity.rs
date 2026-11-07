@@ -1,5 +1,7 @@
 //! CLI catalog parity, graph-only policy and revision recovery.
 #![cfg(feature = "cli_layout")]
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 use cordial::CliLayoutInventoryEnricher;
 use cordial::{
     CrateIr, CrateTarget, CrateViewMut, IrView, LoadContext, Loader, QueryBuilder, SessionBuilder,
@@ -58,7 +60,6 @@ fn materialize(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> {
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn cli_catalog_and_findings_survive_native_projection_and_virtual_edits() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let root = tempfile::tempdir().into_diagnostic()?;
     std::fs::create_dir_all(root.path().join("src/inline")).into_diagnostic()?;
     std::fs::create_dir_all(root.path().join("src/bin")).into_diagnostic()?;

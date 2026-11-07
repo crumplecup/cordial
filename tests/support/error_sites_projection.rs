@@ -11,11 +11,6 @@ use std::path::Path;
 mod source_projection;
 pub use source_projection::baseline;
 
-#[tracing::instrument(level = "debug", skip(graph), err(level = "warn"))]
-pub fn materialized(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> {
-    materialized_with(graph, root, &["error-site-inventory"], "error_site_kind")
-}
-
 #[tracing::instrument(level = "debug", skip(graph, hooks), err(level = "warn"))]
 pub fn materialized_with(
     graph: &CrateIr,

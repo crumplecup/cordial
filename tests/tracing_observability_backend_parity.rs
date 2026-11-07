@@ -1,5 +1,7 @@
 //! Complete evidence/finding parity, configuration independence and virtual revisions.
 #![cfg(feature = "tracing")]
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 #[path = "support/observability_projection.rs"]
 mod projection;
 use cordial::{ATTR_SOURCE_OBSERVABILITY, CrateIr, CrateTarget, IrView, SourceDatabase};
@@ -12,7 +14,6 @@ const MAIN: &str = "fn main() -> Result<(), ()> {\n    fn nested() { try_init();
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn observability_evidence_and_policy_use_canonical_trees_and_revisions() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let root = tempfile::tempdir().into_diagnostic()?;
     for dir in ["src/bin", "tests/fixtures"] {
         std::fs::create_dir_all(root.path().join(dir)).into_diagnostic()?;

@@ -1,4 +1,6 @@
 //! Architecture guards for IR enrichment invariants.
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 
 use miette::{IntoDiagnostic, WrapErr};
 use std::path::{Path, PathBuf};

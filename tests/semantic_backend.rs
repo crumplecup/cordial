@@ -1,4 +1,6 @@
 //! Integration, semantic identity, and revision checks for the shared source database.
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 
 mod support {
     pub mod semantic_metrics;
@@ -80,7 +82,9 @@ fn function(ir: &dyn IrView, label: &str) -> Result<SemanticFunction> {
 fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> {
     cordial::init_tracing();
     let metrics = support::semantic_metrics::QueryMetrics::default();
-    let subscriber = tracing_subscriber::registry().with(metrics.clone());
+    let subscriber = tracing_subscriber::registry()
+        .with(metrics.clone())
+        .with(cordial::tracing_fmt_layer());
     let _subscriber = tracing::subscriber::set_default(subscriber);
     let root = specimen()?;
     let mut session = SourceDatabase::load(root.path()).into_diagnostic()?;

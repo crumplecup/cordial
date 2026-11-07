@@ -145,7 +145,7 @@ that is gated out of most combinations reads as widely used.
 [feature_warnings]
 # enabled = true               # selected by the deep tier
 # depth = 2                    # powerset depth
-# exclude_features = ["slow_tests", "full", "quality", "elicitation"]
+# exclude_features = ["quick", "full", "quality", "elicitation"]
 # group_features = [["allows", "modularity"], ["rustdoc", "shadow"]]
 # private_feature_threshold = 6   # wider gates advise a private feature
 # include_universal = false

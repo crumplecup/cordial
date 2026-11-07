@@ -4,14 +4,18 @@
 mod apply_projection;
 #[path = "support/source_projection.rs"]
 mod projection;
-use cordial::{ATTR_SOURCE_ERROR_APPLY, CrateIr, CrateTarget, IrView};
+use cordial::CrateTarget;
+// Used only by the slow tests, which are compiled without `quick`.
+#[cfg(not(feature = "quick"))]
+use cordial::{ATTR_SOURCE_ERROR_APPLY, CrateIr, IrView};
 use miette::{IntoDiagnostic, Result};
 
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#[cfg(not(feature = "quick"))]
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn native_declarations_drive_apply_and_reject_missing_or_stale_evidence() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
@@ -332,11 +336,12 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
     Ok(())
 }
 
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#[cfg(not(feature = "quick"))]
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn graph_lifetime_plans_require_loader_evidence() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     std::fs::create_dir(root.join("src")).into_diagnostic()?;
@@ -415,7 +420,6 @@ fn make<'a>(source: &'a Cause) -> Leaf { Leaf::new(source) }
 fn apply_text_uses_frozen_loader_bytes_and_rejects_a_fresh_mismatch() -> Result<()> {
     use cordial::{LoadContext, Loader, SessionBuilder, SourceLoadView, SourceLoader};
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     std::fs::create_dir(root.join("src")).into_diagnostic()?;

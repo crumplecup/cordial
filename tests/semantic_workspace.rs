@@ -1,4 +1,6 @@
 //! Cargo context is part of shared semantic evidence and reload boundaries.
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 
 mod support {
     pub mod semantic_workspace;
@@ -206,7 +208,7 @@ fn assert_workspace_context(
         );
     }
     let restored: cordial::SemanticSnapshot =
-        serde_json::from_value(serde_json::to_value(&initial).into_diagnostic()?)
+        serde_json::from_value(serde_json::to_value(initial).into_diagnostic()?)
             .into_diagnostic()?;
     assert_eq!(initial, &restored);
     Ok(())

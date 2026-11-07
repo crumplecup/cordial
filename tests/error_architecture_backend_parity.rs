@@ -1,5 +1,9 @@
 //! Canonical architecture facts preserve library scope and virtual edits.
 #![cfg(feature = "internal_error_chain")]
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
+#[path = "support/error_sites_default.rs"]
+mod default_sites;
 #[path = "support/error_sites_projection.rs"]
 mod projection;
 use cordial::{CrateTarget, ErrorFieldStrategy, IrView, SourceErrorArchitecture};
@@ -11,7 +15,6 @@ const ATTR: &str = "internal_error_record_kind";
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn canonical_architecture_matches_complete_contracts_and_revisions() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     for dir in ["src/inline", "src/nested"] {
@@ -149,7 +152,7 @@ fn canonical_architecture_matches_complete_contracts_and_revisions() -> Result<(
     assert!(database.project(&target, &[]).is_err());
     drop(database);
     std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
-    assert!(!projection::materialized(&native, root)?.is_empty());
+    assert!(!default_sites::materialized(&native, root)?.is_empty());
     assert_eq!(
         actual
             .assess(0, ErrorFieldStrategy::Borrowed, false)

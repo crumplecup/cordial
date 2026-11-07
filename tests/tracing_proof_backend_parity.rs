@@ -1,5 +1,7 @@
 //! Proof reachability uses complete loader evidence, independent of policy or disk.
 #![cfg(feature = "tracing")]
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 
 use cordial::{CrateView, IrView, SourceDatabase, TracingThresholds, WorkspaceIr};
 use miette::{IntoDiagnostic, Result};
@@ -55,7 +57,6 @@ fn exclusions(facts: &cordial::PathInclusionFacts, cfg: &str) -> Result<Vec<BTre
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn canonical_proof_evidence_matches_and_reachability_uses_only_ir() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let fixture = fixture()?;
     let root = fixture.path();
     let legacy = cordial::workspace_path_inclusions(root).into_diagnostic()?;

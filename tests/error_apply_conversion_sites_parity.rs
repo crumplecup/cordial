@@ -1,5 +1,7 @@
 //! Both loaders preserve complete candidate-independent conversion contracts.
 #![cfg(feature = "internal_error_chain")]
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#![cfg(not(feature = "quick"))]
 #[path = "support/error_apply_projection.rs"]
 mod apply_projection;
 #[path = "support/source_projection.rs"]
@@ -11,7 +13,6 @@ use miette::{IntoDiagnostic, Result};
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn conversion_contracts_and_executable_sites_agree() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     std::fs::create_dir(root.join("src")).into_diagnostic()?;

@@ -1,6 +1,8 @@
 //! Loader-owned chain records survive without source files or parse carriers.
 #![cfg(feature = "error_chain")]
 
+#[path = "support/error_sites_default.rs"]
+mod default_sites;
 #[path = "support/error_sites_projection.rs"]
 mod projection;
 
@@ -66,7 +68,7 @@ fn loader_chain_inventory_replays_without_original_inputs() -> Result<()> {
         6,
         "map_err and try nodes share the located chain annotation"
     );
-    assert!(!projection::materialized(&graph, root)?.is_empty());
+    assert!(!default_sites::materialized(&graph, root)?.is_empty());
     let value = serde_json::to_value(&inventory).into_diagnostic()?;
     for key in ["rule_id", "context", "file", "line", "snippet"] {
         let mut broken = value.clone();
@@ -95,11 +97,12 @@ fn loader_chain_inventory_replays_without_original_inputs() -> Result<()> {
     Ok(())
 }
 
+// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
+#[cfg(not(feature = "quick"))]
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn canonical_chain_payloads_follow_virtual_revisions() -> Result<()> {
     cordial::init_tracing();
-    let _subscriber = tracing::subscriber::set_default(tracing_subscriber::registry());
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     std::fs::create_dir_all(root.join("tests/fixtures")).into_diagnostic()?;
