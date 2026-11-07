@@ -135,13 +135,28 @@ impl Collector<'_> {
             _ => None,
         };
         let constants = constant.iter().cloned().collect();
+        let no_locals = BTreeMap::new();
+        let string_names = StaticNames::builder()
+            .aliases(&empty)
+            .strings(&constants)
+            .params(&empty)
+            .locals(&locals)
+            .build()
+            .ok()?;
+        let call_site_names = StaticNames::builder()
+            .aliases(&self.context.aliases)
+            .strings(&empty)
+            .params(&empty)
+            .locals(&no_locals)
+            .build()
+            .ok()?;
         let string = inspect_initializer(
             self.source,
             &field.expr,
             &name,
             field.colon_token.is_none(),
             FieldKind::StaticString,
-            StaticNames::new(&empty, &constants, &empty, &locals),
+            string_names,
         )
         .map(|fact| {
             let origin = if let Some(constant) = constant {
@@ -164,7 +179,7 @@ impl Collector<'_> {
             &name,
             field.colon_token.is_none(),
             FieldKind::CallSiteFile,
-            StaticNames::new(&self.context.aliases, &empty, &empty, &BTreeMap::new()),
+            call_site_names,
         );
         let file = direct.map(|fact| vec![fact]).or_else(|| {
             matches!(&field.expr, Expr::Path(path) if path.qself.is_none() && path.path.is_ident("file"))

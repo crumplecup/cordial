@@ -169,18 +169,15 @@ fn tuple_fact(source: &str, expr: &Expr) -> Option<(InitializerExpressionFact, b
     {
         return None;
     }
-    inspect_initializer(
-        source,
-        file,
-        "file",
-        false,
-        FieldKind::CallSiteFile,
-        StaticNames::new(
-            &aliases,
-            &BTreeSet::new(),
-            &BTreeSet::new(),
-            &BTreeMap::new(),
-        ),
-    )
-    .map(|fact| (fact, true))
+    let none = BTreeSet::new();
+    let no_locals = BTreeMap::new();
+    let names = StaticNames::builder()
+        .aliases(&aliases)
+        .strings(&none)
+        .params(&none)
+        .locals(&no_locals)
+        .build()
+        .ok()?;
+    inspect_initializer(source, file, "file", false, FieldKind::CallSiteFile, names)
+        .map(|fact| (fact, true))
 }

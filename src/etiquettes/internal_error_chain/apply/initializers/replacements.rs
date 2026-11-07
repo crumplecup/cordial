@@ -106,7 +106,9 @@ pub(super) fn inspect_empty_file(source: &str, expr: &Expr) -> Option<Initialize
 }
 
 /// Names whose values are known statically where an initializer is inspected.
-#[derive(Debug, Clone, Copy)]
+/// Built with its builder so the four sets are named at the call site.
+#[derive(Debug, Clone, derive_builder::Builder)]
+#[builder(build_fn(error = "crate::error::CordialError"))]
 pub(super) struct StaticNames<'a> {
     aliases: &'a BTreeSet<String>,
     strings: &'a BTreeSet<String>,
@@ -115,18 +117,10 @@ pub(super) struct StaticNames<'a> {
 }
 
 impl<'a> StaticNames<'a> {
-    pub(super) fn new(
-        aliases: &'a BTreeSet<String>,
-        strings: &'a BTreeSet<String>,
-        params: &'a BTreeSet<String>,
-        locals: &'a BTreeMap<String, usize>,
-    ) -> Self {
-        Self {
-            aliases,
-            strings,
-            params,
-            locals,
-        }
+    /// Start a builder for this value.
+    #[instrument(level = "debug")]
+    pub(super) fn builder() -> StaticNamesBuilder<'a> {
+        StaticNamesBuilder::default()
     }
 }
 

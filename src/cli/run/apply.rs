@@ -22,7 +22,7 @@ pub(in crate::cli) struct QualityApplyOptions<'a> {
     only_etiquette: Option<&'a str>,
 }
 
-#[instrument(level = "debug", skip(ctx), err(level = "warn"))]
+#[instrument(level = "debug", skip(ctx, options), err(level = "warn"))]
 pub(in crate::cli) fn execute_quality_apply(
     ctx: &ActCtx,
     options: QualityApplyOptions<'_>,
