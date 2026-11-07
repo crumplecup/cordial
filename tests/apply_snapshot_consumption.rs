@@ -88,7 +88,9 @@ fn tracing_apply_uses_graph_identity_and_text_without_syntax_access() -> Result<
     cordial::init_tracing();
     let fixture = fixture()?;
     let access = SourceAccess::default();
-    let subscriber = tracing_subscriber::registry().with(access.clone());
+    let subscriber = tracing_subscriber::registry()
+        .with(access.clone())
+        .with(cordial::tracing_fmt_layer());
     let _subscriber = tracing::subscriber::set_default(subscriber);
     let summary = cordial::run_tracing_instrument_apply(
         fixture.path(),
@@ -114,7 +116,9 @@ fn tracing_apply_rejects_a_disk_change_after_collection() -> Result<()> {
         mutate: Some(path.clone()),
         ..SourceAccess::default()
     };
-    let subscriber = tracing_subscriber::registry().with(access.clone());
+    let subscriber = tracing_subscriber::registry()
+        .with(access.clone())
+        .with(cordial::tracing_fmt_layer());
     let _subscriber = tracing::subscriber::set_default(subscriber);
     let result = cordial::run_tracing_instrument_apply(
         fixture.path(),
@@ -138,7 +142,9 @@ fn crate_attribute_apply_uses_graph_identity_and_text_without_syntax_access() ->
     cordial::init_tracing();
     let fixture = fixture()?;
     let access = SourceAccess::default();
-    let subscriber = tracing_subscriber::registry().with(access.clone());
+    let subscriber = tracing_subscriber::registry()
+        .with(access.clone())
+        .with(cordial::tracing_fmt_layer());
     let _subscriber = tracing::subscriber::set_default(subscriber);
     let summary = cordial::run_crate_attrs_apply(fixture.path(), fixture.path(), None, false)
         .into_diagnostic()?;
@@ -158,7 +164,9 @@ fn proof_collection_reads_database_text_without_a_syntax_request() -> Result<()>
         "fn proof() { assert_proofs_non_empty::<Widget>(); assert_kani_contains::<Widget, bool>(); proof_chain(\"Widget\"); }\n",
     ).into_diagnostic()?;
     let access = SourceAccess::default();
-    let subscriber = tracing_subscriber::registry().with(access.clone());
+    let subscriber = tracing_subscriber::registry()
+        .with(access.clone())
+        .with(cordial::tracing_fmt_layer());
     let _subscriber = tracing::subscriber::set_default(subscriber);
     let proof = cordial::testing::collect_proof_harness(&path).into_diagnostic()?;
     assert!(proof.non_empty_types().contains("Widget"));

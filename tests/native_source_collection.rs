@@ -43,8 +43,11 @@ const SOURCE: &str =
 fn supplied_sources_need_neither_a_manifest_nor_a_file() -> Result<()> {
     cordial::init_cli_tracing();
     let access = Parses::default();
-    let _subscriber =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(access.clone()));
+    let _subscriber = tracing::subscriber::set_default(
+        tracing_subscriber::registry()
+            .with(access.clone())
+            .with(cordial::tracing_fmt_layer()),
+    );
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let tree = fixture.path().join("src");
     let file = tree.join("missing.rs");
@@ -103,8 +106,11 @@ fn malformed_supplied_source_preserves_the_native_error_chain() -> Result<()> {
 fn manifest_free_scans_use_native_inventories() -> Result<()> {
     cordial::init_cli_tracing();
     let access = Parses::default();
-    let _subscriber =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(access.clone()));
+    let _subscriber = tracing::subscriber::set_default(
+        tracing_subscriber::registry()
+            .with(access.clone())
+            .with(cordial::tracing_fmt_layer()),
+    );
     let fixture = tempfile::tempdir().into_diagnostic()?;
     std::fs::create_dir(fixture.path().join("src")).into_diagnostic()?;
     std::fs::write(fixture.path().join("src/lib.rs"), SOURCE).into_diagnostic()?;
@@ -122,8 +128,11 @@ fn manifest_free_scans_use_native_inventories() -> Result<()> {
 fn loader_inventories_share_a_parse_and_keep_their_frozen_input() -> Result<()> {
     cordial::init_cli_tracing();
     let access = Parses::default();
-    let _subscriber =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(access.clone()));
+    let _subscriber = tracing::subscriber::set_default(
+        tracing_subscriber::registry()
+            .with(access.clone())
+            .with(cordial::tracing_fmt_layer()),
+    );
     let fixture = tempfile::tempdir().into_diagnostic()?;
     std::fs::create_dir(fixture.path().join("src")).into_diagnostic()?;
     let file = fixture.path().join("src/lib.rs");
@@ -212,8 +221,11 @@ fn loader_inventories_share_a_parse_and_keep_their_frozen_input() -> Result<()> 
 fn standalone_policy_fixtures_use_native_syntax_without_disk_inputs() -> Result<()> {
     cordial::init_cli_tracing();
     let access = Parses::default();
-    let _subscriber =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(access.clone()));
+    let _subscriber = tracing::subscriber::set_default(
+        tracing_subscriber::registry()
+            .with(access.clone())
+            .with(cordial::tracing_fmt_layer()),
+    );
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let tree = fixture.path().join("src");
     let file = tree.join("lib.rs");
@@ -293,8 +305,11 @@ mod dormant {
 fn antipattern_and_contract_fixtures_use_only_native_inputs() -> Result<()> {
     cordial::init_cli_tracing();
     let access = Parses::default();
-    let _subscriber =
-        tracing::subscriber::set_default(tracing_subscriber::registry().with(access.clone()));
+    let _subscriber = tracing::subscriber::set_default(
+        tracing_subscriber::registry()
+            .with(access.clone())
+            .with(cordial::tracing_fmt_layer()),
+    );
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let tree = fixture.path().join("src");
     let file = tree.join("missing.rs");
