@@ -59,7 +59,8 @@ pub(crate) use source::{SourceEditView, SourceSnapshot};
     feature = "panics",
     feature = "error_chain",
     feature = "tracing",
-    feature = "internal_error_chain"
+    feature = "internal_error_chain",
+    feature = "derives"
 ))]
 pub(crate) use source_work::walk as source_walk;
 

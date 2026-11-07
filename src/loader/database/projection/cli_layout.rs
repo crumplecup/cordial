@@ -28,7 +28,8 @@ impl SourceDatabase {
                     feature = "tracing",
                     feature = "internal_error_chain",
                     feature = "verus_ir",
-                    feature = "panics"
+                    feature = "panics",
+                    feature = "antipatterns"
                 ))]
                 &self.db,
                 path,
