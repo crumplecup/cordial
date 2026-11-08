@@ -1,15 +1,10 @@
 //! Workspace splice evidence survives backend changes and virtual revisions.
 #![cfg(feature = "derives")]
 
-use cordial::workspace_path_inclusions;
-// Used only by the slow tests, which are compiled without `quick`.
-#[cfg(not(feature = "quick"))]
-use cordial::{DerivesThresholds, scan_derives_rust_source};
-// Used only by the slow tests, which are compiled without `quick`.
-#[cfg(not(feature = "quick"))]
 use cordial::SourceDatabase;
+use cordial::workspace_path_inclusions;
+use cordial::{DerivesThresholds, scan_derives_rust_source};
 use miette::{IntoDiagnostic, Result};
-#[cfg(not(feature = "quick"))]
 use std::path::Path;
 
 const OWNER: &str = "pub struct Widget { value: String }\nimpl Widget { pub fn value(&self) -> &str { &self.value } }\n";
@@ -70,8 +65,6 @@ fn fixture() -> Result<tempfile::TempDir> {
     Ok(fixture)
 }
 
-// Used only by the slow tests, which are compiled without `quick`.
-#[cfg(not(feature = "quick"))]
 #[tracing::instrument(level = "debug", skip(facts), err(level = "warn"))]
 fn getter_findings(
     facts: &cordial::PathInclusionFacts,
@@ -89,8 +82,6 @@ fn getter_findings(
     .into_diagnostic()
 }
 
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#[cfg(not(feature = "quick"))]
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn workspace_splices_use_canonical_trees_and_preserve_complete_evidence() -> Result<()> {

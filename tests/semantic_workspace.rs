@@ -1,6 +1,4 @@
 //! Cargo context is part of shared semantic evidence and reload boundaries.
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
 
 mod support {
     pub mod semantic_workspace;

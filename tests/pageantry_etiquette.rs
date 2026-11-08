@@ -5,8 +5,6 @@ use cordial::{
     PAGEANTRY_ETIQUETTE, PageantryRuleId, PageantryThresholds, RunAll, Session, SessionBuilder,
     load_cordial_config, scan_pageantry_rust_source,
 };
-// Used only by the slow dogfood test, which is compiled without `quick`.
-#[cfg(not(feature = "quick"))]
 use {cordial::scan_crate_pageantry, std::path::Path};
 
 /// `[pageantry]` knobs as a project would write them in `cordial.toml`.
@@ -244,8 +242,6 @@ pub struct Gamma;
     Ok(())
 }
 
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#[cfg(not(feature = "quick"))]
 #[test]
 fn dogfood_cordial_traits_are_at_the_top() -> miette::Result<()> {
     cordial::init_tracing();

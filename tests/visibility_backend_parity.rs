@@ -1,20 +1,15 @@
 //! Module hierarchy evidence, graph-only visibility policy and revision recovery.
 #![cfg(feature = "visibility")]
-// Used only by the slow tests, which are compiled without `quick`.
-#[cfg(not(feature = "quick"))]
 use cordial::{
     CrateIr, CrateTarget, CrateViewMut, IrView, LoadContext, Loader, QueryBuilder, SessionBuilder,
     SourceDatabase, SourceEnrichView, SourceEnricher, SourceLoadView, SourceLoader,
     VisibilityInventoryEnricher, WorkspaceIr,
 };
 use miette::{IntoDiagnostic, Result};
-#[cfg(not(feature = "quick"))]
 use std::path::Path;
 
-#[cfg(not(feature = "quick"))]
 const SOURCE: &str = include_str!("fixtures/semantic_backend/visibility.rs.txt");
 
-#[cfg(not(feature = "quick"))]
 #[tracing::instrument(level = "debug", skip(target), err(level = "warn"))]
 fn baseline(root: &Path, target: &CrateTarget) -> Result<CrateIr> {
     let session = SessionBuilder::new(root).build();
@@ -30,7 +25,6 @@ fn baseline(root: &Path, target: &CrateTarget) -> Result<CrateIr> {
     Ok(graph)
 }
 
-#[cfg(not(feature = "quick"))]
 #[tracing::instrument(level = "debug", skip(graph), err(level = "warn"))]
 fn materialize(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> {
     let empty = tempfile::tempdir().into_diagnostic()?;
@@ -60,8 +54,6 @@ fn materialize(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> {
     Ok(rows)
 }
 
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#[cfg(not(feature = "quick"))]
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn visibility_tree_and_policy_survive_backend_changes_and_virtual_edits() -> Result<()> {

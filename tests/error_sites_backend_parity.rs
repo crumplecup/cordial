@@ -1,7 +1,5 @@
 //! Error-site payload parity, virtual revisions and source-independent replay.
 #![cfg(feature = "error_sites")]
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
 
 #[path = "support/error_sites_default.rs"]
 mod default_sites;

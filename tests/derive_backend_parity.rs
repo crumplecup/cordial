@@ -1,7 +1,5 @@
 //! Complete derive evidence, graph-only consumers and revision recovery.
 #![cfg(feature = "derives")]
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
 use cordial::{
     CrateIr, CrateTarget, CrateViewMut, DeriveInventoryEnricher, IrView, LoadContext, Loader,
     PathInclusionFacts, QueryBuilder, SessionBuilder, SourceDatabase, SourceEnrichView,

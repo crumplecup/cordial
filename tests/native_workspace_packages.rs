@@ -1,7 +1,5 @@
 //! Workspace membership and usable dependency edges share Cargo configuration.
 #![cfg(feature = "derives")]
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
 
 use cordial::{SemanticCargoOptions, SemanticFeatures, SourceDatabase};
 use miette::{IntoDiagnostic, Result};

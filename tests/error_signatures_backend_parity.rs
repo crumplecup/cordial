@@ -1,7 +1,5 @@
 //! Native signature evidence preserves contracts through virtual revisions.
 #![cfg(feature = "internal_error_chain")]
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
 
 #[path = "support/error_sites_default.rs"]
 mod default_sites;

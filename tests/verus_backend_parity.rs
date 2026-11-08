@@ -1,7 +1,5 @@
 //! Verus dialect facts survive projection, virtual revisions, and IR persistence.
 #![cfg(feature = "verus_ir")]
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
 mod support {
     pub mod semantic_metrics;
 }
