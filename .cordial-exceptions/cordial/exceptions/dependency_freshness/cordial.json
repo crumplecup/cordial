@@ -1,0 +1,26 @@
+[
+  {
+    "file": "/home/erik/repos/cordial/Cargo.toml",
+    "line": 59,
+    "rule_id": "DEPENDENCY-FRESHNESS-PATCH",
+    "reason": "ra_ap_* crates pin each other at exact versions (=0.0.358) and 0.0.360 is only partly published: ra_ap_hir, ra_ap_ide_db, ra_ap_load-cargo, ra_ap_project_model and ra_ap_proc_macro_api have no 0.0.360 release, so no consistent set exists to upgrade to. Self-clearing: when the full set is published the holdout lint fires, and after the upgrade the stale-exception lint fires."
+  },
+  {
+    "file": "/home/erik/repos/cordial/Cargo.toml",
+    "line": 60,
+    "rule_id": "DEPENDENCY-FRESHNESS-PATCH",
+    "reason": "ra_ap_* crates pin each other at exact versions (=0.0.358) and 0.0.360 is only partly published: ra_ap_hir, ra_ap_ide_db, ra_ap_load-cargo, ra_ap_project_model and ra_ap_proc_macro_api have no 0.0.360 release, so no consistent set exists to upgrade to. Self-clearing: when the full set is published the holdout lint fires, and after the upgrade the stale-exception lint fires."
+  },
+  {
+    "file": "/home/erik/repos/cordial/Cargo.toml",
+    "line": 65,
+    "rule_id": "DEPENDENCY-FRESHNESS-PATCH",
+    "reason": "ra_ap_* crates pin each other at exact versions (=0.0.358) and 0.0.360 is only partly published: ra_ap_hir, ra_ap_ide_db, ra_ap_load-cargo, ra_ap_project_model and ra_ap_proc_macro_api have no 0.0.360 release, so no consistent set exists to upgrade to. Self-clearing: when the full set is published the holdout lint fires, and after the upgrade the stale-exception lint fires."
+  },
+  {
+    "file": "/home/erik/repos/cordial/Cargo.toml",
+    "line": 66,
+    "rule_id": "DEPENDENCY-FRESHNESS-PATCH",
+    "reason": "ra_ap_* crates pin each other at exact versions (=0.0.358) and 0.0.360 is only partly published: ra_ap_hir, ra_ap_ide_db, ra_ap_load-cargo, ra_ap_project_model and ra_ap_proc_macro_api have no 0.0.360 release, so no consistent set exists to upgrade to. Self-clearing: when the full set is published the holdout lint fires, and after the upgrade the stale-exception lint fires."
+  }
+]
