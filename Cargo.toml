@@ -415,6 +415,15 @@ miette = { version = "7", features = ["fancy"] }
 [profile.dev]
 debug = "line-tables-only"
 
+# Optimize dependencies, not cordial itself. The semantic backend drives
+# rust-analyzer, which ingests the whole sysroot on every `SourceDatabase::load`;
+# unoptimized (opt-level 0) that took ~81s per test binary and ~8.5s at level 2.
+# Dependencies are cached after the first build, so only a cold build pays the
+# extra compile time, and cordial's own code stays at 0 for fast edit-compile
+# loops and debugging. `profile.test` inherits from `dev`.
+[profile.dev.package."*"]
+opt-level = 2
+
 [profile.test]
 debug = "line-tables-only"
 
