@@ -3,11 +3,8 @@ use cordial::{
     CrateIr, ErrorIrScanEnricher, IrView, QueryBuilder, SessionView, SourceEnrichView,
     SourceEnricher, SourceLoadView,
 };
-// Used only by the slow tests, which are compiled without `quick`.
-#[cfg(not(feature = "quick"))]
 use cordial::{CrateTarget, LoadContext, Loader, SessionBuilder, SourceLoader};
 use miette::{IntoDiagnostic, Result};
-#[cfg(not(feature = "quick"))]
 use std::path::Path;
 use std::sync::{
     Arc,
@@ -15,8 +12,6 @@ use std::sync::{
 };
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
 
-// Used only by the slow tests, which are compiled without `quick`.
-#[cfg(not(feature = "quick"))]
 #[tracing::instrument(level = "debug", skip(graph), err(level = "warn"))]
 pub fn materialized(graph: CrateIr, root: &Path) -> Result<serde_json::Value> {
     let target = CrateTarget::new(graph.crate_name(), root);

@@ -1,7 +1,5 @@
 //! Complete graph-lifetime evidence agrees across frontends.
 #![cfg(feature = "internal_error_chain")]
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
 #[path = "support/source_projection.rs"]
 mod projection;
 use cordial::{CrateTarget, IrView};

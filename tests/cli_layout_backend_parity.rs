@@ -1,7 +1,5 @@
 //! CLI catalog parity, graph-only policy and revision recovery.
 #![cfg(feature = "cli_layout")]
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
 use cordial::CliLayoutInventoryEnricher;
 use cordial::{
     CrateIr, CrateTarget, CrateViewMut, IrView, LoadContext, Loader, QueryBuilder, SessionBuilder,

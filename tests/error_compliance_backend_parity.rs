@@ -82,8 +82,6 @@ fn loader_compliance_is_required_and_replays_without_source() -> Result<()> {
     Ok(())
 }
 
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#[cfg(not(feature = "quick"))]
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn canonical_compliance_payloads_follow_virtual_revisions() -> Result<()> {

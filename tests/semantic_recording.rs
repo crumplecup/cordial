@@ -1,6 +1,4 @@
 //! Formatting evidence uses resolved error types and the function's own bounds.
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
 
 use std::path::Path;
 

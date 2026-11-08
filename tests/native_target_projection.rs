@@ -1,7 +1,5 @@
 //! Target-driven projection retains Cargo identities and complete policy inputs.
 #![cfg(all(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
 
 use cordial::{CrateKind, IrView, QueryBuilder, RunAll, SourceDatabase, SourceSpan};
 use miette::{IntoDiagnostic, Result};

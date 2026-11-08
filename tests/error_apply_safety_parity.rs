@@ -1,7 +1,5 @@
 //! Loader-owned name and initializer safety agrees across source frontends.
 #![cfg(feature = "internal_error_chain")]
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
 #[path = "support/source_projection.rs"]
 mod projection;
 

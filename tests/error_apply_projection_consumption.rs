@@ -5,13 +5,9 @@ mod apply_projection;
 #[path = "support/source_projection.rs"]
 mod projection;
 use cordial::CrateTarget;
-// Used only by the slow tests, which are compiled without `quick`.
-#[cfg(not(feature = "quick"))]
 use cordial::{ATTR_SOURCE_ERROR_APPLY, CrateIr, IrView};
 use miette::{IntoDiagnostic, Result};
 
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#[cfg(not(feature = "quick"))]
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn native_declarations_drive_apply_and_reject_missing_or_stale_evidence() -> Result<()> {
@@ -336,8 +332,6 @@ fn read(value: &ImportedLocated) -> &String { value.file() }
     Ok(())
 }
 
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#[cfg(not(feature = "quick"))]
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn graph_lifetime_plans_require_loader_evidence() -> Result<()> {

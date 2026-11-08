@@ -1,7 +1,5 @@
 //! Complete evidence/finding parity, configuration independence and virtual revisions.
 #![cfg(feature = "tracing")]
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
 #[path = "support/observability_projection.rs"]
 mod projection;
 use cordial::{ATTR_SOURCE_OBSERVABILITY, CrateIr, CrateTarget, IrView, SourceDatabase};

@@ -1,7 +1,5 @@
 //! Native panic collection preserves the complete policy and snapshot payload.
 #![cfg(feature = "panics")]
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
 mod support {
     pub mod semantic_metrics;
 }

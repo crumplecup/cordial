@@ -97,8 +97,6 @@ fn loader_chain_inventory_replays_without_original_inputs() -> Result<()> {
     Ok(())
 }
 
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#[cfg(not(feature = "quick"))]
 #[test]
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 fn canonical_chain_payloads_follow_virtual_revisions() -> Result<()> {
