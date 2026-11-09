@@ -23,7 +23,7 @@ and explanations are the policy the tool actually runs.
 cordial instructions
 cordial open
 cordial done <id>       # after fixing the item and running focused checks
-cordial submit
+cordial submit --tier build --json
 ```
 
 1. Read `cordial instructions` once, then use `cordial open` for the next item.
@@ -32,12 +32,15 @@ cordial submit
    suppressing a finding, or reinterpreting a rule. Fix the item and run focused
    project checks before `cordial done <id>`. Use `cordial skip <id>` when you
    cannot act on it now.
-3. When the list is complete, run `cordial submit` and wait for it. Continue
-   until submit reports zero open items. `cordial stats --verbose` shows list
+3. When the list is complete, run `cordial submit --tier build --json` and wait
+   for it. The JSON output includes a heartbeat, which is reassuring on long
+   operations. Continue until submit reports zero open items. `cordial stats --verbose` shows list
    state. Use item ids when issuing several worklist commands concurrently.
-4. Before each commit, run `just cordial-gate` (or
-   `cordial quality -p . --deny-open --tier all`) and clear every open item, including
-   dependency freshness. This is also the promotion check for `dev` to `main`.
+4. Before each commit, `cordial submit` must report zero open items, including
+   dependency freshness. Do not run `cordial quality` or `just cordial-gate`
+   for this: they bypass the worklist and the all-tier run takes about twenty
+   minutes. `just cordial-gate` is the all-tier gate that CI runs and that
+   promoting `dev` to `main` uses.
 
 Work from `open` and `stats`; raw checklists under `findings/` do not include
 progress on the current list. Use them for detail only when the item requires it.
@@ -62,8 +65,8 @@ Useful routing ids:
 | Need | Start with |
 | --- | --- |
 | Work through findings | `cordial instructions`, then `cordial open` |
-| Commit or promotion gate | `just cordial-gate` (zero open items required) |
-| Promote `dev` to `main` | `just check-all`, `just check-features`, `just cordial-gate`, then a PR; CI must be green |
+| Commit gate | `cordial submit` (zero open items required) |
+| Promote `dev` to `main` | `just check-all`, `just check-features`, `just cordial-gate` (the all-tier gate CI runs), then a PR; CI must be green |
 | Understand a finding | `cordial explain <id-or-rule-id>` |
 | Inspect list progress | `cordial stats --verbose` |
 | Review config knobs | `cordial.toml`, then any config docs under `docs/` |
