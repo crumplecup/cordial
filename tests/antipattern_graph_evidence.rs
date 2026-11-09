@@ -19,6 +19,11 @@ fn policy_changes_replay_from_required_graph_evidence() -> Result<()> {
     let root = fixture.path();
     std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
     std::fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
         root.join("src/lib.rs"),
         include_str!("fixtures/quality/antipatterns/graph_policy.rs"),
     )
@@ -126,6 +131,11 @@ fn registry_changes_replay_saved_contract_shapes_for_each_verifier() -> Result<(
         let fixture = tempfile::tempdir().into_diagnostic()?;
         let root = fixture.path();
         std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+        )
+        .into_diagnostic()?;
         std::fs::write(root.join("src/lib.rs"), text).into_diagnostic()?;
         let name = format!("amenable_{verifier}");
         let evidence = load(root, &name)?.source_antipatterns().into_diagnostic()?;

@@ -29,6 +29,12 @@ fn scan_source(source: &str) -> miette::Result<Vec<PrintRuleId>> {
 
 fn write_tree(files: &[(&str, &str)]) -> miette::Result<tempfile::TempDir> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()
+    .wrap_err("manifest")?;
     for (rel, source) in files {
         let path = fixture.path().join(rel);
         if let Some(parent) = path.parent() {

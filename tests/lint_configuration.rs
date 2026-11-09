@@ -125,6 +125,11 @@ fn plugin_policy_filters_findings_and_reports_without_a_builtin_config_entry() -
     let temp = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(temp.path().join("src")).into_diagnostic()?;
     fs::write(
+        temp.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         temp.path().join("src/lib.rs"),
         "pub fn pending() { todo!() }\n",
     )
@@ -189,6 +194,11 @@ fn tracing_file_exclusion_reaches_assessment_and_report() -> miette::Result<()> 
     cordial::init_tracing();
     let temp = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(temp.path().join("src")).into_diagnostic()?;
+    fs::write(
+        temp.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(temp.path().join("src/lib.rs"), "pub fn pending() {}\n").into_diagnostic()?;
     fs::write(
         temp.path().join("cordial.toml"),

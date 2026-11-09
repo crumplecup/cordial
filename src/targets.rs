@@ -9,25 +9,21 @@ use crate::ir::CrateKind;
 use crate::loader::CrateTarget;
 use crate::plugin::{PluginCategory, plugins_in_category, selected_plugins};
 use crate::session::{RunAll, RunFilter, SessionView};
-use crate::store::project_slug_from_path;
 
 /// Discover crate targets for a session run.
 ///
-/// Uses `cargo metadata` when the project root contains a manifest; otherwise
-/// falls back to a single synthetic target named after the directory.
+/// A project is a Cargo crate or workspace, so the root must contain a
+/// manifest; `cargo metadata` supplies the targets.
 #[instrument(level = "debug", skip(filter), err(level = "warn"))]
 pub fn discover_crate_targets(
     project_root: &Path,
     filter: &dyn RunFilter,
 ) -> CordialResult<Vec<CrateTarget>> {
-    let mut targets = if project_root.join("Cargo.toml").is_file() {
-        workspace_targets(project_root)?
-    } else {
-        vec![CrateTarget::new(
-            project_slug_from_path(project_root),
-            project_root,
-        )]
-    };
+    let manifest = project_root.join("Cargo.toml");
+    if !manifest.is_file() {
+        return Err(CordialError::not_found(manifest));
+    }
+    let mut targets = workspace_targets(project_root)?;
 
     targets = apply_target_filter(targets, filter);
     targets.sort_by(|a, b| a.crate_name().cmp(b.crate_name()));

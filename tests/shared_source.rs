@@ -64,6 +64,11 @@ fn macro_rust_islands_share_the_source_snapshot() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let path = fixture.path().join("src/lib.rs");
     let text = "amenable_derive::gallery_harness! { kani, SOURCE, { fn proof() { assert!(true); write!(out, \"{}\", self.source); } } }\nunknown!(arbitrary tokens);\nunknown! { args, { fn fragment() {} } }\namenable_derive::harness! { wrong_header, { fn fragment() {} } }";
     fs::write(&path, text).into_diagnostic()?;

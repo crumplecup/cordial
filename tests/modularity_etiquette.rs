@@ -53,6 +53,11 @@ fn modularity_etiquette_detects_large_functions() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), large_function_fixture())
         .into_diagnostic()
         .wrap_err("write lib")?;
@@ -360,6 +365,11 @@ fn modularity_etiquette_session_reads_types_per_file_config() -> miette::Result<
         .into_diagnostic()
         .wrap_err("src dir")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/lib.rs"),
         "pub struct Alpha;\npub struct Beta;\n",
     )
@@ -400,6 +410,11 @@ fn generated_files_are_exempt_from_file_and_module_size_but_not_types_per_file()
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
 
     // Twelve types (over the default max_types_per_file of 10) padded past
     // the default file_inventory_min_lines (500) -- written identically
@@ -599,6 +614,11 @@ fn module_size_session_reports_two_sigma_outlier_without_checklisting_it() -> mi
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let mut lib = String::new();
     for index in 0..7 {
         lib.push_str(&format!("mod m{index};\n"));
@@ -665,6 +685,11 @@ fn checklist_lists_over_limit_files_by_descending_size() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("src")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/lib.rs"),
         "mod big;\nmod medium;\nmod small;\n",
     )
@@ -718,6 +743,11 @@ fn nested_file_findings_count_as_one_worklist_item() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let mut source = String::new();
     for index in 0..11 {
         source.push_str(&format!("pub struct Type{index};\n"));
@@ -780,6 +810,11 @@ fn module_size_upper_tail_below_file_floor_is_not_checklist() -> miette::Result<
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let mut lib = String::new();
     for index in 0..7 {
         lib.push_str(&format!("mod m{index};\n"));
@@ -830,6 +865,11 @@ fn module_size_lower_tail_stays_diagnostic_when_not_ignored() -> miette::Result<
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let mut lib = String::new();
     for index in 0..7 {
         lib.push_str(&format!("mod m{index};\n"));
@@ -876,6 +916,11 @@ fn module_size_lower_tail_can_be_ignored() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let mut lib = String::new();
     for index in 0..7 {
         lib.push_str(&format!("mod m{index};\n"));
@@ -928,6 +973,11 @@ fn module_size_session_does_not_flag_even_sizes() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let mut lib = String::new();
     for index in 0..5 {
         lib.push_str(&format!("mod m{index};\n"));
@@ -963,6 +1013,11 @@ fn min_module_lines_drops_tiny_modules_from_sigma_sample() -> miette::Result<()>
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let mut lib = String::new();
     for index in 0..7 {
         lib.push_str(&format!("mod m{index};\n"));
@@ -1183,6 +1238,11 @@ fn top_heavy_parent_is_a_peel_checklist_item() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src/fat"))
         .into_diagnostic()
         .wrap_err("fat")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), "mod fat;\n")
         .into_diagnostic()
         .wrap_err("lib")?;
@@ -1233,6 +1293,11 @@ fn lopsided_sibling_is_a_split_checklist_item() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), "mod big;\nmod small;\n")
         .into_diagnostic()
         .wrap_err("lib")?;
@@ -1280,6 +1345,11 @@ fn unary_nest_is_a_collapse_checklist_item() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src/error/sources"))
         .into_diagnostic()
         .wrap_err("sources")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), "mod error;\n")
         .into_diagnostic()
         .wrap_err("lib")?;
@@ -1345,6 +1415,11 @@ fn unary_leaf_is_not_a_collapse_checklist_item() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src/chain_layer"))
         .into_diagnostic()
         .wrap_err("chain_layer")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), "mod chain_layer;\n")
         .into_diagnostic()
         .wrap_err("lib")?;
@@ -1389,6 +1464,11 @@ fn checklist_names_longest_methods_on_too_long_files() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let mut lib = String::new();
     for index in 0..7 {
         lib.push_str(&format!("mod m{index};\n"));
@@ -1450,6 +1530,11 @@ fn checklist_extract_helpers_on_too_long_files_without_long_bodies() -> miette::
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let mut lib = String::new();
     for index in 0..7 {
         lib.push_str(&format!("mod m{index};\n"));
@@ -1499,6 +1584,11 @@ fn checklist_names_helpers_below_inventory_on_too_long_files() -> miette::Result
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let mut lib = String::new();
     for index in 0..7 {
         lib.push_str(&format!("mod m{index};\n"));
@@ -1597,9 +1687,19 @@ fn module_hierarchy_session_writes_branch_ranking() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src/fat"))
         .into_diagnostic()
         .wrap_err("fat")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("src/thin"))
         .into_diagnostic()
         .wrap_err("thin")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), "mod fat;\nmod thin;\n")
         .into_diagnostic()
         .wrap_err("lib")?;
@@ -1679,6 +1779,11 @@ fn types_per_file_csv_row_quotes_the_comma_joined_context() -> miette::Result<()
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         "pub struct TypeOne;\npub struct TypeTwo;\npub struct TypeThree;\n",

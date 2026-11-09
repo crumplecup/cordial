@@ -11,6 +11,11 @@ fn write_cli_crate(lib: &str, main: &str) -> miette::Result<tempfile::TempDir> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), lib)
         .into_diagnostic()
         .wrap_err("write lib")?;

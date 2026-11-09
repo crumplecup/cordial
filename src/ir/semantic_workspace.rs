@@ -1,7 +1,6 @@
 //! Frozen Cargo context behind a semantic projection. No backend handles escape.
 
 use serde::{Deserialize, Serialize};
-use sha2::Digest;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
@@ -45,10 +44,6 @@ pub enum SemanticContextGap {
         /// Root identifying the affected crate, not a printed type name.
         root: PathBuf,
     },
-    /// No Cargo workspace was loaded into the database. Syntax is still
-    /// canonical, but package membership, dependencies, cfg and name
-    /// resolution are absent and must never be inferred from this context.
-    WorkspaceUnavailable,
 }
 
 /// Resolved crate configuration, including dependency and build-script effects.
@@ -130,41 +125,6 @@ impl SemanticWorkspaceContext {
     #[tracing::instrument(level = "debug")]
     pub(crate) fn builder() -> SemanticWorkspaceContextBuilder {
         SemanticWorkspaceContextBuilder::default()
-    }
-
-    /// Explicit evidence that no Cargo workspace backs this projection. It
-    /// carries no packages, crates, inputs or digests of loaded text, only the
-    /// gap, so consumers cannot mistake absence for a proven empty workspace.
-    #[tracing::instrument(level = "debug", skip(root), err(level = "warn"))]
-    pub(crate) fn unavailable(root: PathBuf) -> crate::CordialResult<Self> {
-        let empty: [u8; 32] = sha2::Sha256::digest([]).into();
-        let context = Self::builder()
-            .identity([0; 32])
-            .root(root)
-            .features(SemanticFeatures::default())
-            .target(None)
-            .all_targets(false)
-            .test_cfg(false)
-            .toolchain(None)
-            .sysroot(None)
-            .proc_macro_server(None)
-            .configuration_inputs(Vec::new())
-            .compiled_inputs(Vec::new())
-            .loaded_sources_digest(empty)
-            .environment_digest(empty)
-            .packages(Vec::new())
-            .crates(Vec::new())
-            .gaps(vec![SemanticContextGap::WorkspaceUnavailable])
-            .build()?;
-        let identity = sha2::Sha256::digest(serde_json::to_vec(&context)?).into();
-        Ok(context.with_identity(identity))
-    }
-
-    /// Whether this context records the absence of a loaded Cargo workspace.
-    #[tracing::instrument(level = "trace", skip(self))]
-    pub fn workspace_unavailable(&self) -> bool {
-        self.gaps
-            .contains(&SemanticContextGap::WorkspaceUnavailable)
     }
 }
 

@@ -53,7 +53,7 @@ pub(super) fn load_and_probe(
     hooks: LoadingHooks<'_>,
     timings: &mut HookTimings,
 ) -> CordialResult<LoadedWorkspace> {
-    let _parsed_source_session = ParsedSourceSession::begin();
+    let parsed_source_session = ParsedSourceSession::begin_in(session.project_root())?;
     let LoadingHooks {
         loaders,
         enrichers,
@@ -144,7 +144,14 @@ pub(super) fn load_and_probe(
         targets.len() as u64 * (loaders.len() + enrichers.len() + probes.len() + 1) as u64,
     );
     for target in targets {
-        let mut crate_ir = CrateIr::new(target.crate_name());
+        let mut crate_ir = if loaders.iter().any(|loader| loader.id() == SourceLoader::ID) {
+            progress.set_message(format!("Building source IR for {}", target.crate_name()));
+            timings.measure("pipeline", "source_ir", || {
+                parsed_source_session.project_target(target)
+            })?
+        } else {
+            CrateIr::new(target.crate_name())
+        };
 
         for loader in loaders {
             progress.set_message(format!(
@@ -155,14 +162,6 @@ pub(super) fn load_and_probe(
             let view = timings.measure("load", loader.id(), || {
                 loader.load(LoadContext::new(session, target))
             })?;
-            if view.loader_id() == SourceLoader::ID
-                && let Some(source) = view.as_any().downcast_ref::<SourceLoadView>()
-            {
-                progress.set_message(format!("Building source IR for {}", target.crate_name()));
-                timings.measure("pipeline", "source_ir", || {
-                    source.populate_ir(&mut crate_ir)
-                })?;
-            }
             #[cfg(feature = "rustdoc")]
             if view.loader_id() == crate::RustdocLoader::ID
                 && let Some(rustdoc) = view.as_any().downcast_ref::<crate::RustdocLoadView>()

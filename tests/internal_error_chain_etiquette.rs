@@ -647,6 +647,11 @@ fn type_graph_scans_src_error_rs() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/error.rs"), ERROR_RS_FIXTURE)
         .into_diagnostic()
         .wrap_err("write error.rs")?;
@@ -711,6 +716,11 @@ fn session_produces_all_four_artifacts() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("error dir")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/error/type_graph.rs"),
         TYPE_GRAPH_FIXTURE,
     )
@@ -774,6 +784,11 @@ fn scan_crate_internal_error_chain_combines_both_scans() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src/error"))
         .into_diagnostic()
         .wrap_err("error dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/error/type_graph.rs"),
         TYPE_GRAPH_FIXTURE,
@@ -896,6 +911,11 @@ fn write_error_crate(src: &str) -> miette::Result<tempfile::TempDir> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/error.rs"), src)
         .into_diagnostic()
         .wrap_err("write error.rs")?;
@@ -995,6 +1015,11 @@ fn incomplete_source_wrapper_is_shape_and_track_caller_violation() -> miette::Re
     fs::create_dir_all(fixture.path().join("src/error"))
         .into_diagnostic()
         .wrap_err("error dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/error/type_graph.rs"),
         TYPE_GRAPH_FIXTURE,
@@ -1501,6 +1526,11 @@ fn native_source_beside_call_site_is_connected() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         "pub mod error;\npub mod io;\n",

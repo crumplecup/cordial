@@ -48,6 +48,11 @@ fn allows_etiquette_detects_allow_attributes() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), ALLOW_ATTRS)
         .into_diagnostic()
         .wrap_err("write fixture")?;
@@ -224,6 +229,11 @@ fn allows_etiquette_emits_verus_reason_finding() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         VERUS_PRELUDE_WITHOUT_REASON,

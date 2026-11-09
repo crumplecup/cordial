@@ -51,6 +51,7 @@ mod probe;
 mod quality_area;
 mod recipe;
 mod recordable;
+pub(crate) use display_types::WELL_KNOWN_DISPLAY_TYPES;
 pub(crate) use recordable::RECORDABLE_IDENTS;
 mod reporter;
 mod scan;

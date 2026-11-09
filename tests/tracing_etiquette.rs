@@ -75,6 +75,11 @@ fn tracing_etiquette_detects_missing_instrument() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("src dir")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/lib.rs"),
         r#"
 #[tracing::instrument(level = "debug")]
@@ -152,6 +157,11 @@ fn tracing_etiquette_classifies_roles_and_recipes() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         r#"
@@ -268,6 +278,11 @@ fn attribute_nodes_materialized_for_instrument() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("src dir")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/lib.rs"),
         r#"#[tracing::instrument]
 pub fn ok() {}
@@ -288,7 +303,7 @@ pub fn ok() {}
         .into_diagnostic()
         .wrap_err("session run")?;
 
-    let slug = cordial::project_slug_from_path(fixture.path());
+    let slug = "fixture";
     let cache = fs::read_to_string(store.path().join("cache").join(format!("{slug}.ir.json")))
         .into_diagnostic()
         .wrap_err("ir cache")?;
@@ -305,6 +320,11 @@ fn tracing_etiquette_emits_recipe_deltas() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         r#"
@@ -411,6 +431,11 @@ fn tracing_non_result_error_site_is_not_silent() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("src dir")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/lib.rs"),
         r#"
 #[tracing::instrument(level = "debug")]
@@ -452,6 +477,11 @@ fn tracing_option_try_is_not_silent() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         r#"
@@ -499,6 +529,11 @@ fn tracing_reports_private_and_pub_super() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("src dir")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/lib.rs"),
         r#"
 mod inner {
@@ -542,6 +577,11 @@ fn tracing_extra_skip_from_config() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("cordial.toml"),
         "[tracing]\nextra_skip = [\"payload\"]\n",
@@ -590,6 +630,11 @@ fn tracing_const_fn_is_never_flagged() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         r#"
@@ -653,6 +698,11 @@ fn tracing_err_recipe_requires_confirmed_display() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         r#"
@@ -727,6 +777,11 @@ fn tracing_skip_covers_tuple_destructured_generic_params() -> miette::Result<()>
         .into_diagnostic()
         .wrap_err("src dir")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/lib.rs"),
         r#"
 pub trait Check<T> {
@@ -783,6 +838,11 @@ fn tracing_never_flags_function_nested_in_configured_gate_cfg() -> miette::Resul
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
     fs::write(
         fixture.path().join("cordial.toml"),
@@ -849,6 +909,11 @@ fn tracing_never_flags_function_called_only_from_proof_context() -> miette::Resu
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
     fs::write(
         fixture.path().join("cordial.toml"),
@@ -933,6 +998,11 @@ fn tracing_still_flags_function_with_an_ordinary_caller_too() -> miette::Result<
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
     fs::write(
         fixture.path().join("cordial.toml"),
@@ -1007,6 +1077,11 @@ fn tracing_treats_cfg_attr_gated_instrument_as_present() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
     fs::write(
         fixture.path().join("cordial.toml"),
@@ -1065,6 +1140,11 @@ fn tracing_checklist_recipe_shows_the_gated_wrap_for_a_gate_crate() -> miette::R
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
     fs::write(
         fixture.path().join("cordial.toml"),
@@ -1120,6 +1200,11 @@ fn tracing_proof_only_method_with_instrument_is_flagged() -> miette::Result<()> 
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
     fs::write(
         fixture.path().join("cordial.toml"),
@@ -1191,6 +1276,11 @@ fn tracing_proof_only_gated_instrument_never_fires_so_it_is_flagged() -> miette:
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
     fs::write(
         fixture.path().join("cordial.toml"),
@@ -1256,6 +1346,11 @@ fn tracing_ungated_instrument_on_ordinary_fn_in_gate_crate() -> miette::Result<(
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
     fs::write(
         fixture.path().join("cordial.toml"),
@@ -1302,6 +1397,11 @@ fn tracing_skip_crate_with_instrument_is_flagged() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
     fs::write(
         fixture.path().join("cordial.toml"),
@@ -1350,6 +1450,11 @@ fn tracing_skip_crate_uninstrumented_is_silent() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     write_minimal_crate_manifest(fixture.path(), "fixture_crate")?;
     fs::write(
         fixture.path().join("cordial.toml"),

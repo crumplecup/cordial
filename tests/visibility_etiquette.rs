@@ -10,6 +10,11 @@ fn write_crate(root: &std::path::Path, lib: &str, extra: &[(&str, &str)]) -> mie
     fs::create_dir_all(root.join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(root.join("src/lib.rs"), lib)
         .into_diagnostic()
         .wrap_err("lib.rs")?;
@@ -224,7 +229,7 @@ fn mod_thin_skip_config_exempts_only_the_named_module() -> miette::Result<()> {
             ("other.rs", "pub fn one_thing() {}\n"),
         ],
     )?;
-    let slug = cordial::project_slug_from_path(fixture.path());
+    let slug = "fixture";
     fs::write(
         fixture.path().join("cordial.toml"),
         format!("\n[visibility]\nmod_thin_skip = {{ \"{slug}\" = [\"gallery\"] }}\n"),

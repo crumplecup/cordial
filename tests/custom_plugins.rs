@@ -73,6 +73,11 @@ fn three_plugin_kinds_register_and_quality_finds_todo() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("src dir")?;
     std::fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
         fixture.path().join("src/lib.rs"),
         "pub fn leftover() {\n    todo!(\"wire this up\")\n}\n",
     )

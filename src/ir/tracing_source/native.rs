@@ -8,6 +8,7 @@ use ra_ap_syntax::{
 };
 use tracing::instrument;
 
+use super::display::DisplayFacts;
 use super::{SourceTracingFunction, SourceTracingInventory, recordable};
 use crate::CordialResult;
 use crate::etiquettes::tracing::{
@@ -34,6 +35,7 @@ impl SourceTracingInventory {
         semantics: &HashMap<TextRange, SemanticFunction>,
     ) -> CordialResult<Self> {
         let mut functions = Vec::new();
+        let display = DisplayFacts::collect(file);
         for item in attributes.items() {
             let range = TextRange::new(
                 (item.range().start() as u32).into(),
@@ -53,7 +55,7 @@ impl SourceTracingInventory {
                 Some(_) => FunctionKind::InherentMethod,
                 None => FunctionKind::Free,
             };
-            let context = context(file, &function, kind, semantics.get(&range))?;
+            let context = context(file, &function, kind, semantics.get(&range), &display)?;
             functions.push(SourceTracingFunction {
                 path: item.path().clone(),
                 range: item.range().clone(),
@@ -77,7 +79,7 @@ impl SourceTracingInventory {
 
 #[instrument(
     level = "debug",
-    skip(file, function, semantics, kind),
+    skip(file, function, semantics, kind, display),
     err(level = "warn")
 )]
 fn context(
@@ -85,15 +87,30 @@ fn context(
     function: &ast::Fn,
     kind: FunctionKind,
     semantics: Option<&SemanticFunction>,
+    display: &DisplayFacts,
 ) -> CordialResult<FnContext> {
     let output = function.ret_type().and_then(|ret| ret.ty());
     let syntactic_result = output.as_ref().is_some_and(recordable::returns_result);
     let (returns_result, displayable) = match semantics.map(|facts| facts.result_recording()) {
-        Some(SemanticResultRecording::Result { display, .. }) => {
-            (true, *display == SemanticCapability::Proven)
-        }
+        Some(SemanticResultRecording::Result {
+            display: capability,
+            ..
+        }) => (
+            true,
+            *capability == SemanticCapability::Proven
+                || output
+                    .as_ref()
+                    .is_some_and(|ty| display.err_is_displayable(ty)),
+        ),
         Some(SemanticResultRecording::NotResult) => (false, false),
-        _ => (syntactic_result, false),
+        // Inactive cfg branches have no semantic facts; read their text.
+        _ => (
+            syntactic_result,
+            syntactic_result
+                && output
+                    .as_ref()
+                    .is_some_and(|ty| display.err_is_displayable(ty)),
+        ),
     };
     let (peek, lines) = body(file, function);
     let receiver = function.param_list().and_then(|list| list.self_param());

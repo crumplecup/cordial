@@ -1,9 +1,6 @@
 use std::fs;
 
-use cordial::{
-    ErrorSurface, PANICS_ETIQUETTE, PanicKind, RunAll, Session, SessionBuilder,
-    project_slug_from_path,
-};
+use cordial::{ErrorSurface, PANICS_ETIQUETTE, PanicKind, RunAll, Session, SessionBuilder};
 use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
@@ -13,6 +10,11 @@ fn panics_etiquette_detects_panic_expect_and_unreachable() -> miette::Result<()>
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         include_str!("fixtures/panics/sample_01.rs"),
@@ -56,7 +58,7 @@ fn panics_etiquette_detects_panic_expect_and_unreachable() -> miette::Result<()>
     assert!(summary.contains("| 4 | 1 | 1 | 1 | 1 | 0 |"));
     assert!(summary.contains("unwrap **1**"));
 
-    let slug = project_slug_from_path(fixture.path());
+    let slug = "fixture";
     assert!(
         store
             .path()
@@ -74,6 +76,11 @@ fn panics_disabled_in_cordial_toml_skips_the_etiquette() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         include_str!("fixtures/panics/sample_20.rs"),
@@ -361,6 +368,11 @@ fn panics_in_tests_ask_for_miette() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("tests")).into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), "pub fn ok() {}\n").into_diagnostic()?;
     fs::write(
@@ -397,6 +409,11 @@ fn panics_in_binaries_ask_for_miette() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("src")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/main.rs"),
         include_str!("fixtures/panics/sample_22.rs"),
     )
@@ -431,6 +448,11 @@ fn test_expect_asks_for_miette() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("tests")).into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), "pub fn ok() {}\n").into_diagnostic()?;
     fs::write(
@@ -465,6 +487,11 @@ fn test_unwrap_asks_for_miette() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("tests")).into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), "pub fn ok() {}\n").into_diagnostic()?;
     fs::write(
@@ -499,6 +526,11 @@ fn cfg_test_module_in_src_asks_for_miette() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         include_str!("fixtures/panics/sample_25.rs"),
@@ -537,6 +569,11 @@ fn library_writeln_expect_is_checklist() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         include_str!("fixtures/panics/sample_26.rs"),
@@ -579,6 +616,11 @@ fn library_tokenstream_parse_expect_is_checklist() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         include_str!("fixtures/panics/sample_06.rs"),
@@ -819,6 +861,11 @@ fn nested_parity_workspace_is_skipped_when_scanning_parent() -> miette::Result<(
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("tests/parity/workspaces/child/src"))
         .into_diagnostic()
         .wrap_err("nested")?;

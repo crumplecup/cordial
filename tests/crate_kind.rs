@@ -68,17 +68,6 @@ fn plain_lib_and_bin_are_not_proc_macros() -> miette::Result<()> {
     Ok(())
 }
 
-#[test]
-fn synthetic_target_without_a_manifest_has_unknown_kinds() -> miette::Result<()> {
-    cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
-    let target = only_target(fixture.path())?;
-    assert!(target.kinds().is_empty());
-    assert!(!target.is_proc_macro());
-    Ok(())
-}
-
 fn populated_ir(kinds: Vec<CrateKind>) -> miette::Result<CrateIr> {
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let src_root = fixture.path().join("src");

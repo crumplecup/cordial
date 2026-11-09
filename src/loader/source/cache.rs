@@ -60,6 +60,12 @@ impl Default for CacheToken {
 }
 
 impl CacheToken {
+    /// Give this run the database that already holds its Cargo workspace.
+    #[tracing::instrument(level = "trace", skip(self, database))]
+    fn install(&self, database: crate::loader::SourceDatabase) {
+        *self.1.lock().unwrap_or_else(PoisonError::into_inner) = Some(database);
+    }
+
     /// Run `f` against this run's database, creating a context-less one if the
     /// run has none yet. The lock is not reentrant: `f` must not request the
     /// database again.
@@ -98,6 +104,26 @@ impl ParsedSourceSession {
         let token = Arc::new(CacheToken::default());
         let previous = SESSION_TOKEN.with(|current| current.replace(Some(token.clone())));
         Self { previous, token }
+    }
+
+    /// Begin a run whose database holds the Cargo workspace at `root`.
+    /// A root that is not a loadable crate or workspace is an error.
+    #[tracing::instrument(level = "debug", err(level = "warn"))]
+    pub(crate) fn begin_in(root: &std::path::Path) -> crate::CordialResult<Self> {
+        let database = crate::loader::SourceDatabase::load(root)?;
+        let session = Self::begin();
+        session.token.install(database);
+        Ok(session)
+    }
+
+    /// Project one target's source and semantic evidence from the run database.
+    #[tracing::instrument(level = "debug", skip(self, target), err(level = "warn"))]
+    pub(crate) fn project_target(
+        &self,
+        target: &crate::loader::CrateTarget,
+    ) -> crate::CordialResult<crate::ir::CrateIr> {
+        self.token
+            .with_database(|database| database.project_target(target))
     }
 }
 

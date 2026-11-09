@@ -263,6 +263,11 @@ fn foreign_error_attenuation_session_produces_csv() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), PRESERVED_FIXTURE)
         .into_diagnostic()
         .wrap_err("write fixture")?;
@@ -308,6 +313,11 @@ fn scan_crate_error_chain_accepts_fixture_root() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), PRESERVED_FIXTURE)
         .into_diagnostic()
         .wrap_err("write fixture")?;

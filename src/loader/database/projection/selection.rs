@@ -13,20 +13,14 @@ impl SourceDatabase {
     #[hotpath::measure]
     pub fn project_target(&mut self, target: &CrateTarget) -> CordialResult<CrateIr> {
         let root = target.crate_root();
-        let context = self.target_context(target)?;
+        let context = self.projection_context()?;
         let root = root.canonicalize()?;
-        let graph = if context.workspace_unavailable() {
-            // No Cargo membership or entry points exist to consult; select the
-            // package's own source tree and leave the gap in the snapshot.
-            rust_files(&root.join("src"))
-        } else {
-            let package = context
-                .packages()
-                .iter()
-                .find(|package| package.root() == &root)
-                .ok_or_else(|| crate::CordialError::not_found(root.clone()))?;
-            self.package_sources(package)
-        };
+        let package = context
+            .packages()
+            .iter()
+            .find(|package| package.root() == &root)
+            .ok_or_else(|| crate::CordialError::not_found(root.clone()))?;
+        let graph = self.package_sources(package);
         let mut policies = BTreeSet::new();
         for tree in crate::loader::quality_scan_trees(&root) {
             let is_source = tree == root.join("src");
@@ -156,10 +150,6 @@ pub(super) fn validate_target(
     target: &CrateTarget,
     context: &crate::SemanticWorkspaceContext,
 ) -> CordialResult<()> {
-    // Nothing was loaded, so there are no configuration inputs to disagree with.
-    if context.workspace_unavailable() {
-        return Ok(());
-    }
     if let Some(snapshot) = target.manifest_snapshot()
         && !context.configuration_inputs().iter().any(|input| {
             input.path() == snapshot.path() && input.digest() == &Some(snapshot.digest())

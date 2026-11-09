@@ -34,7 +34,7 @@ use tracing::instrument;
 /// Types (and `Result` aliases) known displayable within one file's own
 /// scan, regardless of what other guarantees hold crate- or workspace-
 /// wide.
-const WELL_KNOWN_DISPLAY_TYPES: &[&str] = &["String", "Error"];
+pub(crate) const WELL_KNOWN_DISPLAY_TYPES: &[&str] = &["String", "Error"];
 
 /// Per-file facts about which local types implement `Display` and which
 /// local `type X<..> = Result<_, E>;` aliases resolve to a known `E`.

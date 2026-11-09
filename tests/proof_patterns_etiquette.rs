@@ -63,6 +63,11 @@ fn write_fixture(fixture: &std::path::Path) -> miette::Result<()> {
     fs::create_dir_all(fixture.join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.join("src/lib.rs"), FIXTURE_SOURCE)
         .into_diagnostic()
         .wrap_err("write fixture")?;
@@ -111,6 +116,11 @@ fn scan_skips_a_crate_with_no_verus_blocks() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), "pub fn ok() {}\n")
         .into_diagnostic()
         .wrap_err("write fixture")?;

@@ -236,6 +236,13 @@ fn amenable_ext_plugin_is_registered() -> miette::Result<()> {
 /// generalization is proven on more than one name.
 fn write_amenable_ext_config(workspace: &std::path::Path, body: &str) -> miette::Result<()> {
     use miette::WrapErr;
+    std::fs::create_dir_all(workspace.join("src")).into_diagnostic()?;
+    std::fs::write(
+        workspace.join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(workspace.join("src/lib.rs"), "").into_diagnostic()?;
     std::fs::write(workspace.join("cordial.toml"), body)
         .into_diagnostic()
         .wrap_err("write cordial.toml")

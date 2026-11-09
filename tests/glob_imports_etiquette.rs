@@ -72,6 +72,11 @@ fn glob_imports_etiquette_writes_checklist() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), GLOB_SAMPLE)
         .into_diagnostic()
         .wrap_err("write fixture")?;
@@ -111,6 +116,11 @@ fn glob_imports_in_tests_tree_count() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("tests"))
         .into_diagnostic()
         .wrap_err("tests")?;

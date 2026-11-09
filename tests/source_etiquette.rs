@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use cordial::{
     EtiquetteExplain, EtiquetteHooks, RunAll, ScopeEnricher, Session, SessionBuilder, SourceLoader,
-    StaticEtiquette, project_slug_from_path,
+    StaticEtiquette,
 };
 use miette::{IntoDiagnostic, WrapErr};
 
@@ -35,6 +35,11 @@ fn source_loader_builds_ir_and_cache() -> miette::Result<()> {
     std::fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    std::fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     std::fs::write(
         fixture.path().join("src/lib.rs"),
         "pub fn hello() {}\n\npub struct Widget;",
@@ -78,7 +83,7 @@ fn source_loader_builds_ir_and_cache() -> miette::Result<()> {
         );
     }
 
-    let slug = project_slug_from_path(fixture.path());
+    let slug = "fixture";
     let cache_path = store.path().join("cache").join(format!("{slug}.ir.json"));
     assert!(
         cache_path.is_file(),

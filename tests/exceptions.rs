@@ -16,6 +16,11 @@ fn exception_patch_suppresses_matching_panic_finding() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("src dir")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/lib.rs"),
         include_str!("fixtures/panics/exceptions_patch.rs"),
     )
@@ -25,7 +30,7 @@ fn exception_patch_suppresses_matching_panic_finding() -> miette::Result<()> {
     let store = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("store tempdir")?;
-    let slug = cordial::project_slug_from_path(fixture.path());
+    let slug = "fixture";
     let exceptions_dir = store.path().join("exceptions").join("panics");
     fs::create_dir_all(&exceptions_dir)
         .into_diagnostic()
@@ -88,6 +93,11 @@ fn exception_patch_with_context_suppresses_matching_visibility_finding() -> miet
         .into_diagnostic()
         .wrap_err("src dir")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/lib.rs"),
         "pub mod widgets;\npub fn root_item() {}\n",
     )
@@ -103,7 +113,7 @@ fn exception_patch_with_context_suppresses_matching_visibility_finding() -> miet
     let store = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("store tempdir")?;
-    let slug = cordial::project_slug_from_path(fixture.path());
+    let slug = "fixture";
     let exceptions_dir = store.path().join("exceptions").join("visibility");
     fs::create_dir_all(&exceptions_dir)
         .into_diagnostic()
@@ -154,6 +164,11 @@ fn quality_patches_alias_suppresses_matching_finding() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("src dir")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/lib.rs"),
         include_str!("fixtures/panics/exceptions_alias.rs"),
     )
@@ -163,7 +178,7 @@ fn quality_patches_alias_suppresses_matching_finding() -> miette::Result<()> {
     let store = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("store tempdir")?;
-    let slug = cordial::project_slug_from_path(fixture.path());
+    let slug = "fixture";
     let patches_dir = store.path().join("quality").join("patches").join("panics");
     fs::create_dir_all(&patches_dir)
         .into_diagnostic()
