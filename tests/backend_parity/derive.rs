@@ -1,5 +1,5 @@
 //! Complete derive evidence, graph-only consumers and revision recovery.
-#![cfg(feature = "derives")]
+use super::shared;
 use cordial::{
     CrateIr, CrateTarget, CrateViewMut, DeriveInventoryEnricher, IrView, LoadContext, Loader,
     PathInclusionFacts, QueryBuilder, SessionBuilder, SourceDatabase, SourceEnrichView,
@@ -8,7 +8,7 @@ use cordial::{
 use miette::{IntoDiagnostic, Result};
 use std::path::Path;
 
-const SOURCE: &str = include_str!("fixtures/semantic_backend/derives.rs.txt");
+const SOURCE: &str = include_str!("../fixtures/semantic_backend/derives.rs.txt");
 
 #[tracing::instrument(level = "debug", skip(target), err(level = "warn"))]
 fn baseline(root: &Path, target: &CrateTarget) -> Result<CrateIr> {
@@ -55,23 +55,28 @@ fn materialize(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> {
     Ok(rows)
 }
 
-#[test]
+pub const PACKAGE: &str = "derive_parity";
+
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn derive_facts_and_policy_survive_backend_changes_and_virtual_edits() -> Result<()> {
-    cordial::init_tracing();
-    let root = tempfile::tempdir().into_diagnostic()?;
-    std::fs::create_dir_all(root.path().join("src/fixtures")).into_diagnostic()?;
-    std::fs::create_dir(root.path().join("tests")).into_diagnostic()?;
-    std::fs::write(root.path().join("Cargo.toml"), "[package]\nname = \"derive_parity\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n").into_diagnostic()?;
-    let path = root.path().join("src/lib.rs");
-    let fixture = root.path().join("src/fixtures/generated.rs");
-    let integration = root.path().join("tests/integration.rs");
+pub fn write(root: &Path) -> Result<()> {
+    std::fs::create_dir_all(root.join("src/fixtures")).into_diagnostic()?;
+    std::fs::create_dir(root.join("tests")).into_diagnostic()?;
+    let path = root.join("src/lib.rs");
+    let fixture = root.join("src/fixtures/generated.rs");
+    let integration = root.join("tests/integration.rs");
     std::fs::write(&path, SOURCE).into_diagnostic()?;
     std::fs::write(&fixture, "struct Fixture { pub value: u8 }\n").into_diagnostic()?;
     std::fs::write(&integration, "struct Integration { pub ignored: u8 }\n").into_diagnostic()?;
-    let target = CrateTarget::new("derive_parity", root.path());
-    let legacy = baseline(root.path(), &target)?;
-    let mut database = SourceDatabase::load(root.path()).into_diagnostic()?;
+    Ok(())
+}
+
+#[tracing::instrument(level = "debug", skip(database), err(level = "warn"))]
+pub fn check(root: &Path, database: &mut SourceDatabase) -> Result<()> {
+    let path = root.join("src/lib.rs");
+    let fixture = root.join("src/fixtures/generated.rs");
+    let integration = root.join("tests/integration.rs");
+    let target = CrateTarget::new(PACKAGE, root);
+    let legacy = baseline(root, &target)?;
     let paths = [path.clone(), fixture, integration];
     let native = database.project(&target, &paths).into_diagnostic()?;
     let expected = legacy
@@ -92,9 +97,9 @@ fn derive_facts_and_policy_survive_backend_changes_and_virtual_edits() -> Result
         2,
         "source fixtures included; integration tests excluded"
     );
-    let rows = materialize(&native, root.path())?;
+    let rows = materialize(&native, root)?;
     assert_eq!(
-        materialize(&legacy, root.path())?,
+        materialize(&legacy, root)?,
         rows,
         "all finding attributes and spans"
     );
@@ -140,14 +145,14 @@ fn derive_facts_and_policy_survive_backend_changes_and_virtual_edits() -> Result
         rows.iter()
             .any(|row| row["attrs"]["qualified_name"] == "inactive::Record::value")
     );
-    let config = root.path().join("cordial.toml");
+    let config = root.join("cordial.toml");
     std::fs::write(
         &config,
         "[derives]\nmax_constructor_args = 0\nmin_fluent_setters = 99\n",
     )
     .into_diagnostic()?;
-    let changed = materialize(&native, root.path())?;
-    assert_eq!(materialize(&legacy, root.path())?, changed);
+    let changed = materialize(&native, root)?;
+    assert_eq!(materialize(&legacy, root)?, changed);
     assert!(
         !changed
             .iter()
@@ -164,7 +169,7 @@ fn derive_facts_and_policy_survive_backend_changes_and_virtual_edits() -> Result
                 && row["attrs"]["qualified_name"] == "Widget")
     );
     std::fs::remove_file(&config).into_diagnostic()?;
-    assert!(materialize(&CrateIr::new("derive_parity"), root.path()).is_err());
+    assert!(materialize(&CrateIr::new("derive_parity"), root).is_err());
     let mut corrupt = native.clone();
     corrupt
         .set_attr(
@@ -173,7 +178,7 @@ fn derive_facts_and_policy_survive_backend_changes_and_virtual_edits() -> Result
             serde_json::json!({"snapshots":[]}),
         )
         .into_diagnostic()?;
-    assert!(materialize(&corrupt, root.path()).is_err());
+    assert!(materialize(&corrupt, root).is_err());
     database
         .change_file(&path, SOURCE.replace("&self.name", "self.name.as_ref()"))
         .into_diagnostic()?;
@@ -182,7 +187,7 @@ fn derive_facts_and_policy_survive_backend_changes_and_virtual_edits() -> Result
         native.source_policy_inventory().into_diagnostic()?,
         revised.source_policy_inventory().into_diagnostic()?
     );
-    let changed = materialize(&revised, root.path())?;
+    let changed = materialize(&revised, root)?;
     assert!(
         !changed
             .iter()
@@ -203,8 +208,9 @@ fn derive_facts_and_policy_survive_backend_changes_and_virtual_edits() -> Result
         native.source_policy_inventory().into_diagnostic()?,
         restored.source_policy_inventory().into_diagnostic()?
     );
-    assert_eq!(materialize(&restored, root.path())?, rows);
+    assert_eq!(materialize(&restored, root)?, rows);
     assert_eq!(std::fs::read_to_string(path).into_diagnostic()?, SOURCE);
+    shared::resync(database, root)?;
     Ok(())
 }
 

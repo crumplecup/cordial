@@ -1,5 +1,5 @@
 //! CLI catalog parity, graph-only policy and revision recovery.
-#![cfg(feature = "cli_layout")]
+use super::shared;
 use cordial::CliLayoutInventoryEnricher;
 use cordial::{
     CrateIr, CrateTarget, CrateViewMut, IrView, LoadContext, Loader, QueryBuilder, SessionBuilder,
@@ -8,7 +8,7 @@ use cordial::{
 use miette::{IntoDiagnostic, Result};
 use std::path::Path;
 
-const SOURCE: &str = include_str!("fixtures/semantic_backend/cli_layout.rs.txt");
+const SOURCE: &str = include_str!("../fixtures/semantic_backend/cli_layout.rs.txt");
 
 #[tracing::instrument(level = "debug", skip(target), err(level = "warn"))]
 fn baseline(root: &Path, target: &CrateTarget) -> Result<CrateIr> {
@@ -54,54 +54,54 @@ fn materialize(graph: &CrateIr, root: &Path) -> Result<Vec<serde_json::Value>> {
     Ok(rows)
 }
 
-#[test]
+pub const PACKAGE: &str = "cli_parity";
+
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn cli_catalog_and_findings_survive_native_projection_and_virtual_edits() -> Result<()> {
-    cordial::init_tracing();
-    let root = tempfile::tempdir().into_diagnostic()?;
-    std::fs::create_dir_all(root.path().join("src/inline")).into_diagnostic()?;
-    std::fs::create_dir_all(root.path().join("src/bin")).into_diagnostic()?;
-    std::fs::create_dir_all(root.path().join("src/fixtures")).into_diagnostic()?;
-    std::fs::write(
-        root.path().join("Cargo.toml"),
-        "[package]\nname = \"cli_parity\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
-    )
-    .into_diagnostic()?;
-    let path = root.path().join("src/lib.rs");
-    let main = root.path().join("src/main.rs");
-    let external = root.path().join("src/external.rs");
+pub fn write(root: &Path) -> Result<()> {
+    std::fs::create_dir_all(root.join("src/inline")).into_diagnostic()?;
+    std::fs::create_dir_all(root.join("src/bin")).into_diagnostic()?;
+    std::fs::create_dir_all(root.join("src/fixtures")).into_diagnostic()?;
+    let path = root.join("src/lib.rs");
+    let main = root.join("src/main.rs");
+    let external = root.join("src/external.rs");
     std::fs::write(&path, SOURCE).into_diagnostic()?;
     std::fs::write(&main,"#[derive(clap::Parser)] struct Island;\nstruct BinError;\nimpl std::error::Error for BinError {}\nfn main() { match Cli::parse() { cli => cli.act() } }\nfn helper() {}\n").into_diagnostic()?;
     std::fs::write(&external, "#[derive(clap::Parser)] pub struct External;\n")
         .into_diagnostic()?;
     std::fs::write(
-        root.path().join("src/inline/nested.rs"),
+        root.join("src/inline/nested.rs"),
         "#[derive(clap::Parser)] pub struct Nested;\n",
     )
     .into_diagnostic()?;
     std::fs::write(
-        root.path().join("support.rs"),
+        root.join("support.rs"),
         "#[derive(clap::Parser)] pub struct Support;\n",
     )
     .into_diagnostic()?;
     std::fs::write(
-        root.path().join("function_local.rs"),
+        root.join("function_local.rs"),
         "#[derive(clap::Parser)] pub struct LocalExternal;\n",
     )
     .into_diagnostic()?;
     std::fs::write(
-        root.path().join("src/bin/tool.rs"),
+        root.join("src/bin/tool.rs"),
         "fn main() { Cli::parse().act(); }\n",
     )
     .into_diagnostic()?;
     std::fs::write(
-        root.path().join("src/fixtures/ignored.rs"),
+        root.join("src/fixtures/ignored.rs"),
         "#[derive(clap::Parser)] struct Fixture;\n",
     )
     .into_diagnostic()?;
-    let target = CrateTarget::new("cli_parity", root.path());
-    let legacy = baseline(root.path(), &target)?;
-    let mut database = SourceDatabase::load(root.path()).into_diagnostic()?;
+    Ok(())
+}
+
+#[tracing::instrument(level = "debug", skip(database), err(level = "warn"))]
+pub fn check(root: &Path, database: &mut SourceDatabase) -> Result<()> {
+    let main = root.join("src/main.rs");
+    let external = root.join("src/external.rs");
+    let target = CrateTarget::new(PACKAGE, root);
+    let legacy = baseline(root, &target)?;
     let native = database.project(&target, &[]).into_diagnostic()?;
     let expected = legacy
         .source_policy_inventory()
@@ -116,13 +116,13 @@ fn cli_catalog_and_findings_survive_native_projection_and_virtual_edits() -> Res
         actual.cli_layout(),
         "complete catalog, dispatch, entries and snapshots"
     );
-    assert_eq!(actual.crate_root(), root.path());
+    assert_eq!(actual.crate_root(), root);
     for excluded in ["Ignored", "Fixture", "LocalExternal"] {
         assert!(!actual.cli_layout().catalog().types().contains_key(excluded));
     }
-    let rows = materialize(&native, root.path())?;
+    let rows = materialize(&native, root)?;
     assert_eq!(
-        materialize(&legacy, root.path())?,
+        materialize(&legacy, root)?,
         rows,
         "complete finding attributes and spans"
     );
@@ -148,7 +148,7 @@ fn cli_catalog_and_findings_survive_native_projection_and_virtual_edits() -> Res
             "lost nested dispatch for {name}"
         );
     }
-    assert!(materialize(&CrateIr::new("cli_parity"), root.path()).is_err());
+    assert!(materialize(&CrateIr::new("cli_parity"), root).is_err());
     let mut corrupt = native.clone();
     let mut payload = serde_json::to_value(&actual).into_diagnostic()?;
     payload
@@ -163,12 +163,12 @@ fn cli_catalog_and_findings_survive_native_projection_and_virtual_edits() -> Res
         )
         .into_diagnostic()?;
     assert!(
-        materialize(&corrupt, root.path()).is_err(),
+        materialize(&corrupt, root).is_err(),
         "missing CLI evidence cannot establish compliance"
     );
     database.change_file(&external,"#[derive(clap::Parser)] pub struct External;\nimpl External { pub fn act(self)->Result<(),()> { Ok(()) } }\n".into()).into_diagnostic()?;
     let revised = database.project(&target, &[]).into_diagnostic()?;
-    assert_ne!(materialize(&revised, root.path())?, rows);
+    assert_ne!(materialize(&revised, root)?, rows);
     database
         .change_file(
             &external,
@@ -183,7 +183,7 @@ fn cli_catalog_and_findings_survive_native_projection_and_virtual_edits() -> Res
             .map(|i| i.cli_layout().clone()),
         Some(actual.cli_layout().clone())
     );
-    assert_eq!(materialize(&restored, root.path())?, rows);
+    assert_eq!(materialize(&restored, root)?, rows);
     database
         .change_file(&main, "fn main( {".into())
         .into_diagnostic()?;
@@ -191,5 +191,6 @@ fn cli_catalog_and_findings_survive_native_projection_and_virtual_edits() -> Res
         database.project(&target, &[]).is_err(),
         "invalid entry syntax must fail closed"
     );
+    shared::resync(database, root)?;
     Ok(())
 }

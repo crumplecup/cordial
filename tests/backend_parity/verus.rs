@@ -1,49 +1,57 @@
 //! Verus dialect facts survive projection, virtual revisions, and IR persistence.
-#![cfg(feature = "verus_ir")]
-mod support {
-    pub mod semantic_metrics;
-}
-
+use super::{semantic_metrics, shared};
 use cordial::{
     ATTR_SOURCE_VERUS, CrateIr, CrateTarget, IrView, LoadContext, Loader, SessionBuilder,
     SourceDatabase, SourceLoadView, SourceLoader, SourceVerus,
 };
 use miette::{IntoDiagnostic, Result};
+use std::path::Path;
 use tracing_subscriber::prelude::*;
 
-#[test]
+pub const PACKAGE: &str = "verus_parity";
+
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn dialect_evidence_matches_complete_payload_and_virtual_revisions() -> Result<()> {
-    cordial::init_tracing();
-    let metrics = support::semantic_metrics::QueryMetrics::default();
+pub fn write(root: &Path) -> Result<()> {
+    std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
+    let source = [
+        include_str!("../fixtures/verus_ir/signature_facts_source.rs"),
+        include_str!("../fixtures/verus_ir/cfg_test_and_compile_error_source.rs"),
+        include_str!("../fixtures/verus_ir/documented_data_carrying_enum_source.rs"),
+        include_str!("../fixtures/verus_ir/ghost_exec_unreachable_source.rs"),
+        include_str!("../fixtures/verus_ir/assume_and_axiom_source.rs"),
+        include_str!("../fixtures/verus_ir/view_operator_source.rs"),
+        // Best-effort dialect coverage remains explicit: qualified macros are
+        // outside the existing inventory, malformed payloads contribute no rows.
+        include_str!("../fixtures/verus_ir/backend_edges_source.rs"),
+    ]
+    .join("\n");
+    let path = root.join("src/lib.rs");
+    std::fs::write(&path, &source).into_diagnostic()?;
+    Ok(())
+}
+
+#[tracing::instrument(level = "debug", skip(database), err(level = "warn"))]
+pub fn check(root: &Path, database: &mut SourceDatabase) -> Result<()> {
+    let metrics = semantic_metrics::QueryMetrics::default();
     let _subscriber = tracing::subscriber::set_default(
         tracing_subscriber::registry()
             .with(metrics.clone())
             .with(cordial::tracing_fmt_layer()),
     );
-    let fixture = tempfile::tempdir().into_diagnostic()?;
-    let root = fixture.path();
-    std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
-    std::fs::write(
-        root.join("Cargo.toml"),
-        "[package]\nname='verus_parity'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
-    )
-    .into_diagnostic()?;
     let source = [
-        include_str!("fixtures/verus_ir/signature_facts_source.rs"),
-        include_str!("fixtures/verus_ir/cfg_test_and_compile_error_source.rs"),
-        include_str!("fixtures/verus_ir/documented_data_carrying_enum_source.rs"),
-        include_str!("fixtures/verus_ir/ghost_exec_unreachable_source.rs"),
-        include_str!("fixtures/verus_ir/assume_and_axiom_source.rs"),
-        include_str!("fixtures/verus_ir/view_operator_source.rs"),
+        include_str!("../fixtures/verus_ir/signature_facts_source.rs"),
+        include_str!("../fixtures/verus_ir/cfg_test_and_compile_error_source.rs"),
+        include_str!("../fixtures/verus_ir/documented_data_carrying_enum_source.rs"),
+        include_str!("../fixtures/verus_ir/ghost_exec_unreachable_source.rs"),
+        include_str!("../fixtures/verus_ir/assume_and_axiom_source.rs"),
+        include_str!("../fixtures/verus_ir/view_operator_source.rs"),
         // Best-effort dialect coverage remains explicit: qualified macros are
         // outside the existing inventory, malformed payloads contribute no rows.
-        include_str!("fixtures/verus_ir/backend_edges_source.rs"),
+        include_str!("../fixtures/verus_ir/backend_edges_source.rs"),
     ]
     .join("\n");
     let path = root.join("src/lib.rs");
-    std::fs::write(&path, &source).into_diagnostic()?;
-    let target = CrateTarget::new("verus_parity", root);
+    let target = CrateTarget::new(PACKAGE, root);
     let session = SessionBuilder::new(root).build();
     let loaded = SourceLoader
         .load(LoadContext::new(&session, &target))
@@ -62,7 +70,6 @@ fn dialect_evidence_matches_complete_payload_and_virtual_revisions() -> Result<(
         .get("verus_dialect:payload")
         .copied()
         .unwrap_or_default();
-    let mut database = SourceDatabase::load(root).into_diagnostic()?;
     let native = database.project(&target, &[]).into_diagnostic()?;
     let actual = native.source_verus().into_diagnostic()?;
     let counts = metrics.snapshot();
@@ -170,7 +177,7 @@ fn dialect_evidence_matches_complete_payload_and_virtual_revisions() -> Result<(
         database.project(&target, &[]).is_err(),
         "invalid outer Rust cannot produce complete dialect evidence"
     );
-    drop(database);
+    shared::resync(database, root)?;
     drop(loaded);
     std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
     assert_eq!(
