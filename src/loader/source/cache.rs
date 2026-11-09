@@ -31,7 +31,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 use tracing::instrument;
 
@@ -39,21 +39,43 @@ use crate::ir::CrateKind;
 
 use super::{SharedParsedFile, SourceFile, SourceLoadView};
 
-#[derive(Debug)]
-pub(super) struct CacheToken(u64);
+/// Identity of one load-and-probe run, shared by every view created inside it.
+/// It owns the run's single source database, created on first use because most
+/// views never need one.
+pub(super) struct CacheToken(u64, Mutex<Option<crate::loader::SourceDatabase>>);
+
+impl std::fmt::Debug for CacheToken {
+    #[tracing::instrument(level = "trace", skip(self, formatter))]
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_tuple("CacheToken").field(&self.0).finish()
+    }
+}
 
 impl Default for CacheToken {
     #[tracing::instrument(level = "debug")]
     fn default() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(1);
-        Self(NEXT.fetch_add(1, Ordering::Relaxed))
+        Self(NEXT.fetch_add(1, Ordering::Relaxed), Mutex::new(None))
+    }
+}
+
+impl CacheToken {
+    /// Run `f` against this run's database, creating a context-less one if the
+    /// run has none yet. The lock is not reentrant: `f` must not request the
+    /// database again.
+    #[tracing::instrument(level = "trace", skip(self, f))]
+    pub(super) fn with_database<R>(
+        &self,
+        f: impl FnOnce(&mut crate::loader::SourceDatabase) -> R,
+    ) -> R {
+        let mut slot = self.1.lock().unwrap_or_else(PoisonError::into_inner);
+        f(slot.get_or_insert_with(crate::loader::SourceDatabase::new))
     }
 }
 
 type ParsedFiles = HashMap<PathBuf, SharedParsedFile>;
 struct ParsedRun {
     token: Weak<CacheToken>,
-    database: crate::loader::SourceDatabase,
     files: ParsedFiles,
 }
 

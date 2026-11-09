@@ -39,7 +39,6 @@ impl SourceLoadView {
                 .entry(self.cache_token.0)
                 .or_insert_with(|| ParsedRun {
                     token: Arc::downgrade(&self.cache_token),
-                    database: crate::loader::SourceDatabase::new(),
                     files: HashMap::new(),
                 });
             let files = &mut run.files;
@@ -53,9 +52,9 @@ impl SourceLoadView {
                 .iter()
                 .find(|file| file.path() == path)
                 .map(|file| file.source().as_str());
-            let source = run
-                .database
-                .captured_text(path, supplied)?
+            let source = self
+                .cache_token
+                .with_database(|database| database.captured_text(path, supplied))?
                 .ok_or_else(|| crate::CordialError::not_found(path.to_path_buf()))?;
             // Retire this compatibility AST as collectors move to database
             // syntax. Semantic collection must not parse these inputs twice.

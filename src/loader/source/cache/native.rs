@@ -1,10 +1,8 @@
 //! Native syntax collection through the run's canonical source database.
 
-use super::{PARSED, ParsedRun, SourceLoadView};
+use super::SourceLoadView;
 use crate::{CordialResult, loader::DatabaseSource};
-use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
 
 impl SourceLoadView {
     /// Collect facts while the database owns both the source and its tree.
@@ -15,23 +13,13 @@ impl SourceLoadView {
         path: &Path,
         collect: impl FnOnce(&DatabaseSource<'_>) -> CordialResult<T>,
     ) -> CordialResult<T> {
-        PARSED.with(|parsed| {
-            let mut parsed = parsed.borrow_mut();
-            parsed.retain(|_, run| run.token.strong_count() != 0);
-            let run = parsed
-                .entry(self.cache_token.0)
-                .or_insert_with(|| ParsedRun {
-                    token: Arc::downgrade(&self.cache_token),
-                    database: crate::loader::SourceDatabase::new(),
-                    files: HashMap::new(),
-                });
-            let supplied = self
-                .files
-                .iter()
-                .find(|file| file.path() == path)
-                .map(|file| file.source().as_str());
-            run.database.collect_source(path, supplied, collect)
-        })
+        let supplied = self
+            .files
+            .iter()
+            .find(|file| file.path() == path)
+            .map(|file| file.source().as_str());
+        self.cache_token
+            .with_database(|database| database.collect_source(path, supplied, collect))
     }
 
     /// Collect crate-wide facts after freezing every selected database input.
@@ -42,27 +30,18 @@ impl SourceLoadView {
         paths: &[std::path::PathBuf],
         collect: impl FnOnce(&[DatabaseSource<'_>]) -> CordialResult<T>,
     ) -> CordialResult<T> {
-        PARSED.with(|parsed| {
-            let mut parsed = parsed.borrow_mut();
-            parsed.retain(|_, run| run.token.strong_count() != 0);
-            let run = parsed
-                .entry(self.cache_token.0)
-                .or_insert_with(|| ParsedRun {
-                    token: Arc::downgrade(&self.cache_token),
-                    database: crate::loader::SourceDatabase::new(),
-                    files: HashMap::new(),
-                });
+        self.cache_token.with_database(|database| {
             for path in paths {
                 let supplied = self
                     .files
                     .iter()
                     .find(|file| file.path() == path)
                     .map(|file| file.source().as_str());
-                run.database
+                database
                     .captured_text(path, supplied)?
                     .ok_or_else(|| crate::CordialError::not_found(path.clone()))?;
             }
-            run.database.collect_sources(paths, collect)
+            database.collect_sources(paths, collect)
         })
     }
 
