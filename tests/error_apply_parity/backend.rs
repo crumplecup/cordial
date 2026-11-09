@@ -1,30 +1,24 @@
 //! Complete error/apply declaration contracts from both loader frontends.
-#![cfg(feature = "internal_error_chain")]
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
-#[path = "support/source_projection.rs"]
-mod projection;
-use cordial::{CrateTarget, IrView};
+use super::projection;
+use cordial::{CrateTarget, IrView, SourceDatabase};
 use miette::{IntoDiagnostic, Result};
+use std::path::Path;
 
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn native_declarations_preserve_complete_evidence_and_virtual_revisions() -> Result<()> {
-    cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic()?;
-    let root = fixture.path();
-    std::fs::create_dir_all(root.join("src/nested")).into_diagnostic()?;
-    std::fs::write(
-        root.join("Cargo.toml"),
-        "[package]\nname='apply_parity'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
-    )
-    .into_diagnostic()?;
-    let library = root.join("src/lib.rs");
-    let source = format!(
+pub const PACKAGE: &str = "apply_parity";
+
+/// The library root every revision in this scenario starts from and returns to.
+#[tracing::instrument(level = "trace")]
+fn source() -> String {
+    format!(
         "mod nested; #[path = \"renamed.rs\"] mod linked; #[cfg(test)] mod test_only;\n{}",
-        include_str!("fixtures/semantic_backend/error_apply.rs.txt").replace("//!", "//")
-    );
-    std::fs::write(&library, &source).into_diagnostic()?;
+        include_str!("../fixtures/semantic_backend/error_apply.rs.txt").replace("//!", "//")
+    )
+}
+
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+pub fn write(root: &Path) -> Result<()> {
+    std::fs::create_dir_all(root.join("src/nested")).into_diagnostic()?;
+    std::fs::write(root.join("src/lib.rs"), source()).into_diagnostic()?;
     for (path, text) in [
         ("nested/mod.rs", "mod leaf;\n"),
         (
@@ -41,11 +35,19 @@ fn native_declarations_preserve_complete_evidence_and_virtual_revisions() -> Res
     ] {
         std::fs::write(root.join("src").join(path), text).into_diagnostic()?;
     }
-    let target = CrateTarget::new("apply_parity", root);
+    Ok(())
+}
+
+/// Edits the shared database, so it must run after every read-only scenario.
+/// Every edit is virtual and the library root is restored before the end.
+#[tracing::instrument(level = "debug", skip(database), err(level = "warn"))]
+pub fn check(root: &Path, database: &mut SourceDatabase) -> Result<()> {
+    let library = root.join("src/lib.rs");
+    let source = source();
+    let target = CrateTarget::new(PACKAGE, root);
     let baseline = projection::baseline(root, &target)?;
     let expected =
         serde_json::to_value(baseline.source_error_apply().into_diagnostic()?).into_diagnostic()?;
-    let mut database = cordial::SourceDatabase::load(root).into_diagnostic()?;
     let native = database.project(&target, &[]).into_diagnostic()?;
     let actual =
         serde_json::to_value(native.source_error_apply().into_diagnostic()?).into_diagnostic()?;
@@ -115,7 +117,11 @@ fn native_declarations_preserve_complete_evidence_and_virtual_revisions() -> Res
         .change_file(&library, "fn invalid( {".into())
         .into_diagnostic()?;
     assert!(database.project(&target, &[]).is_err());
-    drop(database);
+    // Leave the shared database as it was found: same text as the disk copy.
+    database
+        .change_file(&library, source.clone())
+        .into_diagnostic()?;
+    // Consumers need only the persisted IR, not the database or the files.
     std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
     compare(
         &serde_json::to_value(native.source_error_apply().into_diagnostic()?).into_diagnostic()?,

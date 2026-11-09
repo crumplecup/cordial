@@ -6,8 +6,10 @@
 //! through the shared database. A single `#[test]` calls `run`, which keeps
 //! going after a failure and reports every failing scenario together.
 //!
-//! Scenarios must not leave edits behind: the database is shared, so a
-//! scenario that calls `change_file` belongs in its own test.
+//! The database is shared, so a scenario that calls `change_file` must leave
+//! it as it found it (every edit is virtual, so restore the original text) and
+//! must be listed after every read-only scenario. Scenarios run in order; a
+//! mutator that fails midway can leave later scenarios reading edited text.
 
 use cordial::SourceDatabase;
 use miette::{IntoDiagnostic, Result};

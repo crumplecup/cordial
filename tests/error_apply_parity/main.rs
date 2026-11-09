@@ -3,15 +3,20 @@
 #![cfg(feature = "internal_error_chain")]
 #[path = "../support/error_apply_projection.rs"]
 mod apply_projection;
+#[path = "../support/error_apply_source.rs"]
+mod apply_source;
 #[path = "../support/source_projection.rs"]
 mod projection;
 #[path = "../support/shared_workspace.rs"]
 mod shared;
 
+mod backend;
 mod conversion_sites;
+mod declarations_consumption;
 mod expressions;
 mod getter_uses;
 mod getters;
+mod graph_lifetime_consumption;
 mod initializers;
 mod lifetimes;
 mod local_lifetime_consumption;
@@ -35,6 +40,16 @@ fn native_error_apply_evidence_matches_the_compatibility_loader() -> miette::Res
         Scenario::new(getter_uses::PACKAGE, getter_uses::write, getter_uses::check),
         Scenario::new(getters::PACKAGE, getters::write, getters::check),
         Scenario::new(
+            graph_lifetime_consumption::PACKAGE,
+            graph_lifetime_consumption::write,
+            graph_lifetime_consumption::check,
+        ),
+        Scenario::new(
+            declarations_consumption::PACKAGE,
+            declarations_consumption::write,
+            declarations_consumption::check,
+        ),
+        Scenario::new(
             initializers::PACKAGE,
             initializers::write,
             initializers::check,
@@ -57,5 +72,7 @@ fn native_error_apply_evidence_matches_the_compatibility_loader() -> miette::Res
         ),
         Scenario::new(safety::PACKAGE, safety::write, safety::check),
         Scenario::new(uses::PACKAGE, uses::write, uses::check),
+        // Edits the shared database (virtually), so it runs after every read-only scenario.
+        Scenario::new(backend::PACKAGE, backend::write, backend::check),
     ])
 }
