@@ -2,6 +2,7 @@
 //! loader, including virtual revisions and source-free replay, sharing one
 //! semantic workspace load.
 #![cfg(any(
+    feature = "antipatterns",
     feature = "cli_layout",
     feature = "derives",
     feature = "panics",
@@ -12,12 +13,14 @@
 #[cfg(feature = "tracing")]
 #[path = "../support/observability_projection.rs"]
 mod projection;
-#[cfg(any(feature = "panics", feature = "verus_ir"))]
+#[cfg(any(feature = "antipatterns", feature = "panics", feature = "verus_ir"))]
 #[path = "../support/semantic_metrics.rs"]
 mod semantic_metrics;
 #[path = "../support/shared_workspace.rs"]
 mod shared;
 
+#[cfg(feature = "antipatterns")]
+mod antipatterns;
 #[cfg(feature = "cli_layout")]
 mod cli_layout;
 #[cfg(feature = "derives")]
@@ -38,6 +41,24 @@ use shared::Scenario;
 fn native_facts_match_the_compatibility_loader() -> miette::Result<()> {
     cordial::init_tracing();
     shared::run(&[
+        #[cfg(feature = "antipatterns")]
+        Scenario::new(
+            antipatterns::KANI,
+            antipatterns::write,
+            antipatterns::check_kani,
+        ),
+        #[cfg(feature = "antipatterns")]
+        Scenario::new(
+            antipatterns::CREUSOT,
+            antipatterns::write,
+            antipatterns::check_creusot,
+        ),
+        #[cfg(feature = "antipatterns")]
+        Scenario::new(
+            antipatterns::VERUS,
+            antipatterns::write,
+            antipatterns::check_verus,
+        ),
         #[cfg(feature = "cli_layout")]
         Scenario::new(cli_layout::PACKAGE, cli_layout::write, cli_layout::check),
         #[cfg(feature = "derives")]
