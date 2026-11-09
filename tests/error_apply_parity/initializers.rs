@@ -1,36 +1,30 @@
 //! Complete constructor provenance agrees across frontends, including rejected shapes.
-#![cfg(feature = "internal_error_chain")]
-#[path = "support/source_projection.rs"]
-mod projection;
-#[path = "support/error_apply_initializers.rs"]
+use super::projection;
+#[path = "../support/error_apply_initializers.rs"]
 mod specimens;
-use cordial::{CrateTarget, IrView};
+use cordial::{CrateTarget, IrView, SourceDatabase};
 use miette::{IntoDiagnostic, Result};
+use std::path::Path;
 
-#[test]
+pub const PACKAGE: &str = "initializer_proofs";
+
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn native_initializers_preserve_binding_lifetime_and_cfg_proofs() -> Result<()> {
-    cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic()?;
-    let root = fixture.path();
-    std::fs::create_dir(root.join("src")).into_diagnostic()?;
-    std::fs::write(
-        root.join("Cargo.toml"),
-        "[package]\nname='initializer_proofs'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
-    )
-    .into_diagnostic()?;
+pub fn write(root: &Path) -> Result<()> {
     let cases = specimens::cases();
     let mut library = String::new();
     for (index, source) in cases.iter().enumerate() {
         library.push_str(&format!("mod case_{index};\n"));
         std::fs::write(root.join(format!("src/case_{index}.rs")), source).into_diagnostic()?;
     }
-    std::fs::write(root.join("src/lib.rs"), library).into_diagnostic()?;
-    let target = CrateTarget::new("initializer_proofs", root);
+    std::fs::write(root.join("src/lib.rs"), library).into_diagnostic()
+}
+
+#[tracing::instrument(level = "debug", skip(database), err(level = "warn"))]
+pub fn check(root: &Path, database: &mut SourceDatabase) -> Result<()> {
+    let target = CrateTarget::new(PACKAGE, root);
     let baseline = projection::baseline(root, &target)?;
     let expected =
         serde_json::to_value(baseline.source_error_apply().into_diagnostic()?).into_diagnostic()?;
-    let mut database = cordial::SourceDatabase::load(root).into_diagnostic()?;
     let native = database.project(&target, &[]).into_diagnostic()?;
     let actual =
         serde_json::to_value(native.source_error_apply().into_diagnostic()?).into_diagnostic()?;

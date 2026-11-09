@@ -1,24 +1,16 @@
 //! Loader-owned name and initializer safety agrees across source frontends.
-#![cfg(feature = "internal_error_chain")]
-#[path = "support/source_projection.rs"]
-mod projection;
+use super::projection;
 
-use cordial::{CrateTarget, IrView};
+use cordial::{CrateTarget, IrView, SourceDatabase};
 use miette::{IntoDiagnostic, Result};
+use std::path::Path;
 
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn native_safety_preserves_shadowing_boundaries_and_immutable_sources() -> Result<()> {
-    cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic()?;
-    let root = fixture.path();
-    std::fs::create_dir(root.join("src")).into_diagnostic()?;
-    std::fs::write(
-        root.join("Cargo.toml"),
-        "[package]\nname='apply_safety'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
-    )
-    .into_diagnostic()?;
-    let cases = [
+pub const PACKAGE: &str = "apply_safety";
+
+/// Source text for each case, and whether its name resolution is ambiguous.
+#[tracing::instrument(level = "trace")]
+fn cases() -> [(&'static str, bool); 32] {
+    [
         ("use std::string::String; use core::panic::Location;", false),
         ("use unknown::String;", true),
         ("use unknown::*;", true),
@@ -60,7 +52,12 @@ fn native_safety_preserves_shadowing_boundaries_and_immutable_sources() -> Resul
         ("unsafe extern \"C\" { fn write(); }", false),
         ("macro_rules! plain { () => { struct String; } }", false),
         ("extern crate alloc as _;", false),
-    ];
+    ]
+}
+
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+pub fn write(root: &Path) -> Result<()> {
+    let cases = cases();
     let mut library = String::new();
     for (index, (source, _)) in cases.iter().enumerate() {
         library.push_str(&format!("mod case_{index};\n"));
@@ -92,12 +89,16 @@ mod child { const HIDDEN: &'static str = "no"; }
 fn local() { const LOCAL: &'static str = "no"; }
 "#,
     )
-    .into_diagnostic()?;
-    let target = CrateTarget::new("apply_safety", root);
+    .into_diagnostic()
+}
+
+#[tracing::instrument(level = "debug", skip(database), err(level = "warn"))]
+pub fn check(root: &Path, database: &mut SourceDatabase) -> Result<()> {
+    let cases = cases();
+    let target = CrateTarget::new(PACKAGE, root);
     let baseline = projection::baseline(root, &target)?;
     let expected =
         serde_json::to_value(baseline.source_error_apply().into_diagnostic()?).into_diagnostic()?;
-    let mut database = cordial::SourceDatabase::load(root).into_diagnostic()?;
     let native = database.project(&target, &[]).into_diagnostic()?;
     let actual =
         serde_json::to_value(native.source_error_apply().into_diagnostic()?).into_diagnostic()?;

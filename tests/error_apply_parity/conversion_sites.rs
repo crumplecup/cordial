@@ -1,26 +1,14 @@
 //! Both loaders preserve complete candidate-independent conversion contracts.
-#![cfg(feature = "internal_error_chain")]
-// Slow (over 60s): compiled only without the default `quick` feature; run with `just test-slow`.
-#![cfg(not(feature = "quick"))]
-#[path = "support/error_apply_projection.rs"]
-mod apply_projection;
-#[path = "support/source_projection.rs"]
-mod projection;
-use cordial::{ATTR_SOURCE_ERROR_APPLY, CrateTarget, IrView};
+use super::apply_projection;
+use super::projection;
+use cordial::{ATTR_SOURCE_ERROR_APPLY, CrateTarget, IrView, SourceDatabase};
 use miette::{IntoDiagnostic, Result};
+use std::path::Path;
 
-#[test]
+pub const PACKAGE: &str = "conversion_contracts";
+
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn conversion_contracts_and_executable_sites_agree() -> Result<()> {
-    cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic()?;
-    let root = fixture.path();
-    std::fs::create_dir(root.join("src")).into_diagnostic()?;
-    std::fs::write(
-        root.join("Cargo.toml"),
-        "[package]\nname='conversion_contracts'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
-    )
-    .into_diagnostic()?;
+pub fn write(root: &Path) -> Result<()> {
     std::fs::write(
         root.join("cordial.toml"),
         "[internal_error_chain]\nfield_strategy='borrowed'\n",
@@ -136,12 +124,15 @@ type Alias<T> where T: Factory<Trouble> = Result<T, Trouble>;
         library.push_str(&format!("mod case_{index};\n"));
         std::fs::write(root.join(format!("src/case_{index}.rs")), source).into_diagnostic()?;
     }
-    std::fs::write(root.join("src/lib.rs"), library).into_diagnostic()?;
-    let target = CrateTarget::new("conversion_contracts", root);
+    std::fs::write(root.join("src/lib.rs"), library).into_diagnostic()
+}
+
+#[tracing::instrument(level = "debug", skip(database), err(level = "warn"))]
+pub fn check(root: &Path, database: &mut SourceDatabase) -> Result<()> {
+    let target = CrateTarget::new(PACKAGE, root);
     let baseline = projection::baseline(root, &target)?;
     let expected =
         serde_json::to_value(baseline.source_error_apply().into_diagnostic()?).into_diagnostic()?;
-    let mut database = cordial::SourceDatabase::load(root).into_diagnostic()?;
     let native = database.project(&target, &[]).into_diagnostic()?;
     let actual =
         serde_json::to_value(native.source_error_apply().into_diagnostic()?).into_diagnostic()?;

@@ -1,22 +1,13 @@
 //! Complete closed local-lifetime contracts agree across frontends.
-#![cfg(feature = "internal_error_chain")]
-#[path = "support/source_projection.rs"]
-mod projection;
-use cordial::{CrateTarget, IrView};
+use super::projection;
+use cordial::{CrateTarget, IrView, SourceDatabase};
 use miette::{IntoDiagnostic, Result};
+use std::path::Path;
 
-#[test]
+pub const PACKAGE: &str = "local_lifetimes";
+
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn native_local_lifetimes_preserve_closed_units_and_precise_edits() -> Result<()> {
-    cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic()?;
-    let root = fixture.path();
-    std::fs::create_dir(root.join("src")).into_diagnostic()?;
-    std::fs::write(
-        root.join("Cargo.toml"),
-        "[package]\nname='local_lifetimes'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
-    )
-    .into_diagnostic()?;
+pub fn write(root: &Path) -> Result<()> {
     let owned = r#"#[derive(Debug)]
 struct Failure { message: String, line: u32 }
 impl Failure { fn new<'a>(message: &'a str, line: u32) -> Self { Self { message: message.to_string(), line } } }
@@ -110,12 +101,15 @@ fn make<'a>(message: &'a str, line: u32) -> Failure { Failure::new(message, line
         library.push_str(&format!("mod case_{index};\n"));
         std::fs::write(root.join(format!("src/case_{index}.rs")), source).into_diagnostic()?;
     }
-    std::fs::write(root.join("src/lib.rs"), library).into_diagnostic()?;
-    let target = CrateTarget::new("local_lifetimes", root);
+    std::fs::write(root.join("src/lib.rs"), library).into_diagnostic()
+}
+
+#[tracing::instrument(level = "debug", skip(database), err(level = "warn"))]
+pub fn check(root: &Path, database: &mut SourceDatabase) -> Result<()> {
+    let target = CrateTarget::new(PACKAGE, root);
     let baseline = projection::baseline(root, &target)?;
     let expected =
         serde_json::to_value(baseline.source_error_apply().into_diagnostic()?).into_diagnostic()?;
-    let mut database = cordial::SourceDatabase::load(root).into_diagnostic()?;
     let native = database.project(&target, &[]).into_diagnostic()?;
     let actual =
         serde_json::to_value(native.source_error_apply().into_diagnostic()?).into_diagnostic()?;
