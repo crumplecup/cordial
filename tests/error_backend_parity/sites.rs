@@ -1,28 +1,21 @@
 //! Error-site payload parity, virtual revisions and source-independent replay.
-#![cfg(feature = "error_sites")]
 
-#[path = "support/error_sites_default.rs"]
-mod default_sites;
-#[path = "support/error_sites_projection.rs"]
-mod projection;
-
+use super::{default_sites, projection, shared};
 use cordial::{
     ATTR_SOURCE_ERROR_SITES, CrateIr, CrateTarget, ErrorSiteKind, IrView, SourceDatabase,
 };
 use miette::{IntoDiagnostic, Result};
+use std::path::Path;
 
-const LIB: &str = include_str!("fixtures/semantic_backend/error_sites.rs.txt");
+const LIB: &str = include_str!("../fixtures/semantic_backend/error_sites.rs.txt");
 
-#[test]
+pub const PACKAGE: &str = "error_sites_parity";
+
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn canonical_error_sites_match_and_replay_without_source() -> Result<()> {
-    cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic()?;
-    let root = fixture.path();
+pub fn write(root: &Path) -> Result<()> {
     for dir in ["src", "tests/fixtures", "tests/parity", "examples"] {
         std::fs::create_dir_all(root.join(dir)).into_diagnostic()?;
     }
-    std::fs::write(root.join("Cargo.toml"), "[package]\nname=\"error_sites_parity\"\nversion=\"0.1.0\"\nedition=\"2024\"\n[workspace]\n").into_diagnostic()?;
     let library = root.join("src/lib.rs");
     std::fs::write(&library, LIB).into_diagnostic()?;
     std::fs::write(root.join("src/child.rs"), "pub fn leaf() { source()?; }\n")
@@ -40,11 +33,16 @@ fn canonical_error_sites_match_and_replay_without_source() -> Result<()> {
     ] {
         std::fs::write(root.join(path), "fn invalid( {").into_diagnostic()?;
     }
-    let target = CrateTarget::new("error_sites_parity", root);
+    Ok(())
+}
+
+#[tracing::instrument(level = "debug", skip(database), err(level = "warn"))]
+pub fn check(root: &Path, database: &mut SourceDatabase) -> Result<()> {
+    let library = root.join("src/lib.rs");
+    let target = CrateTarget::new(PACKAGE, root);
     let legacy = projection::baseline(root, &target)?;
     let expected = legacy.source_error_sites().into_diagnostic()?;
     assert_eq!(expected.files().len(), 4);
-    let mut database = SourceDatabase::load(root).into_diagnostic()?;
     let native = database.project(&target, &[]).into_diagnostic()?;
     let actual = native.source_error_sites().into_diagnostic()?;
     assert_eq!(
@@ -94,7 +92,6 @@ fn canonical_error_sites_match_and_replay_without_source() -> Result<()> {
         default_sites::materialized(&native, root)?,
         "all materialized node attributes and spans"
     );
-
     let mut corrupt = native.clone();
     let payload = serde_json::to_value(&actual).into_diagnostic()?;
     for key in [
@@ -121,7 +118,6 @@ fn canonical_error_sites_match_and_replay_without_source() -> Result<()> {
         assert!(corrupt.source_error_sites().is_err(), "required {key}");
     }
     assert!(CrateIr::new("empty").source_error_sites().is_err());
-
     database
         .change_file(
             &library,
@@ -165,8 +161,7 @@ fn canonical_error_sites_match_and_replay_without_source() -> Result<()> {
         database.project(&target, &[]).is_err(),
         "syntax recovery cannot establish a complete census"
     );
-
-    drop(database);
+    shared::resync(database, root)?;
     std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
     std::fs::remove_dir_all(root.join("tests")).into_diagnostic()?;
     assert_eq!(

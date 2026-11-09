@@ -1,28 +1,19 @@
 //! Canonical architecture facts preserve library scope and virtual edits.
-#![cfg(feature = "internal_error_chain")]
-#[path = "support/error_sites_default.rs"]
-mod default_sites;
-#[path = "support/error_sites_projection.rs"]
-mod projection;
+use super::{default_sites, projection, shared};
+use cordial::SourceDatabase;
 use cordial::{CrateTarget, ErrorFieldStrategy, IrView, SourceErrorArchitecture};
 use miette::{IntoDiagnostic, Result};
+use std::path::Path;
 const HOOKS: &[&str] = &["error-architecture-inventory"];
 const ATTR: &str = "internal_error_record_kind";
 
-#[test]
+pub const PACKAGE: &str = "architecture_parity";
+
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn canonical_architecture_matches_complete_contracts_and_revisions() -> Result<()> {
-    cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic()?;
-    let root = fixture.path();
+pub fn write(root: &Path) -> Result<()> {
     for dir in ["src/inline", "src/nested"] {
         std::fs::create_dir_all(root.join(dir)).into_diagnostic()?;
     }
-    std::fs::write(
-        root.join("Cargo.toml"),
-        "[package]\nname='architecture_parity'\nversion='0.1.0'\nedition='2024'\n[workspace]\n",
-    )
-    .into_diagnostic()?;
     std::fs::write(
         root.join("cordial.toml"),
         "[internal_error_chain]\nfield_strategy='borrowed'\n",
@@ -31,8 +22,8 @@ fn canonical_architecture_matches_complete_contracts_and_revisions() -> Result<(
     let library = root.join("src/lib.rs");
     let source = format!(
         "mod empty; mod nested; mod inline {{ mod leaf; }} #[path = \"renamed.rs\"] mod linked; #[cfg(test)] mod test_only;\n{}\n{}",
-        include_str!("fixtures/semantic_backend/error_architecture.rs.txt"),
-        include_str!("fixtures/semantic_backend/error_architecture_edges.rs.txt").replace(
+        include_str!("../fixtures/semantic_backend/error_architecture.rs.txt"),
+        include_str!("../fixtures/semantic_backend/error_architecture_edges.rs.txt").replace(
             "//! Architecture syntax policy remains independent of active Cargo cfgs.",
             "// Architecture edges."
         )
@@ -69,10 +60,23 @@ fn canonical_architecture_matches_complete_contracts_and_revisions() -> Result<(
     ] {
         std::fs::write(root.join("src").join(path), text).into_diagnostic()?;
     }
-    let target = CrateTarget::new("architecture_parity", root);
+    Ok(())
+}
+
+#[tracing::instrument(level = "debug", skip(database), err(level = "warn"))]
+pub fn check(root: &Path, database: &mut SourceDatabase) -> Result<()> {
+    let library = root.join("src/lib.rs");
+    let source = format!(
+        "mod empty; mod nested; mod inline {{ mod leaf; }} #[path = \"renamed.rs\"] mod linked; #[cfg(test)] mod test_only;\n{}\n{}",
+        include_str!("../fixtures/semantic_backend/error_architecture.rs.txt"),
+        include_str!("../fixtures/semantic_backend/error_architecture_edges.rs.txt").replace(
+            "//! Architecture syntax policy remains independent of active Cargo cfgs.",
+            "// Architecture edges."
+        )
+    );
+    let target = CrateTarget::new(PACKAGE, root);
     let baseline = projection::baseline(root, &target)?;
     let expected = baseline.source_error_architecture().into_diagnostic()?;
-    let mut database = cordial::SourceDatabase::load(root).into_diagnostic()?;
     let native = database.project(&target, &[]).into_diagnostic()?;
     let actual = native.source_error_architecture().into_diagnostic()?;
     compare(&actual, &expected)?;
@@ -148,7 +152,7 @@ fn canonical_architecture_matches_complete_contracts_and_revisions() -> Result<(
         .change_file(&root.join("src/empty.rs"), "fn invalid( {".into())
         .into_diagnostic()?;
     assert!(database.project(&target, &[]).is_err());
-    drop(database);
+    shared::resync(database, root)?;
     std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
     assert!(!default_sites::materialized(&native, root)?.is_empty());
     assert_eq!(
@@ -163,6 +167,7 @@ fn canonical_architecture_matches_complete_contracts_and_revisions() -> Result<(
     );
     Ok(())
 }
+
 #[tracing::instrument(level = "debug", skip(actual, expected), err(level = "warn"))]
 fn compare(actual: &SourceErrorArchitecture, expected: &SourceErrorArchitecture) -> Result<()> {
     let actual = serde_json::to_value(actual).into_diagnostic()?;

@@ -1,5 +1,5 @@
 //! Complete error/apply declaration contracts from both loader frontends.
-use super::projection;
+use super::{projection, shared};
 use cordial::{CrateTarget, IrView, SourceDatabase};
 use miette::{IntoDiagnostic, Result};
 use std::path::Path;
@@ -118,9 +118,7 @@ pub fn check(root: &Path, database: &mut SourceDatabase) -> Result<()> {
         .into_diagnostic()?;
     assert!(database.project(&target, &[]).is_err());
     // Leave the shared database as it was found: same text as the disk copy.
-    database
-        .change_file(&library, source.clone())
-        .into_diagnostic()?;
+    shared::resync(database, root)?;
     // Consumers need only the persisted IR, not the database or the files.
     std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
     compare(

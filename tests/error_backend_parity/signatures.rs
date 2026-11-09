@@ -1,45 +1,44 @@
 //! Native signature evidence preserves contracts through virtual revisions.
-#![cfg(feature = "internal_error_chain")]
 
-#[path = "support/error_sites_default.rs"]
-mod default_sites;
-#[path = "support/error_sites_projection.rs"]
-mod projection;
-
+use super::{default_sites, projection, shared};
+use cordial::SourceDatabase;
 use cordial::{CrateTarget, IrView};
 use miette::{IntoDiagnostic, Result};
+use std::path::Path;
 
 const HOOKS: &[&str] = &["error-signature-inventory"];
 const ATTR: &str = "internal_error_record_kind";
 
-#[test]
+pub const PACKAGE: &str = "signature_parity";
+
 #[tracing::instrument(level = "debug", err(level = "warn"))]
-fn canonical_signatures_match_complete_facts_and_virtual_contracts() -> Result<()> {
-    cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic()?;
-    let root = fixture.path();
+pub fn write(root: &Path) -> Result<()> {
     std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
-    std::fs::write(
-        root.join("Cargo.toml"),
-        "[package]\nname=\"signature_parity\"\nversion=\"0.1.0\"\nedition=\"2024\"\n[workspace]\n",
-    )
-    .into_diagnostic()?;
     let library = root.join("src/lib.rs");
     let source = format!(
         "mod child;\n{}",
-        include_str!("fixtures/signature_chain_fixture.rs")
+        include_str!("../fixtures/signature_chain_fixture.rs")
     );
     std::fs::write(&library, &source).into_diagnostic()?;
     std::fs::write(
         root.join("src/child.rs"),
-        include_str!("fixtures/semantic_backend/error_signatures.rs.txt"),
+        include_str!("../fixtures/semantic_backend/error_signatures.rs.txt"),
     )
     .into_diagnostic()?;
     std::fs::write(root.join("src/empty.rs"), "// no declarations\n").into_diagnostic()?;
-    let target = CrateTarget::new("signature_parity", root);
+    Ok(())
+}
+
+#[tracing::instrument(level = "debug", skip(database), err(level = "warn"))]
+pub fn check(root: &Path, database: &mut SourceDatabase) -> Result<()> {
+    let library = root.join("src/lib.rs");
+    let source = format!(
+        "mod child;\n{}",
+        include_str!("../fixtures/signature_chain_fixture.rs")
+    );
+    let target = CrateTarget::new(PACKAGE, root);
     let baseline = projection::baseline(root, &target)?;
     let expected = baseline.source_error_signatures().into_diagnostic()?;
-    let mut database = cordial::SourceDatabase::load(root).into_diagnostic()?;
     let native = database.project(&target, &[]).into_diagnostic()?;
     let actual = native.source_error_signatures().into_diagnostic()?;
     // Compare each complete group to make a mismatch readable without hiding payload changes.
@@ -111,7 +110,7 @@ fn canonical_signatures_match_complete_facts_and_virtual_contracts() -> Result<(
         .change_file(&root.join("src/empty.rs"), "fn invalid( {".into())
         .into_diagnostic()?;
     assert!(database.project(&target, &[]).is_err());
-    drop(database);
+    shared::resync(database, root)?;
     std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
     assert!(!default_sites::materialized(&native, root)?.is_empty());
     assert_eq!(

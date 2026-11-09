@@ -117,6 +117,23 @@ pub fn run(scenarios: &[Scenario]) -> Result<()> {
     Ok(())
 }
 
+/// Return every Rust file under `root/src` to its on-disk text in the database.
+/// Edits are virtual and the disk copy is never written, so a scenario that
+/// edited the database calls this before it removes its sources.
+#[tracing::instrument(level = "debug", skip(database), err(level = "warn"))]
+pub fn resync(database: &mut SourceDatabase, root: &Path) -> Result<()> {
+    for entry in walkdir::WalkDir::new(root.join("src"))
+        .into_iter()
+        .filter_map(std::result::Result::ok)
+        .filter(|entry| entry.file_type().is_file())
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "rs"))
+    {
+        let text = std::fs::read_to_string(entry.path()).into_diagnostic()?;
+        database.change_file(entry.path(), text).into_diagnostic()?;
+    }
+    Ok(())
+}
+
 #[tracing::instrument(level = "trace", skip(payload))]
 fn panic_message(payload: &(dyn Any + Send)) -> String {
     payload
