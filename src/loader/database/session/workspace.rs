@@ -102,6 +102,19 @@ impl SourceDatabase {
         Ok(())
     }
 
+    /// The context a projection of `target` is bound to. A database that never
+    /// loaded Cargo reports the absence explicitly; a loaded one is validated.
+    #[instrument(level = "trace", skip(self, target), err(level = "warn"))]
+    pub(in crate::loader::database) fn target_context(
+        &self,
+        target: &crate::CrateTarget,
+    ) -> CordialResult<crate::SemanticWorkspaceContext> {
+        if self.workspace.is_none() {
+            return crate::SemanticWorkspaceContext::unavailable(target.crate_root().clone());
+        }
+        self.projection_context()
+    }
+
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
     pub(in crate::loader::database) fn projection_context(
         &self,

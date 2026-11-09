@@ -58,7 +58,7 @@ impl SourceDatabase {
         paths: &[PathBuf],
         policy_paths: &[PathBuf],
     ) -> CordialResult<CrateIr> {
-        let context = self.projection_context()?;
+        let context = self.target_context(target)?;
         selection::validate_target(target, &context)?;
         #[cfg(feature = "cfg_hygiene")]
         let declarations = {
@@ -251,7 +251,7 @@ impl SourceDatabase {
             serde_json::to_value(crate::SemanticSnapshot::new(
                 self.revision,
                 snapshots,
-                self.projection_context()?,
+                self.target_context(target)?,
             ))?,
         )?;
         Ok(graph)
