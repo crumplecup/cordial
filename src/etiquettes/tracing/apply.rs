@@ -171,14 +171,20 @@ pub(crate) fn run_apply(
         return Ok(summary);
     }
 
-    let _parsed_source_session = crate::loader::ParsedSourceSession::begin();
-    let source_view = SourceLoadView::for_standalone_scan();
     let config = crate::config::load_cordial_config(project_root, store_home);
     if !config.etiquette_may_run("tracing") {
         return Ok(summary);
     }
+    let parsed_source_session = crate::loader::ParsedSourceSession::begin_in(project_root)?;
+    let source_view = SourceLoadView::for_standalone_scan();
     let selected_files = checklist_path.map(|_| &by_file);
-    let workspace = build_apply_ir(project_root, store_home, &targets, selected_files)?;
+    let workspace = build_apply_ir(
+        project_root,
+        store_home,
+        &parsed_source_session,
+        &targets,
+        selected_files,
+    )?;
     #[cfg(feature = "cli")]
     if let ApplyTargets::CurrentIr(store) = targets_mode {
         for gap in ir::gaps_from_ir(project_root, store_home, &workspace, &targets, store)? {

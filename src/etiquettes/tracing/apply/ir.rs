@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::enricher::{AttributeEnricher, ScopeEnricher};
 use crate::error::{CordialError, CordialResult};
 use crate::hooks::{EnrichView, IrEnricher};
-use crate::ir::{BasicQuery, CrateIr, CrateView, CrateViewMut, IrView, WorkspaceIr};
+use crate::ir::{BasicQuery, CrateView, CrateViewMut, IrView, WorkspaceIr};
 use crate::loader::{CrateTarget, SourceLoadView};
 use crate::session::SessionBuilder;
 
@@ -18,10 +18,11 @@ use super::instrument::{ApplyRecipeRecord, file_matches};
 /// Run the same source loader and function enricher used by quality. The
 /// caller holds a source session across this build and the edit pass. Edit
 /// planning reads frozen text checked against the graph's snapshot identity.
-#[tracing::instrument(level = "debug", skip(targets, by_file), err(level = "warn"))]
+#[tracing::instrument(level = "debug", skip(parsed, targets, by_file), err(level = "warn"))]
 pub(super) fn build_apply_ir(
     project_root: &Path,
     store_home: &Path,
+    parsed: &crate::loader::ParsedSourceSession,
     targets: &[CrateTarget],
     by_file: Option<&BTreeMap<(String, PathBuf), Vec<InstrumentGap>>>,
 ) -> CordialResult<WorkspaceIr> {
@@ -39,9 +40,7 @@ pub(super) fn build_apply_ir(
             continue;
         }
         let source = SourceLoadView::for_target(target)?;
-        let mut crate_ir = CrateIr::new(target.crate_name());
-        source.populate_ir(&mut crate_ir)?;
-        workspace.insert_crate(crate_ir);
+        workspace.insert_crate(parsed.project_target(target)?);
         crate::session::prepare_workspace_source_facts(
             &mut workspace,
             &source,
