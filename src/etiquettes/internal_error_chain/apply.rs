@@ -10,7 +10,7 @@ use tracing::instrument;
 use crate::config::ErrorFieldStrategy;
 use crate::config::load_cordial_config;
 use crate::error::CordialResult;
-use crate::ir::{CrateIr, IrMut, IrView};
+use crate::ir::{IrMut, IrView};
 use crate::loader::{SourceEditView, SourceLoadView};
 use crate::session::RunAll;
 use crate::targets::discover_crate_targets;
@@ -203,13 +203,13 @@ pub fn run_error_field_apply(
     if !config.etiquette_may_run("internal_error_chain") {
         return Ok(summary);
     }
+    let parsed = crate::loader::ParsedSourceSession::begin_in(project_root)?;
     for target in discover_crate_targets(project_root, &RunAll)? {
         if only_crate.is_some_and(|name| name != target.crate_name()) {
             continue;
         }
         let source = SourceLoadView::for_target(&target)?;
-        let mut ir = CrateIr::new(target.crate_name());
-        source.populate_ir(&mut ir)?;
+        let mut ir = parsed.project_target(&target)?;
         enrich_error_apply_evidence(&mut ir, &source, policy.field_strategy())?;
         let units = conversion_units_from_ir(&ir)?;
         let graphs = conversion_graphs_from_ir(&ir)?;

@@ -10,7 +10,6 @@ use std::path::Path;
 
 use crate::config::load_cordial_config;
 use crate::error::CordialResult;
-use crate::ir::CrateIr;
 use crate::loader::SourceLoadView;
 use crate::session::RunAll;
 use crate::targets::discover_crate_targets;
@@ -61,6 +60,7 @@ pub fn run_crate_attrs_apply(
         return Ok(summary);
     }
 
+    let parsed = crate::loader::ParsedSourceSession::begin_in(project_root)?;
     for target in targets {
         let crate_name = target.crate_name();
         let crate_root = target.crate_root();
@@ -82,8 +82,7 @@ pub fn run_crate_attrs_apply(
         }
 
         let source_view = SourceLoadView::for_target(&target)?;
-        let mut ir = CrateIr::new(crate_name);
-        source_view.populate_ir(&mut ir)?;
+        let mut ir = parsed.project_target(&target)?;
         enrich_crate_attrs_evidence(&mut ir, crate_root, policy)?;
         let Some((mut records, insert_at)) = crate_attrs_apply_evidence_from_ir(&ir)? else {
             summary.skipped_existing += 1;

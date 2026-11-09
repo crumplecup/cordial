@@ -25,6 +25,9 @@ fn write_lib(root: &Path, body: &str) -> miette::Result<()> {
 }
 
 fn write_package(root: &Path, name: &str, lib_body: &str) -> miette::Result<()> {
+    fs::create_dir_all(root)
+        .into_diagnostic()
+        .wrap_err("root")?;
     fs::write(
         root.join("Cargo.toml"),
         format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n"),
@@ -42,7 +45,7 @@ fn has(records: &[cordial::CrateAttrsSiteRecord], rule: CrateAttrsRuleId) -> boo
 fn scan_flags_both_when_library_root_is_bare() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    write_lib(fixture.path(), "pub fn ready() {}\n")?;
+    write_package(fixture.path(), "fixture", "pub fn ready() {}\n")?;
     let records = scan_crate_attrs(fixture.path(), "fixture", &CrateAttrsThresholds::default())
         .into_diagnostic()?;
     assert!(
@@ -60,7 +63,7 @@ fn scan_flags_both_when_library_root_is_bare() -> miette::Result<()> {
 fn scan_accepts_warn_docs_and_forbid_unsafe() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    write_lib(fixture.path(), BOTH)?;
+    write_package(fixture.path(), "fixture", BOTH)?;
     let records = scan_crate_attrs(fixture.path(), "fixture", &CrateAttrsThresholds::default())
         .into_diagnostic()?;
     assert!(records.is_empty(), "compliant lib: {records:?}");
@@ -71,8 +74,9 @@ fn scan_accepts_warn_docs_and_forbid_unsafe() -> miette::Result<()> {
 fn deny_unsafe_code_is_not_forbid() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    write_lib(
+    write_package(
         fixture.path(),
+        "fixture",
         "#![deny(unsafe_code)]\n#![warn(missing_docs)]\n",
     )?;
     let records = scan_crate_attrs(fixture.path(), "fixture", &CrateAttrsThresholds::default())
@@ -92,8 +96,9 @@ fn deny_unsafe_code_is_not_forbid() -> miette::Result<()> {
 fn deny_missing_docs_counts() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    write_lib(
+    write_package(
         fixture.path(),
+        "fixture",
         "#![forbid(unsafe_code)]\n#![deny(missing_docs)]\n",
     )?;
     let records = scan_crate_attrs(fixture.path(), "fixture", &CrateAttrsThresholds::default())
@@ -109,7 +114,11 @@ fn deny_missing_docs_counts() -> miette::Result<()> {
 fn combined_forbid_list_satisfies_both() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    write_lib(fixture.path(), "#![forbid(unsafe_code, missing_docs)]\n")?;
+    write_package(
+        fixture.path(),
+        "fixture",
+        "#![forbid(unsafe_code, missing_docs)]\n",
+    )?;
     let records = scan_crate_attrs(fixture.path(), "fixture", &CrateAttrsThresholds::default())
         .into_diagnostic()?;
     assert!(
@@ -123,8 +132,9 @@ fn combined_forbid_list_satisfies_both() -> miette::Result<()> {
 fn cfg_attr_forbid_counts() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    write_lib(
+    write_package(
         fixture.path(),
+        "fixture",
         "#![cfg_attr(not(test), forbid(unsafe_code))]\n#![warn(missing_docs)]\n",
     )?;
     let records = scan_crate_attrs(fixture.path(), "fixture", &CrateAttrsThresholds::default())
@@ -229,7 +239,7 @@ fn lib_path_override_flags_the_named_file() -> miette::Result<()> {
 fn allow_unsafe_skips_only_that_rule() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    write_lib(fixture.path(), "pub fn ffi() {}\n")?;
+    write_package(fixture.path(), "ffi", "pub fn ffi() {}\n")?;
     let workspace = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("workspace")?;
@@ -267,7 +277,7 @@ fn verus_target_with_assume_specification_skips_forbid_unsafe() -> miette::Resul
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let crate_root = fixture.path().join("fixture_verus");
-    write_lib(&crate_root, "pub fn ready() {}\n")?;
+    write_package(&crate_root, "fixture_verus", "pub fn ready() {}\n")?;
     fs::write(
         crate_root.join("src").join("carrier.rs"),
         "verus! { pub assume_specification [char::from_str] (s: &str) -> (result: Result<char, ()>); }\n",
@@ -330,7 +340,7 @@ fn verus_target_without_assume_specification_still_flags_forbid_unsafe() -> miet
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let crate_root = fixture.path().join("fixture_verus");
-    write_lib(&crate_root, "pub fn ready() {}\n")?;
+    write_package(&crate_root, "fixture_verus", "pub fn ready() {}\n")?;
     let records = scan_crate_attrs(
         &crate_root,
         "fixture_verus",
@@ -353,8 +363,9 @@ fn non_verus_crate_with_assume_specification_text_still_flags_forbid_unsafe() ->
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     let crate_root = fixture.path().join("fixture_plain");
-    write_lib(
+    write_package(
         &crate_root,
+        "fixture_plain",
         "// mentions assume_specification but isn't a verus target\npub fn ready() {}\n",
     )?;
     let records = scan_crate_attrs(
@@ -374,7 +385,7 @@ fn non_verus_crate_with_assume_specification_text_still_flags_forbid_unsafe() ->
 fn toggling_a_rule_off_skips_it_everywhere() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    write_lib(fixture.path(), "pub fn ready() {}\n")?;
+    write_package(fixture.path(), "fixture", "pub fn ready() {}\n")?;
     let workspace = tempfile::tempdir()
         .into_diagnostic()
         .wrap_err("workspace")?;

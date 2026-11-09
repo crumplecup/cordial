@@ -25,19 +25,6 @@ impl SourceLoadView {
         .with_manifest_snapshot(target.manifest_snapshot().clone());
         Ok(view)
     }
-
-    /// Load a standalone crate's source through the same snapshot path.
-    #[cfg(feature = "crate_attrs")]
-    #[instrument(level = "debug", skip(crate_root), err(level = "warn"))]
-    pub(crate) fn for_crate_root(crate_root: &Path, crate_name: &str) -> CordialResult<Self> {
-        let src_root = crate_root.join("src");
-        Ok(Self::new(
-            crate_name.to_string(),
-            src_root.clone(),
-            read_source_files(&src_root)?,
-            Vec::new(),
-        ))
-    }
 }
 
 #[instrument(level = "debug", skip(src_root), err(level = "warn"))]
