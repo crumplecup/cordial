@@ -3,8 +3,18 @@ use std::fs;
 use std::path::Path;
 
 use cordial::{
-    CLI_LAYOUT_ETIQUETTE, CliLayoutId, RunAll, Session, SessionBuilder, scan_crate_cli_layout,
+    CLI_LAYOUT_ETIQUETTE, CliLayoutId, CliLayoutRecord, RunAll, Session, SessionBuilder,
+    select_cli_layout_records,
 };
+
+#[path = "support/policy_inventory.rs"]
+mod policy_inventory;
+
+/// The layout findings the loader's CLI catalog gives the crate at `root`.
+fn cli_layout_records(root: &Path, crate_name: &str) -> miette::Result<Vec<CliLayoutRecord>> {
+    let inventory = policy_inventory::policy_inventory(root)?;
+    select_cli_layout_records(inventory.cli_layout(), crate_name).into_diagnostic()
+}
 
 fn write_cli_crate(lib: &str, main: &str) -> miette::Result<tempfile::TempDir> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
@@ -41,9 +51,7 @@ struct Cli {
 fn main() {}
 "#,
     )?;
-    let findings = scan_crate_cli_layout(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = cli_layout_records(fixture.path(), "fixture").wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
             finding.rule_id() == CliLayoutId::Island001 && finding.context().contains("Cli")
@@ -68,9 +76,7 @@ pub struct Cli {
 "#,
         "fn main() {}\n",
     )?;
-    let findings = scan_crate_cli_layout(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = cli_layout_records(fixture.path(), "fixture").wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
             finding.rule_id() == CliLayoutId::Act001 && finding.context().contains("Cli")
@@ -121,9 +127,7 @@ fn main() {
 }
 "#,
     )?;
-    let findings = scan_crate_cli_layout(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = cli_layout_records(fixture.path(), "fixture").wrap_err("scan")?;
     assert!(
         findings
             .iter()
@@ -152,9 +156,7 @@ impl std::fmt::Display for BinaryError {
 fn main() {}
 "#,
     )?;
-    let findings = scan_crate_cli_layout(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = cli_layout_records(fixture.path(), "fixture").wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
             finding.rule_id() == CliLayoutId::Island001 && finding.context().contains("BinaryError")
@@ -201,9 +203,7 @@ fn main() -> Result<(), std::io::Error> {
 }
 "#,
     )?;
-    let findings = scan_crate_cli_layout(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = cli_layout_records(fixture.path(), "fixture").wrap_err("scan")?;
     assert!(
         !findings.iter().any(|finding| {
             matches!(
@@ -266,9 +266,7 @@ fn main() -> Result<(), std::io::Error> {
 }
 "#,
     )?;
-    let findings = scan_crate_cli_layout(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = cli_layout_records(fixture.path(), "fixture").wrap_err("scan")?;
     assert!(
         !findings.iter().any(|finding| {
             matches!(
@@ -321,9 +319,7 @@ fn main() -> Result<(), std::io::Error> {
 }
 "#,
     )?;
-    let findings = scan_crate_cli_layout(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = cli_layout_records(fixture.path(), "fixture").wrap_err("scan")?;
     assert!(
         !findings.iter().any(|finding| {
             matches!(
@@ -367,9 +363,7 @@ fn main() -> Result<(), std::io::Error> {
 }
 "#,
     )?;
-    let findings = scan_crate_cli_layout(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = cli_layout_records(fixture.path(), "fixture").wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
             finding.rule_id() == CliLayoutId::Act001 && finding.context().contains("Commands")
@@ -416,9 +410,7 @@ fn main() -> Result<(), std::io::Error> {
 }
 "#,
     )?;
-    let findings = scan_crate_cli_layout(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = cli_layout_records(fixture.path(), "fixture").wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
             finding.rule_id() == CliLayoutId::Act001 && finding.snippet().contains("nested clap")
@@ -469,9 +461,7 @@ fn main() -> Result<(), std::io::Error> {
 }
 "#,
     )?;
-    let findings = scan_crate_cli_layout(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = cli_layout_records(fixture.path(), "fixture").wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
             finding.rule_id() == CliLayoutId::Act001 && finding.snippet().contains("free function")
@@ -525,9 +515,7 @@ fn main() -> Result<(), std::io::Error> {
 }
 "#,
     )?;
-    let findings = scan_crate_cli_layout(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = cli_layout_records(fixture.path(), "fixture").wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
             finding.rule_id() == CliLayoutId::Act001 && finding.snippet().contains("free function")
@@ -606,9 +594,7 @@ fn main() -> Result<(), std::io::Error> {
 }
 "#,
     )?;
-    let findings = scan_crate_cli_layout(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = cli_layout_records(fixture.path(), "fixture").wrap_err("scan")?;
     assert!(
         findings.iter().any(|finding| {
             finding.rule_id() == CliLayoutId::Act001
@@ -625,9 +611,7 @@ fn main() -> Result<(), std::io::Error> {
 fn dogfood_cordial_follows_cli_layout() -> miette::Result<()> {
     cordial::init_tracing();
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let findings = scan_crate_cli_layout(root, "cordial")
-        .into_diagnostic()
-        .wrap_err("scan cordial")?;
+    let findings = cli_layout_records(root, "cordial").wrap_err("scan cordial")?;
     assert!(
         findings.is_empty(),
         "cordial should follow CLI layout: {findings:?}"

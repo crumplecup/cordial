@@ -87,12 +87,12 @@ pub use etiquettes::antipatterns::{
 pub use etiquettes::cfg_hygiene::{
     CFG_HYGIENE_ETIQUETTE, CfgHygieneInventoryEnricher, CfgHygieneRuleId, CfgHygieneSiteRecord,
     CfgNameOccurrence, all_verifier_names, declared_names_for_crate, expected_verifier_for,
-    scan_crate_cfg_hygiene, scan_rust_source as scan_cfg_hygiene_rust_source,
+    scan_rust_source as scan_cfg_hygiene_rust_source,
 };
 #[cfg(feature = "cli_layout")]
 pub use etiquettes::cli_layout::{
     CLI_LAYOUT_ETIQUETTE, CliLayoutId, CliLayoutInventoryEnricher, CliLayoutRecord,
-    scan_crate_cli_layout,
+    select_cli_layout_records,
 };
 #[cfg(feature = "crate_attrs")]
 pub use etiquettes::crate_attrs::{
@@ -124,7 +124,7 @@ pub use etiquettes::error_sites::{
     ATTR_SOURCE_ERROR_SITES, ERROR_SITES_ETIQUETTE, ErrorOriginClass, ErrorSiteKind,
     ErrorSiteRecord, ErrorSiteScanRow, ErrorSitesFile, ForeignTypeConfidence,
     PartitionedErrorSiteRow, SourceErrorSites, infer_foreign_error_type,
-    partition_error_site_records, partition_error_site_row, scan_crate_error_sites,
+    partition_error_site_records, partition_error_site_row,
     scan_rust_source as scan_error_sites_rust_source,
 };
 #[cfg(feature = "feature_warnings")]
@@ -192,8 +192,8 @@ pub use etiquettes::tracing::{
     SourceTracingFunction, SourceTracingInventory, SubscriberRuleId, SubscriberSiteRecord,
     TRACING_ETIQUETTE, VisibilityLabel, parse_tracing_instrument_checklist,
     parse_tracing_instrument_checklist_text, run_tracing_instrument_apply,
-    scan_crate_tracing_boundary, scan_crate_tracing_print, scan_crate_tracing_subscriber,
-    scan_tracing_print_rust_source,
+    scan_tracing_print_rust_source, tracing_boundary_findings, tracing_print_findings,
+    tracing_subscriber_findings,
 };
 #[cfg(feature = "verus_warnings")]
 pub use etiquettes::verus_warnings::{
@@ -203,7 +203,7 @@ pub use etiquettes::verus_warnings::{
 #[cfg(feature = "visibility")]
 pub use etiquettes::visibility::{
     VISIBILITY_ETIQUETTE, VisibilityFacts, VisibilityInventoryEnricher, VisibilityKind,
-    VisibilityModule, VisibilityRecord, VisibilityRuleId, scan_crate_visibility,
+    VisibilityModule, VisibilityRecord, VisibilityRuleId, select_visibility_records,
 };
 #[cfg(feature = "cfg_scatter")]
 pub use etiquettes::{

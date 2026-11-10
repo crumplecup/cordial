@@ -1,7 +1,7 @@
 //! Snapshot-bound error-site census collected by the shared source loader.
 
 use crate::etiquettes::error_sites::ErrorSiteRecord;
-use crate::loader::{DatabaseSource, SourceLoadView, path_has_fixtures, quality_scan_trees};
+use crate::loader::{DatabaseSource, path_has_fixtures, quality_scan_trees};
 use crate::{CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -26,14 +26,6 @@ pub struct ErrorSitesFile {
 }
 
 impl SourceErrorSites {
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourceErrorSites")]
-    pub(crate) fn collect(source: &SourceLoadView, root: &Path) -> CordialResult<Self> {
-        Self::collect_with(root, |path, tree| {
-            source.collect_native_file(path, |file| Self::native_file(file, tree, root))
-        })
-    }
-
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
     pub(crate) fn collect_with(
         root: &Path,

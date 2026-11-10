@@ -2,12 +2,11 @@
 //! `fn main` must convert its error to a tracing warn/error emission
 //! before the process boundary, not let it bubble to a crash.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::config::TracingBoundaryPolicy;
 use crate::error::CordialResult;
 use crate::ir::ObservabilityFileKind as FileKind;
-use crate::loader::SourceLoadView;
 
 use super::types::{BoundaryRuleId, BoundarySiteRecord};
 use crate::ir::ObservabilityBody as BoundaryBodyFacts;
@@ -24,26 +23,12 @@ struct FnSite {
     context: String,
 }
 
-/// Scan lib, bins, and `tests/` for the binary error-boundary policy.
-/// Every function in the crate is scanned (not just `fn main`) so a
-/// helper `main` delegates to (e.g. `Cli::act`) can be recognized as
-/// already reporting its own errors — mirrors
-/// [`super::super::subscriber::scan_crate_tracing_subscriber`]'s
-/// helper-name delegation strategy.
-#[instrument(level = "debug", skip(policy), err(level = "warn"))]
-pub fn scan_crate_tracing_boundary(
-    crate_root: &Path,
-    crate_name: &str,
-    policy: &TracingBoundaryPolicy,
-    skip_program_lints: bool,
-) -> CordialResult<Vec<BoundarySiteRecord>> {
-    let source = SourceLoadView::for_standalone_scan();
-    let inventory = crate::ir::SourceObservability::collect(&source, crate_root)?;
-    findings_from_inventory(&inventory, crate_name, policy, skip_program_lints)
-}
-
+/// Apply the binary error-boundary policy to the loader-projected functions.
+/// Every function in the crate is considered (not just `fn main`) so a helper
+/// `main` delegates to (e.g. `Cli::act`) can be recognized as already
+/// reporting its own errors.
 #[instrument(level = "debug", skip(inventory, policy), err(level = "warn"))]
-pub(super) fn findings_from_inventory(
+pub fn findings_from_inventory(
     inventory: &crate::ir::SourceObservability,
     crate_name: &str,
     policy: &TracingBoundaryPolicy,

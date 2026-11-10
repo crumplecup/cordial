@@ -3,9 +3,12 @@ use std::fs;
 use std::path::Path;
 
 use cordial::{
-    Disposition, PrintRuleId, RunAll, Session, SessionBuilder, TRACING_ETIQUETTE,
-    TracingStdioPolicy, scan_crate_tracing_print, scan_tracing_print_rust_source,
+    Disposition, IrView, PrintRuleId, RunAll, Session, SessionBuilder, TRACING_ETIQUETTE,
+    TracingStdioPolicy, scan_tracing_print_rust_source, tracing_print_findings,
 };
+
+#[path = "support/projected_crate.rs"]
+mod projected_crate;
 
 fn scan_source_with(source: &str, policy: &TracingStdioPolicy) -> miette::Result<Vec<PrintRuleId>> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
@@ -50,7 +53,10 @@ fn write_tree(files: &[(&str, &str)]) -> miette::Result<tempfile::TempDir> {
 }
 
 fn snippets_with(root: &Path, policy: &TracingStdioPolicy) -> miette::Result<Vec<String>> {
-    let records = scan_crate_tracing_print(root, policy)
+    let inventory = projected_crate::projected_crate(root)?
+        .source_observability()
+        .into_diagnostic()?;
+    let records = tracing_print_findings(&inventory, policy)
         .into_diagnostic()
         .wrap_err("scan crate")?;
     Ok(records

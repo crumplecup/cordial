@@ -31,5 +31,5 @@ pub use assessor::BoundaryAssessor;
 pub use enricher::BoundaryInventoryEnricher;
 pub use probe::BoundarySiteProbe;
 pub use reporter::{BoundaryChecklistReporter, BoundaryCsvReporter, BoundarySummaryReporter};
-pub use scan::scan_crate_tracing_boundary;
+pub use scan::findings_from_inventory as tracing_boundary_findings;
 pub use types::{BoundaryRuleId, BoundarySiteRecord};

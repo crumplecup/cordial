@@ -30,5 +30,6 @@ pub use assessor::PrintAssessor;
 pub use enricher::PrintInventoryEnricher;
 pub use probe::PrintSiteProbe;
 pub use reporter::{PrintChecklistReporter, PrintCsvReporter, PrintSummaryReporter};
-pub use scan::{scan_crate_tracing_print, scan_rust_source};
+pub use scan::findings_from_inventory as tracing_print_findings;
+pub use scan::scan_rust_source;
 pub use types::{PrintRuleId, PrintSiteRecord};

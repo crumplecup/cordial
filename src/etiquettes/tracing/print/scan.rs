@@ -2,25 +2,12 @@
 use super::types::{PrintRuleId, PrintSiteRecord};
 use crate::config::TracingStdioPolicy;
 use crate::error::CordialResult;
-use crate::loader::SourceLoadView;
 use std::path::Path;
 use tracing::instrument;
 
-/// Scan `src/` and `tests/` for leftover std print macros.
-#[instrument(level = "debug", skip(policy), err(level = "warn"))]
-pub fn scan_crate_tracing_print(
-    root: &Path,
-    policy: &TracingStdioPolicy,
-) -> CordialResult<Vec<PrintSiteRecord>> {
-    let source = SourceLoadView::for_standalone_scan();
-    findings_from_inventory(
-        &crate::ir::SourceObservability::collect(&source, root)?,
-        policy,
-    )
-}
-
+/// Apply the stdio policy to the loader-projected print sites.
 #[instrument(level = "debug", skip(inventory, policy), err(level = "warn"))]
-pub(super) fn findings_from_inventory(
+pub fn findings_from_inventory(
     inventory: &crate::ir::SourceObservability,
     policy: &TracingStdioPolicy,
 ) -> CordialResult<Vec<PrintSiteRecord>> {

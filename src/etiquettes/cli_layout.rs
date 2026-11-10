@@ -34,7 +34,7 @@ pub use assessor::CliLayoutAssessor;
 pub use enricher::CliLayoutInventoryEnricher;
 pub use probe::CliLayoutSiteProbe;
 pub use reporter::{CliLayoutChecklistReporter, CliLayoutCsvReporter, CliLayoutSummaryReporter};
-pub use scan::scan_crate_cli_layout;
+pub use scan::select_records as select_cli_layout_records;
 pub use types::{CliLayoutId, CliLayoutRecord};
 
 use std::sync::LazyLock;

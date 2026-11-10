@@ -3,9 +3,26 @@ use std::fs;
 use std::path::Path;
 
 use cordial::{
-    Disposition, RunAll, Session, SessionBuilder, SubscriberRuleId, TRACING_ETIQUETTE,
-    TracingSubscriberPolicy, scan_crate_tracing_subscriber,
+    Disposition, IrView, RunAll, Session, SessionBuilder, SubscriberRuleId, TRACING_ETIQUETTE,
+    TracingSubscriberPolicy, tracing_subscriber_findings,
 };
+
+#[path = "support/projected_crate.rs"]
+mod projected_crate;
+
+/// Subscriber findings from the loader's observability inventory for `root`.
+fn subscriber_records(
+    root: &Path,
+    crate_name: &str,
+    policy: &TracingSubscriberPolicy,
+    skip_program_lints: bool,
+) -> miette::Result<Vec<cordial::SubscriberSiteRecord>> {
+    let inventory = projected_crate::projected_crate(root)?
+        .source_observability()
+        .into_diagnostic()?;
+    tracing_subscriber_findings(&inventory, crate_name, policy, skip_program_lints)
+        .into_diagnostic()
+}
 
 const GOOD_HELPER: &str = r#"
 pub fn init_tracing() {
@@ -54,13 +71,12 @@ fn scan(
     crate_name: &str,
     skip_program_lints: bool,
 ) -> miette::Result<Vec<SubscriberRuleId>> {
-    let records = scan_crate_tracing_subscriber(
+    let records = subscriber_records(
         root,
         crate_name,
         &TracingSubscriberPolicy::default(),
         skip_program_lints,
     )
-    .into_diagnostic()
     .wrap_err("scan")?;
     Ok(records.into_iter().map(|record| record.rule_id()).collect())
 }
@@ -82,9 +98,7 @@ fn scan_with_known_helpers(
         true,
         known_helper_paths.iter().map(|s| s.to_string()).collect(),
     );
-    let records = scan_crate_tracing_subscriber(root, crate_name, &policy, false)
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let records = subscriber_records(root, crate_name, &policy, false).wrap_err("scan")?;
     Ok(records.into_iter().map(|record| record.rule_id()).collect())
 }
 
@@ -363,9 +377,7 @@ fn main() {
         Some("#[test] fn it_works() {}\n"),
     )?;
     let policy = TracingSubscriberPolicy::new(false, false, false, false, false, Vec::new());
-    let records = scan_crate_tracing_subscriber(fixture.path(), "fixture", &policy, false)
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let records = subscriber_records(fixture.path(), "fixture", &policy, false).wrap_err("scan")?;
     assert!(
         records.is_empty(),
         "all knobs off must be silent: {:?}",

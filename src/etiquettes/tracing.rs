@@ -68,15 +68,15 @@ pub use apply::{
 };
 
 pub use assessor::TracingAssessor;
-pub use boundary::{BoundaryRuleId, BoundarySiteRecord, scan_crate_tracing_boundary};
+pub use boundary::{BoundaryRuleId, BoundarySiteRecord, tracing_boundary_findings};
 pub use enricher::FunctionInventoryEnricher;
 pub use print::{
-    PrintRuleId, PrintSiteRecord, scan_crate_tracing_print,
-    scan_rust_source as scan_tracing_print_rust_source,
+    PrintRuleId, PrintSiteRecord, scan_rust_source as scan_tracing_print_rust_source,
+    tracing_print_findings,
 };
 pub use probe::{ForbiddenInstrumentProbe, MissingInstrumentProbe, RecipeDeltaProbe};
 pub use reporter::{TracingChecklistReporter, TracingCsvReporter, TracingSummaryReporter};
-pub use subscriber::{SubscriberRuleId, SubscriberSiteRecord, scan_crate_tracing_subscriber};
+pub use subscriber::{SubscriberRuleId, SubscriberSiteRecord, tracing_subscriber_findings};
 
 use std::sync::LazyLock;
 

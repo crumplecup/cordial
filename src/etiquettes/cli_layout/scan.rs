@@ -3,25 +3,13 @@ use super::{
     hunt::nested_clap_types,
     types::{CliLayoutId, CliLayoutRecord},
 };
+use crate::CordialResult;
 use crate::ir::{CliLayoutFacts, EntryItem, LayoutCatalog, TypeRec};
-use crate::{CordialResult, ir::SourcePolicyInventory, loader::SourceLoadView};
-use std::{
-    collections::BTreeSet,
-    path::{Path, PathBuf},
-};
+use std::{collections::BTreeSet, path::PathBuf};
 use tracing::instrument;
-/// Scan a standalone crate through the shared loader collection boundary.
-#[instrument(level = "debug", err(level = "warn"))]
-pub fn scan_crate_cli_layout(
-    crate_root: &Path,
-    crate_name: &str,
-) -> CordialResult<Vec<CliLayoutRecord>> {
-    let source = SourceLoadView::for_standalone_scan();
-    let facts = SourcePolicyInventory::collect_cli_layout(&source, crate_root, crate_name)?;
-    select_records(&facts, crate_name)
-}
+/// Apply the layout rules to the loader-projected CLI catalog.
 #[instrument(level = "debug", skip(facts), err(level = "warn"))]
-pub(super) fn select_records(
+pub fn select_records(
     facts: &CliLayoutFacts,
     crate_name: &str,
 ) -> CordialResult<Vec<CliLayoutRecord>> {

@@ -2,31 +2,14 @@
 //! `src/` tree, cross-referenced against [`declared`] to produce
 //! UNEXPECTED-CFG-001 and CFG-VERIFIER-MISMATCH-001 records.
 
-use std::path::Path;
-
 use crate::config::CfgHygieneThresholds;
 use crate::error::CordialResult;
-use crate::loader::SourceLoadView;
 
 use super::declared::{all_verifier_names, expected_verifier_for};
 use super::scan::CfgNameOccurrence;
 use super::types::{CfgHygieneRuleId, CfgHygieneSiteRecord};
 
 use tracing::instrument;
-/// Scan one crate for cfg hygiene.
-#[instrument(level = "debug", skip(thresholds), err(level = "warn"))]
-pub fn scan_crate_cfg_hygiene(
-    crate_root: &Path,
-    crate_name: &str,
-    workspace_root: &Path,
-    thresholds: &CfgHygieneThresholds,
-) -> CordialResult<Vec<CfgHygieneSiteRecord>> {
-    let source =
-        SourceLoadView::for_standalone_scan().with_workspace_root(workspace_root.to_path_buf());
-    let inventory = crate::ir::SourcePolicyInventory::collect(&source, crate_root)?;
-    records_for_inventory(&inventory, crate_name, thresholds)
-}
-
 #[instrument(level = "debug", skip(inventory, thresholds), err(level = "warn"))]
 pub(crate) fn records_for_inventory(
     inventory: &crate::ir::SourcePolicyInventory,

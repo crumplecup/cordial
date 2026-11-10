@@ -3,19 +3,13 @@ use cordial::{IrView, SourcePolicyInventory};
 use miette::{IntoDiagnostic, Result};
 use std::path::Path;
 
-#[path = "source_projection.rs"]
-mod source_projection;
+#[path = "projected_crate.rs"]
+mod projected_crate;
 
-/// Project the first crate target under `root` through the database and read
-/// back its policy inventory.
+/// Read back the policy inventory of the first crate target under `root`.
 #[tracing::instrument(level = "debug", err(level = "warn"))]
 pub fn policy_inventory(root: &Path) -> Result<SourcePolicyInventory> {
-    let target = cordial::discover_crate_targets(root, &cordial::RunAll)
-        .into_diagnostic()?
-        .into_iter()
-        .next()
-        .ok_or_else(|| miette::miette!("no crate target under {}", root.display()))?;
-    source_projection::baseline(root, &target)?
+    projected_crate::projected_crate(root)?
         .source_policy_inventory()
         .into_diagnostic()?
         .ok_or_else(|| miette::miette!("no policy inventory for {}", root.display()))

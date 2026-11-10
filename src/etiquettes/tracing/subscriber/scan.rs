@@ -1,11 +1,10 @@
 //! Graph-only policy for tracing-subscriber init policy.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::config::TracingSubscriberPolicy;
 use crate::error::CordialResult;
 use crate::ir::ObservabilityFileKind as FileKind;
-use crate::loader::SourceLoadView;
 
 use super::types::{SubscriberRuleId, SubscriberSiteRecord};
 use crate::ir::ObservabilityBody as InitBodyFacts;
@@ -24,21 +23,9 @@ struct FnSite {
     context: String,
 }
 
-/// Scan lib, bins, and `tests/` for subscriber-init policy rows.
-#[instrument(level = "debug", skip(policy), err(level = "warn"))]
-pub fn scan_crate_tracing_subscriber(
-    crate_root: &Path,
-    crate_name: &str,
-    policy: &TracingSubscriberPolicy,
-    skip_program_lints: bool,
-) -> CordialResult<Vec<SubscriberSiteRecord>> {
-    let source = SourceLoadView::for_standalone_scan();
-    let inventory = crate::ir::SourceObservability::collect(&source, crate_root)?;
-    findings_from_inventory(&inventory, crate_name, policy, skip_program_lints)
-}
-
+/// Apply the subscriber-init policy to the loader-projected functions.
 #[instrument(level = "debug", skip(inventory, policy), err(level = "warn"))]
-pub(super) fn findings_from_inventory(
+pub fn findings_from_inventory(
     inventory: &crate::ir::SourceObservability,
     crate_name: &str,
     policy: &TracingSubscriberPolicy,

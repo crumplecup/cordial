@@ -100,28 +100,6 @@ fn malformed_supplied_source_preserves_the_native_error_chain() -> Result<()> {
 }
 
 #[test]
-fn manifest_free_scans_use_native_inventories() -> Result<()> {
-    cordial::init_cli_tracing();
-    let access = Parses::default();
-    let _subscriber = tracing::subscriber::set_default(
-        tracing_subscriber::registry()
-            .with(access.clone())
-            .with(cordial::tracing_fmt_layer()),
-    );
-    let fixture = tempfile::tempdir().into_diagnostic()?;
-    std::fs::create_dir(fixture.path().join("src")).into_diagnostic()?;
-    std::fs::write(fixture.path().join("src/lib.rs"), SOURCE).into_diagnostic()?;
-    let sites = cordial::scan_crate_error_sites(fixture.path()).into_diagnostic()?;
-    let prints = cordial::scan_crate_tracing_print(fixture.path(), &TracingStdioPolicy::default())
-        .into_diagnostic()?;
-    assert_eq!(sites.len(), 1);
-    assert_eq!(prints.len(), 1);
-    assert_eq!(access.native.load(Ordering::Relaxed), 2);
-    assert_eq!(access.compatibility.load(Ordering::Relaxed), 0);
-    Ok(())
-}
-
-#[test]
 fn projection_keeps_its_frozen_input_until_a_fresh_database() -> Result<()> {
     cordial::init_cli_tracing();
     let fixture = tempfile::tempdir().into_diagnostic()?;
