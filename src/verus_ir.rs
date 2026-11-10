@@ -67,18 +67,6 @@ pub fn scan_verus_rust_source(
     facts::build_crate_ir(blocks)
 }
 
-/// Reuse an already parsed outer file when another one-file scanner also
-/// needs facts from its Verus macro bodies.
-#[cfg(feature = "panics")]
-#[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
-pub(crate) fn scan_verus_rust_syntax(
-    syntax: &syn::File,
-    file: &Path,
-    module_path: &str,
-) -> crate::error::CordialResult<VerusCrateIr> {
-    facts::build_crate_ir(parse::blocks_in_syntax(syntax, file, module_path))
-}
-
 /// Context-free facts and visibility counts from one memoized dialect parse.
 #[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
 pub(crate) struct VerusPayloadFacts {
@@ -100,16 +88,4 @@ pub(crate) fn payload_facts(payload: &str) -> Option<VerusPayloadFacts> {
         #[cfg(feature = "visibility")]
         visible_names,
     })
-}
-
-#[tracing::instrument(level = "debug", skip(file), err(level = "warn"))]
-pub(crate) fn shared_file_facts(
-    file: &crate::loader::SharedParsedFile,
-    module_path: &str,
-) -> crate::CordialResult<VerusCrateIr> {
-    facts::build_crate_ir(parse::blocks_in_syntax(
-        file.syntax(),
-        file.path(),
-        module_path,
-    ))
 }

@@ -185,7 +185,7 @@ pub use etiquettes::pageantry::{
 #[cfg(feature = "panics")]
 pub use etiquettes::panics::{
     PANICS_ETIQUETTE, PanicApplyBlocker, PanicApplyRepair, PanicApplySite, PanicApplySummary,
-    PanicKind, run_panic_apply, scan_crate_panics, scan_rust_source, scan_source_tree,
+    PanicKind, PanicSiteRecord, run_panic_apply,
 };
 #[cfg(feature = "tracing")]
 pub use etiquettes::tracing::{

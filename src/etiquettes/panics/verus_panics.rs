@@ -26,7 +26,7 @@ pub(crate) fn findings(
     ir: &crate::verus_ir::VerusCrateIr,
     crate_root: &Path,
 ) -> CordialResult<Vec<PanicSiteRecord>> {
-    let reachability = super::super::verus_reach::build_verus_reachability(ir);
+    let reachability = super::verus_reach::build_verus_reachability(ir);
     let mut findings = Vec::new();
     for function in ir
         .functions()

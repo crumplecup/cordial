@@ -30,25 +30,21 @@ pub use apply::{
     PanicApplyBlocker, PanicApplyRepair, PanicApplySite, PanicApplySummary, run_panic_apply,
 };
 mod enricher;
-mod error_assertion;
-mod kani_reach;
 mod probe;
 mod reporter;
-mod scan;
 mod types;
 #[cfg(feature = "verus_ir")]
+mod verus_panics;
+#[cfg(feature = "verus_ir")]
 mod verus_reach;
-#[cfg(not(feature = "verus_ir"))]
-mod verus_recover;
 
 pub use assessor::PanicAssessor;
 pub use enricher::PanicInventoryEnricher;
 pub use probe::PanicSiteProbe;
 pub use reporter::{PanicChecklistReporter, PanicCsvReporter, PanicSummaryReporter};
-#[cfg(feature = "verus_ir")]
-pub(crate) use scan::verus_findings;
-pub use scan::{scan_crate_panics, scan_rust_source, scan_source_tree};
 pub use types::{PanicKind, PanicSiteRecord};
+#[cfg(feature = "verus_ir")]
+pub(crate) use verus_panics::findings as verus_findings;
 
 use std::sync::LazyLock;
 

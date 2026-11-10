@@ -1,7 +1,5 @@
 //! Snapshot-bound Verus dialect evidence owned by the shared graph.
-use crate::loader::{
-    SourceLoadView, module_path_from_src_file, path_has_fixtures, quality_scan_trees,
-};
+use crate::loader::{path_has_fixtures, quality_scan_trees};
 use crate::{CordialResult, FileSnapshot, VerusCrateIr};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -26,21 +24,6 @@ pub struct VerusFile {
 }
 
 impl SourceVerus {
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourceVerus")]
-    pub(crate) fn collect(source: &SourceLoadView, root: &Path) -> CordialResult<Self> {
-        Self::collect_with(root, |path, tree| {
-            let file = source.parsed_file(path, "source-verus")?;
-            Ok(VerusFile::new(
-                FileSnapshot::new(path.to_path_buf(), file.source_digest()),
-                crate::verus_ir::shared_file_facts(
-                    &file,
-                    &module_path_from_src_file(tree, path).join("::"),
-                )?,
-            ))
-        })
-    }
-
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
     pub(crate) fn collect_with(
         root: &Path,

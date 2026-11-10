@@ -1,6 +1,9 @@
 use std::fs;
 
 use cordial::{ErrorSurface, PANICS_ETIQUETTE, PanicKind, RunAll, Session, SessionBuilder};
+#[path = "support/panic_sites.rs"]
+mod panic_sites;
+
 use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
@@ -115,22 +118,9 @@ fn panics_disabled_in_cordial_toml_skips_the_etiquette() -> miette::Result<()> {
 }
 
 #[test]
-fn scan_rust_source_finds_panics_inside_a_verus_block() -> miette::Result<()> {
+fn finds_panics_inside_a_verus_block() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_02.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_02.rs"))?;
 
     assert_eq!(
         findings.len(),
@@ -150,22 +140,9 @@ fn scan_rust_source_finds_panics_inside_a_verus_block() -> miette::Result<()> {
 
 #[cfg(feature = "verus_ir")]
 #[test]
-fn scan_rust_source_exempts_a_ghost_proven_unreachable_arm() -> miette::Result<()> {
+fn exempts_a_ghost_proven_unreachable_arm() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_03.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_03.rs"))?;
 
     assert_eq!(
         findings.len(),
@@ -185,8 +162,7 @@ fn scan_rust_source_exempts_a_ghost_proven_unreachable_arm() -> miette::Result<(
 
 #[cfg(feature = "verus_ir")]
 #[test]
-fn scan_rust_source_exempts_a_verification_leaf_but_not_a_helper_or_a_real_callee()
--> miette::Result<()> {
+fn exempts_a_verification_leaf_but_not_a_helper_or_a_real_callee() -> miette::Result<()> {
     cordial::init_tracing();
     // Real amenable_verus shape: a `pub fn verify_*` with a real `ensures`
     // clause, called by nothing else in the crate, is itself the checked
@@ -195,20 +171,7 @@ fn scan_rust_source_exempts_a_verification_leaf_but_not_a_helper_or_a_real_calle
     // isolate each condition: `leaf` (ensures + uncalled -> exempt),
     // `has_a_real_caller` (ensures, but called by `caller` -> NOT exempt),
     // and `no_ensures_uncalled` (uncalled, but no ensures -> NOT exempt).
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_04.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_04.rs"))?;
 
     let contexts: Vec<&str> = findings.iter().map(|f| f.context().as_str()).collect();
     assert!(
@@ -229,43 +192,18 @@ fn scan_rust_source_exempts_a_verification_leaf_but_not_a_helper_or_a_real_calle
 }
 
 #[test]
-fn scan_rust_source_finds_compile_error() -> miette::Result<()> {
+fn finds_compile_error() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_05.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_05.rs"))?;
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].kind(), PanicKind::CompileError);
     Ok(())
 }
 
 #[test]
-fn scan_rust_source_finds_abort_sites_inside_a_string_that_parses_as_rust() -> miette::Result<()> {
+fn finds_abort_sites_inside_a_string_that_parses_as_rust() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("host.rs");
-    fs::write(&file, include_str!("fixtures/panics/embedded_host.rs"))
-        .into_diagnostic()
-        .wrap_err("write host")?;
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/embedded_host.rs"))?;
     assert_eq!(
         findings.len(),
         1,
@@ -277,17 +215,13 @@ fn scan_rust_source_finds_abort_sites_inside_a_string_that_parses_as_rust() -> m
 
 #[cfg(feature = "verus_ir")]
 #[test]
-fn scan_rust_source_finds_verus_abort_sites_inside_embedded_rust() -> miette::Result<()> {
+fn finds_verus_abort_sites_inside_embedded_rust() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("host.rs");
     let source = format!(
         "fn host() {{ let _ = r####\"{}\"####; }}",
         include_str!("fixtures/panics/sample_02.rs")
     );
-    let findings = cordial::scan_rust_source(&source, &file, fixture.path(), fixture.path())
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(&source)?;
 
     assert_eq!(findings.len(), 1, "{findings:?}");
     assert_eq!(findings[0].kind(), PanicKind::Unreachable);
@@ -295,21 +229,9 @@ fn scan_rust_source_finds_verus_abort_sites_inside_embedded_rust() -> miette::Re
 }
 
 #[test]
-fn scan_rust_source_does_not_flag_panic_in_an_assertion_message() -> miette::Result<()> {
+fn does_not_flag_panic_in_an_assertion_message() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("host.rs");
-    fs::write(&file, include_str!("fixtures/panics/assertion_message.rs"))
-        .into_diagnostic()
-        .wrap_err("write host")?;
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/assertion_message.rs"))?;
     assert!(
         findings.is_empty(),
         "\"panic!\" as a message does not parse as a Rust file: {findings:?}"
@@ -659,19 +581,7 @@ fn library_tokenstream_parse_expect_is_checklist() -> miette::Result<()> {
 #[test]
 fn chained_unwrap_on_one_line_is_one_site() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_07.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_07.rs"))?;
     let unwraps = findings
         .iter()
         .filter(|row| row.kind() == PanicKind::Unwrap)
@@ -686,19 +596,7 @@ fn chained_unwrap_on_one_line_is_one_site() -> miette::Result<()> {
 #[test]
 fn unwrap_err_and_expect_err_are_flagged_the_same_as_their_ok_counterparts() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_08.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_08.rs"))?;
 
     let unwraps = findings
         .iter()
@@ -729,19 +627,7 @@ fn expect_err_asserted_against_directly_is_exempt() -> miette::Result<()> {
     // Real amenable_kani::ledger_test shape: the whole point of the call
     // is to extract the error value and assert a fact about it, not to
     // discard or propagate a setup failure.
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_09.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_09.rs"))?;
     assert!(
         findings.is_empty(),
         "error is bound then asserted on directly -- must be exempt: {findings:?}"
@@ -760,19 +646,7 @@ fn expect_err_exemption_matches_even_with_a_multiline_receiver() -> miette::Resu
     // the hard way: this exact fixture's real-world counterpart stayed
     // flagged until error_assertion_binding's own line computation was
     // fixed to match).
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_10.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_10.rs"))?;
     assert!(
         findings.is_empty(),
         "error is bound then asserted on directly, receiver just spans several lines first -- \
@@ -786,19 +660,7 @@ fn unwrap_err_asserted_against_one_hop_later_is_exempt() -> miette::Result<()> {
     cordial::init_tracing();
     // Real assessment_error_chain_test shape: the bound error feeds a
     // further `let`, and THAT is what's asserted on.
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_11.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_11.rs"))?;
     assert!(
         findings.is_empty(),
         "error flows into rendered one hop later, which IS asserted on -- must be exempt: {findings:?}"
@@ -809,19 +671,7 @@ fn unwrap_err_asserted_against_one_hop_later_is_exempt() -> miette::Result<()> {
 #[test]
 fn expect_err_with_no_later_use_still_flagged() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_12.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_12.rs"))?;
     assert_eq!(
         findings.len(),
         1,
@@ -833,19 +683,7 @@ fn expect_err_with_no_later_use_still_flagged() -> miette::Result<()> {
 #[test]
 fn expect_err_bound_and_used_but_never_asserted_still_flagged() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_13.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_13.rs"))?;
     assert_eq!(
         findings.len(),
         1,
@@ -908,20 +746,7 @@ fn nested_parity_workspace_is_skipped_when_scanning_parent() -> miette::Result<(
 #[test]
 fn unwrap_reachable_from_a_kani_proof_harness_is_not_flagged() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_14.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_14.rs"))?;
     assert!(
         findings.is_empty(),
         "unwrap() inside demonstrate_delivery is reachable from the #[kani::proof] harness \
@@ -941,20 +766,7 @@ fn unwrap_reachable_from_a_harness_wrapped_in_another_macro_is_not_flagged() -> 
     // goes looking for it -- this is the one real amenable_kani case that
     // motivated that lookup (every #[kani::proof] harness in that crate is
     // written this way, not as a bare item).
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_15.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_15.rs"))?;
     assert!(
         findings.is_empty(),
         "the harness! wrapper macro's braced argument must still be looked into to find the \
@@ -972,20 +784,7 @@ fn expect_reachable_only_via_an_assert_eq_argument_is_not_flagged() -> miette::R
     // token stream on its own (assertion macros included), so this real
     // call edge was silently invisible to the reachability graph before the
     // fix that added exprs_inside_macro's fallback.
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_16.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_16.rs"))?;
     assert!(
         findings.is_empty(),
         "encode_bmp's real call site inside assert_eq!'s own arguments must still register a \
@@ -997,20 +796,7 @@ fn expect_reachable_only_via_an_assert_eq_argument_is_not_flagged() -> miette::R
 #[test]
 fn unreachable_nested_under_cfg_kani_is_not_flagged() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_17.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_17.rs"))?;
     assert!(
         findings.is_empty(),
         "code nested under #[cfg(kani)] exists only during Kani verification, so its \
@@ -1022,20 +808,7 @@ fn unreachable_nested_under_cfg_kani_is_not_flagged() -> miette::Result<()> {
 #[test]
 fn unwrap_not_reachable_from_any_kani_proof_is_still_flagged() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_18.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_18.rs"))?;
     assert_eq!(
         findings.len(),
         1,
@@ -1050,20 +823,7 @@ fn unwrap_not_reachable_from_any_kani_proof_is_still_flagged() -> miette::Result
 #[test]
 fn panic_outside_cfg_kani_is_still_flagged_even_with_a_cfg_not_kani_twin() -> miette::Result<()> {
     cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("sample.rs");
-    fs::write(&file, include_str!("fixtures/panics/sample_19.rs"))
-        .into_diagnostic()
-        .wrap_err("write sample")?;
-
-    let findings = cordial::scan_rust_source(
-        &fs::read_to_string(&file).into_diagnostic()?,
-        &file,
-        fixture.path(),
-        fixture.path(),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
+    let findings = panic_sites::panic_sites(include_str!("fixtures/panics/sample_19.rs"))?;
     assert_eq!(
         findings.len(),
         1,
