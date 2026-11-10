@@ -1,5 +1,5 @@
 //! Lower canonical field syntax to the same closed storage contract.
-use super::super::native::syntax::{simple_type, type_label};
+use super::super::syntax::{simple_type, type_label};
 use super::{Arguments, CopyRequirement, FieldType};
 use ra_ap_syntax::{
     AstNode,

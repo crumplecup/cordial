@@ -1,6 +1,6 @@
 //! Type membership, field contracts and parent/source relationships.
-use super::super::{EnumInfo, ErrorField, StructInfo, VariantInfo, fields::FieldType};
 use super::{Collector, syntax};
+use super::{EnumInfo, ErrorField, StructInfo, VariantInfo, fields::FieldType};
 use crate::etiquettes::internal_error_chain::type_graph::is_foreign_type_label;
 use ra_ap_syntax::{
     AstNode,

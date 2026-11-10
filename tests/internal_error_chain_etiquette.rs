@@ -2,11 +2,52 @@ use miette::{IntoDiagnostic, WrapErr};
 use std::fs;
 use std::path::Path;
 
+#[path = "support/error_reports.rs"]
+mod error_reports;
+
+/// Type-graph nodes for `source` placed as the lib of a throwaway crate.
+fn type_nodes(source: &str) -> miette::Result<Vec<cordial::InternalErrorTypeNode>> {
+    let fixture = crate_with_lib(source, false)?;
+    Ok(error_reports::internal_report(fixture.path(), "fixture")?
+        .type_graph()
+        .nodes()
+        .clone())
+}
+
+/// Compliance findings for `source`; `proc_macro` marks the crate a proc-macro lib.
+fn compliance_findings(
+    source: &str,
+    proc_macro: bool,
+) -> miette::Result<Vec<cordial::InternalErrorComplianceFinding>> {
+    let fixture = crate_with_lib(source, proc_macro)?;
+    Ok(error_reports::internal_report(fixture.path(), "fixture")?
+        .compliance()
+        .findings()
+        .clone())
+}
+
+fn crate_with_lib(source: &str, proc_macro: bool) -> miette::Result<tempfile::TempDir> {
+    let fixture = tempfile::tempdir().into_diagnostic()?;
+    fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
+    fs::write(fixture.path().join("src/lib.rs"), source).into_diagnostic()?;
+    let lib = if proc_macro {
+        "[lib]\nproc-macro = true\n"
+    } else {
+        ""
+    };
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        format!(
+            "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n{lib}[workspace]\n"
+        ),
+    )
+    .into_diagnostic()?;
+    Ok(fixture)
+}
+
 use cordial::{
     INTERNAL_ERROR_CHAIN_ETIQUETTE, InternalErrorComplianceId, InternalErrorNodeClass,
     InternalErrorTypeProbeId, RunAll, Session, SessionBuilder, SignatureChainStatus,
-    scan_compliance_rust_source, scan_compliance_rust_source_with_crate_kind,
-    scan_crate_internal_error_chain, scan_error_rust_source,
 };
 
 #[test]
@@ -21,7 +62,7 @@ fn signature_chain_catches_helpers_across_modules() -> miette::Result<()> {
     )
     .into_diagnostic()?;
 
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     let signature_findings: Vec<_> = report
         .compliance()
         .findings()
@@ -197,7 +238,7 @@ fn site() {
     )
     .into_diagnostic()?;
 
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     let tracked_sites = report
         .compliance()
         .findings()
@@ -244,7 +285,7 @@ fn sites() {
 }
 "#;
     fs::write(src.join("lib.rs"), source).into_diagnostic()?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     let findings: Vec<_> = report
         .compliance()
         .findings()
@@ -268,17 +309,7 @@ fn sites() {
 #[test]
 fn internal_leaf_is_detected_in_type_graph() -> miette::Result<()> {
     cordial::init_tracing();
-    let error_root = Path::new("tests/fixtures/internal_error_chain");
-    let file = error_root.join("type_graph.rs");
-    fs::create_dir_all(error_root)
-        .into_diagnostic()
-        .wrap_err("fixture dir")?;
-    fs::write(&file, TYPE_GRAPH_FIXTURE)
-        .into_diagnostic()
-        .wrap_err("write fixture")?;
-    let nodes = scan_error_rust_source(TYPE_GRAPH_FIXTURE, &file, error_root, "fixture")
-        .into_diagnostic()
-        .wrap_err("scan type graph")?;
+    let nodes = type_nodes(TYPE_GRAPH_FIXTURE)?;
     assert!(nodes.iter().any(|node| {
         node.probe_id() == InternalErrorTypeProbeId::InternalLeaf001
             && node.node_class() == InternalErrorNodeClass::InternalLeaf
@@ -290,17 +321,7 @@ fn internal_leaf_is_detected_in_type_graph() -> miette::Result<()> {
 #[test]
 fn foreign_bridge_is_detected_in_type_graph() -> miette::Result<()> {
     cordial::init_tracing();
-    let error_root = Path::new("tests/fixtures/internal_error_chain");
-    let file = error_root.join("type_graph.rs");
-    fs::create_dir_all(error_root)
-        .into_diagnostic()
-        .wrap_err("fixture dir")?;
-    fs::write(&file, TYPE_GRAPH_FIXTURE)
-        .into_diagnostic()
-        .wrap_err("write fixture")?;
-    let nodes = scan_error_rust_source(TYPE_GRAPH_FIXTURE, &file, error_root, "fixture")
-        .into_diagnostic()
-        .wrap_err("scan type graph")?;
+    let nodes = type_nodes(TYPE_GRAPH_FIXTURE)?;
     assert!(nodes.iter().any(|node| {
         node.node_class() == InternalErrorNodeClass::ForeignBridge
             && node.type_path().ends_with("InnerSource")
@@ -311,17 +332,7 @@ fn foreign_bridge_is_detected_in_type_graph() -> miette::Result<()> {
 #[test]
 fn nested_source_impl_is_detected() -> miette::Result<()> {
     cordial::init_tracing();
-    let error_root = Path::new("tests/fixtures/internal_error_chain");
-    let file = error_root.join("type_graph.rs");
-    fs::create_dir_all(error_root)
-        .into_diagnostic()
-        .wrap_err("fixture dir")?;
-    fs::write(&file, TYPE_GRAPH_FIXTURE)
-        .into_diagnostic()
-        .wrap_err("write fixture")?;
-    let nodes = scan_error_rust_source(TYPE_GRAPH_FIXTURE, &file, error_root, "fixture")
-        .into_diagnostic()
-        .wrap_err("scan type graph")?;
+    let nodes = type_nodes(TYPE_GRAPH_FIXTURE)?;
     assert!(nodes.iter().any(|node| {
         node.probe_id() == InternalErrorTypeProbeId::InternalNested001
             && node.type_path() == "DomainError"
@@ -332,17 +343,7 @@ fn nested_source_impl_is_detected() -> miette::Result<()> {
 #[test]
 fn stringify_map_err_is_compliance_violation() -> miette::Result<()> {
     cordial::init_tracing();
-    let src_root = Path::new("tests/fixtures/internal_error_chain");
-    let file = src_root.join("compliance.rs");
-    fs::create_dir_all(src_root)
-        .into_diagnostic()
-        .wrap_err("fixture dir")?;
-    fs::write(&file, COMPLIANCE_FIXTURE)
-        .into_diagnostic()
-        .wrap_err("write fixture")?;
-    let findings = scan_compliance_rust_source(COMPLIANCE_FIXTURE, &file, src_root, "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = compliance_findings(COMPLIANCE_FIXTURE, false)?;
     assert!(findings.iter().any(|finding| {
         finding.rule_id() == InternalErrorComplianceId::StringifyForeign001
             && finding.context().contains("stringify_foreign")
@@ -353,17 +354,7 @@ fn stringify_map_err_is_compliance_violation() -> miette::Result<()> {
 #[test]
 fn discard_typed_error_is_compliance_violation() -> miette::Result<()> {
     cordial::init_tracing();
-    let src_root = Path::new("tests/fixtures/internal_error_chain");
-    let file = src_root.join("compliance.rs");
-    fs::create_dir_all(src_root)
-        .into_diagnostic()
-        .wrap_err("fixture dir")?;
-    fs::write(&file, COMPLIANCE_FIXTURE)
-        .into_diagnostic()
-        .wrap_err("write fixture")?;
-    let findings = scan_compliance_rust_source(COMPLIANCE_FIXTURE, &file, src_root, "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = compliance_findings(COMPLIANCE_FIXTURE, false)?;
     assert!(findings.iter().any(|finding| {
         finding.rule_id() == InternalErrorComplianceId::DiscardTyped001
             && finding.context().contains("discard_typed")
@@ -378,17 +369,7 @@ fn discard_typed_error_is_compliance_violation() -> miette::Result<()> {
 #[test]
 fn preserved_foreign_propagation_is_not_compliance_violation() -> miette::Result<()> {
     cordial::init_tracing();
-    let src_root = Path::new("tests/fixtures/internal_error_chain");
-    let file = src_root.join("compliance.rs");
-    fs::create_dir_all(src_root)
-        .into_diagnostic()
-        .wrap_err("fixture dir")?;
-    fs::write(&file, COMPLIANCE_FIXTURE)
-        .into_diagnostic()
-        .wrap_err("write fixture")?;
-    let findings = scan_compliance_rust_source(COMPLIANCE_FIXTURE, &file, src_root, "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = compliance_findings(COMPLIANCE_FIXTURE, false)?;
     assert!(
         !findings
             .iter()
@@ -400,17 +381,7 @@ fn preserved_foreign_propagation_is_not_compliance_violation() -> miette::Result
 #[test]
 fn syn_parse_and_from_wrappers_are_not_compliance_violations() -> miette::Result<()> {
     cordial::init_tracing();
-    let src_root = Path::new("tests/fixtures/internal_error_chain");
-    let file = src_root.join("compliance.rs");
-    fs::create_dir_all(src_root)
-        .into_diagnostic()
-        .wrap_err("fixture dir")?;
-    fs::write(&file, COMPLIANCE_FIXTURE)
-        .into_diagnostic()
-        .wrap_err("write fixture")?;
-    let findings = scan_compliance_rust_source(COMPLIANCE_FIXTURE, &file, src_root, "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = compliance_findings(COMPLIANCE_FIXTURE, false)?;
     assert!(
         !findings
             .iter()
@@ -426,17 +397,7 @@ fn syn_parse_and_from_wrappers_are_not_compliance_violations() -> miette::Result
 #[test]
 fn format_interpolation_of_error_binding_is_compliance_violation() -> miette::Result<()> {
     cordial::init_tracing();
-    let src_root = Path::new("tests/fixtures/internal_error_chain");
-    let file = src_root.join("compliance.rs");
-    fs::create_dir_all(src_root)
-        .into_diagnostic()
-        .wrap_err("fixture dir")?;
-    fs::write(&file, COMPLIANCE_FIXTURE)
-        .into_diagnostic()
-        .wrap_err("write fixture")?;
-    let findings = scan_compliance_rust_source(COMPLIANCE_FIXTURE, &file, src_root, "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let findings = compliance_findings(COMPLIANCE_FIXTURE, false)?;
     assert!(
         findings.iter().any(|finding| {
             finding.context().contains("stringify_via_format")
@@ -502,10 +463,7 @@ fn preserved(builder: Builder) -> Result<Value, TemporalError> {
     })
 }
 "#;
-    let root = Path::new("tests/fixtures/internal_error_chain");
-    let findings =
-        scan_compliance_rust_source(source, &root.join("stringified.rs"), root, "fixture")
-            .into_diagnostic()?;
+    let findings = compliance_findings(source, false)?;
     let stringify: Vec<_> = findings
         .iter()
         .filter(|finding| finding.rule_id() == InternalErrorComplianceId::StringifyForeign001)
@@ -570,12 +528,7 @@ fn unrelated_local_error(builder: Builder) -> Result<Value, TemporalError> {
     })
 }
 "#;
-    let root = Path::new("tests/fixtures/internal_error_chain");
-    let file = root.join("syn_error_terminus.rs");
-
-    let lib_findings =
-        scan_compliance_rust_source_with_crate_kind(source, &file, root, "a_derive_crate", true)
-            .into_diagnostic()?;
+    let lib_findings = compliance_findings(source, true)?;
     assert!(
         !lib_findings
             .iter()
@@ -596,9 +549,7 @@ fn unrelated_local_error(builder: Builder) -> Result<Value, TemporalError> {
         "a non-syn::Error site must still be caught in a proc-macro crate: {lib_findings:?}"
     );
 
-    let non_proc_macro_findings =
-        scan_compliance_rust_source_with_crate_kind(source, &file, root, "a_derive_crate", false)
-            .into_diagnostic()?;
+    let non_proc_macro_findings = compliance_findings(source, false)?;
     assert!(
         non_proc_macro_findings
             .iter()
@@ -659,9 +610,7 @@ fn type_graph_scans_src_error_rs() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("write lib")?;
 
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(
         report.type_graph().nodes().iter().any(|node| {
             node.type_path().contains("SynParse")
@@ -778,7 +727,7 @@ fn session_produces_all_four_artifacts() -> miette::Result<()> {
 }
 
 #[test]
-fn scan_crate_internal_error_chain_combines_both_scans() -> miette::Result<()> {
+fn report_combines_type_graph_and_compliance() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src/error"))
@@ -787,6 +736,11 @@ fn scan_crate_internal_error_chain_combines_both_scans() -> miette::Result<()> {
     fs::write(
         fixture.path().join("Cargo.toml"),
         "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
+        fixture.path().join("src/lib.rs"),
+        "mod error {\n    pub mod type_graph;\n}\nmod compliance;\n",
     )
     .into_diagnostic()?;
     fs::write(
@@ -799,9 +753,7 @@ fn scan_crate_internal_error_chain_combines_both_scans() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("write compliance")?;
 
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("combined scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(!report.type_graph().nodes().is_empty());
     assert!(!report.compliance().findings().is_empty());
     Ok(())
@@ -1021,15 +973,18 @@ fn incomplete_source_wrapper_is_shape_and_track_caller_violation() -> miette::Re
     )
     .into_diagnostic()?;
     fs::write(
+        fixture.path().join("src/lib.rs"),
+        "mod error {\n    pub mod type_graph;\n}\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/error/type_graph.rs"),
         TYPE_GRAPH_FIXTURE,
     )
     .into_diagnostic()
     .wrap_err("write type graph")?;
 
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(
         report.compliance().findings().iter().any(|finding| {
             finding.rule_id() == InternalErrorComplianceId::SourceShape001
@@ -1053,9 +1008,7 @@ fn incomplete_source_wrapper_is_shape_and_track_caller_violation() -> miette::Re
 fn well_formed_source_wrapper_is_not_a_compliance_violation() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = write_error_crate(WELL_FORMED_SOURCE)?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     let source_findings: Vec<_> = report
         .compliance()
         .findings()
@@ -1096,7 +1049,7 @@ fn instrumented_return_hides_tracked_constructor_call_site() -> miette::Result<(
         "    #[track_caller]\n    #[instrument(ret)]\n    pub fn new(source: io::Error)",
     );
     let fixture = write_error_crate(&source)?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(report.compliance().findings().iter().any(|finding| {
         finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001
             && finding.snippet().contains("instrument(ret)")
@@ -1108,9 +1061,7 @@ fn instrumented_return_hides_tracked_constructor_call_site() -> miette::Result<(
 fn location_field_is_rejected_in_favor_of_owned_file_and_line() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = write_error_crate(LOCATION_FIELD_SOURCE)?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(
         report.compliance().findings().iter().any(|finding| {
             finding.rule_id() == InternalErrorComplianceId::SourceShape001
@@ -1127,9 +1078,7 @@ fn location_field_is_rejected_in_favor_of_owned_file_and_line() -> miette::Resul
 fn constructor_without_track_caller_is_a_violation() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = write_error_crate(MISSING_TRACK_CALLER_SOURCE)?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(
         report.compliance().findings().iter().any(|finding| {
             finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001
@@ -1189,9 +1138,7 @@ impl std::error::Error for Error {}
 impl std::error::Error for IoSource {}
 "#;
     let fixture = write_error_crate(src)?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(
         report.compliance().findings().iter().any(|finding| {
             finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001
@@ -1239,9 +1186,7 @@ impl std::error::Error for Error {}
 impl std::error::Error for IoSource {}
 "#;
     let fixture = write_error_crate(src)?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(
         report.compliance().findings().iter().any(|finding| {
             finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001
@@ -1287,9 +1232,7 @@ impl std::error::Error for Error {}
 impl std::error::Error for IoSource {}
 "#;
     let fixture = write_error_crate(src)?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(
         report.compliance().findings().iter().any(|finding| {
             finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001
@@ -1346,9 +1289,7 @@ impl std::error::Error for Error {}
 impl std::error::Error for IoSource {}
 "#;
     let fixture = write_error_crate(src)?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(
         report.compliance().findings().iter().any(|finding| {
             finding.rule_id() == InternalErrorComplianceId::SourceTrackCaller001
@@ -1368,9 +1309,7 @@ impl std::error::Error for IoSource {}
 fn error_enum_is_not_a_parent() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = write_error_crate(ERROR_RS_FIXTURE)?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(
         report.compliance().findings().iter().any(|finding| {
             finding.rule_id() == InternalErrorComplianceId::ArchParent001
@@ -1426,9 +1365,7 @@ impl std::error::Error for Error {}
 impl std::error::Error for IoSource {}
 "#;
     let fixture = write_error_crate(src)?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(
         report
             .compliance()
@@ -1493,9 +1430,7 @@ impl std::error::Error for ParseSource {}
 impl std::error::Error for IoSource {}
 "#;
     let fixture = write_error_crate(src)?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     let arch: Vec<_> = report
         .compliance()
         .findings()
@@ -1581,9 +1516,7 @@ impl std::error::Error for IoSource {}
     .into_diagnostic()
     .wrap_err("write io")?;
 
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     let arch: Vec<_> = report
         .compliance()
         .findings()
@@ -1655,9 +1588,7 @@ impl std::error::Error for Error {}
 impl std::error::Error for IoSource {}
 "#,
     )?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture")
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(
         !report
             .compliance()
@@ -1674,9 +1605,7 @@ impl std::error::Error for IoSource {}
 fn dogfood_cordial_follows_error_architecture() -> miette::Result<()> {
     cordial::init_tracing();
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let report = scan_crate_internal_error_chain(root, "cordial")
-        .into_diagnostic()
-        .wrap_err("scan cordial")?;
+    let report = error_reports::internal_report(root, "cordial")?;
     let arch: Vec<_> = report
         .compliance()
         .findings()
@@ -1748,7 +1677,7 @@ fn f() { let _ = InvalidSource::new("invalid calendar"); }
 "#,
     )
     .into_diagnostic()?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     let fanout: Vec<_> = report
         .compliance()
         .findings()
@@ -1835,7 +1764,7 @@ fn d() { DomainError::invalid("month overflow"); }
 "#,
     )
     .into_diagnostic()?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     let fanout: Vec<_> = report
         .compliance()
         .findings()
@@ -1886,7 +1815,7 @@ fn g() { conditional("three".to_owned()); }
 fn h() { conditional("four".to_owned()); }
 "#,
     )?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     let fanout: Vec<_> = report
         .compliance()
         .findings()
@@ -1911,7 +1840,7 @@ fn c() { let _ = InvalidDescriptorSource::new("day"); }
 fn d() { let _ = InvalidDescriptorSource::new("offset"); }
 "#,
     )?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     let fanout: Vec<_> = report
         .compliance()
         .findings()
@@ -1963,7 +1892,7 @@ fn c() { invalid("same".to_owned()); }
 fn d() { invalid("same".to_owned()); }
 "#,
     )?;
-    let report = scan_crate_internal_error_chain(fixture.path(), "fixture").into_diagnostic()?;
+    let report = error_reports::internal_report(fixture.path(), "fixture")?;
     assert!(
         report
             .compliance()

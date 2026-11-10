@@ -54,8 +54,7 @@
 //! | `homecoming-std` | `framework_std` | How much of Rust `std` implements homecoming `Code`? |
 //! | `amenable-std` | `framework_std` | How much of `std` is in the amenable registry? |
 //!
-//! Error-handling etiquettes share `error_ir`. Coverage etiquettes need
-//! rustdoc JSON.
+//! Coverage etiquettes need rustdoc JSON.
 
 #[cfg(feature = "allows")]
 pub(crate) mod allows;
@@ -77,24 +76,12 @@ mod dependency_freshness;
 pub(crate) mod derives;
 #[cfg(feature = "doc_warnings")]
 pub(crate) mod doc_warnings;
-#[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
-mod error_ir;
-#[cfg(feature = "feature_warnings")]
-pub(crate) mod feature_warnings;
-#[cfg(feature = "glob_imports")]
-pub(crate) mod glob_imports;
-#[cfg(feature = "inline_tests")]
-pub(crate) mod inline_tests;
-#[cfg(feature = "verus_warnings")]
-pub(crate) mod verus_warnings;
-#[cfg(feature = "visibility")]
-pub(crate) mod visibility;
-#[cfg(any(feature = "error_chain", feature = "internal_error_chain"))]
-pub(crate) use error_ir::{ErrorIrScanLayers, scan_rust_file_syntax};
 #[cfg(feature = "error_chain")]
 pub(crate) mod error_chain;
 #[cfg(feature = "error_sites")]
 pub(crate) mod error_sites;
+#[cfg(feature = "feature_warnings")]
+pub(crate) mod feature_warnings;
 #[cfg(feature = "foreign_error_attenuation")]
 pub(crate) mod foreign_error_attenuation;
 #[cfg(feature = "foreign_error_types")]
@@ -103,8 +90,12 @@ pub(crate) mod foreign_error_types;
 mod framework_ext;
 #[cfg(feature = "homecoming_std")]
 pub(crate) mod framework_std;
+#[cfg(feature = "glob_imports")]
+pub(crate) mod glob_imports;
 #[cfg(feature = "impl_coverage")]
 mod impl_coverage;
+#[cfg(feature = "inline_tests")]
+pub(crate) mod inline_tests;
 #[cfg(feature = "internal_error_chain")]
 pub(crate) mod internal_error_chain;
 #[cfg(feature = "modularity")]
@@ -121,6 +112,10 @@ mod shadow;
 pub(crate) mod tracing;
 #[cfg(feature = "trenchcoat")]
 mod trenchcoat;
+#[cfg(feature = "verus_warnings")]
+pub(crate) mod verus_warnings;
+#[cfg(feature = "visibility")]
+pub(crate) mod visibility;
 
 #[cfg(feature = "cfg_scatter")]
 pub use cfg_scatter::{

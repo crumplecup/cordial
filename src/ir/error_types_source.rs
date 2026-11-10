@@ -2,10 +2,10 @@
 
 use crate::etiquettes::internal_error_chain::{
     InternalErrorTypeGraphReport, InternalErrorTypeProbeId, finalize_type_graph,
-    scan_error_rust_syntax_raw, type_path_is_error_related,
+    type_path_is_error_related,
 };
 use crate::ir::error_sites_source::native::excluded_module;
-use crate::loader::{DatabaseSource, SourceLoadView, module_path_from_src_file, path_has_fixtures};
+use crate::loader::{DatabaseSource, module_path_from_src_file, path_has_fixtures};
 use crate::{CordialResult, FileSnapshot};
 use ra_ap_syntax::{
     AstNode, SyntaxNode, WalkEvent,
@@ -79,22 +79,6 @@ impl SourceErrorTypes {
             snapshot: FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
             nodes,
             error_impls,
-        })
-    }
-
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourceErrorTypes")]
-    pub(crate) fn collect(source: &SourceLoadView, root: &Path) -> CordialResult<Self> {
-        Self::collect_with(root, |path, tree| {
-            let file = source.parsed_file(path, "source-error-types")?;
-            let scan = crate::loader::source_walk(path, "source-error-types", || {
-                scan_error_rust_syntax_raw(&file, tree)
-            })?;
-            Ok(ErrorTypesFile {
-                snapshot: FileSnapshot::new(path.to_path_buf(), file.source_digest()),
-                nodes: scan.nodes().clone(),
-                error_impls: scan.error_impls().clone(),
-            })
         })
     }
 

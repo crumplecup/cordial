@@ -1,38 +1,16 @@
 //! Static scan of crate error types: anything that implements `Error`.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
 
 use crate::error::CordialResult;
 
 use super::types::{InternalErrorNodeClass, InternalErrorTypeNode, InternalErrorTypeProbeId};
 
 use tracing::instrument;
-mod visitor;
 mod walk;
 
-pub(crate) use visitor::{RawTypeNode, scan_error_rust_syntax_raw};
-pub(crate) use walk::{
-    for_each_shared_src_rust_file, is_foreign_type_label, item_derives_error, last_ident,
-    trait_is_std_error, type_label, type_path_is_error_related,
-};
-
-/// Scan one error-module source file (used by tests).
-#[instrument(level = "debug", skip(source, file), err(level = "warn"))]
-pub fn scan_error_rust_source(
-    source: &str,
-    file: &Path,
-    error_root: &Path,
-    crate_name: &str,
-) -> CordialResult<Vec<InternalErrorTypeNode>> {
-    let syntax = crate::loader::SourceLoadView::parse_fixture(file, source)?;
-    finalize_type_graph(
-        scan_error_rust_syntax_raw(&syntax, error_root)?
-            .nodes()
-            .clone(),
-        crate_name,
-    )
-}
+pub(crate) use crate::ir::ErrorTypeSourceNode as RawTypeNode;
+pub(crate) use walk::{is_foreign_type_label, last_ident, type_path_is_error_related};
 
 #[instrument(level = "debug", skip(raw_nodes), err(level = "warn"))]
 pub(crate) fn finalize_type_graph(

@@ -117,8 +117,7 @@ pub use etiquettes::doc_warnings::{
 #[cfg(feature = "error_chain")]
 pub use etiquettes::error_chain::{
     ATTR_SOURCE_ERROR_CHAINS, ERROR_CHAIN_ETIQUETTE, ErrorChainProbeId, ErrorChainRecord,
-    ErrorChainsFile, SourceErrorChains, probe_counts, scan_crate_error_chain,
-    scan_rust_source as scan_error_chain_rust_source,
+    ErrorChainsFile, SourceErrorChains, probe_counts,
 };
 #[cfg(feature = "error_sites")]
 pub use etiquettes::error_sites::{
@@ -163,12 +162,10 @@ pub use etiquettes::internal_error_chain::{
     ErrorFieldApplyBlockerReason, ErrorFieldApplyRepair, ErrorFieldApplySummary,
     ErrorFileApplySummary, ErrorFromEvidence, ErrorSourceMethodEvidence, ErrorTryEvidence,
     ErrorTryScope, INTERNAL_ERROR_CHAIN_ETIQUETTE, InternalErrorChainScanReport,
-    InternalErrorComplianceFinding, InternalErrorComplianceId, InternalErrorNodeClass,
-    InternalErrorTypeNode, InternalErrorTypeProbeId, SignatureChainCheck, SignatureChainStatus,
-    WorkspaceInternalErrorChainSummary, build_workspace_internal_error_chain_summary,
-    run_error_field_apply, run_error_file_apply, scan_compliance_rust_source,
-    scan_compliance_rust_source_with_crate_kind, scan_crate_internal_error_chain,
-    scan_error_rust_source,
+    InternalErrorComplianceFinding, InternalErrorComplianceId, InternalErrorComplianceReport,
+    InternalErrorNodeClass, InternalErrorTypeNode, InternalErrorTypeProbeId, SignatureChainCheck,
+    SignatureChainStatus, WorkspaceInternalErrorChainSummary,
+    build_workspace_internal_error_chain_summary, run_error_field_apply, run_error_file_apply,
 };
 #[cfg(feature = "modularity")]
 pub use etiquettes::modularity::{
@@ -251,8 +248,7 @@ pub use enricher::{
 };
 #[cfg(feature = "error_sites")]
 pub use enricher::{
-    ERROR_IR_ENRICHERS, ErrorFlowEnricher, ErrorIrScanEnricher, ErrorIrScanReport,
-    error_ir_enricher_ids, scan_crate_error_ir,
+    ERROR_IR_ENRICHERS, ErrorFlowEnricher, ErrorIrScanEnricher, error_ir_enricher_ids,
 };
 #[cfg(feature = "impl_coverage")]
 pub use enricher::{

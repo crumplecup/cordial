@@ -1,6 +1,6 @@
 //! Constructor contracts and location capture from canonical bodies.
-use super::super::{ConstructorRec, FanoutWrapper};
 use super::{Collector, fanout, syntax};
+use super::{ConstructorRec, FanoutWrapper};
 use ra_ap_syntax::{
     AstNode,
     ast::{self, HasAttrs, HasName},

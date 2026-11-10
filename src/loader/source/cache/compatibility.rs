@@ -11,22 +11,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 impl SourceLoadView {
-    /// Issue a shared tree for an explicitly supplied standalone source fixture.
-    #[cfg(any(feature = "error_chain", feature = "panics"))]
-    #[tracing::instrument(level = "debug", skip(source, path), err(level = "warn"))]
-    pub(crate) fn parse_fixture(path: &Path, source: &str) -> CordialResult<SharedParsedFile> {
-        use crate::loader::source::SourceFile;
-        use std::path::PathBuf;
-
-        let view = Self::new(
-            String::new(),
-            PathBuf::new(),
-            vec![SourceFile::new(path.to_path_buf(), source.to_owned())],
-            Vec::new(),
-        );
-        view.parsed_file(path, "source-fixture")
-    }
-
     /// Return the same parsed file to every hook scanning this path.
     /// Callers own tree discovery and fixture filtering.
     #[tracing::instrument(level = "debug", skip(self, path))]
@@ -36,14 +20,14 @@ impl SourceLoadView {
             let mut parsed = parsed.borrow_mut();
             parsed.retain(|_, run| run.token.strong_count() != 0);
             let run = parsed
-                .entry(self.cache_token.0)
+                .entry(self.cache_token.run())
                 .or_insert_with(|| ParsedRun {
                     token: Arc::downgrade(&self.cache_token),
                     files: HashMap::new(),
                 });
             let files = &mut run.files;
             if let Some(file) = files.get(path) {
-                debug_assert_eq!(file.inner.session, self.cache_token.0);
+                debug_assert_eq!(file.inner.session, self.cache_token.run());
                 source_work::reuse(path, hook);
                 return Ok(file.clone());
             }
@@ -66,7 +50,7 @@ impl SourceLoadView {
                     source,
                     syntax,
                     digest,
-                    session: self.cache_token.0,
+                    session: self.cache_token.run(),
                     macros: std::cell::OnceCell::new(),
                 }),
             };

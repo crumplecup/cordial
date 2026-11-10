@@ -37,13 +37,7 @@ fn signatures_are_required_complete_and_replay_without_source() -> Result<()> {
     let assessment = inventory
         .assess("signature_replay", false)
         .into_diagnostic()?;
-    let standalone =
-        cordial::scan_crate_internal_error_chain(root, "signature_replay").into_diagnostic()?;
-    assert_eq!(assessment.checks(), standalone.signature_checks());
     assert_eq!(assessment.findings().len(), 4);
-    for finding in assessment.findings() {
-        assert!(standalone.compliance().findings().contains(finding));
-    }
     for (status, count) in [
         (SignatureChainStatus::Broken, 4),
         (SignatureChainStatus::Preserved, 3),

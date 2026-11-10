@@ -1,7 +1,7 @@
 //! Snapshot-bound internal error compliance collected by the shared loader.
 
 use crate::etiquettes::internal_error_chain::InternalErrorComplianceFinding;
-use crate::loader::{SourceLoadView, path_has_fixtures};
+use crate::loader::path_has_fixtures;
 use crate::{CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -28,35 +28,6 @@ pub struct ErrorComplianceFile {
 }
 
 impl SourceErrorCompliance {
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourceErrorCompliance")]
-    pub(crate) fn collect(
-        source: &SourceLoadView,
-        root: &Path,
-        crate_name: &str,
-    ) -> CordialResult<Self> {
-        let is_proc_macro = source.crate_kinds().contains(&crate::CrateKind::ProcMacro);
-        Self::collect_with(root, |path, tree| {
-            let file = source.parsed_file(path, "source-error-compliance")?;
-            let findings = crate::loader::source_walk(path, "source-error-compliance", || {
-                crate::etiquettes::scan_rust_file_syntax(
-                    file.syntax(),
-                    path,
-                    tree,
-                    root,
-                    crate_name,
-                    crate::etiquettes::ErrorIrScanLayers::compliance_only(is_proc_macro)?,
-                )
-            })?
-            .compliance()
-            .clone();
-            Ok(ErrorComplianceFile {
-                snapshot: FileSnapshot::new(path.to_path_buf(), file.source_digest()),
-                findings,
-            })
-        })
-    }
-
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
     pub(crate) fn collect_with(
         root: &Path,
