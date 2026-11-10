@@ -242,10 +242,7 @@ pub use enricher::TrenchcoatEnricher;
 #[cfg(feature = "_quality_support")]
 pub use enricher::resolve_source_path;
 #[cfg(feature = "_attribute_scan")]
-pub use enricher::{
-    AttributeEnricher, is_cfg_test, is_gated_instrument_attr, is_instrument_attr,
-    member_crate_root, resolve_parent,
-};
+pub use enricher::{AttributeEnricher, member_crate_root, resolve_parent};
 #[cfg(feature = "error_sites")]
 pub use enricher::{
     ERROR_IR_ENRICHERS, ErrorFlowEnricher, ErrorIrScanEnricher, error_ir_enricher_ids,
@@ -373,15 +370,17 @@ pub use ir::{
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use loader::path_has_fixtures;
 pub use loader::{
-    CrateTarget, LoadView, SemanticCargoOptions, SharedMacroSyntax, SharedParsedFile,
-    SourceDatabase, SourceFile, SourceLoadView, SourceLoader, module_path_from_src_file,
-    quality_scan_trees,
+    CrateTarget, LoadView, SemanticCargoOptions, SourceDatabase, SourceFile, SourceLoadView,
+    SourceLoader, SourceSyntax, module_path_from_src_file, quality_scan_trees,
 };
 pub use objects::{
     Artifact, Disposition, FileSpan, Finding, FindingSink, IrAnchor, MapFindingSink, Marker,
     NodeAnchor, Rule, SourceSpan, TextArtifact,
 };
 pub use progress::{LineProgress, ProgressSink, ProgressTask, noop_progress};
+/// The rust-analyzer syntax crate at the version cordial links, for plugins
+/// reading [`SourceSyntax`] trees.
+pub use ra_ap_syntax as syntax;
 pub use reporter::RollupReporter;
 #[cfg(any(
     feature = "homecoming_std",

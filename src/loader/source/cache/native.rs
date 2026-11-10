@@ -22,6 +22,17 @@ impl SourceLoadView {
             .with_database(|database| database.collect_source(path, supplied, collect))
     }
 
+    /// Hand `read` this file's database-owned syntax. The handle cannot be
+    /// returned from the callback, which keeps the database borrow scoped.
+    #[tracing::instrument(level = "trace", skip(self, path, read), err(level = "warn"))]
+    pub fn with_syntax<T>(
+        &self,
+        path: &Path,
+        read: impl FnOnce(crate::loader::SourceSyntax<'_>) -> CordialResult<T>,
+    ) -> CordialResult<T> {
+        self.collect_native_file(path, |file| read(crate::loader::SourceSyntax::new(file)))
+    }
+
     /// Supplied text uses the ordinary session owner, even when no file exists.
     #[cfg(any(
         feature = "antipatterns",

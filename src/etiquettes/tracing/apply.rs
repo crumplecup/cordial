@@ -176,7 +176,7 @@ pub(crate) fn run_apply(
         return Ok(summary);
     }
     let parsed_source_session = crate::loader::ParsedSourceSession::begin_in(project_root)?;
-    let source_view = SourceLoadView::for_standalone_scan();
+    let source_view = SourceLoadView::for_session();
     let selected_files = checklist_path.map(|_| &by_file);
     let workspace = build_apply_ir(
         project_root,

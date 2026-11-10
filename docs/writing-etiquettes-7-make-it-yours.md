@@ -13,7 +13,7 @@ described in [Part 1](writing-etiquettes.md#how-the-series-works).*
 
 ## Variations
 
-- **Flag something else.** Change the macro name in the visitor, the snippet
+- **Flag something else.** Change the macro name in the tree walk, the snippet
   text, the id, the label, and the strings. That is a different lint with the
   same hooks. `unimplemented!()` and `dbg!()` are both small changes of this
   kind.
@@ -37,7 +37,7 @@ now our lint's findings went only to its own CSV. Wrapping the etiquette in
 `StaticQualityEtiquette` with a `QualityAreaSpec` adds a row for it to that
 report, so its findings count toward the gate. The built-in
 `glob_imports` in `src/etiquettes/glob_imports.rs` is a compact example: a
-visitor, a probe, an assessor, and three reporters that write a CSV, a
+inventory walk, a probe, an assessor, and three reporters that write a CSV, a
 checklist, and a summary.
 
 To wrap the etiquette, move the body of the earlier `LazyLock` closure from

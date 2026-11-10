@@ -1,4 +1,4 @@
-//! Apply reads snapshot-checked text, not a compatibility syntax handle.
+//! Apply edits only snapshot-checked text, and only once per file.
 #![cfg(all(
     feature = "tracing",
     feature = "crate_attrs",
@@ -11,32 +11,13 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
-use tracing::field::{Field, Visit};
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
 
 #[derive(Clone, Default)]
 struct SourceAccess {
-    syntax: Arc<AtomicUsize>,
-    apply_syntax: Arc<AtomicUsize>,
     edits: Arc<AtomicUsize>,
     mutate: Option<PathBuf>,
     mutation_failed: Arc<AtomicBool>,
-}
-
-#[derive(Default)]
-struct Hook(String);
-
-impl Visit for Hook {
-    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-        if field.name() == "hook" {
-            self.0 = format!("{value:?}");
-        }
-    }
-    fn record_str(&mut self, field: &Field, value: &str) {
-        if field.name() == "hook" {
-            self.0 = value.to_owned();
-        }
-    }
 }
 
 impl<S: tracing::Subscriber> Layer<S> for SourceAccess {
@@ -47,15 +28,6 @@ impl<S: tracing::Subscriber> Layer<S> for SourceAccess {
         _context: Context<'_, S>,
     ) {
         let metadata = attributes.metadata();
-        if metadata.target() == "cordial::loader::source::cache" && metadata.name() == "parsed_file"
-        {
-            self.syntax.fetch_add(1, Ordering::Relaxed);
-            let mut hook = Hook::default();
-            attributes.record(&mut hook);
-            if hook.0.contains("tracing-instrument-apply") || hook.0.contains("crate-attrs-apply") {
-                self.apply_syntax.fetch_add(1, Ordering::Relaxed);
-            }
-        }
         if metadata.target() == "cordial::loader::source::edit" && metadata.name() == "edit_file" {
             self.edits.fetch_add(1, Ordering::Relaxed);
             if let Some(path) = &self.mutate {
@@ -84,7 +56,7 @@ fn fixture() -> Result<tempfile::TempDir> {
 }
 
 #[test]
-fn tracing_apply_uses_graph_identity_and_text_without_syntax_access() -> Result<()> {
+fn tracing_apply_uses_graph_identity_and_text() -> Result<()> {
     cordial::init_tracing();
     let fixture = fixture()?;
     let access = SourceAccess::default();
@@ -101,7 +73,6 @@ fn tracing_apply_uses_graph_identity_and_text_without_syntax_access() -> Result<
     .into_diagnostic()?;
     assert_eq!(summary.changed_functions(), 1);
     assert_eq!(access.edits.load(Ordering::Relaxed), 1);
-    assert_eq!(access.apply_syntax.load(Ordering::Relaxed), 0);
     let source = std::fs::read_to_string(fixture.path().join("src/lib.rs")).into_diagnostic()?;
     assert!(source.contains("instrument("), "{source}");
     Ok(())
@@ -129,7 +100,6 @@ fn tracing_apply_rejects_a_disk_change_after_collection() -> Result<()> {
     assert!(!access.mutation_failed.load(Ordering::Relaxed));
     assert!(result.is_err());
     assert_eq!(access.edits.load(Ordering::Relaxed), 1);
-    assert_eq!(access.apply_syntax.load(Ordering::Relaxed), 0);
     assert_eq!(
         std::fs::read_to_string(path).into_diagnostic()?,
         "// concurrent edit\npub fn pending() {}\n"
@@ -138,7 +108,7 @@ fn tracing_apply_rejects_a_disk_change_after_collection() -> Result<()> {
 }
 
 #[test]
-fn crate_attribute_apply_uses_graph_identity_and_text_without_syntax_access() -> Result<()> {
+fn crate_attribute_apply_uses_graph_identity_and_text() -> Result<()> {
     cordial::init_tracing();
     let fixture = fixture()?;
     let access = SourceAccess::default();
@@ -151,12 +121,11 @@ fn crate_attribute_apply_uses_graph_identity_and_text_without_syntax_access() ->
     assert_eq!(summary.changed_files(), 1);
     assert_eq!(summary.inserted_attrs(), 2);
     assert_eq!(access.edits.load(Ordering::Relaxed), 1);
-    assert_eq!(access.apply_syntax.load(Ordering::Relaxed), 0);
     Ok(())
 }
 
 #[test]
-fn proof_collection_reads_database_text_without_a_syntax_request() -> Result<()> {
+fn proof_collection_reads_database_text() -> Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let path = fixture.path().join("proof.rs");
@@ -175,6 +144,5 @@ fn proof_collection_reads_database_text_without_a_syntax_request() -> Result<()>
         &[("Widget".to_string(), "bool".to_string())]
     );
     assert!(proof.proof_chain_subjects().contains("Widget"));
-    assert_eq!(access.syntax.load(Ordering::Relaxed), 0);
     Ok(())
 }

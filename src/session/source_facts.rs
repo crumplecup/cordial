@@ -31,7 +31,7 @@ pub(crate) fn prepare_workspace_proof_harness(
         .iter()
         .any(|id| *id == "amenable-std-scope" || id.starts_with("amenable-ext-"));
     if (needed_by_enricher || needed_by_probe) && workspace.proof_harness().is_none() {
-        let source = SourceLoadView::for_standalone_scan();
+        let source = SourceLoadView::for_session();
         let filter = crate::NamedRunFilter::all_etiquettes();
         workspace.set_proof_harness(
             crate::proof_harness::load_workspace_proof_harness_with_source(

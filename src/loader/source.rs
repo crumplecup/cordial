@@ -1,9 +1,5 @@
-use std::path::Path;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
-
-use sha2::{Digest, Sha256};
 
 use crate::error::CordialResult;
 use crate::hooks::{LoadContext, Loader};
@@ -14,10 +10,10 @@ use super::LoadView;
 use tracing::instrument;
 
 mod cache;
-use super::macro_syntax as macros;
+mod syntax;
 use cache::CacheToken;
 pub(crate) use cache::ParsedSourceSession;
-pub use macros::SharedMacroSyntax;
+pub use syntax::SourceSyntax;
 #[cfg(any(
     feature = "internal_error_chain",
     feature = "tracing",
@@ -81,90 +77,6 @@ pub struct SourceLoadView {
     manifest_snapshot: Option<crate::ir::FileSnapshot>,
     #[getter(skip)]
     cache_token: Arc<CacheToken>,
-}
-
-/// One source snapshot and its syntax tree, issued by a source view.
-///
-/// The private fields keep syntax, text, path, and session provenance together.
-/// A scanner cannot construct this from an independently parsed tree.
-///
-/// ```compile_fail
-/// use cordial::SharedParsedFile;
-/// let syntax = syn::parse_file("fn example() {}").unwrap();
-/// let _: SharedParsedFile = syntax.into();
-/// ```
-///
-/// Callers also cannot reach inside the carrier to pair another file's syntax
-/// or path with this source snapshot.
-///
-/// ```compile_fail
-/// use cordial::SharedParsedFile;
-/// fn replace_snapshot(file: &SharedParsedFile) {
-///     let _ = &file.inner;
-/// }
-/// ```
-#[derive(Debug, Clone)]
-pub struct SharedParsedFile {
-    inner: Rc<ParsedSource>,
-}
-
-#[derive(Debug)]
-struct ParsedSource {
-    path: PathBuf,
-    source: String,
-    syntax: syn::File,
-    digest: [u8; 32],
-    session: u64,
-    macros: std::cell::OnceCell<macros::MacroTrees>,
-}
-
-impl SharedParsedFile {
-    /// Path used to load this source file.
-    #[instrument(level = "trace", skip(self))]
-    pub fn path(&self) -> &Path {
-        &self.inner.path
-    }
-
-    /// Source text parsed into this file's syntax tree.
-    #[instrument(level = "trace", skip(self))]
-    pub fn source(&self) -> &str {
-        &self.inner.source
-    }
-
-    /// Digest of the exact source text that produced this syntax tree.
-    #[instrument(level = "trace", skip(self))]
-    pub fn source_digest(&self) -> [u8; 32] {
-        self.inner.digest
-    }
-
-    /// Whether the file still contains the bytes used to build this snapshot.
-    #[instrument(level = "debug", skip(self), err(level = "warn"))]
-    pub fn matches_disk(&self) -> CordialResult<bool> {
-        matches_snapshot(self.path(), self.source_digest())
-    }
-
-    /// Syntax tree parsed from this file's source text.
-    #[instrument(level = "trace", skip(self))]
-    pub fn syntax(&self) -> &syn::File {
-        &self.inner.syntax
-    }
-
-    /// Rust islands inside supported macros, parsed once with this snapshot.
-    /// Unknown macro grammars return `None`; this does not expand macros.
-    #[instrument(level = "trace", skip(self, invocation))]
-    pub fn macro_syntax(&self, invocation: &syn::Macro) -> Option<&SharedMacroSyntax> {
-        self.inner
-            .macros
-            .get_or_init(|| macros::collect(&self.inner.syntax))
-            .get(&macros::location(invocation))
-    }
-}
-
-#[instrument(level = "debug", skip(path), err(level = "warn"))]
-fn matches_snapshot(path: &Path, expected: [u8; 32]) -> CordialResult<bool> {
-    let current = std::fs::read(path)?;
-    let digest: [u8; 32] = Sha256::digest(current).into();
-    Ok(digest == expected)
 }
 
 impl LoadView for SourceLoadView {

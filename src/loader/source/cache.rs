@@ -1,21 +1,5 @@
 //! Shared parsed-file cache and run-scoped snapshots.
 
-mod compatibility;
-#[cfg(any(
-    feature = "antipatterns",
-    feature = "error_sites",
-    feature = "tracing",
-    feature = "allows",
-    feature = "cfg_hygiene",
-    feature = "cfg_scatter",
-    feature = "glob_imports",
-    feature = "inline_tests",
-    feature = "modularity",
-    feature = "pageantry",
-    feature = "derives",
-    feature = "visibility",
-    feature = "cli_layout"
-))]
 mod native;
 #[cfg(any(
     feature = "cfg_hygiene",
@@ -27,34 +11,20 @@ mod native;
 ))]
 mod text;
 
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 use tracing::instrument;
 
 use crate::ir::CrateKind;
 
-use super::{SharedParsedFile, SourceFile, SourceLoadView};
+use super::{SourceFile, SourceLoadView};
 
 mod session;
 
 pub(in crate::loader::source) use session::CacheToken;
 pub(crate) use session::ParsedSourceSession;
 use session::SESSION_TOKEN;
-
-type ParsedFiles = HashMap<PathBuf, SharedParsedFile>;
-struct ParsedRun {
-    token: Weak<CacheToken>,
-    files: ParsedFiles,
-}
-
-type ParsedRuns = HashMap<u64, ParsedRun>;
-
-thread_local! {
-    static PARSED: RefCell<ParsedRuns> = RefCell::new(HashMap::new());
-}
 
 impl SourceLoadView {
     /// Project one target from the database of the run this view belongs to.
@@ -79,8 +49,9 @@ impl SourceLoadView {
             .with_database(|database| database.project_path_inclusions())
     }
 
-    /// A lazy shared parse cache for a standalone operation outside a session.
-    /// Its caller must drop the view before rescanning files it has edited.
+    /// A view that supplies no files and reads through the database of the run
+    /// current on this thread. Its caller must drop the view before rereading
+    /// files it has edited.
     #[cfg(any(
         feature = "antipatterns",
         feature = "cli_layout",
@@ -100,7 +71,7 @@ impl SourceLoadView {
         feature = "panics"
     ))]
     #[instrument(level = "debug")]
-    pub(crate) fn for_standalone_scan() -> Self {
+    pub(crate) fn for_session() -> Self {
         Self::new(String::new(), PathBuf::new(), Vec::new(), Vec::new())
     }
 

@@ -4,8 +4,6 @@ use std::cell::RefCell;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use super::PARSED;
-
 thread_local! {
     pub(super) static SESSION_TOKEN: RefCell<Option<Arc<CacheToken>>> = const { RefCell::new(None) };
 }
@@ -31,12 +29,6 @@ impl Default for CacheToken {
 }
 
 impl CacheToken {
-    /// Identifier of the run this token belongs to.
-    #[tracing::instrument(level = "trace", skip(self))]
-    pub(super) fn run(&self) -> u64 {
-        self.0
-    }
-
     /// Give this run the database that already holds its Cargo workspace.
     #[tracing::instrument(level = "trace", skip(self, database))]
     fn install(&self, database: crate::loader::SourceDatabase) {
@@ -94,9 +86,6 @@ impl ParsedSourceSession {
 impl Drop for ParsedSourceSession {
     #[tracing::instrument(level = "trace", skip(self))]
     fn drop(&mut self) {
-        PARSED.with(|parsed| {
-            parsed.borrow_mut().remove(&self.token.0);
-        });
         SESSION_TOKEN.with(|current| {
             current.replace(self.previous.take());
         });

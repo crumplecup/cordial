@@ -6,8 +6,6 @@ use crate::ir::{EdgeKind, IrMut, ItemKind, NodeKind, NodeWeight, QueryBuilder};
 use crate::objects::{FileSpan, SourceSpan};
 use tracing::instrument;
 
-pub use crate::ir::{is_cfg_test, is_gated_instrument_attr, is_instrument_attr};
-
 /// Materializes `Attribute` nodes linked to items via [`EdgeKind::HasAttr`].
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AttributeEnricher;

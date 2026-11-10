@@ -10,18 +10,16 @@ and named its rule, `ACME-TODO-001`. This post builds the second job, the
 enricher. It finds every `todo!()` in a file and records each one in the
 crate's graph, so the rest of cordial can see them.
 
-The code comes in two pieces. The first is plain `syn`, the standard Rust
-parsing crate, and knows nothing about cordial. The second connects it to
-cordial.
+The code comes in two pieces. The first is a walk over the syntax tree and
+knows nothing about the graph. The second connects it to cordial.
 
 *The numbered comments in the code match the notes after each block, as
 described in [Part 1](writing-etiquettes.md#how-the-series-works).*
 
 ## Finding the sites
 
-Before any cordial types come into it, the job is to walk a parsed file and
-notice macro calls named `todo`. The walk produces one record
-per call:
+Before the graph comes into it, the job is to walk a parsed file and notice
+macro calls named `todo`. The walk produces one record per call:
 
 ```rust
 // What the walk hands back for each `todo!()` it finds.
@@ -32,98 +30,79 @@ struct TodoRecord {
 }
 ```
 
-The visitor that produces them carries what it needs while it walks the tree:
+The tree is rust-analyzer's, the same one cordial's own checks read. Cordial
+parses each file once, in the run's database, and lends the tree to your hook
+as a `SourceSyntax`. Import rust-analyzer's types from `cordial::syntax`, so
+that your plugin and cordial agree on one version of them:
 
 ```rust
-struct TodoVisitor {
-    // Module path of the file, such as ["parser", "lexer"].
-    module_prefix: Vec<String>,
-    // The functions we are inside right now, innermost last.
-    fn_stack: Vec<String>,
-    // What the walk produces.
-    records: Vec<TodoRecord>,
-}
+use cordial::SourceSyntax;
+use cordial::syntax::AstNode;
+use cordial::syntax::ast::{self, HasName};
 
-impl TodoVisitor {
-    // The module path followed by the function stack, such as
-    // "parser::lexer::next_token", or "<crate>" when both are empty.
-    fn context(&self) -> String {
-        let mut parts = self.module_prefix.clone();
-        parts.extend(self.fn_stack.iter().cloned());
-        if parts.is_empty() {
-            "<crate>".to_string()
-        } else {
-            parts.join("::")
-        }
-    }
-}
-
-impl<'ast> Visit<'ast> for TodoVisitor {
-    // 1. Track the module we are in.
-    fn visit_item_mod(&mut self, node: &'ast syn::ItemMod) {
-        self.module_prefix.push(node.ident.to_string());
-        syn::visit::visit_item_mod(self, node);
-        self.module_prefix.pop();
-    }
-
-    // 2. Track the function we are in: free functions, methods, and
-    //    trait methods.
-    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
-        self.fn_stack.push(node.sig.ident.to_string());
-        syn::visit::visit_item_fn(self, node);
-        self.fn_stack.pop();
-    }
-
-    fn visit_impl_item_fn(&mut self, node: &'ast syn::ImplItemFn) {
-        self.fn_stack.push(node.sig.ident.to_string());
-        syn::visit::visit_impl_item_fn(self, node);
-        self.fn_stack.pop();
-    }
-
-    fn visit_trait_item_fn(&mut self, node: &'ast syn::TraitItemFn) {
-        self.fn_stack.push(node.sig.ident.to_string());
-        syn::visit::visit_trait_item_fn(self, node);
-        self.fn_stack.pop();
-    }
-
-    // 3. Look at every macro call.
-    fn visit_macro(&mut self, node: &'ast syn::Macro) {
-        // 4. Keep the ones named `todo`.
-        if node.path.is_ident("todo") {
-            // 5. Record where it is.
-            self.records.push(TodoRecord {
-                context: self.context(),
-                line: node.span().start().line as u32,
+// Every `todo!()` call in the file, with the functions around it.
+fn todo_sites(file: &SourceSyntax<'_>, module_prefix: &[String]) -> Vec<TodoRecord> {
+    file.syntax()
+        .syntax()
+        .descendants()                                      // 1
+        .filter_map(ast::MacroCall::cast)                   // 2
+        .filter(|call| {                                    // 3
+            call.path()
+                .and_then(|path| path.segment())
+                .and_then(|segment| segment.name_ref())
+                .is_some_and(|name| name.text() == "todo")
+        })
+        .map(|call| {
+            // 4. The enclosing functions, outermost first.
+            let mut parts = module_prefix.to_vec();
+            let mut functions: Vec<String> = call
+                .syntax()
+                .ancestors()
+                .filter_map(ast::Fn::cast)
+                .filter_map(|function| function.name())
+                .map(|name| name.text().to_string())
+                .collect();
+            functions.reverse();
+            parts.extend(functions);
+            TodoRecord {
+                context: if parts.is_empty() {
+                    "<crate>".to_string()
+                } else {
+                    parts.join("::")
+                },
+                // 5. Lines are counted from one.
+                line: file.line(call.syntax().text_range().start()),
                 snippet: "todo!()".to_string(),
-            });
-        }
-        // 6. Carry on with syn's default walk.
-        syn::visit::visit_macro(self, node);
-    }
+            }
+        })
+        .collect()
 }
 ```
 
-1. An inline `mod` adds its name to the module path while its contents are
-   walked. The path for the file itself is the starting value.
-2. Each function's name goes on the stack before its body is walked and comes
-   off afterward. Anything found inside sees the name, which is how a record can
-   say `leftover` and not just a line number. Free functions, methods in `impl`
-   blocks, and default methods in traits each have their own visitor method, so
-   all three are covered.
-3. `visit_macro` sees a macro call wherever it appears, whether it is used as an
+1. `descendants` visits every node under the file, depth first. There is no
+   visitor to write: the tree already holds every item, including code under
+   `#[cfg(..)]`, which is how a `todo!()` in a gated function is found too.
+2. `MacroCall::cast` keeps the macro calls, whether they are used as an
    expression or written as a statement. `todo!("wire this up")` as the last
    expression of a function and `todo!();` with a semicolon both reach it.
-4. Matching on the path is the whole test. `todo!(..)` is a macro whose path is
-   `todo`.
-5. The record's context comes from `context()`, shown above the visitor impl. It
-   joins the module path and the function stack with `::`.
-6. Calling syn's default method keeps the walk going.
+3. Matching on the path's last segment is the whole test. `todo!(..)` is a
+   macro whose path is `todo`.
+4. Walking up through `ancestors` collects every enclosing function: free
+   functions, methods in `impl` blocks and default methods in traits are all
+   `ast::Fn`. That is how a record can say `leftover` and not just a line
+   number. The module path of the file is the starting value.
+5. `SourceSyntax::line` turns a byte offset into a line number, using the same
+   line table cordial's own records use.
+
+`file.syntax()` borrows the tree. `file.into_inner()` hands you the tree itself
+if you want to pass it to your own code; keep `file.snapshot()` (the path and
+digest of the text it came from) with any facts you derive from it.
 
 ## Giving the sites a home
 
 The records need somewhere that other hooks can read them. That place is the
 crate's graph: a `petgraph` of nodes and edges, one per crate, which enrichers
-add to and probes read from. The enricher runs the visitor and writes each
+add to and probes read from. The enricher runs the walk and writes each
 record in as a node.
 
 Each node gets a tag, so that a later hook can find exactly the nodes we add and
@@ -147,22 +126,19 @@ impl SourceEnricher for TodoInventoryEnricher {
         let (ir, source, session) = view.into_parts();
 
         for file in source.files() {
-            // 2. Request the shared parsed tree for this source file.
-            let parsed = source.parsed_file(file.path(), SourceEnricher::id(self))?;
-
-            // 3. Run the visitor over the tree from that same file.
             let module_prefix =
-                cordial::module_path_from_src_file(source.src_root(), parsed.path());
-            let mut visitor = TodoVisitor {
-                module_prefix,
-                fn_stack: Vec::new(),
-                records: Vec::new(),
-            };
-            visitor.visit_file(parsed.syntax());
+                cordial::module_path_from_src_file(source.src_root(), file.path());
 
-            for record in visitor.records {
+            // 2. Borrow the shared tree for this file. The database owns it,
+            //    so the handle cannot leave the closure.
+            let (path, records) = source.with_syntax(file.path(), |syntax| {
+                // 3. Run the walk from the first half of this post.
+                Ok((syntax.path().to_path_buf(), todo_sites(&syntax, &module_prefix)))
+            })?;
+
+            for record in records {
                 // 4. Add a node using the path paired with the parsed tree.
-                let span = FileSpan::new(parsed.path().to_path_buf(), record.line, 1);
+                let span = FileSpan::new(path.clone(), record.line, 1);
                 let node = ir.insert_node(
                     NodeWeight::new(NodeKind::Expr)
                         .with_span(span)
@@ -179,9 +155,8 @@ impl SourceEnricher for TodoInventoryEnricher {
                     // Relative to the project root, so reports don't depend
                     // on where the checkout lives.
                     serde_json::Value::String(
-                        parsed.path()
-                            .strip_prefix(session.project_root())
-                            .unwrap_or(parsed.path())
+                        path.strip_prefix(session.project_root())
+                            .unwrap_or(&path)
                             .display()
                             .to_string(),
                     ),
@@ -199,17 +174,17 @@ impl SourceEnricher for TodoInventoryEnricher {
 
 1. The source-specific hook receives a typed view containing the graph, the
    source loader, and the session (which knows the project root).
-2. `parsed_file` shares one outer-file parse across source hooks in this run.
-   The returned value keeps the path and syntax tree together; parse errors
-   identify the file.
-3. This is the visitor from the first half of this post, run over that tree.
+2. `with_syntax` lends the file's tree from the run's database, which parses
+   each file once for every hook. The handle keeps the path, text and tree
+   together, and parse errors identify the file.
+3. This is the walk from the first half of this post, run over that tree.
 4. Each record becomes an expression node with a span from the same file.
 5. The `acme_todo = true` attribute is the tag. The others (`context`,
    `snippet`, `file`, `line`) are the facts the assessor reads back out.
 6. Every node hangs off the crate root with a `Contains` edge.
 
 Routing everything through a graph means nothing downstream has to know about
-`syn`. The probe asks for nodes with a tag, and it gets them.
+syntax trees. The probe asks for nodes with a tag, and it gets them.
 
 Cordial's two stock enrichers sit alongside ours when we assemble the hook
 tables in Part 4. `ScopeEnricher` adds scope edges from items to their enclosing

@@ -29,7 +29,7 @@ mod trenchcoat;
 mod wrapper_coverage;
 
 #[cfg(feature = "_attribute_scan")]
-pub use attribute::{AttributeEnricher, is_cfg_test, is_gated_instrument_attr, is_instrument_attr};
+pub use attribute::AttributeEnricher;
 #[cfg(feature = "_quality_support")]
 #[cfg(feature = "_attribute_scan")]
 pub use attribute_paths::{member_crate_root, resolve_parent};

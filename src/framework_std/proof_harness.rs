@@ -13,7 +13,7 @@ use tracing::instrument;
 /// Collect proof-chain subjects through the same parsed-source path as the IR.
 #[instrument(level = "debug", err(level = "warn"))]
 pub fn collect_proof_chain_subjects(project_root: &Path) -> CordialResult<HashSet<String>> {
-    let source = SourceLoadView::for_standalone_scan();
+    let source = SourceLoadView::for_session();
     let mut subjects = HashSet::new();
     for path in proof_harness_paths(WorkspaceHub::Amenable, project_root) {
         if path.is_file() {

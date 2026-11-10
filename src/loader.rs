@@ -32,7 +32,6 @@ pub(crate) use native_syntax::token_text as database_token_text;
 pub(crate) use native_syntax::token_text_excluding as database_token_text_excluding;
 mod library_root;
 pub use library_root::library_root_rs;
-mod macro_syntax;
 mod populate;
 mod scan_roots;
 mod source;
@@ -46,9 +45,9 @@ use crate::ir::CrateKind;
 pub use scan_roots::path_has_fixtures;
 pub use scan_roots::quality_scan_trees;
 pub(crate) use source::ParsedSourceSession;
-pub use source::{SharedMacroSyntax, SharedParsedFile, SourceFile, SourceLoadView, SourceLoader};
 #[cfg(feature = "internal_error_chain")]
 pub(crate) use source::{SourceEditView, SourceSnapshot};
+pub use source::{SourceFile, SourceLoadView, SourceLoader, SourceSyntax};
 /// Opaque bundle produced by a loader.
 pub trait LoadView: Send + Sync {
     /// Loader id.

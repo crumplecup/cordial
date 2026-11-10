@@ -13,8 +13,9 @@ use cordial::{
 };
 use std::sync::LazyLock;
 
-use syn::spanned::Spanned;
-use syn::visit::Visit;
+use cordial::SourceSyntax;
+use cordial::syntax::AstNode;
+use cordial::syntax::ast::{self, HasName};
 
 use tracing::instrument;
 static SOURCE_LOADER: SourceLoader = SourceLoader;
@@ -41,7 +42,7 @@ pub static TODO_ETIQUETTE: LazyLock<StaticEtiquette> = LazyLock::new(|| {
         EtiquetteExplain::new(
             "Leftover todo!() macros in source",
             "Unfinished todo!() sites should not merge. This example shows a quality-family plugin wrapping one etiquette.",
-            "Walks syn for todo!() macros and emits ACME-TODO-001. Not a built-in; copy examples/custom_plugins.",
+            "Walks the shared rust-analyzer tree for todo!() macros and emits ACME-TODO-001. Not a built-in; copy examples/custom_plugins.",
             "Set [lints.acme-todo] enabled = false in cordial.toml. Individual rules and paths use the same shared controls as built-ins.",
             vec![EtiquetteRuleExplain::new(
                 "ACME-TODO-001",
@@ -183,17 +184,16 @@ impl SourceEnricher for TodoInventoryEnricher {
         let (ir, source, session) = view.into_parts();
 
         for file in source.files() {
-            let parsed = source.parsed_file(file.path(), SourceEnricher::id(self))?;
-            let module_prefix =
-                cordial::module_path_from_src_file(source.src_root(), parsed.path());
-            let mut visitor = TodoVisitor {
-                module_prefix,
-                fn_stack: Vec::new(),
-                records: Vec::new(),
-            };
-            visitor.visit_file(parsed.syntax());
-            for record in visitor.records {
-                let span = FileSpan::new(parsed.path().to_path_buf(), record.line, 1);
+            let module_prefix = cordial::module_path_from_src_file(source.src_root(), file.path());
+            // The database owns the tree; this callback borrows it.
+            let (path, records) = source.with_syntax(file.path(), |syntax| {
+                Ok((
+                    syntax.path().to_path_buf(),
+                    todo_sites(&syntax, &module_prefix),
+                ))
+            })?;
+            for record in records {
+                let span = FileSpan::new(path.clone(), record.line, 1);
                 let node = ir.insert_node(
                     NodeWeight::new(NodeKind::Expr)
                         .with_span(span)
@@ -206,10 +206,8 @@ impl SourceEnricher for TodoInventoryEnricher {
                     node,
                     "file",
                     serde_json::Value::String(
-                        parsed
-                            .path()
-                            .strip_prefix(session.project_root())
-                            .unwrap_or(parsed.path())
+                        path.strip_prefix(session.project_root())
+                            .unwrap_or(&path)
                             .display()
                             .to_string(),
                     ),
@@ -222,49 +220,42 @@ impl SourceEnricher for TodoInventoryEnricher {
     }
 }
 
-struct TodoVisitor {
-    module_prefix: Vec<String>,
-    fn_stack: Vec<String>,
-    records: Vec<TodoRecord>,
-}
-
-impl TodoVisitor {
-    #[instrument(level = "debug", skip(self))]
-    fn context(&self) -> String {
-        let mut parts = self.module_prefix.clone();
-        parts.extend(self.fn_stack.iter().cloned());
-        if parts.is_empty() {
-            "<crate>".to_string()
-        } else {
-            parts.join("::")
-        }
-    }
-}
-
-impl<'ast> Visit<'ast> for TodoVisitor {
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
-        self.fn_stack.push(node.sig.ident.to_string());
-        syn::visit::visit_item_fn(self, node);
-        self.fn_stack.pop();
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_expr_macro(&mut self, node: &'ast syn::ExprMacro) {
-        if node.mac.path.is_ident("todo") {
-            self.records.push(TodoRecord {
-                context: self.context(),
-                line: node.span().start().line as u32,
-                snippet: node
-                    .mac
-                    .path
-                    .get_ident()
-                    .map(|id| format!("{id}!()"))
-                    .unwrap_or_else(|| "todo!()".to_string()),
-            });
-        }
-        syn::visit::visit_expr_macro(self, node);
-    }
+/// Every `todo!()` call in the file, with the functions enclosing it. The tree
+/// holds code under `#[cfg]` too, so those sites are found as well.
+#[instrument(level = "debug", skip(file))]
+fn todo_sites(file: &SourceSyntax<'_>, module_prefix: &[String]) -> Vec<TodoRecord> {
+    file.syntax()
+        .syntax()
+        .descendants()
+        .filter_map(ast::MacroCall::cast)
+        .filter(|call| {
+            call.path()
+                .and_then(|path| path.segment())
+                .and_then(|segment| segment.name_ref())
+                .is_some_and(|name| name.text() == "todo")
+        })
+        .map(|call| {
+            let mut parts = module_prefix.to_vec();
+            let mut functions: Vec<String> = call
+                .syntax()
+                .ancestors()
+                .filter_map(ast::Fn::cast)
+                .filter_map(|function| function.name())
+                .map(|name| name.text().to_string())
+                .collect();
+            functions.reverse();
+            parts.extend(functions);
+            TodoRecord {
+                context: if parts.is_empty() {
+                    "<crate>".to_string()
+                } else {
+                    parts.join("::")
+                },
+                line: file.line(call.syntax().text_range().start()),
+                snippet: "todo!()".to_string(),
+            }
+        })
+        .collect()
 }
 
 #[derive(Debug, Default, Clone, Copy)]
