@@ -29,6 +29,7 @@ use session::SESSION_TOKEN;
 impl SourceLoadView {
     /// Project one target from the database of the run this view belongs to.
     /// The view must have been created inside a loaded session.
+    #[cfg(feature = "rustdoc")]
     #[tracing::instrument(level = "debug", skip(self, target), err(level = "warn"))]
     pub(crate) fn project_target(
         &self,
@@ -53,22 +54,10 @@ impl SourceLoadView {
     /// current on this thread. Its caller must drop the view before rereading
     /// files it has edited.
     #[cfg(any(
-        feature = "antipatterns",
-        feature = "cli_layout",
-        feature = "derives",
         feature = "tracing",
-        feature = "visibility",
-        feature = "internal_error_chain",
-        feature = "error_sites",
-        feature = "glob_imports",
-        feature = "inline_tests",
-        feature = "pageantry",
-        feature = "cfg_hygiene",
-        feature = "verus_ir",
         feature = "impl_coverage",
         feature = "amenable_std",
-        feature = "allows",
-        feature = "panics"
+        feature = "homecoming_std"
     ))]
     #[instrument(level = "debug")]
     pub(crate) fn for_session() -> Self {

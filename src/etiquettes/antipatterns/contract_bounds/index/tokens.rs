@@ -1,6 +1,7 @@
 //! Token normalization and top-level token-shape utilities.
 
-use proc_macro2::{Delimiter, TokenStream, TokenTree};
+use super::super::token_tree::{Delimiter, Token, parse, render};
+use ra_ap_syntax::{AstNode, Edition, ast};
 use tracing::instrument;
 
 /// Drop the `::` a call-site turbofish (`Type::<Args>`) writes before its
@@ -13,25 +14,23 @@ pub(in crate::etiquettes::antipatterns::contract_bounds) fn strip_turbofish(text
 /// Strip every top-level `#[trigger]` attribute from `tokens`.
 #[instrument(level = "debug", skip(tokens))]
 pub(in crate::etiquettes::antipatterns::contract_bounds) fn strip_trigger_attrs(
-    tokens: TokenStream,
-) -> TokenStream {
-    let items: Vec<TokenTree> = tokens.into_iter().collect();
-    let mut out = Vec::with_capacity(items.len());
-    let mut i = 0;
-    while i < items.len() {
-        if let (TokenTree::Punct(hash), Some(TokenTree::Group(group))) =
-            (&items[i], items.get(i + 1))
-            && hash.as_char() == '#'
-            && group.delimiter() == Delimiter::Bracket
-            && group.stream().to_string() == "trigger"
+    tokens: Vec<Token>,
+) -> Vec<Token> {
+    let mut out = Vec::with_capacity(tokens.len());
+    let mut items = tokens.into_iter().peekable();
+    while let Some(token) = items.next() {
+        if token.is_punct('#')
+            && items.peek().is_some_and(|next| {
+                next.group(Delimiter::Bracket)
+                    .is_some_and(|inner| render(inner) == "trigger")
+            })
         {
-            i += 2;
+            items.next();
             continue;
         }
-        out.push(items[i].clone());
-        i += 1;
+        out.push(token);
     }
-    out.into_iter().collect()
+    out
 }
 
 /// Recognize a whole-clause bare call `name(...)` or `!name(...)`
@@ -39,53 +38,43 @@ pub(in crate::etiquettes::antipatterns::contract_bounds) fn strip_trigger_attrs(
 /// plain Rust syntax.
 #[instrument(level = "debug", skip(clause))]
 pub(in crate::etiquettes::antipatterns::contract_bounds) fn bare_named_call_name(
-    clause: TokenStream,
+    clause: &[Token],
 ) -> Option<String> {
-    let items: Vec<TokenTree> = clause.into_iter().collect();
-    let items = match items.as_slice() {
-        [TokenTree::Punct(punct), rest @ ..] if punct.as_char() == '!' => rest,
+    let items = match clause {
+        [bang, rest @ ..] if bang.is_punct('!') => rest,
         rest => rest,
     };
-
     match items {
-        [TokenTree::Ident(name), TokenTree::Group(group)]
-            if group.delimiter() == Delimiter::Parenthesis =>
-        {
-            Some(name.to_string())
+        [name, arguments] if arguments.group(Delimiter::Parenthesis).is_some() => {
+            name.ident().map(str::to_string)
         }
         _ => None,
     }
+}
+
+/// The clause as a Rust expression, when its tokens form exactly one.
+#[instrument(level = "debug", skip(clause))]
+pub(in crate::etiquettes::antipatterns::contract_bounds) fn expression(
+    clause: &[Token],
+) -> Option<ast::Expr> {
+    let parse = ast::Expr::parse(&render(clause), Edition::CURRENT);
+    if !parse.errors().is_empty() {
+        return None;
+    }
+    ast::Expr::cast(parse.syntax_node())
 }
 
 /// [`bare_named_call_name`], extended to also recognize a Creusot/Verus
 /// bare call carrying a leading outer attribute (`#[trigger] name(...)`).
 #[instrument(level = "debug", skip(clause))]
 pub(in crate::etiquettes::antipatterns::contract_bounds) fn named_call_name_allowing_leading_attr(
-    clause: TokenStream,
+    clause: &[Token],
 ) -> Option<String> {
-    if let Some(name) = bare_named_call_name(clause.clone()) {
+    if let Some(name) = bare_named_call_name(clause) {
         return Some(name);
     }
-    let expr = syn::parse2::<syn::Expr>(clause).ok()?;
-    let call = match &expr {
-        syn::Expr::Call(call) => call,
-        syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Not(_)) => {
-            match unary.expr.as_ref() {
-                syn::Expr::Call(call) => call,
-                _ => return None,
-            }
-        }
-        _ => return None,
-    };
-    let syn::Expr::Path(func_path) = call.func.as_ref() else {
-        return None;
-    };
-    if func_path.qself.is_some() {
-        return None;
-    }
-    let mut segs = func_path.path.segments.iter();
-    match (segs.next(), segs.next()) {
-        (Some(seg), None) => Some(seg.ident.to_string()),
+    match super::super::facts::ContractCall::from_expr(&expression(clause)?) {
+        super::super::facts::ContractCall::Bare(name) => Some(name),
         _ => None,
     }
 }
@@ -94,9 +83,10 @@ pub(in crate::etiquettes::antipatterns::contract_bounds) fn named_call_name_allo
 /// form for the type-prefix suffix comparison.
 #[instrument(level = "debug")]
 pub(in crate::etiquettes::antipatterns::contract_bounds) fn normalize_text(text: &str) -> String {
-    text.parse::<TokenStream>()
-        .map(|stream| canonicalize_type_text(&stream.to_string()))
-        .unwrap_or_else(|_| canonicalize_type_text(text.trim()))
+    parse(text).map_or_else(
+        || canonicalize_type_text(text.trim()),
+        |tokens| canonicalize_type_text(&render(&tokens)),
+    )
 }
 
 /// Canonicalize `text` for type-prefix suffix comparison by stripping
@@ -109,33 +99,4 @@ pub(in crate::etiquettes::antipatterns::contract_bounds) fn canonicalize_type_te
         .filter(|c| !c.is_whitespace())
         .collect::<String>()
         .replace(",>", ">")
-}
-
-#[instrument(level = "debug", skip(tokens))]
-pub(in crate::etiquettes::antipatterns::contract_bounds) fn normalize_tokens(
-    tokens: TokenStream,
-) -> String {
-    tokens.to_string()
-}
-
-/// Split a flat top-level token sequence on top-level commas.
-#[instrument(level = "debug", skip(tokens))]
-pub(in crate::etiquettes::antipatterns::contract_bounds) fn split_top_level_commas(
-    tokens: &[TokenTree],
-) -> Vec<Vec<TokenTree>> {
-    let mut segments = Vec::new();
-    let mut current = Vec::new();
-    for tt in tokens {
-        if let TokenTree::Punct(punct) = tt
-            && punct.as_char() == ','
-        {
-            segments.push(std::mem::take(&mut current));
-            continue;
-        }
-        current.push(tt.clone());
-    }
-    if !current.is_empty() {
-        segments.push(current);
-    }
-    segments
 }

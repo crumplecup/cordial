@@ -257,7 +257,7 @@ pub use enricher::{
     ShadowLinkEnricher, ShadowMapEntry, discover_same_crate_shadow_pairs, load_shadow_map,
     resolve_shadow_entries,
 };
-pub use error::{CordialError, CordialErrorKind, CordialResult, TokenStreamParseError};
+pub use error::{CordialError, CordialErrorKind, CordialResult};
 pub use etiquette::{
     After, BUILT_IN_ORDER, Before, BeforeMirror, DERIVE_RULE_IDS, Etiquette, EtiquetteExplain,
     EtiquetteHooks, EtiquetteRuleExplain, IntoEtiquette, LintConstraint, LintOrder, OrderExplain,

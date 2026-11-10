@@ -1,6 +1,8 @@
 //! Clause-level exemptions that do not need registry lookup.
 
-use proc_macro2::TokenStream;
+use super::super::token_tree::Token;
+use super::tokens::expression;
+use ra_ap_syntax::ast;
 use tracing::instrument;
 
 /// A bare `true`/`false` clause is tautological; a bare `result`, tuple
@@ -42,10 +44,12 @@ fn is_bare_result_is_none(normalized: &str) -> bool {
 #[instrument(level = "trace", skip(clause), ret)]
 pub(in crate::etiquettes::antipatterns::contract_bounds) fn is_builtin_contract_inspection(
     kind: &str,
-    clause: TokenStream,
+    clause: &[Token],
 ) -> bool {
-    let Ok(syn::Expr::MethodCall(method_call)) = syn::parse2::<syn::Expr>(clause) else {
+    let Some(ast::Expr::MethodCallExpr(method_call)) = expression(clause) else {
         return false;
     };
-    method_call.method == kind
+    method_call
+        .name_ref()
+        .is_some_and(|method| method.text() == kind)
 }

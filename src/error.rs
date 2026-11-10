@@ -45,7 +45,6 @@ use local::{
     NoCachedIrSource, NoExceptionsSource, NotFoundSource, OpenFindingsSource,
     UnknownEtiquetteSource, UnreachableSource,
 };
-pub use parse::TokenStreamParseError;
 use parse::{ConfigSource, JsonParseSource, JsonSource};
 mod rust_parse;
 use scan::ScanError;
@@ -104,8 +103,6 @@ pub enum CordialErrorKind {
     CargoMetadata(CargoMetadataSource),
     /// Writing formatted text failed.
     Fmt(FmtSource),
-    /// A token stream failed to parse.
-    TokenStreamParse(TokenStreamParseError),
     /// A required path was missing.
     NotFound(NotFoundSource),
     /// No exception file exists for that etiquette and crate.
@@ -198,7 +195,6 @@ impl std::error::Error for CordialError {
             CordialErrorKind::RustParse(source) => Some(source),
             CordialErrorKind::CargoMetadata(source) => Some(source),
             CordialErrorKind::Fmt(source) => Some(source),
-            CordialErrorKind::TokenStreamParse(source) => Some(source),
             CordialErrorKind::Prefix(source) => Some(source),
             CordialErrorKind::Builder(source) => Some(source),
             CordialErrorKind::CargoRustdocBuild(source) => Some(source),
@@ -253,7 +249,6 @@ impl Display for CordialErrorKind {
             Self::UnknownEtiquette(source) => source.fmt(formatter),
             Self::CargoMetadata(source) => source.fmt(formatter),
             Self::Fmt(source) => source.fmt(formatter),
-            Self::TokenStreamParse(source) => source.fmt(formatter),
             Self::NotFound(source) => source.fmt(formatter),
             Self::NoExceptions(source) => source.fmt(formatter),
             Self::NoCachedIr(source) => source.fmt(formatter),

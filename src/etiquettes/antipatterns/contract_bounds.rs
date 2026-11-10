@@ -56,6 +56,8 @@ mod native;
 pub(super) use native::collect;
 pub(crate) use native::collect_payload;
 mod registry;
+mod token_tree;
+pub(super) use token_tree::shape as clause_shape;
 mod verus;
 
 pub(crate) use index::verifier_for_crate;

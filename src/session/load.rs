@@ -8,7 +8,9 @@ use crate::error::{CordialError, CordialResult};
 
 use crate::hooks::{EnrichView, IrEnricher, LoadContext, Loader, Probe, ProbeView};
 use crate::ir::{CrateIr, CrateView, CrateViewMut, WorkspaceIr};
-use crate::loader::{CrateTarget, LoadView, ParsedSourceSession, SourceLoadView, SourceLoader};
+use crate::loader::{CrateTarget, LoadView, ParsedSourceSession, SourceLoader};
+#[cfg(any(feature = "derives", feature = "antipatterns"))]
+use crate::loader::SourceLoadView;
 use crate::objects::Marker;
 
 use crate::HookTimings;
@@ -144,7 +146,7 @@ pub(super) fn load_and_probe(
         targets.len() as u64 * (loaders.len() + enrichers.len() + probes.len() + 1) as u64,
     );
     for target in targets {
-        let mut crate_ir = if loaders.iter().any(|loader| loader.id() == SourceLoader::ID) {
+        let crate_ir = if loaders.iter().any(|loader| loader.id() == SourceLoader::ID) {
             progress.set_message(format!("Building source IR for {}", target.crate_name()));
             timings.measure("pipeline", "source_ir", || {
                 parsed_source_session.project_target(target)
@@ -153,6 +155,8 @@ pub(super) fn load_and_probe(
             CrateIr::new(target.crate_name())
         };
 
+        #[cfg(feature = "rustdoc")]
+        let mut crate_ir = crate_ir;
         for loader in loaders {
             progress.set_message(format!(
                 "Loading {} with {}",

@@ -30,7 +30,9 @@ pub(crate) use native_syntax::DatabaseVerusSyntax;
 pub(crate) use native_syntax::token_text as database_token_text;
 #[cfg(feature = "antipatterns")]
 pub(crate) use native_syntax::token_text_excluding as database_token_text_excluding;
+#[cfg(feature = "crate_attrs")]
 mod library_root;
+#[cfg(feature = "crate_attrs")]
 pub use library_root::library_root_rs;
 mod populate;
 mod scan_roots;

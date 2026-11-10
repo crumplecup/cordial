@@ -1,7 +1,7 @@
 //! Kani clause shapes use the loader's expression nodes without reparsing.
 use super::super::{
     facts::ContractCall,
-    index::tokens::{canonicalize_type_text, strip_turbofish},
+    index::tokens::canonicalize_type_text,
 };
 use super::{ContractClause, is_trivial, make_finding, name, site_context};
 use crate::{
@@ -46,7 +46,7 @@ pub(super) fn assertion(
         }
         Clause::new(
             token_text(first.syntax()),
-            call_shape(first),
+            ContractCall::from_expr(first),
             canonical_body(first),
         )
     } else {
@@ -118,56 +118,12 @@ pub(super) fn assumption(
         "requires",
         Clause::new(
             token_text(first.syntax()),
-            call_shape(&first),
+            ContractCall::from_expr(&first),
             canonical_body(&first),
         ),
         source.line(first.syntax().text_range().start()),
         clauses,
     )
-}
-
-#[tracing::instrument(level = "trace", skip(expr))]
-fn call_shape(expr: &ast::Expr) -> ContractCall {
-    let call = match expr {
-        ast::Expr::CallExpr(call) => Some(call.clone()),
-        ast::Expr::PrefixExpr(prefix) if prefix.op_kind() == Some(ast::UnaryOp::Not) => {
-            prefix.expr().and_then(|expr| match expr {
-                ast::Expr::CallExpr(call) => Some(call),
-                _ => None,
-            })
-        }
-        _ => None,
-    };
-    let Some(ast::Expr::PathExpr(function)) = call.and_then(|call| call.expr()) else {
-        return ContractCall::None;
-    };
-    let Some(path) = function.path() else {
-        return ContractCall::None;
-    };
-    let Some(predicate) = name(Some(path.clone())) else {
-        return ContractCall::None;
-    };
-    let mut first = path.clone();
-    while let Some(qualifier) = first.qualifier() {
-        first = qualifier;
-    }
-    if let Some(ty) = first
-        .segment()
-        .and_then(|segment| segment.type_anchor())
-        .and_then(|anchor| anchor.ty())
-    {
-        return ContractCall::Typed {
-            predicate,
-            prefix: canonicalize_type_text(&token_text(ty.syntax())),
-        };
-    }
-    match path.qualifier() {
-        None => ContractCall::Bare(predicate),
-        Some(prefix) => ContractCall::Typed {
-            predicate,
-            prefix: canonicalize_type_text(&strip_turbofish(&token_text(prefix.syntax()))),
-        },
-    }
 }
 
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]

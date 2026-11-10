@@ -1,13 +1,14 @@
 //! Source-derived contract call shapes retained independently of registry policy.
 
 use super::index::tokens::{
-    bare_named_call_name, canonicalize_type_text, named_call_name_allowing_leading_attr,
+    bare_named_call_name, canonicalize_type_text, expression, named_call_name_allowing_leading_attr,
     strip_trigger_attrs, strip_turbofish,
 };
-use super::index::{ContractIndex, normalize_tokens};
+use super::index::ContractIndex;
+use super::token_tree::{Token, render};
 use crate::etiquettes::antipatterns::types::AntipatternSiteRecord;
-use proc_macro2::TokenStream;
-use quote::ToTokens;
+use crate::loader::database_token_text as token_text;
+use ra_ap_syntax::{AstNode, ast};
 use serde::{Deserialize, Serialize};
 
 #[derive(
@@ -35,21 +36,21 @@ impl ContractClause {
         site: AntipatternSiteRecord,
         verifier: &str,
         kind: &str,
-        tokens: TokenStream,
+        tokens: Vec<Token>,
         sibling_names: Vec<String>,
     ) -> Self {
         Self {
             site,
             verifier: verifier.into(),
             kind: kind.into(),
-            call: ContractCall::collect(verifier, tokens.clone()),
-            canonical_body: canonicalize_type_text(&normalize_tokens(strip_trigger_attrs(tokens))),
+            call: ContractCall::collect(verifier, &tokens),
+            canonical_body: canonicalize_type_text(&render(&strip_trigger_attrs(tokens))),
             sibling_names,
         }
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
-    pub(super) fn sibling_name(tokens: TokenStream) -> Option<String> {
+    pub(super) fn sibling_name(tokens: &[Token]) -> Option<String> {
         named_call_name_allowing_leading_attr(tokens)
     }
 
@@ -66,48 +67,62 @@ impl ContractClause {
 
 impl ContractCall {
     #[tracing::instrument(level = "debug", skip(clause))]
-    fn collect(verifier: &str, clause: TokenStream) -> Self {
+    fn collect(verifier: &str, clause: &[Token]) -> Self {
         if verifier != "kani"
-            && let Some(name) = bare_named_call_name(clause.clone())
+            && let Some(name) = bare_named_call_name(clause)
         {
             return Self::Bare(name);
         }
-        let Ok(expr) = syn::parse2::<syn::Expr>(clause) else {
-            return Self::None;
-        };
-        let call = match &expr {
-            syn::Expr::Call(call) => call,
-            syn::Expr::Unary(unary) if matches!(unary.op, syn::UnOp::Not(_)) => {
-                let syn::Expr::Call(call) = unary.expr.as_ref() else {
-                    return Self::None;
-                };
-                call
+        expression(clause).map_or(Self::None, |expr| Self::from_expr(&expr))
+    }
+
+    /// The call a whole clause expression makes: `name(..)`, `!name(..)`, or
+    /// `Type::name(..)`, with the type prefix canonicalized for matching.
+    #[tracing::instrument(level = "trace", skip(expr))]
+    pub(super) fn from_expr(expr: &ast::Expr) -> Self {
+        let call = match expr {
+            ast::Expr::CallExpr(call) => Some(call.clone()),
+            ast::Expr::PrefixExpr(prefix) if prefix.op_kind() == Some(ast::UnaryOp::Not) => {
+                prefix.expr().and_then(|expr| match expr {
+                    ast::Expr::CallExpr(call) => Some(call),
+                    _ => None,
+                })
             }
-            _ => return Self::None,
+            _ => None,
         };
-        let syn::Expr::Path(func) = call.func.as_ref() else {
+        let Some(ast::Expr::PathExpr(function)) = call.and_then(|call| call.expr()) else {
             return Self::None;
         };
-        let Some(last) = func.path.segments.last() else {
+        let Some(path) = function.path() else {
             return Self::None;
         };
-        if let Some(qself) = &func.qself {
+        let Some(predicate) = path
+            .segment()
+            .and_then(|segment| segment.name_ref())
+            .map(|name| name.text().to_string())
+        else {
+            return Self::None;
+        };
+        let mut first = path.clone();
+        while let Some(qualifier) = first.qualifier() {
+            first = qualifier;
+        }
+        if let Some(ty) = first
+            .segment()
+            .and_then(|segment| segment.type_anchor())
+            .and_then(|anchor| anchor.ty())
+        {
             return Self::Typed {
-                predicate: last.ident.to_string(),
-                prefix: canonicalize_type_text(&normalize_tokens(qself.ty.to_token_stream())),
+                predicate,
+                prefix: canonicalize_type_text(&token_text(ty.syntax())),
             };
         }
-        if func.path.segments.len() == 1 {
-            return Self::Bare(last.ident.to_string());
-        }
-        let mut prefix = func.path.clone();
-        prefix.segments.pop();
-        prefix.segments.pop_punct();
-        Self::Typed {
-            predicate: last.ident.to_string(),
-            prefix: canonicalize_type_text(&strip_turbofish(&normalize_tokens(
-                prefix.to_token_stream(),
-            ))),
+        match path.qualifier() {
+            None => Self::Bare(predicate),
+            Some(prefix) => Self::Typed {
+                predicate,
+                prefix: canonicalize_type_text(&strip_turbofish(&token_text(prefix.syntax()))),
+            },
         }
     }
 }

@@ -1,4 +1,4 @@
-//! Parse-family native sources (JSON, config, syn, token stream).
+//! Parse-family native sources (JSON and config).
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::panic::Location;
@@ -132,47 +132,6 @@ impl std::error::Error for ConfigSource {
     }
 }
 
-/// Send/Sync stand-in for [`proc_macro2::LexError`], which is not Send.
-#[derive(Debug, derive_getters::Getters)]
-pub struct TokenStreamParseError {
-    #[getter(skip)]
-    source: String,
-    file: String,
-    #[getter(copy)]
-    line: u32,
-}
-
-impl TokenStreamParseError {
-    /// Construct a new value.
-    #[track_caller]
-    #[instrument(level = "debug", skip(source))]
-    pub fn new(source: impl Into<String>) -> Self {
-        let loc = Location::caller();
-        Self {
-            source: source.into(),
-            file: loc.file().to_string(),
-            line: loc.line(),
-        }
-    }
-}
-
-impl From<proc_macro2::LexError> for TokenStreamParseError {
-    #[track_caller]
-    #[instrument(level = "debug", skip(source))]
-    fn from(source: proc_macro2::LexError) -> Self {
-        Self::new(source.to_string())
-    }
-}
-
-impl Display for TokenStreamParseError {
-    #[instrument(level = "trace", skip(self, formatter))]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-        write!(formatter, "token stream parse error: {}", self.source)
-    }
-}
-
-impl std::error::Error for TokenStreamParseError {}
-
 impl super::CordialError {
     /// JSON failed to parse at this path.
     #[track_caller]
@@ -197,15 +156,5 @@ impl From<config::ConfigError> for super::CordialError {
     #[instrument(level = "debug", skip(value))]
     fn from(value: config::ConfigError) -> Self {
         Self::from_kind(super::CordialErrorKind::Config(ConfigSource::from(value)))
-    }
-}
-
-impl From<proc_macro2::LexError> for super::CordialError {
-    #[track_caller]
-    #[instrument(level = "debug", skip(value))]
-    fn from(value: proc_macro2::LexError) -> Self {
-        Self::from_kind(super::CordialErrorKind::TokenStreamParse(
-            TokenStreamParseError::from(value),
-        ))
     }
 }

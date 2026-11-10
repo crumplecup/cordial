@@ -7,7 +7,7 @@ use tracing::instrument;
 
 impl SourceLoadView {
     /// Freeze non-syntax inputs in the same database as the shared tree.
-    #[cfg(any(feature = "cfg_hygiene", feature = "tracing"))]
+    #[cfg(feature = "cfg_hygiene")]
     #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
     pub(crate) fn input_text(&self, path: &Path) -> CordialResult<Option<String>> {
         self.cache_token

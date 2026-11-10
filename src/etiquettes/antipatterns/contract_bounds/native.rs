@@ -1,8 +1,9 @@
 //! Durable proof clauses selected from canonical Rust and memoized dialect islands.
 use super::{
     ContractClause,
-    index::{is_trivial, normalize_tokens, verifier_for_crate},
+    index::{is_trivial, verifier_for_crate},
     make_finding, site_context,
+    token_tree::{parse, render},
 };
 use crate::{
     CordialResult, FileSnapshot,
@@ -92,17 +93,18 @@ pub(super) fn collect_file(
 /// Called only by the loader's tracked opaque-dialect query.
 #[tracing::instrument(level = "debug", skip_all)]
 pub(crate) fn collect_payload(
-    tokens: proc_macro2::TokenStream,
+    text: &str,
     file: &Path,
     modules: &[String],
     context: &str,
     kind: &str,
     line: u32,
 ) -> Option<Vec<ContractClause>> {
+    let tokens = parse(text)?;
     if kind == "verus" {
-        return super::verus::collect_payload(tokens, file, modules).ok();
+        return super::verus::collect_payload(&tokens, file, modules).ok();
     }
-    let normalized = normalize_tokens(tokens.clone());
+    let normalized = render(&tokens);
     if is_trivial(&normalized) {
         return Some(Vec::new());
     }

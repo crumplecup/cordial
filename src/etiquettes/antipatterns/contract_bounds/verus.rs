@@ -2,21 +2,19 @@
 
 use std::path::Path;
 
-use proc_macro2::{Delimiter, TokenStream, TokenTree};
 use tracing::instrument;
 
 use crate::error::CordialResult;
 
 use super::ContractClause;
-use super::index::{
-    is_builtin_contract_inspection, is_trivial, normalize_tokens, split_top_level_commas,
-};
+use super::index::{is_builtin_contract_inspection, is_trivial};
+use super::token_tree::{Delimiter, Token, TokenKind, render, split_top_level_commas};
 
 use super::{make_finding, site_context};
 
 #[instrument(level = "debug", skip(tokens, file), err(level = "warn"))]
 pub(super) fn collect_payload(
-    tokens: TokenStream,
+    tokens: &[Token],
     file: &Path,
     module_prefix: &[String],
 ) -> CordialResult<Vec<ContractClause>> {
@@ -24,17 +22,12 @@ pub(super) fn collect_payload(
     let mut clause_groups = Vec::new();
     walk_verus_tokens(tokens, &mut clause_groups);
     for (kind, clauses, harness) in clause_groups {
-        for (idx, clause) in clauses.iter().cloned().enumerate() {
-            let normalized = normalize_tokens(clause.clone());
-            if is_trivial(&normalized) || is_builtin_contract_inspection(kind, clause.clone()) {
+        for (idx, clause) in clauses.iter().enumerate() {
+            let normalized = render(clause);
+            if is_trivial(&normalized) || is_builtin_contract_inspection(kind, clause) {
                 continue;
             }
-            let line = clause
-                .clone()
-                .into_iter()
-                .next()
-                .map(|tt| tt.span().start().line as u32)
-                .unwrap_or(0);
+            let line = clause.first().map_or(0, Token::line);
             let leaf = if harness.is_empty() {
                 "verus!".to_string()
             } else {
@@ -45,13 +38,13 @@ pub(super) fn collect_payload(
                 .iter()
                 .enumerate()
                 .filter(|(other, _)| *other != idx)
-                .filter_map(|(_, sibling)| ContractClause::sibling_name(sibling.clone()))
+                .filter_map(|(_, sibling)| ContractClause::sibling_name(sibling))
                 .collect();
             findings.push(ContractClause::collect(
                 make_finding(context, file, line, &normalized)?,
                 "verus",
                 kind,
-                clause,
+                clause.clone(),
                 sibling_names,
             ));
         }
@@ -59,6 +52,19 @@ pub(super) fn collect_payload(
 
     Ok(findings)
 }
+
+/// Whether `items[idx]` is immediately preceded by a `.` — a dotted
+/// method call (`H::default.ensures((), result)`, Verus's own builtin
+/// function-item contract-inspection method) spells its method name
+/// `ensures`/`requires` identically to the real clause-list keyword,
+/// but is never one: a genuine `requires`/`ensures` keyword always
+/// follows a function signature directly, never a `.`.
+#[instrument(level = "debug", skip(items))]
+fn preceded_by_dot(items: &[Token], idx: usize) -> bool {
+    idx > 0 && items[idx - 1].is_punct('.')
+}
+
+type ClauseGroup = (&'static str, Vec<Vec<Token>>, String);
 
 /// Recursively find every `requires`/`ensures` keyword in `tokens`, descending
 /// into every nested `Group` (function bodies, parenthesized expressions,
@@ -87,36 +93,20 @@ pub(super) fn collect_payload(
 /// clause at a time) so a caller can recognize a raw equation that only
 /// restates a *sibling* clause in the same list — see
 /// [`ContractClause`].
-/// Whether `items[idx]` is immediately preceded by a `.` — a dotted
-/// method call (`H::default.ensures((), result)`, Verus's own builtin
-/// function-item contract-inspection method) spells its method name
-/// `ensures`/`requires` identically to the real clause-list keyword,
-/// but is never one: a genuine `requires`/`ensures` keyword always
-/// follows a function signature directly, never a `.`.
-#[instrument(level = "debug", skip(items))]
-fn preceded_by_dot(items: &[TokenTree], idx: usize) -> bool {
-    idx > 0
-        && matches!(
-            &items[idx - 1],
-            TokenTree::Punct(punct) if punct.as_char() == '.'
-        )
-}
-
-#[instrument(level = "debug", skip(tokens, out))]
-fn walk_verus_tokens(tokens: TokenStream, out: &mut Vec<(&'static str, Vec<TokenStream>, String)>) {
-    let items: Vec<TokenTree> = tokens.into_iter().collect();
+#[instrument(level = "debug", skip(items, out))]
+fn walk_verus_tokens(items: &[Token], out: &mut Vec<ClauseGroup>) {
     let mut i = 0;
     let mut current_fn = String::new();
     while i < items.len() {
-        match &items[i] {
-            TokenTree::Ident(ident) if ident == "fn" => {
-                if let Some(TokenTree::Ident(name)) = items.get(i + 1) {
+        match items[i].kind() {
+            TokenKind::Ident(ident) if ident == "fn" => {
+                if let Some(name) = items.get(i + 1).and_then(Token::ident) {
                     current_fn = name.to_string();
                 }
                 i += 1;
             }
-            TokenTree::Ident(ident)
-                if (ident == "requires" || ident == "ensures") && !preceded_by_dot(&items, i) =>
+            TokenKind::Ident(ident)
+                if (ident == "requires" || ident == "ensures") && !preceded_by_dot(items, i) =>
             {
                 let kind = if ident == "requires" {
                     "requires"
@@ -125,30 +115,26 @@ fn walk_verus_tokens(tokens: TokenStream, out: &mut Vec<(&'static str, Vec<Token
                 };
                 let mut j = i + 1;
                 while j < items.len() {
-                    match &items[j] {
-                        TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => break,
-                        TokenTree::Punct(punct) if punct.as_char() == ';' => break,
-                        TokenTree::Ident(next)
-                            if (next == "requires" || next == "ensures")
-                                && !preceded_by_dot(&items, j) =>
-                        {
-                            break;
-                        }
-                        _ => j += 1,
+                    let ends_list = items[j].group(Delimiter::Brace).is_some()
+                        || items[j].is_punct(';')
+                        || (matches!(items[j].ident(), Some("requires" | "ensures"))
+                            && !preceded_by_dot(items, j));
+                    if ends_list {
+                        break;
                     }
+                    j += 1;
                 }
-                let group: Vec<TokenStream> = split_top_level_commas(&items[i + 1..j])
+                let group: Vec<Vec<Token>> = split_top_level_commas(&items[i + 1..j])
                     .into_iter()
                     .filter(|segment| !segment.is_empty())
-                    .map(|segment| segment.into_iter().collect())
                     .collect();
                 if !group.is_empty() {
                     out.push((kind, group, current_fn.clone()));
                 }
                 i = j;
             }
-            TokenTree::Group(group) => {
-                walk_verus_tokens(group.stream(), out);
+            TokenKind::Group(_, inner) => {
+                walk_verus_tokens(inner, out);
                 i += 1;
             }
             _ => i += 1,
