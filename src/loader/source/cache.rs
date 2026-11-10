@@ -68,6 +68,17 @@ impl SourceLoadView {
             .with_database(|database| database.project_target(target))
     }
 
+    /// Project workspace splices and proof calls from the run's database.
+    /// The view must have been created inside a loaded session.
+    #[cfg(feature = "derives")]
+    #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
+    pub(crate) fn project_path_inclusions(
+        &self,
+    ) -> crate::CordialResult<crate::ir::PathInclusionFacts> {
+        self.cache_token
+            .with_database(|database| database.project_path_inclusions())
+    }
+
     /// A lazy shared parse cache for a standalone operation outside a session.
     /// Its caller must drop the view before rescanning files it has edited.
     #[cfg(any(

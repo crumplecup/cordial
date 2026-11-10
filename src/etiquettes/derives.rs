@@ -33,7 +33,6 @@ mod scan;
 mod types;
 
 pub use crate::ir::PathInclusionFacts;
-pub use crate::loader::workspace_path_inclusions;
 pub use assessor::DeriveAssessor;
 pub use enricher::DeriveInventoryEnricher;
 pub use probe::DeriveSiteProbe;

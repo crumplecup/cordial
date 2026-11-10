@@ -33,12 +33,6 @@ pub(crate) use native_syntax::token_text_excluding as database_token_text_exclud
 mod library_root;
 pub use library_root::library_root_rs;
 mod macro_syntax;
-#[cfg(feature = "derives")]
-mod path_inclusion;
-#[cfg(feature = "derives")]
-pub use path_inclusion::workspace_path_inclusions;
-#[cfg(feature = "derives")]
-pub(crate) use path_inclusion::workspace_path_inclusions_with_source;
 mod populate;
 mod scan_roots;
 mod source;
@@ -55,15 +49,6 @@ pub(crate) use source::ParsedSourceSession;
 pub use source::{SharedMacroSyntax, SharedParsedFile, SourceFile, SourceLoadView, SourceLoader};
 #[cfg(feature = "internal_error_chain")]
 pub(crate) use source::{SourceEditView, SourceSnapshot};
-#[cfg(any(
-    feature = "panics",
-    feature = "error_chain",
-    feature = "tracing",
-    feature = "internal_error_chain",
-    feature = "derives"
-))]
-pub(crate) use source_work::walk as source_walk;
-
 /// Opaque bundle produced by a loader.
 pub trait LoadView: Send + Sync {
     /// Loader id.

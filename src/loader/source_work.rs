@@ -21,14 +21,6 @@ pub(crate) fn parse(source: &str, path: &Path, hook: &str) -> CordialResult<syn:
     Ok(syntax)
 }
 
-#[hotpath::measure]
-#[tracing::instrument(level = "debug", skip(path, action), fields(path = %path.display()))]
-pub(crate) fn walk<T>(path: &Path, hook: &str, action: impl FnOnce() -> T) -> T {
-    let result = action();
-    tracing::trace!("source walked");
-    result
-}
-
 #[tracing::instrument(level = "trace", skip(path), fields(path = %path.display()))]
 pub(crate) fn reuse(path: &Path, hook: &str) {
     tracing::trace!("parsed source reused");

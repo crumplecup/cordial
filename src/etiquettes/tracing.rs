@@ -55,7 +55,6 @@ pub(crate) use display_types::WELL_KNOWN_DISPLAY_TYPES;
 pub(crate) use recordable::RECORDABLE_IDENTS;
 mod reporter;
 mod scan;
-pub(crate) use scan::{self_type_key, syn_path_label, type_label};
 mod subscriber;
 mod types;
 pub(crate) use classify::{BodyPeek, ReceiverShape, classify_complexity, classify_role};

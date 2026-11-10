@@ -107,7 +107,7 @@ pub use etiquettes::creusot_diagnostics::{
 #[cfg(feature = "derives")]
 pub use etiquettes::derives::{
     DERIVES_ETIQUETTE, DeriveInventoryEnricher, DeriveRuleId, DeriveSiteRecord, PathInclusionFacts,
-    scan_rust_source as scan_derives_rust_source, workspace_path_inclusions,
+    scan_rust_source as scan_derives_rust_source,
 };
 #[cfg(feature = "doc_warnings")]
 pub use etiquettes::doc_warnings::{

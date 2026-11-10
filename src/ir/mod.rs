@@ -68,8 +68,6 @@ mod origin;
 mod path_inclusion;
 #[cfg(feature = "derives")]
 pub use path_inclusion::{PathInclusionFacts, PathInclusionMember, PathInclusionSource};
-#[cfg(feature = "derives")]
-pub(crate) use path_inclusion::{canonical_or, normalize};
 #[cfg(feature = "tracing")]
 mod proof_calls;
 #[cfg(feature = "tracing")]

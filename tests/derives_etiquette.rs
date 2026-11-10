@@ -1049,7 +1049,10 @@ mod shared;
 fn path_spliced_file_without_the_dependency_is_exempt() -> miette::Result<()> {
     cordial::init_tracing();
     let (fixture, owner_root, owner_file) = write_path_spliced_fixture(false)?;
-    let path_inclusions = cordial::workspace_path_inclusions(fixture.path()).into_diagnostic()?;
+    let path_inclusions = cordial::SourceDatabase::load(fixture.path())
+        .into_diagnostic()?
+        .project_path_inclusions()
+        .into_diagnostic()?;
     let source = fs::read_to_string(&owner_file).into_diagnostic()?;
     let findings = scan_derives_rust_source(
         &source,
@@ -1075,7 +1078,10 @@ fn path_spliced_file_without_the_dependency_is_exempt() -> miette::Result<()> {
 fn path_spliced_file_with_the_dependency_is_still_flagged() -> miette::Result<()> {
     cordial::init_tracing();
     let (fixture, owner_root, owner_file) = write_path_spliced_fixture(true)?;
-    let path_inclusions = cordial::workspace_path_inclusions(fixture.path()).into_diagnostic()?;
+    let path_inclusions = cordial::SourceDatabase::load(fixture.path())
+        .into_diagnostic()?
+        .project_path_inclusions()
+        .into_diagnostic()?;
     let source = fs::read_to_string(&owner_file).into_diagnostic()?;
     let findings = scan_derives_rust_source(
         &source,

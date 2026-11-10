@@ -80,10 +80,7 @@ pub(crate) fn prepare_workspace_source_facts(
             }
         });
         if needs_path_facts && workspace.path_inclusions().is_none() {
-            workspace.set_path_inclusions(crate::loader::workspace_path_inclusions_with_source(
-                session.project_root(),
-                source,
-            )?);
+            workspace.set_path_inclusions(source.project_path_inclusions()?);
         }
     }
 
@@ -98,5 +95,7 @@ pub(crate) fn prepare_workspace_source_facts(
     }
     #[cfg(not(feature = "derives"))]
     let _ = source;
+    #[cfg(not(any(feature = "antipatterns", feature = "tracing")))]
+    let _ = session;
     Ok(())
 }
