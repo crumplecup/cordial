@@ -12,28 +12,22 @@ use super::lifetime::LifetimePlanFacts;
 use crate::config::ErrorFieldStrategy;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
-mod attributes;
 mod sites;
 pub(crate) use sites::ConversionFileFacts;
 mod collection;
 mod edges;
 mod from;
 mod graph;
-mod helpers;
 pub(super) mod resolution;
-mod result_alias;
 mod source_method;
 mod syntax_facts;
 mod try_conversion;
 
-pub(super) use attributes::call_site_attribute_is_stable;
-pub(super) use edges::error_edge_evidence;
 pub use edges::{
     ErrorEdgeEvidence, ErrorEdgeField, ErrorEdgeStorage, ErrorEdgeTarget, ErrorEdgeTargetKind,
 };
 pub use from::ErrorFromEvidence;
 pub(crate) use graph::{conversion_units_from_ir, enrich_conversion_units};
-pub(super) use helpers::derive_is_builtin;
 pub(super) use resolution::CrateTypeIndex;
 pub use source_method::ErrorSourceMethodEvidence;
 pub use try_conversion::{ErrorTryEvidence, ErrorTryScope};

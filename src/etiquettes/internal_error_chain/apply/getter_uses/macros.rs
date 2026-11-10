@@ -80,14 +80,9 @@ fn macro_contract(file: &crate::loader::DatabaseSource<'_>, invocation: &ast::Ma
     };
     if file.tree().items().any(|item| matches!(item, ast::Item::MacroRules(item) if item.name().is_some_and(|ident| ident.text() == name))) { return false; }
     if matches!(name.as_str(), "harness" | "gallery_harness") {
-        return super::super::super::getters::known_native_derive(
-            file,
-            &path,
-            "amenable_derive",
-            name,
-        );
+        return super::super::getters::known_native_derive(file, &path, "amenable_derive", name);
     }
     (path.len() == 1 && contracts::unshadowed(file, name))
-        || super::super::super::getters::known_native_derive(file, &path, "std", name)
-        || super::super::super::getters::known_native_derive(file, &path, "core", name)
+        || super::super::getters::known_native_derive(file, &path, "std", name)
+        || super::super::getters::known_native_derive(file, &path, "core", name)
 }

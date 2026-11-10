@@ -1,5 +1,6 @@
 //! Written paths, return contracts, imports and standard Result alias guards.
-use super::{ErrorTryEvidence, ErrorTryScope, PathFact};
+use super::super::{ErrorTryEvidence, ErrorTryScope};
+use super::PathFact;
 use crate::loader::DatabaseSource;
 use ra_ap_syntax::{
     AstNode, SyntaxNode,

@@ -6,8 +6,8 @@ use std::path::Path;
 use miette::{IntoDiagnostic, WrapErr};
 
 use cordial::{
-    ATTR_CRATE_KINDS, CrateIr, CrateKind, CrateTarget, IrMut, IrView, LoadContext, Loader, RunAll,
-    SessionBuilder, SourceLoadView, SourceLoader, discover_crate_targets,
+    ATTR_CRATE_KINDS, CrateIr, CrateKind, CrateTarget, IrMut, IrView, RunAll, SourceDatabase,
+    discover_crate_targets,
 };
 
 fn write_crate(
@@ -73,18 +73,16 @@ fn populated_ir(kinds: Vec<CrateKind>) -> miette::Result<CrateIr> {
     let src_root = fixture.path().join("src");
     fs::create_dir_all(&src_root).into_diagnostic()?;
     fs::write(src_root.join("lib.rs"), "pub fn f() {}").into_diagnostic()?;
-    let session = SessionBuilder::new(fixture.path()).build();
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let target = CrateTarget::new("fixture", fixture.path()).with_kinds(kinds);
-    let loaded = SourceLoader
-        .load(LoadContext::new(&session, &target))
-        .into_diagnostic()?;
-    let view = loaded
-        .as_any()
-        .downcast_ref::<SourceLoadView>()
-        .ok_or_else(|| miette::miette!("source loader returned another view"))?;
-    let mut ir = CrateIr::new("fixture");
-    view.populate_ir(&mut ir).into_diagnostic()?;
-    Ok(ir)
+    SourceDatabase::load(fixture.path())
+        .into_diagnostic()?
+        .project_target(&target)
+        .into_diagnostic()
 }
 
 #[test]

@@ -1,11 +1,30 @@
 //! Candidate-independent conversion contracts, projected by the source loader.
 use super::{ErrorEdgeEvidence, ErrorFromEvidence, ErrorSourceMethodEvidence, ErrorTryEvidence};
+use crate::loader::{DatabaseMacroSyntax, DatabaseSource};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-mod compatibility;
-mod native;
+mod attributes;
+mod collect;
+mod context;
 mod select;
+mod signatures;
+
+#[derive(Clone, Default)]
+struct Context {
+    depth: usize,
+    owner: Option<String>,
+    error_trait: Option<Vec<String>>,
+    source_site: Option<usize>,
+    returns: Option<BTreeSet<String>>,
+    evidence: Option<ErrorTryEvidence>,
+    guards: Vec<CalleeGuard>,
+}
+struct Collector<'a, 'db> {
+    file: &'a DatabaseSource<'db>,
+    macros: DatabaseMacroSyntax,
+    events: Vec<Event>,
+}
 
 /// Ordered conversion events for one required source snapshot.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, derive_new::new)]

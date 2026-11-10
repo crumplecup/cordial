@@ -1,379 +1,142 @@
-//! Collect lifetime sites from the shared syntax tree.
-
-use std::collections::{BTreeMap, BTreeSet};
-
-use syn::spanned::Spanned;
-use syn::visit::Visit;
-use syn::{GenericParam, PathArguments, Type};
+//! Lifetime closure evidence from the canonical database syntax.
+use super::{ConditionalScope, GraphLifetimeFacts, Scope, sites, types};
+use crate::loader::DatabaseSource;
+use ra_ap_syntax::{AstNode, SyntaxKind, SyntaxNode, ast};
 use tracing::instrument;
-
-use crate::config::ErrorFieldStrategy;
-use crate::loader::SharedParsedFile;
-
-use super::super::super::span_range;
-use super::super::types::type_name;
-use super::field_needs_lifetime;
-use super::one_lifetime;
-use super::provenance::{safe_impl_constructor, safe_top_level_return};
-use super::{
-    ConditionalScope, Declaration, FunctionSite, GraphLifetimeFacts, ImplSite, MethodSite, Range,
-    TypeArguments, TypePathSite,
-};
-
-trait VisitTarget<'ast> {
-    fn visit_with(&'ast self, visitor: &mut LifetimeNames);
-}
 
 impl GraphLifetimeFacts {
     #[instrument(level = "debug", skip(file))]
     #[hotpath::measure(impl_type = "GraphLifetimeFacts")]
-    pub(crate) fn collect(file: &SharedParsedFile) -> Self {
-        let mut collector = Collector {
-            file,
-            facts: Self::default(),
-            module_depth: 0,
-            scope_lifetimes: BTreeSet::new(),
-            conditional_scope: None,
-        };
-        collector.visit_file(file.syntax());
-        collector.facts.type_paths.sort_by_key(|site| site.range);
-        collector.facts
+    pub(crate) fn collect_native(file: &DatabaseSource<'_>) -> Self {
+        let mut facts = Self::default();
+        collect(&mut facts, file.tree().syntax(), &Scope::default());
+        facts.type_paths.sort_by_key(|site| site.range);
+        facts
     }
 }
 
-struct Collector<'a> {
-    file: &'a SharedParsedFile,
-    facts: GraphLifetimeFacts,
-    module_depth: usize,
-    scope_lifetimes: BTreeSet<String>,
-    conditional_scope: Option<ConditionalScope>,
-}
-
-impl Collector<'_> {
-    #[instrument(level = "trace", skip(self, span))]
-    fn range(&self, span: proc_macro2::Span) -> Option<Range> {
-        span_range(self.file.source(), span)
+#[instrument(level = "trace", skip(facts, node, scope))]
+fn collect(facts: &mut GraphLifetimeFacts, node: &SyntaxNode, scope: &Scope) {
+    use ast::{HasGenericParams, HasName};
+    if matches!(
+        node.kind(),
+        SyntaxKind::TOKEN_TREE
+            | SyntaxKind::CFG_META
+            | SyntaxKind::CFG_ATTR_META
+            | SyntaxKind::UNSAFE_META
+    ) {
+        return;
     }
-
-    #[instrument(level = "trace", skip(self, span))]
-    fn end(&self, span: proc_macro2::Span) -> Option<usize> {
-        self.range(span).map(|(_, end)| end)
+    let mut scope = scope.clone();
+    if ast::Module::can_cast(node.kind()) {
+        scope.module_depth += 1;
     }
-}
-
-impl<'ast> Visit<'ast> for Collector<'_> {
-    #[instrument(level = "trace", skip(self, item))]
-    fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
-        self.module_depth += 1;
-        syn::visit::visit_item_mod(self, item);
-        self.module_depth -= 1;
-    }
-
-    #[instrument(level = "trace", skip(self, item))]
-    fn visit_item_struct(&mut self, item: &'ast syn::ItemStruct) {
-        let name = item.ident.to_string();
-        self.facts.declarations.push(Declaration {
-            name: name.clone(),
-            is_enum: false,
-            module_depth: self.module_depth,
-            ident_end: self.end(item.ident.span()),
-            generics_empty: item.generics.params.is_empty(),
-            one_lifetime: one_lifetime(&item.generics),
-            generics_range: self.range(item.generics.span()),
-            where_clause: item.generics.where_clause.is_some(),
-            needs_borrowed: item
-                .fields
-                .iter()
-                .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Borrowed)),
-            needs_owned: item
-                .fields
-                .iter()
-                .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Owned)),
-            retained_lifetimes: retained_lifetimes(item.fields.iter()),
-        });
-        let previous = self.conditional_scope.replace(ConditionalScope {
-            owner: name,
+    if let Some(item) = ast::Struct::cast(node.clone())
+        && let Some(name) = item.name()
+    {
+        facts.declarations.push(sites::declaration(
+            &item,
+            name.clone(),
+            false,
+            scope.module_depth,
+            item.field_list().into_iter().collect(),
+        ));
+        scope.conditional = Some(ConditionalScope {
+            owner: name.text().to_string(),
             borrowed_only: false,
         });
-        syn::visit::visit_item_struct(self, item);
-        self.conditional_scope = previous;
     }
-
-    #[instrument(level = "trace", skip(self, item))]
-    fn visit_item_enum(&mut self, item: &'ast syn::ItemEnum) {
-        let name = item.ident.to_string();
-        self.facts.declarations.push(Declaration {
-            name: name.clone(),
-            is_enum: true,
-            module_depth: self.module_depth,
-            ident_end: self.end(item.ident.span()),
-            generics_empty: item.generics.params.is_empty(),
-            one_lifetime: one_lifetime(&item.generics),
-            generics_range: self.range(item.generics.span()),
-            where_clause: item.generics.where_clause.is_some(),
-            needs_borrowed: item
-                .variants
-                .iter()
-                .flat_map(|variant| variant.fields.iter())
-                .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Borrowed)),
-            needs_owned: item
-                .variants
-                .iter()
-                .flat_map(|variant| variant.fields.iter())
-                .any(|field| field_needs_lifetime(field, ErrorFieldStrategy::Owned)),
-            retained_lifetimes: retained_lifetimes(
-                item.variants
-                    .iter()
-                    .flat_map(|variant| variant.fields.iter()),
-            ),
-        });
-        let previous = self.conditional_scope.replace(ConditionalScope {
-            owner: name,
-            borrowed_only: false,
-        });
-        syn::visit::visit_item_enum(self, item);
-        self.conditional_scope = previous;
-    }
-
-    #[instrument(level = "trace", skip(self, item))]
-    fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
-        let name = type_name(&item.self_ty);
-        let methods = item
-            .items
-            .iter()
-            .filter_map(|member| match member {
-                syn::ImplItem::Fn(method) => Some(method),
-                _ => None,
-            })
-            .map(|method| {
-                let lifetime_names = all_lifetimes(&method.sig);
-                let output_self = matches!(&method.sig.output, syn::ReturnType::Type(_, ty)
-                    if matches!(&**ty, Type::Path(path) if path.path.is_ident("Self")));
-                let all_inputs_typed = method
-                    .sig
-                    .inputs
-                    .iter()
-                    .all(|input| matches!(input, syn::FnArg::Typed(_)));
-                let one_method_lifetime = one_lifetime(&method.sig.generics);
-                let constructor_anchors = one_method_lifetime
-                    .as_ref()
-                    .filter(|lifetime| {
-                        output_self
-                            && all_inputs_typed
-                            && method
-                                .sig
-                                .inputs
-                                .iter()
-                                .any(|input| all_lifetimes(input).contains(*lifetime))
-                    })
-                    .cloned()
-                    .into_iter()
-                    .collect();
-                let safe_constructor_lifetimes = lifetime_names
-                    .iter()
-                    .filter(|lifetime| safe_impl_constructor(method, lifetime))
-                    .cloned()
-                    .collect();
-                let mut used_lifetimes = lifetime_names;
-                used_lifetimes.extend(all_lifetimes(&method.block));
-                MethodSite {
-                    output_self,
-                    all_inputs_typed,
-                    generics_empty: method.sig.generics.params.is_empty(),
-                    one_lifetime: one_method_lifetime,
-                    generics_range: self.range(method.sig.generics.span()),
-                    ident_end: self.end(method.sig.ident.span()),
-                    safe_constructor_lifetimes,
-                    constructor_anchors,
-                    used_lifetimes,
-                }
-            })
+    if let Some(item) = ast::Enum::cast(node.clone())
+        && let Some(name) = item.name()
+    {
+        let fields = item
+            .variant_list()
+            .into_iter()
+            .flat_map(|list| list.variants())
+            .filter_map(|variant| variant.field_list())
             .collect();
-        let trait_lifetimes = item
-            .trait_
-            .as_ref()
-            .map_or_else(BTreeSet::new, |(path, _)| all_lifetimes(path));
-        self.facts.impls.push(ImplSite {
-            name: name.clone(),
-            module_depth: self.module_depth,
-            impl_token_end: self.end(item.impl_token.span()),
-            generics_empty: item.generics.params.is_empty(),
-            one_lifetime: one_lifetime(&item.generics),
-            generics_range: self.range(item.generics.span()),
-            trait_lifetimes,
-            methods,
+        facts.declarations.push(sites::declaration(
+            &item,
+            name.clone(),
+            true,
+            scope.module_depth,
+            fields,
+        ));
+        scope.conditional = Some(ConditionalScope {
+            owner: name.text().to_string(),
+            borrowed_only: false,
         });
-        let previous_scope = std::mem::replace(
-            &mut self.scope_lifetimes,
-            one_lifetime(&item.generics).into_iter().collect(),
-        );
-        let previous_conditional = std::mem::replace(
-            &mut self.conditional_scope,
-            name.filter(|_| item.generics.params.is_empty())
-                .map(|owner| ConditionalScope {
-                    owner,
-                    borrowed_only: true,
-                }),
-        );
-        syn::visit::visit_item_impl(self, item);
-        self.scope_lifetimes = previous_scope;
-        self.conditional_scope = previous_conditional;
     }
-
-    #[instrument(level = "trace", skip(self, item))]
-    fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
-        let return_names = return_type_names(&item.sig.output);
-        let mut safe_returns = BTreeMap::new();
-        for lifetime in all_lifetimes(&item.sig) {
-            let safe: BTreeSet<_> = return_names
-                .iter()
-                .filter(|name| {
-                    safe_top_level_return(item, &BTreeSet::from([(*name).clone()]), &lifetime)
-                })
-                .cloned()
-                .collect();
-            safe_returns.insert(lifetime, safe);
-        }
-        if !return_names.is_empty() {
-            self.facts.functions.push(FunctionSite {
-                return_names,
-                safe_returns,
+    if let Some(item) = ast::Impl::cast(node.clone()) {
+        let site = sites::implementation(&item, scope.module_depth);
+        scope.lifetimes = site.one_lifetime.clone().into_iter().collect();
+        scope.conditional = site
+            .name
+            .clone()
+            .filter(|_| site.generics_empty)
+            .map(|owner| ConditionalScope {
+                owner,
+                borrowed_only: true,
             });
-        }
-        let previous_scope = std::mem::replace(
-            &mut self.scope_lifetimes,
-            item.sig
-                .generics
-                .params
-                .iter()
+        facts.impls.push(site);
+    }
+    if let Some(item) = ast::Fn::cast(node.clone()) {
+        let associated = item.syntax().parent().is_some_and(|parent| {
+            ast::AssocItemList::can_cast(parent.kind())
+                || ast::ExternItemList::can_cast(parent.kind())
+        });
+        if !associated {
+            if let Some(site) = sites::function(&item) {
+                facts.functions.push(site);
+            }
+            scope.lifetimes = item
+                .generic_param_list()
+                .into_iter()
+                .flat_map(|list| list.generic_params())
                 .filter_map(|param| match param {
-                    GenericParam::Lifetime(lifetime) => Some(lifetime.lifetime.ident.to_string()),
+                    ast::GenericParam::LifetimeParam(param) => {
+                        param.lifetime().map(|value| types::lifetime_name(&value))
+                    }
                     _ => None,
                 })
-                .collect(),
-        );
-        let previous_conditional = self.conditional_scope.take();
-        syn::visit::visit_item_fn(self, item);
-        self.scope_lifetimes = previous_scope;
-        self.conditional_scope = previous_conditional;
+                .collect();
+            scope.conditional = None;
+        }
     }
-
-    #[instrument(level = "trace", skip(self, item))]
-    fn visit_type_path(&mut self, item: &'ast syn::TypePath) {
-        if let Some(segment) = item.path.segments.last() {
-            let arguments = match &segment.arguments {
-                PathArguments::None => TypeArguments::None,
-                PathArguments::AngleBracketed(arguments) if arguments.args.len() == 1 => {
-                    match arguments.args.first() {
-                        Some(syn::GenericArgument::Lifetime(lifetime)) => {
-                            TypeArguments::OneLifetime {
-                                name: lifetime.ident.to_string(),
-                                range: self.range(arguments.span()),
-                            }
-                        }
-                        _ => TypeArguments::Other,
-                    }
+    if let Some(path) = ast::PathType::cast(node.clone())
+        && !types::trait_path(&path)
+        && let Some(site) = types::path_site(&path, &scope)
+    {
+        facts.type_paths.push(site);
+    }
+    if let Some(path) = ast::PathExpr::cast(node.clone()).and_then(|expr| expr.path()) {
+        use ast::HasGenericArgs;
+        let mut next = Some(path);
+        while let Some(path) = next {
+            if let Some(segment) = path.segment() {
+                if (segment.generic_arg_list().is_some()
+                    || segment.parenthesized_arg_list().is_some())
+                    && let Some(name) = segment.name_ref()
+                {
+                    facts.expr_path_blockers.insert(name.text().to_string());
                 }
-                _ => TypeArguments::Other,
-            };
-            self.facts.type_paths.push(TypePathSite {
-                name: segment.ident.to_string(),
-                range: self.range(item.span()),
-                ident_end: self.end(segment.ident.span()),
-                arguments,
-                qself: item.qself.is_some(),
-                path_len: item.path.segments.len(),
-                scope_lifetimes: self.scope_lifetimes.clone(),
-                conditional_scope: self.conditional_scope.clone(),
-            });
-        }
-        syn::visit::visit_type_path(self, item);
-    }
-
-    #[instrument(level = "trace", skip(self, item))]
-    fn visit_expr_path(&mut self, item: &'ast syn::ExprPath) {
-        self.facts.expr_path_blockers.extend(
-            item.path
-                .segments
-                .iter()
-                .filter(|segment| !matches!(segment.arguments, PathArguments::None))
-                .map(|segment| segment.ident.to_string()),
-        );
-        syn::visit::visit_expr_path(self, item);
-    }
-}
-
-#[instrument(level = "trace", skip(value))]
-fn all_lifetimes<'ast, T: VisitTarget<'ast>>(value: &'ast T) -> BTreeSet<String> {
-    let mut names = LifetimeNames(BTreeSet::new());
-    value.visit_with(&mut names);
-    names.0
-}
-
-#[instrument(level = "trace", skip(fields))]
-fn retained_lifetimes<'a>(fields: impl Iterator<Item = &'a syn::Field>) -> BTreeSet<String> {
-    fields
-        .filter(|field| !field_needs_lifetime(field, ErrorFieldStrategy::Owned))
-        .flat_map(|field| all_lifetimes(&field.ty))
-        .collect()
-}
-
-impl<'ast> VisitTarget<'ast> for syn::Signature {
-    #[instrument(level = "trace", skip(self, visitor))]
-    fn visit_with(&'ast self, visitor: &mut LifetimeNames) {
-        visitor.visit_signature(self);
-    }
-}
-
-impl<'ast> VisitTarget<'ast> for syn::Block {
-    #[instrument(level = "trace", skip(self, visitor))]
-    fn visit_with(&'ast self, visitor: &mut LifetimeNames) {
-        visitor.visit_block(self);
-    }
-}
-
-impl<'ast> VisitTarget<'ast> for syn::Path {
-    #[instrument(level = "trace", skip(self, visitor))]
-    fn visit_with(&'ast self, visitor: &mut LifetimeNames) {
-        visitor.visit_path(self);
-    }
-}
-
-impl<'ast> VisitTarget<'ast> for syn::Type {
-    #[instrument(level = "trace", skip(self, visitor))]
-    fn visit_with(&'ast self, visitor: &mut LifetimeNames) {
-        visitor.visit_type(self);
-    }
-}
-
-impl<'ast> VisitTarget<'ast> for syn::FnArg {
-    #[instrument(level = "trace", skip(self, visitor))]
-    fn visit_with(&'ast self, visitor: &mut LifetimeNames) {
-        visitor.visit_fn_arg(self);
-    }
-}
-
-struct LifetimeNames(BTreeSet<String>);
-
-impl<'ast> Visit<'ast> for LifetimeNames {
-    #[instrument(level = "debug", skip(self, lifetime))]
-    fn visit_lifetime(&mut self, lifetime: &'ast syn::Lifetime) {
-        self.0.insert(lifetime.ident.to_string());
-    }
-}
-
-#[instrument(level = "trace", skip(output))]
-fn return_type_names(output: &syn::ReturnType) -> BTreeSet<String> {
-    struct Names(BTreeSet<String>);
-    impl<'ast> Visit<'ast> for Names {
-        fn visit_type_path(&mut self, path: &'ast syn::TypePath) {
-            if let Some(segment) = path.path.segments.last() {
-                self.0.insert(segment.ident.to_string());
+                if let Some(anchor) = segment.type_anchor()
+                    && anchor.as_token().is_some()
+                    && let Some(trait_path) = anchor
+                        .syntax()
+                        .children()
+                        .filter_map(ast::PathType::cast)
+                        .last()
+                        .and_then(|ty| ty.path())
+                {
+                    next = Some(trait_path);
+                    continue;
+                }
             }
-            syn::visit::visit_type_path(self, path);
+            next = path.qualifier();
         }
     }
-    let mut names = Names(BTreeSet::new());
-    names.visit_return_type(output);
-    names.0
+    for child in node.children() {
+        collect(facts, &child, &scope);
+    }
 }

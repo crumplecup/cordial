@@ -2,10 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use quote::ToTokens;
 use tracing::instrument;
-
-use crate::loader::SharedParsedFile;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) struct Names {
@@ -17,13 +14,6 @@ impl Names {
     pub(super) fn record(&mut self, name: &str) {
         *self.counts.entry(name.to_string()).or_default() += 1;
     }
-    #[instrument(level = "debug", skip(file))]
-    pub(super) fn collect(file: &SharedParsedFile) -> Self {
-        let mut names = Self::default();
-        names.tokens(file.syntax().to_token_stream());
-        names
-    }
-
     #[instrument(level = "trace", skip(self, other))]
     pub(super) fn extend(&mut self, other: &Self) {
         for (name, count) in &other.counts {
@@ -57,16 +47,5 @@ impl Names {
         }
         self.counts.insert(name.clone(), 1);
         name
-    }
-
-    #[instrument(level = "trace", skip(self, tokens))]
-    fn tokens(&mut self, tokens: proc_macro2::TokenStream) {
-        for token in tokens {
-            match token {
-                proc_macro2::TokenTree::Ident(ident) => self.record(&ident.to_string()),
-                proc_macro2::TokenTree::Group(group) => self.tokens(group.stream()),
-                _ => {}
-            }
-        }
     }
 }

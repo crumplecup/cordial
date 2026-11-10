@@ -1,23 +1,18 @@
 //! Constructor initializer recognition for conservative error field edits.
 
-use syn::spanned::Spanned;
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
 
-use super::{Edit, simple_type_name, span_range};
+use super::Edit;
 
-mod bindings;
 mod native;
 mod native_bindings;
 mod native_tuples;
 mod native_values;
 mod projection;
 mod replacements;
-mod source;
-mod tuples;
 
-pub(super) use bindings::impl_uses_lifetime;
 pub(super) use projection::InitializerBatchInput;
 pub(crate) use projection::InitializerFileFacts;
 use replacements::InitializerExpressionFact;
@@ -48,18 +43,4 @@ impl InitializerFacts {
 pub(super) enum FieldKind {
     CallSiteFile,
     StaticString,
-}
-
-#[instrument(level = "debug", skip(source, attrs))]
-fn cfg_text(source: &str, attrs: &[syn::Attribute]) -> Option<Vec<String>> {
-    attrs
-        .iter()
-        .map(|attr| {
-            if !attr.path().is_ident("cfg") {
-                return None;
-            }
-            let (start, end) = span_range(source, attr.span())?;
-            Some(source.get(start..end)?.to_string())
-        })
-        .collect()
 }

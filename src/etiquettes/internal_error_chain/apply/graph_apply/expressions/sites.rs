@@ -1,6 +1,6 @@
 //! Located graph expression evidence, separate from traversal and scope tracking.
-use super::super::{GraphExprEvent, GraphValueFact, Range, SourceArgument};
-use super::{GraphExprFacts, macros, syntax};
+use super::super::syntax;
+use super::{GraphExprEvent, GraphExprFacts, GraphValueFact, Range, SourceArgument, macros};
 use ra_ap_syntax::{
     AstNode, SyntaxNode,
     ast::{self, HasArgList, HasName},

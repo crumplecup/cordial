@@ -4,8 +4,8 @@
 use cordial::AntipatternWorkspaceFacts;
 use cordial::{
     ATTR_SOURCE_ANTIPATTERNS, AntipatternRuleId, ContractRecordDump, CrateIr, CrateTarget,
-    ErrorFieldStrategy, IrView, LoadContext, Loader, SessionBuilder, SourceAntipatterns,
-    SourceLoadView, SourceLoader, StaticRefStrategy, scan_crate_contract_bounds,
+    ErrorFieldStrategy, IrView, SourceAntipatterns, SourceDatabase, StaticRefStrategy,
+    scan_crate_contract_bounds,
 };
 use miette::{IntoDiagnostic, Result};
 use sha2::{Digest, Sha256};
@@ -202,16 +202,9 @@ fn registry(verifier: &str) -> Result<Vec<ContractRecordDump>> {
 
 #[tracing::instrument(level = "debug", skip(root), err(level = "warn"))]
 fn load(root: &Path, name: &str) -> Result<CrateIr> {
-    let session = SessionBuilder::new(root).build();
     let target = CrateTarget::new(name, root);
-    let loaded = SourceLoader
-        .load(LoadContext::new(&session, &target))
-        .into_diagnostic()?;
-    let source = loaded
-        .as_any()
-        .downcast_ref::<SourceLoadView>()
-        .ok_or_else(|| miette::miette!("source view"))?;
-    let mut graph = CrateIr::new(name);
-    source.populate_ir(&mut graph).into_diagnostic()?;
-    Ok(graph)
+    SourceDatabase::load(root)
+        .into_diagnostic()?
+        .project_target(&target)
+        .into_diagnostic()
 }

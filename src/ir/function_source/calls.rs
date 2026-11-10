@@ -4,9 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::SourceByteRange;
 
-mod compatibility;
 mod native;
-pub(super) use compatibility::collect;
 pub(super) use native::collect as collect_native;
 
 /// A call expression belonging to this function's execution scope.

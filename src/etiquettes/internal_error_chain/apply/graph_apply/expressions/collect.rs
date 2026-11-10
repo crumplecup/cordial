@@ -1,12 +1,10 @@
 //! Expression sites projected from the canonical source database tree.
-use super::GraphExprFacts;
+use super::super::syntax;
+use super::{GraphExprFacts, sites};
 use crate::loader::DatabaseSource;
 use ra_ap_syntax::{AstNode, SyntaxKind, SyntaxNode, ast};
 use std::collections::BTreeMap;
 use tracing::instrument;
-mod macros;
-mod sites;
-use super::super::syntax;
 
 impl GraphExprFacts {
     #[instrument(level = "debug", skip(file))]

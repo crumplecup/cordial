@@ -1,6 +1,5 @@
 //! Declaration, method and free-function lifetime contracts.
-use super::super::{Declaration, FunctionSite, ImplSite, MethodSite};
-use super::{provenance, types};
+use super::{Declaration, FunctionSite, ImplSite, MethodSite, provenance, types};
 use crate::etiquettes::internal_error_chain::apply::graph_apply::syntax;
 use ra_ap_syntax::{
     AstNode,

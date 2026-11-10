@@ -7,7 +7,7 @@ use syn::{Attribute, ImplItem, Item, ItemFn, ItemImpl, ItemMod, Type, Visibility
 
 use crate::error::CordialResult;
 use crate::ir::{SourceTracingFunction, SourceTracingInventory};
-use crate::loader::{SharedParsedFile, module_path_from_src_file};
+use crate::loader::module_path_from_src_file;
 
 use super::classify::classify;
 use super::display_types::{DisplayTypeFacts, collect_display_type_facts};
@@ -17,18 +17,6 @@ use super::types::{FunctionKind, FunctionRecord, VisibilityLabel};
 use tracing::instrument;
 
 impl SourceTracingInventory {
-    /// Project function facts while the loader owns the shared tree.
-    #[instrument(level = "debug", skip(file), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourceTracingInventory")]
-    pub(crate) fn collect(file: &SharedParsedFile) -> CordialResult<Self> {
-        crate::loader::source_walk(file.path(), "tracing-inventory", || {
-            Ok(Self::new(
-                file.source_digest(),
-                collect_syntax(file.syntax())?,
-            ))
-        })
-    }
-
     /// Apply run-specific configuration and proof reachability to collected facts.
     #[instrument(
         level = "debug",

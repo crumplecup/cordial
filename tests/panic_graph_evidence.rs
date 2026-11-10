@@ -3,7 +3,7 @@
 
 use cordial::{
     ATTR_SOURCE_PANICS, CrateIr, CrateTarget, EnrichView, Etiquette, IrView, LoadContext, Loader,
-    PANICS_ETIQUETTE, QueryBuilder, SessionBuilder, SourceLoadView, SourceLoader, SourcePanics,
+    PANICS_ETIQUETTE, QueryBuilder, SessionBuilder, SourceDatabase, SourceLoader, SourcePanics,
 };
 use miette::{IntoDiagnostic, Result};
 use sha2::{Digest, Sha256};
@@ -37,17 +37,11 @@ fn panic_inventory_survives_source_removal_and_rejects_incomplete_evidence() -> 
         )
         .into_diagnostic()?;
     }
-    let session = SessionBuilder::new(root).build();
     let target = CrateTarget::new("panic_evidence", root);
-    let loaded = SourceLoader
-        .load(LoadContext::new(&session, &target))
+    let graph = SourceDatabase::load(root)
+        .into_diagnostic()?
+        .project_target(&target)
         .into_diagnostic()?;
-    let source = loaded
-        .as_any()
-        .downcast_ref::<SourceLoadView>()
-        .ok_or_else(|| miette::miette!("source view"))?;
-    let mut graph = CrateIr::new("panic_evidence");
-    source.populate_ir(&mut graph).into_diagnostic()?;
     let evidence = graph.source_panics().into_diagnostic()?;
     assert_eq!(
         evidence.snapshots().len(),
@@ -128,7 +122,6 @@ fn panic_inventory_survives_source_removal_and_rejects_incomplete_evidence() -> 
     assert!(corrupted.source_panics().is_err());
     let expected = materialize(&graph)?;
     assert_eq!(expected.len(), evidence.records().len());
-    drop(loaded);
     std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
     std::fs::remove_dir_all(root.join("tests")).into_diagnostic()?;
     assert_eq!(graph.source_panics().into_diagnostic()?, evidence);

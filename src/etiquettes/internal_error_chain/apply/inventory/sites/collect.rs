@@ -1,36 +1,16 @@
 //! Conversion contracts from the loader's canonical rust-analyzer tree.
-use super::super::{
-    ErrorEdgeEvidence, ErrorEdgeField, ErrorFromEvidence, ErrorSourceMethodEvidence,
-    ErrorTryEvidence, ErrorTryScope,
-};
-use super::{CalleeGuard, ConversionFileFacts, Event, Kind, PathFact};
+use super::super::{ErrorEdgeEvidence, ErrorEdgeField};
+use super::signatures::{mentions, path};
+use super::{CalleeGuard, Collector, Context, ConversionFileFacts, Event, Kind};
+use super::{attributes, signatures};
 use crate::etiquettes::internal_error_chain::apply::graph_apply::GraphExprFacts;
-use crate::loader::{DatabaseMacroSyntax, DatabaseSource};
+use crate::loader::DatabaseSource;
 use ra_ap_syntax::{
     AstNode, SyntaxKind, SyntaxNode,
     ast::{self, HasArgList, HasName},
 };
 use std::collections::BTreeSet;
-mod attributes;
-mod context;
-mod signatures;
-use signatures::{mentions, path, plain_path, return_evidence};
 
-#[derive(Clone, Default)]
-struct Context {
-    depth: usize,
-    owner: Option<String>,
-    error_trait: Option<Vec<String>>,
-    source_site: Option<usize>,
-    returns: Option<BTreeSet<String>>,
-    evidence: Option<ErrorTryEvidence>,
-    guards: Vec<CalleeGuard>,
-}
-struct Collector<'a, 'db> {
-    file: &'a DatabaseSource<'db>,
-    macros: DatabaseMacroSyntax,
-    events: Vec<Event>,
-}
 impl ConversionFileFacts {
     #[tracing::instrument(level = "debug", skip(file))]
     #[hotpath::measure(impl_type = "ConversionFileFacts")]
@@ -52,7 +32,7 @@ impl ConversionFileFacts {
 }
 impl Collector<'_, '_> {
     #[tracing::instrument(level = "trace", skip(self, node, context, kind))]
-    fn record(&mut self, node: &SyntaxNode, context: &Context, kind: Kind) {
+    pub(super) fn record(&mut self, node: &SyntaxNode, context: &Context, kind: Kind) {
         let range = node.text_range();
         let start = node
             .descendants_with_tokens()

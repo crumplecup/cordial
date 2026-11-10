@@ -7,12 +7,33 @@ use tracing::instrument;
 
 use crate::FileSnapshot;
 
+use std::collections::BTreeMap;
+
+use crate::loader::{DatabaseMacroSyntax, DatabaseSource};
+
+mod collect;
+mod contracts;
+mod expressions;
 mod identity;
-mod native;
-mod source;
-mod visit;
+mod macros;
 
 use identity::Identities;
+
+/// Per-file collection state; fields stay private to this module and its children.
+#[derive(Clone)]
+struct Scope {
+    bindings: BTreeMap<String, ReceiverRecipe>,
+    functions: BTreeMap<String, ReceiverRecipe>,
+    owner: ReceiverRecipe,
+    local_types: bool,
+}
+
+struct Collector<'a, 'db> {
+    file: &'a DatabaseSource<'db>,
+    syntax: DatabaseMacroSyntax,
+    scope: Scope,
+    facts: Vec<ConsumerSite>,
+}
 
 /// Candidate-independent receiver evidence, collected before crate-wide joins.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

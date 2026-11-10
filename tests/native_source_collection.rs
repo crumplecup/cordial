@@ -6,10 +6,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-use cordial::{
-    CrateIr, CrateTarget, IrView, LoadContext, Loader, SessionBuilder, SourceLoadView,
-    SourceLoader, TracingStdioPolicy,
-};
+use cordial::{CrateTarget, IrView, SourceDatabase, TracingStdioPolicy};
 use miette::{IntoDiagnostic, Result};
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
 
@@ -125,38 +122,22 @@ fn manifest_free_scans_use_native_inventories() -> Result<()> {
 }
 
 #[test]
-fn loader_inventories_share_a_parse_and_keep_their_frozen_input() -> Result<()> {
+fn projection_keeps_its_frozen_input_until_a_fresh_database() -> Result<()> {
     cordial::init_cli_tracing();
-    let access = Parses::default();
-    let _subscriber = tracing::subscriber::set_default(
-        tracing_subscriber::registry()
-            .with(access.clone())
-            .with(cordial::tracing_fmt_layer()),
-    );
     let fixture = tempfile::tempdir().into_diagnostic()?;
     std::fs::create_dir(fixture.path().join("src")).into_diagnostic()?;
+    std::fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let file = fixture.path().join("src/lib.rs");
     std::fs::write(&file, SOURCE).into_diagnostic()?;
     let target = CrateTarget::new("fixture", fixture.path());
-    let session = SessionBuilder::new(fixture.path()).build();
-    let loaded = SourceLoader
-        .load(LoadContext::new(&session, &target))
-        .into_diagnostic()?;
-    let source = loaded
-        .as_any()
-        .downcast_ref::<SourceLoadView>()
-        .ok_or_else(|| miette::miette!("source view"))?;
-    let mut first = CrateIr::new("fixture");
-    source.populate_ir(&mut first).into_diagnostic()?;
-    assert_eq!(
-        access.native.load(Ordering::Relaxed),
-        1,
-        "both inventories must share the upstream query"
-    );
+    let mut database = SourceDatabase::load(fixture.path()).into_diagnostic()?;
+    let first = database.project_target(&target).into_diagnostic()?;
     std::fs::write(&file, "pub fn changed() {}\n").into_diagnostic()?;
-    let mut repeated = CrateIr::new("fixture");
-    source.populate_ir(&mut repeated).into_diagnostic()?;
-    assert_eq!(access.native.load(Ordering::Relaxed), 1);
+    let repeated = database.project_target(&target).into_diagnostic()?;
     assert_eq!(
         first.source_error_sites().into_diagnostic()?,
         repeated.source_error_sites().into_diagnostic()?
@@ -186,15 +167,10 @@ fn loader_inventories_share_a_parse_and_keep_their_frozen_input() -> Result<()> 
         first.source_antipatterns().into_diagnostic()?,
         repeated.source_antipatterns().into_diagnostic()?
     );
-    let fresh = SourceLoader
-        .load(LoadContext::new(&session, &target))
+    let changed = SourceDatabase::load(fixture.path())
+        .into_diagnostic()?
+        .project_target(&target)
         .into_diagnostic()?;
-    let source = fresh
-        .as_any()
-        .downcast_ref::<SourceLoadView>()
-        .ok_or_else(|| miette::miette!("source view"))?;
-    let mut changed = CrateIr::new("fixture");
-    source.populate_ir(&mut changed).into_diagnostic()?;
     assert_ne!(
         first.source_error_sites().into_diagnostic()?,
         changed.source_error_sites().into_diagnostic()?
@@ -203,7 +179,6 @@ fn loader_inventories_share_a_parse_and_keep_their_frozen_input() -> Result<()> 
         first.source_observability().into_diagnostic()?,
         changed.source_observability().into_diagnostic()?
     );
-    assert_eq!(access.native.load(Ordering::Relaxed), 2);
     Ok(())
 }
 

@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use syn::{GenericParam, Item, ItemStruct, Type};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
@@ -15,8 +14,6 @@ use crate::loader::{SourceEditView, SourceLoadView};
 use crate::session::RunAll;
 use crate::targets::discover_crate_targets;
 
-use super::type_graph::trait_is_std_error;
-
 mod getter_uses;
 pub(super) mod getters;
 mod graph_apply;
@@ -25,7 +22,6 @@ mod inventory;
 mod lifetime;
 mod names;
 mod patch;
-mod uses;
 mod write;
 
 pub(crate) use self::getter_uses::GetterConsumerFacts;
@@ -325,99 +321,3 @@ pub fn run_error_field_apply(
 
 /// Compatibility name for the original file-only apply operation.
 pub use run_error_field_apply as run_error_file_apply;
-
-#[instrument(level = "debug", skip(syntax))]
-fn known_error_impls(syntax: &syn::File) -> BTreeSet<String> {
-    syntax
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            Item::Impl(item)
-                if item
-                    .trait_
-                    .as_ref()
-                    .is_some_and(|(path, _)| trait_is_std_error(path)) =>
-            {
-                simple_type_name(&item.self_ty)
-            }
-            _ => None,
-        })
-        .collect()
-}
-
-#[instrument(level = "debug", skip(ty))]
-fn simple_type_name(ty: &Type) -> Option<String> {
-    let Type::Path(path) = ty else { return None };
-    if path.qself.is_some() || path.path.segments.len() != 1 {
-        return None;
-    }
-    path.path
-        .segments
-        .first()
-        .map(|segment| segment.ident.to_string())
-}
-
-#[instrument(level = "trace", skip(ty), ret)]
-fn is_string(ty: &Type) -> bool {
-    matches!(ty, Type::Path(path) if path.path.is_ident("String"))
-}
-
-#[instrument(level = "trace", skip(ty), ret)]
-fn is_static_str(ty: &Type) -> bool {
-    is_str_ref_with_lifetime(ty, "static")
-}
-
-#[instrument(level = "trace", skip(ty, lifetime), ret)]
-fn is_str_ref_with_lifetime(ty: &Type, lifetime: &str) -> bool {
-    matches!(ty, Type::Reference(reference)
-        if reference.mutability.is_none()
-            && reference.lifetime.as_ref().is_some_and(|named| named.ident == lifetime)
-            && matches!(&*reference.elem, Type::Path(path) if path.path.is_ident("str")))
-}
-
-#[instrument(level = "trace", skip(item), ret)]
-fn single_struct_lifetime(item: &ItemStruct) -> Option<String> {
-    if item.generics.where_clause.is_some() || item.generics.params.len() != 1 {
-        return None;
-    }
-    match item.generics.params.first()? {
-        GenericParam::Lifetime(param) if param.attrs.is_empty() && param.bounds.is_empty() => {
-            let lifetime = param.lifetime.ident.to_string();
-            item.fields
-                .iter()
-                .any(|field| is_non_string_lifetime_anchor(&field.ty, &lifetime))
-                .then_some(lifetime)
-        }
-        _ => None,
-    }
-}
-
-#[instrument(level = "trace", skip(ty, lifetime), ret)]
-fn is_non_string_lifetime_anchor(ty: &Type, lifetime: &str) -> bool {
-    matches!(ty, Type::Reference(reference)
-        if reference.lifetime.as_ref().is_some_and(|named| named.ident == lifetime)
-            && !matches!(&*reference.elem, Type::Path(path) if path.path.is_ident("str")))
-}
-
-#[instrument(level = "debug", skip(source, span))]
-fn span_range(source: &str, span: proc_macro2::Span) -> Option<(usize, usize)> {
-    let offset = |line: usize, column: usize| {
-        let start = source
-            .split_inclusive('\n')
-            .take(line.checked_sub(1)?)
-            .map(str::len)
-            .sum::<usize>();
-        // proc_macro2 columns count characters; edits use byte offsets.
-        let tail = source.get(start..)?;
-        let column = tail
-            .char_indices()
-            .map(|(offset, _)| offset)
-            .chain(std::iter::once(tail.len()))
-            .nth(column)?;
-        start.checked_add(column)
-    };
-    Some((
-        offset(span.start().line, span.start().column)?,
-        offset(span.end().line, span.end().column)?,
-    ))
-}

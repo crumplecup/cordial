@@ -1,210 +1,130 @@
+//! Conservative constructor and forwarding-return lifetime origins.
+use crate::etiquettes::internal_error_chain::apply::graph_apply::syntax;
+use ra_ap_syntax::ast::{self, HasArgList, HasGenericArgs, HasName};
 use std::collections::BTreeSet;
-
-use syn::Type;
-use syn::visit::Visit;
 use tracing::instrument;
 
-#[instrument(level = "trace", skip(value, lifetime))]
-fn contains_lifetime_type(value: &Type, lifetime: &str) -> bool {
-    struct LifetimeUse<'a> {
-        lifetime: &'a str,
-        found: bool,
-    }
-    impl<'ast> Visit<'ast> for LifetimeUse<'_> {
-        #[instrument(level = "debug", skip(self, value))]
-        fn visit_lifetime(&mut self, value: &'ast syn::Lifetime) {
-            self.found |= value.ident == self.lifetime;
-        }
-    }
-    let mut visitor = LifetimeUse {
-        lifetime,
-        found: false,
-    };
-    visitor.visit_type(value);
-    visitor.found
+#[instrument(level = "trace", skip(item))]
+fn sole_tail(item: &ast::Fn) -> Option<ast::Expr> {
+    let body = item.body()?.stmt_list()?;
+    body.statements()
+        .next()
+        .is_none()
+        .then(|| body.tail_expr())
+        .flatten()
 }
 
-#[instrument(level = "debug", skip(signature))]
-pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn anchored_parameters(
-    signature: &syn::Signature,
-    lifetime: &str,
-) -> BTreeSet<String> {
-    fn collect(pat: &syn::Pat, ty: &Type, lifetime: &str, names: &mut BTreeSet<String>) {
-        match (pat, ty) {
-            (syn::Pat::Ident(ident), ty) if contains_lifetime_type(ty, lifetime) => {
-                names.insert(ident.ident.to_string());
-            }
-            (syn::Pat::Tuple(pat), Type::Tuple(ty)) if pat.elems.len() == ty.elems.len() => {
-                for (pat, ty) in pat.elems.iter().zip(&ty.elems) {
-                    collect(pat, ty, lifetime, names);
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut names = BTreeSet::new();
-    for input in &signature.inputs {
-        if let syn::FnArg::Typed(input) = input {
-            collect(&input.pat, &input.ty, lifetime, &mut names);
-        }
-    }
-    names
-}
-
-#[instrument(level = "debug", skip(expr, parameters))]
-fn anchored_expr(expr: &syn::Expr, parameters: &BTreeSet<String>) -> bool {
-    match expr {
-        syn::Expr::Path(path) if path.path.segments.len() == 1 => {
-            parameters.contains(&path.path.segments[0].ident.to_string())
-        }
-        syn::Expr::Reference(reference) => anchored_expr(&reference.expr, parameters),
-        syn::Expr::MethodCall(call)
-            if call.args.is_empty()
-                && matches!(
-                    call.method.to_string().as_str(),
-                    "clone" | "to_owned" | "to_string"
-                ) =>
-        {
-            anchored_expr(&call.receiver, parameters)
-        }
-        syn::Expr::Call(call)
-            if matches!(&*call.func, syn::Expr::Path(path)
-                if path.path.segments.len() == 2
-                    && path.path.segments[0].ident == "Box"
-                    && path.path.segments[1].ident == "new")
-                && call.args.len() == 1 =>
-        {
-            call.args
-                .first()
-                .is_some_and(|arg| anchored_expr(arg, parameters))
-        }
-        _ => false,
-    }
-}
-
-#[instrument(level = "debug", skip(expr, names, parameters))]
-fn direct_graph_return(
-    expr: &syn::Expr,
-    names: &BTreeSet<String>,
-    parameters: &BTreeSet<String>,
-) -> bool {
-    let syn::Expr::Call(call) = expr else {
-        return false;
-    };
-    let syn::Expr::Path(path) = &*call.func else {
-        return false;
-    };
-    path.path.segments.len() >= 2
-        && path
-            .path
-            .segments
-            .iter()
-            .rev()
-            .nth(1)
-            .is_some_and(|segment| names.contains(&segment.ident.to_string()))
-        && call.args.iter().all(|arg| anchored_expr(arg, parameters))
-}
-
-#[instrument(level = "debug", skip(expr, parameters))]
-pub(in crate::etiquettes::internal_error_chain::apply::graph_apply) fn constructor_origin(
-    expr: &syn::Expr,
-    parameters: &BTreeSet<String>,
-) -> bool {
-    if anchored_expr(expr, parameters) {
-        return true;
-    }
-    let syn::Expr::Call(call) = expr else {
-        return false;
-    };
-    matches!(&*call.func, syn::Expr::Path(path)
-        if path.path.segments.len() == 2
-            && path.path.segments[0].ident == "Box"
-            && path.path.segments[1].ident == "new")
-        && call.args.len() == 1
-        && call
-            .args
-            .first()
-            .is_some_and(|arg| constructor_origin(arg, parameters))
-}
-
-#[instrument(level = "debug", skip(item))]
-pub(super) fn safe_impl_constructor(item: &syn::ImplItemFn, lifetime: &str) -> bool {
-    let parameters = anchored_parameters(&item.sig, lifetime);
+#[instrument(level = "trace", skip(item, parameters))]
+pub(super) fn safe_constructor(item: &ast::Fn, parameters: &BTreeSet<String>) -> bool {
     if parameters.is_empty() {
         return false;
     }
-    let [syn::Stmt::Expr(tail, None)] = item.block.stmts.as_slice() else {
-        return false;
-    };
-    match tail {
-        syn::Expr::Struct(value) if value.path.is_ident("Self") && value.rest.is_none() => {
-            value.fields.iter().all(|field| {
-                !matches!(&field.member, syn::Member::Named(name)
-                    if name == "kind" || name == "source")
-                    || constructor_origin(&field.expr, &parameters)
-            })
+    match sole_tail(item) {
+        Some(ast::Expr::RecordExpr(record)) => {
+            if !record.path().is_some_and(|path| {
+                path.qualifier().is_none()
+                    && path.coloncolon_token().is_none()
+                    && path.segment().is_some_and(|segment| {
+                        segment.generic_arg_list().is_none()
+                            && segment.name_ref().is_some_and(|name| name.text() == "Self")
+                    })
+            }) {
+                return false;
+            }
+            let Some(fields) = record.record_expr_field_list() else {
+                return false;
+            };
+            fields.dotdot_token().is_none()
+                && fields.fields().all(|field| {
+                    let expr = field.expr();
+                    let name = field.name_ref().or_else(|| match &expr {
+                        Some(ast::Expr::PathExpr(expr)) => expr.path()?.segment()?.name_ref(),
+                        _ => None,
+                    });
+                    !name.is_some_and(|name| matches!(name.text(), "kind" | "source"))
+                        || expr.is_some_and(|expr| syntax::origin(&expr, parameters))
+                })
         }
-        syn::Expr::Call(call)
-            if matches!(&*call.func, syn::Expr::Path(path)
-                if path.path.segments.len() == 2
-                    && path.path.segments[0].ident == "Self") =>
-        {
-            call.args.iter().all(|arg| anchored_expr(arg, &parameters))
+        Some(ast::Expr::CallExpr(call)) => {
+            matches!(call.expr(), Some(ast::Expr::PathExpr(expr)) if expr.path().map(syntax::names).is_some_and(|names| names.len() == 2 && names[0] == "Self"))
+                && call
+                    .arg_list()
+                    .is_some_and(|list| list.args().all(|arg| syntax::origin(&arg, parameters)))
         }
         _ => false,
     }
 }
 
-#[instrument(level = "debug", skip(block, parameters))]
-fn forwarding_result(block: &syn::Block, parameters: &BTreeSet<String>) -> bool {
-    let [
-        syn::Stmt::Local(local),
-        syn::Stmt::Expr(syn::Expr::Try(try_expr), Some(_)),
-        syn::Stmt::Expr(syn::Expr::Call(ok), None),
-    ] = block.stmts.as_slice()
-    else {
+#[instrument(level = "trace", skip(item, name, parameters))]
+pub(super) fn safe_return(item: &ast::Fn, name: &str, parameters: &BTreeSet<String>) -> bool {
+    if parameters.is_empty() {
+        return false;
+    }
+    sole_tail(item).is_some_and(|expr| match expr {
+        ast::Expr::CallExpr(call) => {
+            matches!(call.expr(), Some(ast::Expr::PathExpr(expr)) if expr.path().map(syntax::names).is_some_and(|names| names.len() >= 2 && names[names.len() - 2] == name)) && call.arg_list().is_some_and(|list| list.args().all(|arg| syntax::origin(&arg, parameters)))
+        }
+        _ => false,
+    }) || forwarding_result(item, parameters)
+}
+
+#[instrument(level = "trace", skip(item, parameters))]
+fn forwarding_result(item: &ast::Fn, parameters: &BTreeSet<String>) -> bool {
+    let Some(body) = item.body().and_then(|body| body.stmt_list()) else {
         return false;
     };
-    let syn::Pat::Type(binding) = &local.pat else {
+    let statements: Vec<_> = body.statements().collect();
+    let [ast::Stmt::LetStmt(local), ast::Stmt::ExprStmt(stmt)] = statements.as_slice() else {
         return false;
     };
-    let syn::Pat::Ident(binding_name) = &*binding.pat else {
+    let Some(ast::Pat::IdentPat(binding)) = local.pat() else {
         return false;
     };
-    if !matches!(&*binding.ty, Type::Path(path)
-        if path.path.segments.last().is_some_and(|segment| segment.ident == "Result"))
-        || !matches!(&*try_expr.expr, syn::Expr::Path(path)
-            if path.path.is_ident(&binding_name.ident))
+    let Some(binding) = binding.name() else {
+        return false;
+    };
+    if !matches!(local.ty(), Some(ast::Type::PathType(ty)) if ty.path().and_then(|path| path.segment()).and_then(|part| part.name_ref()).is_some_and(|name| name.text() == "Result"))
     {
         return false;
     }
-    let Some(init) = &local.init else {
+    let Some(ast::Expr::TryExpr(expr)) = stmt.expr() else {
         return false;
     };
-    let syn::Expr::Call(err) = &*init.expr else {
-        return false;
-    };
-    let [syn::Expr::Tuple(tuple)] = err.args.iter().collect::<Vec<_>>().as_slice() else {
-        return false;
-    };
-    matches!(&*err.func, syn::Expr::Path(path) if path.path.is_ident("Err"))
-        && tuple.elems.iter().all(|arg| anchored_expr(arg, parameters))
-        && matches!(&*ok.func, syn::Expr::Path(path) if path.path.is_ident("Ok"))
-        && ok.args.len() == 1
-        && matches!(ok.args.first(), Some(syn::Expr::Tuple(unit)) if unit.elems.is_empty())
-}
-
-#[instrument(level = "debug", skip(item, names))]
-pub(super) fn safe_top_level_return(
-    item: &syn::ItemFn,
-    names: &BTreeSet<String>,
-    lifetime: &str,
-) -> bool {
-    let parameters = anchored_parameters(&item.sig, lifetime);
-    if parameters.is_empty() {
+    if stmt.semicolon_token().is_none()
+        || !expr
+            .expr()
+            .is_some_and(|expr| syntax::bare_path(&expr, binding.text()))
+    {
         return false;
     }
-    matches!(item.block.stmts.as_slice(), [syn::Stmt::Expr(expr, None)]
-        if direct_graph_return(expr, names, &parameters))
-        || forwarding_result(&item.block, &parameters)
+    let Some(ast::Expr::CallExpr(err)) = local.initializer() else {
+        return false;
+    };
+    if !err
+        .expr()
+        .is_some_and(|expr| syntax::bare_path(&expr, "Err"))
+    {
+        return false;
+    }
+    let args: Vec<_> = err
+        .arg_list()
+        .into_iter()
+        .flat_map(|list| list.args())
+        .collect();
+    let [ast::Expr::TupleExpr(tuple)] = args.as_slice() else {
+        return false;
+    };
+    if !tuple.fields().all(|arg| syntax::origin(&arg, parameters)) {
+        return false;
+    }
+    let Some(ast::Expr::CallExpr(ok)) = body.tail_expr() else {
+        return false;
+    };
+    let args: Vec<_> = ok
+        .arg_list()
+        .into_iter()
+        .flat_map(|list| list.args())
+        .collect();
+    ok.expr().is_some_and(|expr| syntax::bare_path(&expr, "Ok"))
+        && matches!(args.as_slice(), [ast::Expr::TupleExpr(unit)] if unit.fields().next().is_none())
 }

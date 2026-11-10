@@ -33,19 +33,6 @@ impl SourceAntipatterns {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourceAntipatterns")]
-    pub(crate) fn collect(
-        source: &crate::SourceLoadView,
-        root: &Path,
-        crate_name: &str,
-    ) -> CordialResult<Self> {
-        Ok(Self {
-            crate_root: root.into(),
-            catalog: AntipatternCatalog::collect(source, root, crate_name)?,
-        })
-    }
-
     /// Fingerprints of every inspected source file, including empty files.
     #[tracing::instrument(level = "trace", skip(self))]
     pub fn snapshots(&self) -> &[FileSnapshot] {

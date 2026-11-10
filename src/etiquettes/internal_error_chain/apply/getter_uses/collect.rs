@@ -1,31 +1,15 @@
 //! Getter receiver evidence from canonical Rust and loader-issued macro islands.
-use super::{ConsumerSite, GetterConsumerFacts, ReceiverRecipe, UseKind};
-use crate::loader::{DatabaseMacroSyntax, DatabaseSource};
+use super::{
+    Collector, ConsumerSite, GetterConsumerFacts, ReceiverRecipe, Scope, UseKind, contracts,
+    expressions,
+};
+use crate::loader::DatabaseSource;
 use ra_ap_syntax::{
     AstNode, SyntaxKind, SyntaxNode,
     ast::{self, HasGenericParams, HasName},
 };
 use std::collections::BTreeMap;
 use tracing::instrument;
-
-mod contracts;
-mod expressions;
-mod macros;
-
-#[derive(Clone)]
-struct Scope {
-    bindings: BTreeMap<String, ReceiverRecipe>,
-    functions: BTreeMap<String, ReceiverRecipe>,
-    owner: ReceiverRecipe,
-    local_types: bool,
-}
-
-struct Collector<'a, 'db> {
-    file: &'a DatabaseSource<'db>,
-    syntax: DatabaseMacroSyntax,
-    scope: Scope,
-    facts: Vec<ConsumerSite>,
-}
 
 impl GetterConsumerFacts {
     #[instrument(level = "debug", skip(file))]
@@ -52,7 +36,7 @@ impl GetterConsumerFacts {
 
 impl Collector<'_, '_> {
     #[instrument(level = "trace", skip(self, node))]
-    fn visit(&mut self, node: &SyntaxNode, offset: usize) {
+    pub(super) fn visit(&mut self, node: &SyntaxNode, offset: usize) {
         if matches!(node.kind(), SyntaxKind::TOKEN_TREE | SyntaxKind::ATTR) {
             return;
         }
@@ -193,7 +177,13 @@ impl Collector<'_, '_> {
     }
 
     #[instrument(level = "trace", skip(self, receiver, kind))]
-    fn record(&mut self, start: usize, end: usize, receiver: ReceiverRecipe, kind: UseKind) {
+    pub(super) fn record(
+        &mut self,
+        start: usize,
+        end: usize,
+        receiver: ReceiverRecipe,
+        kind: UseKind,
+    ) {
         let (line, column) = position(self.file.source(), start);
         let (end_line, end_column) = position(self.file.source(), end);
         self.facts.push(ConsumerSite {

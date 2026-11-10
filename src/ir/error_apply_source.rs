@@ -4,7 +4,7 @@ use crate::etiquettes::internal_error_chain::{
     ConversionFileFacts, GetterConsumerFacts, GetterContractFacts, GraphDeclarationFacts,
     GraphExprFacts, GraphLifetimeFacts, InitializerFileFacts, LifetimeFileFacts, NameAudit,
 };
-use crate::loader::{DatabaseSource, SourceLoadView, SourceSnapshot};
+use crate::loader::{DatabaseSource, SourceSnapshot};
 use crate::{CordialError, CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -63,40 +63,6 @@ impl SourceErrorApply {
         file: &impl SourceSnapshot,
     ) -> CordialResult<&ConversionFileFacts> {
         Ok(&self.file_for(file)?.conversion_sites)
-    }
-
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourceErrorApply")]
-    pub(crate) fn collect(source: &SourceLoadView, root: &Path) -> CordialResult<Self> {
-        let mut files = Vec::new();
-        crate::etiquettes::internal_error_chain::for_each_shared_src_rust_file(
-            source,
-            root,
-            |path, _| {
-                let file = source.parsed_file(path, "source-error-apply")?;
-                files.push(ErrorApplyFile {
-                    snapshot: FileSnapshot::new(path.to_path_buf(), file.source_digest()),
-                    declarations: GraphDeclarationFacts::collect(&file),
-                    namespace: ApplyNamespace::collect(&file),
-                    name_audit: NameAudit::collect(&file),
-                    static_strings: static_strings::collect(&file),
-                    uses: ApplyUses::collect(&file),
-                    expressions: GraphExprFacts::collect(&file),
-                    lifetimes: GraphLifetimeFacts::collect(&file),
-                    getters: GetterContractFacts::collect(&file),
-                    getter_uses: GetterConsumerFacts::collect(&file),
-                    local_lifetimes: LifetimeFileFacts::collect(&file),
-                    initializers: InitializerFileFacts::collect(&file),
-                    conversion_sites: ConversionFileFacts::collect(&file),
-                });
-                Ok(())
-            },
-        )?;
-        files.sort_by(|a, b| a.snapshot.path().cmp(b.snapshot.path()));
-        Ok(Self {
-            crate_root: root.to_path_buf(),
-            files,
-        })
     }
 
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]

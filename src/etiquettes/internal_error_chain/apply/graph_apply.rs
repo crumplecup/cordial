@@ -25,7 +25,6 @@ mod expressions;
 mod lifetimes;
 mod plan;
 mod syntax;
-mod types;
 
 pub(crate) use declarations::GraphDeclarationFacts;
 pub(super) use declarations::{DeclarationKind, GraphFields};

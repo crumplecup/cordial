@@ -1,6 +1,5 @@
 //! Exact generic, field and type-use contracts for lifetime planning.
-use super::super::{ConditionalScope, Range, TypeArguments, TypePathSite};
-use super::Scope;
+use super::{ConditionalScope, Range, Scope, TypeArguments, TypePathSite};
 use crate::etiquettes::internal_error_chain::apply::graph_apply::syntax;
 use ra_ap_syntax::{
     AstNode, SyntaxKind, SyntaxNode,

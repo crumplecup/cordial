@@ -1,10 +1,8 @@
 //! Conservative name checks for syntactic error field rewrites.
 
 use std::collections::BTreeSet;
-use syn::visit::Visit;
 use tracing::instrument;
 
-mod compatibility;
 mod native;
 
 /// Decline a rewrite if a name it relies on can mean something else locally.
@@ -18,14 +16,6 @@ pub(crate) struct NameAudit {
 }
 
 impl NameAudit {
-    #[instrument(level = "debug", skip(file))]
-    #[hotpath::measure(impl_type = "NameAudit")]
-    pub(crate) fn collect(file: &crate::loader::SharedParsedFile) -> Self {
-        let mut audit = Self::default();
-        audit.visit_file(file.syntax());
-        audit
-    }
-
     #[instrument(level = "trace", skip(self))]
     pub(super) fn blocks(&self, type_name: &str) -> bool {
         self.ambiguous

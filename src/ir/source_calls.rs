@@ -3,7 +3,6 @@
 use super::{FunctionBoundary, NodeId, SourceByteRange};
 use serde::{Deserialize, Serialize};
 
-mod collect;
 mod native;
 
 /// A value path, including uses outside the direct-call graph.
@@ -61,13 +60,6 @@ pub struct SourceModuleScope {
     /// Older snapshots lack this evidence and cannot establish use-site closure.
     #[serde(default)]
     uses: Option<SourceUseInventory>,
-}
-
-impl SourceModuleScope {
-    #[tracing::instrument(level = "trace", skip(file))]
-    pub(crate) fn collect(file: &crate::loader::SharedParsedFile) -> Self {
-        collect::collect(file)
-    }
 }
 
 /// Why a written call cannot identify a source function in this resolver.

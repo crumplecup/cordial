@@ -1,8 +1,8 @@
 //! Scope transitions for impl owners, source methods and fallible return contracts.
-use super::{
-    Collector, Context, ErrorFromEvidence, ErrorSourceMethodEvidence, ErrorTryScope, Kind,
-};
-use super::{mentions, path, plain_path, return_evidence, signatures};
+use super::super::{ErrorFromEvidence, ErrorSourceMethodEvidence, ErrorTryScope};
+use super::signatures::{mentions, path, plain_path, return_evidence};
+use super::{Collector, Context};
+use super::{Kind, signatures};
 use ra_ap_syntax::{
     AstNode, SyntaxNode,
     ast::{self, HasName},

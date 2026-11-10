@@ -1,6 +1,6 @@
 //! Conservative macro guards, using only loader-issued argument syntax.
-use super::super::GraphExprEvent;
-use super::syntax;
+use super::super::syntax;
+use super::GraphExprEvent;
 use crate::loader::DatabaseMacroSyntax;
 use ra_ap_syntax::{AstNode, NodeOrToken, SyntaxElement, SyntaxKind, ast, ast::HasGenericArgs};
 use std::collections::BTreeSet;
@@ -157,7 +157,7 @@ fn accesses(expr: &ast::Expr, field: &str, syntax: &DatabaseMacroSyntax) -> bool
     })
 }
 
-impl super::super::GraphExprFacts {
+impl super::GraphExprFacts {
     #[instrument(level = "trace", skip(tree, invocation, syntax))]
     pub(in crate::etiquettes::internal_error_chain::apply) fn conversion_macro(
         tree: Option<ast::TokenTree>,

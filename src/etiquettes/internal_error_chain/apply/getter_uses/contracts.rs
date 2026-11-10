@@ -1,5 +1,5 @@
 //! Existing conservative method contracts, collected before identity resolution.
-use super::super::{MethodContract, ReceiverRecipe};
+use super::{MethodContract, ReceiverRecipe};
 use crate::loader::DatabaseSource;
 use ra_ap_syntax::ast::{self, HasAttrs, HasGenericArgs, HasGenericParams, HasModuleItem, HasName};
 use tracing::instrument;
@@ -38,7 +38,7 @@ pub(super) fn methods(file: &DatabaseSource<'_>) -> Vec<MethodContract> {
                 }
             }
             ast::Item::Struct(item)
-                if super::super::super::getters::has_native_derive(
+                if super::super::getters::has_native_derive(
                     file,
                     &item,
                     "derive_getters",

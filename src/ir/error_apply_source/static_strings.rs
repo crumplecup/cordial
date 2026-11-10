@@ -1,35 +1,11 @@
 //! Immutable initializer sources retained with their source snapshot.
 
-use crate::loader::{DatabaseSource, SharedParsedFile};
+use crate::loader::DatabaseSource;
 use ra_ap_syntax::{
     AstNode,
     ast::{self, HasAttrs, HasGenericArgs, HasModuleItem, HasName},
 };
 use std::collections::{BTreeMap, BTreeSet};
-
-#[tracing::instrument(level = "debug", skip(file))]
-pub(super) fn collect(file: &SharedParsedFile) -> BTreeSet<String> {
-    let mut declarations: BTreeMap<String, Vec<bool>> = BTreeMap::new();
-    for item in &file.syntax().items {
-        let (name, ty, attrs, immutable) = match item {
-            syn::Item::Const(item) => (&item.ident, &item.ty, &item.attrs, true),
-            syn::Item::Static(item) => (
-                &item.ident,
-                &item.ty,
-                &item.attrs,
-                matches!(item.mutability, syn::StaticMutability::None),
-            ),
-            _ => continue,
-        };
-        declarations.entry(name.to_string()).or_default().push(
-            immutable && attrs.is_empty() && matches!(&**ty, syn::Type::Reference(reference)
-                if reference.mutability.is_none()
-                    && reference.lifetime.as_ref().is_some_and(|named| named.ident == "static")
-                    && matches!(&*reference.elem, syn::Type::Path(path) if path.path.is_ident("str"))),
-        );
-    }
-    unique(declarations)
-}
 
 #[tracing::instrument(level = "debug", skip(file))]
 pub(super) fn collect_native(file: &DatabaseSource<'_>) -> BTreeSet<String> {

@@ -23,6 +23,11 @@ fn architecture_is_required_and_reassessed_without_source() -> Result<()> {
     let root = fixture.path();
     std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
     std::fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = 'architecture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
         root.join("src/lib.rs"),
         format!(
             "mod empty;\n{}",
