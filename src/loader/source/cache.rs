@@ -140,6 +140,17 @@ impl Drop for ParsedSourceSession {
 }
 
 impl SourceLoadView {
+    /// Project one target from the database of the run this view belongs to.
+    /// The view must have been created inside a loaded session.
+    #[tracing::instrument(level = "debug", skip(self, target), err(level = "warn"))]
+    pub(crate) fn project_target(
+        &self,
+        target: &crate::loader::CrateTarget,
+    ) -> crate::CordialResult<crate::ir::CrateIr> {
+        self.cache_token
+            .with_database(|database| database.project_target(target))
+    }
+
     /// A lazy shared parse cache for a standalone operation outside a session.
     /// Its caller must drop the view before rescanning files it has edited.
     #[cfg(any(

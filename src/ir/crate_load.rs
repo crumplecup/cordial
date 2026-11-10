@@ -32,7 +32,16 @@ pub fn load_crate_ir_if_missing(
     let mut crate_ir = CrateIr::new(crate_name);
     let mut load_views: HashMap<String, Box<dyn LoadView>> = HashMap::new();
 
-    for loader in loaders {
+    // The source projection builds the graph; rustdoc populates on top of it.
+    let ordered = loaders
+        .iter()
+        .filter(|loader| loader.id() == SourceLoader::ID)
+        .chain(
+            loaders
+                .iter()
+                .filter(|loader| loader.id() != SourceLoader::ID),
+        );
+    for loader in ordered {
         let view = if loader.id() == RustdocLoader::ID {
             load_rustdoc_view(session, &target, shadow_for_upstream)?
         } else {
@@ -42,7 +51,7 @@ pub fn load_crate_ir_if_missing(
         if view.loader_id() == SourceLoader::ID
             && let Some(source) = view.as_any().downcast_ref::<SourceLoadView>()
         {
-            source.populate_ir(&mut crate_ir)?;
+            crate_ir = source.project_target(&target)?;
         }
         if view.loader_id() == RustdocLoader::ID
             && let Some(rustdoc) = view.as_any().downcast_ref::<RustdocLoadView>()

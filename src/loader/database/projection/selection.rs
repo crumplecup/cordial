@@ -18,6 +18,7 @@ impl SourceDatabase {
         let package = context
             .packages()
             .iter()
+            .chain(&self.external_packages)
             .find(|package| package.root() == &root)
             .ok_or_else(|| crate::CordialError::not_found(root.clone()))?;
         let graph = self.package_sources(package);

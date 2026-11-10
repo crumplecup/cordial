@@ -43,6 +43,7 @@ impl SourceDatabase {
             vfs: Vfs::default(),
             revision: 1,
             workspace: None,
+            external_packages: Vec::new(),
             cargo_options: None,
             proc_macro_server: None,
             #[cfg(feature = "cfg_hygiene")]

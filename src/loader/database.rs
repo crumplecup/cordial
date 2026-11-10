@@ -25,6 +25,9 @@ pub struct SourceDatabase {
     vfs: ra_ap_vfs::Vfs,
     revision: u64,
     workspace: Option<crate::SemanticWorkspaceContext>,
+    // Dependency packages of the loaded Cargo graph, kept out of the context
+    // identity so snapshots do not carry the whole dependency tree.
+    external_packages: Vec<crate::SemanticPackageContext>,
     cargo_options: Option<crate::SemanticCargoOptions>,
     // Keep the expansion service alive for this entire analysis session.
     proc_macro_server: Option<ra_ap_proc_macro_api::ProcMacroClient>,

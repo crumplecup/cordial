@@ -1,6 +1,6 @@
 //! Effectful workspace loading stays in the driver, outside tracked queries.
 
-use super::{context, inputs};
+use super::{context, inputs, packages};
 
 use super::SourceDatabase;
 use crate::{CordialResult, SemanticCargoOptions, SemanticContextGap};
@@ -42,6 +42,7 @@ impl SourceDatabase {
         }
         workspace.set_build_scripts(scripts);
         let context = context::WorkspaceInputs::capture(&workspace, options, gaps)?;
+        let external_packages = packages::collect_external(&workspace);
         let load_config = LoadCargoConfig {
             load_out_dirs_from_check: true,
             with_proc_macro_server: ProcMacroServerChoice::Sysroot,
@@ -58,6 +59,7 @@ impl SourceDatabase {
             vfs,
             revision: 1,
             workspace: Some(context),
+            external_packages,
             cargo_options: Some(options.clone()),
             proc_macro_server: server,
             #[cfg(feature = "cfg_hygiene")]
