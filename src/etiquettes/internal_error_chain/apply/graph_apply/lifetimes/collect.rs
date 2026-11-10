@@ -1,8 +1,17 @@
 //! Lifetime closure evidence from the canonical database syntax.
-use super::{ConditionalScope, GraphLifetimeFacts, Scope, sites, types};
+use super::{ConditionalScope, GraphLifetimeFacts, sites, types};
 use crate::loader::DatabaseSource;
 use ra_ap_syntax::{AstNode, SyntaxKind, SyntaxNode, ast};
+use std::collections::BTreeSet;
 use tracing::instrument;
+
+/// Lifetimes and conditionals in force at the current position of the walk.
+#[derive(Clone, Default)]
+struct Scope {
+    module_depth: usize,
+    lifetimes: BTreeSet<String>,
+    conditional: Option<ConditionalScope>,
+}
 
 impl GraphLifetimeFacts {
     #[instrument(level = "debug", skip(file))]
@@ -105,7 +114,7 @@ fn collect(facts: &mut GraphLifetimeFacts, node: &SyntaxNode, scope: &Scope) {
     }
     if let Some(path) = ast::PathType::cast(node.clone())
         && !types::trait_path(&path)
-        && let Some(site) = types::path_site(&path, &scope)
+        && let Some(site) = types::path_site(&path, &scope.lifetimes, scope.conditional.as_ref())
     {
         facts.type_paths.push(site);
     }

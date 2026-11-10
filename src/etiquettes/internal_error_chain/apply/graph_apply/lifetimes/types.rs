@@ -1,5 +1,5 @@
 //! Exact generic, field and type-use contracts for lifetime planning.
-use super::{ConditionalScope, Range, Scope, TypeArguments, TypePathSite};
+use super::{ConditionalScope, Range, TypeArguments, TypePathSite};
 use crate::etiquettes::internal_error_chain::apply::graph_apply::syntax;
 use ra_ap_syntax::{
     AstNode, SyntaxKind, SyntaxNode,
@@ -83,8 +83,12 @@ pub(super) fn trait_path(path: &ast::PathType) -> bool {
     })
 }
 
-#[instrument(level = "trace", skip(path, scope))]
-pub(super) fn path_site(path: &ast::PathType, scope: &Scope) -> Option<TypePathSite> {
+#[instrument(level = "trace", skip(path, lifetimes, conditional))]
+pub(super) fn path_site(
+    path: &ast::PathType,
+    lifetimes: &BTreeSet<String>,
+    conditional: Option<&ConditionalScope>,
+) -> Option<TypePathSite> {
     let path_node = path.path()?;
     let segment = path_node.segment()?;
     let name = segment.name_ref()?;
@@ -117,8 +121,8 @@ pub(super) fn path_site(path: &ast::PathType, scope: &Scope) -> Option<TypePathS
         arguments,
         qself,
         path_len: syntax::names(path_node).len(),
-        scope_lifetimes: scope.lifetimes.clone(),
-        conditional_scope: scope.conditional.as_ref().map(|value| ConditionalScope {
+        scope_lifetimes: lifetimes.clone(),
+        conditional_scope: conditional.map(|value| ConditionalScope {
             owner: value.owner.clone(),
             borrowed_only: value.borrowed_only,
         }),

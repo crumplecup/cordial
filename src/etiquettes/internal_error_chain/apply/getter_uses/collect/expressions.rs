@@ -1,5 +1,6 @@
 //! Lexical receiver provenance, without resolving crate declarations here.
-use super::{Collector, ReceiverRecipe, UseKind, contracts};
+use super::super::{ReceiverRecipe, UseKind, contracts};
+use super::Collector;
 use ra_ap_syntax::{
     AstNode, SyntaxNode,
     ast::{self, HasArgList, HasName},

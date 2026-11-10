@@ -17,13 +17,6 @@ mod provenance;
 mod sites;
 mod types;
 
-#[derive(Clone, Default)]
-struct Scope {
-    module_depth: usize,
-    lifetimes: BTreeSet<String>,
-    conditional: Option<ConditionalScope>,
-}
-
 type Range = (usize, usize);
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
