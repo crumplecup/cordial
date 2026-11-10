@@ -63,7 +63,7 @@ impl SourceErrorChains {
     ) -> CordialResult<ErrorChainsFile> {
         Ok(ErrorChainsFile {
             snapshot: FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
-            records: collect_native(file, tree, root)?,
+            records: collect(file, tree, root)?,
         })
     }
 
@@ -94,7 +94,7 @@ struct Fact {
 
 #[tracing::instrument(level = "debug", skip(file), err(level = "warn"))]
 #[hotpath::measure]
-fn collect_native(
+fn collect(
     file: &DatabaseSource<'_>,
     tree: &Path,
     root: &Path,

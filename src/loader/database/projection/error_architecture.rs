@@ -27,7 +27,7 @@ impl SourceDatabase {
             &paths,
             |catalog, path, tree| {
                 let source = self.error_source(path)?;
-                catalog.collect_native(&source, tree);
+                catalog.collect(&source, tree);
                 Ok(FileSnapshot::new(
                     path.to_path_buf(),
                     source.source_digest(),

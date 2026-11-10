@@ -64,7 +64,7 @@ impl SourceDatabase {
                                 tree,
                                 ra_ap_ide_db::line_index(&self.db, id),
                             );
-                            crate::ir::SourceProofFunction::collect_native(
+                            crate::ir::SourceProofFunction::collect(
                                 &source,
                                 &self.proof_module_path(&sema, id, package, path)?,
                             )

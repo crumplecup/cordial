@@ -69,7 +69,7 @@ struct Collector<'a, 'db> {
 impl AntipatternCatalog {
     #[tracing::instrument(level = "debug", skip(files), err(level = "warn"))]
     #[hotpath::measure(impl_type = "AntipatternCatalog")]
-    pub(crate) fn collect_native(
+    pub(crate) fn collect(
         root: &Path,
         crate_name: &str,
         files: &[(PathBuf, &DatabaseSource<'_>)],
@@ -106,8 +106,7 @@ impl AntipatternCatalog {
             collector.walk(source.tree().syntax(), &context)?;
             sites.extend(collector.sites);
         }
-        let contracts =
-            super::contract_bounds::collect_native(root, crate_name, files, &mut snapshots)?;
+        let contracts = super::contract_bounds::collect(root, crate_name, files, &mut snapshots)?;
         snapshots.sort_by(|a, b| a.path().cmp(b.path()));
         snapshots.dedup();
         Ok(Self::new(

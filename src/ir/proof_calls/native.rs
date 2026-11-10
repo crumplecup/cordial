@@ -11,7 +11,7 @@ use ra_ap_syntax::{
 impl SourceProofFunction {
     #[tracing::instrument(level = "debug", skip(file))]
     #[hotpath::measure(impl_type = "SourceProofFunction")]
-    pub(crate) fn collect_native(file: &DatabaseSource<'_>, prefix: &[String]) -> Vec<Self> {
+    pub(crate) fn collect(file: &DatabaseSource<'_>, prefix: &[String]) -> Vec<Self> {
         let mut out = Vec::new();
         let macros = file.proof_macro_syntax();
         items(&macros, file.tree().items(), prefix, &[], &mut out);

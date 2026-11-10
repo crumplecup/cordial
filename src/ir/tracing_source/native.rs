@@ -29,7 +29,7 @@ impl SourceTracingInventory {
         err(level = "warn")
     )]
     #[hotpath::measure(impl_type = "SourceTracingInventory")]
-    pub(crate) fn collect_native(
+    pub(crate) fn collect(
         file: &DatabaseSource<'_>,
         attributes: &SourceFileAttributes,
         semantics: &HashMap<TextRange, SemanticFunction>,

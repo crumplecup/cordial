@@ -182,9 +182,9 @@ impl Collector<'_, '_> {
                     _ => None,
                 });
                 if let Some(edge_field) = edge_field {
-                    let evidence = field.ty().and_then(|ty| {
-                        ErrorEdgeEvidence::collect_native(self.file, &ty, edge_field)
-                    });
+                    let evidence = field
+                        .ty()
+                        .and_then(|ty| ErrorEdgeEvidence::collect(self.file, &ty, edge_field));
                     self.record(
                         field.syntax(),
                         context,

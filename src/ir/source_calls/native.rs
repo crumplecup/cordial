@@ -11,7 +11,7 @@ use crate::loader::DatabaseSource;
 impl SourceModuleScope {
     #[tracing::instrument(level = "trace", skip(file))]
     #[hotpath::measure(impl_type = "SourceModuleScope")]
-    pub(crate) fn collect_native(file: &DatabaseSource<'_>) -> Self {
+    pub(crate) fn collect(file: &DatabaseSource<'_>) -> Self {
         let mut scope = Self {
             source_digest: file.source_digest(),
             insertion_offset: file.source().len(),

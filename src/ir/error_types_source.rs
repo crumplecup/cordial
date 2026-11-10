@@ -74,7 +74,7 @@ impl SourceErrorTypes {
         file: &crate::loader::DatabaseSource<'_>,
         tree: &Path,
     ) -> CordialResult<ErrorTypesFile> {
-        let (nodes, error_impls) = collect_native(file, tree)?;
+        let (nodes, error_impls) = collect(file, tree)?;
         Ok(ErrorTypesFile {
             snapshot: FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
             nodes,
@@ -150,7 +150,7 @@ struct Fact {
 
 #[tracing::instrument(level = "debug", skip(file), err(level = "warn"))]
 #[hotpath::measure]
-fn collect_native(
+fn collect(
     file: &DatabaseSource<'_>,
     tree: &Path,
 ) -> CordialResult<(Vec<ErrorTypeSourceNode>, BTreeSet<String>)> {

@@ -239,7 +239,7 @@ struct Collector<'a, 'db> {
 impl Catalog {
     #[tracing::instrument(level = "debug", skip(self, file))]
     #[hotpath::measure(impl_type = "ErrorArchitectureCatalog")]
-    pub(crate) fn collect_native(&mut self, file: &DatabaseSource<'_>, root: &Path) {
+    pub(crate) fn collect(&mut self, file: &DatabaseSource<'_>, root: &Path) {
         let mut collector = Collector {
             file,
             catalog: self,

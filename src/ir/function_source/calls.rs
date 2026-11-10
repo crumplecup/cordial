@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::SourceByteRange;
 
 mod native;
-pub(super) use native::collect as collect_native;
+pub(super) use native::collect;
 
 /// A call expression belonging to this function's execution scope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]

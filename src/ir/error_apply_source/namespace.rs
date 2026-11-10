@@ -28,7 +28,7 @@ pub(crate) struct ApplyImport {
 impl ApplyNamespace {
     #[tracing::instrument(level = "debug", skip(file))]
     #[hotpath::measure(impl_type = "ApplyNamespace")]
-    pub(super) fn collect_native(file: &DatabaseSource<'_>) -> Self {
+    pub(super) fn collect(file: &DatabaseSource<'_>) -> Self {
         let mut facts = Self {
             modules: Vec::new(),
             imports: Vec::new(),

@@ -8,7 +8,7 @@ use ra_ap_syntax::{
 
 impl FieldType {
     #[tracing::instrument(level = "trace", skip(ty))]
-    pub(crate) fn collect_native(ty: &ast::Type) -> Self {
+    pub(crate) fn collect(ty: &ast::Type) -> Self {
         Self {
             label: type_label(ty),
             static_str: static_str(ty),

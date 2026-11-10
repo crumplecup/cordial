@@ -13,7 +13,7 @@ use crate::ir::function_source::success;
 
 impl FunctionReturnFlow {
     #[tracing::instrument(level = "trace", skip(function))]
-    pub(in crate::ir::function_source) fn collect_native(function: &ast::Fn) -> Self {
+    pub(in crate::ir::function_source) fn collect(function: &ast::Fn) -> Self {
         let mut flow = Self {
             returns: Vec::new(),
             tail: FunctionTail::Statements,

@@ -9,7 +9,7 @@ use tracing::instrument;
 impl GraphExprFacts {
     #[instrument(level = "debug", skip(file))]
     #[hotpath::measure(impl_type = "GraphExprFacts")]
-    pub(crate) fn collect_native(file: &DatabaseSource<'_>) -> Self {
+    pub(crate) fn collect(file: &DatabaseSource<'_>) -> Self {
         let syntax = file.error_apply_macro_syntax();
         let mut facts = Self { events: Vec::new() };
         collect_node(

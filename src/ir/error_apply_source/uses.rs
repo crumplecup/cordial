@@ -57,7 +57,7 @@ impl ApplyUses {
 impl ApplyUses {
     #[tracing::instrument(level = "debug", skip(file))]
     #[hotpath::measure(impl_type = "ApplyUses")]
-    pub(in crate::ir::error_apply_source) fn collect_native(file: &DatabaseSource<'_>) -> Self {
+    pub(in crate::ir::error_apply_source) fn collect(file: &DatabaseSource<'_>) -> Self {
         let mut facts = Self::empty(file.source());
         for node in file.tree().syntax().descendants() {
             let declaration = if let Some(item) = ast::Struct::cast(node.clone()) {

@@ -75,10 +75,10 @@ fn collect_field(
         matches!(reference.ty(), Some(ast::Type::TupleType(tuple)) if tuple.fields().next().is_none())
     });
     let source_edge = (name.is_none() || name.as_deref() == Some("source"))
-        .then(|| ErrorEdgeEvidence::collect_native(file, &ty, ErrorEdgeField::Source))
+        .then(|| ErrorEdgeEvidence::collect(file, &ty, ErrorEdgeField::Source))
         .flatten();
     let kind_edge = (name.as_deref() == Some("kind"))
-        .then(|| ErrorEdgeEvidence::collect_native(file, &ty, ErrorEdgeField::Kind))
+        .then(|| ErrorEdgeEvidence::collect(file, &ty, ErrorEdgeField::Kind))
         .flatten();
     let candidate_storage = if is_plain(&ty, "String") {
         Some(StringStorage::Owned)

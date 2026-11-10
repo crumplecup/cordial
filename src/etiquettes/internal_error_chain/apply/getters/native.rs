@@ -14,7 +14,7 @@ pub(in crate::etiquettes::internal_error_chain::apply) use imports::{has_derive,
 impl GetterContractFacts {
     #[tracing::instrument(level = "debug", skip(file))]
     #[hotpath::measure(impl_type = "GetterContractFacts")]
-    pub(crate) fn collect_native(file: &DatabaseSource<'_>) -> Self {
+    pub(crate) fn collect(file: &DatabaseSource<'_>) -> Self {
         let mut fields = Vec::new();
         for item in file.tree().items() {
             let ast::Item::Struct(item) = item else {

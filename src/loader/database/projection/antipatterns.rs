@@ -20,7 +20,7 @@ impl SourceDatabase {
                 .zip(sources)
                 .map(|((tree, _), source)| (tree.clone(), source))
                 .collect();
-            SourceAntipatterns::collect_native(root, target.crate_name(), &files)
+            SourceAntipatterns::collect(root, target.crate_name(), &files)
         })
     }
 }

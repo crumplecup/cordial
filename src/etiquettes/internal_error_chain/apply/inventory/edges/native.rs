@@ -8,7 +8,7 @@ use ra_ap_syntax::{
 
 impl ErrorEdgeEvidence {
     #[tracing::instrument(level = "trace", skip(file, ty, field))]
-    pub(in crate::etiquettes::internal_error_chain::apply) fn collect_native(
+    pub(in crate::etiquettes::internal_error_chain::apply) fn collect(
         file: &DatabaseSource<'_>,
         ty: &ast::Type,
         field: ErrorEdgeField,

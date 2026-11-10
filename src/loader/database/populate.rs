@@ -40,9 +40,9 @@ impl Projection {
         let mut module = source_weight(source, NodeKind::Module, module_path, 1);
         module.set_attr(
             crate::ir::ATTR_SOURCE_MODULE_SCOPE,
-            serde_json::to_value(crate::ir::SourceModuleScope::collect_native(source))?,
+            serde_json::to_value(crate::ir::SourceModuleScope::collect(source))?,
         );
-        let attributes = crate::ir::SourceFileAttributes::collect_native(source);
+        let attributes = crate::ir::SourceFileAttributes::collect(source);
         let declaration_paths: HashMap<_, _> = attributes
             .items()
             .iter()
@@ -127,7 +127,7 @@ impl Projection {
         graph.set_attr(
             module,
             crate::ir::ATTR_SOURCE_TRACING_INVENTORY,
-            serde_json::to_value(crate::ir::SourceTracingInventory::collect_native(
+            serde_json::to_value(crate::ir::SourceTracingInventory::collect(
                 source,
                 &attributes,
                 &tracing_semantics,
@@ -205,7 +205,7 @@ fn collect_function(
         .parent()
         .is_some_and(|parent| ast::SourceFile::can_cast(parent.kind()))
         && let Some(facts) =
-            crate::ir::FunctionSourceSyntax::collect_native(source, function.syntax().text_range())
+            crate::ir::FunctionSourceSyntax::collect(source, function.syntax().text_range())
     {
         weight.set_attr(
             crate::ir::ATTR_FUNCTION_SOURCE_SYNTAX,

@@ -16,7 +16,7 @@ struct Scope {
 impl GraphLifetimeFacts {
     #[instrument(level = "debug", skip(file))]
     #[hotpath::measure(impl_type = "GraphLifetimeFacts")]
-    pub(crate) fn collect_native(file: &DatabaseSource<'_>) -> Self {
+    pub(crate) fn collect(file: &DatabaseSource<'_>) -> Self {
         let mut facts = Self::default();
         collect(&mut facts, file.tree().syntax(), &Scope::default());
         facts.type_paths.sort_by_key(|site| site.range);

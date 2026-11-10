@@ -46,7 +46,7 @@ impl FunctionSourceSyntax {
     /// different snapshot cannot supply an unrelated AST alongside this text.
     #[tracing::instrument(level = "trace", skip(file, range))]
     #[hotpath::measure(impl_type = "FunctionSourceSyntax")]
-    pub(crate) fn collect_native(file: &DatabaseSource<'_>, range: TextRange) -> Option<Self> {
+    pub(crate) fn collect(file: &DatabaseSource<'_>, range: TextRange) -> Option<Self> {
         let function = file.function(range)?;
         let body = function.body()?;
         let signature = signature_range(&function)?;
@@ -60,8 +60,7 @@ impl FunctionSourceSyntax {
             || TextRange::empty(signature.end()),
             |ty| ty.syntax().text_range(),
         );
-        let (calls, unwraps, has_call_shadowing, opaque_calls) =
-            calls::collect_native(file, &function);
+        let (calls, unwraps, has_call_shadowing, opaque_calls) = calls::collect(file, &function);
         let result_contract = output::native_result_contract(file, output.as_ref());
         // Exact generated syntax, deliberately separate from resolved Result identity.
         let has_infallible_result_syntax = result_contract.as_ref().is_some_and(|contract| {
@@ -75,7 +74,7 @@ impl FunctionSourceSyntax {
             signature_range: std::ops::Range::<usize>::from(signature).into(),
             body_range: std::ops::Range::<usize>::from(body.syntax().text_range()).into(),
             output_range: std::ops::Range::<usize>::from(output_range).into(),
-            return_flow: FunctionReturnFlow::collect_native(&function),
+            return_flow: FunctionReturnFlow::collect(&function),
             has_infallible_result_syntax,
             result_contract,
             calls,

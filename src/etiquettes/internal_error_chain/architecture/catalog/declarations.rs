@@ -166,7 +166,7 @@ impl Collector<'_, '_> {
                 .join("::"),
                 file: self.file.path().to_path_buf(),
                 line: self.file.line(original.syntax().text_range().start()),
-                ty: FieldType::collect_native(ty),
+                ty: FieldType::collect(ty),
             });
         }
     }

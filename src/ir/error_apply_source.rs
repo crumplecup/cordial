@@ -86,18 +86,18 @@ impl SourceErrorApply {
     pub(crate) fn native_file(file: &DatabaseSource<'_>) -> ErrorApplyFile {
         ErrorApplyFile {
             snapshot: FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
-            declarations: GraphDeclarationFacts::collect_native(file),
-            namespace: ApplyNamespace::collect_native(file),
-            name_audit: NameAudit::collect_native(file),
-            static_strings: static_strings::collect_native(file),
-            uses: ApplyUses::collect_native(file),
-            expressions: GraphExprFacts::collect_native(file),
-            lifetimes: GraphLifetimeFacts::collect_native(file),
-            getters: GetterContractFacts::collect_native(file),
-            getter_uses: GetterConsumerFacts::collect_native(file),
-            local_lifetimes: LifetimeFileFacts::collect_native(file),
-            initializers: InitializerFileFacts::collect_native(file),
-            conversion_sites: ConversionFileFacts::collect_native(file),
+            declarations: GraphDeclarationFacts::collect(file),
+            namespace: ApplyNamespace::collect(file),
+            name_audit: NameAudit::collect(file),
+            static_strings: static_strings::collect(file),
+            uses: ApplyUses::collect(file),
+            expressions: GraphExprFacts::collect(file),
+            lifetimes: GraphLifetimeFacts::collect(file),
+            getters: GetterContractFacts::collect(file),
+            getter_uses: GetterConsumerFacts::collect(file),
+            local_lifetimes: LifetimeFileFacts::collect(file),
+            initializers: InitializerFileFacts::collect(file),
+            conversion_sites: ConversionFileFacts::collect(file),
         }
     }
 

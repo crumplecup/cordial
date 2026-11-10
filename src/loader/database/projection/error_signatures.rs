@@ -31,7 +31,7 @@ impl SourceDatabase {
                 sema.parse(edition),
                 ra_ap_ide_db::line_index(&self.db, file),
             );
-            index.collect_native(&source, tree);
+            index.collect(&source, tree);
             Ok(FileSnapshot::new(
                 path.to_path_buf(),
                 source.source_digest(),

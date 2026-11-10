@@ -53,7 +53,7 @@ mod facts;
 pub(crate) use facts::ContractClause;
 mod index;
 mod native;
-pub(super) use native::collect_native;
+pub(super) use native::collect;
 pub(crate) use native::collect_payload;
 mod registry;
 mod verus;

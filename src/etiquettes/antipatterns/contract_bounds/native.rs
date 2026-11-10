@@ -17,7 +17,7 @@ mod kani;
 mod walk;
 
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
-pub(in crate::etiquettes::antipatterns) fn collect_native(
+pub(in crate::etiquettes::antipatterns) fn collect(
     root: &Path,
     crate_name: &str,
     files: &[(PathBuf, &DatabaseSource<'_>)],

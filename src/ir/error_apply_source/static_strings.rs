@@ -8,7 +8,7 @@ use ra_ap_syntax::{
 use std::collections::{BTreeMap, BTreeSet};
 
 #[tracing::instrument(level = "debug", skip(file))]
-pub(super) fn collect_native(file: &DatabaseSource<'_>) -> BTreeSet<String> {
+pub(super) fn collect(file: &DatabaseSource<'_>) -> BTreeSet<String> {
     let mut declarations: BTreeMap<String, Vec<bool>> = BTreeMap::new();
     for item in file.tree().items() {
         let (name, ty, immutable, attrs_empty) = match item {

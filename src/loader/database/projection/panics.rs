@@ -46,7 +46,7 @@ impl SourceDatabase {
                 ),
             ));
         }
-        SourcePanics::collect_native(
+        SourcePanics::collect(
             root,
             &files,
             #[cfg(feature = "verus_ir")]
