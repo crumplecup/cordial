@@ -210,10 +210,7 @@ pub struct PageantrySourceSite {
 impl PageantrySourceSite {
     /// Apply rule switches and shim limits to already collected facts.
     #[tracing::instrument(level = "debug", skip(self, thresholds))]
-    pub(crate) fn selected(
-        &self,
-        thresholds: &crate::PageantryThresholds,
-    ) -> Option<PageantrySiteRecord> {
+    pub fn selected(&self, thresholds: &crate::PageantryThresholds) -> Option<PageantrySiteRecord> {
         if !thresholds.rule_enabled(self.site.rule_id().as_str()) {
             return None;
         }

@@ -6,6 +6,9 @@ use cordial::{
     scan_glob_imports_rust_source,
 };
 
+#[path = "support/policy_inventory.rs"]
+mod policy_inventory;
+
 const GLOB_SAMPLE: &str = r#"
 use std::collections::*;
 use std::io::{self, *};
@@ -134,9 +137,10 @@ fn glob_imports_in_tests_tree_count() -> miette::Result<()> {
     .into_diagnostic()
     .wrap_err("it")?;
 
-    let records = cordial::scan_crate_glob_imports(fixture.path())
-        .into_diagnostic()
-        .wrap_err("scan crate")?;
+    let records = policy_inventory::policy_inventory(fixture.path())
+        .wrap_err("scan crate")?
+        .glob_imports()
+        .clone();
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].snippet(), "crate::helper::*");
     Ok(())

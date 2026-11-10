@@ -68,7 +68,7 @@ pub use etiquettes::IMPL_COVERAGE_ETIQUETTE;
 pub use etiquettes::TRENCHCOAT_ETIQUETTE;
 #[cfg(feature = "allows")]
 pub use etiquettes::allows::{
-    ALLOWS_ETIQUETTE, AllowInventoryEnricher, AllowRuleId, AllowSiteRecord, scan_crate_allows,
+    ALLOWS_ETIQUETTE, AllowInventoryEnricher, AllowRuleId, AllowSiteRecord,
     scan_rust_source as scan_allows_rust_source,
 };
 #[cfg(feature = "antipatterns")]
@@ -148,12 +148,12 @@ pub use etiquettes::foreign_error_types::{
 #[cfg(feature = "glob_imports")]
 pub use etiquettes::glob_imports::{
     GLOB_IMPORTS_ETIQUETTE, GlobImportInventoryEnricher, GlobImportRuleId, GlobImportSiteRecord,
-    scan_crate_glob_imports, scan_rust_source as scan_glob_imports_rust_source,
+    scan_rust_source as scan_glob_imports_rust_source,
 };
 #[cfg(feature = "inline_tests")]
 pub use etiquettes::inline_tests::{
     INLINE_TESTS_ETIQUETTE, InlineTestInventoryEnricher, InlineTestRuleId, InlineTestSiteRecord,
-    scan_crate_inline_tests, scan_rust_source as scan_inline_tests_rust_source,
+    scan_rust_source as scan_inline_tests_rust_source,
 };
 #[cfg(feature = "internal_error_chain")]
 pub use etiquettes::internal_error_chain::{
@@ -176,7 +176,7 @@ pub use etiquettes::modularity::{
 };
 #[cfg(feature = "pageantry")]
 pub use etiquettes::pageantry::{
-    PAGEANTRY_ETIQUETTE, PageantryInventoryEnricher, PageantryRuleId, scan_crate_pageantry,
+    PAGEANTRY_ETIQUETTE, PageantryInventoryEnricher, PageantryRuleId,
     scan_rust_source as scan_pageantry_rust_source,
 };
 #[cfg(feature = "panics")]

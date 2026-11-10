@@ -6,6 +6,9 @@ use cordial::{
     scan_inline_tests_rust_source,
 };
 
+#[path = "support/policy_inventory.rs"]
+mod policy_inventory;
+
 const INLINE_SRC: &str = r#"
 pub fn live() {}
 
@@ -115,9 +118,10 @@ fn inline_tests_ignore_crate_tests_directory() -> miette::Result<()> {
     .into_diagnostic()
     .wrap_err("it")?;
 
-    let records = cordial::scan_crate_inline_tests(fixture.path())
-        .into_diagnostic()
-        .wrap_err("scan crate")?;
+    let records = policy_inventory::policy_inventory(fixture.path())
+        .wrap_err("scan crate")?
+        .inline_tests()
+        .clone();
     assert!(records.is_empty());
     Ok(())
 }

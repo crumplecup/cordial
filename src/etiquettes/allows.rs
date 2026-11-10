@@ -31,7 +31,7 @@ pub use assessor::AllowAssessor;
 pub use enricher::AllowInventoryEnricher;
 pub use probe::AllowSiteProbe;
 pub use reporter::{AllowChecklistReporter, AllowCsvReporter, AllowSummaryReporter};
-pub use scan::{scan_crate_allows, scan_rust_source};
+pub use scan::scan_rust_source;
 pub use types::{AllowRuleId, AllowSiteRecord};
 
 use std::sync::LazyLock;
