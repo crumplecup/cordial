@@ -44,13 +44,13 @@ mod delta;
 mod display_types;
 mod enricher;
 mod present;
+mod recordable;
 pub(crate) use present::PresentInstrument;
 pub(crate) use types::InstrumentLevel;
 mod print;
 mod probe;
 mod quality_area;
 mod recipe;
-mod recordable;
 pub(crate) use display_types::WELL_KNOWN_DISPLAY_TYPES;
 pub(crate) use recordable::RECORDABLE_IDENTS;
 mod reporter;
@@ -77,7 +77,6 @@ pub use print::{
 };
 pub use probe::{ForbiddenInstrumentProbe, MissingInstrumentProbe, RecipeDeltaProbe};
 pub use reporter::{TracingChecklistReporter, TracingCsvReporter, TracingSummaryReporter};
-pub use scan::scan_rust_source;
 pub use subscriber::{SubscriberRuleId, SubscriberSiteRecord, scan_crate_tracing_subscriber};
 
 use std::sync::LazyLock;

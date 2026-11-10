@@ -13,7 +13,6 @@ use tracing::instrument;
 #[derive(Debug, Clone, derive_builder::Builder, derive_getters::Getters)]
 #[builder(build_fn(error = "crate::error::CordialError"))]
 pub struct FunctionRecord {
-    crate_name: String,
     qualified_name: String,
     #[getter(copy)]
     kind: FunctionKind,

@@ -242,7 +242,6 @@ fn inventory_records(
             file,
             prefix,
             crate_root,
-            crate_name,
             extra_skip,
             never_instrument,
         )?);

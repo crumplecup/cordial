@@ -1,18 +1,13 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use syn::spanned::Spanned;
-use syn::visit::Visit;
-use syn::{Attribute, ImplItem, Item, ItemFn, ItemImpl, ItemMod, Type, Visibility};
+use syn::Type;
 
 use crate::error::CordialResult;
-use crate::ir::{SourceTracingFunction, SourceTracingInventory};
-use crate::loader::module_path_from_src_file;
+use crate::ir::SourceTracingInventory;
 
-use super::classify::classify;
-use super::display_types::{DisplayTypeFacts, collect_display_type_facts};
 use super::recipe::recipe as instrument_recipe;
-use super::types::{FunctionKind, FunctionRecord, VisibilityLabel};
+use super::types::FunctionRecord;
 
 use tracing::instrument;
 
@@ -28,7 +23,6 @@ impl SourceTracingInventory {
         file: &Path,
         module_prefix: &str,
         project_root: &Path,
-        crate_name: &str,
         extra_skip: &[String],
         never_instrument: &HashSet<String>,
     ) -> CordialResult<Vec<FunctionRecord>> {
@@ -51,7 +45,6 @@ impl SourceTracingInventory {
             let ctx = function.context();
             records.push(
                 FunctionRecord::builder()
-                    .crate_name(crate_name.to_string())
                     .qualified_name(qualified)
                     .kind(function.kind())
                     .visibility(function.visibility().clone())
@@ -69,247 +62,6 @@ impl SourceTracingInventory {
             );
         }
         Ok(records)
-    }
-}
-
-/// Parse one source file and return discovered functions (used by tests).
-#[instrument(
-    level = "debug",
-    skip(source, file, never_instrument),
-    err(level = "warn")
-)]
-pub fn scan_rust_source(
-    source: &str,
-    file: &Path,
-    src_root: &Path,
-    project_root: &Path,
-    crate_name: &str,
-    extra_skip: &[String],
-    never_instrument: &HashSet<String>,
-) -> CordialResult<Vec<FunctionRecord>> {
-    let syntax = syn::parse_file(source)
-        .map_err(|err| crate::error::CordialError::syn_parse(file.display().to_string(), err))?;
-    SourceTracingInventory::new(
-        {
-            use sha2::{Digest, Sha256};
-            Sha256::digest(source.as_bytes()).into()
-        },
-        collect_syntax(&syntax)?,
-    )
-    .records(
-        file,
-        &module_path_from_src_file(src_root, file).join("::"),
-        project_root,
-        crate_name,
-        extra_skip,
-        never_instrument,
-    )
-}
-
-#[instrument(level = "debug", skip(syntax), err(level = "warn"))]
-fn collect_syntax(syntax: &syn::File) -> CordialResult<Vec<SourceTracingFunction>> {
-    let mut visitor = FileScanVisitor {
-        module_prefix: Vec::new(),
-        display_types: collect_display_type_facts(&syntax.items),
-        records: Vec::new(),
-        error: None,
-    };
-    visitor.visit_file(syntax);
-    if let Some(error) = visitor.error {
-        return Err(error);
-    }
-    Ok(visitor.records)
-}
-
-struct FileScanVisitor {
-    module_prefix: Vec<String>,
-    display_types: DisplayTypeFacts,
-    records: Vec<SourceTracingFunction>,
-    error: Option<crate::error::CordialError>,
-}
-
-/// Every fact needed to record one function, bundled so
-/// [`FileScanVisitor::record_fn`] takes one argument instead of seven.
-struct RecordFnArgs<'a> {
-    sig: &'a syn::Signature,
-    attrs: &'a [Attribute],
-    visibility: &'a Visibility,
-    span: proc_macro2::Span,
-    kind: FunctionKind,
-    local_name: &'a str,
-    body: Option<&'a syn::Block>,
-}
-
-impl FileScanVisitor {
-    #[instrument(level = "debug", skip(self))]
-    fn qualify(&self, local: &str) -> String {
-        if self.module_prefix.is_empty() {
-            local.to_string()
-        } else {
-            format!("{}::{local}", self.module_prefix.join("::"))
-        }
-    }
-
-    #[instrument(level = "debug", skip(self, args))]
-    fn record_fn(&mut self, args: RecordFnArgs<'_>) {
-        if args.sig.constness.is_some() {
-            // `tracing::instrument` categorically rejects `const fn`
-            // (`error: the #[instrument] attribute may not be used with
-            // const fns`) -- never record one as needing instrumentation,
-            // so neither the checklist nor `--apply` ever proposes it.
-            return;
-        }
-        let qualified_name = self.qualify(args.local_name);
-        let instrumented = args.attrs.iter().any(crate::enricher::is_instrument_attr);
-        let prover_visible_instrument = args.attrs.iter().any(|attr| {
-            crate::enricher::is_instrument_attr(attr)
-                && !crate::enricher::is_gated_instrument_attr(attr)
-        });
-        let line = args.span.start().line as u32;
-        let ctx = match classify(
-            &args.sig.ident.to_string(),
-            args.sig,
-            args.kind,
-            args.body,
-            &self.display_types,
-        ) {
-            Ok(ctx) => ctx,
-            Err(error) => {
-                if self.error.is_none() {
-                    self.error = Some(error);
-                }
-                return;
-            }
-        };
-        match SourceTracingFunction::builder()
-            .path(qualified_name)
-            .range(args.span.byte_range().into())
-            .line(line)
-            .kind(args.kind)
-            .visibility(visibility_label(args.visibility))
-            .instrumented(instrumented)
-            .prover_visible_instrument(prover_visible_instrument)
-            .context(ctx)
-            .build()
-        {
-            Ok(record) => self.records.push(record),
-            Err(error) if self.error.is_none() => self.error = Some(error),
-            Err(_) => {}
-        }
-    }
-
-    #[instrument(level = "debug", skip(self, items))]
-    fn visit_module_items(&mut self, items: &[Item], module_prefix: &[String]) {
-        let prev = self.module_prefix.clone();
-        self.module_prefix = module_prefix.to_vec();
-        for item in items {
-            self.visit_item(item);
-        }
-        self.module_prefix = prev;
-    }
-
-    #[instrument(level = "debug", skip(self, item))]
-    fn visit_item(&mut self, item: &Item) {
-        match item {
-            Item::Fn(item_fn) => {
-                self.record_fn(RecordFnArgs {
-                    sig: &item_fn.sig,
-                    attrs: &item_fn.attrs,
-                    visibility: &item_fn.vis,
-                    span: item_fn.span(),
-                    kind: FunctionKind::Free,
-                    local_name: &item_fn.sig.ident.to_string(),
-                    body: Some(&item_fn.block),
-                });
-            }
-            Item::Mod(item_mod) => self.visit_mod(item_mod),
-            Item::Impl(item_impl) => self.visit_impl(item_impl),
-            _ => {}
-        }
-    }
-
-    #[instrument(level = "debug", skip(self, item_mod))]
-    fn visit_mod(&mut self, item_mod: &ItemMod) {
-        if crate::enricher::is_cfg_test(&item_mod.attrs) {
-            return;
-        }
-        let Some((_, items)) = &item_mod.content else {
-            return;
-        };
-        let mut nested = self.module_prefix.clone();
-        nested.push(item_mod.ident.to_string());
-        self.visit_module_items(items, &nested);
-    }
-
-    #[instrument(level = "debug", skip(self, item_impl))]
-    fn visit_impl(&mut self, item_impl: &ItemImpl) {
-        let self_ty = self_type_key(&item_impl.self_ty);
-        let trait_name = item_impl
-            .trait_
-            .as_ref()
-            .map(|(path, _)| syn_path_label(path));
-        for impl_item in &item_impl.items {
-            let ImplItem::Fn(method) = impl_item else {
-                continue;
-            };
-            let local = impl_method_local_name(&self_ty, trait_name.as_deref(), &method.sig.ident);
-            let kind = if trait_name.is_some() {
-                FunctionKind::TraitImplMethod
-            } else {
-                FunctionKind::InherentMethod
-            };
-            self.record_fn(RecordFnArgs {
-                sig: &method.sig,
-                attrs: &method.attrs,
-                visibility: &method.vis,
-                span: method.span(),
-                kind,
-                local_name: &local,
-                body: Some(&method.block),
-            });
-        }
-    }
-}
-
-impl<'ast> Visit<'ast> for FileScanVisitor {
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_item_fn(&mut self, node: &'ast ItemFn) {
-        self.record_fn(RecordFnArgs {
-            sig: &node.sig,
-            attrs: &node.attrs,
-            visibility: &node.vis,
-            span: node.span(),
-            kind: FunctionKind::Free,
-            local_name: &node.sig.ident.to_string(),
-            body: Some(&node.block),
-        });
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_item_mod(&mut self, node: &'ast ItemMod) {
-        self.visit_mod(node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_item_impl(&mut self, node: &'ast ItemImpl) {
-        self.visit_impl(node);
-    }
-}
-
-#[instrument(level = "debug", skip(vis))]
-fn visibility_label(vis: &Visibility) -> VisibilityLabel {
-    match vis {
-        Visibility::Public(_) => VisibilityLabel::Public,
-        Visibility::Restricted(restricted) => {
-            if restricted.path.is_ident("crate") {
-                VisibilityLabel::PubCrate
-            } else if restricted.path.is_ident("super") {
-                VisibilityLabel::PubSuper
-            } else {
-                VisibilityLabel::PubInPath(restricted.path.segments[0].ident.to_string())
-            }
-        }
-        Visibility::Inherited => VisibilityLabel::Private,
     }
 }
 
@@ -417,29 +169,5 @@ fn const_arg_label(expr: &syn::Expr) -> String {
         }) => b.value.to_string(),
         syn::Expr::Path(path) => syn_path_label(&path.path),
         _ => "_".to_string(),
-    }
-}
-
-/// The qualified local name (module prefix not included) an impl
-/// method is recorded under -- UFCS-qualified for a trait impl
-/// (`<{self_ty} as {trait_name}>::{method}`, e.g.
-/// `<RustStdStandard<AtomicI8> as KaniWitness>::proof`, so each type's
-/// impl of a shared trait is a distinct checklist row), self-type
-/// qualified otherwise (`{self_ty}::{method}`). Shared with
-/// [`super::call_graph::CallGraphFacts`] so a call written as
-/// `Type::method(..)` (the real syntactic form a trait impl method is
-/// actually *called* with -- UFCS through the type, not the trait) can
-/// still be resolved back to the same key this function is recorded
-/// under, and with [`crate::enricher::AttributeEnricher`] so an existing
-/// `#[instrument]` attaches to the right node.
-#[instrument(level = "trace", skip(method_ident))]
-pub(super) fn impl_method_local_name(
-    self_ty: &str,
-    trait_name: Option<&str>,
-    method_ident: &syn::Ident,
-) -> String {
-    match trait_name {
-        Some(trait_name) => format!("<{self_ty} as {trait_name}>::{method_ident}"),
-        None => format!("{self_ty}::{method_ident}"),
     }
 }

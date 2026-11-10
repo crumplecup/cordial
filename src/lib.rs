@@ -196,7 +196,7 @@ pub use etiquettes::tracing::{
     TRACING_ETIQUETTE, VisibilityLabel, parse_tracing_instrument_checklist,
     parse_tracing_instrument_checklist_text, run_tracing_instrument_apply,
     scan_crate_tracing_boundary, scan_crate_tracing_print, scan_crate_tracing_subscriber,
-    scan_rust_source as scan_tracing_rust_source, scan_tracing_print_rust_source,
+    scan_tracing_print_rust_source,
 };
 #[cfg(feature = "verus_warnings")]
 pub use etiquettes::verus_warnings::{
