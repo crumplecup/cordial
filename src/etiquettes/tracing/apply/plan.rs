@@ -171,9 +171,16 @@ impl FilePlanner<'_> {
                 replacement.push_str(newline);
             }
             // Validate proposed edits before any source in the transaction changes.
-            syn::parse_file(&replacement).map_err(|error| {
-                crate::CordialError::syn_parse(path.display().to_string(), error)
-            })?;
+            if let Some(error) =
+                ra_ap_syntax::SourceFile::parse(&replacement, ra_ap_syntax::Edition::CURRENT)
+                    .errors()
+                    .first()
+            {
+                return Err(crate::CordialError::rust_parse(
+                    path.display().to_string(),
+                    error.clone(),
+                ));
+            }
             summary.changed_files += 1;
             return Ok(Some((
                 SourceWrite::new(path, source.to_string(), replacement),

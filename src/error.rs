@@ -46,7 +46,7 @@ use local::{
     UnknownEtiquetteSource, UnreachableSource,
 };
 pub use parse::TokenStreamParseError;
-use parse::{ConfigSource, JsonParseSource, JsonSource, SynParseSource};
+use parse::{ConfigSource, JsonParseSource, JsonSource};
 mod rust_parse;
 use scan::ScanError;
 use store_lock::StoreLockError;
@@ -90,8 +90,6 @@ pub enum CordialErrorKind {
     Clock(ClockSource),
     /// `cordial.toml` (or layered config) failed to load.
     Config(ConfigSource),
-    /// `syn` failed to parse a Rust file.
-    SynParse(SynParseSource),
     /// A canonical rust-analyzer source input failed syntax validation.
     RustParse(rust_parse::RustParseSource),
     /// A match arm (or equivalent control path) that must not execute.
@@ -197,7 +195,6 @@ impl std::error::Error for CordialError {
             CordialErrorKind::TomlParse(source) => Some(source),
             CordialErrorKind::Clock(source) => Some(source),
             CordialErrorKind::Config(source) => Some(source),
-            CordialErrorKind::SynParse(source) => Some(source),
             CordialErrorKind::RustParse(source) => Some(source),
             CordialErrorKind::CargoMetadata(source) => Some(source),
             CordialErrorKind::Fmt(source) => Some(source),
@@ -249,7 +246,6 @@ impl Display for CordialErrorKind {
             Self::TomlParse(source) => source.fmt(formatter),
             Self::Clock(source) => source.fmt(formatter),
             Self::Config(source) => source.fmt(formatter),
-            Self::SynParse(source) => source.fmt(formatter),
             Self::RustParse(source) => source.fmt(formatter),
             Self::Unreachable(source) => source.fmt(formatter),
             Self::ApplyGapWriteOnly(source) => source.fmt(formatter),

@@ -132,49 +132,6 @@ impl std::error::Error for ConfigSource {
     }
 }
 
-#[derive(Debug, derive_getters::Getters)]
-pub struct SynParseSource {
-    #[getter(skip)]
-    source: syn::Error,
-    #[getter(skip)]
-    path: String,
-    file: String,
-    #[getter(copy)]
-    line: u32,
-}
-
-impl SynParseSource {
-    #[track_caller]
-    #[instrument(level = "debug", skip(path, source))]
-    pub fn new(path: impl Into<String>, source: syn::Error) -> Self {
-        let loc = Location::caller();
-        Self {
-            source,
-            path: path.into(),
-            file: loc.file().to_string(),
-            line: loc.line(),
-        }
-    }
-}
-
-impl Display for SynParseSource {
-    #[instrument(level = "trace", skip(self, formatter))]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-        write!(
-            formatter,
-            "syn parse error in {}: {}",
-            self.path, self.source
-        )
-    }
-}
-
-impl std::error::Error for SynParseSource {
-    #[instrument(level = "trace", skip(self))]
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.source)
-    }
-}
-
 /// Send/Sync stand-in for [`proc_macro2::LexError`], which is not Send.
 #[derive(Debug, derive_getters::Getters)]
 pub struct TokenStreamParseError {
@@ -217,15 +174,6 @@ impl Display for TokenStreamParseError {
 impl std::error::Error for TokenStreamParseError {}
 
 impl super::CordialError {
-    /// `syn` failed to parse this source file.
-    #[track_caller]
-    #[instrument(level = "debug", skip(path, err))]
-    pub fn syn_parse(path: impl Into<String>, err: syn::Error) -> Self {
-        Self::from_kind(super::CordialErrorKind::SynParse(SynParseSource::new(
-            path, err,
-        )))
-    }
-
     /// JSON failed to parse at this path.
     #[track_caller]
     #[instrument(level = "debug", skip(path, err))]
