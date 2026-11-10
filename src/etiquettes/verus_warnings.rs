@@ -35,7 +35,7 @@ pub use probe::VerusWarningSiteProbe;
 pub use reporter::{
     VerusWarningChecklistReporter, VerusWarningCsvReporter, VerusWarningSummaryReporter,
 };
-pub use scan::{crate_is_verus_target, parse_verus_compiler_output, scan_crate_verus_warnings};
+pub use scan::{crate_is_verus_target, parse_verus_compiler_output};
 pub use types::{VerusWarningRecord, VerusWarningRuleId};
 
 use std::sync::LazyLock;

@@ -12,13 +12,6 @@ use super::types::{
 
 use tracing::instrument;
 
-/// Build a crate's [`VerusCrateIr`] from every block `collect_verus_blocks`
-/// found.
-#[instrument(level = "debug", skip(blocks))]
-pub(super) fn build_crate_ir(blocks: Vec<VerusBlock>) -> crate::error::CordialResult<VerusCrateIr> {
-    collect_crate_ir(blocks)
-}
-
 #[tracing::instrument(level = "debug", skip(blocks), err(level = "warn"))]
 pub(super) fn collect_crate_ir(
     blocks: Vec<VerusBlock>,

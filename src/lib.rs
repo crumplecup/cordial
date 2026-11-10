@@ -198,7 +198,7 @@ pub use etiquettes::tracing::{
 #[cfg(feature = "verus_warnings")]
 pub use etiquettes::verus_warnings::{
     VERUS_WARNINGS_ETIQUETTE, VerusWarningRecord, VerusWarningRuleId, crate_is_verus_target,
-    parse_verus_compiler_output, scan_crate_verus_warnings,
+    parse_verus_compiler_output,
 };
 #[cfg(feature = "visibility")]
 pub use etiquettes::visibility::{
@@ -211,7 +211,9 @@ pub use etiquettes::{
     CfgSiteOccurrence, scan_cfg_scatter_rust_source,
 };
 #[cfg(feature = "proof_patterns")]
-pub use etiquettes::{PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, scan_crate_proof_patterns};
+pub use etiquettes::{
+    PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, ProofPatternRecord, proof_pattern_records,
+};
 #[cfg(feature = "internal_error_chain")]
 pub use ir::{
     ATTR_SOURCE_ERROR_APPLY, ATTR_SOURCE_ERROR_ARCHITECTURE, ATTR_SOURCE_ERROR_COMPLIANCE,
@@ -224,7 +226,7 @@ pub use ir::{ATTR_SOURCE_VERUS, SourceVerus, VerusFile};
 #[cfg(feature = "verus_ir")]
 pub use verus_ir::{
     VerusCrateIr, VerusEnumFacts, VerusEnumVariantFacts, VerusFnFacts, VerusFnMode, VerusPanicKind,
-    VerusPanicSite, VerusPublish, scan_crate_verus_ir, scan_verus_rust_source,
+    VerusPanicSite, VerusPublish,
 };
 #[cfg(feature = "shadow")]
 mod shadow;

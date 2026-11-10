@@ -2,12 +2,23 @@ use std::fs;
 use std::path::PathBuf;
 
 #[cfg(feature = "verus_ir")]
-use cordial::scan_crate_verus_ir;
+use cordial::{CrateTarget, IrView, VerusCrateIr};
 use cordial::{
     Session, SessionBuilder, VERUS_WARNINGS_ETIQUETTE, VerusWarningRuleId, crate_is_verus_target,
-    parse_verus_compiler_output, scan_crate_verus_warnings,
+    parse_verus_compiler_output,
 };
 use miette::{IntoDiagnostic, WrapErr};
+
+#[cfg(feature = "verus_ir")]
+#[path = "support/source_projection.rs"]
+mod source_projection;
+
+/// The Verus facts the loader stores for the crate at `root`.
+#[cfg(feature = "verus_ir")]
+fn verus_facts(name: &str, root: &std::path::Path) -> miette::Result<VerusCrateIr> {
+    let ir = source_projection::baseline(root, &CrateTarget::new(name, root))?;
+    Ok(ir.source_verus().into_diagnostic()?.facts())
+}
 
 const CANARY: &str = include_str!("fixtures/quality/verus_warnings/canary.stderr");
 
@@ -98,24 +109,6 @@ fn ordinary_crate_is_not_a_verus_target() -> miette::Result<()> {
     Ok(())
 }
 
-#[test]
-fn scan_skips_non_verus_crate_without_invoking_compiler() -> miette::Result<()> {
-    cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    fs::create_dir_all(fixture.path().join("src")).into_diagnostic()?;
-    fs::write(
-        fixture.path().join("Cargo.toml"),
-        "[package]\nname = \"plain\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
-    )
-    .into_diagnostic()?;
-    fs::write(fixture.path().join("src/lib.rs"), "pub fn ok() {}\n").into_diagnostic()?;
-    let records = scan_crate_verus_warnings(fixture.path())
-        .into_diagnostic()
-        .wrap_err("scan")?;
-    assert!(records.is_empty());
-    Ok(())
-}
-
 /// `missing documentation for a method` at a fully-documented,
 /// data-carrying enum's own declaration line is Verus's own synthesized
 /// pattern-projection accessor, not a real gap -- see
@@ -123,9 +116,9 @@ fn scan_skips_non_verus_crate_without_invoking_compiler() -> miette::Result<()> 
 /// own doc comment. An identical warning pointing at an *undocumented*
 /// data-carrying enum is a real gap and still flags.
 ///
-/// Composes `parse_verus_compiler_output` + `scan_crate_verus_ir`
-/// directly -- the same two real, pure functions `scan_crate_verus_warnings`'s
-/// own `retain_real_warnings` filter calls internally -- rather than
+/// Composes `parse_verus_compiler_output` + the loader's Verus inventory
+/// directly -- the same two real, pure steps the Verus warning enricher's
+/// own `retain_real_warnings` filter performs internally -- rather than
 /// going through the real subprocess/`CORDIAL_VERUS` injection path
 /// `session_writes_checklist_from_injected_verus` uses below: that path
 /// mutates a process-global env var, and two tests doing that
@@ -149,13 +142,17 @@ fn pattern_projection_warning_is_suppressed_only_when_fully_documented() -> miet
     let documented_root = fixture.path().join("documented_verus");
     fs::create_dir_all(documented_root.join("src")).into_diagnostic()?;
     fs::write(documented_root.join("src/lib.rs"), documented_source).into_diagnostic()?;
+    fs::write(
+        documented_root.join("Cargo.toml"),
+        "[package]\nname = 'documented'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let documented_parsed = parse_verus_compiler_output(fake_compiler_output, &documented_root)
         .into_diagnostic()
         .wrap_err("parse documented")?;
     assert_eq!(documented_parsed.len(), 1, "sanity: the fake output parses");
-    let documented_ir = scan_crate_verus_ir(&documented_root)
-        .into_diagnostic()
-        .wrap_err("scan documented ir")?;
+    let documented_ir =
+        verus_facts("documented", &documented_root).wrap_err("scan documented ir")?;
     let documented_kept: Vec<_> = documented_parsed
         .iter()
         .filter(|record| {
@@ -172,12 +169,16 @@ fn pattern_projection_warning_is_suppressed_only_when_fully_documented() -> miet
     let undocumented_root = fixture.path().join("undocumented_verus");
     fs::create_dir_all(undocumented_root.join("src")).into_diagnostic()?;
     fs::write(undocumented_root.join("src/lib.rs"), undocumented_source).into_diagnostic()?;
+    fs::write(
+        undocumented_root.join("Cargo.toml"),
+        "[package]\nname = 'undocumented'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     let undocumented_parsed = parse_verus_compiler_output(fake_compiler_output, &undocumented_root)
         .into_diagnostic()
         .wrap_err("parse undocumented")?;
-    let undocumented_ir = scan_crate_verus_ir(&undocumented_root)
-        .into_diagnostic()
-        .wrap_err("scan undocumented ir")?;
+    let undocumented_ir =
+        verus_facts("undocumented", &undocumented_root).wrap_err("scan undocumented ir")?;
     let undocumented_kept: Vec<_> = undocumented_parsed
         .iter()
         .filter(|record| {

@@ -30,6 +30,7 @@ mod enricher;
 mod probe;
 mod reporter;
 mod scan;
+pub use scan::proof_pattern_records;
 mod types;
 
 pub use assessor::ProofPatternAssessor;
@@ -38,8 +39,7 @@ pub use probe::ProofPatternSiteProbe;
 pub use reporter::{
     ProofPatternChecklistReporter, ProofPatternCsvReporter, ProofPatternSummaryReporter,
 };
-pub use scan::scan_crate_proof_patterns;
-pub use types::ProofPatternKind;
+pub use types::{ProofPatternKind, ProofPatternRecord};
 
 use std::sync::LazyLock;
 

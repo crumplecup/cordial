@@ -16,18 +16,12 @@
 //! own token stream -- `verus_syn` expects to parse that content
 //! directly, not a whole ordinary Rust file with an embedded macro call.
 
-mod finder;
-pub(super) use finder::blocks_in_syntax;
 #[cfg(feature = "visibility")]
 mod visibility;
 
 use std::path::{Path, PathBuf};
 
 use verus_syn::parse::{Parse, ParseStream};
-
-use crate::loader::{
-    SourceLoadView, module_path_from_src_file, path_has_fixtures, quality_scan_trees,
-};
 
 use tracing::instrument;
 
@@ -68,62 +62,6 @@ impl VerusBlock {
     pub(super) fn into_parts(self) -> (PathBuf, String, bool, Vec<verus_syn::Item>) {
         (self.file, self.module_path, self.cfg_test, self.items)
     }
-}
-
-/// Find every `verus! { .. }` block under `crate_root`'s `src`/`tests`
-/// trees (excluding `fixtures/`, matching every other quality scanner's
-/// own scope) and parse each with real `verus_syn`. A block that fails
-/// to parse (a real syntax error, or a `verus_syn` version mismatch
-/// against the toolchain that generated the source) is silently
-/// skipped, not reported as an error -- best-effort inventory, the same
-/// posture `verus_carrier::find_fn` already takes for the identical
-/// reason (a partial, real answer beats none).
-#[instrument(level = "debug", err(level = "warn"))]
-pub(super) fn collect_verus_blocks(
-    crate_root: &Path,
-) -> crate::error::CordialResult<Vec<VerusBlock>> {
-    let source = SourceLoadView::for_standalone_scan();
-    collect_verus_blocks_impl(crate_root, &source)
-}
-
-#[instrument(level = "debug", skip(source), err(level = "warn"))]
-fn collect_verus_blocks_impl(
-    crate_root: &Path,
-    source: &SourceLoadView,
-) -> crate::error::CordialResult<Vec<VerusBlock>> {
-    let mut blocks = Vec::new();
-    for src_root in quality_scan_trees(crate_root) {
-        if !src_root.is_dir() {
-            continue;
-        }
-        for entry in walkdir::WalkDir::new(&src_root)
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(|entry| entry.file_type().is_file())
-        {
-            let path = entry.path();
-            if path.extension().is_none_or(|ext| ext != "rs") || path_has_fixtures(path, crate_root)
-            {
-                continue;
-            }
-            let module_path = module_path_from_src_file(&src_root, path).join("::");
-            let parsed = source.parsed_file(path, "verus-ir")?;
-            blocks.extend(blocks_in_syntax(parsed.syntax(), path, &module_path));
-        }
-    }
-    Ok(blocks)
-}
-
-/// Find and parse every `verus! { .. }` block in one already-read
-/// source string -- the shared core `collect_verus_blocks` uses per
-/// file, and a direct entry point for testing against one file's
-/// content without needing a real crate tree on disk.
-#[instrument(level = "debug", skip(source, file))]
-pub(super) fn blocks_in_source(source: &str, file: &Path, module_path: &str) -> Vec<VerusBlock> {
-    let Ok(syntax) = syn::parse_file(source) else {
-        return Vec::new();
-    };
-    blocks_in_syntax(&syntax, file, module_path)
 }
 
 /// Parse a loader-issued macro payload, preserving original line coordinates.

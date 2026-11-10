@@ -5,9 +5,20 @@ use std::path::Path;
 use miette::IntoDiagnostic;
 
 use cordial::{
-    SourceSpan, VerusCrateIr, VerusEnumFacts, VerusFnFacts, VerusFnMode, VerusPanicKind,
-    VerusPublish, scan_verus_rust_source,
+    IrView, SourceSpan, VerusCrateIr, VerusEnumFacts, VerusFnFacts, VerusFnMode, VerusPanicKind,
+    VerusPublish,
 };
+
+#[path = "support/source_fixture.rs"]
+mod source_fixture;
+
+/// The Verus facts the loader stores for `source` placed as a crate lib.
+fn verus_facts(source: &str) -> miette::Result<VerusCrateIr> {
+    Ok(source_fixture::project_source(source)?
+        .source_verus()
+        .into_diagnostic()?
+        .facts())
+}
 
 fn function_named<'a>(ir: &'a VerusCrateIr, name: &str) -> miette::Result<&'a VerusFnFacts> {
     ir.functions()
@@ -48,12 +59,7 @@ const VIEW_OPERATOR_SOURCE: &str = include_str!("fixtures/verus_ir/view_operator
 #[test]
 fn parses_a_function_whose_body_uses_the_view_operator() -> miette::Result<()> {
     cordial::init_tracing();
-    let ir = scan_verus_rust_source(
-        VIEW_OPERATOR_SOURCE,
-        Path::new("cstr_carrier.rs"),
-        "rust_std::cstr_carrier",
-    )
-    .into_diagnostic()?;
+    let ir = verus_facts(VIEW_OPERATOR_SOURCE)?;
 
     let names: Vec<&str> = ir.functions().iter().map(|f| f.name().as_str()).collect();
     assert!(
@@ -101,12 +107,7 @@ const ASSUME_AND_AXIOM_SOURCE: &str = include_str!("fixtures/verus_ir/assume_and
 #[test]
 fn detects_real_soundness_escape_hatches() -> miette::Result<()> {
     cordial::init_tracing();
-    let ir = scan_verus_rust_source(
-        ASSUME_AND_AXIOM_SOURCE,
-        Path::new("soundness_sample.rs"),
-        "gallery::soundness_sample",
-    )
-    .into_diagnostic()?;
+    let ir = verus_facts(ASSUME_AND_AXIOM_SOURCE)?;
 
     let axiom = function_named(&ir, "axiom_addition_commutes")?;
     assert_eq!(axiom.mode(), VerusFnMode::ProofAxiom);
@@ -138,12 +139,7 @@ const SIGNATURE_FACTS_SOURCE: &str = include_str!("fixtures/verus_ir/signature_f
 #[test]
 fn extracts_signature_level_facts_and_every_panic_site_kind() -> miette::Result<()> {
     cordial::init_tracing();
-    let ir = scan_verus_rust_source(
-        SIGNATURE_FACTS_SOURCE,
-        Path::new("signature_sample.rs"),
-        "gallery::signature_sample",
-    )
-    .into_diagnostic()?;
+    let ir = verus_facts(SIGNATURE_FACTS_SOURCE)?;
 
     let lemma = function_named(&ir, "lemma_applies_everywhere")?;
     assert!(lemma.is_broadcast());
@@ -172,12 +168,7 @@ const CFG_TEST_AND_COMPILE_ERROR_SOURCE: &str =
 #[test]
 fn tracks_cfg_test_module_nesting_and_detects_compile_error() -> miette::Result<()> {
     cordial::init_tracing();
-    let ir = scan_verus_rust_source(
-        CFG_TEST_AND_COMPILE_ERROR_SOURCE,
-        Path::new("cfg_test_sample.rs"),
-        "gallery::cfg_test_sample",
-    )
-    .into_diagnostic()?;
+    let ir = verus_facts(CFG_TEST_AND_COMPILE_ERROR_SOURCE)?;
 
     let library_fn = function_named(&ir, "in_library_code")?;
     assert!(!library_fn.cfg_test());
@@ -199,12 +190,7 @@ const GHOST_EXEC_UNREACHABLE_SOURCE: &str =
 #[test]
 fn marks_only_the_unreachable_arm_with_a_real_ghost_sibling() -> miette::Result<()> {
     cordial::init_tracing();
-    let ir = scan_verus_rust_source(
-        GHOST_EXEC_UNREACHABLE_SOURCE,
-        Path::new("ghost_exec_sample.rs"),
-        "gallery::ghost_exec_sample",
-    )
-    .into_diagnostic()?;
+    let ir = verus_facts(GHOST_EXEC_UNREACHABLE_SOURCE)?;
 
     let paired = function_named(&ir, "matches_int_error_kind_carriers_own_shape")?;
     assert_eq!(paired.panic_sites().len(), 1, "{:?}", paired.panic_sites());
@@ -234,12 +220,7 @@ const LOCAL_CALL_SOURCE: &str = include_str!("fixtures/verus_ir/local_call_sourc
 #[test]
 fn records_local_call_target_names() -> miette::Result<()> {
     cordial::init_tracing();
-    let ir = scan_verus_rust_source(
-        LOCAL_CALL_SOURCE,
-        Path::new("local_call_sample.rs"),
-        "gallery::local_call_sample",
-    )
-    .into_diagnostic()?;
+    let ir = verus_facts(LOCAL_CALL_SOURCE)?;
 
     let caller = function_named(&ir, "caller")?;
     assert!(
@@ -261,31 +242,22 @@ fn records_local_call_target_names() -> miette::Result<()> {
 #[test]
 fn fully_documented_data_carrying_enum_is_a_pattern_projection_enum() -> miette::Result<()> {
     cordial::init_tracing();
-    let file = Path::new("transfer_error.rs");
-    let ir = scan_verus_rust_source(
-        DOCUMENTED_DATA_CARRYING_ENUM_SOURCE,
-        file,
-        "gallery::transfer_error",
-    )
-    .into_diagnostic()?;
+    let ir = verus_facts(DOCUMENTED_DATA_CARRYING_ENUM_SOURCE)?;
 
     let transfer_error = enum_named(&ir, "TransferError")?;
     assert!(transfer_error.synthesizes_pattern_projection_accessors());
     assert!(transfer_error.fully_documented());
-    assert!(ir.is_documented_pattern_projection_enum(file, transfer_error.span().line()));
+    assert!(ir.is_documented_pattern_projection_enum(
+        transfer_error.span().file(),
+        transfer_error.span().line()
+    ));
     Ok(())
 }
 
 #[test]
 fn undocumented_data_carrying_variant_is_not_exempt() -> miette::Result<()> {
     cordial::init_tracing();
-    let file = Path::new("transfer_error.rs");
-    let ir = scan_verus_rust_source(
-        UNDOCUMENTED_VARIANT_ENUM_SOURCE,
-        file,
-        "gallery::transfer_error",
-    )
-    .into_diagnostic()?;
+    let ir = verus_facts(UNDOCUMENTED_VARIANT_ENUM_SOURCE)?;
 
     let transfer_error = enum_named(&ir, "TransferError")?;
     assert!(transfer_error.synthesizes_pattern_projection_accessors());
@@ -293,39 +265,39 @@ fn undocumented_data_carrying_variant_is_not_exempt() -> miette::Result<()> {
         !transfer_error.fully_documented(),
         "NegativeAmount has no doc comment"
     );
-    assert!(!ir.is_documented_pattern_projection_enum(file, transfer_error.span().line()));
+    assert!(!ir.is_documented_pattern_projection_enum(
+        transfer_error.span().file(),
+        transfer_error.span().line()
+    ));
     Ok(())
 }
 
 #[test]
 fn unit_only_enum_never_synthesizes_accessors() -> miette::Result<()> {
     cordial::init_tracing();
-    let file = Path::new("selector.rs");
-    let ir = scan_verus_rust_source(UNIT_ONLY_ENUM_SOURCE, file, "gallery::selector")
-        .into_diagnostic()?;
+    let ir = verus_facts(UNIT_ONLY_ENUM_SOURCE)?;
 
     let selector = enum_named(&ir, "Selector")?;
     assert!(
         !selector.synthesizes_pattern_projection_accessors(),
         "no variant carries data"
     );
-    assert!(!ir.is_documented_pattern_projection_enum(file, selector.span().line()));
+    assert!(
+        !ir.is_documented_pattern_projection_enum(selector.span().file(), selector.span().line())
+    );
     Ok(())
 }
 
 #[test]
 fn wrong_line_or_file_is_never_a_match() -> miette::Result<()> {
     cordial::init_tracing();
-    let file = Path::new("transfer_error.rs");
-    let ir = scan_verus_rust_source(
-        DOCUMENTED_DATA_CARRYING_ENUM_SOURCE,
-        file,
-        "gallery::transfer_error",
-    )
-    .into_diagnostic()?;
+    let ir = verus_facts(DOCUMENTED_DATA_CARRYING_ENUM_SOURCE)?;
     let transfer_error = enum_named(&ir, "TransferError")?;
 
-    assert!(!ir.is_documented_pattern_projection_enum(file, transfer_error.span().line() + 1));
+    assert!(!ir.is_documented_pattern_projection_enum(
+        transfer_error.span().file(),
+        transfer_error.span().line() + 1
+    ));
     assert!(!ir.is_documented_pattern_projection_enum(
         Path::new("other.rs"),
         transfer_error.span().line()

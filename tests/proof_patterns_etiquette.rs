@@ -1,10 +1,20 @@
 use std::fs;
 
 use cordial::{
-    PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, RunAll, Session, SessionBuilder,
-    scan_crate_proof_patterns,
+    CrateTarget, IrView, PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, ProofPatternRecord, RunAll,
+    Session, SessionBuilder, proof_pattern_records,
 };
 use miette::{IntoDiagnostic, WrapErr};
+
+#[path = "support/source_projection.rs"]
+mod source_projection;
+
+/// The proof-pattern records the loader's Verus inventory yields for `root`.
+fn scanned_records(root: &std::path::Path) -> miette::Result<Vec<ProofPatternRecord>> {
+    let ir = source_projection::baseline(root, &CrateTarget::new("fixture", root))?;
+    let facts = ir.source_verus().into_diagnostic()?.facts();
+    proof_pattern_records(&facts, root).into_diagnostic()
+}
 
 const FIXTURE_SOURCE: &str = r#"
 use verus_builtin_macros::verus;
@@ -80,9 +90,7 @@ fn scan_crate_finds_every_real_escape_hatch_and_broadcast() -> miette::Result<()
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     write_fixture(fixture.path())?;
 
-    let records = scan_crate_proof_patterns(fixture.path())
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let records = scanned_records(fixture.path()).wrap_err("scan")?;
 
     let kinds: Vec<ProofPatternKind> = records.iter().map(|record| record.kind()).collect();
     assert!(kinds.contains(&ProofPatternKind::Axiom), "{kinds:?}");
@@ -125,9 +133,7 @@ fn scan_skips_a_crate_with_no_verus_blocks() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("write fixture")?;
 
-    let records = scan_crate_proof_patterns(fixture.path())
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let records = scanned_records(fixture.path()).wrap_err("scan")?;
     assert!(records.is_empty());
     Ok(())
 }

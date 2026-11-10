@@ -10,33 +10,12 @@ use super::types::{VerusWarningRecord, VerusWarningRuleId};
 
 use tracing::instrument;
 
-/// Scan a crate: run Verus when this crate is a Verus target and the
-/// compiler is on `PATH`.
-#[instrument(level = "debug", err(level = "warn"))]
-pub fn scan_crate_verus_warnings(crate_root: &Path) -> CordialResult<Vec<VerusWarningRecord>> {
-    scan_crate_verus_warnings_impl(
-        crate_root,
-        #[cfg(feature = "verus_ir")]
-        None,
-    )
-}
-
+/// Run Verus when this crate is a Verus target and the compiler is on `PATH`,
+/// dropping warnings that Verus's own synthesized accessors explain.
 #[instrument(level = "debug", skip(verus), err(level = "warn"))]
 pub(super) fn scan_crate_verus_warnings_with_ir(
     crate_root: &Path,
     #[cfg(feature = "verus_ir")] verus: &crate::VerusCrateIr,
-) -> CordialResult<Vec<VerusWarningRecord>> {
-    scan_crate_verus_warnings_impl(
-        crate_root,
-        #[cfg(feature = "verus_ir")]
-        Some(verus),
-    )
-}
-
-#[instrument(level = "debug", skip(verus), err(level = "warn"))]
-fn scan_crate_verus_warnings_impl(
-    crate_root: &Path,
-    #[cfg(feature = "verus_ir")] verus: Option<&crate::VerusCrateIr>,
 ) -> CordialResult<Vec<VerusWarningRecord>> {
     if !crate_is_verus_target(crate_root) {
         return Ok(Vec::new());
@@ -53,18 +32,14 @@ fn scan_crate_verus_warnings_impl(
     };
     let output = run_verus(&verus_binary, crate_root, &entry)?;
     let records = parse_verus_compiler_output(&output, crate_root)?;
-    warning_filter::retain_real_warnings(
-        records,
-        crate_root,
-        #[cfg(feature = "verus_ir")]
-        verus,
-    )
+    #[cfg(feature = "verus_ir")]
+    return warning_filter::retain_real_warnings(records, verus);
+    #[cfg(not(feature = "verus_ir"))]
+    warning_filter::retain_real_warnings(records)
 }
 
 #[cfg(feature = "verus_ir")]
 mod warning_filter {
-    use std::path::Path;
-
     use super::VerusWarningRecord;
     use crate::error::CordialResult;
     use tracing::instrument;
@@ -80,16 +55,8 @@ mod warning_filter {
     #[instrument(level = "debug", skip(records, verus), err(level = "warn"))]
     pub(super) fn retain_real_warnings(
         records: Vec<VerusWarningRecord>,
-        crate_root: &Path,
-        verus: Option<&crate::VerusCrateIr>,
+        verus: &crate::VerusCrateIr,
     ) -> CordialResult<Vec<VerusWarningRecord>> {
-        let standalone;
-        let verus = if let Some(verus) = verus {
-            verus
-        } else {
-            standalone = crate::verus_ir::scan_crate_verus_ir(crate_root)?;
-            &standalone
-        };
         Ok(records
             .into_iter()
             .filter(|record| {
@@ -102,8 +69,6 @@ mod warning_filter {
 
 #[cfg(not(feature = "verus_ir"))]
 mod warning_filter {
-    use std::path::Path;
-
     use crate::error::CordialResult;
 
     use super::VerusWarningRecord;
@@ -112,9 +77,7 @@ mod warning_filter {
     #[instrument(level = "debug", skip(records))]
     pub(super) fn retain_real_warnings(
         records: Vec<VerusWarningRecord>,
-        crate_root: &Path,
     ) -> CordialResult<Vec<VerusWarningRecord>> {
-        let _ = crate_root;
         Ok(records)
     }
 }
