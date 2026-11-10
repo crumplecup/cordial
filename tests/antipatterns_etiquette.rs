@@ -2,12 +2,36 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use cordial::{
-    ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, ErrorFieldStrategy, RunAll, Session, SessionBuilder,
-    StaticRefStrategy, scan_antipatterns_rust_source,
-    scan_antipatterns_rust_source_with_skip_paths,
+    ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, AntipatternSiteRecord, AntipatternWorkspaceFacts,
+    CrateTarget, ErrorFieldStrategy, IrView, RunAll, Session, SessionBuilder, StaticRefStrategy,
+    scan_antipatterns_rust_source, scan_antipatterns_rust_source_with_skip_paths,
     scan_antipatterns_rust_source_with_static_ref_strategy,
-    scan_antipatterns_rust_source_with_strategies, scan_crate_antipatterns,
+    scan_antipatterns_rust_source_with_strategies,
 };
+
+#[path = "support/source_projection.rs"]
+mod source_projection;
+
+/// The antipattern findings the loader's inventory gives the member crate,
+/// with registry and workspace-version evidence from `workspace_root`.
+fn crate_antipatterns(
+    member: &Path,
+    name: &str,
+    workspace_root: &Path,
+) -> miette::Result<Vec<AntipatternSiteRecord>> {
+    let facts =
+        AntipatternWorkspaceFacts::load(workspace_root, workspace_root).into_diagnostic()?;
+    source_projection::baseline(workspace_root, &CrateTarget::new(name, member))?
+        .source_antipatterns()
+        .into_diagnostic()?
+        .assess(
+            name,
+            &facts,
+            StaticRefStrategy::default(),
+            ErrorFieldStrategy::default(),
+        )
+        .into_diagnostic()
+}
 
 #[test]
 fn workspace_version_findings_refresh_after_manifest_edit() -> miette::Result<()> {
@@ -27,8 +51,7 @@ fn workspace_version_findings_refresh_after_manifest_edit() -> miette::Result<()
         "[package]\nname = \"member\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
     )
     .into_diagnostic()?;
-    let first = scan_crate_antipatterns(&member, "member", workspace.path(), workspace.path())
-        .into_diagnostic()?;
+    let first = crate_antipatterns(&member, "member", workspace.path())?;
     assert!(
         first
             .iter()
@@ -40,8 +63,7 @@ fn workspace_version_findings_refresh_after_manifest_edit() -> miette::Result<()
         "[package]\nname = \"member\"\nversion.workspace = true\nedition = \"2024\"\n",
     )
     .into_diagnostic()?;
-    let second = scan_crate_antipatterns(&member, "member", workspace.path(), workspace.path())
-        .into_diagnostic()?;
+    let second = crate_antipatterns(&member, "member", workspace.path())?;
     assert!(
         second
             .iter()
@@ -455,9 +477,8 @@ fn crate_local_traits_apply_across_files() -> miette::Result<()> {
     .into_diagnostic()
     .wrap_err("write query")?;
 
-    let findings = scan_crate_antipatterns(tmp.path(), "split_traits", tmp.path(), tmp.path())
-        .into_diagnostic()
-        .wrap_err("scan crate")?;
+    let findings =
+        crate_antipatterns(tmp.path(), "split_traits", tmp.path()).wrap_err("scan crate")?;
     let unused: Vec<_> = findings
         .iter()
         .filter(|f| f.rule_id() == AntipatternRuleId::UnusedUnderscoreArg001)

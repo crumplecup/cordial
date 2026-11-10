@@ -44,28 +44,6 @@ pub(crate) enum StaticFieldShape {
 }
 
 impl AntipatternCatalog {
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "AntipatternCatalog")]
-    pub(crate) fn collect(
-        source: &crate::SourceLoadView,
-        root: &std::path::Path,
-        crate_name: &str,
-    ) -> CordialResult<Self> {
-        let paths = super::native::input_paths(
-            root,
-            super::contract_bounds::verifier_for_crate(crate_name).is_some(),
-        )?;
-        let inputs: Vec<_> = paths.iter().map(|(_, path)| path.clone()).collect();
-        source.collect_native_files(&inputs, |sources| {
-            let files: Vec<_> = paths
-                .iter()
-                .zip(sources)
-                .map(|((tree, _), source)| (tree.clone(), source))
-                .collect();
-            Self::collect_native(root, crate_name, &files)
-        })
-    }
-
     #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
     pub(crate) fn assess(
         &self,

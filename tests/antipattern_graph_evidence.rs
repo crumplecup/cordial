@@ -5,7 +5,6 @@ use cordial::AntipatternWorkspaceFacts;
 use cordial::{
     ATTR_SOURCE_ANTIPATTERNS, AntipatternRuleId, ContractRecordDump, CrateIr, CrateTarget,
     ErrorFieldStrategy, IrView, SourceAntipatterns, SourceDatabase, StaticRefStrategy,
-    scan_crate_contract_bounds,
 };
 use miette::{IntoDiagnostic, Result};
 use sha2::{Digest, Sha256};
@@ -142,10 +141,12 @@ fn registry_changes_replay_saved_contract_shapes_for_each_verifier() -> Result<(
         let registry = registry(verifier)?;
         let mut outcomes = Vec::new();
         for records in [Vec::new(), registry] {
-            let expected = scan_crate_contract_bounds(root, &name, &records).into_diagnostic()?;
+            let none = records.is_empty();
+            let facts = AntipatternWorkspaceFacts::new(records, HashMap::new());
+            let expected = contract_rows(&evidence, &name, &facts)?;
             assert_eq!(
                 expected.len(),
-                match (verifier, records.is_empty()) {
+                match (verifier, none) {
                     ("creusot", true) => 3,
                     ("kani", true) => 3,
                     ("verus", true) => 2,
@@ -153,27 +154,14 @@ fn registry_changes_replay_saved_contract_shapes_for_each_verifier() -> Result<(
                     _ => 1,
                 }
             );
-            outcomes.push((
-                AntipatternWorkspaceFacts::new(records, HashMap::new()),
-                expected,
-            ));
+            outcomes.push((facts, expected));
         }
         let evidence: SourceAntipatterns =
             serde_json::from_value(serde_json::to_value(evidence).into_diagnostic()?)
                 .into_diagnostic()?;
         std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
         for (facts, expected) in outcomes {
-            let actual: Vec<_> = evidence
-                .assess(
-                    &name,
-                    &facts,
-                    StaticRefStrategy::String,
-                    ErrorFieldStrategy::Owned,
-                )
-                .into_diagnostic()?
-                .into_iter()
-                .filter(|row| row.rule_id() == AntipatternRuleId::UnnamedContractBound001)
-                .collect();
+            let actual = contract_rows(&evidence, &name, &facts)?;
             assert_eq!(
                 actual, expected,
                 "{verifier}: full source locations and snippets"
@@ -181,6 +169,26 @@ fn registry_changes_replay_saved_contract_shapes_for_each_verifier() -> Result<(
         }
     }
     Ok(())
+}
+
+/// The unnamed-contract-bound rows the saved evidence yields under `facts`.
+#[tracing::instrument(level = "debug", skip(evidence, facts), err(level = "warn"))]
+fn contract_rows(
+    evidence: &SourceAntipatterns,
+    name: &str,
+    facts: &AntipatternWorkspaceFacts,
+) -> Result<Vec<cordial::AntipatternSiteRecord>> {
+    Ok(evidence
+        .assess(
+            name,
+            facts,
+            StaticRefStrategy::String,
+            ErrorFieldStrategy::Owned,
+        )
+        .into_diagnostic()?
+        .into_iter()
+        .filter(|row| row.rule_id() == AntipatternRuleId::UnnamedContractBound001)
+        .collect())
 }
 
 #[tracing::instrument(level = "debug", err(level = "warn"))]

@@ -4,12 +4,16 @@ use std::fs;
 use std::path::PathBuf;
 
 use cordial::{
-    ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, ContractRecordDump, RunAll, Session, SessionBuilder,
-    scan_crate_contract_bounds, scan_creusot_contract_bounds_source,
-    scan_kani_contract_bounds_source, scan_verus_contract_bounds_source,
+    ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, AntipatternWorkspaceFacts, ContractRecordDump,
+    CrateTarget, ErrorFieldStrategy, IrView, RunAll, Session, SessionBuilder, StaticRefStrategy,
+    scan_creusot_contract_bounds_source, scan_kani_contract_bounds_source,
+    scan_verus_contract_bounds_source,
 };
 
 use miette::{IntoDiagnostic, WrapErr};
+
+#[path = "support/source_projection.rs"]
+mod source_projection;
 
 fn fixtures_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/quality/antipatterns")
@@ -1098,9 +1102,27 @@ amenable_derive::harness! {
     .into_diagnostic()
     .wrap_err("write gallery harness")?;
 
-    let findings = scan_crate_contract_bounds(crate_root.path(), "amenable_kani", &[])
-        .into_diagnostic()
-        .wrap_err("scan crate")?;
+    fs::write(
+        crate_root.path().join("Cargo.toml"),
+        "[package]\nname = 'amenable_kani'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    let findings = source_projection::baseline(
+        crate_root.path(),
+        &CrateTarget::new("amenable_kani", crate_root.path()),
+    )?
+    .source_antipatterns()
+    .into_diagnostic()?
+    .assess(
+        "amenable_kani",
+        &AntipatternWorkspaceFacts::new(Vec::new(), std::collections::HashMap::new()),
+        StaticRefStrategy::default(),
+        ErrorFieldStrategy::default(),
+    )
+    .into_diagnostic()?
+    .into_iter()
+    .filter(|row| row.rule_id() == AntipatternRuleId::UnnamedContractBound001)
+    .collect::<Vec<_>>();
 
     assert_eq!(findings.len(), 1);
     assert!(findings[0].context().contains("verify_production"));

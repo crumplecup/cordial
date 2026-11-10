@@ -74,10 +74,8 @@ pub use etiquettes::allows::{
 #[cfg(feature = "antipatterns")]
 pub use etiquettes::antipatterns::{
     ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, AntipatternSiteRecord, AntipatternWorkspaceFacts,
-    ContractRecordDump, ContractRecordDumpBuilder, scan_crate_antipatterns,
-    scan_crate_antipatterns_with_static_ref_strategy, scan_crate_contract_bounds,
-    scan_creusot_contract_bounds_source, scan_kani_contract_bounds_source,
-    scan_rust_source as scan_antipatterns_rust_source,
+    ContractRecordDump, ContractRecordDumpBuilder, scan_creusot_contract_bounds_source,
+    scan_kani_contract_bounds_source, scan_rust_source as scan_antipatterns_rust_source,
     scan_rust_source_with_skip_paths as scan_antipatterns_rust_source_with_skip_paths,
     scan_rust_source_with_static_ref_strategy as scan_antipatterns_rust_source_with_static_ref_strategy,
     scan_rust_source_with_strategies as scan_antipatterns_rust_source_with_strategies,

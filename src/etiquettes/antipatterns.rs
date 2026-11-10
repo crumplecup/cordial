@@ -51,9 +51,8 @@ pub use assessor::AntipatternAssessor;
 pub(crate) use contract_bounds::verifier_for_crate as antipattern_contract_verifier;
 pub(crate) use contract_bounds::{ContractClause, collect_payload as antipattern_contract_payload};
 pub use contract_bounds::{
-    ContractRecordDump, ContractRecordDumpBuilder, scan_crate_contract_bounds,
-    scan_creusot_contract_bounds_source, scan_kani_contract_bounds_source,
-    scan_verus_contract_bounds_source,
+    ContractRecordDump, ContractRecordDumpBuilder, scan_creusot_contract_bounds_source,
+    scan_kani_contract_bounds_source, scan_verus_contract_bounds_source,
 };
 pub use enricher::AntipatternInventoryEnricher;
 pub use probe::AntipatternSiteProbe;
@@ -65,7 +64,6 @@ pub use scan::{
     scan_rust_source_with_strategies,
 };
 pub use scan_crate::AntipatternWorkspaceFacts;
-pub use scan_crate::{scan_crate_antipatterns, scan_crate_antipatterns_with_static_ref_strategy};
 pub use types::{AntipatternRuleId, AntipatternSiteRecord};
 pub use version_reporter::{
     VersionInMemberChecklistReporter, VersionInMemberCsvReporter, VersionInMemberSummaryReporter,

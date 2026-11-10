@@ -22,29 +22,6 @@ impl SourceLoadView {
             .with_database(|database| database.collect_source(path, supplied, collect))
     }
 
-    /// Collect crate-wide facts after freezing every selected database input.
-    #[cfg(feature = "antipatterns")]
-    #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
-    pub(crate) fn collect_native_files<T>(
-        &self,
-        paths: &[std::path::PathBuf],
-        collect: impl FnOnce(&[DatabaseSource<'_>]) -> CordialResult<T>,
-    ) -> CordialResult<T> {
-        self.cache_token.with_database(|database| {
-            for path in paths {
-                let supplied = self
-                    .files
-                    .iter()
-                    .find(|file| file.path() == path)
-                    .map(|file| file.source().as_str());
-                database
-                    .captured_text(path, supplied)?
-                    .ok_or_else(|| crate::CordialError::not_found(path.clone()))?;
-            }
-            database.collect_sources(paths, collect)
-        })
-    }
-
     /// Supplied text uses the ordinary session owner, even when no file exists.
     #[cfg(any(
         feature = "antipatterns",
