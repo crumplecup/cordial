@@ -3,7 +3,14 @@
 use ra_ap_hir::{Adt, AsAssocItem, AssocItemContainer, Function, LangItem, Semantics, Trait, Type};
 use ra_ap_ide_db::{RootDatabase, famous_defs::FamousDefs};
 
-use crate::{SemanticCapability, SemanticFormattingRole, SemanticResultRecording};
+use ra_ap_syntax::{
+    AstNode,
+    ast::{self, HasName},
+};
+
+use crate::{
+    SemanticCapability, SemanticFormattingRole, SemanticParameter, SemanticResultRecording,
+};
 
 /// Check the instantiated error in the function's own parameter environment.
 /// A borrowed success value has no bearing on the error's formatting traits.
@@ -39,6 +46,53 @@ pub(super) fn result_recording(
             ),
         ),
     }
+}
+
+/// The `Debug` verdict for every binding the function's parameters introduce,
+/// judged on the binding's own type in the function's environment: a derived
+/// `Debug`, a `Vec` of one, and a `T: Debug` parameter are all recordable.
+#[tracing::instrument(level = "debug", skip(sema, function, source))]
+pub(super) fn parameters(
+    sema: &Semantics<'_, RootDatabase>,
+    function: Function,
+    source: &ast::Fn,
+) -> Vec<SemanticParameter> {
+    let debug = Trait::lang(
+        sema.db,
+        function.module(sema.db).krate(sema.db),
+        LangItem::Debug,
+    );
+    let mut bindings = Vec::new();
+    for pattern in source
+        .param_list()
+        .into_iter()
+        .flat_map(|list| list.params())
+        .filter_map(|param| param.pat())
+    {
+        for binding in pattern
+            .syntax()
+            .descendants()
+            .filter_map(ast::IdentPat::cast)
+        {
+            let Some(name) = binding.name() else {
+                continue;
+            };
+            let verdict = sema
+                .type_of_pat(&ast::Pat::IdentPat(binding))
+                .map_or(SemanticCapability::Unavailable, |info| {
+                    capability(sema.db, &info.original, debug)
+                });
+            tracing::debug!(
+                target: "cordial::semantic::recording",
+                function = %function.name(sema.db).as_str(),
+                parameter = %name.text(),
+                ?verdict,
+                "parameter recording"
+            );
+            bindings.push(SemanticParameter::new(name.text().to_string(), verdict));
+        }
+    }
+    bindings
 }
 
 #[tracing::instrument(level = "trace", skip(db, ty, required))]

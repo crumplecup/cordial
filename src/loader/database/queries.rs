@@ -71,6 +71,7 @@ fn collect_direct(db: &RootDatabase, function: Function) -> Option<DirectFacts> 
         facts: SemanticFunction::new(types::identity(db, function.into()), label, output)
             .with_result_recording(recording::result_recording(&sema, function))
             .with_formatting_role(recording::formatting_role(&sema, function))
+            .with_parameters(recording::parameters(&sema, function, &source.value))
             .with_calls(calls)
             .with_incomplete(incomplete),
         source_targets,

@@ -306,10 +306,18 @@ fn collect_function(
             serde_json::to_value(facts)?,
         );
     }
-    if let Some(definition) = sema
+    let definition = sema
         .to_def(function)
-        .or_else(|| expanded_definition(sema, function))
-    {
+        .or_else(|| expanded_definition(sema, function));
+    if definition.is_none() {
+        tracing::debug!(
+            target: "cordial::semantic::definitions",
+            function = %function.name().map(|name| name.text().to_string()).unwrap_or_default(),
+            attribute_macro = sema.expand_attr_macro(&ast::Item::Fn(function.clone())).is_some(),
+            "function has no definition in the database"
+        );
+    }
+    if let Some(definition) = definition {
         let key = queries::FunctionKey::new(db, definition);
         let facts = queries::function_evidence(db, key)
             .as_ref()
@@ -321,25 +329,38 @@ fn collect_function(
     Ok(())
 }
 
-/// The definition of a function an attribute macro replaces, read from the
-/// function the macro generated. `None` when no macro applies or it cannot be
+/// How many attribute macros may be stacked on one function before it is
+/// reported as a gap. Every expansion that still carries a macro costs one.
+const MAX_ATTRIBUTE_MACRO_DEPTH: usize = 8;
+
+/// The definition of a function attribute macros replace, read from the function
+/// they finally generate. With several macros stacked (`#[instrument]` over
+/// `#[measure]`), each expansion still carries the next, so it is expanded again
+/// until a definition appears. `None` when no macro applies or one cannot be
 /// expanded (no proc-macro server, a macro error): that stays a gap, not a guess.
 #[tracing::instrument(level = "trace", skip(sema, function))]
 pub(super) fn expanded_definition(
     sema: &Semantics<'_, RootDatabase>,
     function: &ast::Fn,
 ) -> Option<ra_ap_hir::Function> {
-    let expansion = sema.expand_attr_macro(&ast::Item::Fn(function.clone()))?;
     let name = function.name()?;
-    expansion
-        .value
-        .value
-        .descendants()
-        .filter_map(ast::Fn::cast)
-        .find(|generated| {
-            generated
-                .name()
-                .is_some_and(|candidate| candidate.text() == name.text())
-        })
-        .and_then(|generated| sema.to_def(&generated))
+    let mut current = function.clone();
+    for _ in 0..MAX_ATTRIBUTE_MACRO_DEPTH {
+        let expansion = sema.expand_attr_macro(&ast::Item::Fn(current.clone()))?;
+        let generated = expansion
+            .value
+            .value
+            .descendants()
+            .filter_map(ast::Fn::cast)
+            .find(|candidate| {
+                candidate
+                    .name()
+                    .is_some_and(|candidate| candidate.text() == name.text())
+            })?;
+        if let Some(definition) = sema.to_def(&generated) {
+            return Some(definition);
+        }
+        current = generated;
+    }
+    None
 }
