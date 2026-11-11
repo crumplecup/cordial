@@ -10,6 +10,7 @@ use ra_ap_syntax::{
 
 use crate::{
     SemanticCapability, SemanticFormattingRole, SemanticParameter, SemanticResultRecording,
+    SemanticReturnRecording, SemanticReturnShape,
 };
 
 /// Check the instantiated error in the function's own parameter environment.
@@ -46,6 +47,68 @@ pub(super) fn result_recording(
             ),
         ),
     }
+}
+
+/// Whether the whole return value can be recorded, and whether any part of its
+/// type is a reference or raw pointer. Both read the resolved type, so an alias
+/// that hides a reference, `Self`, and `impl Trait` are judged as what they are.
+#[tracing::instrument(level = "debug", skip(sema, function))]
+pub(super) fn return_recording(
+    sema: &Semantics<'_, RootDatabase>,
+    function: Function,
+) -> SemanticReturnRecording {
+    let ty = function.ret_type(sema.db);
+    if ty.is_unknown() {
+        return SemanticReturnRecording::default();
+    }
+    let debug = Trait::lang(
+        sema.db,
+        function.module(sema.db).krate(sema.db),
+        LangItem::Debug,
+    );
+    let mut borrowed = false;
+    ty.walk(sema.db, |part| {
+        borrowed |= part.is_reference() || part.is_raw_ptr();
+    });
+    let verdict = capability(sema.db, &ty, debug);
+    tracing::debug!(
+        target: "cordial::semantic::recording",
+        function = %function.name(sema.db).as_str(),
+        ?verdict,
+        borrowed,
+        "return recording"
+    );
+    SemanticReturnRecording::new(verdict, Some(borrowed))
+}
+
+/// Whether the return type is the impl's own `Self` (through references and
+/// aliases) and whether a `bool` occurs anywhere in it.
+#[tracing::instrument(level = "debug", skip(sema, function))]
+pub(super) fn return_shape(
+    sema: &Semantics<'_, RootDatabase>,
+    function: Function,
+) -> SemanticReturnShape {
+    let ty = function.ret_type(sema.db);
+    if ty.is_unknown() {
+        return SemanticReturnShape::default();
+    }
+    let self_ty = function
+        .as_assoc_item(sema.db)
+        .and_then(|item| match item.container(sema.db) {
+            AssocItemContainer::Impl(implementation) => Some(implementation.self_ty(sema.db)),
+            AssocItemContainer::Trait(_) => None,
+        });
+    let is_self = self_ty.is_some_and(|self_ty| ty.strip_references() == self_ty);
+    let mut has_bool = false;
+    ty.walk(sema.db, |part| has_bool |= part.is_bool());
+    tracing::debug!(
+        target: "cordial::semantic::recording",
+        function = %function.name(sema.db).as_str(),
+        is_self,
+        has_bool,
+        "return shape"
+    );
+    SemanticReturnShape::new(Some(is_self), Some(has_bool))
 }
 
 /// The `Debug` verdict for every binding the function's parameters introduce,
