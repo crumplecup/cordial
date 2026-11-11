@@ -1,0 +1,48 @@
+pub trait Ensures {
+    fn ensures() -> bool;
+}
+
+pub struct Checker;
+
+impl Ensures for Checker {
+    fn ensures() -> bool {
+        true
+    }
+}
+
+impl Checker {
+    pub fn inherent() -> bool {
+        true
+    }
+}
+
+pub fn helper() -> bool {
+    true
+}
+
+fake_harness_macro::harness! {
+    kani, VERIFY_CHECKER_SRC, {
+        #[kani::proof]
+        fn verify_checker() {
+            assert!(Checker::ensures());
+            helper();
+        }
+    }
+}
+
+fake_harness_macro::harness! {
+    kani, ORDINARY_SRC, {
+        fn ordinary_in_macro() {
+            helper();
+        }
+    }
+}
+
+fake_harness_macro::harness! {
+    kani, PATHS_SRC, {
+        fn qualified_paths() {
+            Checker::inherent();
+            Ensures::ensures();
+        }
+    }
+}

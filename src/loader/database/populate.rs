@@ -58,6 +58,8 @@ impl Projection {
         module.set_attr("qualified_path", module_path.into());
         let module = graph.insert_node(module);
         graph.insert_edge(graph.root(), module, EdgeKind::Contains)?;
+        #[cfg(feature = "tracing")]
+        let macros = source.proof_macro_syntax();
         let mut nodes: HashMap<TextRange, (NodeId, String)> = HashMap::new();
         for item in source
             .tree()
@@ -131,9 +133,60 @@ impl Projection {
                     }
                 }
             }
+            #[cfg(feature = "tracing")]
+            if let ast::Item::MacroCall(invocation) = &item {
+                let reading = super::islands::Reading::new(db, sema, &macros, module_path);
+                self.record_islands(&reading, source, invocation, node, graph)?;
+            }
             nodes.insert(item.syntax().text_range(), (node, qualified));
         }
         Ok(module)
+    }
+
+    /// Give each function in a macro invocation's tokens a node under the
+    /// invocation, with its gates and the calls resolved at the invocation.
+    #[cfg(feature = "tracing")]
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, reading, source, invocation, graph, parent),
+        err(level = "warn")
+    )]
+    fn record_islands(
+        &mut self,
+        reading: &super::islands::Reading<'_, '_>,
+        source: &DatabaseSource<'_>,
+        invocation: &ast::MacroCall,
+        parent: NodeId,
+        graph: &mut CrateIr,
+    ) -> CordialResult<()> {
+        let line = source.line(invocation.syntax().text_range().start());
+        for function in super::islands::functions(reading.macros(), invocation) {
+            let name = function
+                .path()
+                .rsplit("::")
+                .next()
+                .unwrap_or(function.path())
+                .to_owned();
+            let mut weight = source_weight(source, NodeKind::Item(ItemKind::Fn), &name, line);
+            let qualified = if reading.module_path().is_empty() {
+                function.path().clone()
+            } else {
+                format!("{}::{}", reading.module_path(), function.path())
+            };
+            weight.set_attr("qualified_path", qualified.into());
+            weight.set_attr(
+                crate::ir::ATTR_MACRO_ISLAND,
+                serde_json::to_value(crate::ir::MacroIsland::new(function.gates().clone()))?,
+            );
+            let node = graph.insert_node(weight);
+            graph.insert_edge(parent, node, EdgeKind::Contains)?;
+            for path in function.calls() {
+                if let Some(target) = super::islands::resolve(reading, invocation, path) {
+                    self.calls.push((node, target));
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Add the resolved `Calls` edges and hand back the function nodes.

@@ -2,6 +2,8 @@
 use tracing::instrument;
 mod contexts;
 mod external;
+#[cfg(feature = "tracing")]
+mod islands;
 mod options;
 mod populate;
 mod projection;
