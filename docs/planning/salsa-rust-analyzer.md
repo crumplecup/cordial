@@ -1,9 +1,11 @@
 # A shared semantic backend with Salsa and rust-analyzer
 
-**Status:** Active, 2026-11-05. The next milestone is the production
-frontend cutover: one rust-analyzer/Salsa database supplies collection and
-semantic evidence through the shared IR, and the replaced parsing ownership
-is removed. Tracing's remaining semantic work depends on this milestone.
+**Status:** Active, 2026-11-10. The production frontend cutover is done: one
+session-owned rust-analyzer/Salsa database supplies parse and collection
+evidence through the shared IR, and the `syn` frontend, parse cache,
+standalone scans and parity tests are removed. Remaining: consume the
+database's semantic facts in tracing assessment and apply, and the one
+`verus_syn` dialect parser behind `verus_ir`.
 Research and dependency compatibility checked on 2026-10-30.
 
 ## Purpose
@@ -56,12 +58,12 @@ commits and the gates below:
 - [ ] Migrate every production collector in the inventory below, including
   inactive syntax, macro islands and supported proof dialects. Collect missing
   facts in the loader; consumers read them through `IrView`.
-- [ ] Route ordinary quality, submit and apply runs through that database and
+- [x] Route ordinary quality, submit and apply runs through that database and
   its IR projection. No hook or apply planner creates a private analysis path.
 - [ ] Use the projected semantic identities and error formatting capabilities
   in production tracing assessment and apply. Remove the corresponding
   handwritten resolution as its replacement becomes authoritative.
-- [ ] Remove the compatibility AST ownership, parse cache and orphaned evidence
+- [x] Remove the compatibility AST ownership, parse cache and orphaned evidence
   paths at cutover. Classify candidate validation and code generation separately;
   they must not conceal another parse of original production inputs.
 - [ ] Demonstrate production tracing across files and one complete strategy
@@ -1578,3 +1580,29 @@ milestone; do not treat each port as a separate product destination. Continue
 implement / focused checks / build-tier submit / commit. Keep the selected
 architecture as the destination throughout; do not create another user-facing
 backend choice or extend handwritten semantic resolution.
+
+
+## Checkpoint: the `syn` frontend is gone (2026-11-10)
+
+Contract clauses (Kani, Creusot, Verus) now read rust-analyzer's token trees
+and expressions; `TokenStreamParse`, the `syn`, `proc-macro2` and `quote`
+dependencies of the default build, and the last standalone scans are removed.
+`proc-macro2` and `quote` remain only behind the optional `verus_ir` feature,
+together with `verus_syn`.
+
+Open against the milestone:
+
+- **Semantic facts in tracing.** `IrView` exposes `semantic_snapshot` and
+  `semantic_function`, but tracing assessment and apply, and `src/transform`,
+  do not read them yet; handwritten resolution remains there.
+- **Verus.** `verus_syn` is the last `syn`-family parser. Retiring it needs an
+  upstream route or a token-based design for `verus!` bodies.
+- **Cargo context.** Selected target/features/cfg, build outputs and proc
+  macros as retained context identity, with explicit unavailable evidence.
+- **Sections 3 and 4.** The cross-file panic-to-typed-error transformation
+  and the cold/warm measurements have not started.
+- **Dependencies.** `ra_ap_*` stay pinned at 0.0.358 until upstream publishes a
+  complete 0.0.362 set (exceptions are recorded in the store).
+
+Next: wire tracing assessment to the projected semantic identities, replacing
+its handwritten resolution one rule at a time.
