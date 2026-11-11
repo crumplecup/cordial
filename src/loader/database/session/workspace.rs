@@ -1,11 +1,10 @@
 //! Effectful workspace loading stays in the driver, outside tracked queries.
 
-use super::{context, inputs, packages};
+use super::{context, inputs, packages, variants};
 
 use super::SourceDatabase;
 use crate::{CordialResult, SemanticCargoOptions, SemanticContextGap};
 use ra_ap_ide_db::RootDatabase;
-use ra_ap_load_cargo::{LoadCargoConfig, ProcMacroServerChoice, load_workspace_into_db};
 use ra_ap_project_model::{ProjectManifest, ProjectWorkspace};
 use ra_ap_vfs::AbsPathBuf;
 use std::path::Path;
@@ -43,16 +42,9 @@ impl SourceDatabase {
         workspace.set_build_scripts(scripts);
         let context = context::WorkspaceInputs::capture(&workspace, options, gaps)?;
         let external_packages = packages::collect_external(&workspace);
-        let load_config = LoadCargoConfig {
-            load_out_dirs_from_check: true,
-            with_proc_macro_server: ProcMacroServerChoice::Sysroot,
-            prefill_caches: false,
-            num_worker_threads: 1,
-            proc_macro_processes: 1,
-        };
         let mut db = RootDatabase::new(None);
         let (vfs, server) =
-            load_workspace_into_db(workspace, &config.extra_env, &load_config, &mut db)?;
+            variants::load_into_db(workspace, options.proof_cfgs(), &config.extra_env, &mut db)?;
         let context = context.finish(&db, &vfs, server.as_ref())?;
         Ok(Self {
             db,

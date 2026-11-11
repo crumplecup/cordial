@@ -5,6 +5,7 @@ mod context;
 mod inputs;
 mod packages;
 mod source;
+mod variants;
 mod workspace;
 
 use std::path::Path;

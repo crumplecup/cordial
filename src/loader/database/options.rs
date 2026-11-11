@@ -18,6 +18,10 @@ pub struct SemanticCargoOptions {
     test_cfg: bool,
     /// Explicit environment overrides. Values are never published in the IR.
     environment: BTreeMap<String, Option<String>>,
+    /// Verifier cfg flags (`kani`, `creusot`, ...) to enable in a second analysis
+    /// of the workspace's own packages, inside the same database. Code gated
+    /// by them is inactive in the ordinary build and has no semantic facts there.
+    proof_cfgs: Vec<String>,
 }
 
 impl SemanticCargoOptions {

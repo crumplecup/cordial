@@ -63,6 +63,9 @@ ra_ap_proc_macro_api = "0.0.358"
 ra_ap_project_model = "0.0.358"
 ra_ap_syntax = "0.0.358"
 ra_ap_vfs = "0.0.358"
+ra_ap_vfs-notify = "0.0.358"
+ra_ap_cfg = "0.0.358"
+crossbeam-channel = "0.5"
 salsa = { version = "0.28.5", default-features = false, features = ["macros", "inventory"] }
 anyhow = "1"
 
