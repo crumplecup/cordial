@@ -270,7 +270,15 @@ fn cargo_entry_identity_and_other_source_files_constrain_closure() -> miette::Re
     let path = fixture.path().join("src/main.rs");
     let manifest = fixture.path().join("Cargo.toml");
     let original_manifest = fs::read_to_string(&manifest).into_diagnostic()?;
-    fs::copy(&path, fixture.path().join("src/actual.rs")).into_diagnostic()?;
+    // The Cargo entry is `actual.rs`; the specimen's own `main` is compiled, as a
+    // module of it, but is not the entry.
+    let specimen = fs::read_to_string(&path).into_diagnostic()?;
+    fs::write(
+        fixture.path().join("src/actual.rs"),
+        "mod stale;\nfn main() {}\n",
+    )
+    .into_diagnostic()?;
+    fs::write(fixture.path().join("src/stale.rs"), specimen).into_diagnostic()?;
     fs::write(
         &manifest,
         original_manifest
@@ -284,10 +292,10 @@ fn cargo_entry_identity_and_other_source_files_constrain_closure() -> miette::Re
         Some(vec![fixture.path().join("src/actual.rs")])
     );
     let leaf = ir
-        .node_by_path("leaf")
+        .node_by_path("stale::leaf")
         .ok_or_else(|| miette::miette!("missing leaf"))?;
     let main = ir
-        .node_by_path("main")
+        .node_by_path("stale::main")
         .ok_or_else(|| miette::miette!("missing main"))?;
     assert_eq!(
         plan_closed_owned_panic_component(&ir, leaf, 0, main).into_diagnostic()?,
