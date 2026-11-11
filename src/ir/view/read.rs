@@ -46,6 +46,15 @@ pub trait IrView {
         evidence::optional(self, id, crate::ir::ATTR_FUNCTION_LOCATION)
     }
 
+    /// The trait method this function implements, if it implements one.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn trait_implementation(
+        &self,
+        id: NodeId,
+    ) -> CordialResult<Option<crate::ir::TraitImplementation>> {
+        evidence::optional(self, id, crate::ir::ATTR_TRAIT_IMPLEMENTATION)
+    }
+
     /// Calls this function makes into other workspace crates, in every context.
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
     fn external_calls(&self, id: NodeId) -> CordialResult<Vec<crate::ir::ExternalCall>> {

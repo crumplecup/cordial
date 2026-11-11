@@ -172,7 +172,8 @@ pub use error_family::{
     ErrorFamilyMember, FunctionErrorFamily,
 };
 pub use function_location::{
-    ATTR_EXTERNAL_CALLS, ATTR_FUNCTION_LOCATION, ExternalCall, FunctionLocation,
+    ATTR_EXTERNAL_CALLS, ATTR_FUNCTION_LOCATION, ATTR_TRAIT_IMPLEMENTATION, ExternalCall,
+    FunctionLocation, TraitImplementation,
 };
 pub(crate) use function_source::native_signature_range;
 pub use function_source::{

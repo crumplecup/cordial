@@ -351,9 +351,9 @@ pub use ir::{
     ATTR_FUNCTION_SOURCE_SYNTAX, ATTR_IR_ORIGIN, ATTR_SEMANTIC_ACTIVITY,
     ATTR_SEMANTIC_CONTEXT_FUNCTIONS, ATTR_SEMANTIC_CONTEXT_PLAN, ATTR_SEMANTIC_FUNCTION,
     ATTR_SEMANTIC_SNAPSHOT, ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_FILE_ATTRIBUTES,
-    ATTR_SOURCE_MODULE_SCOPE, ATTR_SYN_DOC_PEER, AttrKey, AttrValue, BasicQuery,
-    CallResolutionFailure, CrateIr, CrateIrSnapshot, CrateKind, CrateView, CrateViewMut,
-    DeclaredFunctionOutput, EdgeKind, EdgeWeight, ErrorFamilyBasis, ErrorFamilyGap,
+    ATTR_SOURCE_MODULE_SCOPE, ATTR_SYN_DOC_PEER, ATTR_TRAIT_IMPLEMENTATION, AttrKey, AttrValue,
+    BasicQuery, CallResolutionFailure, CrateIr, CrateIrSnapshot, CrateKind, CrateView,
+    CrateViewMut, DeclaredFunctionOutput, EdgeKind, EdgeWeight, ErrorFamilyBasis, ErrorFamilyGap,
     ErrorFamilyGapReason, ErrorFamilyMember, ExternalCall, FileSnapshot, FunctionBoundary,
     FunctionCallFlow, FunctionCallSyntax, FunctionErrorFamily, FunctionLocation,
     FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionSourceSyntax,
@@ -368,7 +368,7 @@ pub use ir::{
     SourceAttributeArgument, SourceAttributeArguments, SourceAttributedItem, SourceByteRange,
     SourceCallResolution, SourceCallUse, SourceCrateLints, SourceEntryContract,
     SourceFileAttributes, SourceInstrumentSyntax, SourceModuleScope, SourcePathUse,
-    SourceResultContract, SourceUseInventory, WorkspaceIr,
+    SourceResultContract, SourceUseInventory, TraitImplementation, WorkspaceIr,
 };
 #[cfg(feature = "impl_coverage")]
 pub use ir::{

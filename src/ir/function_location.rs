@@ -16,6 +16,9 @@ pub const ATTR_FUNCTION_LOCATION: &str = "function_location";
 /// Node attribute holding the calls a function makes into other crates.
 pub const ATTR_EXTERNAL_CALLS: &str = "semantic_external_calls";
 
+/// Node attribute holding the trait method a function implements.
+pub const ATTR_TRAIT_IMPLEMENTATION: &str = "trait_implementation";
+
 /// The file and byte offset where a function item starts, attributes included.
 #[derive(
     Debug,
@@ -48,4 +51,18 @@ pub struct ExternalCall {
     callee: FunctionLocation,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     context: Option<super::SemanticContextKey>,
+}
+
+/// A function that implements a trait method.
+///
+/// A call through a trait names the trait's declaration, not the implementation
+/// that runs, so a reader that follows calls treats a call to the declaration as
+/// a call to every implementer. `declaration` is `None` when the trait is not
+/// the workspace's: its callers are not all visible.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters, derive_new::new,
+)]
+#[new(visibility = "pub(crate)")]
+pub struct TraitImplementation {
+    declaration: Option<FunctionLocation>,
 }
