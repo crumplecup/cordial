@@ -58,39 +58,14 @@ fn collect_direct(db: &RootDatabase, function: Function) -> Option<DirectFacts> 
     let mut calls = Vec::new();
     let mut source_targets = Vec::new();
     if let Some(body) = source.value.body().filter(|_| !expanded) {
-        let mut walk = body.syntax().preorder();
-        while let Some(event) = walk.next() {
-            let WalkEvent::Enter(node) = event else {
-                continue;
-            };
-            if ast::Fn::can_cast(node.kind())
-                || ast::ClosureExpr::can_cast(node.kind())
-                || ast::MacroCall::can_cast(node.kind())
-            {
-                incomplete = true;
-                walk.skip_subtree();
-                continue;
-            }
-            let Some(call) = ast::Expr::cast(node.clone()).filter(|expr| {
-                matches!(expr, ast::Expr::CallExpr(_) | ast::Expr::MethodCallExpr(_))
-            }) else {
-                continue;
-            };
-            let (target, output) = call_contract(
-                &sema,
-                krate,
-                semantic_callable(&sema, &call),
-                &mut source_targets,
-            );
-            incomplete |=
-                !matches!(target, SemanticCallTarget::Function(_)) || types::incomplete(&output);
-            let range = node.text_range();
-            calls.push(SemanticCall::new(
-                (usize::from(range.start())..usize::from(range.end())).into(),
-                target,
-                output,
-            ));
-        }
+        let mut walk = BodyWalk {
+            sema: &sema,
+            krate,
+            calls: &mut calls,
+            targets: &mut source_targets,
+            incomplete: &mut incomplete,
+        };
+        walk.node(body.syntax(), None);
     }
     Some(DirectFacts {
         facts: SemanticFunction::new(types::identity(db, function.into()), label, output)
@@ -100,6 +75,70 @@ fn collect_direct(db: &RootDatabase, function: Function) -> Option<DirectFacts> 
             .with_incomplete(incomplete),
         source_targets,
     })
+}
+
+/// The calls in one function body, gathered into the function's facts.
+struct BodyWalk<'a, 'db> {
+    sema: &'a Semantics<'db, RootDatabase>,
+    krate: ra_ap_hir::Crate,
+    calls: &'a mut Vec<SemanticCall>,
+    targets: &'a mut Vec<Function>,
+    incomplete: &'a mut bool,
+}
+
+impl BodyWalk<'_, '_> {
+    /// Walk `root` for calls. `invocation` is the source range of the macro call
+    /// whose expansion `root` is, when it is one: ranges inside an expansion are
+    /// not file coordinates, so its calls take the invocation's range.
+    #[instrument(level = "debug", skip(self, root, invocation))]
+    fn node(
+        &mut self,
+        root: &ra_ap_syntax::SyntaxNode,
+        invocation: Option<ra_ap_syntax::TextRange>,
+    ) {
+        let mut walk = root.preorder();
+        while let Some(event) = walk.next() {
+            let WalkEvent::Enter(node) = event else {
+                continue;
+            };
+            if ast::Fn::can_cast(node.kind()) || ast::ClosureExpr::can_cast(node.kind()) {
+                *self.incomplete = true;
+                walk.skip_subtree();
+                continue;
+            }
+            if let Some(invoked) = ast::MacroCall::cast(node.clone()) {
+                // A macro call hides code from the function's own contract, so the
+                // function stays incomplete; what rust-analyzer can expand still
+                // contributes its calls to reachability.
+                *self.incomplete = true;
+                walk.skip_subtree();
+                if let Some(expansion) = self.sema.expand_macro_call(&invoked) {
+                    let range = invocation.unwrap_or_else(|| invoked.syntax().text_range());
+                    self.node(&expansion.value, Some(range));
+                }
+                continue;
+            }
+            let Some(call) = ast::Expr::cast(node.clone()).filter(|expr| {
+                matches!(expr, ast::Expr::CallExpr(_) | ast::Expr::MethodCallExpr(_))
+            }) else {
+                continue;
+            };
+            let (target, output) = call_contract(
+                self.sema,
+                self.krate,
+                semantic_callable(self.sema, &call),
+                self.targets,
+            );
+            *self.incomplete |=
+                !matches!(target, SemanticCallTarget::Function(_)) || types::incomplete(&output);
+            let range = invocation.unwrap_or_else(|| node.text_range());
+            self.calls.push(SemanticCall::new(
+                (usize::from(range.start())..usize::from(range.end())).into(),
+                target,
+                output,
+            ));
+        }
+    }
 }
 
 #[instrument(level = "trace", skip(sema, call))]

@@ -1,0 +1,26 @@
+pub fn target() -> bool {
+    true
+}
+
+macro_rules! twice {
+    ($e:expr) => {
+        $e;
+        $e
+    };
+}
+
+pub fn asserts() {
+    assert!(target());
+}
+
+pub fn local_macro() {
+    twice!(target());
+}
+
+pub fn unexpandable() {
+    unknown_crate::run!(target());
+}
+
+pub fn plain() {
+    target();
+}
