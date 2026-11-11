@@ -139,6 +139,4 @@ pub(crate) struct BodyPeek {
     stmts: usize,
     #[getter(skip)]
     has_branch: bool,
-    #[getter(copy)]
-    has_error_path_event: bool,
 }
