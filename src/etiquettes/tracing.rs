@@ -30,7 +30,7 @@
 
 pub use crate::ir::{
     ATTR_SOURCE_OBSERVABILITY, ATTR_SOURCE_TRACING_INVENTORY, SourceObservability,
-    SourceProofFunction, SourceTracingFunction, SourceTracingInventory,
+    SourceTracingFunction, SourceTracingInventory,
 };
 
 mod apply;

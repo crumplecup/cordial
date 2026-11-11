@@ -16,7 +16,7 @@ pub struct PathInclusionMember {
     dependencies: BTreeSet<String>,
 }
 
-/// Exact snapshot, module targets and proof calls collected from its syntax.
+/// Exact snapshot and module targets collected from its syntax.
 #[derive(
     Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_new::new, derive_getters::Getters,
 )]
@@ -24,8 +24,6 @@ pub struct PathInclusionSource {
     crate_name: String,
     snapshot: FileSnapshot,
     targets: Vec<String>,
-    #[cfg(feature = "tracing")]
-    proof_calls: Vec<super::SourceProofFunction>,
 }
 
 /// Workspace-wide splice graph and dependencies, with their collected evidence.

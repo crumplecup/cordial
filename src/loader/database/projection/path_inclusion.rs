@@ -55,67 +55,11 @@ impl SourceDatabase {
                             Sha256::digest(text.as_bytes()).into(),
                         ),
                         targets(tree.items()),
-                        #[cfg(feature = "tracing")]
-                        {
-                            let source = super::super::DatabaseSource::new(
-                                &self.db,
-                                path,
-                                text,
-                                tree,
-                                ra_ap_ide_db::line_index(&self.db, id),
-                            );
-                            crate::ir::SourceProofFunction::collect(
-                                &source,
-                                &self.proof_module_path(&sema, id, package, path)?,
-                            )
-                        },
                     ));
                 }
             }
             Ok(PathInclusionFacts::from_evidence(members, sources))
         })
-    }
-
-    #[cfg(feature = "tracing")]
-    #[tracing::instrument(level = "trace", skip_all, err(level = "warn"))]
-    fn proof_module_path(
-        &self,
-        sema: &Semantics<'_, ra_ap_ide_db::RootDatabase>,
-        file: ra_ap_vfs::FileId,
-        package: &crate::SemanticPackageContext,
-        path: &std::path::Path,
-    ) -> CordialResult<Vec<String>> {
-        let src = package.root().join("src");
-        if path.starts_with(&src) {
-            return Ok(crate::loader::module_path_from_src_file(&src, path));
-        }
-        if package.source_entries().iter().any(|entry| entry == path) {
-            return Ok(Vec::new());
-        }
-        sema.file_to_module_defs(file)
-            .find(|module| {
-                self.vfs
-                    .file_path(module.krate(&self.db).root_file(&self.db))
-                    .as_path()
-                    .is_some_and(|root| {
-                        package
-                            .source_entries()
-                            .iter()
-                            .any(|entry| entry == AsRef::<std::path::Path>::as_ref(root))
-                    })
-            })
-            .map(|module| {
-                module
-                    .path_to_root(&self.db)
-                    .into_iter()
-                    .rev()
-                    .filter_map(|module| module.name(&self.db))
-                    .map(|name| name.as_str().to_owned())
-                    .collect()
-            })
-            .ok_or_else(|| {
-                crate::CordialError::workspace_source_facts_missing("proof source module identity")
-            })
     }
 }
 

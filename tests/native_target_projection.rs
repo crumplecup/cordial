@@ -139,7 +139,7 @@ fn assert_snapshot_sources(graph: &CrateIr, root: &std::path::Path) -> Result<()
     Ok(())
 }
 
-/// Path inclusion covers custom module files, and each proves its own calls.
+/// Path inclusion covers the files that custom `#[path]` modules pull in.
 #[cfg(feature = "derives")]
 #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
 fn assert_path_inclusions(database: &mut SourceDatabase, root: &std::path::Path) -> Result<()> {
@@ -161,24 +161,24 @@ fn assert_path_inclusions(database: &mut SourceDatabase, root: &std::path::Path)
         ]
         .map(|path| root.join(path))
     );
-    #[cfg(feature = "tracing")]
-    for (file, function) in [
-        ("library/child.rs", "child::library_child"),
-        ("cli/command.rs", "command::command"),
-    ] {
-        let source = workspace
-            .sources()
-            .iter()
-            .find(|source| source.snapshot().path() == &root.join(file))
-            .ok_or_else(|| miette::miette!("missing custom module source"))?;
+    Ok(())
+}
+
+/// A file reached through a custom `#[path]` module is a module of its own, and its
+/// functions are named from that module, not from where the file sits on disk.
+#[tracing::instrument(level = "debug", skip_all)]
+fn assert_custom_module_function_names(graph: &CrateIr) {
+    let names: Vec<String> = graph
+        .nodes_matching(&QueryBuilder::new().has_attr("qualified_path").build())
+        .iter()
+        .filter_map(|node| node.attr("qualified_path")?.as_str().map(str::to_owned))
+        .collect();
+    for expected in ["child::library_child", "command::command"] {
         assert!(
-            source
-                .proof_calls()
-                .iter()
-                .any(|call| call.qualified_name() == function)
+            names.iter().any(|name| name == expected),
+            "{expected}: {names:?}"
         );
     }
-    Ok(())
 }
 
 /// The integration test's `allow` is in the policy inventory, but its functions are not module
@@ -273,6 +273,7 @@ fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Re
     assert_snapshot_sources(&graph, root.path())?;
     #[cfg(feature = "derives")]
     assert_path_inclusions(&mut database, root.path())?;
+    assert_custom_module_function_names(&graph);
     assert_policy_and_inactive_code(&graph, root.path())?;
     assert_edit_revises_policy_without_touching_disk(&mut database, target, root.path())
 }
