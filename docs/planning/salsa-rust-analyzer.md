@@ -1768,7 +1768,7 @@ Bites, in order:
 - [x] **T3 Role inputs.** `returns_self` and `contains_bool` for role
   classification from the resolved return type. The role heuristics themselves
   are naming policy and stay.
-- [ ] **T4 Error-path events.** `has_error_path_event` matches macros named
+- [x] **T4 Error-path events.** `has_error_path_event` matches macros named
   `warn`/`error`. Resolve the macro and require that it is `tracing`'s.
 - [ ] **T5 Observability body facts.** The subscriber, print and boundary rules
   share one collector that matches names: `init`/`try_init`/`set_global_default`,
