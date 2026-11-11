@@ -2,6 +2,7 @@
 use tracing::instrument;
 mod contexts;
 mod external;
+mod identity;
 #[cfg(feature = "tracing")]
 mod islands;
 mod options;
