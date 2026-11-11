@@ -200,6 +200,10 @@ name = "tracing_apply"
 required-features = ["tracing"]
 
 [[test]]
+name = "tracing_apply_const_array"
+required-features = ["tracing"]
+
+[[test]]
 name = "tracing_attribute_evidence"
 required-features = ["tracing"]
 

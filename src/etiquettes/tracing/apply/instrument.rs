@@ -303,16 +303,41 @@ fn collect_attr_indices(lines: &[String], fn_idx: usize) -> Vec<usize> {
             continue;
         }
         if delta > 0 {
-            // A closing-only tail line (e.g. bare `)]`) that doesn't
-            // itself start with `#[` -- still part of the attribute
-            // above it.
-            indices.insert(0, i);
-            pending = delta;
+            // A closing-only tail line (e.g. bare `)]`) that doesn't itself
+            // start with `#[` belongs to the attribute above it, but only if
+            // such an attribute exists. The `];` ending a `const` array closes
+            // brackets too and is not an attribute.
+            let Some(opening) = attribute_opening(lines, i, delta) else {
+                break;
+            };
+            indices.splice(0..0, opening..=i);
+            i = opening;
             continue;
         }
         break;
     }
     indices
+}
+
+/// The line of the `#[` that opens the attribute whose tail is line `tail`,
+/// found by walking up until the brackets balance. `None` when the walk meets
+/// something that cannot be inside an attribute first.
+#[instrument(level = "debug")]
+fn attribute_opening(lines: &[String], tail: usize, tail_delta: i32) -> Option<usize> {
+    let mut depth = tail_delta;
+    let mut i = tail;
+    while i > 0 {
+        i -= 1;
+        let stripped = lines[i].trim();
+        depth += closes_minus_opens(stripped);
+        if stripped.starts_with("#[") {
+            return (depth <= 0).then_some(i);
+        }
+        if stripped.is_empty() || stripped.starts_with("//") || depth <= 0 {
+            return None;
+        }
+    }
+    None
 }
 
 #[instrument(level = "debug")]
