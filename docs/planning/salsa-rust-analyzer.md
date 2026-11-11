@@ -1735,3 +1735,50 @@ compute the call graph, then enrich.
 `transform/` readers of `Calls` should move to the same edges. The IR decode and
 the ordinary pass are now the dominant costs. Rustc's own expansion (`cargo
 expand`) as a stronger tier for macros rust-analyzer cannot expand is tabled.
+
+## Checklist: tracing consumes semantic facts (2026-11-11)
+
+Tracing assessment and apply still answer several questions from spelling. Each
+is a question about what something *is*, which the database already knows. The
+work is one building block per kind of question, then each rule moved onto it,
+smallest first, deleting the handwritten version as its replacement becomes
+authoritative. Where the database has no facts for a function, the answer is
+"unavailable", never a guess from names.
+
+Two blocks cover almost everything:
+
+- **Type capability** (the solver proves a trait, as displayability already does):
+  can this type be recorded with `Debug`.
+- **Resolved identity** (a macro, call, attribute or path resolved to its
+  definition): which crate and path does this name.
+
+Bites, in order:
+
+- [ ] **T1 Parameter recording.** `recordable::{parameters, unrecordable, generic}`
+  decide the `skip(..)` list from a whitelist of type names (`RECORDABLE_IDENTS`).
+  Replace with the solver's `Debug` verdict per binding, in the function's own
+  environment, so a derived `Debug` type, a `Vec` of one, and a `T: Debug`
+  parameter are recorded.
+- [ ] **T2 Return recording.** `return_unrecordable` and `return_borrowed` (the
+  `ret` and `err` options) from the return type's `Debug` verdict and its
+  reference-ness.
+- [ ] **T3 Role inputs.** `returns_self` and `contains_bool` for role
+  classification from the resolved return type. The role heuristics themselves
+  are naming policy and stay.
+- [ ] **T4 Error-path events.** `has_error_path_event` matches macros named
+  `warn`/`error`. Resolve the macro and require that it is `tracing`'s.
+- [ ] **T5 Observability body facts.** The subscriber, print and boundary rules
+  share one collector that matches names: `init`/`try_init`/`set_global_default`,
+  `try_from_default_env`, `Once`/`OnceLock`, `println`/`eprintln`/`dbg`,
+  `warn`/`error`, and `calls_helper`, which compares callee names with function
+  names. Replace each with a resolved identity, and `calls_helper` with the
+  resolved `Calls` edges.
+- [ ] **T6 Attribute identity.** `#[instrument]` is recognised by path text.
+  Resolve it to `tracing`'s attribute macro.
+- [ ] **T7 Remove the fallbacks.** The `Result` guess from the spelling of the
+  return type (`ends_with("Result")`), `recordable.rs`, `RECORDABLE_IDENTS`, and
+  the duplicate `is_result` in the observability collector.
+
+Acceptance for each bite: the rule's existing tests pass or change only where the
+old answer was wrong; a new test shows a case the spelling got wrong; the
+`cordial::semantic` debug event says what was resolved.
