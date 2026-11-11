@@ -72,6 +72,7 @@ pub use path_inclusion::{PathInclusionFacts, PathInclusionMember, PathInclusionS
 mod proof_calls;
 #[cfg(feature = "tracing")]
 pub use proof_calls::SourceProofFunction;
+mod function_location;
 mod query;
 #[cfg(feature = "rustdoc")]
 mod rustdoc_query;
@@ -169,6 +170,9 @@ pub use edge::{EdgeKind, EdgeWeight};
 pub use error_family::{
     ATTR_FUNCTION_ERROR_FAMILY, ErrorFamilyBasis, ErrorFamilyGap, ErrorFamilyGapReason,
     ErrorFamilyMember, FunctionErrorFamily,
+};
+pub use function_location::{
+    ATTR_EXTERNAL_CALLS, ATTR_FUNCTION_LOCATION, ExternalCall, FunctionLocation,
 };
 pub(crate) use function_source::native_signature_range;
 pub use function_source::{

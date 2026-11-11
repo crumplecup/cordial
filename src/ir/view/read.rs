@@ -40,6 +40,18 @@ pub trait IrView {
         )
     }
 
+    /// Where this function item starts in source, if the loader recorded it.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn function_location(&self, id: NodeId) -> CordialResult<Option<crate::ir::FunctionLocation>> {
+        evidence::optional(self, id, crate::ir::ATTR_FUNCTION_LOCATION)
+    }
+
+    /// Calls this function makes into other workspace crates, in every context.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn external_calls(&self, id: NodeId) -> CordialResult<Vec<crate::ir::ExternalCall>> {
+        Ok(evidence::optional(self, id, crate::ir::ATTR_EXTERNAL_CALLS)?.unwrap_or_default())
+    }
+
     /// The non-ordinary contexts analysed for this crate, if a projection ran.
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
     fn semantic_context_plan(&self) -> CordialResult<Option<crate::ir::SemanticContextPlan>> {
