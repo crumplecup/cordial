@@ -151,7 +151,14 @@ fn context(
                 .unwrap_or(true),
         )
         .err_is_displayable(displayable)
-        .has_error_path_event(peek.has_error_path_event())
+        // Only `tracing`'s own warn! and error! are error-path events: a local macro
+        // or another logger's of the same name is not.
+        .has_error_path_event(semantics.is_some_and(|facts| {
+            facts
+                .macro_calls()
+                .iter()
+                .any(|call| call.is("tracing", &["warn", "error"]))
+        }))
         .build()
 }
 
@@ -186,23 +193,15 @@ fn body(file: &DatabaseSource<'_>, function: &ast::Fn) -> (BodyPeek, u32) {
             + usize::from(list.tail_expr().is_some())
     });
     let mut has_branch = false;
-    let mut has_error_path_event = false;
     for node in body.syntax().descendants() {
         has_branch |= ast::IfExpr::can_cast(node.kind())
             || ast::MatchExpr::can_cast(node.kind())
             || ast::WhileExpr::can_cast(node.kind())
             || ast::ForExpr::can_cast(node.kind());
-        if let Some(call) = ast::MacroCall::cast(node) {
-            has_error_path_event |= call
-                .path()
-                .and_then(|path| path.segment())
-                .and_then(|segment| segment.name_ref())
-                .is_some_and(|name| matches!(name.text(), "warn" | "error"));
-        }
     }
     let range = body.syntax().text_range();
     (
-        BodyPeek::new(stmts, has_branch, has_error_path_event),
+        BodyPeek::new(stmts, has_branch),
         file.line(range.end())
             .saturating_sub(file.line(range.start()))
             .max(1),

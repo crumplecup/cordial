@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::semantic_macros::SemanticMacroCall;
 use super::semantic_recording::{
     SemanticFormattingRole, SemanticParameter, SemanticResultRecording, SemanticReturnRecording,
     SemanticReturnShape,
@@ -129,6 +130,11 @@ pub struct SemanticFunction {
     #[serde(default)]
     #[setters(generate)]
     formatting_role: SemanticFormattingRole,
+    /// Every macro invocation in the body and the macro it resolved to.
+    #[new(default)]
+    #[serde(default)]
+    #[setters(generate)]
+    macro_calls: Vec<SemanticMacroCall>,
     /// What the return type is, for role classification.
     #[new(default)]
     #[serde(default)]

@@ -75,6 +75,7 @@ mod query;
 mod rustdoc_query;
 mod semantic;
 mod semantic_context;
+mod semantic_macros;
 mod semantic_recording;
 mod semantic_workspace;
 pub(crate) mod source_attributes;
@@ -201,6 +202,7 @@ pub use semantic_context::{
     ATTR_SEMANTIC_ACTIVITY, ATTR_SEMANTIC_CONTEXT_FUNCTIONS, ATTR_SEMANTIC_CONTEXT_PLAN,
     SemanticContextFunction, SemanticContextKey, SemanticContextPlan,
 };
+pub use semantic_macros::SemanticMacroCall;
 pub use semantic_recording::{
     SemanticCapability, SemanticFormattingRole, SemanticParameter, SemanticResultRecording,
     SemanticReturnRecording, SemanticReturnShape,
