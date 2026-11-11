@@ -1606,3 +1606,41 @@ Open against the milestone:
 
 Next: wire tracing assessment to the projected semantic identities, replacing
 its handwritten resolution one rule at a time.
+
+## Design: proof-cfg crate variants in the one database (2026-11-10)
+
+**Problem.** rust-analyzer resolves only code active under the loaded cfg set.
+Proof harnesses and gated helpers (`cfg(kani)`, `cfg(creusot)`, the crate's own
+verifier gates) are inactive in the ordinary build, so they have no semantic
+facts: no call targets, no types. Tracing's proof-only reachability, and any
+other lint that must look inside cfg blocks, cannot read them from the IR. A
+name-keyed syntactic fallback is rejected: the invariant is one parse, one IR,
+and no inferior second path.
+
+**Decision.** Analyse the same files under more than one cfg context inside the
+one database. `ProjectWorkspace` carries `cfg_overrides`; loading the workspace
+a second time with the project's verifier cfgs enabled yields a second
+`CrateGraphBuilder`. `CrateGraphBuilder::extend` merges it into the first and
+deduplicates crates whose data is identical, so the sysroot, dependencies and
+every `FileId` are shared. Only workspace crates (and their dependents) gain a
+proof-cfg variant. The VFS parses each file once; only definition maps and macro
+expansion differ per variant, which is exactly what cfg changes.
+
+**IR shape (to settle in the first commit).** Semantic facts are keyed by
+cfg context. Each source function node keeps its ordinary-context
+`semantic_function` and gains the facts of every context in which it is active;
+`Calls` edges record the context that resolved them. A node active in no
+context stays explicit, never silently empty. Consumers ask the IR for "edges
+under any context" or "under context C".
+
+**Steps.**
+1. Replace `load_workspace_into_db` with a Cordial loader that builds the base
+   graph and the proof-cfg variants, merges them with `extend`, and applies one
+   change. Prove with a specimen that a `cfg(kani)` caller resolves its callee.
+2. Select a variant per crate target in projection; project facts per context.
+3. Cross-crate `Calls` edges at workspace level (definitions are session ids,
+   shared by the one database).
+4. Move tracing's proof-only reachability onto those edges; delete
+   `SourceProofFunction::call_keys`/`calls` and the name registry.
+5. Re-point `enricher/source_calls.rs` consumers (`transform/`) at the same
+   edges and remove its handwritten same-module resolution.
