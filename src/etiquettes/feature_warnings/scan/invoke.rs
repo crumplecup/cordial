@@ -50,7 +50,7 @@ pub(super) fn cargo_hack_available(crate_root: &Path) -> bool {
         .is_ok_and(|output| output.status.success())
 }
 
-#[instrument(level = "info", skip(policy), fields(crate_name = crate_name))]
+#[instrument(level = "info", skip(policy), fields(crate_name = crate_name), err(level = "warn"))]
 #[hotpath::measure]
 pub(super) fn run_cargo_hack(
     crate_root: &Path,
@@ -89,7 +89,7 @@ pub(super) fn run_cargo_hack(
 }
 
 #[hotpath::measure]
-#[instrument(level = "debug", skip(command))]
+#[instrument(level = "debug", skip(command), err(level = "warn"))]
 fn wait_for_cargo_hack(command: &mut Command) -> std::io::Result<Output> {
     command.output()
 }

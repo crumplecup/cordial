@@ -11,7 +11,7 @@ use crate::etiquettes::feature_warnings::types::{FeatureWarningRecord, FeatureWa
 use tracing::instrument;
 
 /// Turn a parsed run into one record per feature-dependent site.
-#[instrument(level = "debug", skip(run, ignore_features))]
+#[instrument(level = "debug", skip(run, ignore_features), err(level = "warn"))]
 #[hotpath::measure]
 pub fn records_from_run(
     run: &HackRun,

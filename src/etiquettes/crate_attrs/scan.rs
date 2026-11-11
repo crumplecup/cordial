@@ -147,7 +147,7 @@ mod verus_exemption {
     use crate::{CordialResult, ir::IrView};
     use std::path::Path;
 
-    #[tracing::instrument(level = "trace", skip(ir))]
+    #[tracing::instrument(level = "trace", skip(ir, crate_root))]
     pub(super) fn is_unsafe_forbid_exempt_verus_target(
         crate_root: &Path,
         ir: &dyn IrView,
