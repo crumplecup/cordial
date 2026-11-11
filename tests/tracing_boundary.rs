@@ -3,15 +3,36 @@ use std::fs;
 use std::path::Path;
 
 use cordial::{
-    BoundaryRuleId, Disposition, RunAll, Session, SessionBuilder, TRACING_ETIQUETTE,
-    TracingBoundaryPolicy, scan_crate_tracing_boundary,
+    BoundaryRuleId, Disposition, IrView, RunAll, Session, SessionBuilder, TRACING_ETIQUETTE,
+    TracingBoundaryPolicy, tracing_boundary_findings,
 };
+
+#[path = "support/projected_crate.rs"]
+mod projected_crate;
+
+/// Boundary findings from the loader's observability inventory for `root`.
+fn boundary_records(
+    root: &Path,
+    crate_name: &str,
+    policy: &TracingBoundaryPolicy,
+    skip_program_lints: bool,
+) -> miette::Result<Vec<cordial::BoundarySiteRecord>> {
+    let inventory = projected_crate::projected_crate(root)?
+        .source_observability()
+        .into_diagnostic()?;
+    tracing_boundary_findings(&inventory, crate_name, policy, skip_program_lints).into_diagnostic()
+}
 
 fn write_bin(main: &str) -> miette::Result<tempfile::TempDir> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/main.rs"), main)
         .into_diagnostic()
         .wrap_err("write main")?;
@@ -23,13 +44,12 @@ fn scan(
     crate_name: &str,
     skip_program_lints: bool,
 ) -> miette::Result<Vec<BoundaryRuleId>> {
-    let records = scan_crate_tracing_boundary(
+    let records = boundary_records(
         root,
         crate_name,
         &TracingBoundaryPolicy::default(),
         skip_program_lints,
     )
-    .into_diagnostic()
     .wrap_err("scan")?;
     Ok(records.into_iter().map(|record| record.rule_id()).collect())
 }
@@ -173,9 +193,7 @@ fn known_cross_crate_helper_is_trusted() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = write_bin("fn main() -> Result<(), String> { other_crate::run() }\n")?;
     let policy = TracingBoundaryPolicy::new(true, vec!["other_crate::run".to_string()]);
-    let records = scan_crate_tracing_boundary(fixture.path(), "fixture", &policy, false)
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let records = boundary_records(fixture.path(), "fixture", &policy, false).wrap_err("scan")?;
     let rules: Vec<_> = records.into_iter().map(|record| record.rule_id()).collect();
     assert!(
         rules.is_empty(),
@@ -189,9 +207,7 @@ fn knob_off_is_silent() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = write_bin("fn main() -> Result<(), String> { Ok(()) }\n")?;
     let policy = TracingBoundaryPolicy::new(false, Vec::new());
-    let records = scan_crate_tracing_boundary(fixture.path(), "fixture", &policy, false)
-        .into_diagnostic()
-        .wrap_err("scan")?;
+    let records = boundary_records(fixture.path(), "fixture", &policy, false).wrap_err("scan")?;
     assert!(
         records.is_empty(),
         "main_reports_errors = false must be silent"

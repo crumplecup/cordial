@@ -23,15 +23,12 @@
 mod assessor;
 mod probe;
 mod reporter;
-mod scan;
 mod types;
 
 pub use crate::ir::{ATTR_SOURCE_ERROR_CHAINS, ErrorChainsFile, SourceErrorChains};
 pub use assessor::ErrorChainAssessor;
 pub use probe::ErrorChainProbe;
 pub use reporter::{ErrorChainChecklistReporter, ErrorChainCsvReporter, ErrorChainSummaryReporter};
-pub(crate) use scan::scan_rust_syntax;
-pub use scan::{scan_crate_error_chain, scan_rust_source};
 pub use types::{ErrorChainProbeId, ErrorChainRecord, probe_counts};
 
 use std::sync::LazyLock;

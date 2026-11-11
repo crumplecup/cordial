@@ -73,6 +73,11 @@ fn cfg_hygiene_etiquette_flags_undeclared_but_not_builtin() -> miette::Result<()
         .into_diagnostic()
         .wrap_err("src dir")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/lib.rs"),
         SOURCE_WITH_UNDECLARED_AND_BUILTIN,
     )
@@ -135,6 +140,11 @@ fn cfg_hygiene_etiquette_respects_build_rs_declarations() -> miette::Result<()> 
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         r#"#[cfg(my_custom_cfg)]

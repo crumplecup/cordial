@@ -9,6 +9,7 @@ pub struct InternalErrorComplianceReport {
 }
 
 impl InternalErrorComplianceReport {
+    /// Findings that stringify a foreign error.
     #[instrument(level = "trace", skip(self))]
     pub fn stringify_count(&self) -> usize {
         self.findings()
@@ -17,6 +18,7 @@ impl InternalErrorComplianceReport {
             .count()
     }
 
+    /// Findings that discard a typed error.
     #[instrument(level = "trace", skip(self))]
     pub fn discard_count(&self) -> usize {
         self.findings()
@@ -25,6 +27,7 @@ impl InternalErrorComplianceReport {
             .count()
     }
 
+    /// Findings about the shape of a `source` accessor.
     #[instrument(level = "trace", skip(self))]
     pub fn source_shape_count(&self) -> usize {
         self.findings()
@@ -42,6 +45,7 @@ impl InternalErrorComplianceReport {
             .count()
     }
 
+    /// Findings about `#[track_caller]` on source accessors.
     #[instrument(level = "trace", skip(self))]
     pub fn source_track_caller_count(&self) -> usize {
         self.findings()
@@ -56,6 +60,7 @@ impl InternalErrorComplianceReport {
             .count()
     }
 
+    /// Findings about the error-type architecture.
     #[instrument(level = "trace", skip(self))]
     pub fn architecture_count(&self) -> usize {
         self.findings()

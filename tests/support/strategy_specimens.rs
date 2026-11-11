@@ -66,9 +66,10 @@ pub fn discover(root: &Path) -> miette::Result<CrateIr> {
     let session = SessionBuilder::new(root)
         .with_store_root(store.path())
         .register(&*PANICS_ETIQUETTE)
+        .with_ir_snapshot()
         .build();
     session.run(&RunAll).into_diagnostic()?;
-    let cache = store.path().join("cache/strategy-specimen.ir.json");
+    let cache = store.path().join("cache/strategy-specimen.ir.zst");
     let ir = CrateIr::read_cache(&cache).into_diagnostic()?;
     assert_eq!(
         ir.crate_kinds().into_diagnostic()?,

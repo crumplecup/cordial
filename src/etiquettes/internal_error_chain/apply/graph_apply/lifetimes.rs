@@ -3,7 +3,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use syn::{GenericParam, Type};
 use tracing::instrument;
 
 use crate::config::ErrorFieldStrategy;
@@ -11,14 +10,12 @@ use crate::loader::SourceEditView;
 
 use super::super::Edit;
 use super::super::inventory::CrateTypeIndex;
-use super::types::{is_copy_shape, storage_shape, type_name};
 
 mod collect;
-mod native;
 mod plan;
 mod provenance;
-
-pub(super) use provenance::{anchored_parameters, constructor_origin};
+mod sites;
+mod types;
 
 type Range = (usize, usize);
 
@@ -278,34 +275,4 @@ fn select_sites(
             })
         }
     }
-}
-
-#[instrument(level = "trace", skip(field, strategy))]
-fn field_needs_lifetime(field: &syn::Field, strategy: ErrorFieldStrategy) -> bool {
-    if field.ident.as_ref().is_some_and(|name| name == "file") || storage_shape(&field.ty).is_none()
-    {
-        return false;
-    }
-    match strategy {
-        ErrorFieldStrategy::Borrowed => !is_copy_shape(&field.ty),
-        ErrorFieldStrategy::Owned => {
-            matches!(field.ty, Type::Reference(_))
-                && (field.ident.is_none()
-                    || field
-                        .ident
-                        .as_ref()
-                        .is_some_and(|name| name == "kind" || name == "source")
-                    || type_name(&field.ty).as_deref() == Some("str"))
-        }
-    }
-}
-
-#[instrument(level = "trace", skip(generics))]
-fn one_lifetime(generics: &syn::Generics) -> Option<String> {
-    let [GenericParam::Lifetime(parameter)] = generics.params.iter().collect::<Vec<_>>().as_slice()
-    else {
-        return None;
-    };
-    (parameter.attrs.is_empty() && parameter.bounds.is_empty())
-        .then(|| parameter.lifetime.ident.to_string())
 }

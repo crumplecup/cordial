@@ -3,7 +3,7 @@ pub(crate) use native_syntax::module_path as database_module_path;
 use tracing::instrument;
 mod database;
 mod native_syntax;
-pub use database::{SemanticCargoOptions, SourceDatabase};
+pub use database::{CfgPlanning, Reporter, SemanticCargoOptions, SourceDatabase};
 #[cfg(any(
     feature = "tracing",
     feature = "internal_error_chain",
@@ -30,15 +30,10 @@ pub(crate) use native_syntax::DatabaseVerusSyntax;
 pub(crate) use native_syntax::token_text as database_token_text;
 #[cfg(feature = "antipatterns")]
 pub(crate) use native_syntax::token_text_excluding as database_token_text_excluding;
+#[cfg(feature = "crate_attrs")]
 mod library_root;
+#[cfg(feature = "crate_attrs")]
 pub use library_root::library_root_rs;
-mod macro_syntax;
-#[cfg(feature = "derives")]
-mod path_inclusion;
-#[cfg(feature = "derives")]
-pub use path_inclusion::workspace_path_inclusions;
-#[cfg(feature = "derives")]
-pub(crate) use path_inclusion::workspace_path_inclusions_with_source;
 mod populate;
 mod scan_roots;
 mod source;
@@ -52,18 +47,9 @@ use crate::ir::CrateKind;
 pub use scan_roots::path_has_fixtures;
 pub use scan_roots::quality_scan_trees;
 pub(crate) use source::ParsedSourceSession;
-pub use source::{SharedMacroSyntax, SharedParsedFile, SourceFile, SourceLoadView, SourceLoader};
 #[cfg(feature = "internal_error_chain")]
 pub(crate) use source::{SourceEditView, SourceSnapshot};
-#[cfg(any(
-    feature = "panics",
-    feature = "error_chain",
-    feature = "tracing",
-    feature = "internal_error_chain",
-    feature = "derives"
-))]
-pub(crate) use source_work::walk as source_walk;
-
+pub use source::{SourceFile, SourceLoadView, SourceLoader, SourceSyntax};
 /// Opaque bundle produced by a loader.
 pub trait LoadView: Send + Sync {
     /// Loader id.

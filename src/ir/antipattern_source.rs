@@ -22,27 +22,14 @@ pub struct SourceAntipatterns {
 impl SourceAntipatterns {
     #[tracing::instrument(level = "debug", skip(files), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourceAntipatterns")]
-    pub(crate) fn collect_native(
+    pub(crate) fn collect(
         root: &Path,
         crate_name: &str,
         files: &[(PathBuf, &crate::loader::DatabaseSource<'_>)],
     ) -> CordialResult<Self> {
         Ok(Self {
             crate_root: root.into(),
-            catalog: AntipatternCatalog::collect_native(root, crate_name, files)?,
-        })
-    }
-
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourceAntipatterns")]
-    pub(crate) fn collect(
-        source: &crate::SourceLoadView,
-        root: &Path,
-        crate_name: &str,
-    ) -> CordialResult<Self> {
-        Ok(Self {
-            crate_root: root.into(),
-            catalog: AntipatternCatalog::collect(source, root, crate_name)?,
+            catalog: AntipatternCatalog::collect(root, crate_name, files)?,
         })
     }
 

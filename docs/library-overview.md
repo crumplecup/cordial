@@ -16,7 +16,7 @@ lint behavior. Architecture:
 
 Built-in plugins are feature-gated:
 
-- `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `crate_attrs`, `doc_warnings`, `feature_warnings`, `glob_imports`, `inline_tests`, `verus_warnings`, `creusot_diagnostics`, `dependency_freshness`, `proof_patterns`, `pageantry` — source-quality scanners
+- `panics`, `tracing`, `allows`, `modularity`, `derives`, `error_sites`, `error_chain`, `internal_error_chain`, `foreign_error_types`, `foreign_error_attenuation`, `antipatterns`, `cfg_scatter`, `visibility`, `cli_layout`, `crate_attrs`, `doc_warnings`, `feature_warnings`, `glob_imports`, `inline_tests`, `verus_warnings`, `creusot_diagnostics`, `dependency_freshness`, `proof_patterns`, `pageantry`, `stale_exceptions` — source-quality scanners
   (the `quality` umbrella)
 - `cli` — clap binary (`cordial`)
 - `impl_coverage`, `trenchcoat`, `shadow` — rustdoc coverage scanners

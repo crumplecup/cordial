@@ -10,6 +10,9 @@ use tracing::instrument;
 use crate::error::{CordialError, CordialResult};
 use crate::ir::{EdgeKind, EdgeWeight, IrIndexes, NodeId, NodeKind, NodeWeight};
 
+/// zstd level for IR files: fast to write, still an order of magnitude smaller than JSON.
+const ZSTD_LEVEL: i32 = 3;
+
 /// Serializable snapshot of a crate graph for cache read/write.
 #[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub struct CrateIrSnapshot {
@@ -86,6 +89,27 @@ impl CrateIr {
         }
         self.graph
             .add_edge(from.to_index(), to.to_index(), EdgeWeight::new(kind));
+        Ok(())
+    }
+
+    /// Insert a `ContextCalls` edge resolved in the non-ordinary `context`.
+    #[instrument(level = "debug", skip(self, from, to, context), err(level = "warn"))]
+    pub fn insert_context_call(
+        &mut self,
+        from: NodeId,
+        to: NodeId,
+        context: crate::ir::SemanticContextKey,
+    ) -> CordialResult<()> {
+        if self.graph.node_weight(from.to_index()).is_none()
+            || self.graph.node_weight(to.to_index()).is_none()
+        {
+            return Err(CordialError::edge_references_missing_node());
+        }
+        self.graph.add_edge(
+            from.to_index(),
+            to.to_index(),
+            EdgeWeight::new(EdgeKind::ContextCalls).with_context(context),
+        );
         Ok(())
     }
 
@@ -195,29 +219,59 @@ impl CrateIr {
         })
     }
 
-    /// Write a pretty-printed JSON IR cache file.
+    /// Write the IR as compact JSON compressed with zstd.
+    ///
+    /// Compact and compressed because the pretty-printed form of a real crate
+    /// runs to hundreds of megabytes; this stays a small fraction of that.
     #[instrument(level = "info", skip(self, path), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "CrateIr")]
     pub fn write_cache(&self, path: &Path) -> CordialResult<()> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
+        let started = std::time::Instant::now();
         let snapshot = self.snapshot()?;
-        let json = serde_json::to_string_pretty(&snapshot)?;
-        fs::write(path, json)?;
+        let mut encoder = zstd::stream::write::Encoder::new(fs::File::create(path)?, ZSTD_LEVEL)?;
+        serde_json::to_writer(&mut encoder, &snapshot)?;
+        encoder.finish()?;
+        tracing::debug!(
+            target: "cordial::metrics",
+            path = %path.display(),
+            bytes = fs::metadata(path).map(|meta| meta.len()).unwrap_or(0),
+            nodes = snapshot.nodes().len(),
+            edges = snapshot.edges().len(),
+            millis = started.elapsed().as_millis() as u64,
+            "ir file written"
+        );
         Ok(())
     }
 
-    /// Read a JSON IR cache file.
+    /// Read an IR file written by [`Self::write_cache`].
     #[instrument(level = "info", skip(path), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "CrateIr")]
     pub fn read_cache(path: &Path) -> CordialResult<Self> {
-        let json = fs::read_to_string(path)?;
-        let snapshot: CrateIrSnapshot = serde_json::from_str(&json)?;
-        Self::from_snapshot(snapshot)
+        let started = std::time::Instant::now();
+        let decoder = zstd::stream::read::Decoder::new(fs::File::open(path)?)?;
+        let snapshot: CrateIrSnapshot = serde_json::from_reader(std::io::BufReader::new(decoder))?;
+        let decoded = started.elapsed();
+        let (nodes, edges) = (snapshot.nodes().len(), snapshot.edges().len());
+        let ir = Self::from_snapshot(snapshot)?;
+        tracing::debug!(
+            target: "cordial::metrics",
+            path = %path.display(),
+            bytes = fs::metadata(path).map(|meta| meta.len()).unwrap_or(0),
+            nodes,
+            edges,
+            decode_millis = decoded.as_millis() as u64,
+            total_millis = started.elapsed().as_millis() as u64,
+            "ir file read"
+        );
+        Ok(ir)
     }
 
     /// Store path for this crate's IR cache file.
     #[instrument(level = "debug")]
     pub fn cache_path(cache_dir: &Path, crate_name: &str) -> PathBuf {
-        cache_dir.join(format!("{crate_name}.ir.json"))
+        cache_dir.join(format!("{crate_name}.ir.zst"))
     }
 }

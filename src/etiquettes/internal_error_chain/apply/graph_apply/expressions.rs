@@ -10,8 +10,9 @@ use crate::config::ErrorFieldStrategy;
 use super::super::Edit;
 use super::{Change, Shape, VariantChange};
 
-mod compatibility;
-mod native;
+mod collect;
+mod macros;
+mod sites;
 
 type Range = (usize, usize);
 

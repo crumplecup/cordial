@@ -11,6 +11,11 @@ fn quality_cli_filter_runs_both_etiquettes() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("src dir")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/lib.rs"),
         include_str!("fixtures/panics/rollup_filter.rs"),
     )
@@ -48,6 +53,11 @@ fn rollup_summary_lists_open_findings_by_etiquette() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         include_str!("fixtures/panics/boom_x.rs"),

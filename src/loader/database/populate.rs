@@ -9,6 +9,7 @@ use ra_ap_syntax::{
     ast::{self, HasName},
 };
 
+use super::contexts::FunctionNodes;
 use super::{DatabaseSource, queries};
 use crate::loader::SourceLoader;
 use crate::{
@@ -20,6 +21,8 @@ use crate::{
 pub(super) struct Projection {
     definitions: HashMap<SemanticItemId, NodeId>,
     calls: Vec<(NodeId, SemanticItemId)>,
+    /// Every function item's node, for the cfg-context passes that follow.
+    functions: FunctionNodes,
 }
 
 impl Projection {
@@ -36,13 +39,13 @@ impl Projection {
         source: &DatabaseSource<'_>,
         module_path: &str,
         graph: &mut CrateIr,
-    ) -> CordialResult<()> {
+    ) -> CordialResult<NodeId> {
         let mut module = source_weight(source, NodeKind::Module, module_path, 1);
         module.set_attr(
             crate::ir::ATTR_SOURCE_MODULE_SCOPE,
-            serde_json::to_value(crate::ir::SourceModuleScope::collect_native(source))?,
+            serde_json::to_value(crate::ir::SourceModuleScope::collect(source))?,
         );
-        let attributes = crate::ir::SourceFileAttributes::collect_native(source);
+        let attributes = crate::ir::SourceFileAttributes::collect(source);
         let declaration_paths: HashMap<_, _> = attributes
             .items()
             .iter()
@@ -56,8 +59,6 @@ impl Projection {
         let module = graph.insert_node(module);
         graph.insert_edge(graph.root(), module, EdgeKind::Contains)?;
         let mut nodes: HashMap<TextRange, (NodeId, String)> = HashMap::new();
-        #[cfg(feature = "tracing")]
-        let mut tracing_semantics = HashMap::new();
         for item in source
             .tree()
             .syntax()
@@ -111,9 +112,11 @@ impl Projection {
             }
             let node = graph.insert_node(weight);
             graph.insert_edge(parent, node, EdgeKind::Contains)?;
+            if matches!(item, ast::Item::Fn(_)) {
+                self.functions
+                    .insert(source.path(), item.syntax().text_range(), node);
+            }
             if let Some(facts) = crate::IrView::semantic_function(graph, node)? {
-                #[cfg(feature = "tracing")]
-                tracing_semantics.insert(item.syntax().text_range(), facts.clone());
                 self.definitions.insert(*facts.definition(), node);
                 for call in facts.calls() {
                     if let crate::SemanticCallTarget::Function(target) = call.target() {
@@ -123,27 +126,27 @@ impl Projection {
             }
             nodes.insert(item.syntax().text_range(), (node, qualified));
         }
-        #[cfg(feature = "tracing")]
-        graph.set_attr(
-            module,
-            crate::ir::ATTR_SOURCE_TRACING_INVENTORY,
-            serde_json::to_value(crate::ir::SourceTracingInventory::collect_native(
-                source,
-                &attributes,
-                &tracing_semantics,
-            )?)?,
-        )?;
-        Ok(())
+        Ok(module)
     }
 
+    /// Add the resolved `Calls` edges and hand back the function nodes.
     #[tracing::instrument(level = "trace", skip(self, graph), err(level = "warn"))]
-    pub(super) fn connect(self, graph: &mut CrateIr) -> CordialResult<()> {
-        for (caller, target) in self.calls {
-            if let Some(callee) = self.definitions.get(&target) {
-                graph.insert_edge(caller, *callee, EdgeKind::Calls)?;
-            }
+    pub(super) fn connect(self, graph: &mut CrateIr) -> CordialResult<FunctionNodes> {
+        // One edge per caller and callee: the relationship. Each call's own
+        // range and contract stay in the caller's semantic facts.
+        let pairs: std::collections::BTreeSet<(NodeId, NodeId)> = self
+            .calls
+            .iter()
+            .filter_map(|(caller, target)| {
+                self.definitions
+                    .get(target)
+                    .map(|callee| (*caller, *callee))
+            })
+            .collect();
+        for (caller, callee) in pairs {
+            graph.insert_edge(caller, callee, EdgeKind::Calls)?;
         }
-        Ok(())
+        Ok(self.functions)
     }
 }
 
@@ -205,14 +208,17 @@ fn collect_function(
         .parent()
         .is_some_and(|parent| ast::SourceFile::can_cast(parent.kind()))
         && let Some(facts) =
-            crate::ir::FunctionSourceSyntax::collect_native(source, function.syntax().text_range())
+            crate::ir::FunctionSourceSyntax::collect(source, function.syntax().text_range())
     {
         weight.set_attr(
             crate::ir::ATTR_FUNCTION_SOURCE_SYNTAX,
             serde_json::to_value(facts)?,
         );
     }
-    if let Some(definition) = sema.to_def(function) {
+    if let Some(definition) = sema
+        .to_def(function)
+        .or_else(|| expanded_definition(sema, function))
+    {
         let key = queries::FunctionKey::new(db, definition);
         let facts = queries::function_evidence(db, key)
             .as_ref()
@@ -222,4 +228,27 @@ fn collect_function(
         weight.set_attr(crate::ATTR_SEMANTIC_FUNCTION, serde_json::to_value(facts)?);
     }
     Ok(())
+}
+
+/// The definition of a function an attribute macro replaces, read from the
+/// function the macro generated. `None` when no macro applies or it cannot be
+/// expanded (no proc-macro server, a macro error): that stays a gap, not a guess.
+#[tracing::instrument(level = "trace", skip(sema, function))]
+pub(super) fn expanded_definition(
+    sema: &Semantics<'_, RootDatabase>,
+    function: &ast::Fn,
+) -> Option<ra_ap_hir::Function> {
+    let expansion = sema.expand_attr_macro(&ast::Item::Fn(function.clone()))?;
+    let name = function.name()?;
+    expansion
+        .value
+        .value
+        .descendants()
+        .filter_map(ast::Fn::cast)
+        .find(|generated| {
+            generated
+                .name()
+                .is_some_and(|candidate| candidate.text() == name.text())
+        })
+        .and_then(|generated| sema.to_def(&generated))
 }

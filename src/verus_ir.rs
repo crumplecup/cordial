@@ -24,7 +24,7 @@
 //! [`crate::ir`] separation between "the parsed structure" and "the
 //! rule that flags something about it."
 //!
-//! **How to use.** Feature `verus_ir`. [`scan_crate_verus_ir`] returns a
+//! **How to use.** Feature `verus_ir`. [`crate::SourceVerus::facts`] returns a
 //! crate's [`VerusCrateIr`]; best-effort throughout (a block or function
 //! that fails to parse is silently skipped, not reported as an error --
 //! a partial, real answer beats none, the same posture `amenable_core::
@@ -40,44 +40,6 @@ pub use types::{
 };
 
 use std::path::Path;
-
-use tracing::instrument;
-
-/// Parse every `verus! { .. }` block under `crate_root` and extract real
-/// per-function facts from each. See this module's own doc comment for
-/// scope and the best-effort posture.
-#[instrument(level = "debug", err(level = "warn"))]
-pub fn scan_crate_verus_ir(crate_root: &Path) -> crate::error::CordialResult<VerusCrateIr> {
-    let blocks = parse::collect_verus_blocks(crate_root)?;
-    facts::build_crate_ir(blocks)
-}
-
-/// Parse every `verus! { .. }` block in one already-read source string
-/// and extract real per-function facts from each -- a direct entry
-/// point for testing against one file's content without a real crate
-/// tree on disk, matching [`scan_crate_verus_ir`]'s own best-effort
-/// posture.
-#[instrument(level = "debug", skip(source, file))]
-pub fn scan_verus_rust_source(
-    source: &str,
-    file: &Path,
-    module_path: &str,
-) -> crate::error::CordialResult<VerusCrateIr> {
-    let blocks = parse::blocks_in_source(source, file, module_path);
-    facts::build_crate_ir(blocks)
-}
-
-/// Reuse an already parsed outer file when another one-file scanner also
-/// needs facts from its Verus macro bodies.
-#[cfg(feature = "panics")]
-#[instrument(level = "debug", skip(syntax, file), err(level = "warn"))]
-pub(crate) fn scan_verus_rust_syntax(
-    syntax: &syn::File,
-    file: &Path,
-    module_path: &str,
-) -> crate::error::CordialResult<VerusCrateIr> {
-    facts::build_crate_ir(parse::blocks_in_syntax(syntax, file, module_path))
-}
 
 /// Context-free facts and visibility counts from one memoized dialect parse.
 #[derive(Debug, Clone, PartialEq, Eq, derive_getters::Getters)]
@@ -100,16 +62,4 @@ pub(crate) fn payload_facts(payload: &str) -> Option<VerusPayloadFacts> {
         #[cfg(feature = "visibility")]
         visible_names,
     })
-}
-
-#[tracing::instrument(level = "debug", skip(file), err(level = "warn"))]
-pub(crate) fn shared_file_facts(
-    file: &crate::loader::SharedParsedFile,
-    module_path: &str,
-) -> crate::CordialResult<VerusCrateIr> {
-    facts::build_crate_ir(parse::blocks_in_syntax(
-        file.syntax(),
-        file.path(),
-        module_path,
-    ))
 }

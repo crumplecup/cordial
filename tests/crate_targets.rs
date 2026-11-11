@@ -1,21 +1,14 @@
 use std::fs;
 use std::path::Path;
 
-use cordial::{NamedRunFilter, discover_crate_targets, project_slug_from_path};
+use cordial::{NamedRunFilter, discover_crate_targets};
 use miette::{IntoDiagnostic, WrapErr};
 
 #[test]
-fn non_cargo_project_uses_directory_slug() -> miette::Result<()> {
+fn a_directory_without_a_manifest_is_not_a_rust_project() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let targets = discover_crate_targets(fixture.path(), &NamedRunFilter::all_etiquettes())
-        .into_diagnostic()
-        .wrap_err("targets")?;
-    assert_eq!(targets.len(), 1);
-    assert_eq!(
-        *targets[0].crate_name(),
-        project_slug_from_path(fixture.path())
-    );
+    assert!(discover_crate_targets(fixture.path(), &NamedRunFilter::all_etiquettes()).is_err());
     Ok(())
 }
 

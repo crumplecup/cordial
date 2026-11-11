@@ -1,4 +1,4 @@
-//! Parse-family native sources (JSON, config, syn, token stream).
+//! Parse-family native sources (JSON and config).
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::panic::Location;
@@ -132,100 +132,7 @@ impl std::error::Error for ConfigSource {
     }
 }
 
-#[derive(Debug, derive_getters::Getters)]
-pub struct SynParseSource {
-    #[getter(skip)]
-    source: syn::Error,
-    #[getter(skip)]
-    path: String,
-    file: String,
-    #[getter(copy)]
-    line: u32,
-}
-
-impl SynParseSource {
-    #[track_caller]
-    #[instrument(level = "debug", skip(path, source))]
-    pub fn new(path: impl Into<String>, source: syn::Error) -> Self {
-        let loc = Location::caller();
-        Self {
-            source,
-            path: path.into(),
-            file: loc.file().to_string(),
-            line: loc.line(),
-        }
-    }
-}
-
-impl Display for SynParseSource {
-    #[instrument(level = "trace", skip(self, formatter))]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-        write!(
-            formatter,
-            "syn parse error in {}: {}",
-            self.path, self.source
-        )
-    }
-}
-
-impl std::error::Error for SynParseSource {
-    #[instrument(level = "trace", skip(self))]
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.source)
-    }
-}
-
-/// Send/Sync stand-in for [`proc_macro2::LexError`], which is not Send.
-#[derive(Debug, derive_getters::Getters)]
-pub struct TokenStreamParseError {
-    #[getter(skip)]
-    source: String,
-    file: String,
-    #[getter(copy)]
-    line: u32,
-}
-
-impl TokenStreamParseError {
-    /// Construct a new value.
-    #[track_caller]
-    #[instrument(level = "debug", skip(source))]
-    pub fn new(source: impl Into<String>) -> Self {
-        let loc = Location::caller();
-        Self {
-            source: source.into(),
-            file: loc.file().to_string(),
-            line: loc.line(),
-        }
-    }
-}
-
-impl From<proc_macro2::LexError> for TokenStreamParseError {
-    #[track_caller]
-    #[instrument(level = "debug", skip(source))]
-    fn from(source: proc_macro2::LexError) -> Self {
-        Self::new(source.to_string())
-    }
-}
-
-impl Display for TokenStreamParseError {
-    #[instrument(level = "trace", skip(self, formatter))]
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
-        write!(formatter, "token stream parse error: {}", self.source)
-    }
-}
-
-impl std::error::Error for TokenStreamParseError {}
-
 impl super::CordialError {
-    /// `syn` failed to parse this source file.
-    #[track_caller]
-    #[instrument(level = "debug", skip(path, err))]
-    pub fn syn_parse(path: impl Into<String>, err: syn::Error) -> Self {
-        Self::from_kind(super::CordialErrorKind::SynParse(SynParseSource::new(
-            path, err,
-        )))
-    }
-
     /// JSON failed to parse at this path.
     #[track_caller]
     #[instrument(level = "debug", skip(path, err))]
@@ -249,15 +156,5 @@ impl From<config::ConfigError> for super::CordialError {
     #[instrument(level = "debug", skip(value))]
     fn from(value: config::ConfigError) -> Self {
         Self::from_kind(super::CordialErrorKind::Config(ConfigSource::from(value)))
-    }
-}
-
-impl From<proc_macro2::LexError> for super::CordialError {
-    #[track_caller]
-    #[instrument(level = "debug", skip(value))]
-    fn from(value: proc_macro2::LexError) -> Self {
-        Self::from_kind(super::CordialErrorKind::TokenStreamParse(
-            TokenStreamParseError::from(value),
-        ))
     }
 }

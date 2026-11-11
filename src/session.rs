@@ -176,6 +176,7 @@ impl std::fmt::Debug for SessionBuilder {
             .field("etiquettes", &self.etiquettes.as_ref().map(Vec::len))
             .field("progress", &"<progress-sink>")
             .field("measurement_mode", &self.measurement_mode)
+            .field("ir_snapshot", &self.ir_snapshot)
             .finish()
     }
 }
@@ -199,6 +200,7 @@ impl SessionBuilder {
             etiquettes: Some(Vec::new()),
             progress: Some(noop_progress_arc()),
             measurement_mode: Some(false),
+            ir_snapshot: Some(false),
         }
     }
 
@@ -226,6 +228,16 @@ impl SessionBuilder {
     #[instrument(level = "trace", skip(self, progress))]
     pub fn with_progress_sink(mut self, progress: Arc<dyn ProgressSink>) -> Self {
         self.progress = Some(progress);
+        self
+    }
+
+    /// Write each crate's IR under the store's `cache/` directory after enrichment.
+    ///
+    /// Off by default: nothing in a normal run reads the file, so writing it only
+    /// costs time. `cordial export` and tests that inspect the IR ask for it.
+    #[instrument(level = "trace", skip(self))]
+    pub fn with_ir_snapshot(mut self) -> Self {
+        self.ir_snapshot = Some(true);
         self
     }
 
@@ -273,6 +285,7 @@ impl SessionBuilder {
             etiquettes: self.etiquettes.unwrap_or_default(),
             progress: self.progress.unwrap_or_else(noop_progress_arc),
             measurement_mode: self.measurement_mode.unwrap_or(false),
+            ir_snapshot: self.ir_snapshot.unwrap_or(false),
         }
     }
 }
@@ -306,12 +319,20 @@ pub struct RuntimeSession {
     /// Isolated measurement run that must not replace reports or ledger history.
     #[builder(default)]
     measurement_mode: bool,
+    /// Write each crate's IR under `cache/` after enrichment.
+    #[builder(default)]
+    ir_snapshot: bool,
 }
 
 impl RuntimeSession {
     #[instrument(level = "trace", skip(self))]
     pub(super) fn measurement_mode(&self) -> bool {
         self.measurement_mode
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    pub(super) fn ir_snapshot(&self) -> bool {
+        self.ir_snapshot
     }
     #[instrument(level = "trace", skip(self))]
     pub(super) fn registered_plugins(&self) -> &[&'static dyn Plugin] {

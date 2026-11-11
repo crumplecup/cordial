@@ -59,7 +59,7 @@ impl SiteClassifier {
 }
 
 impl Catalog {
-    #[instrument(level = "debug", skip(self, field_strategy))]
+    #[instrument(level = "debug", skip(self, field_strategy), err(level = "warn"))]
     pub(crate) fn findings(
         &self,
         kind_fanout_max_call_sites: usize,
@@ -76,7 +76,11 @@ impl Catalog {
         Ok(findings)
     }
 
-    #[instrument(level = "debug", skip(self, field_strategy, findings))]
+    #[instrument(
+        level = "debug",
+        skip(self, field_strategy, findings),
+        err(level = "warn")
+    )]
     fn emit_parent_findings(
         &self,
         field_strategy: ErrorFieldStrategy,
@@ -140,7 +144,11 @@ impl Catalog {
         Ok(())
     }
 
-    #[instrument(level = "debug", skip(self, parents, field_strategy, findings))]
+    #[instrument(
+        level = "debug",
+        skip(self, parents, field_strategy, findings),
+        err(level = "warn")
+    )]
     fn emit_missing_parent_findings(
         &self,
         parents: &[&StructInfo],
@@ -219,7 +227,11 @@ impl Catalog {
         Ok(())
     }
 
-    #[instrument(level = "debug", skip(self, parents, field_strategy, findings))]
+    #[instrument(
+        level = "debug",
+        skip(self, parents, field_strategy, findings),
+        err(level = "warn")
+    )]
     fn emit_parent_storage_findings(
         &self,
         parents: &[&StructInfo],
@@ -305,7 +317,11 @@ impl Catalog {
         Ok(())
     }
 
-    #[instrument(level = "debug", skip(self, field_strategy, findings))]
+    #[instrument(
+        level = "debug",
+        skip(self, field_strategy, findings),
+        err(level = "warn")
+    )]
     fn emit_native_source_findings(
         &self,
         field_strategy: ErrorFieldStrategy,
@@ -398,7 +414,11 @@ impl Catalog {
         Ok(())
     }
 
-    #[instrument(level = "debug", skip(self, rule_id, site, classifier))]
+    #[instrument(
+        level = "debug",
+        skip(self, rule_id, site, classifier),
+        err(level = "warn")
+    )]
     fn finding(
         &self,
         rule_id: InternalErrorComplianceId,

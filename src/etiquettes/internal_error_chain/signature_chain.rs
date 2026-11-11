@@ -96,7 +96,6 @@ pub(crate) struct SignatureChainIndex {
     conversions: Vec<Conversion>,
 }
 
-mod collect;
 mod facts;
 mod native;
 mod resolve;

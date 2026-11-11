@@ -100,26 +100,6 @@ impl SourceObservability {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourceObservability")]
-    pub(crate) fn collect(source: &SourceLoadView, root: &Path) -> CordialResult<Self> {
-        Self::collect_with(root, |path, tree| {
-            match source.collect_native_file(path, |file| Ok(Self::native_file(file, tree, root))) {
-                Ok(file) => Ok(file),
-                Err(error)
-                    if crate::loader::path_has_fixtures(path, root)
-                        && matches!(error.kind(), crate::CordialErrorKind::RustParse(_)) =>
-                {
-                    let text = source
-                        .input_text(path)?
-                        .ok_or_else(|| crate::CordialError::not_found(path.to_path_buf()))?;
-                    Ok(Self::invalid_file(path, root, &text))
-                }
-                Err(error) => Err(error),
-            }
-        })
-    }
-
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
     pub(crate) fn collect_with(
         root: &Path,

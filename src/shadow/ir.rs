@@ -65,7 +65,7 @@ pub fn collect_shadow_items_from_workspace(
     collect_shadow_items_from_ir(ir)
 }
 
-#[instrument(level = "debug", skip(ir))]
+#[instrument(level = "debug", skip(ir), err(level = "warn"))]
 pub fn collect_shadow_items_from_ir(ir: &crate::ir::CrateIr) -> CordialResult<Vec<ShadowIrItem>> {
     let all_nodes = BasicQuery::all_nodes();
     let mut items = Vec::new();

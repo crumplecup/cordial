@@ -4,7 +4,7 @@ use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{EdgeKind, NodeKind, NodeWeight};
 use crate::objects::FileSpan;
 
-use super::scan::scan_crate_proof_patterns_with_ir;
+use super::scan::proof_pattern_records;
 
 use tracing::instrument;
 
@@ -28,7 +28,7 @@ impl IrEnricher for ProofPatternInventoryEnricher {
         let inventory = ir.source_verus()?;
         let crate_root = inventory.crate_root();
         let verus = inventory.facts();
-        let records = scan_crate_proof_patterns_with_ir(crate_root, &verus)?;
+        let records = proof_pattern_records(&verus, crate_root)?;
 
         for record in records {
             let parent = resolve_parent(ir, record.context())?;

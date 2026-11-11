@@ -32,10 +32,8 @@
 mod apply;
 mod architecture;
 mod assessor;
-mod compliance;
 mod probe;
 mod reporter;
-mod scan;
 mod signature_chain;
 mod source_shape;
 mod type_graph;
@@ -60,16 +58,9 @@ pub use reporter::{
     InternalErrorChainChecklistReporter, InternalErrorChainSummaryReporter,
     InternalErrorComplianceCsvReporter, InternalErrorTypeGraphCsvReporter,
 };
-pub use scan::{
-    scan_compliance_rust_source, scan_compliance_rust_source_with_crate_kind,
-    scan_crate_internal_error_chain, scan_error_rust_source,
-};
 pub(crate) use signature_chain::SignatureChainIndex;
 pub use signature_chain::{SignatureChainCheck, SignatureChainStatus};
-pub(crate) use type_graph::{
-    finalize_type_graph, for_each_shared_src_rust_file, scan_error_rust_syntax_raw,
-    type_path_is_error_related,
-};
+pub(crate) use type_graph::{finalize_type_graph, type_path_is_error_related};
 pub use types::{
     InternalErrorChainScanReport, InternalErrorComplianceFinding, InternalErrorComplianceId,
     InternalErrorComplianceReport, InternalErrorNodeClass, InternalErrorTypeGraphReport,

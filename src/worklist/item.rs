@@ -212,7 +212,7 @@ fn without_line_number(input: &str) -> String {
 }
 
 /// Assign unique, stable display ids after all checklist items are known.
-#[instrument(level = "debug", skip(items))]
+#[instrument(level = "debug", skip(items), err(level = "warn"))]
 pub(super) fn assign_ids(items: &mut [WorklistItem]) -> CordialResult<()> {
     let mut full_hashes = BTreeMap::new();
     for item in items.iter() {

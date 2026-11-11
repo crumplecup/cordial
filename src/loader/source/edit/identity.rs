@@ -1,6 +1,5 @@
 //! Identity-only access for error conversion planning.
 
-use super::super::SharedParsedFile;
 use super::SourceEditView;
 use crate::FileSnapshot;
 use std::path::Path;
@@ -21,18 +20,6 @@ impl SourceSnapshot for FileSnapshot {
     #[instrument(level = "trace", skip(self))]
     fn source_digest(&self) -> [u8; 32] {
         self.digest()
-    }
-}
-
-impl SourceSnapshot for SharedParsedFile {
-    #[instrument(level = "trace", skip(self))]
-    fn path(&self) -> &Path {
-        self.path()
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    fn source_digest(&self) -> [u8; 32] {
-        self.source_digest()
     }
 }
 

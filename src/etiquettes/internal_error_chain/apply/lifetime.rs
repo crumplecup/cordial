@@ -10,16 +10,10 @@ use crate::config::ErrorFieldStrategy;
 use super::Edit;
 use super::initializers::InitializerFacts;
 
-mod forwarding;
-mod methods;
 mod native;
 mod native_forwarding;
 mod native_methods;
 mod native_syntax;
-mod planner;
-mod source;
-
-use source::{LifetimeFileIndex, scalar_copy_name};
 
 type Range = (usize, usize);
 

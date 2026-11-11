@@ -51,10 +51,13 @@ fn collect_direct(db: &RootDatabase, function: Function) -> Option<DirectFacts> 
     tracing::debug!(target: "cordial::semantic::queries", function = label.as_str(), query = "direct", "semantic query executed");
     let krate = function.module(db).krate(db);
     let output = types::return_contract(&sema, krate, &function.ret_type(db));
-    let mut incomplete = types::incomplete(&output) || source.value.body().is_none();
+    // An attribute macro generated this function. Its body's ranges are expansion
+    // coordinates, not the original file's, so its calls stay an explicit gap.
+    let expanded = source.file_id.is_macro();
+    let mut incomplete = types::incomplete(&output) || source.value.body().is_none() || expanded;
     let mut calls = Vec::new();
     let mut source_targets = Vec::new();
-    if let Some(body) = source.value.body() {
+    if let Some(body) = source.value.body().filter(|_| !expanded) {
         let mut walk = body.syntax().preorder();
         while let Some(event) = walk.next() {
             let WalkEvent::Enter(node) = event else {
@@ -68,15 +71,17 @@ fn collect_direct(db: &RootDatabase, function: Function) -> Option<DirectFacts> 
                 walk.skip_subtree();
                 continue;
             }
-            let callable = if let Some(call) = ast::CallExpr::cast(node.clone()) {
-                call.expr()
-                    .and_then(|expr| sema.resolve_expr_as_callable(&expr))
-            } else if let Some(call) = ast::MethodCallExpr::cast(node.clone()) {
-                sema.resolve_method_call_as_callable(&call)
-            } else {
+            let Some(call) = ast::Expr::cast(node.clone()).filter(|expr| {
+                matches!(expr, ast::Expr::CallExpr(_) | ast::Expr::MethodCallExpr(_))
+            }) else {
                 continue;
             };
-            let (target, output) = call_contract(&sema, krate, callable, &mut source_targets);
+            let (target, output) = call_contract(
+                &sema,
+                krate,
+                semantic_callable(&sema, &call),
+                &mut source_targets,
+            );
             incomplete |=
                 !matches!(target, SemanticCallTarget::Function(_)) || types::incomplete(&output);
             let range = node.text_range();
@@ -95,6 +100,20 @@ fn collect_direct(db: &RootDatabase, function: Function) -> Option<DirectFacts> 
             .with_incomplete(incomplete),
         source_targets,
     })
+}
+
+#[instrument(level = "trace", skip(sema, call))]
+fn semantic_callable<'db>(
+    sema: &Semantics<'db, RootDatabase>,
+    call: &ast::Expr,
+) -> Option<Callable<'db>> {
+    match call {
+        ast::Expr::CallExpr(call) => call
+            .expr()
+            .and_then(|expr| sema.resolve_expr_as_callable(&expr)),
+        ast::Expr::MethodCallExpr(call) => sema.resolve_method_call_as_callable(call),
+        _ => None,
+    }
 }
 
 #[instrument(level = "trace", skip(sema, krate, callable, targets))]

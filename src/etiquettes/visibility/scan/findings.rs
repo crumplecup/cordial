@@ -9,7 +9,7 @@ use crate::etiquettes::visibility::types::{
 use crate::ir::VisibilityKind as VisKind;
 
 use tracing::instrument;
-#[instrument(level = "debug", skip(root, thresholds, eval))]
+#[instrument(level = "debug", skip(root, thresholds, eval), err(level = "warn"))]
 pub(super) fn collect_findings(
     root: &ModuleNode,
     thresholds: VisibilityThresholds,
@@ -43,7 +43,7 @@ pub(super) fn collect_findings(
     Ok(out)
 }
 
-#[instrument(level = "debug", skip(node, out))]
+#[instrument(level = "debug", skip(node, out), err(level = "warn"))]
 fn collect_module_findings(
     node: &ModuleNode,
     thin_floor: usize,

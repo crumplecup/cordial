@@ -10,32 +10,14 @@ use super::types::{ProofPatternKind, ProofPatternRecord};
 
 use tracing::instrument;
 
-/// Scan a crate's real `verus! { .. }` blocks for soundness-relevant
-/// patterns: functions that are trusted rather than proven (`assume`/
-/// `admit`/`external_body`/`uninterp`/`axiom`), and `broadcast` lemmas,
-/// whose contribution to the total proof burden is invisible at call
-/// sites. Reuses [`crate::verus_ir::scan_crate_verus_ir`] -- the same
-/// real `verus_syn` parse `panics` already merges in for panic sites.
-#[instrument(level = "debug", err(level = "warn"))]
-pub fn scan_crate_proof_patterns(crate_root: &Path) -> CordialResult<Vec<ProofPatternRecord>> {
-    let ir = crate::verus_ir::scan_crate_verus_ir(crate_root)?;
-    proof_pattern_records(&ir, crate_root)
-}
-
+/// Convert the soundness-relevant signals of a crate's Verus inventory into
+/// proof-pattern records: functions that are trusted rather than proven
+/// (`assume`/`admit`/`external_body`/`uninterp`/`axiom`), and `broadcast`
+/// lemmas, whose contribution to the total proof burden is invisible at call
+/// sites. One record per active kind per function, since a function can carry
+/// more than one (e.g. `assume` and `admit` in the same body).
 #[instrument(level = "debug", skip(ir), err(level = "warn"))]
-pub(super) fn scan_crate_proof_patterns_with_ir(
-    crate_root: &Path,
-    ir: &VerusCrateIr,
-) -> CordialResult<Vec<ProofPatternRecord>> {
-    proof_pattern_records(ir, crate_root)
-}
-
-/// Convert every real proof-pattern signal `ir` carries into this
-/// etiquette's own record shape -- one record per active kind per
-/// function, since a function can carry more than one (e.g. `assume`
-/// and `admit` in the same body).
-#[instrument(level = "debug", skip(ir))]
-fn proof_pattern_records(
+pub fn proof_pattern_records(
     ir: &VerusCrateIr,
     crate_root: &Path,
 ) -> CordialResult<Vec<ProofPatternRecord>> {
@@ -46,7 +28,7 @@ fn proof_pattern_records(
         .map(|groups| groups.into_iter().flatten().collect())
 }
 
-#[instrument(level = "debug", skip(function))]
+#[instrument(level = "debug", skip(function), err(level = "warn"))]
 fn function_records(
     function: &VerusFnFacts,
     crate_root: &Path,

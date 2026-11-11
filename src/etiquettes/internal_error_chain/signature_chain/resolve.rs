@@ -13,7 +13,7 @@ use crate::etiquettes::internal_error_chain::{
 };
 
 impl SignatureChainIndex {
-    #[tracing::instrument(level = "debug", skip(self))]
+    #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
     pub(crate) fn assess(
         &self,
         crate_name: &str,

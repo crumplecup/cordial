@@ -4,6 +4,7 @@ use crate::{CordialResult, SourceAntipatterns};
 
 impl SourceDatabase {
     #[tracing::instrument(level = "debug", skip(self, target), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn project_antipatterns(
         &self,
         target: &crate::CrateTarget,
@@ -20,7 +21,7 @@ impl SourceDatabase {
                 .zip(sources)
                 .map(|((tree, _), source)| (tree.clone(), source))
                 .collect();
-            SourceAntipatterns::collect_native(root, target.crate_name(), &files)
+            SourceAntipatterns::collect(root, target.crate_name(), &files)
         })
     }
 }

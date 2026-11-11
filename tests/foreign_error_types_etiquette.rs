@@ -118,11 +118,13 @@ fn run_syn_parse_fixture(manifest: Option<&str>) -> miette::Result<String> {
     fs::write(fixture.path().join("src/lib.rs"), SYN_PARSE_SOURCE)
         .into_diagnostic()
         .wrap_err("write fixture")?;
-    if let Some(manifest) = manifest {
-        fs::write(fixture.path().join("Cargo.toml"), manifest)
-            .into_diagnostic()
-            .wrap_err("write manifest")?;
-    }
+    // An ordinary crate still needs a manifest to be a Rust project.
+    let manifest = manifest.unwrap_or(
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    );
+    fs::write(fixture.path().join("Cargo.toml"), manifest)
+        .into_diagnostic()
+        .wrap_err("write manifest")?;
 
     let store = tempfile::tempdir()
         .into_diagnostic()
@@ -172,6 +174,11 @@ fn foreign_error_types_session_produces_artifacts() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), ERROR_SITES)
         .into_diagnostic()
         .wrap_err("write fixture")?;

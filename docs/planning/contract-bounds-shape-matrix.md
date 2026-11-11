@@ -55,7 +55,8 @@ flagged even though the real code was already correctly named.
 Both fixed bugs, and the third (also now fixed), were each found by hand
 while doing unrelated naming work, then patched with exactly one
 hand-written regression test apiece (`tests/contract_bounds.rs`,
-originally 25 tests, 969 lines). Nothing enumerated the space of shapes
+originally 25 tests, 969 lines; now split by concern across
+`tests/contract_bounds_*.rs`). Nothing enumerated the space of shapes
 the scanner is *supposed* to handle, so there was no way to tell "we've
 covered the realistic cases" from "we've covered the cases someone
 happened to hit."
@@ -143,11 +144,11 @@ one test" into a checklist that can't silently shrink.
 
 ### Migration
 
-The existing 25 hand-written tests in `tests/contract_bounds.rs` migrate
+The existing 25 hand-written tests in `tests/contract_bounds_*.rs` migrate
 into rows first (preserving current coverage, not building a second
 parallel suite), then the three documented bugs above get their own rows
 as the bootstrap set for "found in the wild."
-`tests/contract_bounds.rs`'s existing helpers (`fixtures_root()`,
+The `tests/contract_bounds_*.rs` helpers (`fixtures_root()`,
 `logic_fn_record()`, `kani_type_record()`) carry over into the row
 `registry` closures largely unchanged.
 
@@ -209,7 +210,7 @@ Resolved 2026-08-30: for a genuine, requested cordial-repo work session
 (as opposed to incidentally wandering into this repo while doing
 unrelated `amenable`-side work), full Bash access — `cd`, `cargo
 build`/`test`, etc. — is in scope, not just `just install`. `cargo test
---features full --test contract_bounds` was run directly and repeatedly
+--features full --test contract_bounds_shapes_kani` was run directly and repeatedly
 while building the harness below.
 
 ## Status

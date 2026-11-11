@@ -1,6 +1,6 @@
 //! Backend-independent module-tree evidence for visibility policy.
 mod collect;
-use crate::{CordialResult, FileSnapshot, loader::SourceLoadView};
+use crate::FileSnapshot;
 pub(crate) use collect::collect;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -10,17 +10,6 @@ impl super::SourcePolicyInventory {
     pub(crate) fn set_visibility(&mut self, root: &Path, facts: VisibilityFacts) {
         self.crate_root = root.to_path_buf();
         self.visibility = facts;
-    }
-
-    /// Collect module-tree evidence using the shared loader's source snapshots.
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    pub fn collect_visibility(
-        source: &SourceLoadView,
-        root: &Path,
-    ) -> CordialResult<VisibilityFacts> {
-        Self::collect_native_visibility(root, |path| {
-            source.collect_native_file(path, Self::native_visibility_file)
-        })
     }
 }
 

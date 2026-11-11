@@ -135,32 +135,6 @@ fn arguments(group: &LocatedGroup) -> SourceAttributeArguments {
     }
 }
 
-#[instrument(level = "trace", skip(tokens))]
-pub(super) fn compatibility_tokens(tokens: proc_macro2::TokenStream) -> Vec<LocatedToken> {
-    tokens
-        .into_iter()
-        .map(|token| {
-            let range = token.span().byte_range();
-            match token {
-                proc_macro2::TokenTree::Group(group) => LocatedToken {
-                    text: String::new(),
-                    range,
-                    group: Some(LocatedGroup {
-                        range: group.span_open().byte_range().end
-                            ..group.span_close().byte_range().start,
-                        tokens: compatibility_tokens(group.stream()),
-                    }),
-                },
-                token => LocatedToken {
-                    text: token.to_string(),
-                    range,
-                    group: None,
-                },
-            }
-        })
-        .collect()
-}
-
 #[instrument(level = "trace", skip(node))]
 pub(super) fn native_tokens(node: &ra_ap_syntax::SyntaxNode) -> Vec<LocatedToken> {
     use ra_ap_syntax::{AstNode, ast};

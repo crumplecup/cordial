@@ -1,6 +1,6 @@
 //! Module boundaries and import bindings collected with error declarations.
 
-use crate::loader::{DatabaseSource, SharedParsedFile};
+use crate::loader::DatabaseSource;
 use ra_ap_syntax::ast::{self, HasAttrs, HasModuleItem, HasName};
 use serde::{Deserialize, Serialize};
 
@@ -28,73 +28,7 @@ pub(crate) struct ApplyImport {
 impl ApplyNamespace {
     #[tracing::instrument(level = "debug", skip(file))]
     #[hotpath::measure(impl_type = "ApplyNamespace")]
-    pub(super) fn collect(file: &SharedParsedFile) -> Self {
-        let mut facts = Self {
-            modules: Vec::new(),
-            imports: Vec::new(),
-            aliases: Vec::new(),
-        };
-        for item in &file.syntax().items {
-            match item {
-                syn::Item::Mod(item)
-                    if item.content.is_none()
-                        && item.attrs.iter().all(|attr| {
-                            attr.path().is_ident("doc") || attr.path().is_ident("cfg")
-                        }) =>
-                {
-                    facts.modules.push(ApplyModule {
-                        name: item.ident.to_string(),
-                        unconditional: item.attrs.iter().all(|attr| attr.path().is_ident("doc")),
-                    });
-                }
-                syn::Item::Use(item) => {
-                    let mut bindings = Vec::new();
-                    collect_syn_bindings(&item.tree, Vec::new(), &mut bindings);
-                    facts.imports.push(ApplyImport {
-                        bindings,
-                        unconditional: item.attrs.iter().all(|attr| attr.path().is_ident("doc")),
-                    });
-                }
-                syn::Item::Type(item) => facts.aliases.push(item.ident.to_string()),
-                _ => {}
-            }
-        }
-        facts
-    }
-}
-
-#[tracing::instrument(level = "trace", skip(tree, paths))]
-fn collect_syn_bindings(
-    tree: &syn::UseTree,
-    mut prefix: Vec<String>,
-    paths: &mut Vec<(String, Vec<String>)>,
-) {
-    match tree {
-        syn::UseTree::Path(path) => {
-            prefix.push(path.ident.to_string());
-            collect_syn_bindings(&path.tree, prefix, paths);
-        }
-        syn::UseTree::Name(name) => {
-            prefix.push(name.ident.to_string());
-            paths.push((name.ident.to_string(), prefix));
-        }
-        syn::UseTree::Rename(rename) => {
-            prefix.push(rename.ident.to_string());
-            paths.push((rename.rename.to_string(), prefix));
-        }
-        syn::UseTree::Group(group) => {
-            for tree in &group.items {
-                collect_syn_bindings(tree, prefix.clone(), paths);
-            }
-        }
-        syn::UseTree::Glob(_) => {}
-    }
-}
-
-impl ApplyNamespace {
-    #[tracing::instrument(level = "debug", skip(file))]
-    #[hotpath::measure(impl_type = "ApplyNamespace")]
-    pub(super) fn collect_native(file: &DatabaseSource<'_>) -> Self {
+    pub(super) fn collect(file: &DatabaseSource<'_>) -> Self {
         let mut facts = Self {
             modules: Vec::new(),
             imports: Vec::new(),

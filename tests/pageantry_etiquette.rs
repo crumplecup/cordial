@@ -5,7 +5,10 @@ use cordial::{
     PAGEANTRY_ETIQUETTE, PageantryRuleId, PageantryThresholds, RunAll, Session, SessionBuilder,
     load_cordial_config, scan_pageantry_rust_source,
 };
-use {cordial::scan_crate_pageantry, std::path::Path};
+use std::path::Path;
+
+#[path = "support/policy_inventory.rs"]
+mod policy_inventory;
 
 /// `[pageantry]` knobs as a project would write them in `cordial.toml`.
 fn thresholds_from_toml(body: &str) -> miette::Result<PageantryThresholds> {
@@ -197,6 +200,11 @@ fn pageantry_etiquette_writes_checklist() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), "mod arrange;\n")
         .into_diagnostic()
         .wrap_err("write lib")?;
@@ -246,9 +254,12 @@ pub struct Gamma;
 fn dogfood_cordial_traits_are_at_the_top() -> miette::Result<()> {
     cordial::init_tracing();
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let records = scan_crate_pageantry(root, &PageantryThresholds::default())
-        .into_diagnostic()
-        .wrap_err("scan cordial")?;
+    let records = policy_inventory::policy_inventory(root)
+        .wrap_err("scan cordial")?
+        .pageantry()
+        .iter()
+        .filter_map(|site| site.selected(&PageantryThresholds::default()))
+        .collect::<Vec<_>>();
     let listed: Vec<String> = records
         .iter()
         .map(|record| {

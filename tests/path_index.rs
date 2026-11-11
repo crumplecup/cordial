@@ -21,11 +21,12 @@ fn path_index_resolves_type_nodes_after_rustdoc_load() -> miette::Result<()> {
     let session = SessionBuilder::new(&workspace)
         .with_store_root(store.path())
         .register(&*IMPL_COVERAGE_ETIQUETTE)
+        .with_ir_snapshot()
         .build();
     let filter = NamedRunFilter::etiquettes(["impl-coverage"]).with_crate("url".to_string());
     session.run(&filter).into_diagnostic().wrap_err("run")?;
 
-    let cache_path = store.path().join("cache").join("url.ir.json");
+    let cache_path = store.path().join("cache").join("url.ir.zst");
     let ir = cordial::CrateIr::read_cache(&cache_path)
         .into_diagnostic()
         .wrap_err("read ir cache")?;

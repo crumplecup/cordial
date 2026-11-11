@@ -33,9 +33,9 @@ mod types;
 pub use assessor::ModularityAssessor;
 pub use enricher::ModularityInventoryEnricher;
 pub use hierarchy::{
-    ModuleHierarchyNode, ModuleSizeInput, OrderBand, SiblingImbalance, UnaryNest,
-    build_module_hierarchy, fat_leaves, library_branches, lopsided_siblings, order_bands,
-    top_heavy_parents, unary_nests,
+    ModuleHierarchyNode, ModuleSizeInput, OrderBand, SiblingImbalance, TEST_TARGET_PREFIX,
+    UnaryNest, build_module_hierarchy, fat_leaves, library_branches, lopsided_siblings,
+    order_bands, top_heavy_parents, unary_nests,
 };
 pub use probe::ModularitySiteProbe;
 pub use reporter::{ModularityChecklistReporter, ModularityCsvReporter, ModularitySummaryReporter};

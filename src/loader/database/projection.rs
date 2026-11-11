@@ -52,6 +52,7 @@ impl SourceDatabase {
     }
 
     #[instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     fn project_selection(
         &mut self,
         target: &crate::CrateTarget,
@@ -72,7 +73,8 @@ impl SourceDatabase {
             })?;
             inventory
         };
-        attach_db(&self.db, || {
+        let ordinary_watch = crate::process_memory::Watch::start("ordinary projection".to_owned());
+        let (mut graph, outline) = attach_db(&self.db, || {
             self.project_attached(
                 target,
                 paths,
@@ -80,17 +82,26 @@ impl SourceDatabase {
                 #[cfg(feature = "cfg_hygiene")]
                 declarations,
             )
-        })
+        })?;
+        drop(ordinary_watch);
+        crate::process_memory::log("ordinary projection done");
+        // Gated code is analysed by changing the database's cfg input, which
+        // needs the exclusive borrow the ordinary pass does not have.
+        self.project_contexts(paths, outline.functions(), &mut graph)?;
+        #[cfg(feature = "tracing")]
+        self.project_tracing_inventories(&outline, &mut graph)?;
+        Ok(graph)
     }
 
     #[instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     fn project_attached(
         &self,
         target: &crate::CrateTarget,
         paths: &[PathBuf],
         policy_paths: &[PathBuf],
         #[cfg(feature = "cfg_hygiene")] declarations: crate::ir::SourcePolicyInventory,
-    ) -> CordialResult<CrateIr> {
+    ) -> CordialResult<(CrateIr, declarations::Outline)> {
         let mut graph = CrateIr::new(target.crate_name());
         selection::target_attributes(target, &mut graph)?;
         #[cfg(any(
@@ -195,7 +206,8 @@ impl SourceDatabase {
             crate::ir::ATTR_SOURCE_ERROR_APPLY,
             serde_json::to_value(self.project_error_apply(target.crate_root())?)?,
         )?;
-        let snapshots = self.project_declarations(paths, &mut graph)?;
+        let (snapshots, outline) =
+            self.project_declarations(target.crate_root(), paths, &mut graph)?;
         #[cfg(any(
             feature = "allows",
             feature = "cfg_hygiene",
@@ -254,6 +266,6 @@ impl SourceDatabase {
                 self.projection_context()?,
             ))?,
         )?;
-        Ok(graph)
+        Ok((graph, outline))
     }
 }

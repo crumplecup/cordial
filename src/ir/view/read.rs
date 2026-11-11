@@ -28,6 +28,54 @@ pub trait IrView {
         evidence::optional(self, id, crate::ir::ATTR_SEMANTIC_FUNCTION)
     }
 
+    /// Read function facts in every non-ordinary context that resolved it.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn semantic_context_functions(
+        &self,
+        id: NodeId,
+    ) -> CordialResult<Vec<crate::ir::SemanticContextFunction>> {
+        Ok(
+            evidence::optional(self, id, crate::ir::ATTR_SEMANTIC_CONTEXT_FUNCTIONS)?
+                .unwrap_or_default(),
+        )
+    }
+
+    /// The non-ordinary contexts analysed for this crate, if a projection ran.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn semantic_context_plan(&self) -> CordialResult<Option<crate::ir::SemanticContextPlan>> {
+        evidence::optional(self, self.root()?, crate::ir::ATTR_SEMANTIC_CONTEXT_PLAN)
+    }
+
+    /// Contexts in which this function is active, or `None` when no semantic
+    /// projection ran. `Some(vec![])` means every analysed context leaves it
+    /// inactive: absence of facts is never silently "no calls". Functions
+    /// declared inside another function's body are active only in the ordinary
+    /// context; their enclosing function's `incomplete` flag marks that gap.
+    #[instrument(level = "trace", skip(self), err(level = "warn"))]
+    fn active_contexts(
+        &self,
+        id: NodeId,
+    ) -> CordialResult<Option<Vec<crate::ir::SemanticContextKey>>> {
+        if self.semantic_snapshot()?.is_none() {
+            return Ok(None);
+        }
+        let mut active = Vec::new();
+        if self.semantic_function(id)?.is_some() {
+            active.push(crate::ir::SemanticContextKey::ordinary());
+        }
+        if let (Some(plan), Some(indexes)) = (
+            self.semantic_context_plan()?,
+            evidence::optional::<Vec<u32>>(self, id, crate::ir::ATTR_SEMANTIC_ACTIVITY)?,
+        ) {
+            active.extend(
+                indexes
+                    .into_iter()
+                    .filter_map(|index| plan.contexts().get(index as usize).cloned()),
+            );
+        }
+        Ok(Some(active))
+    }
+
     /// Read signature-level or prospective migration alternatives from shared IR.
     /// Missing facts never establish an empty error family.
     #[instrument(level = "trace", skip(self), err(level = "warn"))]
@@ -84,6 +132,11 @@ pub trait IrView {
     fn parents(&self, id: NodeId, kind: EdgeKind) -> Vec<NodeId>;
     /// Child node ids along outgoing edges of `kind`.
     fn children(&self, id: NodeId, kind: EdgeKind) -> Vec<NodeId>;
+    /// Callers resolved in `context`, along incoming `ContextCalls` edges.
+    /// The ordinary context has none here: read it through `Calls`.
+    fn context_parents(&self, id: NodeId, context: &crate::ir::SemanticContextKey) -> Vec<NodeId>;
+    /// Callees resolved in `context`, along outgoing `ContextCalls` edges.
+    fn context_children(&self, id: NodeId, context: &crate::ir::SemanticContextKey) -> Vec<NodeId>;
     /// Node id for a `foo::bar` path, if the path index knows it.
     fn node_by_path(&self, path: &str) -> Option<NodeId>;
 

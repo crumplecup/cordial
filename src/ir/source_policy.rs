@@ -1,9 +1,7 @@
 //! Loader-owned file-policy evidence, including inactive source syntax.
 
-use crate::loader::SourceLoadView;
-use crate::{CordialResult, FileSnapshot};
+use crate::FileSnapshot;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 
 #[cfg(feature = "cli_layout")]
 mod cli_layout;
@@ -77,67 +75,6 @@ pub struct SourcePolicyInventory {
 }
 
 impl SourcePolicyInventory {
-    /// Collect policy facts from the loader-owned native syntax snapshots.
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourcePolicyInventory")]
-    pub(crate) fn collect(source: &SourceLoadView, crate_root: &Path) -> CordialResult<Self> {
-        let mut inventory = Self {
-            crate_root: crate_root.to_path_buf(),
-            ..Self::default()
-        };
-        for tree in crate::loader::quality_scan_trees(crate_root) {
-            let is_source = tree == crate_root.join("src");
-            if !is_source
-                && !cfg!(any(
-                    feature = "allows",
-                    feature = "glob_imports",
-                    feature = "pageantry"
-                ))
-            {
-                continue;
-            }
-            for entry in walkdir::WalkDir::new(&tree)
-                .into_iter()
-                .filter_map(Result::ok)
-                .filter(|entry| entry.file_type().is_file())
-            {
-                let path = entry.path();
-                if path.extension().is_none_or(|extension| extension != "rs") {
-                    continue;
-                }
-                if crate::loader::path_has_fixtures(path, crate_root)
-                    && !(is_source
-                        && cfg!(any(
-                            feature = "cfg_hygiene",
-                            feature = "cfg_scatter",
-                            feature = "modularity",
-                            feature = "derives"
-                        )))
-                {
-                    continue;
-                }
-                source.collect_native_file(path, |file| {
-                    inventory.collect_native_file(file, crate_root)
-                })?;
-            }
-        }
-        #[cfg(feature = "cfg_hygiene")]
-        inventory.collect_declarations(crate_root, source.workspace_root(), |path| {
-            source.input_text(path)
-        })?;
-        #[cfg(feature = "visibility")]
-        {
-            inventory.visibility = Self::collect_visibility(source, crate_root)?;
-        }
-        #[cfg(feature = "cli_layout")]
-        {
-            inventory.cli_layout =
-                Self::collect_cli_layout(source, crate_root, source.crate_name())?;
-        }
-        inventory.sort();
-        Ok(inventory)
-    }
-
     #[tracing::instrument(level = "debug", skip(self))]
     pub(crate) fn sort(&mut self) {
         #[cfg(feature = "derives")]

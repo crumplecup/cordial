@@ -152,7 +152,7 @@ impl LintOrder {
     }
 
     /// Validate `constraints` against `known_ids` and keep owned rows.
-    #[instrument(level = "debug", skip(constraints))]
+    #[instrument(level = "debug", skip(constraints), err(level = "warn"))]
     pub fn try_from(
         known_ids: &'static [&'static str],
         constraints: &[LintConstraint],

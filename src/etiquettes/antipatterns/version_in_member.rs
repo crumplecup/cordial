@@ -192,7 +192,11 @@ fn dependency_should_use_workspace(
     }
 }
 
-#[instrument(level = "debug", skip(deps, workspace_dep_names, findings))]
+#[instrument(
+    level = "debug",
+    skip(deps, workspace_dep_names, findings),
+    err(level = "warn")
+)]
 fn scan_dependency_entries(
     deps: &toml::map::Map<String, Value>,
     section_path: &str,
@@ -218,7 +222,11 @@ fn scan_dependency_entries(
     Ok(())
 }
 
-#[instrument(level = "debug", skip(table, workspace_dep_names, findings))]
+#[instrument(
+    level = "debug",
+    skip(table, workspace_dep_names, findings),
+    err(level = "warn")
+)]
 fn scan_target_dependency_tables(
     table: &toml::Table,
     manifest_rel: &Path,
@@ -245,7 +253,11 @@ fn scan_target_dependency_tables(
     Ok(())
 }
 
-#[instrument(level = "debug", skip(table, workspace_dep_names, findings))]
+#[instrument(
+    level = "debug",
+    skip(table, workspace_dep_names, findings),
+    err(level = "warn")
+)]
 fn scan_dependency_sections_in_table(
     table: &toml::Table,
     section_prefix: &str,
@@ -388,7 +400,7 @@ fn find_dependency_line(content: &str, section_path: &str, dep_name: &str) -> Op
     find_line(content, dep_name)
 }
 
-#[instrument(level = "debug", skip(file))]
+#[instrument(level = "debug", skip(file), err(level = "warn"))]
 fn version_record(
     context: String,
     file: PathBuf,
@@ -404,7 +416,7 @@ fn version_record(
         .build()
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", err(level = "warn"))]
 fn parse_manifest_table(content: &str, manifest_path: &Path) -> CordialResult<toml::Table> {
     toml::from_str(content)
         .map_err(|error| CordialError::toml_parse(manifest_path.display().to_string(), error))

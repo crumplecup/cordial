@@ -68,8 +68,6 @@ mod origin;
 mod path_inclusion;
 #[cfg(feature = "derives")]
 pub use path_inclusion::{PathInclusionFacts, PathInclusionMember, PathInclusionSource};
-#[cfg(feature = "derives")]
-pub(crate) use path_inclusion::{canonical_or, normalize};
 #[cfg(feature = "tracing")]
 mod proof_calls;
 #[cfg(feature = "tracing")]
@@ -78,6 +76,7 @@ mod query;
 #[cfg(feature = "rustdoc")]
 mod rustdoc_query;
 mod semantic;
+mod semantic_context;
 mod semantic_workspace;
 mod source_attributes;
 mod source_calls;
@@ -144,8 +143,6 @@ pub use source_attributes::{
     SourceAttributeArguments, SourceAttributedItem, SourceCrateLints, SourceFileAttributes,
     SourceInstrumentSyntax,
 };
-#[cfg(feature = "_attribute_scan")]
-pub use source_attributes::{is_cfg_test, is_gated_instrument_attr, is_instrument_attr};
 #[cfg(feature = "tracing")]
 pub use tracing_source::{
     ATTR_SOURCE_TRACING_INVENTORY, SourceTracingFunction, SourceTracingInventory,
@@ -196,6 +193,10 @@ pub use semantic::{
     ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, SemanticCall, SemanticCallTarget,
     SemanticCapability, SemanticFormattingRole, SemanticFunction, SemanticItemId,
     SemanticResultRecording, SemanticReturnContract, SemanticSnapshot, SemanticType,
+};
+pub use semantic_context::{
+    ATTR_SEMANTIC_ACTIVITY, ATTR_SEMANTIC_CONTEXT_FUNCTIONS, ATTR_SEMANTIC_CONTEXT_PLAN,
+    SemanticContextFunction, SemanticContextKey, SemanticContextPlan,
 };
 pub use semantic_workspace::{
     SemanticConfigurationInput, SemanticContextGap, SemanticCrateContext, SemanticFeatures,

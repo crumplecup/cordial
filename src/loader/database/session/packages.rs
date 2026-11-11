@@ -4,14 +4,27 @@ use crate::SemanticPackageContext;
 use ra_ap_project_model::{ProjectWorkspace, ProjectWorkspaceKind, TargetKind};
 use std::path::Path;
 
+/// Workspace members, which define the context identity.
 #[tracing::instrument(level = "debug", skip(workspace))]
 pub(super) fn collect(workspace: &ProjectWorkspace) -> Vec<SemanticPackageContext> {
+    select(workspace, true)
+}
+
+/// Dependency packages of the same Cargo graph. They are not part of the
+/// context identity, but their source is in the database and may be projected.
+#[tracing::instrument(level = "debug", skip(workspace))]
+pub(super) fn collect_external(workspace: &ProjectWorkspace) -> Vec<SemanticPackageContext> {
+    select(workspace, false)
+}
+
+#[tracing::instrument(level = "debug", skip(workspace))]
+fn select(workspace: &ProjectWorkspace, members: bool) -> Vec<SemanticPackageContext> {
     let ProjectWorkspaceKind::Cargo { cargo, .. } = &workspace.kind else {
         return Vec::new();
     };
     let mut members: Vec<_> = cargo
         .packages()
-        .filter(|package| cargo[*package].is_member)
+        .filter(|package| cargo[*package].is_member == members)
         .map(|package| {
             let package = &cargo[package];
             let mut entries: Vec<_> = package

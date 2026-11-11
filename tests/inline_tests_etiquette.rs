@@ -6,6 +6,9 @@ use cordial::{
     scan_inline_tests_rust_source,
 };
 
+#[path = "support/policy_inventory.rs"]
+mod policy_inventory;
+
 const INLINE_SRC: &str = r#"
 pub fn live() {}
 
@@ -97,6 +100,11 @@ fn inline_tests_ignore_crate_tests_directory() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("tests"))
         .into_diagnostic()
         .wrap_err("tests")?;
@@ -110,9 +118,10 @@ fn inline_tests_ignore_crate_tests_directory() -> miette::Result<()> {
     .into_diagnostic()
     .wrap_err("it")?;
 
-    let records = cordial::scan_crate_inline_tests(fixture.path())
-        .into_diagnostic()
-        .wrap_err("scan crate")?;
+    let records = policy_inventory::policy_inventory(fixture.path())
+        .wrap_err("scan crate")?
+        .inline_tests()
+        .clone();
     assert!(records.is_empty());
     Ok(())
 }
@@ -124,6 +133,11 @@ fn inline_tests_etiquette_writes_checklist() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), INLINE_SRC)
         .into_diagnostic()
         .wrap_err("write fixture")?;

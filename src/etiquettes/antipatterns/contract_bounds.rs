@@ -53,68 +53,16 @@ mod facts;
 pub(crate) use facts::ContractClause;
 mod index;
 mod native;
-pub(super) use native::collect_native;
+pub(super) use native::collect;
 pub(crate) use native::collect_payload;
 mod registry;
+mod token_tree;
+pub(super) use token_tree::shape as clause_shape;
 mod verus;
 
 pub(crate) use index::verifier_for_crate;
 pub use index::{ContractRecordDump, ContractRecordDumpBuilder};
 pub use registry::fetch_contract_records;
-
-/// Scan one crate's `src/**/*.rs` tree for the backend it's written for.
-/// Returns no findings for any other crate — this rule only applies to
-/// the three verifier crates.
-#[instrument(level = "debug", skip(registry), err(level = "warn"))]
-pub fn scan_crate_contract_bounds(
-    crate_root: &Path,
-    crate_name: &str,
-    registry: &[ContractRecordDump],
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    let source = SourceLoadView::for_standalone_scan();
-    scan_crate_contract_bounds_impl(crate_root, crate_name, registry, &source)
-}
-
-#[instrument(level = "debug", skip(registry, source), err(level = "warn"))]
-fn scan_crate_contract_bounds_impl(
-    crate_root: &Path,
-    crate_name: &str,
-    registry: &[ContractRecordDump],
-    source: &SourceLoadView,
-) -> CordialResult<Vec<AntipatternSiteRecord>> {
-    let index = index::ContractIndex::build(registry);
-    Ok(
-        collect_crate_contract_bounds(crate_root, crate_name, source, &mut Vec::new())?
-            .iter()
-            .filter_map(|clause| clause.finding(&index))
-            .collect(),
-    )
-}
-
-#[instrument(level = "debug", skip(source, snapshots), err(level = "warn"))]
-pub(super) fn collect_crate_contract_bounds(
-    crate_root: &Path,
-    crate_name: &str,
-    source: &SourceLoadView,
-    snapshots: &mut Vec<crate::FileSnapshot>,
-) -> CordialResult<Vec<ContractClause>> {
-    if verifier_for_crate(crate_name).is_none() {
-        return Ok(Vec::new());
-    }
-    let src = crate_root.join("src");
-    let paths = super::native::input_paths(crate_root, true)?;
-    let inputs: Vec<_> = paths
-        .iter()
-        .filter(|(_, path)| {
-            path.starts_with(&src) && !path.components().any(|part| part.as_os_str() == "gallery")
-        })
-        .map(|(_, path)| path.clone())
-        .collect();
-    source.collect_native_files(&inputs, |sources| {
-        let files: Vec<_> = sources.iter().map(|source| (src.clone(), source)).collect();
-        collect_native(crate_root, crate_name, &files, snapshots)
-    })
-}
 
 #[instrument(level = "debug", skip(clauses, registry))]
 pub(super) fn assess_contracts(
@@ -135,7 +83,7 @@ pub(super) fn site_context(module_prefix: &[String], leaf: &str) -> String {
     parts.join("::")
 }
 
-#[instrument(level = "debug", skip(file))]
+#[instrument(level = "debug", skip(file), err(level = "warn"))]
 pub(super) fn make_finding(
     context: String,
     file: &Path,

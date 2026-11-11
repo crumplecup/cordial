@@ -43,7 +43,7 @@ impl PartitionedErrorSiteRow {
 }
 
 /// Partition error site records.
-#[instrument(level = "debug", skip(records))]
+#[instrument(level = "debug", skip(records), err(level = "warn"))]
 pub fn partition_error_site_records(
     records: &[ErrorSiteScanRow],
     crate_name: &str,
@@ -55,7 +55,7 @@ pub fn partition_error_site_records(
 }
 
 /// Partition error site row.
-#[instrument(level = "debug", skip(finding))]
+#[instrument(level = "debug", skip(finding), err(level = "warn"))]
 pub fn partition_error_site_row(
     finding: &ErrorSiteScanRow,
     crate_name: &str,

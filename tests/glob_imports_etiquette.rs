@@ -6,6 +6,9 @@ use cordial::{
     scan_glob_imports_rust_source,
 };
 
+#[path = "support/policy_inventory.rs"]
+mod policy_inventory;
+
 const GLOB_SAMPLE: &str = r#"
 use std::collections::*;
 use std::io::{self, *};
@@ -72,6 +75,11 @@ fn glob_imports_etiquette_writes_checklist() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), GLOB_SAMPLE)
         .into_diagnostic()
         .wrap_err("write fixture")?;
@@ -111,6 +119,11 @@ fn glob_imports_in_tests_tree_count() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::create_dir_all(fixture.path().join("tests"))
         .into_diagnostic()
         .wrap_err("tests")?;
@@ -124,9 +137,10 @@ fn glob_imports_in_tests_tree_count() -> miette::Result<()> {
     .into_diagnostic()
     .wrap_err("it")?;
 
-    let records = cordial::scan_crate_glob_imports(fixture.path())
-        .into_diagnostic()
-        .wrap_err("scan crate")?;
+    let records = policy_inventory::policy_inventory(fixture.path())
+        .wrap_err("scan crate")?
+        .glob_imports()
+        .clone();
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].snippet(), "crate::helper::*");
     Ok(())

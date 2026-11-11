@@ -136,7 +136,7 @@ pub fn resolve_rustdoc_json(
 }
 
 /// Resolve rustdoc JSON, rebuilding the workspace-member cache when absent or stale.
-#[instrument(level = "debug", skip(session, target))]
+#[instrument(level = "debug", skip(session, target), err(level = "warn"))]
 pub(crate) fn resolve_or_rebuild_rustdoc_json(
     session: &dyn SessionView,
     target: &CrateTarget,

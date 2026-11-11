@@ -126,7 +126,7 @@ struct CoverageFindingArgs<'a> {
     disposition: Disposition,
 }
 
-#[instrument(level = "debug", skip(node_id, args))]
+#[instrument(level = "debug", skip(node_id, args), err(level = "warn"))]
 fn coverage_finding(
     node_id: crate::ir::NodeId,
     args: CoverageFindingArgs<'_>,

@@ -8,7 +8,9 @@ use crate::error::{CordialError, CordialResult};
 
 use crate::hooks::{EnrichView, IrEnricher, LoadContext, Loader, Probe, ProbeView};
 use crate::ir::{CrateIr, CrateView, CrateViewMut, WorkspaceIr};
-use crate::loader::{CrateTarget, LoadView, ParsedSourceSession, SourceLoadView, SourceLoader};
+#[cfg(any(feature = "derives", feature = "antipatterns"))]
+use crate::loader::SourceLoadView;
+use crate::loader::{CrateTarget, LoadView, ParsedSourceSession, SourceLoader};
 use crate::objects::Marker;
 
 use crate::HookTimings;
@@ -37,6 +39,55 @@ pub(super) struct LoadingHooks<'a> {
     loaders: &'a [&'a dyn Loader],
     enrichers: &'a [&'a dyn IrEnricher],
     probes: &'a [&'a dyn Probe],
+    /// Whether a selected etiquette reads semantic facts of cfg-gated code.
+    gated_semantics: bool,
+}
+
+/// Begin the run's source session without loading the workspace.
+///
+/// The results of a run are kept under a digest of everything that shaped them.
+/// When this run's inputs have the same digest, the cached results stand in for
+/// the analysis and the workspace is never loaded; otherwise it loads when the
+/// first target needs projecting, and the results are recorded for the next run.
+/// Gated code is analysed only when a selected etiquette reads its facts.
+#[instrument(level = "debug", skip(session, store, timings), err(level = "warn"))]
+#[hotpath::measure]
+fn begin_database(
+    session: &RuntimeSession,
+    store: &StoreLayout,
+    gated_semantics: bool,
+    timings: &mut HookTimings,
+) -> CordialResult<ParsedSourceSession> {
+    let planning = if gated_semantics {
+        crate::CfgPlanning::Automatic
+    } else {
+        crate::CfgPlanning::Explicit
+    };
+    let task = session
+        .progress()
+        .spinner("Checking for cached results".to_string());
+    let cache = timings.measure("pipeline", "result_cache_key", || {
+        let options = crate::loader::SemanticCargoOptions::default().with_cfg_planning(planning);
+        crate::run_cache::gather(&crate::run_cache::KeyRequest::new(
+            session.project_root(),
+            format!("{options:?}"),
+        ))
+        .map(|inputs| crate::run_cache::RunCache::open(store, inputs))
+    });
+    let cache = match cache {
+        Ok(cache) => Some(cache),
+        Err(error) => {
+            // Without a key nothing can be reused, but the run still works.
+            tracing::warn!(error = ?error, "cached results unavailable; analysing from scratch");
+            None
+        }
+    };
+    task.finish("Checked for cached results".to_string());
+    Ok(ParsedSourceSession::begin_deferred(
+        session.project_root(),
+        planning,
+        cache,
+    ))
 }
 
 #[instrument(
@@ -53,11 +104,12 @@ pub(super) fn load_and_probe(
     hooks: LoadingHooks<'_>,
     timings: &mut HookTimings,
 ) -> CordialResult<LoadedWorkspace> {
-    let _parsed_source_session = ParsedSourceSession::begin();
+    let parsed_source_session = begin_database(session, store, hooks.gated_semantics, timings)?;
     let LoadingHooks {
         loaders,
         enrichers,
         probes,
+        gated_semantics: _,
     } = hooks;
     let mut workspace = WorkspaceIr::default();
     #[cfg(feature = "dependency_freshness")]
@@ -139,13 +191,27 @@ pub(super) fn load_and_probe(
     #[cfg(not(feature = "impl_coverage"))]
     let _ = filter;
 
-    let progress = session.progress().bar(
-        "Loading, enriching, and probing crates".to_string(),
-        targets.len() as u64 * (loaders.len() + enrichers.len() + probes.len() + 1) as u64,
-    );
+    let progress: std::sync::Arc<dyn crate::ProgressTask> =
+        std::sync::Arc::from(session.progress().bar(
+            "Loading, enriching, and probing crates".to_string(),
+            targets.len() as u64 * (loaders.len() + enrichers.len() + probes.len() + 1) as u64,
+        ));
+    parsed_source_session.set_reporter({
+        let task = progress.clone();
+        crate::loader::Reporter::new(move |message| task.set_message(message))
+    });
     for target in targets {
-        let mut crate_ir = CrateIr::new(target.crate_name());
+        let crate_ir = if loaders.iter().any(|loader| loader.id() == SourceLoader::ID) {
+            progress.set_message(format!("Building source IR for {}", target.crate_name()));
+            timings.measure("pipeline", "source_ir", || {
+                parsed_source_session.project_target(target)
+            })?
+        } else {
+            CrateIr::new(target.crate_name())
+        };
 
+        #[cfg(feature = "rustdoc")]
+        let mut crate_ir = crate_ir;
         for loader in loaders {
             progress.set_message(format!(
                 "Loading {} with {}",
@@ -155,14 +221,6 @@ pub(super) fn load_and_probe(
             let view = timings.measure("load", loader.id(), || {
                 loader.load(LoadContext::new(session, target))
             })?;
-            if view.loader_id() == SourceLoader::ID
-                && let Some(source) = view.as_any().downcast_ref::<SourceLoadView>()
-            {
-                progress.set_message(format!("Building source IR for {}", target.crate_name()));
-                timings.measure("pipeline", "source_ir", || {
-                    source.populate_ir(&mut crate_ir)
-                })?;
-            }
             #[cfg(feature = "rustdoc")]
             if view.loader_id() == crate::RustdocLoader::ID
                 && let Some(rustdoc) = view.as_any().downcast_ref::<crate::RustdocLoadView>()
@@ -209,13 +267,15 @@ pub(super) fn load_and_probe(
             progress.inc(1);
         }
 
-        progress.set_message(format!("Caching IR for {}", target.crate_name()));
-        timings.measure("pipeline", "cache_ir", || {
-            let cached = workspace
-                .crate_ir(target.crate_name())
-                .ok_or_else(|| CordialError::crate_ir_must_exist())?;
-            cached.write_cache(&store.ir_cache_path(target.crate_name()))
-        })?;
+        if session.ir_snapshot() {
+            progress.set_message(format!("Writing the IR file for {}", target.crate_name()));
+            timings.measure("pipeline", "write_ir", || {
+                let ir = workspace
+                    .crate_ir(target.crate_name())
+                    .ok_or_else(|| CordialError::crate_ir_must_exist())?;
+                ir.write_cache(&store.ir_cache_path(target.crate_name()))
+            })?;
+        }
         progress.inc(1);
 
         let crate_view = CrateView::new(&workspace, target.crate_name().clone());

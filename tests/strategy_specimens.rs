@@ -83,7 +83,9 @@ fn unwrap_lookalike_is_a_compiling_negative_specimen() -> miette::Result<()> {
     assert!(output.status.success());
     assert_eq!(output.stdout, b"7\n");
     let ir = discover(fixture.path())?;
-    assert_functions(&ir, &["leaf", "main"])?;
+    // The lookalike method is a function in the source, so it has a node; only
+    // the free functions carry the transform contract.
+    assert_functions(&ir, &["OrdinaryValue::unwrap", "leaf", "main"])?;
     // The syntax-based lint flags this too. It is not apply authorization.
     assert_panic_sites(&ir, "leaf", 1)?;
     assert_source_snapshot(fixture.path(), &ir)?;
@@ -244,10 +246,11 @@ fn assert_source_snapshot(root: &Path, ir: &dyn IrView) -> miette::Result<()> {
         if node.kind() != &NodeKind::Item(ItemKind::Fn) {
             continue;
         }
-        let facts = ir
-            .function_source_syntax(node.id())
-            .into_diagnostic()?
-            .ok_or_else(|| miette::miette!("missing source facts"))?;
+        // Methods and nested functions have nodes but no free-function contract;
+        // every function that does carry facts must match the snapshot.
+        let Some(facts) = ir.function_source_syntax(node.id()).into_diagnostic()? else {
+            continue;
+        };
         assert_eq!(facts.source_digest(), digest);
         let range = facts.signature_range();
         assert_eq!(

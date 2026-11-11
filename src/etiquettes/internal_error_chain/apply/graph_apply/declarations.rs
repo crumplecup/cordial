@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use super::super::inventory::{ErrorEdgeEvidence, ErrorEdgeTarget, StringStorage};
 use super::Shape;
 
-mod collect;
 mod desired;
 mod native;
 mod repairs;

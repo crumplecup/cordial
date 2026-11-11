@@ -15,8 +15,8 @@ and you can add your own without forking the tool. Clippy already has a lint for
 thing to learn is cordial's plugin machinery.
 
 This series is for you if you can read Rust and have the cordial repository
-checked out. You don't need to know `syn` or `petgraph`. The posts introduce
-what they use.
+checked out. You don't need to know `petgraph` or rust-analyzer's syntax
+tree. The posts introduce what they use.
 
 ## What done looks like
 

@@ -25,6 +25,10 @@ pub enum EdgeKind {
     ErrorFlow,
     /// Resolved direct source call; absence does not prove caller closure.
     Calls,
+    /// Resolved direct source call in a non-ordinary cfg context, whose weight
+    /// names the context. `Calls` edges stay ordinary-context only, so a
+    /// reader never sees gated callers unless it asks for their context.
+    ContextCalls,
     /// Node carries this attribute.
     HasAttr,
     /// Edge or node owned by a plugin.
@@ -32,12 +36,27 @@ pub enum EdgeKind {
 }
 
 /// Weight stored at each graph edge.
-#[derive(Debug, Clone, Serialize, Deserialize, derive_new::new, derive_getters::Getters)]
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    derive_new::new,
+    derive_getters::Getters,
+    derive_setters::Setters,
+)]
+#[setters(prefix = "with_", strip_option)]
 pub struct EdgeWeight {
     /// Kind of this edge.
     #[getter(copy)]
+    #[setters(skip)]
     kind: EdgeKind,
     /// Optional edge label.
     #[new(default)]
+    #[setters(skip)]
     label: Option<String>,
+    /// Cfg context that resolved this edge; set on `ContextCalls` edges only.
+    #[new(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    context: Option<super::SemanticContextKey>,
 }

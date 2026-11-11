@@ -41,7 +41,7 @@ impl WorkspaceInternalErrorChainSummary {
 }
 
 /// Build workspace internal error chain summary.
-#[instrument(level = "debug", skip(reports))]
+#[instrument(level = "debug", skip(reports), err(level = "warn"))]
 pub fn build_workspace_internal_error_chain_summary(
     reports: &[InternalErrorChainScanReport],
 ) -> CordialResult<WorkspaceInternalErrorChainSummary> {

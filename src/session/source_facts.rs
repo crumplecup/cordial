@@ -7,7 +7,11 @@ use crate::loader::SourceLoadView;
 use crate::session::SessionView;
 
 #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
-#[tracing::instrument(level = "debug", skip(workspace, session, enrichers, probe_ids))]
+#[tracing::instrument(
+    level = "debug",
+    skip(workspace, session, enrichers, probe_ids),
+    err(level = "warn")
+)]
 pub(crate) fn prepare_workspace_proof_harness(
     workspace: &mut WorkspaceIr,
     session: &dyn SessionView,
@@ -31,7 +35,7 @@ pub(crate) fn prepare_workspace_proof_harness(
         .iter()
         .any(|id| *id == "amenable-std-scope" || id.starts_with("amenable-ext-"));
     if (needed_by_enricher || needed_by_probe) && workspace.proof_harness().is_none() {
-        let source = SourceLoadView::for_standalone_scan();
+        let source = SourceLoadView::for_session();
         let filter = crate::NamedRunFilter::all_etiquettes();
         workspace.set_proof_harness(
             crate::proof_harness::load_workspace_proof_harness_with_source(
@@ -45,7 +49,11 @@ pub(crate) fn prepare_workspace_proof_harness(
 }
 
 #[cfg(any(feature = "derives", feature = "antipatterns"))]
-#[tracing::instrument(level = "debug", skip(workspace, source, session, enrichers))]
+#[tracing::instrument(
+    level = "debug",
+    skip(workspace, source, session, enrichers),
+    err(level = "warn")
+)]
 pub(crate) fn prepare_workspace_source_facts(
     workspace: &mut WorkspaceIr,
     source: &SourceLoadView,
@@ -80,10 +88,7 @@ pub(crate) fn prepare_workspace_source_facts(
             }
         });
         if needs_path_facts && workspace.path_inclusions().is_none() {
-            workspace.set_path_inclusions(crate::loader::workspace_path_inclusions_with_source(
-                session.project_root(),
-                source,
-            )?);
+            workspace.set_path_inclusions(source.project_path_inclusions()?);
         }
     }
 
@@ -98,5 +103,7 @@ pub(crate) fn prepare_workspace_source_facts(
     }
     #[cfg(not(feature = "derives"))]
     let _ = source;
+    #[cfg(not(any(feature = "antipatterns", feature = "tracing")))]
+    let _ = session;
     Ok(())
 }

@@ -2,9 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-mod compatibility;
 mod native;
-pub(super) use compatibility::{entry_contract, has_infallible_result_syntax, result_contract};
 pub(super) use native::{
     entry_contract as native_entry_contract,
     has_infallible_result_syntax as native_core_result_syntax,

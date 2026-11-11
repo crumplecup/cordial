@@ -154,7 +154,7 @@ pub fn homecoming_row_disposition(status: FrameworkTraitStatus) -> Disposition {
     }
 }
 
-#[instrument(level = "debug", skip(findings))]
+#[instrument(level = "debug", skip(findings), err(level = "warn"))]
 pub fn framework_report_from_findings(
     findings: &[&dyn Finding],
     include_nightly: bool,

@@ -1,9 +1,11 @@
 # A shared semantic backend with Salsa and rust-analyzer
 
-**Status:** Active, 2026-11-05. The next milestone is the production
-frontend cutover: one rust-analyzer/Salsa database supplies collection and
-semantic evidence through the shared IR, and the replaced parsing ownership
-is removed. Tracing's remaining semantic work depends on this milestone.
+**Status:** Active, 2026-11-10. The production frontend cutover is done: one
+session-owned rust-analyzer/Salsa database supplies parse and collection
+evidence through the shared IR, and the `syn` frontend, parse cache,
+standalone scans and parity tests are removed. Remaining: consume the
+database's semantic facts in tracing assessment and apply, and the one
+`verus_syn` dialect parser behind `verus_ir`.
 Research and dependency compatibility checked on 2026-10-30.
 
 ## Purpose
@@ -56,12 +58,12 @@ commits and the gates below:
 - [ ] Migrate every production collector in the inventory below, including
   inactive syntax, macro islands and supported proof dialects. Collect missing
   facts in the loader; consumers read them through `IrView`.
-- [ ] Route ordinary quality, submit and apply runs through that database and
+- [x] Route ordinary quality, submit and apply runs through that database and
   its IR projection. No hook or apply planner creates a private analysis path.
 - [ ] Use the projected semantic identities and error formatting capabilities
   in production tracing assessment and apply. Remove the corresponding
   handwritten resolution as its replacement becomes authoritative.
-- [ ] Remove the compatibility AST ownership, parse cache and orphaned evidence
+- [x] Remove the compatibility AST ownership, parse cache and orphaned evidence
   paths at cutover. Classify candidate validation and code generation separately;
   they must not conceal another parse of original production inputs.
 - [ ] Demonstrate production tracing across files and one complete strategy
@@ -1578,3 +1580,119 @@ milestone; do not treat each port as a separate product destination. Continue
 implement / focused checks / build-tier submit / commit. Keep the selected
 architecture as the destination throughout; do not create another user-facing
 backend choice or extend handwritten semantic resolution.
+
+
+## Checkpoint: the `syn` frontend is gone (2026-11-10)
+
+Contract clauses (Kani, Creusot, Verus) now read rust-analyzer's token trees
+and expressions; `TokenStreamParse`, the `syn`, `proc-macro2` and `quote`
+dependencies of the default build, and the last standalone scans are removed.
+`proc-macro2` and `quote` remain only behind the optional `verus_ir` feature,
+together with `verus_syn`.
+
+Open against the milestone:
+
+- **Semantic facts in tracing.** `IrView` exposes `semantic_snapshot` and
+  `semantic_function`, but tracing assessment and apply, and `src/transform`,
+  do not read them yet; handwritten resolution remains there.
+- **Verus.** `verus_syn` is the last `syn`-family parser. Retiring it needs an
+  upstream route or a token-based design for `verus!` bodies.
+- **Cargo context.** Selected target/features/cfg, build outputs and proc
+  macros as retained context identity, with explicit unavailable evidence.
+- **Sections 3 and 4.** The cross-file panic-to-typed-error transformation
+  and the cold/warm measurements have not started.
+- **Dependencies.** `ra_ap_*` stay pinned at 0.0.358 until upstream publishes a
+  complete 0.0.362 set (exceptions are recorded in the store).
+
+Next: wire tracing assessment to the projected semantic identities, replacing
+its handwritten resolution one rule at a time.
+
+## Design: cfg contexts as diffs on the one database (2026-11-11)
+
+**Problem.** rust-analyzer resolves only the code a crate's cfg set activates.
+Proof harnesses, feature-gated modules and `cfg(not(..))` alternatives are
+inactive in the ordinary build, so they have no semantic facts there. Lints that
+must look inside cfg blocks cannot read them from the IR, and a name-keyed
+syntactic fallback is rejected: one parse, one IR, no inferior second path.
+
+**First attempt, rejected by measurement.** Merging a crate-graph variant per
+gate into the database (`CrateGraphBuilder::extend`) kept one VFS but kept every
+variant's definition maps and inference results alive. On Cordial it asked for
+43 contexts, and memory climbed past 8 GB. It also needed rust-analyzer's
+`Semantics` to analyse bodies it cannot find (it resolves a file's items in the
+first crate containing the file). It was removed.
+
+**Decision.** A context is a diff on the database's input. The workspace crates'
+`cfg_options` are changed, salsa recomputes what depends on them, the newly
+active code's facts are copied into the IR, and the next diff replaces them.
+Only one variant is resident at a time. The facts live in the IR, which is the
+rule: collect once, consume from `IrView`.
+
+- **Keys.** `SemanticContextKey` holds enabled and disabled cfg atoms (`kani`,
+  `feature="x"`); the ordinary build changes none.
+- **IR.** A function node carries `semantic_activity` (the contexts it is active
+  in, cheap for every function) and `semantic_context_functions` (full facts, only
+  where a context can differ). `EdgeKind::ContextCalls` edges record the context
+  that resolved a call; `Calls` stays ordinary-only. `IrView::active_contexts`
+  returns `Some(vec![])` for code no analysed context activates, so absence is
+  explicit; the crate's `semantic_context_plan` says whether planning completed.
+- **Which functions get full facts.** Exact, per context: a gate's composed
+  predicate is evaluated under the ordinary cfg set and the context's. A function
+  needs its own facts only if it is inactive in the ordinary build, sits inside or
+  holds a flipped gate, or mentions a name a flipped gate defines.
+- **Planning.** Every `#[cfg]` in the workspace's files is read from the parsed
+  trees and composed with its enclosing nodes' cfgs. A clause no examined state
+  satisfies asks for a context on top of the current one; examining it can reach
+  nested gates, so asking repeats to a fixed point (cap: 64 contexts).
+- **Merging.** Compatible requests share a context. A merged context is entered
+  and checked: a module declaring one name twice in one namespace (exclusive
+  alternatives) splits it in halves until each half holds. Cordial's 43 requests
+  became 1 context.
+- **Pay for use.** `Etiquette::needs_gated_semantics` (tracing says yes) decides
+  whether the loader plans contexts at all. Everyone else pays nothing.
+- **Containment.** A 1 GiB growth budget over the ordinary pass ends planning
+  with an incomplete plan, and a failure in the passes degrades to the same, so
+  extra evidence never fails an unrelated run.
+- **Instrumentation.** `cordial::metrics` events carry resident and peak memory;
+  a one-second sampler runs inside the ordinary pass, the planning scan and each
+  context; the loader says each phase through a progress reporter; every
+  projection collector has a hotpath measure.
+
+**Measured on Cordial (debug build).** Workspace load 805 MiB; ordinary pass 70 s
+and 3.0 GiB; planning scan under 1 s; one merged context 3.7 s and no further
+memory.
+
+**Known gaps, explicit in the code.** Calls inside attribute-macro-generated
+functions are marked incomplete (their ranges are expansion coordinates);
+functions declared inside another function's body get facts only in the ordinary
+context; overlapping trait impls are not detected by the duplicate-name check.
+
+**Result cache (built).** A run's analysis is kept under a digest of everything
+that shaped it, and a later run with the same digest never loads the workspace.
+
+- **Entry.** `{store}/cache/run/{digest}/` holds one compressed IR per target
+  (Cordial's is under 10 MB; the pretty-printed file it replaced was 459 MB), the
+  workspace path-inclusion facts, and the inputs. Artifacts are written
+  atomically and are each valid for their key; only the current key's entry is kept.
+- **Key.** The Cordial binary (path, size, mtime), an IR schema version, the
+  Cargo options and planning mode, `rustc -vV`, the environment variables that
+  shape the build (an allowlist, so `RUST_LOG` cannot cause a miss), and a digest
+  of every file under every local package root, which includes path dependencies
+  outside the workspace. Build directories are skipped by name and by the
+  `CACHEDIR.TAG` marker. `Cargo.lock` pins registry dependencies by checksum.
+- **Lazy load.** A run starts with an empty database and a recipe for loading
+  the real one. A hit reads the artifacts and never loads; a miss, or an artifact
+  the entry lacks, loads once and records what it computed.
+- **Miss messages.** A miss says which inputs changed since the last entry.
+- **Measured on Cordial (debug build).** Miss 2m33s; hit 41s, with no workspace
+  load and the same gate result. The remaining time on a hit is the 11.8 s IR
+  decode (`serde_json` over `Value` attributes) and the later stages.
+- **Limits.** Reuse is all-or-nothing per target: one changed file reanalyses
+  the target, because salsa's in-memory results cannot be saved. Proof-harness
+  scans still run against the empty database on a hit; they are file-level syntax
+  collection.
+
+**Remaining.** Tracing's proof-only reachability still uses the old name-keyed
+registry; it should read `ContextCalls`. `enricher/source_calls.rs` and the
+`transform/` readers of `Calls` should move to the same edges. The IR decode and
+the ordinary pass are now the dominant costs.

@@ -95,7 +95,9 @@ impl SourcePolicyInventory {
         let include_visibility = cfg!(any(feature = "visibility", feature = "cli_layout"))
             && is_source
             && !crate::loader::path_has_fixtures(file.path(), crate_root);
-        let include_modularity = cfg!(feature = "modularity") && is_source;
+        let include_modularity = cfg!(feature = "modularity")
+            && (is_source || is_test)
+            && !crate::loader::path_has_fixtures(file.path(), crate_root);
         let include_pageantry = cfg!(feature = "pageantry")
             && (is_source || is_test)
             && !crate::loader::path_has_fixtures(file.path(), crate_root);
@@ -133,8 +135,20 @@ impl SourcePolicyInventory {
         }
         #[cfg(feature = "modularity")]
         if include_modularity {
+            // A test file is a target of its own: it is sized with the modules,
+            // but its context keeps it out of the crate's module tree.
+            let context = if is_source {
+                _prefix.clone()
+            } else {
+                let relative = file.path().strip_prefix(&test_root).unwrap_or(file.path());
+                vec![format!(
+                    "{}{}",
+                    crate::etiquettes::modularity::TEST_TARGET_PREFIX,
+                    relative.with_extension("").display()
+                )]
+            };
             self.modularity
-                .extend(modularity::collect(file, crate_root, &_prefix)?);
+                .extend(modularity::collect(file, crate_root, &context)?);
         }
         #[cfg(feature = "pageantry")]
         if include_pageantry {

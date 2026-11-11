@@ -1,19 +1,20 @@
 //! Target-driven projection retains Cargo identities and complete policy inputs.
 #![cfg(all(feature = "allows", feature = "cfg_hygiene", feature = "cfg_scatter"))]
 
-use cordial::{CrateKind, IrView, QueryBuilder, RunAll, SourceDatabase, SourceSpan};
+use cordial::{
+    CrateIr, CrateKind, CrateTarget, IrView, QueryBuilder, RunAll, SourceDatabase, SourceSpan,
+};
 use miette::{IntoDiagnostic, Result};
 
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Result<()> {
-    cordial::init_cli_tracing();
-    let root = tempfile::tempdir().into_diagnostic()?;
+/// A package with a custom `[lib]` and `[[bin]]` path, a detached `src` file behind an inactive
+/// `cfg`, an integration test that allows a lint, and a malformed fixture that must be ignored.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+fn write_target_selection_workspace(root: &std::path::Path) -> Result<()> {
     for dir in ["src", "library", "cli", "tests/fixtures"] {
-        std::fs::create_dir_all(root.path().join(dir)).into_diagnostic()?;
+        std::fs::create_dir_all(root.join(dir)).into_diagnostic()?;
     }
     std::fs::write(
-        root.path().join("Cargo.toml"),
+        root.join("Cargo.toml"),
         "[package]\nname = 'target_selection'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n[lib]\npath = 'library/api.rs'\n[[bin]]\nname = 'custom_cli'\npath = 'cli/entry.rs'\n",
     ).into_diagnostic()?;
     for (path, text) in [
@@ -28,16 +29,21 @@ fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Re
         ),
         ("tests/fixtures/ignored.rs", "fn malformed( {"),
     ] {
-        std::fs::write(root.path().join(path), text).into_diagnostic()?;
+        std::fs::write(root.join(path), text).into_diagnostic()?;
     }
-    let targets = cordial::discover_crate_targets(root.path(), &RunAll).into_diagnostic()?;
-    assert_eq!(targets.len(), 1);
-    let target = &targets[0];
-    let mut database = SourceDatabase::load(root.path()).into_diagnostic()?;
-    let graph = database.project_target(target).into_diagnostic()?;
+    Ok(())
+}
+
+/// Target metadata is tied to the Cargo context that was loaded: a stale manifest identity fails.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+fn assert_stale_manifest_is_rejected(
+    database: &mut SourceDatabase,
+    target: &CrateTarget,
+    root: &std::path::Path,
+) -> Result<()> {
     let stale = target.clone().with_manifest_snapshot(Some(
         serde_json::from_value(serde_json::json!({
-            "path": root.path().join("Cargo.toml"),
+            "path": root.join("Cargo.toml"),
             "digest": ([0_u8; 32]),
         }))
         .into_diagnostic()?,
@@ -46,6 +52,12 @@ fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Re
         database.project_target(&stale).is_err(),
         "target metadata must belong to the loaded Cargo context"
     );
+    Ok(())
+}
+
+/// The projected graph keeps the Cargo target kinds, manifest identity and binary entries.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+fn assert_target_identity(graph: &CrateIr, target: &CrateTarget) -> Result<()> {
     assert_eq!(graph.crate_kinds().into_diagnostic()?, *target.kinds());
     assert!(
         graph
@@ -78,6 +90,13 @@ fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Re
         root_node.attr(cordial::ATTR_BINARY_ENTRY_PATHS),
         Some(&serde_json::to_value(target.binary_entries()).into_diagnostic()?)
     );
+    Ok(())
+}
+
+/// The semantic snapshot lists every file of the target, detached and test sources included, and
+/// the package names its custom entry points.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+fn assert_snapshot_sources(graph: &CrateIr, root: &std::path::Path) -> Result<()> {
     let snapshot = graph
         .semantic_snapshot()
         .into_diagnostic()?
@@ -88,7 +107,7 @@ fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Re
         .map(|source| {
             source
                 .path()
-                .strip_prefix(root.path())
+                .strip_prefix(root)
                 .map(std::path::Path::to_path_buf)
                 .into_diagnostic()
         })
@@ -112,52 +131,60 @@ fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Re
         .iter()
         .find(|package| package.name() == "target_selection")
         .ok_or_else(|| miette::miette!("missing package identity"))?;
-    assert_eq!(package.root(), root.path());
+    assert_eq!(package.root(), root);
     assert_eq!(
         package.source_entries(),
-        &[
-            root.path().join("cli/entry.rs"),
-            root.path().join("library/api.rs")
-        ]
+        &[root.join("cli/entry.rs"), root.join("library/api.rs")]
     );
-    #[cfg(feature = "derives")]
-    {
-        let workspace = database.project_path_inclusions().into_diagnostic()?;
-        let mut paths: Vec<_> = workspace
+    Ok(())
+}
+
+/// Path inclusion covers custom module files, and each proves its own calls.
+#[cfg(feature = "derives")]
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+fn assert_path_inclusions(database: &mut SourceDatabase, root: &std::path::Path) -> Result<()> {
+    let workspace = database.project_path_inclusions().into_diagnostic()?;
+    let mut paths: Vec<_> = workspace
+        .sources()
+        .iter()
+        .map(|source| source.snapshot().path().clone())
+        .collect();
+    paths.sort();
+    assert_eq!(
+        paths,
+        [
+            "cli/command.rs",
+            "cli/entry.rs",
+            "library/api.rs",
+            "library/child.rs",
+            "src/detached.rs"
+        ]
+        .map(|path| root.join(path))
+    );
+    #[cfg(feature = "tracing")]
+    for (file, function) in [
+        ("library/child.rs", "child::library_child"),
+        ("cli/command.rs", "command::command"),
+    ] {
+        let source = workspace
             .sources()
             .iter()
-            .map(|source| source.snapshot().path().clone())
-            .collect();
-        paths.sort();
-        assert_eq!(
-            paths,
-            [
-                "cli/command.rs",
-                "cli/entry.rs",
-                "library/api.rs",
-                "library/child.rs",
-                "src/detached.rs"
-            ]
-            .map(|path| root.path().join(path))
-        );
-        #[cfg(feature = "tracing")]
-        for (file, function) in [
-            ("library/child.rs", "child::library_child"),
-            ("cli/command.rs", "command::command"),
-        ] {
-            let source = workspace
-                .sources()
+            .find(|source| source.snapshot().path() == &root.join(file))
+            .ok_or_else(|| miette::miette!("missing custom module source"))?;
+        assert!(
+            source
+                .proof_calls()
                 .iter()
-                .find(|source| source.snapshot().path() == &root.path().join(file))
-                .ok_or_else(|| miette::miette!("missing custom module source"))?;
-            assert!(
-                source
-                    .proof_calls()
-                    .iter()
-                    .any(|call| call.qualified_name() == function)
-            );
-        }
+                .any(|call| call.qualified_name() == function)
+        );
     }
+    Ok(())
+}
+
+/// The integration test's `allow` is in the policy inventory, but its functions are not module
+/// scopes of the library, and a function behind an inactive `cfg` has no semantic facts.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+fn assert_policy_and_inactive_code(graph: &CrateIr, root: &std::path::Path) -> Result<()> {
     let policy = graph
         .source_policy_inventory()
         .into_diagnostic()?
@@ -180,7 +207,7 @@ fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Re
                 .weight()
                 .span()
                 .as_ref()
-                .is_some_and(|span| !span.file().starts_with(root.path().join("tests"))))
+                .is_some_and(|span| !span.file().starts_with(root.join("tests"))))
     );
     let inactive = graph
         .nodes_matching(
@@ -197,9 +224,20 @@ fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Re
             .into_diagnostic()?
             .is_none()
     );
+    Ok(())
+}
+
+/// Editing the integration test in the database drops its `allow` from a new projection while the
+/// file on disk is untouched.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+fn assert_edit_revises_policy_without_touching_disk(
+    database: &mut SourceDatabase,
+    target: &CrateTarget,
+    root: &std::path::Path,
+) -> Result<()> {
     database
         .change_file(
-            &root.path().join("tests/integration.rs"),
+            &root.join("tests/integration.rs"),
             "fn integration_only() {}\n".into(),
         )
         .into_diagnostic()?;
@@ -213,8 +251,28 @@ fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Re
             .is_empty()
     );
     assert_eq!(
-        std::fs::read_to_string(root.path().join("tests/integration.rs")).into_diagnostic()?,
+        std::fs::read_to_string(root.join("tests/integration.rs")).into_diagnostic()?,
         "#[allow(dead_code)] fn integration_only() {}\n"
     );
     Ok(())
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn target_selection_preserves_entries_inactive_sources_and_test_policies() -> Result<()> {
+    cordial::init_cli_tracing();
+    let root = tempfile::tempdir().into_diagnostic()?;
+    write_target_selection_workspace(root.path())?;
+    let targets = cordial::discover_crate_targets(root.path(), &RunAll).into_diagnostic()?;
+    assert_eq!(targets.len(), 1);
+    let target = &targets[0];
+    let mut database = SourceDatabase::load(root.path()).into_diagnostic()?;
+    let graph = database.project_target(target).into_diagnostic()?;
+    assert_stale_manifest_is_rejected(&mut database, target, root.path())?;
+    assert_target_identity(&graph, target)?;
+    assert_snapshot_sources(&graph, root.path())?;
+    #[cfg(feature = "derives")]
+    assert_path_inclusions(&mut database, root.path())?;
+    assert_policy_and_inactive_code(&graph, root.path())?;
+    assert_edit_revises_policy_without_touching_disk(&mut database, target, root.path())
 }

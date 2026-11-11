@@ -31,5 +31,5 @@ pub use assessor::SubscriberAssessor;
 pub use enricher::SubscriberInventoryEnricher;
 pub use probe::SubscriberSiteProbe;
 pub use reporter::{SubscriberChecklistReporter, SubscriberCsvReporter, SubscriberSummaryReporter};
-pub use scan::scan_crate_tracing_subscriber;
+pub use scan::findings_from_inventory as tracing_subscriber_findings;
 pub use types::{SubscriberRuleId, SubscriberSiteRecord};

@@ -3,6 +3,17 @@
 use crate::SemanticFeatures;
 use std::collections::BTreeMap;
 
+/// How the loader chooses the cfg contexts it analyses beside the ordinary build.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CfgPlanning {
+    /// Read the workspace's `#[cfg]` predicates and add a context for every clause
+    /// the loaded contexts leave unsatisfied, so gated code is analysed somewhere.
+    #[default]
+    Automatic,
+    /// Analyse only the contexts named in [`SemanticCargoOptions::cfg_contexts`].
+    Explicit,
+}
+
 /// One Cargo configuration for a canonical semantic session.
 /// These are driver inputs, not an alternative analysis backend.
 #[derive(Debug, Clone, Default, derive_getters::Getters, derive_setters::Setters)]
@@ -18,6 +29,17 @@ pub struct SemanticCargoOptions {
     test_cfg: bool,
     /// Explicit environment overrides. Values are never published in the IR.
     environment: BTreeMap<String, Option<String>>,
+    /// Extra cfg contexts to analyse beside the ordinary build, each enabling its
+    /// cfg flags (`kani`, `creusot`, ...) for the workspace's own packages inside
+    /// the same database. Code gated by them is inactive in the ordinary build and
+    /// has no semantic facts there. Exclusive cfgs belong in separate contexts.
+    cfg_contexts: Vec<crate::SemanticContextKey>,
+    /// Whether further contexts are planned from the workspace's cfg predicates.
+    cfg_planning: CfgPlanning,
+    /// Resident memory, in MiB, the cfg-context passes may add beyond the ordinary
+    /// pass before planning stops with an incomplete plan. 1024 when unset; 0
+    /// analyses no context at all.
+    context_memory_budget_mib: Option<u64>,
 }
 
 impl SemanticCargoOptions {

@@ -40,7 +40,6 @@ pub use enricher::CfgHygieneInventoryEnricher;
 pub use probe::CfgHygieneSiteProbe;
 pub use reporter::{CfgHygieneChecklistReporter, CfgHygieneCsvReporter, CfgHygieneSummaryReporter};
 pub use scan::{CfgNameOccurrence, scan_rust_source};
-pub use scan_crate::scan_crate_cfg_hygiene;
 pub use types::{CfgHygieneRuleId, CfgHygieneSiteRecord};
 
 use std::sync::LazyLock;

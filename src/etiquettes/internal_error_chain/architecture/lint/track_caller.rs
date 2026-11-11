@@ -12,7 +12,7 @@ use super::super::catalog::{Catalog, ConstructorRec, StructInfo};
 use super::{FindingSite, SiteClassifier};
 
 impl Catalog {
-    #[instrument(level = "debug", skip(self, findings))]
+    #[instrument(level = "debug", skip(self, findings), err(level = "warn"))]
     pub(super) fn emit_map_err_track_caller(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -44,7 +44,7 @@ impl Catalog {
         Ok(())
     }
 
-    #[instrument(level = "debug", skip(self, findings, item))]
+    #[instrument(level = "debug", skip(self, findings, item), err(level = "warn"))]
     pub(super) fn emit_track_caller(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -73,7 +73,7 @@ impl Catalog {
         Ok(())
     }
 
-    #[instrument(level = "debug", skip(self, findings))]
+    #[instrument(level = "debug", skip(self, findings), err(level = "warn"))]
     pub(super) fn emit_parent_track_caller(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -113,7 +113,7 @@ impl Catalog {
             .collect()
     }
 
-    #[instrument(level = "debug", skip(self, item))]
+    #[instrument(level = "debug", skip(self, item), err(level = "warn"))]
     fn missing_new_finding(
         &self,
         item: &StructInfo,
@@ -133,7 +133,7 @@ impl Catalog {
         )
     }
 
-    #[instrument(level = "debug", skip(self, findings, item, ctor))]
+    #[instrument(level = "debug", skip(self, findings, item, ctor), err(level = "warn"))]
     fn emit_new_track_caller_findings(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -223,7 +223,7 @@ impl Catalog {
                 }))
     }
 
-    #[instrument(level = "debug", skip(self, findings, item, ctor))]
+    #[instrument(level = "debug", skip(self, findings, item, ctor), err(level = "warn"))]
     fn emit_delegating_track_caller_findings(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,

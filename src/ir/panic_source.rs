@@ -1,8 +1,8 @@
 //! Snapshot-bound panic and proof-exemption evidence retained by the loader.
 
+use crate::FileSnapshot;
 use crate::etiquettes::panics::PanicSiteRecord;
 use crate::loader::DatabaseSource;
-use crate::{CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -62,23 +62,6 @@ impl PanicProofGraph {
             }
         }
         reachable
-    }
-}
-
-impl SourcePanics {
-    #[tracing::instrument(level = "debug", skip(source, verus), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourcePanics")]
-    pub(crate) fn collect(
-        source: &crate::loader::SourceLoadView,
-        root: &std::path::Path,
-        #[cfg(feature = "verus_ir")] verus: &crate::VerusCrateIr,
-    ) -> CordialResult<Self> {
-        crate::etiquettes::panics::collect_panic_inventory(
-            root,
-            source,
-            #[cfg(feature = "verus_ir")]
-            Some(verus),
-        )
     }
 }
 

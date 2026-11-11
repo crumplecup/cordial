@@ -2,13 +2,15 @@ use miette::{IntoDiagnostic, WrapErr};
 use std::fs;
 use std::path::PathBuf;
 
+#[path = "support/source_fixture.rs"]
+mod source_fixture;
+
 use cordial::{
     ErrorSiteKind, ErrorSiteScanRow, FOREIGN_ERROR_ATTENUATION_ETIQUETTE,
     ForeignErrorHandlingClass, ForeignErrorTypeRecord, ForeignErrorTypeReport,
-    ForeignTypeConfidence, RunAll, Session, SessionBuilder, build_error_site_partition_report,
-    build_foreign_error_attenuation_report, build_foreign_error_type_report,
-    partition_error_site_records, scan_crate_error_chain, scan_error_chain_rust_source,
-    scan_error_sites_rust_source,
+    ForeignTypeConfidence, IrView, RunAll, Session, SessionBuilder,
+    build_error_site_partition_report, build_foreign_error_attenuation_report,
+    build_foreign_error_type_report, partition_error_site_records,
 };
 
 const PRESERVED_FIXTURE: &str = r#"
@@ -65,16 +67,13 @@ fn broken_stringify() -> Result<(), UmbrellaKind> {
 "#;
 
 fn scan_sites_fixture() -> miette::Result<Vec<ErrorSiteScanRow>> {
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("preserved.rs");
-    fs::write(&file, PRESERVED_FIXTURE)
+    source_fixture::project_source(PRESERVED_FIXTURE)?
+        .source_error_sites()
         .into_diagnostic()
-        .wrap_err("write fixture")?;
-    scan_error_sites_rust_source(PRESERVED_FIXTURE, &file, fixture.path(), fixture.path())
-        .into_diagnostic()
-        .wrap_err("scan")
-        .and_then(|records| {
-            records
+        .wrap_err("error sites")
+        .and_then(|inventory| {
+            inventory
+                .records()
                 .into_iter()
                 .map(|record| {
                     ErrorSiteScanRow::builder()
@@ -121,14 +120,11 @@ fn question_mark_record(
 }
 
 fn scan_chain_fixture() -> miette::Result<Vec<cordial::ErrorChainRecord>> {
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("preserved.rs");
-    fs::write(&file, PRESERVED_FIXTURE)
+    Ok(source_fixture::project_source(PRESERVED_FIXTURE)?
+        .source_error_chains()
         .into_diagnostic()
-        .wrap_err("write fixture")?;
-    scan_error_chain_rust_source(PRESERVED_FIXTURE, &file, fixture.path(), fixture.path())
-        .into_diagnostic()
-        .wrap_err("scan")
+        .wrap_err("error chains")?
+        .records())
 }
 
 #[test]
@@ -263,6 +259,11 @@ fn foreign_error_attenuation_session_produces_csv() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), PRESERVED_FIXTURE)
         .into_diagnostic()
         .wrap_err("write fixture")?;
@@ -298,22 +299,5 @@ fn foreign_error_attenuation_session_produces_csv() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("summary")?;
     assert!(summary.contains("Preservation rate"));
-    Ok(())
-}
-
-#[test]
-fn scan_crate_error_chain_accepts_fixture_root() -> miette::Result<()> {
-    cordial::init_tracing();
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    fs::create_dir_all(fixture.path().join("src"))
-        .into_diagnostic()
-        .wrap_err("src dir")?;
-    fs::write(fixture.path().join("src/lib.rs"), PRESERVED_FIXTURE)
-        .into_diagnostic()
-        .wrap_err("write fixture")?;
-    let records = scan_crate_error_chain(fixture.path())
-        .into_diagnostic()
-        .wrap_err("scan crate")?;
-    assert!(!records.is_empty());
     Ok(())
 }

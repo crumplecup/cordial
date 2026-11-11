@@ -4,8 +4,7 @@
 use cordial::AntipatternWorkspaceFacts;
 use cordial::{
     ATTR_SOURCE_ANTIPATTERNS, AntipatternRuleId, ContractRecordDump, CrateIr, CrateTarget,
-    ErrorFieldStrategy, IrView, LoadContext, Loader, SessionBuilder, SourceAntipatterns,
-    SourceLoadView, SourceLoader, StaticRefStrategy, scan_crate_contract_bounds,
+    ErrorFieldStrategy, IrView, SourceAntipatterns, SourceDatabase, StaticRefStrategy,
 };
 use miette::{IntoDiagnostic, Result};
 use sha2::{Digest, Sha256};
@@ -18,6 +17,11 @@ fn policy_changes_replay_from_required_graph_evidence() -> Result<()> {
     let fixture = tempfile::tempdir().into_diagnostic()?;
     let root = fixture.path();
     std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
+    std::fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     std::fs::write(
         root.join("src/lib.rs"),
         include_str!("fixtures/quality/antipatterns/graph_policy.rs"),
@@ -126,16 +130,23 @@ fn registry_changes_replay_saved_contract_shapes_for_each_verifier() -> Result<(
         let fixture = tempfile::tempdir().into_diagnostic()?;
         let root = fixture.path();
         std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+        )
+        .into_diagnostic()?;
         std::fs::write(root.join("src/lib.rs"), text).into_diagnostic()?;
         let name = format!("amenable_{verifier}");
         let evidence = load(root, &name)?.source_antipatterns().into_diagnostic()?;
         let registry = registry(verifier)?;
         let mut outcomes = Vec::new();
         for records in [Vec::new(), registry] {
-            let expected = scan_crate_contract_bounds(root, &name, &records).into_diagnostic()?;
+            let none = records.is_empty();
+            let facts = AntipatternWorkspaceFacts::new(records, HashMap::new());
+            let expected = contract_rows(&evidence, &name, &facts)?;
             assert_eq!(
                 expected.len(),
-                match (verifier, records.is_empty()) {
+                match (verifier, none) {
                     ("creusot", true) => 3,
                     ("kani", true) => 3,
                     ("verus", true) => 2,
@@ -143,27 +154,14 @@ fn registry_changes_replay_saved_contract_shapes_for_each_verifier() -> Result<(
                     _ => 1,
                 }
             );
-            outcomes.push((
-                AntipatternWorkspaceFacts::new(records, HashMap::new()),
-                expected,
-            ));
+            outcomes.push((facts, expected));
         }
         let evidence: SourceAntipatterns =
             serde_json::from_value(serde_json::to_value(evidence).into_diagnostic()?)
                 .into_diagnostic()?;
         std::fs::remove_dir_all(root.join("src")).into_diagnostic()?;
         for (facts, expected) in outcomes {
-            let actual: Vec<_> = evidence
-                .assess(
-                    &name,
-                    &facts,
-                    StaticRefStrategy::String,
-                    ErrorFieldStrategy::Owned,
-                )
-                .into_diagnostic()?
-                .into_iter()
-                .filter(|row| row.rule_id() == AntipatternRuleId::UnnamedContractBound001)
-                .collect();
+            let actual = contract_rows(&evidence, &name, &facts)?;
             assert_eq!(
                 actual, expected,
                 "{verifier}: full source locations and snippets"
@@ -171,6 +169,26 @@ fn registry_changes_replay_saved_contract_shapes_for_each_verifier() -> Result<(
         }
     }
     Ok(())
+}
+
+/// The unnamed-contract-bound rows the saved evidence yields under `facts`.
+#[tracing::instrument(level = "debug", skip(evidence, facts), err(level = "warn"))]
+fn contract_rows(
+    evidence: &SourceAntipatterns,
+    name: &str,
+    facts: &AntipatternWorkspaceFacts,
+) -> Result<Vec<cordial::AntipatternSiteRecord>> {
+    Ok(evidence
+        .assess(
+            name,
+            facts,
+            StaticRefStrategy::String,
+            ErrorFieldStrategy::Owned,
+        )
+        .into_diagnostic()?
+        .into_iter()
+        .filter(|row| row.rule_id() == AntipatternRuleId::UnnamedContractBound001)
+        .collect())
 }
 
 #[tracing::instrument(level = "debug", err(level = "warn"))]
@@ -192,16 +210,9 @@ fn registry(verifier: &str) -> Result<Vec<ContractRecordDump>> {
 
 #[tracing::instrument(level = "debug", skip(root), err(level = "warn"))]
 fn load(root: &Path, name: &str) -> Result<CrateIr> {
-    let session = SessionBuilder::new(root).build();
     let target = CrateTarget::new(name, root);
-    let loaded = SourceLoader
-        .load(LoadContext::new(&session, &target))
-        .into_diagnostic()?;
-    let source = loaded
-        .as_any()
-        .downcast_ref::<SourceLoadView>()
-        .ok_or_else(|| miette::miette!("source view"))?;
-    let mut graph = CrateIr::new(name);
-    source.populate_ir(&mut graph).into_diagnostic()?;
-    Ok(graph)
+    SourceDatabase::load(root)
+        .into_diagnostic()?
+        .project_target(&target)
+        .into_diagnostic()
 }

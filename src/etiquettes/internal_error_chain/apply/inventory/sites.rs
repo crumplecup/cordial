@@ -3,9 +3,10 @@ use super::{ErrorEdgeEvidence, ErrorFromEvidence, ErrorSourceMethodEvidence, Err
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-mod compatibility;
-mod native;
+mod attributes;
+mod collect;
 mod select;
+mod signatures;
 
 /// Ordered conversion events for one required source snapshot.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, derive_new::new)]

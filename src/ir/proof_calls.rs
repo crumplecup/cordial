@@ -2,7 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 
-mod compatibility;
 mod native;
 
 /// One function's names, inherited proof markers and direct path-call keys.

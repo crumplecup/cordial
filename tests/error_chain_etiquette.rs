@@ -1,10 +1,11 @@
 use miette::{IntoDiagnostic, WrapErr};
 use std::fs;
-use std::path::Path;
+
+#[path = "support/source_fixture.rs"]
+mod source_fixture;
 
 use cordial::{
-    ERROR_CHAIN_ETIQUETTE, ErrorChainProbeId, RunAll, Session, SessionBuilder, probe_counts,
-    scan_error_chain_rust_source,
+    ERROR_CHAIN_ETIQUETTE, ErrorChainProbeId, IrView, RunAll, Session, SessionBuilder, probe_counts,
 };
 
 const PRESERVED_FIXTURE: &str = r#"
@@ -90,14 +91,11 @@ fn broken_stringify() -> Result<(), UmbrellaKind> {
 "#;
 
 fn scan_fixture() -> miette::Result<Vec<cordial::ErrorChainRecord>> {
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("preserved.rs");
-    fs::write(&file, PRESERVED_FIXTURE)
+    Ok(source_fixture::project_source(PRESERVED_FIXTURE)?
+        .source_error_chains()
         .into_diagnostic()
-        .wrap_err("write fixture")?;
-    scan_error_chain_rust_source(PRESERVED_FIXTURE, &file, fixture.path(), fixture.path())
-        .into_diagnostic()
-        .wrap_err("scan")
+        .wrap_err("error chains")?
+        .records())
 }
 
 #[test]
@@ -183,6 +181,11 @@ fn session_produces_error_chain_preserved_csv() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), PRESERVED_FIXTURE)
         .into_diagnostic()
         .wrap_err("write fixture")?;
@@ -233,20 +236,5 @@ fn probe_counts_aggregate_fixture_rules() -> miette::Result<()> {
     assert_eq!(counts.from_bridge(), 1);
     assert!(counts.preserved_propagation() >= 5);
     assert!(counts.infrastructure() >= 2);
-    Ok(())
-}
-
-#[test]
-fn scan_rust_source_accepts_relative_paths() -> miette::Result<()> {
-    cordial::init_tracing();
-    let findings = scan_error_chain_rust_source(
-        PRESERVED_FIXTURE,
-        Path::new("src/lib.rs"),
-        Path::new("src"),
-        Path::new("."),
-    )
-    .into_diagnostic()
-    .wrap_err("scan")?;
-    assert!(!findings.is_empty());
     Ok(())
 }

@@ -26,7 +26,7 @@ fn dependency_freshness_cache_path(store_root: &Path) -> PathBuf {
         .join(DEPENDENCY_FRESHNESS_CACHE_FILE)
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", err(level = "warn"))]
 fn freshness_cache_index(store_root: &Path) -> CordialResult<FreshnessIndex> {
     let path = dependency_freshness_cache_path(store_root);
     if !path.is_file() {
@@ -48,7 +48,7 @@ fn freshness_cache_index(store_root: &Path) -> CordialResult<FreshnessIndex> {
     Ok(out)
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", err(level = "warn"))]
 pub(super) fn freshness_index(
     project_root: &Path,
     store_root: Option<&Path>,
@@ -62,7 +62,7 @@ pub(super) fn freshness_index(
     cargo_update_dry_run_freshness_index(project_root)
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", err(level = "warn"))]
 fn cargo_update_dry_run_freshness_index(project_root: &Path) -> CordialResult<FreshnessIndex> {
     let output = Command::new("cargo")
         .current_dir(project_root)

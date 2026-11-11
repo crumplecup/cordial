@@ -4,7 +4,6 @@ use crate::config::ErrorFieldStrategy;
 use crate::etiquettes::internal_error_chain::{
     ErrorArchitectureCatalog, InternalErrorComplianceFinding,
 };
-use crate::loader::SourceLoadView;
 use crate::{CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -22,29 +21,6 @@ pub struct SourceErrorArchitecture {
 }
 
 impl SourceErrorArchitecture {
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourceErrorArchitecture")]
-    pub(crate) fn collect(
-        source: &SourceLoadView,
-        root: &Path,
-        crate_name: &str,
-    ) -> CordialResult<Self> {
-        let mut paths = Vec::new();
-        crate::etiquettes::internal_error_chain::for_each_shared_src_rust_file(
-            source,
-            root,
-            |path, _| {
-                paths.push(path.to_path_buf());
-                Ok(())
-            },
-        )?;
-        Self::collect_with(root, crate_name, &paths, |catalog, path, tree| {
-            let file = source.parsed_file(path, "source-error-architecture")?;
-            catalog.collect(&file, tree)?;
-            Ok(FileSnapshot::new(path.to_path_buf(), file.source_digest()))
-        })
-    }
-
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
     pub(crate) fn collect_with(
         root: &Path,

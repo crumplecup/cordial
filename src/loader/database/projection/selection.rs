@@ -18,6 +18,7 @@ impl SourceDatabase {
         let package = context
             .packages()
             .iter()
+            .chain(&self.external_packages)
             .find(|package| package.root() == &root)
             .ok_or_else(|| crate::CordialError::not_found(root.clone()))?;
         let graph = self.package_sources(package);
@@ -28,6 +29,7 @@ impl SourceDatabase {
                 && !cfg!(any(
                     feature = "allows",
                     feature = "glob_imports",
+                    feature = "modularity",
                     feature = "pageantry"
                 ))
             {
@@ -57,6 +59,7 @@ impl SourceDatabase {
     /// Union policy scan roots with source modules selected by Cargo entry
     /// identities. Semantic module lookup reuses this database's canonical tree.
     #[tracing::instrument(level = "debug", skip(self, package))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn package_sources(
         &self,
         package: &crate::SemanticPackageContext,

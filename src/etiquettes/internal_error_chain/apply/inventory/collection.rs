@@ -21,7 +21,7 @@ use crate::etiquettes::internal_error_chain::apply::initializers::{
 };
 
 /// Return one conversion unit and declaration line per candidate field.
-#[instrument(level = "debug", skip(files, declarations))]
+#[instrument(level = "debug", skip(files, declarations), err(level = "warn"))]
 pub(super) fn collect_conversion_units(
     files: &[FileSnapshot],
     declarations: &CrateTypeIndex,

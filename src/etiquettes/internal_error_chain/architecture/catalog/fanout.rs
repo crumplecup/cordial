@@ -1,13 +1,11 @@
-//! Syntactic facts for one-hop Kind-variant fan-out detection.
+//! Kind-variant fan-out facts: the wrapper and call records, and their extraction
+//! from literal calls and one-hop string wrappers in canonical syntax.
 
-use std::path::PathBuf;
-
-use crate::loader::{SharedMacroSyntax, SharedParsedFile};
+use super::syntax;
+use crate::loader::DatabaseMacroSyntax;
+use ra_ap_syntax::ast::{self, HasArgList, HasGenericArgs, HasName};
 use serde::{Deserialize, Serialize};
-use syn::{
-    Expr, FnArg, GenericArgument, Lit, Pat, PathArguments, ReturnType, Signature, Stmt, Type,
-};
-use tracing::instrument;
+use std::path::PathBuf;
 
 #[derive(
     Debug,
@@ -58,212 +56,157 @@ pub(crate) struct FanoutCall {
     literal: String,
 }
 
-#[instrument(level = "trace", skip(sig, block))]
-pub(super) fn wrapper_target(sig: &Signature, block: &syn::Block) -> Option<FanoutTarget> {
-    if matches!(sig.output, ReturnType::Default) || sig.inputs.len() != 1 || block.stmts.len() != 1
-    {
+#[tracing::instrument(level = "trace", skip(function))]
+pub(super) fn wrapper(function: &ast::Fn) -> Option<FanoutTarget> {
+    function.ret_type()?;
+    let params = function.param_list()?;
+    if params.self_param().is_some() {
         return None;
     }
-    let FnArg::Typed(input) = sig.inputs.first()? else {
-        return None;
-    };
-    if !is_string_input(&input.ty) {
+    let mut params = params.params();
+    let param = params.next()?;
+    if params.next().is_some() || !string_input(&param.ty()?) {
         return None;
     }
-    let Pat::Ident(param) = input.pat.as_ref() else {
+    let ast::Pat::IdentPat(param) = param.pat()? else {
         return None;
     };
-    let Stmt::Expr(expr, None) = block.stmts.first()? else {
+    let name = param.name()?;
+    let block = function.body()?.stmt_list()?;
+    if block.statements().next().is_some() {
         return None;
-    };
-    forwarded_target(expr, &param.ident.to_string())
+    }
+    forwarded(&block.tail_expr()?, name.text())
 }
-
-#[instrument(level = "trace", skip(ty))]
-fn is_string_input(ty: &Type) -> bool {
+#[tracing::instrument(level = "trace", skip(ty))]
+fn string_input(ty: &ast::Type) -> bool {
     match ty {
-        Type::Path(path) => path.path.segments.last().is_some_and(|seg| seg.ident == "String"),
-        Type::Reference(reference) => matches!(reference.elem.as_ref(), Type::Path(path) if path.path.is_ident("str")),
-        Type::ImplTrait(bounds) => bounds.bounds.iter().any(|bound| {
-            let syn::TypeParamBound::Trait(bound) = bound else { return false };
-            let Some(seg) = bound.path.segments.last() else { return false };
-            if seg.ident != "Into" { return false; }
-            let PathArguments::AngleBracketed(args) = &seg.arguments else { return false; };
-            args.args.iter().any(|arg| matches!(arg, GenericArgument::Type(Type::Path(path)) if path.path.is_ident("String")))
-        }),
+        ast::Type::PathType(t) => t
+            .path()
+            .and_then(|p| p.segment())
+            .and_then(|s| s.name_ref())
+            .is_some_and(|n| n.text() == "String"),
+        ast::Type::RefType(t) => {
+            t.ty().and_then(|t| syntax::simple_type(&t)).as_deref() == Some("str")
+        }
+        ast::Type::ImplTraitType(t) => t
+            .type_bound_list()
+            .into_iter()
+            .flat_map(|l| l.bounds())
+            .any(|bound| {
+                let Some(ast::Type::PathType(ty)) = bound.ty() else {
+                    return false;
+                };
+                let Some(segment) = ty.path().and_then(|p| p.segment()) else {
+                    return false;
+                };
+                segment.name_ref().is_some_and(|n| n.text() == "Into")
+                    && segment.generic_arg_list().is_some_and(|args| {
+                        args.generic_args().any(|arg| {
+                            let ast::GenericArg::TypeArg(arg) = arg else {
+                                return false;
+                            };
+                            arg.ty().and_then(|ty| syntax::simple_type(&ty)).as_deref()
+                                == Some("String")
+                        })
+                    })
+            }),
         _ => false,
     }
 }
-
-#[instrument(level = "trace", skip(expr))]
-fn forwarded_target(expr: &Expr, param: &str) -> Option<FanoutTarget> {
-    let Expr::Call(call) = peel(expr) else {
+#[tracing::instrument(level = "trace", skip(expr))]
+fn forwarded(expr: &ast::Expr, param: &str) -> Option<FanoutTarget> {
+    let ast::Expr::CallExpr(call) = syntax::peel(expr.clone()) else {
         return None;
     };
-    if call.args.len() != 1 {
-        return None;
-    }
-    let path = call_path(&call.func)?;
-    let pair = last_two(path);
-    let arg = call.args.first()?;
-    if let Some((name, owner)) = pair
-        && name == "new"
-        && owner.to_string().ends_with("Source")
+    let arg = syntax::one_arg(&call)?;
+    let (owner, name) = syntax::callee(&call.expr()?)?;
+    if name == "new"
+        && let Some(owner) = owner.as_ref().filter(|o| o.ends_with("Source"))
     {
-        return path_is_ident(arg, param).then(|| FanoutTarget::new(None, None, owner.to_string()));
+        let ast::Expr::PathExpr(path) = syntax::peel(arg) else {
+            return None;
+        };
+        return (path.path().and_then(|p| syntax::simple_path(&p)).as_deref() == Some(param))
+            .then(|| FanoutTarget::new(None, None, owner.clone()));
     }
-    let target = forwarded_target(arg, param)?;
-    if let Some((variant, kind)) = pair
-        && kind.to_string().ends_with("Kind")
-    {
+    let target = forwarded(&arg, param)?;
+    if let Some(kind) = owner.filter(|o| o.ends_with("Kind")) {
         if target.kind().is_some() {
             return None;
         }
         return Some(FanoutTarget::new(
-            Some(kind.to_string()),
-            Some(variant.to_string()),
+            Some(kind),
+            Some(name),
             target.source().clone(),
         ));
     }
     Some(target)
 }
-
-#[instrument(level = "trace", skip(call, input))]
-pub(super) fn direct_target(
-    call: &syn::ExprCall,
-    input: &SharedParsedFile,
+#[tracing::instrument(level = "trace", skip(call, macros))]
+pub(super) fn direct(
+    call: &ast::CallExpr,
+    macros: &DatabaseMacroSyntax,
+    kind: bool,
 ) -> Option<(FanoutTarget, String)> {
-    if call.args.len() != 1 {
+    let arg = syntax::one_arg(call)?;
+    let (owner, name) = syntax::callee(&call.expr()?)?;
+    let owner = owner?;
+    if !kind {
+        return (name == "new" && owner.ends_with("Source"))
+            .then(|| literal(&arg, macros).map(|l| (FanoutTarget::new(None, None, owner), l)))
+            .flatten();
+    }
+    if !owner.ends_with("Kind") {
         return None;
     }
-    let path = call_path(&call.func)?;
-    let (variant, kind) = last_two(path)?;
-    if !kind.to_string().ends_with("Kind") {
-        return None;
-    }
-    let Expr::Call(source_call) = peel(call.args.first()?) else {
+    let ast::Expr::CallExpr(source) = syntax::peel(arg) else {
         return None;
     };
-    if source_call.args.len() != 1 {
+    let (source_owner, source_name) = syntax::callee(&source.expr()?)?;
+    let source_owner = source_owner?;
+    if source_name != "new" || !source_owner.ends_with("Source") {
         return None;
     }
-    let source_path = call_path(&source_call.func)?;
-    let (name, source) = last_two(source_path)?;
-    if name != "new" || !source.to_string().ends_with("Source") {
-        return None;
-    }
-    let literal = literal_string(source_call.args.first()?, input)?;
     Some((
-        FanoutTarget::new(
-            Some(kind.to_string()),
-            Some(variant.to_string()),
-            source.to_string(),
-        ),
-        literal,
+        FanoutTarget::new(Some(owner), Some(name), source_owner),
+        literal(&syntax::one_arg(&source)?, macros)?,
     ))
 }
-
-#[instrument(level = "trace", skip(call, input))]
-pub(super) fn direct_source_target(
-    call: &syn::ExprCall,
-    input: &SharedParsedFile,
-) -> Option<(FanoutTarget, String)> {
-    if call.args.len() != 1 {
-        return None;
-    }
-    let path = call_path(&call.func)?;
-    let (name, source) = last_two(path)?;
-    if name != "new" || !source.to_string().ends_with("Source") {
-        return None;
-    }
-    let literal = literal_string(call.args.first()?, input)?;
-    Some((FanoutTarget::new(None, None, source.to_string()), literal))
-}
-
-#[instrument(level = "trace", skip(expr, source))]
-pub(super) fn literal_string(expr: &Expr, source: &SharedParsedFile) -> Option<String> {
-    match peel(expr) {
-        Expr::Lit(lit) => match &lit.lit {
-            Lit::Str(value) => Some(value.value()),
-            _ => None,
-        },
-        Expr::MethodCall(call)
-            if call.args.is_empty()
-                && (call.method == "to_owned"
-                    || call.method == "into"
-                    || call.method == "to_string") =>
+#[tracing::instrument(level = "trace", skip(expr, macros))]
+pub(super) fn literal(expr: &ast::Expr, macros: &DatabaseMacroSyntax) -> Option<String> {
+    match syntax::peel(expr.clone()) {
+        ast::Expr::Literal(l) => string(&l),
+        ast::Expr::MethodCallExpr(call)
+            if call.arg_list()?.args().next().is_none()
+                && call
+                    .name_ref()
+                    .is_some_and(|n| matches!(n.text(), "to_owned" | "into" | "to_string")) =>
         {
-            literal_string(&call.receiver, source)
+            literal(&call.receiver()?, macros)
         }
-        // `format!("...", data)` is still one real call site worth
-        // counting for fan-out, not a reason to drop the call from
-        // consideration entirely -- its template is the distinguishing
-        // text, same role a bare literal plays above. Interpolated
-        // runtime data never changes which call site produced it.
-        Expr::Macro(mac)
-            if mac
-                .mac
-                .path
-                .segments
-                .last()
-                .is_some_and(|segment| segment.ident == "format") =>
-        {
-            let SharedMacroSyntax::Expressions(args) = source.macro_syntax(&mac.mac)? else {
+        ast::Expr::MacroExpr(m) => {
+            let invocation = m.macro_call()?;
+            if invocation
+                .path()
+                .and_then(|p| p.segment())
+                .and_then(|s| s.name_ref())
+                .is_none_or(|n| n.text() != "format")
+            {
+                return None;
+            }
+            let ast::Expr::Literal(l) = macros.arguments(&invocation).first()? else {
                 return None;
             };
-            match args.first()? {
-                Expr::Lit(lit) => match &lit.lit {
-                    Lit::Str(value) => Some(value.value()),
-                    _ => None,
-                },
-                _ => None,
-            }
+            string(l)
         }
         _ => None,
     }
 }
-
-/// The owning type (`None` for a free function) and name of a call's
-/// callee, so `AmenableError::invariant(...)` resolves the same way a
-/// wrapper constructor defined on that type does -- matching by name
-/// alone, the way `call_name` used to, silently rejected every
-/// qualified associated-function call before it even reached the
-/// wrapper lookup.
-#[instrument(level = "trace", skip(expr))]
-pub(super) fn call_owner_and_name(expr: &Expr) -> Option<(Option<String>, String)> {
-    let path = call_path(expr)?;
-    let mut segments = path.segments.iter().rev();
-    let name = segments.next()?.ident.to_string();
-    let owner = segments.next().map(|segment| segment.ident.to_string());
-    Some((owner, name))
-}
-
-#[instrument(level = "trace", skip(expr))]
-fn call_path(expr: &Expr) -> Option<&syn::Path> {
-    let Expr::Path(path) = peel(expr) else {
+#[tracing::instrument(level = "trace", skip(literal))]
+fn string(literal: &ast::Literal) -> Option<String> {
+    let ast::LiteralKind::String(s) = literal.kind() else {
         return None;
     };
-    Some(&path.path)
-}
-
-#[instrument(level = "trace", skip(path))]
-fn last_two(path: &syn::Path) -> Option<(&syn::Ident, &syn::Ident)> {
-    let mut segments = path.segments.iter().rev();
-    Some((&segments.next()?.ident, &segments.next()?.ident))
-}
-
-#[instrument(level = "trace", skip(expr))]
-fn path_is_ident(expr: &Expr, ident: &str) -> bool {
-    matches!(peel(expr), Expr::Path(path) if path.path.is_ident(ident))
-}
-
-#[instrument(level = "trace", skip(expr))]
-fn peel(mut expr: &Expr) -> &Expr {
-    loop {
-        expr = match expr {
-            Expr::Paren(paren) => &paren.expr,
-            Expr::Group(group) => &group.expr,
-            _ => return expr,
-        };
-    }
+    s.value().ok().map(|s| s.into_owned())
 }

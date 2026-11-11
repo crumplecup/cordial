@@ -13,7 +13,11 @@ use super::{
     Edit, ErrorConversionUnit, ErrorFieldApplyBlocker, ErrorFieldApplyBlockerReason, FilePlan,
 };
 
-#[instrument(level = "debug", skip(file, strategy, ir_units, graphs))]
+#[instrument(
+    level = "debug",
+    skip(file, strategy, ir_units, graphs),
+    err(level = "warn")
+)]
 pub(super) fn patch_file(
     file: &SourceEditView,
     strategy: ErrorFieldStrategy,
@@ -183,7 +187,11 @@ pub(super) fn patch_file(
     apply_planned_edits(file, edits, converted, blockers, pending, units, dry_run)
 }
 
-#[instrument(level = "debug", skip(file, edits, blockers, pending, units))]
+#[instrument(
+    level = "debug",
+    skip(file, edits, blockers, pending, units),
+    err(level = "warn")
+)]
 fn apply_planned_edits(
     file: &SourceEditView,
     mut edits: Vec<Edit>,

@@ -14,7 +14,7 @@ pub fn render_quality_report_markdown(report: &QualityReport) -> CordialResult<S
     render_quality_report_with_coverage(report, None)
 }
 
-#[instrument(level = "debug", skip(report, coverage))]
+#[instrument(level = "debug", skip(report, coverage), err(level = "warn"))]
 pub(super) fn render_quality_report_with_coverage(
     report: &QualityReport,
     coverage: Option<&ReportRunCoverage>,
@@ -98,7 +98,7 @@ pub fn render_quality_workspace_summary_markdown(report: &QualityReport) -> Cord
     render_quality_workspace_summary_with_coverage(report, None)
 }
 
-#[instrument(level = "debug", skip(report, coverage))]
+#[instrument(level = "debug", skip(report, coverage), err(level = "warn"))]
 pub(super) fn render_quality_workspace_summary_with_coverage(
     report: &QualityReport,
     coverage: Option<&ReportRunCoverage>,

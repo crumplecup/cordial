@@ -41,20 +41,18 @@ pub(crate) use call_graph::CallGraphFacts;
 pub(crate) use call_graph::workspace_call_graph;
 mod classify;
 mod delta;
-mod display_types;
 mod enricher;
 mod present;
+mod recordable;
 pub(crate) use present::PresentInstrument;
 pub(crate) use types::InstrumentLevel;
 mod print;
 mod probe;
 mod quality_area;
 mod recipe;
-mod recordable;
 pub(crate) use recordable::RECORDABLE_IDENTS;
 mod reporter;
 mod scan;
-pub(crate) use scan::{self_type_key, syn_path_label, type_label};
 mod subscriber;
 mod types;
 pub(crate) use classify::{BodyPeek, ReceiverShape, classify_complexity, classify_role};
@@ -68,16 +66,15 @@ pub use apply::{
 };
 
 pub use assessor::TracingAssessor;
-pub use boundary::{BoundaryRuleId, BoundarySiteRecord, scan_crate_tracing_boundary};
+pub use boundary::{BoundaryRuleId, BoundarySiteRecord, tracing_boundary_findings};
 pub use enricher::FunctionInventoryEnricher;
 pub use print::{
-    PrintRuleId, PrintSiteRecord, scan_crate_tracing_print,
-    scan_rust_source as scan_tracing_print_rust_source,
+    PrintRuleId, PrintSiteRecord, scan_rust_source as scan_tracing_print_rust_source,
+    tracing_print_findings,
 };
 pub use probe::{ForbiddenInstrumentProbe, MissingInstrumentProbe, RecipeDeltaProbe};
 pub use reporter::{TracingChecklistReporter, TracingCsvReporter, TracingSummaryReporter};
-pub use scan::scan_rust_source;
-pub use subscriber::{SubscriberRuleId, SubscriberSiteRecord, scan_crate_tracing_subscriber};
+pub use subscriber::{SubscriberRuleId, SubscriberSiteRecord, tracing_subscriber_findings};
 
 use std::sync::LazyLock;
 
@@ -269,7 +266,8 @@ pub static TRACING_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|
                     ),
                 ],
             ),
-        ),
+        )
+        .with_gated_semantics(),
         Some(
             QualityAreaSpec::new(
                 "Tracing instrumentation",

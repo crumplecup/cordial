@@ -7,6 +7,9 @@ use cordial::{
     scan_allows_rust_source,
 };
 
+#[path = "support/policy_inventory.rs"]
+mod policy_inventory;
+
 const ALLOW_ATTRS: &str = r#"#![allow(dead_code)]
 
 #[allow(clippy::too_many_arguments)]
@@ -34,9 +37,10 @@ fn allows_workspace_fixture_has_four_sites() -> miette::Result<()> {
     cordial::init_tracing();
     let workspace =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/parity/workspaces/allow_attrs");
-    let records = cordial::scan_crate_allows(&workspace)
-        .into_diagnostic()
-        .wrap_err("scan workspace")?;
+    let records = policy_inventory::policy_inventory(&workspace)
+        .wrap_err("scan workspace")?
+        .allows()
+        .clone();
     assert_eq!(records.len(), 4);
     Ok(())
 }
@@ -48,6 +52,11 @@ fn allows_etiquette_detects_allow_attributes() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), ALLOW_ATTRS)
         .into_diagnostic()
         .wrap_err("write fixture")?;
@@ -224,6 +233,11 @@ fn allows_etiquette_emits_verus_reason_finding() -> miette::Result<()> {
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(
         fixture.path().join("src/lib.rs"),
         VERUS_PRELUDE_WITHOUT_REASON,

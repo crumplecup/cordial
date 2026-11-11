@@ -1,75 +1,10 @@
 //! Classify a function into [`FunctionRole`] and [`FunctionComplexity`].
 
-use syn::spanned::Spanned;
-use syn::visit::Visit;
-use syn::{
-    Block, ExprIf, ExprMatch, FnArg, Receiver, ReceiverKind, ReturnType, Signature, Stmt, Type,
-    TypePath,
-};
-
 use crate::config::ModularityThresholds;
-use crate::error::CordialResult;
 
-use super::display_types::DisplayTypeFacts;
-use super::recordable::{
-    pattern_bindings, return_type_borrowed, return_type_unrecordable, unrecordable_params,
-};
-use super::types::{FnContext, FunctionComplexity, FunctionKind, FunctionRole};
+use super::types::{FunctionComplexity, FunctionKind, FunctionRole};
 
 use tracing::instrument;
-/// Classify `ident` (unqualified) from its signature, kind, and optional body.
-#[instrument(
-    level = "debug",
-    skip(sig, kind, body, display_types),
-    err(level = "warn")
-)]
-pub fn classify(
-    ident: &str,
-    sig: &Signature,
-    kind: FunctionKind,
-    body: Option<&Block>,
-    display_types: &DisplayTypeFacts,
-) -> CordialResult<FnContext> {
-    let peek = body.map(peek_body).unwrap_or_default();
-    let body_lines = body.map(block_lines).unwrap_or(1);
-    let returns_result = returns_result_ty(sig);
-    let returns_self = returns_self_ty(sig);
-    let returns_bool = returns_named(sig, "bool");
-    let role = classify_role(
-        ident,
-        &ReceiverShape {
-            immutable_reference: sig.receiver().is_some_and(receiver_is_immutable_reference),
-            mutable_value: sig.receiver().is_some_and(receiver_is_mut_value),
-            input_count: sig.inputs.len(),
-        },
-        kind,
-        &peek,
-        returns_self,
-        returns_bool,
-        returns_result,
-    );
-    let complexity = classify_complexity(body_lines, returns_result, &peek);
-    let err_is_displayable = returns_result && err_type_is_displayable(sig, display_types);
-    FnContext::builder()
-        .role(role)
-        .complexity(complexity)
-        .param_names(param_names(sig))
-        .unrecordable_params(unrecordable_params(sig))
-        .returns_result(returns_result)
-        .return_unrecordable(return_type_unrecordable(sig))
-        .return_borrowed(return_type_borrowed(sig))
-        .err_is_displayable(err_is_displayable)
-        .has_error_path_event(peek.has_error_path_event)
-        .build()
-}
-
-#[instrument(level = "debug", skip(sig, display_types))]
-fn err_type_is_displayable(sig: &Signature, display_types: &DisplayTypeFacts) -> bool {
-    match &sig.output {
-        ReturnType::Type(_, ty) => display_types.err_type_is_displayable(ty),
-        ReturnType::Default => false,
-    }
-}
 
 #[instrument(level = "debug", skip(receiver, kind, peek))]
 pub(crate) fn classify_role(
@@ -165,16 +100,6 @@ fn is_setter(ident: &str, receiver: &ReceiverShape) -> bool {
         || (receiver.mutable_value && receiver.input_count >= 2)
 }
 
-#[instrument(level = "trace", skip(recv), ret)]
-fn receiver_is_immutable_reference(recv: &Receiver) -> bool {
-    matches!(recv.kind, ReceiverKind::Reference(_, _, None)) && recv.mutability.is_none()
-}
-
-#[instrument(level = "trace", skip(recv), ret)]
-fn receiver_is_mut_value(recv: &Receiver) -> bool {
-    matches!(recv.kind, ReceiverKind::Value) && recv.mutability.is_some()
-}
-
 #[instrument(level = "trace", ret)]
 fn is_predicate(ident: &str, returns_bool: bool) -> bool {
     returns_bool
@@ -208,105 +133,6 @@ pub(crate) fn classify_complexity(
     FunctionComplexity::Linear
 }
 
-#[instrument(level = "debug", skip(sig))]
-fn param_names(sig: &Signature) -> Vec<String> {
-    sig.inputs
-        .iter()
-        .flat_map(|arg| match arg {
-            FnArg::Receiver(_) => vec!["self".to_string()],
-            FnArg::Typed(pat) => pattern_bindings(&pat.pat, Some(&pat.ty))
-                .into_iter()
-                .map(|(name, _)| name)
-                .collect(),
-        })
-        .collect()
-}
-
-#[instrument(level = "debug", skip(sig))]
-fn returns_named(sig: &Signature, name: &str) -> bool {
-    match &sig.output {
-        ReturnType::Type(_, ty) => type_path_contains(ty, name),
-        ReturnType::Default => false,
-    }
-}
-
-#[instrument(level = "debug", skip(sig))]
-fn returns_result_ty(sig: &Signature) -> bool {
-    match &sig.output {
-        ReturnType::Type(_, ty) => type_is_result(ty),
-        ReturnType::Default => false,
-    }
-}
-
-#[instrument(level = "debug", skip(ty))]
-fn type_is_result(ty: &Type) -> bool {
-    match ty {
-        Type::Path(TypePath { path, .. }) => path.segments.last().is_some_and(|segment| {
-            let ident = segment.ident.to_string();
-            ident == "Result" || ident.ends_with("Result")
-        }),
-        Type::Reference(reference) => type_is_result(&reference.elem),
-        Type::Paren(paren) => type_is_result(&paren.elem),
-        Type::Group(group) => type_is_result(&group.elem),
-        _ => false,
-    }
-}
-
-#[instrument(level = "debug", skip(sig))]
-fn returns_self_ty(sig: &Signature) -> bool {
-    match &sig.output {
-        ReturnType::Type(_, ty) => type_is_self(ty),
-        ReturnType::Default => false,
-    }
-}
-
-#[instrument(level = "debug", skip(ty))]
-fn type_is_self(ty: &Type) -> bool {
-    match ty {
-        Type::Path(TypePath { path, .. }) => path.is_ident("Self"),
-        Type::Reference(reference) => type_is_self(&reference.elem),
-        Type::Paren(paren) => type_is_self(&paren.elem),
-        Type::Group(group) => type_is_self(&group.elem),
-        _ => false,
-    }
-}
-
-#[instrument(level = "debug", skip(ty))]
-fn type_path_contains(ty: &Type, name: &str) -> bool {
-    match ty {
-        Type::Path(TypePath { path, .. }) => path
-            .segments
-            .iter()
-            .any(|segment| segment.ident == name || type_args_contain(&segment.arguments, name)),
-        Type::Reference(reference) => type_path_contains(&reference.elem, name),
-        Type::Paren(paren) => type_path_contains(&paren.elem, name),
-        Type::Group(group) => type_path_contains(&group.elem, name),
-        Type::Tuple(tuple) => tuple
-            .elems
-            .iter()
-            .any(|inner| type_path_contains(inner, name)),
-        _ => false,
-    }
-}
-
-#[instrument(level = "debug", skip(args))]
-fn type_args_contain(args: &syn::PathArguments, name: &str) -> bool {
-    let syn::PathArguments::AngleBracketed(args) = args else {
-        return false;
-    };
-    args.args.iter().any(|arg| match arg {
-        syn::GenericArgument::Type(ty) => type_path_contains(ty, name),
-        _ => false,
-    })
-}
-
-#[instrument(level = "debug", skip(block))]
-fn block_lines(block: &Block) -> u32 {
-    let start = block.span().start().line as u32;
-    let end = block.span().end().line as u32;
-    end.saturating_sub(start).max(1)
-}
-
 #[derive(Debug, Default, derive_new::new, derive_getters::Getters)]
 pub(crate) struct BodyPeek {
     #[getter(skip)]
@@ -315,63 +141,4 @@ pub(crate) struct BodyPeek {
     has_branch: bool,
     #[getter(copy)]
     has_error_path_event: bool,
-}
-
-#[instrument(level = "debug", skip(block))]
-fn peek_body(block: &Block) -> BodyPeek {
-    let stmts = block
-        .stmts
-        .iter()
-        .filter(|stmt| !matches!(stmt, Stmt::Item(_)))
-        .count();
-    let mut peek = BodyPeek {
-        stmts,
-        has_branch: false,
-        has_error_path_event: false,
-    };
-    BodyPeekVisitor(&mut peek).visit_block(block);
-    peek
-}
-
-struct BodyPeekVisitor<'a>(&'a mut BodyPeek);
-
-impl<'ast> Visit<'ast> for BodyPeekVisitor<'_> {
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_expr_match(&mut self, node: &'ast ExprMatch) {
-        self.0.has_branch = true;
-        syn::visit::visit_expr_match(self, node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_expr_if(&mut self, node: &'ast ExprIf) {
-        self.0.has_branch = true;
-        syn::visit::visit_expr_if(self, node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_expr_while(&mut self, node: &'ast syn::ExprWhile) {
-        self.0.has_branch = true;
-        syn::visit::visit_expr_while(self, node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_expr_for_loop(&mut self, node: &'ast syn::ExprForLoop) {
-        self.0.has_branch = true;
-        syn::visit::visit_expr_for_loop(self, node);
-    }
-
-    #[instrument(level = "debug", skip(self, node))]
-    fn visit_macro(&mut self, node: &'ast syn::Macro) {
-        if is_error_or_warn_macro(&node.path) {
-            self.0.has_error_path_event = true;
-        }
-        syn::visit::visit_macro(self, node);
-    }
-}
-
-#[instrument(level = "trace", skip(path), ret)]
-fn is_error_or_warn_macro(path: &syn::Path) -> bool {
-    path.segments
-        .last()
-        .is_some_and(|segment| segment.ident == "error" || segment.ident == "warn")
 }

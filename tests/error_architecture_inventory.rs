@@ -23,6 +23,11 @@ fn architecture_is_required_and_reassessed_without_source() -> Result<()> {
     let root = fixture.path();
     std::fs::create_dir_all(root.join("src")).into_diagnostic()?;
     std::fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = 'architecture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
         root.join("src/lib.rs"),
         format!(
             "mod empty;\n{}",
@@ -91,14 +96,6 @@ fn architecture_is_required_and_reassessed_without_source() -> Result<()> {
         owned.len() > relaxed.len(),
         "fan-out is reassessed from retained sites"
     );
-    let standalone =
-        cordial::scan_crate_internal_error_chain(root, "architecture").into_diagnostic()?;
-    for finding in &owned {
-        assert!(
-            standalone.compliance().findings().contains(finding),
-            "standalone parity: {finding:?}"
-        );
-    }
     let encoded = serde_json::to_value(&inventory).into_diagnostic()?;
     let decoded: SourceErrorArchitecture =
         serde_json::from_value(encoded.clone()).into_diagnostic()?;

@@ -16,7 +16,6 @@ pub use edit::{
 };
 pub use entry::{
     ExceptionEntry, ExceptionSet, StaleException, apply_exception_sets, stale_exceptions,
-    warn_stale_exceptions,
 };
 pub use load::{load_exception_sets, load_exceptions};
 pub use paths::{

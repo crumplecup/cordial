@@ -133,7 +133,7 @@ fn typed_report_from_rows(
 /// under one (arbitrary, `rows.first()`-derived) crate name. Used to render
 /// a real per-crate breakdown instead of mislabeling the workspace-wide
 /// aggregate as belonging to whichever crate happened to sort first.
-#[instrument(level = "debug", skip(rows))]
+#[instrument(level = "debug", skip(rows), err(level = "warn"))]
 fn typed_reports_by_crate(
     rows: &[ForeignErrorTypeRow],
 ) -> CordialResult<Vec<super::types::ForeignErrorTypeReport>> {

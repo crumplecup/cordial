@@ -40,10 +40,11 @@ fn syn_doc_link_connects_widget_source_and_rustdoc_nodes() -> miette::Result<()>
     let session = SessionBuilder::new(&fixture)
         .with_store_root(store.path())
         .register(&*DUAL_INVENTORY_ETIQUETTE)
+        .with_ir_snapshot()
         .build();
     session.run(&RunAll).into_diagnostic().wrap_err("run")?;
 
-    let cache_path = store.path().join("cache").join("build_demo.ir.json");
+    let cache_path = store.path().join("cache").join("build_demo.ir.zst");
     let ir = cordial::CrateIr::read_cache(&cache_path)
         .into_diagnostic()
         .wrap_err("read ir cache")?;

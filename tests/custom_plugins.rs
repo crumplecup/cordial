@@ -73,8 +73,13 @@ fn three_plugin_kinds_register_and_quality_finds_todo() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("src dir")?;
     std::fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    std::fs::write(
         fixture.path().join("src/lib.rs"),
-        "pub fn leftover() {\n    todo!(\"wire this up\")\n}\n",
+        "pub fn leftover() {\n    todo!(\"wire this up\")\n}\n\n#[cfg(feature = \"later\")]\npub fn gated() {\n    todo!(\"behind a cfg\")\n}\n",
     )
     .into_diagnostic()
     .wrap_err("write lib")?;
@@ -95,11 +100,13 @@ fn three_plugin_kinds_register_and_quality_finds_todo() -> miette::Result<()> {
         .into_diagnostic()
         .wrap_err("session run")?;
     let findings: Vec<_> = outcome.findings().collect();
-    assert!(
-        findings
-            .iter()
-            .any(|finding| finding.rule().id() == "ACME-TODO-001"),
-        "planted todo!() should produce ACME-TODO-001"
+    let todos = findings
+        .iter()
+        .filter(|finding| finding.rule().id() == "ACME-TODO-001")
+        .count();
+    assert_eq!(
+        todos, 2,
+        "the plain and the cfg-gated todo!() should both produce ACME-TODO-001"
     );
     Ok(())
 }

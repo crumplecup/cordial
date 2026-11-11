@@ -1,5 +1,5 @@
 //! Lower canonical field syntax to the same closed storage contract.
-use super::super::native::syntax::{simple_type, type_label};
+use super::super::syntax::{simple_type, type_label};
 use super::{Arguments, CopyRequirement, FieldType};
 use ra_ap_syntax::{
     AstNode,
@@ -8,7 +8,7 @@ use ra_ap_syntax::{
 
 impl FieldType {
     #[tracing::instrument(level = "trace", skip(ty))]
-    pub(crate) fn collect_native(ty: &ast::Type) -> Self {
+    pub(crate) fn collect(ty: &ast::Type) -> Self {
         Self {
             label: type_label(ty),
             static_str: static_str(ty),

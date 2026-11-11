@@ -1,6 +1,8 @@
 #![cfg(feature = "panics")]
 //! Executable proof of supported nested source wrappers and conversions.
 
+#[path = "support/error_reports.rs"]
+mod error_reports;
 #[path = "support/strategy_specimens.rs"]
 mod specimens;
 
@@ -160,8 +162,7 @@ fn four_level_owned_families_compile_and_preserve_all_native_sources() -> miette
 
 #[cfg(feature = "internal_error_chain")]
 fn assert_compliance(root: &std::path::Path) -> miette::Result<()> {
-    let report =
-        cordial::scan_crate_internal_error_chain(root, "strategy-specimen").into_diagnostic()?;
+    let report = error_reports::internal_report(root, "strategy-specimen")?;
     assert!(
         report.compliance().findings().is_empty(),
         "{:?}",

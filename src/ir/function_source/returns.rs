@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 
 use super::{FunctionSuccessExit, SourceByteRange};
 
-mod compatibility;
 mod native;
 
 /// A return exits the current function, rather than a nested execution scope.

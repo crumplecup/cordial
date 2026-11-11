@@ -1,9 +1,6 @@
 //! Crate-tree scan for `pub mod` paths that do not earn their visibility.
 
-use std::path::Path;
-
 use crate::error::CordialResult;
-use crate::loader::SourceLoadView;
 
 use super::types::{VisibilityRecord, VisibilityThresholds};
 
@@ -15,21 +12,10 @@ mod tree;
 use eval::resolve_eval;
 use findings::collect_findings;
 
-/// Walk the crate's root module tree (`src/lib.rs` or `src/main.rs`) and
-/// apply `thresholds`. The scanner never picks thresholds itself.
-#[instrument(level = "debug", skip(thresholds), err(level = "warn"))]
-pub fn scan_crate_visibility(
-    crate_root: &Path,
-    thresholds: VisibilityThresholds,
-) -> CordialResult<Vec<VisibilityRecord>> {
-    let source = SourceLoadView::for_standalone_scan();
-    let facts = crate::ir::SourcePolicyInventory::collect_visibility(&source, crate_root)?;
-    select_records(&facts, thresholds)
-}
-
-/// Evaluate thresholds without reading source or resolving paths.
+/// Apply `thresholds` to the loader-projected module tree, without reading
+/// source or resolving paths. The scanner never picks thresholds itself.
 #[instrument(level = "debug", skip(facts, thresholds), err(level = "warn"))]
-pub(super) fn select_records(
+pub fn select_records(
     facts: &crate::ir::VisibilityFacts,
     thresholds: VisibilityThresholds,
 ) -> CordialResult<Vec<VisibilityRecord>> {

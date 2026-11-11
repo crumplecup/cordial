@@ -52,7 +52,17 @@ fn direct_calls_retain_identity_ranges_and_incoming_edges() -> miette::Result<()
         );
         assert_eq!(ir.children(node(caller)?, EdgeKind::Calls), [target_id]);
     }
-    for name in ["shadow", "local", "external", "qualified", "calls_generic"] {
+    // The flow stays the conservative authority for writes: none of these calls
+    // resolves there. The `Calls` edges are what rust-analyzer resolved: closures
+    // and unknown names resolve to nothing, a qualified path and a turbofish call
+    // resolve to their definitions.
+    for (name, edge) in [
+        ("shadow", None),
+        ("local", None),
+        ("external", None),
+        ("qualified", Some("leaf")),
+        ("calls_generic", Some("generic")),
+    ] {
         let flow = ir
             .function_call_flow(node(name)?)
             .into_diagnostic()?
@@ -62,7 +72,12 @@ fn direct_calls_retain_identity_ranges_and_incoming_edges() -> miette::Result<()
                 .iter()
                 .all(|call| matches!(call.resolution(), SourceCallResolution::Unresolved(_)))
         );
-        assert!(ir.children(node(name)?, EdgeKind::Calls).is_empty());
+        let expected: Vec<_> = edge.map(node).transpose()?.into_iter().collect();
+        assert_eq!(
+            ir.children(node(name)?, EdgeKind::Calls),
+            expected,
+            "{name}"
+        );
     }
     assert!(function_facts(&ir, "scopes")?.unwraps().is_empty());
     Ok(())
@@ -97,7 +112,16 @@ fn imports_attributes_macros_and_extern_aliases_keep_names_unresolved() -> miett
         assert!(!flow.namespace_trusted());
         assert!(flow.calls().iter().all(|call| call.resolution()
             == &SourceCallResolution::Unresolved(CallResolutionFailure::OpaqueScope)));
-        assert!(ir.children(leaf, EdgeKind::Calls).is_empty());
+        // An untrusted namespace withholds write authority, not resolution: the
+        // call still resolves to `operation` in the database.
+        let operation = ir
+            .node_by_path("operation")
+            .ok_or_else(|| miette::miette!("missing operation under {prefix:?}"))?;
+        assert_eq!(
+            ir.children(leaf, EdgeKind::Calls),
+            [operation],
+            "{prefix:?}"
+        );
     }
     Ok(())
 }
@@ -124,7 +148,10 @@ fn root_namespace_ambiguity_reaches_other_source_modules() -> miette::Result<()>
             .ok_or_else(|| miette::miette!("missing flow"))?
             .namespace_trusted()
     );
-    assert!(ir.children(leaf, EdgeKind::Calls).is_empty());
+    let operation = ir
+        .node_by_path("remote::operation")
+        .ok_or_else(|| miette::miette!("missing remote operation"))?;
+    assert_eq!(ir.children(leaf, EdgeKind::Calls), [operation]);
     Ok(())
 }
 

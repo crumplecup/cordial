@@ -20,7 +20,7 @@ use self::lockfile::{locked_versions_for_entry, lockfile_index};
 use tracing::instrument;
 
 /// Survey selected crates from one workspace snapshot and join Cargo freshness once.
-#[instrument(level = "debug", skip(targets))]
+#[instrument(level = "debug", skip(targets), err(level = "warn"))]
 pub(crate) fn survey_workspace_dependency_freshness(
     project_root: &Path,
     targets: &[CrateTarget],
@@ -87,7 +87,8 @@ pub(crate) fn survey_workspace_dependency_freshness(
 
 #[instrument(
     level = "debug",
-    skip(manifest, manifest_table, workspace_dependencies, lockfile_index)
+    skip(manifest, manifest_table, workspace_dependencies, lockfile_index),
+    err(level = "warn")
 )]
 fn survey_manifest(
     crate_name: &str,
@@ -116,7 +117,7 @@ fn survey_manifest(
     Ok(records)
 }
 
-#[instrument(level = "debug", skip(path))]
+#[instrument(level = "debug", skip(path), err(level = "warn"))]
 fn parse_table(content: &str, path: &Path) -> CordialResult<toml::Table> {
     toml::from_str(content)
         .map_err(|error| CordialError::toml_parse(path.display().to_string(), error))

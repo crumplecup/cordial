@@ -4,27 +4,12 @@ mod compiled;
 mod context;
 mod inputs;
 mod packages;
-#[cfg(any(
-    feature = "antipatterns",
-    feature = "error_sites",
-    feature = "tracing",
-    feature = "allows",
-    feature = "cfg_hygiene",
-    feature = "cfg_scatter",
-    feature = "glob_imports",
-    feature = "inline_tests",
-    feature = "modularity",
-    feature = "pageantry",
-    feature = "derives",
-    feature = "visibility",
-    feature = "cli_layout"
-))]
 mod source;
 mod workspace;
 
 use std::path::Path;
 
-use super::SourceDatabase;
+use super::{Reporter, SourceDatabase};
 use ra_ap_hir::ChangeWithProcMacros;
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
@@ -43,11 +28,19 @@ impl SourceDatabase {
             vfs: Vfs::default(),
             revision: 1,
             workspace: None,
+            external_packages: Vec::new(),
             cargo_options: None,
             proc_macro_server: None,
+            reporter: Reporter::default(),
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: None,
         }
+    }
+
+    /// Say future long phases through `reporter`.
+    #[instrument(level = "trace", skip(self, reporter))]
+    pub(crate) fn set_reporter(&mut self, reporter: Reporter) {
+        self.reporter = reporter;
     }
 
     /// Register one source input and return the database-owned text snapshot.
@@ -71,7 +64,7 @@ impl SourceDatabase {
 
     /// Freeze a loader input without parsing it. Repeated reads reuse the
     /// database value, including virtual revisions made by candidate analysis.
-    #[cfg(any(feature = "cfg_hygiene", feature = "tracing"))]
+    #[cfg(feature = "cfg_hygiene")]
     #[instrument(level = "debug", skip(self, path), err(level = "warn"))]
     pub(crate) fn input_text(&mut self, path: &Path) -> CordialResult<Option<String>> {
         self.captured_text(path, None)

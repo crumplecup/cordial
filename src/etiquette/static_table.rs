@@ -40,6 +40,7 @@ pub struct StaticEtiquette {
     name: String,
     hooks: EtiquetteHooks,
     is_coverage: bool,
+    gated_semantics: bool,
     explain: EtiquetteExplain,
 }
 
@@ -61,8 +62,16 @@ impl StaticEtiquette {
             name: name.into(),
             hooks,
             is_coverage,
+            gated_semantics: false,
             explain,
         }
+    }
+
+    /// Mark this etiquette as reading semantic facts of cfg-gated code.
+    #[instrument(level = "trace", skip(self))]
+    pub fn with_gated_semantics(mut self) -> Self {
+        self.gated_semantics = true;
+        self
     }
 }
 
@@ -117,6 +126,11 @@ impl Etiquette for StaticEtiquette {
     #[instrument(level = "trace", skip(self))]
     fn is_coverage(&self) -> bool {
         self.is_coverage
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn needs_gated_semantics(&self) -> bool {
+        self.gated_semantics
     }
 }
 
@@ -194,6 +208,11 @@ impl Etiquette for StaticQualityEtiquette {
     #[instrument(level = "trace", skip(self))]
     fn is_coverage(&self) -> bool {
         self.etiquette.is_coverage()
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    fn needs_gated_semantics(&self) -> bool {
+        self.etiquette.needs_gated_semantics()
     }
 }
 

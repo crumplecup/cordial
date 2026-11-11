@@ -49,10 +49,3 @@ pub struct SourceTracingInventory {
     source_digest: [u8; 32],
     functions: Vec<SourceTracingFunction>,
 }
-
-impl SourceTracingFunction {
-    #[tracing::instrument(level = "debug")]
-    pub(crate) fn builder() -> SourceTracingFunctionBuilder {
-        SourceTracingFunctionBuilder::default()
-    }
-}

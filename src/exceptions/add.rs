@@ -62,7 +62,7 @@ impl AddExceptionOutcome {
 ///
 /// Creates the file when missing. An identical row is a no-op. Rows that
 /// already live in the elicit_doc alias are left there and not duplicated.
-#[instrument(level = "debug", skip(store, entry))]
+#[instrument(level = "debug", skip(store, entry), err(level = "warn"))]
 pub fn add_exception(
     store: &StoreLayout,
     etiquette_id: &str,
@@ -103,7 +103,7 @@ pub fn add_exception(
 /// Existing objects keep unknown fields (for example `verifiers`). An
 /// identical `path` in the canonical file or the `exceptions/` alias is a
 /// no-op.
-#[instrument(level = "debug", skip(store, entry))]
+#[instrument(level = "debug", skip(store, entry), err(level = "warn"))]
 pub fn add_coverage_skip(
     store: &StoreLayout,
     patch_set: &str,
@@ -131,7 +131,7 @@ pub fn add_coverage_skip(
     Ok(AddExceptionOutcome::Inserted { path: canonical })
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", err(level = "warn"))]
 fn require_nonempty(label: &str, value: &str) -> CordialResult<()> {
     if value.trim().is_empty() {
         return Err(CordialError::label_must_not_be_empty(label));

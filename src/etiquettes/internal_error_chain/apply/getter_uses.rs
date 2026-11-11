@@ -7,10 +7,9 @@ use tracing::instrument;
 
 use crate::FileSnapshot;
 
+mod collect;
+mod contracts;
 mod identity;
-mod native;
-mod source;
-mod visit;
 
 use identity::Identities;
 

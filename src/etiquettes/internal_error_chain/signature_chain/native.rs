@@ -17,7 +17,7 @@ mod sources;
 impl SignatureChainIndex {
     #[tracing::instrument(level = "debug", skip(self, file))]
     #[hotpath::measure]
-    pub(crate) fn collect_native(&mut self, file: &DatabaseSource<'_>, tree: &Path) {
+    pub(crate) fn collect(&mut self, file: &DatabaseSource<'_>, tree: &Path) {
         let scope = module_path_from_src_file(tree, file.path());
         self.native_items(file.tree().items(), &scope, file);
     }

@@ -11,6 +11,11 @@ fn multiple_etiquettes_share_loader_and_emit_both_reports() -> miette::Result<()
         .into_diagnostic()
         .wrap_err("src dir")?;
     fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
+    fs::write(
         fixture.path().join("src/lib.rs"),
         include_str!("fixtures/panics/multi_etiquette.rs"),
     )
@@ -24,6 +29,7 @@ fn multiple_etiquettes_share_loader_and_emit_both_reports() -> miette::Result<()
         .with_store_root(store.path())
         .register(&*PANICS_ETIQUETTE)
         .register(&*TRACING_ETIQUETTE)
+        .with_ir_snapshot()
         .build();
 
     let outcome = session
@@ -47,8 +53,8 @@ fn multiple_etiquettes_share_loader_and_emit_both_reports() -> miette::Result<()
     assert!(findings_dir.join("quality-report.md").is_file());
     assert!(findings_dir.join("summary.md").is_file());
 
-    let slug = cordial::project_slug_from_path(fixture.path());
-    let cache_path = store.path().join("cache").join(format!("{slug}.ir.json"));
+    let slug = "fixture";
+    let cache_path = store.path().join("cache").join(format!("{slug}.ir.zst"));
     assert!(cache_path.is_file(), "single shared IR cache");
     Ok(())
 }

@@ -28,7 +28,7 @@ impl SourceTracingInventory {
         err(level = "warn")
     )]
     #[hotpath::measure(impl_type = "SourceTracingInventory")]
-    pub(crate) fn collect_native(
+    pub(crate) fn collect(
         file: &DatabaseSource<'_>,
         attributes: &SourceFileAttributes,
         semantics: &HashMap<TextRange, SemanticFunction>,
@@ -89,10 +89,15 @@ fn context(
     let output = function.ret_type().and_then(|ret| ret.ty());
     let syntactic_result = output.as_ref().is_some_and(recordable::returns_result);
     let (returns_result, displayable) = match semantics.map(|facts| facts.result_recording()) {
-        Some(SemanticResultRecording::Result { display, .. }) => {
-            (true, *display == SemanticCapability::Proven)
-        }
+        // The solver is authoritative: an error is displayable only when it proved
+        // the actual core trait, never from the spelling of its name.
+        Some(SemanticResultRecording::Result {
+            display: capability,
+            ..
+        }) => (true, *capability == SemanticCapability::Proven),
         Some(SemanticResultRecording::NotResult) => (false, false),
+        // No loaded context analysed this function. The signature still says whether
+        // it returns a `Result`; with no evidence nothing can prove its error displayable.
         _ => (syntactic_result, false),
     };
     let (peek, lines) = body(file, function);

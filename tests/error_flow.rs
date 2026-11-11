@@ -29,6 +29,11 @@ fn error_flow_enricher_partitions_sites_and_links_origins() -> miette::Result<()
     fs::create_dir_all(fixture.path().join("src"))
         .into_diagnostic()
         .wrap_err("src dir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), ERROR_SITES)
         .into_diagnostic()
         .wrap_err("write fixture")?;
@@ -39,6 +44,7 @@ fn error_flow_enricher_partitions_sites_and_links_origins() -> miette::Result<()
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .register(&*ERROR_SITES_ETIQUETTE)
+        .with_ir_snapshot()
         .build();
 
     session
@@ -57,7 +63,7 @@ fn error_flow_enricher_partitions_sites_and_links_origins() -> miette::Result<()
         .find(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.ends_with(".ir.json"))
+                .is_some_and(|name| name.ends_with(".ir.zst"))
         })
         .ok_or_else(|| miette::miette!("ir cache file"))?;
     let ir = CrateIr::read_cache(&cache_path)

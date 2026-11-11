@@ -3,7 +3,7 @@
 use crate::etiquettes::internal_error_chain::{
     InternalErrorComplianceFinding, SignatureChainCheck, SignatureChainIndex,
 };
-use crate::loader::{SourceLoadView, path_has_fixtures};
+use crate::loader::path_has_fixtures;
 use crate::{CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -28,23 +28,6 @@ pub struct ErrorSignatureAssessment {
 }
 
 impl SourceErrorSignatures {
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourceErrorSignatures")]
-    pub(crate) fn collect(source: &SourceLoadView, root: &Path) -> CordialResult<Self> {
-        Self::collect_with(root, |index, path, tree| {
-            let file = source.parsed_file(path, "source-error-signatures")?;
-            crate::loader::source_walk(
-                path,
-                "source-error-signatures",
-                || -> CordialResult<()> {
-                    index.collect(file.syntax(), path, tree);
-                    Ok(())
-                },
-            )?;
-            Ok(FileSnapshot::new(path.to_path_buf(), file.source_digest()))
-        })
-    }
-
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
     pub(crate) fn collect_with(
         root: &Path,

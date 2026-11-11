@@ -25,7 +25,7 @@ pub fn build_shadow_pair_report(
     build_shadow_pair_report_from_inventories(&target, &shadow_inv)
 }
 
-#[instrument(level = "debug", skip(target, shadow))]
+#[instrument(level = "debug", skip(target, shadow), err(level = "warn"))]
 pub fn build_shadow_pair_report_from_inventories(
     target: &RustdocInventory,
     shadow: &RustdocInventory,

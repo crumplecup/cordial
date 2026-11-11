@@ -13,7 +13,7 @@ use tracing::instrument;
 impl SourceFileAttributes {
     #[instrument(level = "debug", skip(file))]
     #[hotpath::measure(impl_type = "SourceFileAttributes")]
-    pub(crate) fn collect_native(file: &DatabaseSource<'_>) -> Self {
+    pub(crate) fn collect(file: &DatabaseSource<'_>) -> Self {
         let mut items = Vec::new();
         collect_items(file, file.tree().items(), &[], &mut items);
         let mut lints = SourceCrateLints::default();

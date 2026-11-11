@@ -11,7 +11,7 @@ use tracing::instrument;
 
 use crate::error::CordialResult;
 
-use super::{SourceLoadView, matches_snapshot};
+use super::SourceLoadView;
 use crate::{CordialError, FileSnapshot};
 use sha2::{Digest, Sha256};
 
@@ -57,4 +57,12 @@ impl SourceEditView {
     pub(crate) fn matches_disk(&self) -> CordialResult<bool> {
         matches_snapshot(self.path(), self.source_digest())
     }
+}
+
+/// Whether the file at `path` still holds the bytes with digest `expected`.
+#[instrument(level = "debug", skip(path), err(level = "warn"))]
+fn matches_snapshot(path: &Path, expected: [u8; 32]) -> CordialResult<bool> {
+    let current = std::fs::read(path)?;
+    let digest: [u8; 32] = Sha256::digest(current).into();
+    Ok(digest == expected)
 }

@@ -88,6 +88,11 @@ check-features:
 # Quality-etiquette gate: write reports, then fail if `quality-report.md`
 # still has open action items. Uses this checkout's binary, not a pinned
 # install. CI runs this as `cordial-gate (ubuntu-latest)`.
+#
+# CI and promotion only. It runs every tier, including the deep feature
+# powerset (about twenty minutes), and `exceptions load` replaces the local
+# exception store from the repo files. Local development and agents work
+# through `cordial open` / `cordial submit` (default build tier) instead.
 cordial-gate:
     {{cargo}} run --features {{features}} --bin cordial -- exceptions load
     {{cargo}} run --features {{features}} --bin cordial -- quality --deny-open --tier all

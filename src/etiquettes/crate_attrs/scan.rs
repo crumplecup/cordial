@@ -3,11 +3,10 @@
 pub use crate::loader::library_root_rs;
 use std::path::Path;
 
-use crate::ir::{CrateIr, IrView, QueryBuilder, SourceCrateLints, SourceFileAttributes};
+use crate::ir::{IrView, QueryBuilder, SourceCrateLints, SourceFileAttributes};
 
 use crate::config::CrateAttrsThresholds;
 use crate::error::CordialResult;
-use crate::loader::SourceLoadView;
 use crate::objects::SourceSpan;
 
 use super::types::{CrateAttrsRuleId, CrateAttrsSiteRecord};
@@ -25,9 +24,16 @@ pub fn scan_crate_attrs(
         return Ok(Vec::new());
     };
 
-    let source = SourceLoadView::for_crate_root(crate_root, crate_name)?;
-    let mut ir = CrateIr::new(crate_name);
-    source.populate_ir(&mut ir)?;
+    let parsed = crate::loader::ParsedSourceSession::begin_in(
+        crate_root,
+        &crate::loader::Reporter::default(),
+        crate::CfgPlanning::Explicit,
+    )?;
+    let target = crate::discover_crate_targets(crate_root, &crate::RunAll)?
+        .into_iter()
+        .find(|target| target.crate_name() == crate_name)
+        .ok_or_else(|| crate::CordialError::not_found(crate_root.to_path_buf()))?;
+    let ir = parsed.project_target(&target)?;
     let presence = library_facts(&ir, &lib)?
         .map(|facts| *facts.lints())
         .unwrap_or_default();

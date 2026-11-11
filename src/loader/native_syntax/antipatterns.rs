@@ -22,9 +22,8 @@ fn contract_facts<'db>(
     key: Payload<'db>,
 ) -> Option<Vec<ContractClause>> {
     tracing::debug!(target: "cordial::semantic::queries", function = "payload", query = "antipattern_contract", "semantic query executed");
-    let tokens = key.text(db).parse::<proc_macro2::TokenStream>().ok()?;
     crate::etiquettes::antipatterns::antipattern_contract_payload(
-        tokens,
+        key.text(db),
         key.file(db),
         key.modules(db),
         key.context(db),

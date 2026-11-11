@@ -3,7 +3,7 @@
 use crate::etiquettes::error_chain::{ErrorChainProbeId, ErrorChainRecord};
 use crate::ir::error_sites_source::native::{context, excluded_module};
 use crate::loader::module_path_from_src_file;
-use crate::loader::{DatabaseSource, SourceLoadView, path_has_fixtures};
+use crate::loader::{DatabaseSource, path_has_fixtures};
 use crate::{CordialResult, FileSnapshot};
 use ra_ap_syntax::{AstNode, SyntaxNode, WalkEvent, ast};
 use serde::{Deserialize, Serialize};
@@ -30,21 +30,6 @@ pub struct ErrorChainsFile {
 }
 
 impl SourceErrorChains {
-    #[tracing::instrument(level = "debug", skip(source), err(level = "warn"))]
-    #[hotpath::measure(impl_type = "SourceErrorChains")]
-    pub(crate) fn collect(source: &SourceLoadView, root: &Path) -> CordialResult<Self> {
-        Self::collect_with(root, |path, tree| {
-            let file = source.parsed_file(path, "source-error-chains")?;
-            let records = crate::loader::source_walk(path, "source-error-chains", || {
-                crate::etiquettes::error_chain::scan_rust_syntax(&file, tree, root)
-            })?;
-            Ok(ErrorChainsFile {
-                snapshot: FileSnapshot::new(path.to_path_buf(), file.source_digest()),
-                records,
-            })
-        })
-    }
-
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
     pub(crate) fn collect_with(
         root: &Path,
@@ -78,7 +63,7 @@ impl SourceErrorChains {
     ) -> CordialResult<ErrorChainsFile> {
         Ok(ErrorChainsFile {
             snapshot: FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
-            records: collect_native(file, tree, root)?,
+            records: collect(file, tree, root)?,
         })
     }
 
@@ -109,7 +94,7 @@ struct Fact {
 
 #[tracing::instrument(level = "debug", skip(file), err(level = "warn"))]
 #[hotpath::measure]
-fn collect_native(
+fn collect(
     file: &DatabaseSource<'_>,
     tree: &Path,
     root: &Path,

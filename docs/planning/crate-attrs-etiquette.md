@@ -83,7 +83,7 @@ does not need a prior `quality` run.
 Turning on `#![warn(missing_docs)]` is the cheap half: every public item
 then needs rustdoc. This crate's library root now carries both inner
 attributes, and the public API is documented so `cargo check` is clean
-under that lint. The dogfood test in `tests/crate_attrs_etiquette.rs`
+under that lint. The dogfood test in `tests/crate_attrs_session.rs`
 asserts a clean scan of `cordial` itself.
 
 ## Status
@@ -95,4 +95,4 @@ asserts a clean scan of `cordial` itself.
 | Checklist grouped by crate | done |
 | Apply | `cordial quality --apply` inserts the missing inner attributes |
 | Cordial dogfood | `src/lib.rs` has both attrs; public items documented |
-| Tests | `tests/crate_attrs_etiquette.rs` |
+| Tests | `tests/crate_attrs_scan.rs`, `tests/crate_attrs_session.rs`, `tests/crate_attrs_apply.rs` |

@@ -18,31 +18,6 @@ fn canonical(node: &SyntaxNode) -> String {
         .join(" ")
 }
 
-#[tracing::instrument(level = "trace", skip(tokens))]
-fn canonical_tokens(tokens: proc_macro2::TokenStream) -> String {
-    tokens
-        .into_iter()
-        .map(|token| match token {
-            proc_macro2::TokenTree::Group(group) => {
-                let (open, close) = match group.delimiter() {
-                    proc_macro2::Delimiter::Parenthesis => ("(", ")"),
-                    proc_macro2::Delimiter::Bracket => ("[", "]"),
-                    proc_macro2::Delimiter::Brace => ("{", "}"),
-                    proc_macro2::Delimiter::None => ("", ""),
-                };
-                let inner = canonical_tokens(group.stream());
-                [open, inner.as_str(), close]
-                    .into_iter()
-                    .filter(|part| !part.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            }
-            token => token.to_string(),
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 #[salsa::tracked(returns(ref))]
 #[tracing::instrument(level = "trace", skip(db, key))]
 #[hotpath::measure]
@@ -50,15 +25,53 @@ fn condition<'db>(
     db: &'db dyn SemanticDatabase,
     key: CfgPayload<'db>,
 ) -> Option<(String, Option<String>)> {
-    let meta = syn::parse_str::<syn::Meta>(key.text(db)).ok()?;
-    let negated = match &meta {
-        syn::Meta::List(list) if list.path.is_ident("not") => list
-            .parse_args::<syn::Meta>()
-            .ok()
-            .map(|meta| canonical_tokens(quote::quote!(#meta))),
+    // The predicate sits in an opaque token tree, so give the parser the one
+    // context in which it is a predicate.
+    let parse = ra_ap_syntax::SourceFile::parse(
+        &format!("#[cfg({})] fn f() {{}}", key.text(db)),
+        ra_ap_syntax::Edition::CURRENT,
+    );
+    if !parse.errors().is_empty() {
+        return None;
+    }
+    let attr = parse
+        .tree()
+        .syntax()
+        .descendants()
+        .find_map(ast::Attr::cast)?;
+    let ast::Meta::CfgMeta(meta) = attr.meta()? else {
+        return None;
+    };
+    predicate_condition(&meta)
+}
+
+/// The canonical predicate and, for `not(single)`, the canonical operand.
+#[tracing::instrument(level = "trace", skip(meta))]
+fn predicate_condition(meta: &ast::CfgMeta) -> Option<(String, Option<String>)> {
+    if meta.comma_token().is_some() {
+        return None;
+    }
+    let predicate = meta.cfg_predicate()?;
+    if !valid_meta(&predicate) {
+        return None;
+    }
+    let negated = match &predicate {
+        ast::CfgPredicate::CfgComposite(list) if list.keyword()?.text() == "not" => {
+            let parts: Vec<_> = list.cfg_predicates().collect();
+            if let [part] = parts.as_slice() {
+                (valid_meta(part)
+                    && !list
+                        .syntax()
+                        .children_with_tokens()
+                        .any(|part| part.kind() == SyntaxKind::COMMA))
+                .then(|| canonical(part.syntax()))
+            } else {
+                None
+            }
+        }
         _ => None,
     };
-    Some((canonical_tokens(quote::quote!(#meta)), negated))
+    Some((canonical(predicate.syntax()), negated))
 }
 
 impl DatabaseSource<'_> {
@@ -69,34 +82,14 @@ impl DatabaseSource<'_> {
         }
         let meta = attr.meta()?;
         if let ast::Meta::CfgMeta(meta) = &meta {
-            if meta.comma_token().is_some() {
-                return None;
-            }
-            let predicate = meta.cfg_predicate()?;
-            if !valid_meta(&predicate) {
-                return None;
-            }
-            let negated = match &predicate {
-                ast::CfgPredicate::CfgComposite(list) if list.keyword()?.text() == "not" => {
-                    let parts: Vec<_> = list.cfg_predicates().collect();
-                    if let [part] = parts.as_slice() {
-                        (valid_meta(part)
-                            && !list
-                                .syntax()
-                                .children_with_tokens()
-                                .any(|part| part.kind() == SyntaxKind::COMMA))
-                        .then(|| canonical(part.syntax()))
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            };
-            return Some((canonical(predicate.syntax()), negated));
+            return predicate_condition(meta);
         }
         let ast::Meta::TokenTreeMeta(meta) = meta else {
             return None;
         };
+        if meta.path()?.syntax().text() != "cfg" {
+            return None;
+        }
         let tree = meta.token_tree()?;
         let text = self.text(tree.syntax());
         let inner = text.get(1..text.len().checked_sub(1)?)?;

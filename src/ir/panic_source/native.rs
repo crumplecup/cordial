@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 impl SourcePanics {
     #[tracing::instrument(level = "debug", skip(files, verus), err(level = "warn"))]
     #[hotpath::measure(impl_type = "SourcePanics")]
-    pub(crate) fn collect_native(
+    pub(crate) fn collect(
         root: &Path,
         files: &[(PathBuf, DatabaseSource<'_>)],
         #[cfg(feature = "verus_ir")] verus: &crate::VerusCrateIr,

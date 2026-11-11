@@ -95,7 +95,7 @@ pub fn render_amenable_ext_checklist_md(
 /// [`render_amenable_ext_checklist_md`]. Every other piece of text
 /// (scope, impl crate, source crate) already reads from `report` itself
 /// rather than assuming "std", so no further parameterization is needed.
-#[instrument(level = "debug", skip(report, skip_map))]
+#[instrument(level = "debug", skip(report, skip_map), err(level = "warn"))]
 fn render_wrapped_checklist_md(
     report: &AmenableStdReport,
     skip_map: &VerifierSkipMap,

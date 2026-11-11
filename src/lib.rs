@@ -36,10 +36,12 @@ mod loader;
 mod objects;
 mod plugin;
 mod plugins;
+mod process_memory;
 mod progress;
 #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
 mod proof_harness;
 mod reporter;
+mod run_cache;
 /// Rustdoc JSON inventory helpers used by coverage etiquettes.
 #[cfg(feature = "rustdoc")]
 pub mod rustdoc;
@@ -68,16 +70,14 @@ pub use etiquettes::IMPL_COVERAGE_ETIQUETTE;
 pub use etiquettes::TRENCHCOAT_ETIQUETTE;
 #[cfg(feature = "allows")]
 pub use etiquettes::allows::{
-    ALLOWS_ETIQUETTE, AllowInventoryEnricher, AllowRuleId, AllowSiteRecord, scan_crate_allows,
+    ALLOWS_ETIQUETTE, AllowInventoryEnricher, AllowRuleId, AllowSiteRecord,
     scan_rust_source as scan_allows_rust_source,
 };
 #[cfg(feature = "antipatterns")]
 pub use etiquettes::antipatterns::{
     ANTIPATTERNS_ETIQUETTE, AntipatternRuleId, AntipatternSiteRecord, AntipatternWorkspaceFacts,
-    ContractRecordDump, ContractRecordDumpBuilder, scan_crate_antipatterns,
-    scan_crate_antipatterns_with_static_ref_strategy, scan_crate_contract_bounds,
-    scan_creusot_contract_bounds_source, scan_kani_contract_bounds_source,
-    scan_rust_source as scan_antipatterns_rust_source,
+    ContractRecordDump, ContractRecordDumpBuilder, scan_creusot_contract_bounds_source,
+    scan_kani_contract_bounds_source, scan_rust_source as scan_antipatterns_rust_source,
     scan_rust_source_with_skip_paths as scan_antipatterns_rust_source_with_skip_paths,
     scan_rust_source_with_static_ref_strategy as scan_antipatterns_rust_source_with_static_ref_strategy,
     scan_rust_source_with_strategies as scan_antipatterns_rust_source_with_strategies,
@@ -87,12 +87,12 @@ pub use etiquettes::antipatterns::{
 pub use etiquettes::cfg_hygiene::{
     CFG_HYGIENE_ETIQUETTE, CfgHygieneInventoryEnricher, CfgHygieneRuleId, CfgHygieneSiteRecord,
     CfgNameOccurrence, all_verifier_names, declared_names_for_crate, expected_verifier_for,
-    scan_crate_cfg_hygiene, scan_rust_source as scan_cfg_hygiene_rust_source,
+    scan_rust_source as scan_cfg_hygiene_rust_source,
 };
 #[cfg(feature = "cli_layout")]
 pub use etiquettes::cli_layout::{
     CLI_LAYOUT_ETIQUETTE, CliLayoutId, CliLayoutInventoryEnricher, CliLayoutRecord,
-    scan_crate_cli_layout,
+    select_cli_layout_records,
 };
 #[cfg(feature = "crate_attrs")]
 pub use etiquettes::crate_attrs::{
@@ -107,7 +107,7 @@ pub use etiquettes::creusot_diagnostics::{
 #[cfg(feature = "derives")]
 pub use etiquettes::derives::{
     DERIVES_ETIQUETTE, DeriveInventoryEnricher, DeriveRuleId, DeriveSiteRecord, PathInclusionFacts,
-    scan_rust_source as scan_derives_rust_source, workspace_path_inclusions,
+    scan_rust_source as scan_derives_rust_source,
 };
 #[cfg(feature = "doc_warnings")]
 pub use etiquettes::doc_warnings::{
@@ -117,15 +117,14 @@ pub use etiquettes::doc_warnings::{
 #[cfg(feature = "error_chain")]
 pub use etiquettes::error_chain::{
     ATTR_SOURCE_ERROR_CHAINS, ERROR_CHAIN_ETIQUETTE, ErrorChainProbeId, ErrorChainRecord,
-    ErrorChainsFile, SourceErrorChains, probe_counts, scan_crate_error_chain,
-    scan_rust_source as scan_error_chain_rust_source,
+    ErrorChainsFile, SourceErrorChains, probe_counts,
 };
 #[cfg(feature = "error_sites")]
 pub use etiquettes::error_sites::{
     ATTR_SOURCE_ERROR_SITES, ERROR_SITES_ETIQUETTE, ErrorOriginClass, ErrorSiteKind,
     ErrorSiteRecord, ErrorSiteScanRow, ErrorSitesFile, ForeignTypeConfidence,
     PartitionedErrorSiteRow, SourceErrorSites, infer_foreign_error_type,
-    partition_error_site_records, partition_error_site_row, scan_crate_error_sites,
+    partition_error_site_records, partition_error_site_row,
     scan_rust_source as scan_error_sites_rust_source,
 };
 #[cfg(feature = "feature_warnings")]
@@ -149,12 +148,12 @@ pub use etiquettes::foreign_error_types::{
 #[cfg(feature = "glob_imports")]
 pub use etiquettes::glob_imports::{
     GLOB_IMPORTS_ETIQUETTE, GlobImportInventoryEnricher, GlobImportRuleId, GlobImportSiteRecord,
-    scan_crate_glob_imports, scan_rust_source as scan_glob_imports_rust_source,
+    scan_rust_source as scan_glob_imports_rust_source,
 };
 #[cfg(feature = "inline_tests")]
 pub use etiquettes::inline_tests::{
     INLINE_TESTS_ETIQUETTE, InlineTestInventoryEnricher, InlineTestRuleId, InlineTestSiteRecord,
-    scan_crate_inline_tests, scan_rust_source as scan_inline_tests_rust_source,
+    scan_rust_source as scan_inline_tests_rust_source,
 };
 #[cfg(feature = "internal_error_chain")]
 pub use etiquettes::internal_error_chain::{
@@ -163,12 +162,10 @@ pub use etiquettes::internal_error_chain::{
     ErrorFieldApplyBlockerReason, ErrorFieldApplyRepair, ErrorFieldApplySummary,
     ErrorFileApplySummary, ErrorFromEvidence, ErrorSourceMethodEvidence, ErrorTryEvidence,
     ErrorTryScope, INTERNAL_ERROR_CHAIN_ETIQUETTE, InternalErrorChainScanReport,
-    InternalErrorComplianceFinding, InternalErrorComplianceId, InternalErrorNodeClass,
-    InternalErrorTypeNode, InternalErrorTypeProbeId, SignatureChainCheck, SignatureChainStatus,
-    WorkspaceInternalErrorChainSummary, build_workspace_internal_error_chain_summary,
-    run_error_field_apply, run_error_file_apply, scan_compliance_rust_source,
-    scan_compliance_rust_source_with_crate_kind, scan_crate_internal_error_chain,
-    scan_error_rust_source,
+    InternalErrorComplianceFinding, InternalErrorComplianceId, InternalErrorComplianceReport,
+    InternalErrorNodeClass, InternalErrorTypeNode, InternalErrorTypeProbeId, SignatureChainCheck,
+    SignatureChainStatus, WorkspaceInternalErrorChainSummary,
+    build_workspace_internal_error_chain_summary, run_error_field_apply, run_error_file_apply,
 };
 #[cfg(feature = "modularity")]
 pub use etiquettes::modularity::{
@@ -179,13 +176,13 @@ pub use etiquettes::modularity::{
 };
 #[cfg(feature = "pageantry")]
 pub use etiquettes::pageantry::{
-    PAGEANTRY_ETIQUETTE, PageantryInventoryEnricher, PageantryRuleId, scan_crate_pageantry,
+    PAGEANTRY_ETIQUETTE, PageantryInventoryEnricher, PageantryRuleId,
     scan_rust_source as scan_pageantry_rust_source,
 };
 #[cfg(feature = "panics")]
 pub use etiquettes::panics::{
     PANICS_ETIQUETTE, PanicApplyBlocker, PanicApplyRepair, PanicApplySite, PanicApplySummary,
-    PanicKind, run_panic_apply, scan_crate_panics, scan_rust_source, scan_source_tree,
+    PanicKind, PanicSiteRecord, run_panic_apply,
 };
 #[cfg(feature = "tracing")]
 pub use etiquettes::tracing::{
@@ -195,18 +192,18 @@ pub use etiquettes::tracing::{
     SourceTracingFunction, SourceTracingInventory, SubscriberRuleId, SubscriberSiteRecord,
     TRACING_ETIQUETTE, VisibilityLabel, parse_tracing_instrument_checklist,
     parse_tracing_instrument_checklist_text, run_tracing_instrument_apply,
-    scan_crate_tracing_boundary, scan_crate_tracing_print, scan_crate_tracing_subscriber,
-    scan_rust_source as scan_tracing_rust_source, scan_tracing_print_rust_source,
+    scan_tracing_print_rust_source, tracing_boundary_findings, tracing_print_findings,
+    tracing_subscriber_findings,
 };
 #[cfg(feature = "verus_warnings")]
 pub use etiquettes::verus_warnings::{
     VERUS_WARNINGS_ETIQUETTE, VerusWarningRecord, VerusWarningRuleId, crate_is_verus_target,
-    parse_verus_compiler_output, scan_crate_verus_warnings,
+    parse_verus_compiler_output,
 };
 #[cfg(feature = "visibility")]
 pub use etiquettes::visibility::{
     VISIBILITY_ETIQUETTE, VisibilityFacts, VisibilityInventoryEnricher, VisibilityKind,
-    VisibilityModule, VisibilityRecord, VisibilityRuleId, scan_crate_visibility,
+    VisibilityModule, VisibilityRecord, VisibilityRuleId, select_visibility_records,
 };
 #[cfg(feature = "cfg_scatter")]
 pub use etiquettes::{
@@ -214,7 +211,11 @@ pub use etiquettes::{
     CfgSiteOccurrence, scan_cfg_scatter_rust_source,
 };
 #[cfg(feature = "proof_patterns")]
-pub use etiquettes::{PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, scan_crate_proof_patterns};
+pub use etiquettes::{
+    PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, ProofPatternRecord, proof_pattern_records,
+};
+#[cfg(feature = "_etiquette_plugins")]
+pub use etiquettes::{STALE_EXCEPTIONS_ETIQUETTE, StaleExceptionFinding};
 #[cfg(feature = "internal_error_chain")]
 pub use ir::{
     ATTR_SOURCE_ERROR_APPLY, ATTR_SOURCE_ERROR_ARCHITECTURE, ATTR_SOURCE_ERROR_COMPLIANCE,
@@ -227,7 +228,7 @@ pub use ir::{ATTR_SOURCE_VERUS, SourceVerus, VerusFile};
 #[cfg(feature = "verus_ir")]
 pub use verus_ir::{
     VerusCrateIr, VerusEnumFacts, VerusEnumVariantFacts, VerusFnFacts, VerusFnMode, VerusPanicKind,
-    VerusPanicSite, VerusPublish, scan_crate_verus_ir, scan_verus_rust_source,
+    VerusPanicSite, VerusPublish,
 };
 #[cfg(feature = "shadow")]
 mod shadow;
@@ -245,14 +246,10 @@ pub use enricher::TrenchcoatEnricher;
 #[cfg(feature = "_quality_support")]
 pub use enricher::resolve_source_path;
 #[cfg(feature = "_attribute_scan")]
-pub use enricher::{
-    AttributeEnricher, is_cfg_test, is_gated_instrument_attr, is_instrument_attr,
-    member_crate_root, resolve_parent,
-};
+pub use enricher::{AttributeEnricher, member_crate_root, resolve_parent};
 #[cfg(feature = "error_sites")]
 pub use enricher::{
-    ERROR_IR_ENRICHERS, ErrorFlowEnricher, ErrorIrScanEnricher, ErrorIrScanReport,
-    error_ir_enricher_ids, scan_crate_error_ir,
+    ERROR_IR_ENRICHERS, ErrorFlowEnricher, ErrorIrScanEnricher, error_ir_enricher_ids,
 };
 #[cfg(feature = "impl_coverage")]
 pub use enricher::{
@@ -264,7 +261,7 @@ pub use enricher::{
     ShadowLinkEnricher, ShadowMapEntry, discover_same_crate_shadow_pairs, load_shadow_map,
     resolve_shadow_entries,
 };
-pub use error::{CordialError, CordialErrorKind, CordialResult, TokenStreamParseError};
+pub use error::{CordialError, CordialErrorKind, CordialResult};
 pub use etiquette::{
     After, BUILT_IN_ORDER, Before, BeforeMirror, DERIVE_RULE_IDS, Etiquette, EtiquetteExplain,
     EtiquetteHooks, EtiquetteRuleExplain, IntoEtiquette, LintConstraint, LintOrder, OrderExplain,
@@ -351,24 +348,26 @@ pub use hooks::{
 pub use ir::{
     ATTR_BINARY_ENTRY_PATHS, ATTR_CARGO_MANIFEST_SNAPSHOT, ATTR_CRATE_KINDS,
     ATTR_FUNCTION_CALL_FLOW, ATTR_FUNCTION_ERROR_FAMILY, ATTR_FUNCTION_SOURCE_SYNTAX,
-    ATTR_IR_ORIGIN, ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, ATTR_SOURCE_ATTRIBUTE,
-    ATTR_SOURCE_FILE_ATTRIBUTES, ATTR_SOURCE_MODULE_SCOPE, ATTR_SYN_DOC_PEER, AttrKey, AttrValue,
-    BasicQuery, CallResolutionFailure, CrateIr, CrateIrSnapshot, CrateKind, CrateView,
-    CrateViewMut, DeclaredFunctionOutput, EdgeKind, EdgeWeight, ErrorFamilyBasis, ErrorFamilyGap,
-    ErrorFamilyGapReason, ErrorFamilyMember, FileSnapshot, FunctionBoundary, FunctionCallFlow,
-    FunctionCallSyntax, FunctionErrorFamily, FunctionNestedScope, FunctionReturn,
-    FunctionReturnFlow, FunctionSourceSyntax, FunctionSuccessExit, FunctionTail,
-    FunctionUnwrapSyntax, IrIndexes, IrMut, IrView, ItemKind, NestedScopeKind, NodeId, NodeKind,
-    NodeView, NodeWeight, ORIGIN_RUSTDOC, ORIGIN_SOURCE, PanicSitesQuery, QualifiedPath, Query,
-    QueryBuilder, ResolvedFunctionCall, ReturnValue, SemanticCall, SemanticCallTarget,
-    SemanticCapability, SemanticConfigurationInput, SemanticContextGap, SemanticCrateContext,
-    SemanticFeatures, SemanticFormattingRole, SemanticFunction, SemanticItemId,
-    SemanticPackageContext, SemanticResultRecording, SemanticReturnContract, SemanticSnapshot,
-    SemanticType, SemanticWorkspaceContext, SourceAttribute, SourceAttributeArgument,
-    SourceAttributeArguments, SourceAttributedItem, SourceByteRange, SourceCallResolution,
-    SourceCallUse, SourceCrateLints, SourceEntryContract, SourceFileAttributes,
-    SourceInstrumentSyntax, SourceModuleScope, SourcePathUse, SourceResultContract,
-    SourceUseInventory, WorkspaceIr,
+    ATTR_IR_ORIGIN, ATTR_SEMANTIC_ACTIVITY, ATTR_SEMANTIC_CONTEXT_FUNCTIONS,
+    ATTR_SEMANTIC_CONTEXT_PLAN, ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT,
+    ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_FILE_ATTRIBUTES, ATTR_SOURCE_MODULE_SCOPE,
+    ATTR_SYN_DOC_PEER, AttrKey, AttrValue, BasicQuery, CallResolutionFailure, CrateIr,
+    CrateIrSnapshot, CrateKind, CrateView, CrateViewMut, DeclaredFunctionOutput, EdgeKind,
+    EdgeWeight, ErrorFamilyBasis, ErrorFamilyGap, ErrorFamilyGapReason, ErrorFamilyMember,
+    FileSnapshot, FunctionBoundary, FunctionCallFlow, FunctionCallSyntax, FunctionErrorFamily,
+    FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionSourceSyntax,
+    FunctionSuccessExit, FunctionTail, FunctionUnwrapSyntax, IrIndexes, IrMut, IrView, ItemKind,
+    NestedScopeKind, NodeId, NodeKind, NodeView, NodeWeight, ORIGIN_RUSTDOC, ORIGIN_SOURCE,
+    PanicSitesQuery, QualifiedPath, Query, QueryBuilder, ResolvedFunctionCall, ReturnValue,
+    SemanticCall, SemanticCallTarget, SemanticCapability, SemanticConfigurationInput,
+    SemanticContextFunction, SemanticContextGap, SemanticContextKey, SemanticContextPlan,
+    SemanticCrateContext, SemanticFeatures, SemanticFormattingRole, SemanticFunction,
+    SemanticItemId, SemanticPackageContext, SemanticResultRecording, SemanticReturnContract,
+    SemanticSnapshot, SemanticType, SemanticWorkspaceContext, SourceAttribute,
+    SourceAttributeArgument, SourceAttributeArguments, SourceAttributedItem, SourceByteRange,
+    SourceCallResolution, SourceCallUse, SourceCrateLints, SourceEntryContract,
+    SourceFileAttributes, SourceInstrumentSyntax, SourceModuleScope, SourcePathUse,
+    SourceResultContract, SourceUseInventory, WorkspaceIr,
 };
 #[cfg(feature = "impl_coverage")]
 pub use ir::{
@@ -377,15 +376,18 @@ pub use ir::{
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use loader::path_has_fixtures;
 pub use loader::{
-    CrateTarget, LoadView, SemanticCargoOptions, SharedMacroSyntax, SharedParsedFile,
-    SourceDatabase, SourceFile, SourceLoadView, SourceLoader, module_path_from_src_file,
-    quality_scan_trees,
+    CfgPlanning, CrateTarget, LoadView, SemanticCargoOptions, SourceDatabase, SourceFile,
+    SourceLoadView, SourceLoader, SourceSyntax, module_path_from_src_file, quality_scan_trees,
 };
 pub use objects::{
     Artifact, Disposition, FileSpan, Finding, FindingSink, IrAnchor, MapFindingSink, Marker,
     NodeAnchor, Rule, SourceSpan, TextArtifact,
 };
+pub use process_memory::{MemorySample, sample as memory_sample};
 pub use progress::{LineProgress, ProgressSink, ProgressTask, noop_progress};
+/// The rust-analyzer syntax crate at the version cordial links, for plugins
+/// reading [`SourceSyntax`] trees.
+pub use ra_ap_syntax as syntax;
 pub use reporter::RollupReporter;
 #[cfg(any(
     feature = "homecoming_std",

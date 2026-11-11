@@ -30,7 +30,7 @@ impl crate::session::RunFilter for TimingFilter<'_> {
     }
 }
 
-#[instrument(level = "info", skip(ctx))]
+#[instrument(level = "info", skip(ctx), err(level = "warn"))]
 pub(super) fn run_child(
     ctx: &ActCtx,
     label: &str,

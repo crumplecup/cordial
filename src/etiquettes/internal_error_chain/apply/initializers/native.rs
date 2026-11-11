@@ -30,7 +30,7 @@ struct Collector<'a, 'db> {
 impl InitializerFileFacts {
     #[instrument(level = "debug", skip(file))]
     #[hotpath::measure(impl_type = "InitializerFileFacts")]
-    pub(crate) fn collect_native(file: &DatabaseSource<'_>) -> Self {
+    pub(crate) fn collect(file: &DatabaseSource<'_>) -> Self {
         let mut collector = Collector {
             file,
             records: Vec::new(),

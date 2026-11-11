@@ -69,7 +69,7 @@ pub fn load_workspace_proof_harness(
     project_root: &Path,
     filter: &dyn crate::session::RunFilter,
 ) -> CordialResult<ProofHarness> {
-    let source = SourceLoadView::for_standalone_scan();
+    let source = SourceLoadView::for_session();
     load_workspace_proof_harness_with_source(project_root, filter, &source)
 }
 
@@ -94,7 +94,7 @@ pub(crate) fn load_workspace_proof_harness_with_source(
 #[cfg(feature = "impl_coverage")]
 #[instrument(level = "debug", skip(path), err(level = "warn"))]
 pub fn collect_proof_harness(path: &Path) -> CordialResult<ProofHarness> {
-    let source = SourceLoadView::for_standalone_scan();
+    let source = SourceLoadView::for_session();
     collect_proof_harness_with_source(path, &source)
 }
 

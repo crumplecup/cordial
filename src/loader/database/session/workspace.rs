@@ -1,11 +1,13 @@
 //! Effectful workspace loading stays in the driver, outside tracked queries.
 
-use super::{context, inputs};
+use super::{context, inputs, packages};
 
 use super::SourceDatabase;
+use crate::loader::database::Reporter;
 use crate::{CordialResult, SemanticCargoOptions, SemanticContextGap};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_load_cargo::{LoadCargoConfig, ProcMacroServerChoice, load_workspace_into_db};
+use ra_ap_project_model::CargoConfig;
 use ra_ap_project_model::{ProjectManifest, ProjectWorkspace};
 use ra_ap_vfs::AbsPathBuf;
 use std::path::Path;
@@ -16,7 +18,7 @@ impl SourceDatabase {
     #[instrument(level = "debug", skip(root), err(level = "warn"))]
     #[hotpath::measure]
     pub fn load(root: &Path) -> CordialResult<Self> {
-        Self::load_with(root, &SemanticCargoOptions::default())
+        Self::load_reporting(root, &SemanticCargoOptions::default(), &Reporter::default())
     }
 
     /// Load one explicit Cargo configuration into the canonical database.
@@ -25,41 +27,42 @@ impl SourceDatabase {
     #[instrument(level = "debug", skip(root, options), err(level = "warn"))]
     #[hotpath::measure]
     pub fn load_with(root: &Path, options: &SemanticCargoOptions) -> CordialResult<Self> {
+        Self::load_reporting(root, options, &Reporter::default())
+    }
+
+    /// [`Self::load_with`], saying each phase through `reporter` as it starts.
+    #[instrument(level = "debug", skip(root, options, reporter), err(level = "warn"))]
+    #[hotpath::measure]
+    pub fn load_reporting(
+        root: &Path,
+        options: &SemanticCargoOptions,
+        reporter: &Reporter,
+    ) -> CordialResult<Self> {
         let root = root.canonicalize()?;
         // canonicalize established absoluteness; check UTF-8 before the
         // upstream path constructor's assertion boundary.
         root.to_str()
             .ok_or_else(|| crate::CordialError::not_found(root.clone()))?;
-        let path = AbsPathBuf::assert_utf8(root.clone());
-        let manifest = ProjectManifest::discover_single(&path)?;
         let config = options.cargo_config();
-        let progress = |message: String| tracing::debug!(%message, "semantic workspace load");
-        let mut workspace = ProjectWorkspace::load(manifest, &config, &progress)?;
-        let mut gaps = Vec::new();
-        let scripts = workspace.run_build_scripts(&config, &progress)?;
-        if scripts.error().is_some() {
-            gaps.push(SemanticContextGap::BuildScripts);
-        }
-        workspace.set_build_scripts(scripts);
+        reporter.say("Reading Cargo metadata");
+        let mut workspace = discover(&root, &config)?;
+        reporter.say("Running build scripts");
+        let gaps = run_build_scripts(&mut workspace, &config)?;
         let context = context::WorkspaceInputs::capture(&workspace, options, gaps)?;
-        let load_config = LoadCargoConfig {
-            load_out_dirs_from_check: true,
-            with_proc_macro_server: ProcMacroServerChoice::Sysroot,
-            prefill_caches: false,
-            num_worker_threads: 1,
-            proc_macro_processes: 1,
-        };
-        let mut db = RootDatabase::new(None);
-        let (vfs, server) =
-            load_workspace_into_db(workspace, &config.extra_env, &load_config, &mut db)?;
+        let external_packages = packages::collect_external(&workspace);
+        reporter.say("Loading the workspace into rust-analyzer");
+        let (db, vfs, server) = load_database(workspace, &config)?;
         let context = context.finish(&db, &vfs, server.as_ref())?;
+        crate::process_memory::log("workspace loaded");
         Ok(Self {
             db,
             vfs,
             revision: 1,
             workspace: Some(context),
+            external_packages,
             cargo_options: Some(options.clone()),
             proc_macro_server: server,
+            reporter: reporter.clone(),
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: Some(root),
         })
@@ -128,4 +131,55 @@ impl SourceDatabase {
         }
         Ok(context.clone())
     }
+}
+
+/// Discover the manifest and read `cargo metadata` and the sysroot.
+#[instrument(level = "debug", skip(root, config), err(level = "warn"))]
+#[hotpath::measure]
+fn discover(root: &Path, config: &CargoConfig) -> CordialResult<ProjectWorkspace> {
+    let path = AbsPathBuf::assert_utf8(root.to_path_buf());
+    let manifest = ProjectManifest::discover_single(&path)?;
+    let progress = |message: String| tracing::debug!(%message, "semantic workspace load");
+    Ok(ProjectWorkspace::load(manifest, config, &progress)?)
+}
+
+/// Run Cargo's build scripts for their outputs; failure becomes a context gap.
+#[instrument(level = "debug", skip(workspace, config), err(level = "warn"))]
+#[hotpath::measure]
+fn run_build_scripts(
+    workspace: &mut ProjectWorkspace,
+    config: &CargoConfig,
+) -> CordialResult<Vec<SemanticContextGap>> {
+    let progress = |message: String| tracing::debug!(%message, "semantic workspace load");
+    let mut gaps = Vec::new();
+    let scripts = workspace.run_build_scripts(config, &progress)?;
+    if scripts.error().is_some() {
+        gaps.push(SemanticContextGap::BuildScripts);
+    }
+    workspace.set_build_scripts(scripts);
+    Ok(gaps)
+}
+
+/// Load the workspace into a fresh database with the proc-macro server.
+#[instrument(level = "debug", skip(workspace, config), err(level = "warn"))]
+#[hotpath::measure]
+fn load_database(
+    workspace: ProjectWorkspace,
+    config: &CargoConfig,
+) -> CordialResult<(
+    RootDatabase,
+    ra_ap_vfs::Vfs,
+    Option<ra_ap_proc_macro_api::ProcMacroClient>,
+)> {
+    let load_config = LoadCargoConfig {
+        load_out_dirs_from_check: true,
+        with_proc_macro_server: ProcMacroServerChoice::Sysroot,
+        prefill_caches: false,
+        num_worker_threads: 1,
+        proc_macro_processes: 1,
+    };
+    let mut db = RootDatabase::new(None);
+    let (vfs, server) =
+        load_workspace_into_db(workspace, &config.extra_env, &load_config, &mut db)?;
+    Ok((db, vfs, server))
 }

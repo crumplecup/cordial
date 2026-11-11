@@ -7,6 +7,7 @@ use std::path::Path;
 
 impl SourceDatabase {
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn project_observability(&self, root: &Path) -> CordialResult<SourceObservability> {
         let sema = Semantics::new(&self.db);
         SourceObservability::collect_with(root, |path, tree| {

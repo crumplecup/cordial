@@ -10,7 +10,7 @@ Delete the regenerable artifacts of one project's store, or of every store with
 Cordial writes a lot into its store, and nothing ever removes any of it. Under
 `~/.cordial/{project}/` each run leaves:
 
-- `cache/`: cached IR (`{crate}.ir.json`), rustdoc JSON, build artifacts, and
+- `cache/`: cached IR (`{crate}.ir.zst`), rustdoc JSON, build artifacts, and
   `rustdoc-target`, a whole cargo target directory for the rustdoc JSON builds. It
   is the large one, and it grows with every crate and toolchain the project has
   been analyzed with.

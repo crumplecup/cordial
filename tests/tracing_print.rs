@@ -3,9 +3,12 @@ use std::fs;
 use std::path::Path;
 
 use cordial::{
-    Disposition, PrintRuleId, RunAll, Session, SessionBuilder, TRACING_ETIQUETTE,
-    TracingStdioPolicy, scan_crate_tracing_print, scan_tracing_print_rust_source,
+    Disposition, IrView, PrintRuleId, RunAll, Session, SessionBuilder, TRACING_ETIQUETTE,
+    TracingStdioPolicy, scan_tracing_print_rust_source, tracing_print_findings,
 };
+
+#[path = "support/projected_crate.rs"]
+mod projected_crate;
 
 fn scan_source_with(source: &str, policy: &TracingStdioPolicy) -> miette::Result<Vec<PrintRuleId>> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
@@ -29,6 +32,12 @@ fn scan_source(source: &str) -> miette::Result<Vec<PrintRuleId>> {
 
 fn write_tree(files: &[(&str, &str)]) -> miette::Result<tempfile::TempDir> {
     let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
+    fs::write(
+        fixture.path().join("Cargo.toml"),
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+    )
+    .into_diagnostic()
+    .wrap_err("manifest")?;
     for (rel, source) in files {
         let path = fixture.path().join(rel);
         if let Some(parent) = path.parent() {
@@ -44,7 +53,10 @@ fn write_tree(files: &[(&str, &str)]) -> miette::Result<tempfile::TempDir> {
 }
 
 fn snippets_with(root: &Path, policy: &TracingStdioPolicy) -> miette::Result<Vec<String>> {
-    let records = scan_crate_tracing_print(root, policy)
+    let inventory = projected_crate::projected_crate(root)?
+        .source_observability()
+        .into_diagnostic()?;
+    let records = tracing_print_findings(&inventory, policy)
         .into_diagnostic()
         .wrap_err("scan crate")?;
     Ok(records

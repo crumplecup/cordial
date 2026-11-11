@@ -1,12 +1,11 @@
 use std::collections::BTreeMap;
 
-use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
-
 use crate::csv_row::csv_field;
 use crate::error::CordialResult;
 use crate::hooks::{RenderView, Reporter};
 use crate::objects::{Artifact, Finding, MapFindingSink, TextArtifact};
 
+use super::contract_bounds::clause_shape;
 use super::types::{AntipatternRuleId, build_workspace_antipatterns_summary};
 
 use tracing::instrument;
@@ -283,49 +282,6 @@ fn write_duplicate_clusters(body: &mut String, entries: &[&AntipatternRow]) -> C
     }
     body.push('\n');
     Ok(())
-}
-
-#[instrument(level = "debug")]
-fn clause_shape(snippet: &str) -> String {
-    snippet
-        .parse::<TokenStream>()
-        .map(|tokens| shape_tokens(tokens).to_string())
-        .unwrap_or_else(|_| snippet.to_string())
-}
-
-#[instrument(level = "debug", skip(tokens))]
-fn shape_tokens(tokens: TokenStream) -> TokenStream {
-    let items: Vec<TokenTree> = tokens.into_iter().collect();
-    let mut out = Vec::with_capacity(items.len());
-    for (i, tt) in items.iter().enumerate() {
-        match tt {
-            TokenTree::Ident(ident) => {
-                let is_call = matches!(
-                    items.get(i + 1),
-                    Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Parenthesis
-                );
-                if is_call {
-                    out.push(tt.clone());
-                } else {
-                    out.push(TokenTree::Ident(proc_macro2::Ident::new("X", ident.span())));
-                }
-            }
-            TokenTree::Literal(literal) => {
-                out.push(TokenTree::Ident(proc_macro2::Ident::new(
-                    "X",
-                    literal.span(),
-                )));
-            }
-            TokenTree::Group(group) => {
-                out.push(TokenTree::Group(Group::new(
-                    group.delimiter(),
-                    shape_tokens(group.stream()),
-                )));
-            }
-            TokenTree::Punct(_) => out.push(tt.clone()),
-        }
-    }
-    TokenStream::from_iter(out)
 }
 
 /// Writes `antipatterns-summary.md`.

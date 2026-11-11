@@ -17,7 +17,7 @@ use super::{AmenableStdEntry, AmenableStdReport, AmenableStdStatus};
 /// `classify_row` -- shared by [`build_amenable_std_report`] and
 /// [`build_amenable_ext_report`], which differ only in which wrapper
 /// type's evidence/witness/proof-test lookups `classify_row` uses.
-#[instrument(level = "debug", skip(args, classify_row))]
+#[instrument(level = "debug", skip(args, classify_row), err(level = "warn"))]
 fn build_wrapped_report(
     args: BuildWrappedReportArgs<'_>,
     classify_row: impl Fn(&str, ClassifyRowArgs<'_>) -> CordialResult<AmenableStdEntry>,
@@ -63,7 +63,11 @@ fn build_wrapped_report(
 }
 
 /// Build an amenable std registry coverage report.
-#[instrument(level = "debug", skip(items, registry, skip_map, proof_chain_subjects))]
+#[instrument(
+    level = "debug",
+    skip(items, registry, skip_map, proof_chain_subjects),
+    err(level = "warn")
+)]
 pub fn build_amenable_std_report(
     source_crate: &str,
     items: &[StdInventoryItem],
@@ -88,7 +92,11 @@ pub fn build_amenable_std_report(
 }
 
 /// Build an amenable ext (third-party crate) registry coverage report.
-#[instrument(level = "debug", skip(items, registry, skip_map, proof_chain_subjects))]
+#[instrument(
+    level = "debug",
+    skip(items, registry, skip_map, proof_chain_subjects),
+    err(level = "warn")
+)]
 pub fn build_amenable_ext_report(
     source_crate: &str,
     items: &[StdInventoryItem],
@@ -150,7 +158,8 @@ pub struct ClassifyRowArgs<'a> {
         evidence_for_type,
         witness_verifiers_for_type,
         type_has_proof_test
-    )
+    ),
+    err(level = "warn")
 )]
 fn classify_wrapped_row(
     type_path: &str,
@@ -208,7 +217,7 @@ pub(crate) struct RowFacts<'a> {
 /// `Missing` without evidence, `Complete` when every applicable verifier has
 /// a witness, and `Partial` otherwise. Shared by inventory rows and by the
 /// per-instantiation rows built from them.
-#[instrument(level = "debug", skip(facts))]
+#[instrument(level = "debug", skip(facts), err(level = "warn"))]
 pub(crate) fn entry_from_facts(facts: RowFacts<'_>) -> CordialResult<AmenableStdEntry> {
     let RowFacts {
         type_path,
@@ -280,7 +289,7 @@ pub(crate) fn entry_from_facts(facts: RowFacts<'_>) -> CordialResult<AmenableStd
 }
 
 /// Classify one std inventory row for amenable registry coverage.
-#[instrument(level = "debug", skip(args))]
+#[instrument(level = "debug", skip(args), err(level = "warn"))]
 pub fn classify_amenable_std_row(
     type_path: &str,
     args: ClassifyRowArgs<'_>,
@@ -296,7 +305,7 @@ pub fn classify_amenable_std_row(
 
 /// Classify one third-party (`amenable_ext`) inventory row for amenable
 /// registry coverage.
-#[instrument(level = "debug", skip(args))]
+#[instrument(level = "debug", skip(args), err(level = "warn"))]
 pub fn classify_amenable_ext_row(
     type_path: &str,
     args: ClassifyRowArgs<'_>,

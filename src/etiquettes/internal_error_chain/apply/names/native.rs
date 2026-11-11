@@ -10,7 +10,7 @@ use ra_ap_syntax::{
 impl NameAudit {
     #[tracing::instrument(level = "debug", skip(file))]
     #[hotpath::measure(impl_type = "NameAudit")]
-    pub(crate) fn collect_native(file: &DatabaseSource<'_>) -> Self {
+    pub(crate) fn collect(file: &DatabaseSource<'_>) -> Self {
         let mut visitor = NameAudit::default();
         for node in file.tree().syntax().descendants().filter(|node| {
             !node
