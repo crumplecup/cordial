@@ -36,7 +36,10 @@ pub(super) enum TokenKind {
     /// Identifiers, keywords and lifetimes.
     Ident(String),
     /// One punctuation character; `joint` when another follows immediately.
-    Punct { ch: char, joint: bool },
+    Punct {
+        ch: char,
+        joint: bool,
+    },
     Literal(String),
     Group(Delimiter, Vec<Token>),
 }

@@ -212,6 +212,8 @@ pub use etiquettes::{
 pub use etiquettes::{
     PROOF_PATTERNS_ETIQUETTE, ProofPatternKind, ProofPatternRecord, proof_pattern_records,
 };
+#[cfg(feature = "_etiquette_plugins")]
+pub use etiquettes::{STALE_EXCEPTIONS_ETIQUETTE, StaleExceptionFinding};
 #[cfg(feature = "internal_error_chain")]
 pub use ir::{
     ATTR_SOURCE_ERROR_APPLY, ATTR_SOURCE_ERROR_ARCHITECTURE, ATTR_SOURCE_ERROR_COMPLIANCE,

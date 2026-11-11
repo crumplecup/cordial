@@ -91,15 +91,18 @@ pub(super) fn assess_targets(
         crate_findings = timings.measure("pipeline", "exceptions", || {
             let exception_sets =
                 crate::exceptions::load_exception_sets(store, etiquette_ids, target.crate_name())?;
-            crate::exceptions::warn_stale_exceptions(
-                target.crate_name(),
-                &crate_findings,
-                &exception_sets,
-            );
-            Ok(crate::exceptions::apply_exception_sets(
-                crate_findings,
-                &exception_sets,
-            ))
+            #[cfg(feature = "_etiquette_plugins")]
+            let stale = if etiquette_ids.contains(&"stale_exceptions") {
+                stale_findings(target.crate_name(), &crate_findings, &exception_sets)
+            } else {
+                Vec::new()
+            };
+            #[cfg(not(feature = "_etiquette_plugins"))]
+            let stale: Vec<Box<dyn Finding>> = Vec::new();
+            let mut applied =
+                crate::exceptions::apply_exception_sets(crate_findings, &exception_sets);
+            applied.extend(stale);
+            Ok(applied)
         })?;
         all_findings.extend(crate_findings);
         progress.inc(1);
@@ -107,4 +110,25 @@ pub(super) fn assess_targets(
 
     progress.finish(format!("Assessed {} crate(s)", targets.len()));
     Ok(all_findings)
+}
+
+#[cfg(feature = "_etiquette_plugins")]
+/// One open finding per exception row that matches nothing in `findings`.
+///
+/// Raised only when the stale-exceptions etiquette is part of the run.
+#[instrument(level = "debug", skip(findings, sets))]
+fn stale_findings(
+    crate_name: &str,
+    findings: &[Box<dyn Finding>],
+    sets: &HashMap<String, crate::exceptions::ExceptionSet>,
+) -> Vec<Box<dyn Finding>> {
+    let refs: Vec<&dyn Finding> = findings.iter().map(Box::as_ref).collect();
+    crate::exceptions::stale_exceptions(&refs, sets)
+        .into_iter()
+        .map(|stale| {
+            Box::new(crate::etiquettes::StaleExceptionFinding::new(
+                crate_name, stale,
+            )) as Box<dyn Finding>
+        })
+        .collect()
 }

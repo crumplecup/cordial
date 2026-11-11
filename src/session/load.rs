@@ -8,9 +8,9 @@ use crate::error::{CordialError, CordialResult};
 
 use crate::hooks::{EnrichView, IrEnricher, LoadContext, Loader, Probe, ProbeView};
 use crate::ir::{CrateIr, CrateView, CrateViewMut, WorkspaceIr};
-use crate::loader::{CrateTarget, LoadView, ParsedSourceSession, SourceLoader};
 #[cfg(any(feature = "derives", feature = "antipatterns"))]
 use crate::loader::SourceLoadView;
+use crate::loader::{CrateTarget, LoadView, ParsedSourceSession, SourceLoader};
 use crate::objects::Marker;
 
 use crate::HookTimings;

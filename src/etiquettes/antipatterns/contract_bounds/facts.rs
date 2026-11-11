@@ -1,10 +1,10 @@
 //! Source-derived contract call shapes retained independently of registry policy.
 
-use super::index::tokens::{
-    bare_named_call_name, canonicalize_type_text, expression, named_call_name_allowing_leading_attr,
-    strip_trigger_attrs, strip_turbofish,
-};
 use super::index::ContractIndex;
+use super::index::tokens::{
+    bare_named_call_name, canonicalize_type_text, expression,
+    named_call_name_allowing_leading_attr, strip_trigger_attrs, strip_turbofish,
+};
 use super::token_tree::{Token, render};
 use crate::etiquettes::antipatterns::types::AntipatternSiteRecord;
 use crate::loader::database_token_text as token_text;

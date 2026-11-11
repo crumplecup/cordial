@@ -244,29 +244,6 @@ pub fn stale_exceptions(
     stale
 }
 
-/// Log a warning for each row in `sets` that matches no finding in `findings`.
-#[instrument(level = "debug", skip(findings, sets))]
-pub fn warn_stale_exceptions(
-    crate_name: &str,
-    findings: &[Box<dyn Finding>],
-    sets: &HashMap<String, ExceptionSet>,
-) {
-    let finding_refs: Vec<&dyn Finding> = findings.iter().map(Box::as_ref).collect();
-    for stale in stale_exceptions(&finding_refs, sets) {
-        let entry = stale.entry();
-        tracing::warn!(
-            crate_name,
-            etiquette = %stale.etiquette(),
-            file = %entry.file(),
-            line = ?entry.line(),
-            rule_id = ?entry.rule_id(),
-            context = ?entry.context(),
-            reason = %entry.reason(),
-            "exception matches no finding; remove or edit it with `cordial exceptions`"
-        );
-    }
-}
-
 /// Apply loaded exception sets, wrapping matching findings as suppressed.
 #[instrument(level = "debug", skip(findings, sets))]
 pub fn apply_exception_sets(

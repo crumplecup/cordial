@@ -132,6 +132,19 @@ separate lints with independent strategies. Use
 `manifest_workspace_bypass = false` to keep a policy shape visible in the
 survey without opening findings for it.
 
+## Exception hygiene
+
+An exception is a documented decision, so a decision that no longer applies is
+itself a finding.
+
+| Etiquette | Enforces | Main rule ids |
+| --- | --- | --- |
+| `stale_exceptions` | Every exception row still suppresses a finding of its etiquette. A row keyed to a moved line or a fixed finding opens an item until it is re-keyed or removed. | `EXCEPTION-STALE-001` |
+
+Only rows of etiquettes that ran are checked, so a skipped etiquette or a crate
+outside the run filter never reports. Fix a row with
+`cordial exceptions edit` or `cordial exceptions remove`.
+
 ## Proof hygiene
 
 The proof-hygiene standard is: verifier-only compiler signal and trusted proof

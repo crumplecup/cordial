@@ -1,8 +1,5 @@
 //! Kani clause shapes use the loader's expression nodes without reparsing.
-use super::super::{
-    facts::ContractCall,
-    index::tokens::canonicalize_type_text,
-};
+use super::super::{facts::ContractCall, index::tokens::canonicalize_type_text};
 use super::{ContractClause, is_trivial, make_finding, name, site_context};
 use crate::{
     CordialResult,

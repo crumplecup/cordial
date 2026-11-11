@@ -102,6 +102,10 @@ pub(crate) mod internal_error_chain;
 pub(crate) mod modularity;
 #[cfg(feature = "pageantry")]
 pub(crate) mod pageantry;
+#[cfg(feature = "_etiquette_plugins")]
+mod stale_exceptions;
+#[cfg(feature = "_etiquette_plugins")]
+pub use stale_exceptions::{STALE_EXCEPTIONS_ETIQUETTE, StaleExceptionFinding};
 #[cfg(feature = "panics")]
 pub(crate) mod panics;
 #[cfg(feature = "proof_patterns")]
@@ -158,7 +162,7 @@ pub use trenchcoat::TRENCHCOAT_ETIQUETTE;
 /// `docs/planning/quality-report-feeder-trait.md`).
 #[::tracing::instrument(level = "debug")]
 pub(crate) fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::QualityEtiquette> {
-    let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 25] = [
+    let items: [Option<&'static dyn crate::etiquette::QualityEtiquette>; 26] = [
         #[cfg(feature = "panics")]
         Some(&*panics::PANICS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "panics"))]
@@ -276,6 +280,10 @@ pub(crate) fn quality_report_etiquettes() -> Vec<&'static dyn crate::etiquette::
         #[cfg(feature = "pageantry")]
         Some(&*pageantry::PAGEANTRY_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
         #[cfg(not(feature = "pageantry"))]
+        None,
+        #[cfg(feature = "_etiquette_plugins")]
+        Some(&*STALE_EXCEPTIONS_ETIQUETTE as &dyn crate::etiquette::QualityEtiquette),
+        #[cfg(not(feature = "_etiquette_plugins"))]
         None,
     ];
     items.into_iter().flatten().collect()

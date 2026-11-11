@@ -334,6 +334,10 @@ name = "exceptions"
 required-features = ["panics", "visibility"]
 
 [[test]]
+name = "stale_exceptions"
+required-features = ["panics"]
+
+[[test]]
 name = "quality_report"
 required-features = ["quality"]
 

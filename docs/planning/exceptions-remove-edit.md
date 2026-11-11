@@ -1,4 +1,4 @@
-# `cordial exceptions remove` / `edit` and stale-exception warnings
+# `cordial exceptions remove` / `edit` and stale-exception findings
 
 Status: **Active**
 
@@ -39,16 +39,18 @@ in place. `ExceptionUpdate` carries optional new `file`, `line`, `rule_id`,
 the same normalization as `add`, and an edit that would duplicate another row is
 an error.
 
-### Stale warnings
+### Stale exceptions
 
 `stale_exceptions(findings, sets)` returns entries whose category produced no
-matching finding in this run. The session warns once per stale entry after
-exceptions are applied, naming the crate, etiquette, selector fields, and
-reason. It is a warning, not a gate: an etiquette that was skipped or a crate
-outside the run filter is never reported (sets are only loaded for the
-selected etiquettes and crates).
+matching finding in this run. The session turns each one into an open
+`EXCEPTION-STALE-001` finding of the `stale_exceptions` etiquette after
+exceptions are applied, so it reaches the worklist, naming the crate,
+etiquette, selector fields, and reason. An etiquette that was skipped or a
+crate outside the run filter is never reported (sets are only loaded for the
+selected etiquettes and crates). It was a log warning until a dead row went
+unnoticed after a line shift.
 
-A dedicated `list --stale` is not provided; the run-time warning sees the same
+A dedicated `list --stale` is not provided; the run-time finding sees the same
 findings and needs no second analysis pass.
 
 ## CLI
@@ -64,5 +66,5 @@ cordial exceptions edit <etiquette> --context C [--rule-id R] ... \
 - [x] Design
 - [x] Library API: `remove_exception`, `update_exception`
 - [x] CLI `remove` / `edit`
-- [x] Stale warning in the session run
+- [x] Stale exception finding (`EXCEPTION-STALE-001`) in the session run
 - [x] Tests in `tests/exceptions.rs`, `tests/cli.rs`
