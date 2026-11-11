@@ -1667,8 +1667,32 @@ functions are marked incomplete (their ranges are expansion coordinates);
 functions declared inside another function's body get facts only in the ordinary
 context; overlapping trait impls are not detected by the duplicate-name check.
 
+**Result cache (built).** A run's analysis is kept under a digest of everything
+that shaped it, and a later run with the same digest never loads the workspace.
+
+- **Entry.** `{store}/cache/run/{digest}/` holds one compressed IR per target
+  (Cordial's is under 10 MB; the pretty-printed file it replaced was 459 MB), the
+  workspace path-inclusion facts, and the inputs. Artifacts are written
+  atomically and are each valid for their key; only the current key's entry is kept.
+- **Key.** The Cordial binary (path, size, mtime), an IR schema version, the
+  Cargo options and planning mode, `rustc -vV`, the environment variables that
+  shape the build (an allowlist, so `RUST_LOG` cannot cause a miss), and a digest
+  of every file under every local package root, which includes path dependencies
+  outside the workspace. Build directories are skipped by name and by the
+  `CACHEDIR.TAG` marker. `Cargo.lock` pins registry dependencies by checksum.
+- **Lazy load.** A run starts with an empty database and a recipe for loading
+  the real one. A hit reads the artifacts and never loads; a miss, or an artifact
+  the entry lacks, loads once and records what it computed.
+- **Miss messages.** A miss says which inputs changed since the last entry.
+- **Measured on Cordial (debug build).** Miss 2m33s; hit 41s, with no workspace
+  load and the same gate result. The remaining time on a hit is the 11.8 s IR
+  decode (`serde_json` over `Value` attributes) and the later stages.
+- **Limits.** Reuse is all-or-nothing per target: one changed file reanalyses
+  the target, because salsa's in-memory results cannot be saved. Proof-harness
+  scans still run against the empty database on a hit; they are file-level syntax
+  collection.
+
 **Remaining.** Tracing's proof-only reachability still uses the old name-keyed
 registry; it should read `ContextCalls`. `enricher/source_calls.rs` and the
-`transform/` readers of `Calls` should move to the same edges. The IR file is
-now compact and opt-in; a keyed result cache that the pipeline reads, so a repeat
-run skips the load, is designed but not built.
+`transform/` readers of `Calls` should move to the same edges. The IR decode and
+the ordinary pass are now the dominant costs.

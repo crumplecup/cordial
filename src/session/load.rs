@@ -43,13 +43,18 @@ pub(super) struct LoadingHooks<'a> {
     gated_semantics: bool,
 }
 
-/// Load the Cargo workspace into the run's database, saying each phase through
-/// a spinner. Gated code is analysed only when a selected etiquette reads its
-/// facts, so the cost lands on the etiquettes that ask.
-#[instrument(level = "debug", skip(session, timings), err(level = "warn"))]
+/// Begin the run's source session without loading the workspace.
+///
+/// The results of a run are kept under a digest of everything that shaped them.
+/// When this run's inputs have the same digest, the cached results stand in for
+/// the analysis and the workspace is never loaded; otherwise it loads when the
+/// first target needs projecting, and the results are recorded for the next run.
+/// Gated code is analysed only when a selected etiquette reads its facts.
+#[instrument(level = "debug", skip(session, store, timings), err(level = "warn"))]
 #[hotpath::measure]
 fn begin_database(
     session: &RuntimeSession,
+    store: &StoreLayout,
     gated_semantics: bool,
     timings: &mut HookTimings,
 ) -> CordialResult<ParsedSourceSession> {
@@ -58,20 +63,31 @@ fn begin_database(
     } else {
         crate::CfgPlanning::Explicit
     };
-    let load_task: std::sync::Arc<dyn crate::ProgressTask> = std::sync::Arc::from(
-        session
-            .progress()
-            .spinner("Loading the Cargo workspace".to_string()),
-    );
-    let load_report = {
-        let task = load_task.clone();
-        crate::loader::Reporter::new(move |message| task.set_message(message))
+    let task = session
+        .progress()
+        .spinner("Checking for cached results".to_string());
+    let cache = timings.measure("pipeline", "result_cache_key", || {
+        let options = crate::loader::SemanticCargoOptions::default().with_cfg_planning(planning);
+        crate::run_cache::gather(&crate::run_cache::KeyRequest::new(
+            session.project_root(),
+            format!("{options:?}"),
+        ))
+        .map(|inputs| crate::run_cache::RunCache::open(store, inputs))
+    });
+    let cache = match cache {
+        Ok(cache) => Some(cache),
+        Err(error) => {
+            // Without a key nothing can be reused, but the run still works.
+            tracing::warn!(error = ?error, "cached results unavailable; analysing from scratch");
+            None
+        }
     };
-    let database = timings.measure("pipeline", "source_database_load", || {
-        ParsedSourceSession::begin_in(session.project_root(), &load_report, planning)
-    })?;
-    load_task.finish("Loaded the Cargo workspace and semantic database".to_string());
-    Ok(database)
+    task.finish("Checked for cached results".to_string());
+    Ok(ParsedSourceSession::begin_deferred(
+        session.project_root(),
+        planning,
+        cache,
+    ))
 }
 
 #[instrument(
@@ -88,7 +104,7 @@ pub(super) fn load_and_probe(
     hooks: LoadingHooks<'_>,
     timings: &mut HookTimings,
 ) -> CordialResult<LoadedWorkspace> {
-    let parsed_source_session = begin_database(session, hooks.gated_semantics, timings)?;
+    let parsed_source_session = begin_database(session, store, hooks.gated_semantics, timings)?;
     let LoadingHooks {
         loaders,
         enrichers,

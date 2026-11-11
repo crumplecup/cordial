@@ -35,8 +35,7 @@ impl SourceLoadView {
         &self,
         target: &crate::loader::CrateTarget,
     ) -> crate::CordialResult<crate::ir::CrateIr> {
-        self.cache_token
-            .with_database(|database| database.project_target(target))
+        self.cache_token.project_target(target)
     }
 
     /// Project workspace splices and proof calls from the run's database.
@@ -46,8 +45,7 @@ impl SourceLoadView {
     pub(crate) fn project_path_inclusions(
         &self,
     ) -> crate::CordialResult<crate::ir::PathInclusionFacts> {
-        self.cache_token
-            .with_database(|database| database.project_path_inclusions())
+        self.cache_token.path_inclusions()
     }
 
     /// A view that supplies no files and reads through the database of the run

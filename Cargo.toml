@@ -344,6 +344,10 @@ name = "gated_semantics_demand"
 required-features = ["panics", "tracing"]
 
 [[test]]
+name = "result_cache"
+required-features = ["panics"]
+
+[[test]]
 name = "quality_report"
 required-features = ["quality"]
 

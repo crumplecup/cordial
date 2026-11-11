@@ -229,10 +229,20 @@ impl CrateIr {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
+        let started = std::time::Instant::now();
         let snapshot = self.snapshot()?;
         let mut encoder = zstd::stream::write::Encoder::new(fs::File::create(path)?, ZSTD_LEVEL)?;
         serde_json::to_writer(&mut encoder, &snapshot)?;
         encoder.finish()?;
+        tracing::debug!(
+            target: "cordial::metrics",
+            path = %path.display(),
+            bytes = fs::metadata(path).map(|meta| meta.len()).unwrap_or(0),
+            nodes = snapshot.nodes().len(),
+            edges = snapshot.edges().len(),
+            millis = started.elapsed().as_millis() as u64,
+            "ir file written"
+        );
         Ok(())
     }
 
@@ -240,9 +250,23 @@ impl CrateIr {
     #[instrument(level = "info", skip(path), err(level = "warn"))]
     #[hotpath::measure(impl_type = "CrateIr")]
     pub fn read_cache(path: &Path) -> CordialResult<Self> {
+        let started = std::time::Instant::now();
         let decoder = zstd::stream::read::Decoder::new(fs::File::open(path)?)?;
         let snapshot: CrateIrSnapshot = serde_json::from_reader(std::io::BufReader::new(decoder))?;
-        Self::from_snapshot(snapshot)
+        let decoded = started.elapsed();
+        let (nodes, edges) = (snapshot.nodes().len(), snapshot.edges().len());
+        let ir = Self::from_snapshot(snapshot)?;
+        tracing::debug!(
+            target: "cordial::metrics",
+            path = %path.display(),
+            bytes = fs::metadata(path).map(|meta| meta.len()).unwrap_or(0),
+            nodes,
+            edges,
+            decode_millis = decoded.as_millis() as u64,
+            total_millis = started.elapsed().as_millis() as u64,
+            "ir file read"
+        );
+        Ok(ir)
     }
 
     /// Store path for this crate's IR cache file.

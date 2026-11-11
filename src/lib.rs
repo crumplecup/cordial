@@ -41,6 +41,7 @@ mod progress;
 #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
 mod proof_harness;
 mod reporter;
+mod run_cache;
 /// Rustdoc JSON inventory helpers used by coverage etiquettes.
 #[cfg(feature = "rustdoc")]
 pub mod rustdoc;
