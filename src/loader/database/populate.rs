@@ -109,6 +109,13 @@ impl Projection {
             weight.set_attr("qualified_path", qualified.clone().into());
             if let ast::Item::Fn(function) = &item {
                 collect_function(db, sema, source, function, &mut weight)?;
+                weight.set_attr(
+                    crate::ir::ATTR_FUNCTION_LOCATION,
+                    serde_json::to_value(crate::FunctionLocation::new(
+                        source.path().to_path_buf(),
+                        u32::from(range.start()),
+                    ))?,
+                );
             }
             let node = graph.insert_node(weight);
             graph.insert_edge(parent, node, EdgeKind::Contains)?;
@@ -130,8 +137,12 @@ impl Projection {
     }
 
     /// Add the resolved `Calls` edges and hand back the function nodes.
-    #[tracing::instrument(level = "trace", skip(self, graph), err(level = "warn"))]
-    pub(super) fn connect(self, graph: &mut CrateIr) -> CordialResult<FunctionNodes> {
+    #[tracing::instrument(level = "trace", skip(self, graph, locator), err(level = "warn"))]
+    pub(super) fn connect(
+        self,
+        graph: &mut CrateIr,
+        locator: &super::external::Locator<'_>,
+    ) -> CordialResult<FunctionNodes> {
         // One edge per caller and callee: the relationship. Each call's own
         // range and contract stay in the caller's semantic facts.
         let pairs: std::collections::BTreeSet<(NodeId, NodeId)> = self
@@ -145,6 +156,30 @@ impl Projection {
             .collect();
         for (caller, callee) in pairs {
             graph.insert_edge(caller, callee, EdgeKind::Calls)?;
+        }
+        // A call to a function with no node here may land in another crate of
+        // the workspace; record where, so that crate's graph can claim it.
+        let mut external: std::collections::BTreeMap<
+            NodeId,
+            std::collections::BTreeSet<crate::FunctionLocation>,
+        > = std::collections::BTreeMap::new();
+        for (caller, target) in &self.calls {
+            if !self.definitions.contains_key(target)
+                && let Some(location) = locator.locate(*target)
+            {
+                external.entry(*caller).or_default().insert(location);
+            }
+        }
+        for (caller, locations) in external {
+            let calls: Vec<_> = locations
+                .into_iter()
+                .map(|location| crate::ExternalCall::new(location, None))
+                .collect();
+            graph.set_attr(
+                caller,
+                crate::ATTR_EXTERNAL_CALLS,
+                serde_json::to_value(calls)?,
+            )?;
         }
         Ok(self.functions)
     }

@@ -1,0 +1,7 @@
+pub fn shared() {}
+
+pub struct Checker;
+
+impl Checker {
+    pub fn ensures() {}
+}

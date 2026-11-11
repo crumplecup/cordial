@@ -1,0 +1,8 @@
+pub fn ordinary() {
+    provider::shared();
+}
+
+#[cfg(kani)]
+pub fn harness() {
+    provider::Checker::ensures();
+}

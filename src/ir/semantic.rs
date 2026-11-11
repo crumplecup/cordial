@@ -26,6 +26,14 @@ pub const ATTR_SEMANTIC_FUNCTION: &str = "semantic_function";
 #[new(visibility = "pub(crate)")]
 pub struct SemanticItemId(u64);
 
+impl SemanticItemId {
+    /// The raw bits of the session-local identity.
+    #[tracing::instrument(level = "trace", skip(self))]
+    pub(crate) fn bits(self) -> u64 {
+        self.0
+    }
+}
+
 /// A deliberately bounded type summary; unsupported types remain explicit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SemanticType {

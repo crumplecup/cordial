@@ -94,7 +94,14 @@ impl SourceDatabase {
             #[cfg(not(feature = "tracing"))]
             let _ = module;
         }
-        let functions = projection.connect(graph)?;
+        let roots = self
+            .projection_context()?
+            .packages()
+            .iter()
+            .map(|package| package.root().clone())
+            .collect();
+        let locator = super::super::external::Locator::new(&self.db, &self.vfs, roots);
+        let functions = projection.connect(graph, &locator)?;
         let outline = Outline {
             functions,
             #[cfg(feature = "tracing")]

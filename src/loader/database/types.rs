@@ -2,7 +2,7 @@
 
 use ra_ap_hir::{Adt, Crate, ModuleDef, Semantics, Type};
 use ra_ap_ide_db::{RootDatabase, famous_defs::FamousDefs};
-use salsa::plumbing::AsId;
+use salsa::plumbing::{AsId, FromId};
 use tracing::instrument;
 
 use crate::{SemanticItemId, SemanticReturnContract, SemanticType};
@@ -15,6 +15,12 @@ struct ItemKey<'db> {
 #[instrument(level = "trace", skip(db, definition))]
 pub(super) fn identity(db: &RootDatabase, definition: ModuleDef) -> SemanticItemId {
     SemanticItemId::new(ItemKey::new(db, definition).as_id().as_bits())
+}
+
+/// The definition an identity of this session names.
+#[instrument(level = "trace", skip(db, id))]
+pub(super) fn definition(db: &RootDatabase, id: SemanticItemId) -> ModuleDef {
+    *ItemKey::from_id(salsa::Id::from_bits(id.bits())).definition(db)
 }
 
 #[instrument(level = "trace", skip(db, ty))]

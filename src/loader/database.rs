@@ -1,6 +1,7 @@
 //! Canonical source inputs, tracked queries, and shared IR projection.
 use tracing::instrument;
 mod contexts;
+mod external;
 mod options;
 mod populate;
 mod projection;

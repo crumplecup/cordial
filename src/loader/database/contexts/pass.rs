@@ -22,7 +22,7 @@ use crate::{
 use ra_ap_cfg::CfgOptions;
 use ra_ap_hir::{Semantics, attach_db};
 use ra_ap_syntax::{AstNode, TextRange, ast};
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use tracing::instrument;
 
@@ -279,6 +279,14 @@ impl SourceDatabase {
                 }
             }
             let mut edges: BTreeSet<(NodeId, NodeId)> = BTreeSet::new();
+            let roots = self
+                .projection_context()?
+                .packages()
+                .iter()
+                .map(|package| package.root().clone())
+                .collect();
+            let locator = super::super::external::Locator::new(&self.db, &self.vfs, roots);
+            let mut external: BTreeMap<NodeId, BTreeSet<crate::FunctionLocation>> = BTreeMap::new();
             for (caller, target) in calls {
                 let callee = definitions.get(&target);
                 tracing::debug!(
@@ -291,10 +299,15 @@ impl SourceDatabase {
                 );
                 if let Some(callee) = callee {
                     edges.insert((caller, *callee));
+                } else if let Some(location) = locator.locate(target) {
+                    external.entry(caller).or_default().insert(location);
                 }
             }
             for (caller, callee) in edges {
                 graph.insert_context_call(caller, callee, context.clone())?;
+            }
+            for (caller, locations) in external {
+                push_external_calls(graph, caller, locations, context)?;
             }
             Ok(finished)
         })
@@ -361,6 +374,28 @@ fn push_activity(graph: &mut CrateIr, node: NodeId, index: u32) -> CordialResult
         node,
         crate::ATTR_SEMANTIC_ACTIVITY,
         serde_json::to_value(active)?,
+    )
+}
+
+/// Add the calls `node` makes into other crates in this context to those already
+/// recorded on it.
+#[instrument(level = "trace", skip(graph, locations, node, context), err(level = "warn"))]
+fn push_external_calls(
+    graph: &mut CrateIr,
+    node: NodeId,
+    locations: BTreeSet<crate::FunctionLocation>,
+    context: &SemanticContextKey,
+) -> CordialResult<()> {
+    let mut calls = crate::IrView::external_calls(graph, node)?;
+    calls.extend(
+        locations
+            .into_iter()
+            .map(|location| crate::ExternalCall::new(location, Some(context.clone()))),
+    );
+    graph.set_attr(
+        node,
+        crate::ATTR_EXTERNAL_CALLS,
+        serde_json::to_value(calls)?,
     )
 }
 
