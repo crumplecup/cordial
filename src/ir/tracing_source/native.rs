@@ -87,6 +87,7 @@ fn context(
     semantics: Option<&SemanticFunction>,
 ) -> CordialResult<FnContext> {
     let output = function.ret_type().and_then(|ret| ret.ty());
+    let return_shape = semantics.map(|facts| facts.return_shape());
     let syntactic_result = output.as_ref().is_some_and(recordable::returns_result);
     let (returns_result, displayable) = match semantics.map(|facts| facts.result_recording()) {
         // The solver is authoritative: an error is displayable only when it proved
@@ -124,10 +125,15 @@ fn context(
         &shape,
         kind,
         &peek,
-        output.as_ref().is_some_and(recordable::returns_self),
-        output.as_ref().is_some_and(recordable::contains_bool),
+        return_shape
+            .and_then(|returned| *returned.is_self())
+            .unwrap_or(false),
+        return_shape
+            .and_then(|returned| *returned.has_bool())
+            .unwrap_or(false),
         returns_result,
     );
+    let return_recording = semantics.map(|facts| facts.return_recording());
     let names = recordable::parameter_names(function);
     let skipped = unrecordable_parameters(&names, semantics);
     FnContext::builder()
@@ -136,8 +142,14 @@ fn context(
         .param_names(names)
         .unrecordable_params(skipped)
         .returns_result(returns_result)
-        .return_unrecordable(output.as_ref().is_some_and(recordable::unrecordable))
-        .return_borrowed(output.as_ref().is_some_and(recordable::borrowed))
+        .return_unrecordable(
+            !return_recording.is_some_and(|ret| *ret.debug() == SemanticCapability::Proven),
+        )
+        .return_borrowed(
+            return_recording
+                .and_then(|ret| *ret.borrowed())
+                .unwrap_or(true),
+        )
         .err_is_displayable(displayable)
         .has_error_path_event(peek.has_error_path_event())
         .build()
