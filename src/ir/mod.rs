@@ -73,13 +73,14 @@ mod proof_calls;
 #[cfg(feature = "tracing")]
 pub use proof_calls::SourceProofFunction;
 mod function_location;
+mod macro_island;
 mod query;
 #[cfg(feature = "rustdoc")]
 mod rustdoc_query;
 mod semantic;
 mod semantic_context;
 mod semantic_workspace;
-mod source_attributes;
+pub(crate) mod source_attributes;
 mod source_calls;
 #[cfg(any(
     feature = "allows",
@@ -185,6 +186,7 @@ pub use function_source::{
 pub use graph::{CrateIr, CrateIrSnapshot};
 pub use indexes::{AttrKey, AttrValue, IrIndexes, QualifiedPath};
 pub use input_snapshot::{ATTR_CARGO_MANIFEST_SNAPSHOT, FileSnapshot};
+pub use macro_island::{ATTR_MACRO_ISLAND, MacroIsland};
 pub use node::{ItemKind, NodeId, NodeKind, NodeWeight};
 pub use node::{NodeRef, NodeView};
 pub use origin::{ATTR_IR_ORIGIN, ATTR_SYN_DOC_PEER, ORIGIN_RUSTDOC, ORIGIN_SOURCE};

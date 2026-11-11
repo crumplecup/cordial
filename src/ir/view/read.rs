@@ -4,6 +4,7 @@ use super::evidence;
 
 #[cfg(feature = "internal_error_chain")]
 mod error;
+mod semantic;
 mod source;
 mod workspace;
 use crate::error::CordialResult;
@@ -16,86 +17,7 @@ use tracing::instrument;
 /// concrete petgraph storage. All node ids are local to this crate graph and
 /// remain valid only for the IR snapshot passed to the hook.
 pub trait IrView {
-    /// Source input identity for the semantic projection in this graph.
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn semantic_snapshot(&self) -> CordialResult<Option<crate::ir::SemanticSnapshot>> {
-        evidence::optional(self, self.root()?, crate::ir::ATTR_SEMANTIC_SNAPSHOT)
-    }
-
-    /// Read the source database's snapshot-local semantic function facts.
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn semantic_function(&self, id: NodeId) -> CordialResult<Option<crate::ir::SemanticFunction>> {
-        evidence::optional(self, id, crate::ir::ATTR_SEMANTIC_FUNCTION)
-    }
-
-    /// Read function facts in every non-ordinary context that resolved it.
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn semantic_context_functions(
-        &self,
-        id: NodeId,
-    ) -> CordialResult<Vec<crate::ir::SemanticContextFunction>> {
-        Ok(
-            evidence::optional(self, id, crate::ir::ATTR_SEMANTIC_CONTEXT_FUNCTIONS)?
-                .unwrap_or_default(),
-        )
-    }
-
-    /// Where this function item starts in source, if the loader recorded it.
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn function_location(&self, id: NodeId) -> CordialResult<Option<crate::ir::FunctionLocation>> {
-        evidence::optional(self, id, crate::ir::ATTR_FUNCTION_LOCATION)
-    }
-
-    /// The trait method this function implements, if it implements one.
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn trait_implementation(
-        &self,
-        id: NodeId,
-    ) -> CordialResult<Option<crate::ir::TraitImplementation>> {
-        evidence::optional(self, id, crate::ir::ATTR_TRAIT_IMPLEMENTATION)
-    }
-
-    /// Calls this function makes into other workspace crates, in every context.
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn external_calls(&self, id: NodeId) -> CordialResult<Vec<crate::ir::ExternalCall>> {
-        Ok(evidence::optional(self, id, crate::ir::ATTR_EXTERNAL_CALLS)?.unwrap_or_default())
-    }
-
-    /// The non-ordinary contexts analysed for this crate, if a projection ran.
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn semantic_context_plan(&self) -> CordialResult<Option<crate::ir::SemanticContextPlan>> {
-        evidence::optional(self, self.root()?, crate::ir::ATTR_SEMANTIC_CONTEXT_PLAN)
-    }
-
-    /// Contexts in which this function is active, or `None` when no semantic
-    /// projection ran. `Some(vec![])` means every analysed context leaves it
-    /// inactive: absence of facts is never silently "no calls". Functions
-    /// declared inside another function's body are active only in the ordinary
-    /// context; their enclosing function's `incomplete` flag marks that gap.
-    #[instrument(level = "trace", skip(self), err(level = "warn"))]
-    fn active_contexts(
-        &self,
-        id: NodeId,
-    ) -> CordialResult<Option<Vec<crate::ir::SemanticContextKey>>> {
-        if self.semantic_snapshot()?.is_none() {
-            return Ok(None);
-        }
-        let mut active = Vec::new();
-        if self.semantic_function(id)?.is_some() {
-            active.push(crate::ir::SemanticContextKey::ordinary());
-        }
-        if let (Some(plan), Some(indexes)) = (
-            self.semantic_context_plan()?,
-            evidence::optional::<Vec<u32>>(self, id, crate::ir::ATTR_SEMANTIC_ACTIVITY)?,
-        ) {
-            active.extend(
-                indexes
-                    .into_iter()
-                    .filter_map(|index| plan.contexts().get(index as usize).cloned()),
-            );
-        }
-        Ok(Some(active))
-    }
+    semantic::readers!();
 
     /// Read signature-level or prospective migration alternatives from shared IR.
     /// Missing facts never establish an empty error family.
