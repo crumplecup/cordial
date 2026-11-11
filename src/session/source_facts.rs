@@ -92,6 +92,22 @@ pub(crate) fn prepare_workspace_source_facts(
         }
     }
 
+    #[cfg(not(feature = "derives"))]
+    let _ = source;
+    #[cfg(not(feature = "antipatterns"))]
+    let _ = session;
+    Ok(())
+}
+
+/// Evaluate tracing's proof-only reachability once every crate's IR is in the
+/// workspace: a call can leave one crate for another, so no crate can be judged
+/// before all of them are present.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+pub(crate) fn prepare_workspace_call_graph(
+    workspace: &mut WorkspaceIr,
+    session: &dyn SessionView,
+    enrichers: &[&dyn IrEnricher],
+) -> CordialResult<()> {
     #[cfg(feature = "tracing")]
     if enrichers
         .iter()
@@ -101,9 +117,7 @@ pub(crate) fn prepare_workspace_source_facts(
         let config = crate::config::load_session_config(session);
         workspace.refresh_tracing_call_graph(config.tracing())?;
     }
-    #[cfg(not(feature = "derives"))]
-    let _ = source;
-    #[cfg(not(any(feature = "antipatterns", feature = "tracing")))]
-    let _ = session;
+    #[cfg(not(feature = "tracing"))]
+    let _ = (workspace, session, enrichers);
     Ok(())
 }

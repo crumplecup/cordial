@@ -252,7 +252,9 @@ pub(super) fn load_and_probe(
                 enrichers,
             )?;
         }
-
+    }
+    crate::session::prepare_workspace_call_graph(&mut workspace, session, enrichers)?;
+    for target in targets {
         for enricher in enrichers {
             progress.set_message(format!(
                 "Enriching {} with {}",

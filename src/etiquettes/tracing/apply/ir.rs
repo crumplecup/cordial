@@ -35,10 +35,10 @@ pub(super) fn build_apply_ir(
     let enrichers: [&dyn IrEnricher; 3] = [&scope, &inventory, &attributes];
     let mut workspace = WorkspaceIr::default();
 
+    // Every crate's IR goes in first, selected or not: a caller in a crate that
+    // is not being edited still decides whether a function is proof-only.
+    let mut loaded = Vec::new();
     for target in targets {
-        if by_file.is_some_and(|files| !files.keys().any(|(name, _)| name == target.crate_name())) {
-            continue;
-        }
         let source = SourceLoadView::for_target(target)?;
         workspace.insert_crate(parsed.project_target(target)?);
         crate::session::prepare_workspace_source_facts(
@@ -47,9 +47,16 @@ pub(super) fn build_apply_ir(
             &session,
             &enrichers,
         )?;
+        loaded.push((target, source));
+    }
+    crate::session::prepare_workspace_call_graph(&mut workspace, &session, &enrichers)?;
+    for (target, source) in &loaded {
+        if by_file.is_some_and(|files| !files.keys().any(|(name, _)| name == target.crate_name())) {
+            continue;
+        }
         for enricher in enrichers {
             let mut view = CrateViewMut::new(&mut workspace, target.crate_name().clone());
-            enricher.enrich(EnrichView::new(&mut view, &source, &session))?;
+            enricher.enrich(EnrichView::new(&mut view, source, &session))?;
         }
     }
     Ok(workspace)

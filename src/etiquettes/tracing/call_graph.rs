@@ -1,52 +1,41 @@
-//! Workspace-wide call-graph facts: which functions are reachable
-//! *only* from proof-only entry points -- functions nested inside an
-//! ancestor `#[cfg(<verifier-cfg>)]`, the crate's own gate cfg name(s)
-//! (see [`crate_gate_cfgs`](super::apply::crate_gate_cfgs)) -- so
-//! instrumenting them can never produce observable output in any real
-//! build, exactly like the entry points themselves.
+//! Workspace-wide call-graph facts: which functions are reachable *only* from
+//! proof-only code -- code that exists only in a verifier's build -- so that
+//! instrumenting them can never produce observable output in any real build,
+//! exactly like the proof-only code itself.
 //!
-//! **Why this has to be call-graph-based, not trait-name-based.** A
-//! first version of this recognized `amenable_core::Ensures`/`Requires`
-//! impls by name specifically -- real, but a special case tied to one
-//! workspace's own trait names, not a mechanism any other cordial user
-//! gets for free. The actual, reusable invariant is call-graph
-//! reachability: a function whose *every* real caller, transitively,
-//! bottoms out in a proof-only entry point is exactly as dead-to-
-//! tracing as the entry point itself, whatever trait (if any) it
-//! happens to implement.
+//! **Evidence.** Everything here is read from the crate IRs the loader built
+//! from the one session database: resolved `Calls` and `ContextCalls` edges (the
+//! latter are calls that exist only under a cfg context such as `kani`), calls
+//! into other workspace crates matched by source location, calls through a
+//! trait followed to each implementation, and functions read from macro
+//! invocations whose calls were resolved at the invocation. No name is matched
+//! against another name.
 //!
-//! **How.** The shared IR retains syntax-level evidence; call
-//! resolution is name-based: `Type::method(..)`/`bare_fn(..)` (explicit
-//! path syntax) is unambiguous enough to match against a workspace-wide
-//! registry of known function definitions by their own last one or two
-//! path segments; `receiver.method(..)` calls, whose receiver's type
-//! isn't known without real inference, are not resolved at all and so
-//! never produce a graph edge. This is the existing name-based proof policy;
-//! unresolved or external callers can exist. Fixed point: seed `excluded` with every function
-//! nested in an ancestor gate cfg, then repeatedly add any function
-//! whose in-workspace callers are **all** already `excluded` (and it
-//! has at least one) until nothing changes. A function with zero known
-//! in-workspace callers -- `pub` API an external crate might call, or
-//! genuinely dead code -- is never added: no positive evidence it's
-//! proof-only, and gating dead code costs nothing either way.
+//! **Seeds.** A function is proof-only outright when it is inactive in the
+//! ordinary build and active only in contexts that turn on one of its crate's
+//! gate cfgs (see [`crate_gate_cfgs`](super::apply::crate_gate_cfgs)), or when
+//! a function read from a macro names such a gate.
 //!
-//! Scoped to same-workspace calls only (no attempt to resolve a call
-//! into an external, non-workspace dependency) -- every real case this
-//! was built against (`amenable_kani`'s own `Ensures`/`Requires`
-//! impls, called from its own proof harnesses) is intra-workspace.
+//! **Fixed point.** Then repeatedly add any function whose callers are **all**
+//! already excluded (and it has at least one) until nothing changes. A function
+//! with no known caller -- `pub` API an external crate might call, or genuinely
+//! dead code -- is never added: there is no positive evidence it is proof-only,
+//! and gating dead code costs nothing either way. Neither is a function that
+//! implements a trait the workspace does not own: the standard library or a
+//! dependency may call it where nothing here can see.
 
 use std::collections::{HashMap, HashSet};
 
-use crate::PathInclusionFacts;
 use crate::config::TracingThresholds;
+use crate::{CordialResult, CrateIr, PathInclusionFacts};
 
 use tracing::instrument;
 
-mod collect;
-mod resolve;
+mod exclusion;
+mod graph;
 
-use collect::collect_workspace_functions;
-use resolve::never_instrument_from_calls;
+use super::apply::crate_gate_cfgs;
+use graph::Origin;
 
 /// Workspace-wide call-graph facts retained by the session IR.
 #[derive(Debug, Default, Clone)]
@@ -60,8 +49,7 @@ static EMPTY: std::sync::OnceLock<HashSet<String>> = std::sync::OnceLock::new();
 
 impl CallGraphFacts {
     /// Qualified names in `crate_name` that are reachable only from
-    /// proof-only entry points -- never worth recording as needing
-    /// `#[instrument]`.
+    /// proof-only code -- never worth recording as needing `#[instrument]`.
     #[instrument(level = "trace", skip(self))]
     pub fn never_instrument(&self, crate_name: &str) -> &HashSet<String> {
         self.never_instrument
@@ -70,13 +58,27 @@ impl CallGraphFacts {
     }
 }
 
-/// Evaluate proof-only reachability using loader-owned workspace evidence.
-#[instrument(level = "debug", skip(config, path_facts))]
+/// Evaluate proof-only reachability over the workspace's crate IRs.
+#[instrument(level = "debug", skip(config, path_facts, crates), err(level = "warn"))]
 pub(crate) fn workspace_call_graph(
     config: &TracingThresholds,
     path_facts: &PathInclusionFacts,
-) -> CallGraphFacts {
-    let collected = collect_workspace_functions(config, path_facts);
-    let never_instrument = never_instrument_from_calls(&collected);
-    CallGraphFacts { never_instrument }
+    crates: &HashMap<String, CrateIr>,
+) -> CordialResult<CallGraphFacts> {
+    let graph = graph::build(crates)?;
+    let gates: HashMap<String, _> = crates
+        .keys()
+        .map(|name| (name.clone(), crate_gate_cfgs(name, config, path_facts)))
+        .collect();
+    let mut never_instrument: HashMap<String, HashSet<String>> = HashMap::new();
+    for vertex in exclusion::proof_only(&graph, &gates) {
+        let function = &graph.vertices()[vertex];
+        if matches!(function.origin(), Origin::Source(_)) {
+            never_instrument
+                .entry(function.crate_name().clone())
+                .or_default()
+                .insert(function.qualified_name().clone());
+        }
+    }
+    Ok(CallGraphFacts { never_instrument })
 }
