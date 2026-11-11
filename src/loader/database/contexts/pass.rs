@@ -230,6 +230,13 @@ impl SourceDatabase {
     ) -> CordialResult<bool> {
         attach_db(&self.db, || {
             let sema = Semantics::new(&self.db);
+            let roots = self
+                .projection_context()?
+                .packages()
+                .iter()
+                .map(|package| package.root().clone())
+                .collect();
+            let locator = super::super::external::Locator::new(&self.db, &self.vfs, roots);
             let mut definitions: HashMap<SemanticItemId, NodeId> = HashMap::new();
             let mut calls: Vec<(NodeId, SemanticItemId)> = Vec::new();
             let mut finished = true;
@@ -255,6 +262,13 @@ impl SourceDatabase {
                     definitions.insert(types::identity(&self.db, definition.into()), node);
                     push_activity(graph, node, index)?;
                     let new = crate::IrView::semantic_function(graph, node)?.is_none();
+                    if new {
+                        locator.record_trait_implementation(
+                            graph,
+                            types::identity(&self.db, definition.into()),
+                            node,
+                        )?;
+                    }
                     if !(new || flips.touches(range) || flips.mentions(function.syntax())) {
                         continue;
                     }
@@ -279,13 +293,6 @@ impl SourceDatabase {
                 }
             }
             let mut edges: BTreeSet<(NodeId, NodeId)> = BTreeSet::new();
-            let roots = self
-                .projection_context()?
-                .packages()
-                .iter()
-                .map(|package| package.root().clone())
-                .collect();
-            let locator = super::super::external::Locator::new(&self.db, &self.vfs, roots);
             let mut external: BTreeMap<NodeId, BTreeSet<crate::FunctionLocation>> = BTreeMap::new();
             for (caller, target) in calls {
                 let callee = definitions.get(&target);
@@ -379,7 +386,11 @@ fn push_activity(graph: &mut CrateIr, node: NodeId, index: u32) -> CordialResult
 
 /// Add the calls `node` makes into other crates in this context to those already
 /// recorded on it.
-#[instrument(level = "trace", skip(graph, locations, node, context), err(level = "warn"))]
+#[instrument(
+    level = "trace",
+    skip(graph, locations, node, context),
+    err(level = "warn")
+)]
 fn push_external_calls(
     graph: &mut CrateIr,
     node: NodeId,

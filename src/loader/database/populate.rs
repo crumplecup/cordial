@@ -157,6 +157,9 @@ impl Projection {
         for (caller, callee) in pairs {
             graph.insert_edge(caller, callee, EdgeKind::Calls)?;
         }
+        for (id, node) in &self.definitions {
+            locator.record_trait_implementation(graph, *id, *node)?;
+        }
         // A call to a function with no node here may land in another crate of
         // the workspace; record where, so that crate's graph can claim it.
         let mut external: std::collections::BTreeMap<

@@ -7,12 +7,14 @@
 
 use std::path::PathBuf;
 
-use ra_ap_hir::{HasSource, ModuleDef};
+use ra_ap_hir::{AsAssocItem, AssocItem, AssocItemContainer, Function, HasSource, ModuleDef};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_syntax::AstNode;
 
 use super::types;
-use crate::{FunctionLocation, SemanticItemId};
+use crate::{
+    CordialResult, CrateIr, FunctionLocation, NodeId, SemanticItemId, TraitImplementation,
+};
 
 /// Finds where a function definition starts, for functions the workspace owns.
 #[derive(derive_new::new)]
@@ -32,6 +34,11 @@ impl Locator<'_> {
         let ModuleDef::Function(function) = types::definition(self.db, id) else {
             return None;
         };
+        self.location_of(function)
+    }
+
+    #[tracing::instrument(level = "trace", skip(self, function))]
+    fn location_of(&self, function: Function) -> Option<FunctionLocation> {
         let source = ra_ap_hir::attach_db(self.db, || function.source(self.db))?;
         if source.file_id.is_macro() {
             return None;
@@ -51,5 +58,46 @@ impl Locator<'_> {
                     u32::from(source.value.syntax().text_range().start()),
                 )
             })
+    }
+
+    /// Record on `node` the trait method the function `id` implements, if it
+    /// implements one. The declaration's location is recorded when the trait is
+    /// the workspace's; otherwise the fact says the declaration is foreign.
+    #[tracing::instrument(level = "debug", skip(self, id, graph, node), err(level = "warn"))]
+    pub(super) fn record_trait_implementation(
+        &self,
+        graph: &mut CrateIr,
+        id: SemanticItemId,
+        node: NodeId,
+    ) -> CordialResult<()> {
+        let ModuleDef::Function(function) = types::definition(self.db, id) else {
+            return Ok(());
+        };
+        let declaration = ra_ap_hir::attach_db(self.db, || {
+            let AssocItemContainer::Impl(implementation) =
+                function.as_assoc_item(self.db)?.container(self.db)
+            else {
+                return None;
+            };
+            let name = function.name(self.db);
+            implementation
+                .trait_(self.db)?
+                .items(self.db)
+                .into_iter()
+                .find_map(|item| match item {
+                    AssocItem::Function(declared) if declared.name(self.db) == name => {
+                        Some(declared)
+                    }
+                    _ => None,
+                })
+        });
+        let Some(declared) = declaration else {
+            return Ok(());
+        };
+        graph.set_attr(
+            node,
+            crate::ATTR_TRAIT_IMPLEMENTATION,
+            serde_json::to_value(TraitImplementation::new(self.location_of(declared)))?,
+        )
     }
 }

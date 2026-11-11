@@ -1,0 +1,33 @@
+pub struct Local;
+
+impl provider::Rule for Local {
+    fn check(&self) -> bool {
+        true
+    }
+}
+
+impl std::fmt::Display for Local {
+    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Ok(())
+    }
+}
+
+pub trait Own {
+    fn own(&self);
+}
+
+impl Own for Local {
+    fn own(&self) {}
+}
+
+impl Local {
+    pub fn inherent(&self) {}
+}
+
+#[cfg(kani)]
+pub struct Gated;
+
+#[cfg(kani)]
+impl Own for Gated {
+    fn own(&self) {}
+}
