@@ -1,91 +1,34 @@
 //! Project conservative recording evidence from the database-issued syntax.
 
-use std::collections::HashSet;
-
 use ra_ap_syntax::{
     AstNode,
-    ast::{self, HasGenericArgs, HasGenericParams, HasName},
+    ast::{self, HasGenericArgs, HasName},
 };
 use tracing::instrument;
 
 use crate::etiquettes::tracing::RECORDABLE_IDENTS;
 
+/// The names the parameters bind, `self` first. Whether each can be recorded is
+/// the database's verdict, not anything read from its written type.
 #[instrument(level = "debug", skip(function))]
-pub(super) fn parameters(function: &ast::Fn) -> (Vec<String>, Vec<String>) {
-    let generics: HashSet<_> = function
-        .generic_param_list()
-        .into_iter()
-        .flat_map(|list| {
-            list.generic_params().filter_map(|param| match param {
-                ast::GenericParam::TypeParam(param) => Some(param),
-                _ => None,
-            })
-        })
-        .filter_map(|param| param.name().map(|name| name.text().to_string()))
-        .collect();
+pub(super) fn parameter_names(function: &ast::Fn) -> Vec<String> {
     let mut names = Vec::new();
-    let mut skipped = Vec::new();
     if let Some(list) = function.param_list() {
         if list.self_param().is_some() {
             names.push("self".into());
         }
-        for param in list.params() {
-            if let Some(pattern) = param.pat() {
-                for (name, ty) in bindings(&pattern, param.ty()) {
-                    if ty
-                        .as_ref()
-                        .is_none_or(|ty| unrecordable(ty) || generic(ty, &generics))
-                    {
-                        skipped.push(name.clone());
-                    }
-                    names.push(name);
-                }
-            }
+        for pattern in list.params().filter_map(|param| param.pat()) {
+            names.extend(
+                pattern
+                    .syntax()
+                    .descendants()
+                    .filter_map(ast::IdentPat::cast)
+                    .filter_map(|binding| binding.name())
+                    .map(|name| name.text().to_string()),
+            );
         }
     }
-    (names, skipped)
-}
-
-#[instrument(level = "trace", skip(pattern, ty))]
-fn bindings(pattern: &ast::Pat, ty: Option<ast::Type>) -> Vec<(String, Option<ast::Type>)> {
-    match (pattern, ty) {
-        (ast::Pat::IdentPat(pattern), ty) => pattern
-            .name()
-            .map(|name| vec![(name.text().to_string(), ty)])
-            .unwrap_or_default(),
-        (ast::Pat::ParenPat(pattern), ty) => pattern
-            .pat()
-            .map(|pattern| bindings(&pattern, ty))
-            .unwrap_or_default(),
-        (ast::Pat::RefPat(pattern), Some(ast::Type::RefType(ty))) => pattern
-            .pat()
-            .map(|pattern| bindings(&pattern, ty.ty()))
-            .unwrap_or_default(),
-        (ast::Pat::TuplePat(pattern), Some(ast::Type::TupleType(ty)))
-            if pattern.fields().count() == ty.fields().count() =>
-        {
-            pattern
-                .fields()
-                .zip(ty.fields())
-                .flat_map(|(pattern, ty)| bindings(&pattern, Some(ty)))
-                .collect()
-        }
-        _ => pattern
-            .syntax()
-            .descendants()
-            .filter_map(ast::IdentPat::cast)
-            .filter_map(|pattern| pattern.name().map(|name| (name.text().to_string(), None)))
-            .collect(),
-    }
-}
-
-#[instrument(level = "debug", skip(ty, generics))]
-fn generic(ty: &ast::Type, generics: &HashSet<String>) -> bool {
-    ty.syntax()
-        .descendants()
-        .filter_map(ast::PathSegment::cast)
-        .filter_map(|segment| segment.name_ref())
-        .any(|name| generics.contains(name.text()))
+    names
 }
 
 #[instrument(level = "debug", skip(ty))]

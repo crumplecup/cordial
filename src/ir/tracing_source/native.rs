@@ -128,7 +128,8 @@ fn context(
         output.as_ref().is_some_and(recordable::contains_bool),
         returns_result,
     );
-    let (names, skipped) = recordable::parameters(function);
+    let names = recordable::parameter_names(function);
+    let skipped = unrecordable_parameters(&names, semantics);
     FnContext::builder()
         .role(role)
         .complexity(classify_complexity(lines, returns_result, &peek))
@@ -140,6 +141,25 @@ fn context(
         .err_is_displayable(displayable)
         .has_error_path_event(peek.has_error_path_event())
         .build()
+}
+
+/// The parameters `#[instrument]` cannot record: those whose `Debug` is not
+/// proven. With no facts for the function nothing is proven, so all are skipped.
+#[instrument(level = "debug", skip(names, semantics))]
+fn unrecordable_parameters(names: &[String], semantics: Option<&SemanticFunction>) -> Vec<String> {
+    names
+        .iter()
+        .filter(|name| name.as_str() != "self")
+        .filter(|name| {
+            !semantics.is_some_and(|facts| {
+                facts.parameters().iter().any(|parameter| {
+                    parameter.name() == name.as_str()
+                        && *parameter.debug() == SemanticCapability::Proven
+                })
+            })
+        })
+        .cloned()
+        .collect()
 }
 
 #[instrument(level = "debug", skip(file, function))]
