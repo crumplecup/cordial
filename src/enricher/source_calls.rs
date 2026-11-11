@@ -1,4 +1,9 @@
-//! Resolve direct calls against declarations already retained in the shared IR.
+//! Resolve direct calls against the semantic facts retained in the shared IR.
+//!
+//! The syntactic calls of a function are joined, by range, to the targets
+//! rust-analyzer resolved; no name is compared with another name. What this
+//! stage still decides is the contract the transformations rely on: a direct,
+//! unqualified call to a source free function in the caller's own module.
 
 use std::collections::HashMap;
 
@@ -7,7 +12,8 @@ use crate::hooks::{EnrichView, IrEnricher};
 use crate::ir::{
     ATTR_FUNCTION_CALL_FLOW, BasicQuery, CallResolutionFailure, EdgeKind, FunctionBoundary,
     FunctionCallFlow, FunctionCallSyntax, FunctionSourceSyntax, IrMut, IrView, ItemKind, NodeId,
-    NodeKind, ResolvedFunctionCall, SourceCallResolution,
+    NodeKind, ResolvedFunctionCall, SemanticCallTarget, SemanticFunction, SemanticItemId,
+    SourceCallResolution,
 };
 
 /// Adds source declaration identities and caller edges without another parse.
@@ -30,7 +36,7 @@ impl IrEnricher for SourceCallEnricher {
     fn enrich(&self, view: EnrichView<'_>) -> CordialResult<()> {
         let ir = view.ir();
         let nodes = ir.nodes_matching(&BasicQuery::all_nodes());
-        let mut names: HashMap<(NodeId, String), Vec<NodeId>> = HashMap::new();
+        let mut definitions: HashMap<SemanticItemId, NodeId> = HashMap::new();
         let mut functions = Vec::new();
         let mut extern_crates = false;
         for node in nodes {
@@ -46,32 +52,40 @@ impl IrEnricher for SourceCallEnricher {
             if let Some(facts) = ir.function_source_syntax(node.id())? {
                 functions.push((node.id(), facts));
             }
-            // Count all declarations, not only functions: a same-name const or
-            // conditional duplicate must not be mistaken for one unique fn.
-            if matches!(node.kind(), NodeKind::Item(_)) {
-                for parent in ir.parents(node.id(), EdgeKind::Contains) {
-                    if let Some(name) = node.weight().name() {
-                        names
-                            .entry((parent, name.trim_start_matches("r#").to_owned()))
-                            .or_default()
-                            .push(node.id());
-                    }
-                }
+            if let Some(semantic) = semantic_facts(ir, node.id())? {
+                definitions.insert(*semantic.definition(), node.id());
             }
         }
         for (function, facts) in functions {
-            enrich_function(ir, function, &facts, &names, extern_crates)?;
+            enrich_function(ir, function, &facts, &definitions, extern_crates)?;
         }
         Ok(())
     }
 }
 
-#[tracing::instrument(level = "trace", skip(ir, function, facts, names), err(level = "warn"))]
+/// A function's semantic facts: the ordinary build's, or those of the first cfg
+/// context that resolved it when it exists only there.
+#[tracing::instrument(level = "trace", skip(ir, function), err(level = "warn"))]
+fn semantic_facts(ir: &dyn IrView, function: NodeId) -> CordialResult<Option<SemanticFunction>> {
+    if let Some(facts) = ir.semantic_function(function)? {
+        return Ok(Some(facts));
+    }
+    Ok(ir
+        .semantic_context_functions(function)?
+        .first()
+        .map(|entry| entry.function().clone()))
+}
+
+#[tracing::instrument(
+    level = "trace",
+    skip(ir, function, facts, definitions),
+    err(level = "warn")
+)]
 fn enrich_function(
     ir: &mut dyn IrMut,
     function: NodeId,
     facts: &FunctionSourceSyntax,
-    names: &HashMap<(NodeId, String), Vec<NodeId>>,
+    definitions: &HashMap<SemanticItemId, NodeId>,
     extern_crates: bool,
 ) -> CordialResult<()> {
     let parents = ir.parents(function, EdgeKind::Contains);
@@ -81,19 +95,18 @@ fn enrich_function(
         .transpose()?
         .flatten();
     let namespace_trusted = !extern_crates && scope.is_some_and(|scope| !scope.opaque());
+    let semantic = semantic_facts(ir, function)?;
     let mut calls = Vec::new();
     for call in facts.calls() {
-        let resolution = resolve_call(ir, module, facts, call, names, namespace_trusted)?;
-        if let SourceCallResolution::Source {
-            function: target, ..
-        } = &resolution
-        {
-            // Multiple call sites retain separate ranges, but graph adjacency
-            // needs only one edge per caller/callee pair.
-            if !ir.children(function, EdgeKind::Calls).contains(target) {
-                ir.insert_edge(function, *target, EdgeKind::Calls)?;
-            }
-        }
+        let resolution = resolve_call(
+            ir,
+            module,
+            facts,
+            call,
+            semantic.as_ref(),
+            definitions,
+            namespace_trusted,
+        )?;
         calls.push(ResolvedFunctionCall::new(call.range().clone(), resolution));
     }
     ir.set_attr(
@@ -110,7 +123,7 @@ fn enrich_function(
 
 #[tracing::instrument(
     level = "trace",
-    skip(ir, module, facts, call, names),
+    skip(ir, module, facts, call, semantic, definitions, namespace_trusted),
     err(level = "warn")
 )]
 fn resolve_call(
@@ -118,27 +131,53 @@ fn resolve_call(
     module: Option<NodeId>,
     facts: &FunctionSourceSyntax,
     call: &FunctionCallSyntax,
-    names: &HashMap<(NodeId, String), Vec<NodeId>>,
+    semantic: Option<&SemanticFunction>,
+    definitions: &HashMap<SemanticItemId, NodeId>,
     namespace_trusted: bool,
 ) -> CordialResult<SourceCallResolution> {
     use CallResolutionFailure as Failure;
     let unresolved = SourceCallResolution::Unresolved;
+    // An untrusted namespace withholds write authority, not resolution: the
+    // `Calls` edge is the database's, and stays.
     if !namespace_trusted || *facts.has_call_shadowing() {
         return Ok(unresolved(Failure::OpaqueScope));
     }
     if let Some(boundary) = resolution_boundary(facts) {
         return Ok(unresolved(Failure::Boundary(boundary)));
     }
-    let Some(name) = call.local_name() else {
+    if call.local_name().is_none() {
         return Ok(unresolved(Failure::UnsupportedCallee));
+    }
+    // Without semantic facts the compiler front end has not established what the
+    // names in this function mean.
+    let Some(semantic) = semantic else {
+        tracing::debug!(
+            target: "cordial::semantic::calls",
+            call = ?call.range(),
+            "no semantic facts for the calling function; call left unresolved"
+        );
+        return Ok(unresolved(Failure::OpaqueScope));
     };
-    let Some(candidates) = module.and_then(|module| names.get(&(module, name.clone()))) else {
+    let Some(resolved) = semantic
+        .calls()
+        .iter()
+        .find(|resolved| resolved.range() == call.range())
+    else {
         return Ok(unresolved(Failure::MissingOrAmbiguousTarget));
     };
-    if candidates.len() != 1 {
+    let SemanticCallTarget::Function(definition) = resolved.target() else {
+        return Ok(unresolved(match resolved.target() {
+            SemanticCallTarget::OtherCallable => Failure::UnsupportedCallee,
+            _ => Failure::MissingOrAmbiguousTarget,
+        }));
+    };
+    let Some(target) = definitions.get(definition).copied() else {
+        return Ok(unresolved(Failure::MissingOrAmbiguousTarget));
+    };
+    // The transformations adapt callers declared beside the callee.
+    if module.is_none_or(|module| ir.parents(target, EdgeKind::Contains) != [module]) {
         return Ok(unresolved(Failure::MissingOrAmbiguousTarget));
     }
-    let target = candidates[0];
     if !ir
         .node(target)
         .is_some_and(|node| node.kind() == &NodeKind::Item(ItemKind::Fn))
