@@ -29,6 +29,7 @@ impl SourceDatabase {
                 && !cfg!(any(
                     feature = "allows",
                     feature = "glob_imports",
+                    feature = "modularity",
                     feature = "pageantry"
                 ))
             {

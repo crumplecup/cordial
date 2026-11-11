@@ -207,7 +207,7 @@ in code until dogfood needs a project override.
 
 ## Status
 
-Implemented (`tests/cordial_config.rs`). Every etiquette table has
+Implemented (`tests/cordial_config_*.rs`). Every etiquette table has
 `enabled` (default true); `CordialConfig::etiquette_enabled` gates the
 session. Visibility, modularity (including types-per-file, module-size
 2σ, lower-tail ignore, hotspot diagnosis, hierarchy lints: top-heavy,

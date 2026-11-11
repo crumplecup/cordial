@@ -6,7 +6,7 @@
 use crate::{
     CordialError, CordialResult, CrateIr, Etiquette, NamedRunFilter, Session, SessionBuilder,
     StoreLayout, SurrealGraphExport, all_plugins, default_store_home, etiquettes_from_plugins,
-    lookup_etiquette,
+    lookup_etiquette, quality_plugins,
 };
 use std::fs;
 use std::io::{self, Write};
@@ -141,13 +141,15 @@ pub(super) fn view_store_file(store: &StoreLayout, path: &Path) -> CordialResult
     Ok(())
 }
 
-/// Run the pipeline once with the IR file turned on, for an export that finds none.
+/// Run the source-quality pipeline once with the IR file turned on, for an export
+/// that finds none. The quality set is what `cordial quality` runs, and it needs
+/// nothing a bare project lacks; the coverage reporters in `all_plugins` do.
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
 fn regenerate_ir(store: &StoreLayout, project_root: &Path) -> CordialResult<()> {
     let mut builder = SessionBuilder::new(project_root)
         .with_store_root(store.root().clone())
         .with_ir_snapshot();
-    for plugin in all_plugins() {
+    for plugin in quality_plugins() {
         builder = builder.register_plugin(plugin);
     }
     builder.build().run(&NamedRunFilter::all_plugins())?;

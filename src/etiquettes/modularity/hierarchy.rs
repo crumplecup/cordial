@@ -68,6 +68,11 @@ impl ModuleHierarchyNode {
 
 pub const CRATE_ROOT_PATH: &str = "<crate>";
 
+/// Start of the context of a file under `tests/`. It is sized like a module,
+/// but it is a target of its own and no part of the crate's module tree; `/`
+/// cannot occur in a module path, so it never names a real module.
+pub const TEST_TARGET_PREFIX: &str = "tests/";
+
 #[instrument(level = "debug", skip(path))]
 fn parent_path(path: &str) -> Option<String> {
     if path == CRATE_ROOT_PATH {
@@ -98,7 +103,10 @@ pub fn build_module_hierarchy(modules: &[ModuleSizeInput]) -> Vec<ModuleHierarch
     }
 
     let mut by_path: BTreeMap<String, ModuleSizeInput> = BTreeMap::new();
-    for module in modules {
+    for module in modules
+        .iter()
+        .filter(|module| !module.path.starts_with(TEST_TARGET_PREFIX))
+    {
         by_path
             .entry(module.path.clone())
             .and_modify(|existing| {

@@ -4,12 +4,13 @@ mod support {
     pub mod semantic_metrics;
 }
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use cordial::SourceDatabase;
 use cordial::{
-    IrView, QueryBuilder, SemanticCallTarget, SemanticFunction, SemanticReturnContract,
-    SemanticType,
+    CrateIr, CrateTarget, IrView, QueryBuilder, SemanticCallTarget, SemanticFunction,
+    SemanticReturnContract, SemanticSnapshot, SemanticType,
 };
 use miette::{IntoDiagnostic, Result};
 use tracing_subscriber::prelude::*;
@@ -75,26 +76,19 @@ fn function(ir: &dyn IrView, label: &str) -> Result<SemanticFunction> {
     Err(miette::miette!("function {label} missing from graph"))
 }
 
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> {
-    cordial::init_tracing();
-    let metrics = support::semantic_metrics::QueryMetrics::default();
-    let subscriber = tracing_subscriber::registry()
-        .with(metrics.clone())
-        .with(cordial::tracing_fmt_layer());
-    let _subscriber = tracing::subscriber::set_default(subscriber);
-    let root = specimen()?;
-    let mut session = SourceDatabase::load(root.path()).into_diagnostic()?;
-    let graph = session
-        .project(
-            &cordial::CrateTarget::new("semantic_specimen", root.path()),
-            &paths(root.path()),
-        )
-        .into_diagnostic()?;
-    let leaf = function(&graph, "fallible")?;
-    let method = function(&graph, "read")?;
-    let middle = function(&graph, "middle")?;
+#[tracing::instrument(level = "debug", skip(root))]
+fn semantic_target(root: &Path) -> CrateTarget {
+    CrateTarget::new("semantic_specimen", root)
+}
+
+/// The `Result` alias resolves to its success and error types, every resolved call carries the
+/// callee's contract, unresolved and unsupported shapes are marked incomplete, and the calls are
+/// linked as graph edges.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+fn assert_results_resolve_across_files(graph: &CrateIr) -> Result<()> {
+    let leaf = function(graph, "fallible")?;
+    let method = function(graph, "read")?;
+    let middle = function(graph, "middle")?;
     let SemanticReturnContract::Result {
         definition,
         success,
@@ -122,11 +116,11 @@ fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> 
         );
     }
     assert!(matches!(
-        function(&graph, "fake")?.output(),
+        function(graph, "fake")?.output(),
         SemanticReturnContract::Other(_)
     ));
     for label in ["const_error", "lifetime_error"] {
-        let facts = function(&graph, label)?;
+        let facts = function(graph, label)?;
         assert!(matches!(
             facts.output(),
             SemanticReturnContract::Result {
@@ -136,12 +130,12 @@ fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> 
         ));
         assert!(*facts.incomplete());
     }
-    let missing = function(&graph, "missing")?;
+    let missing = function(graph, "missing")?;
     assert_eq!(missing.calls().len(), 1);
     assert_eq!(missing.calls()[0].target(), &SemanticCallTarget::Unresolved);
     assert!(*missing.incomplete());
     assert_eq!(
-        function(&graph, "root")?.reachable_result_errors(),
+        function(graph, "root")?.reachable_result_errors(),
         &vec![error.clone()]
     );
     let mut middle_node = None;
@@ -177,37 +171,56 @@ fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> 
         .collect();
     assert!(linked.contains(leaf.definition()));
     assert!(linked.contains(method.definition()));
-    let initial_snapshot = graph
+    Ok(())
+}
+
+/// The first projection is revision 1 and records all six sources; the snapshot is returned so the
+/// later phases can compare against it.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+fn initial_snapshot_of(graph: &CrateIr) -> Result<SemanticSnapshot> {
+    let snapshot = graph
         .semantic_snapshot()
         .into_diagnostic()?
         .ok_or_else(|| miette::miette!("missing semantic snapshot"))?;
-    assert_eq!(*initial_snapshot.revision(), 1);
-    assert_eq!(initial_snapshot.sources().len(), 6);
-    let paths = paths(root.path());
-    let first = session
-        .project(
-            &cordial::CrateTarget::new("semantic_specimen", root.path()),
-            &paths,
-        )
-        .into_diagnostic()?;
-    let before = metrics.snapshot();
-    assert!(
-        before.contains_key("direct:unrelated"),
-        "query counts: {before:?}"
-    );
+    assert_eq!(*snapshot.revision(), 1);
+    assert_eq!(snapshot.sources().len(), 6);
+    Ok(snapshot)
+}
+
+/// Projecting again with nothing changed returns the same facts and runs no Cordial query.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+fn assert_warm_projection_runs_no_queries(
+    session: &mut SourceDatabase,
+    root: &Path,
+    first: &CrateIr,
+    metrics: &support::semantic_metrics::QueryMetrics,
+    before: &BTreeMap<String, usize>,
+) -> Result<()> {
     let warm = session
-        .project(
-            &cordial::CrateTarget::new("semantic_specimen", root.path()),
-            &paths,
-        )
+        .project(&semantic_target(root), &paths(root))
         .into_diagnostic()?;
-    assert_eq!(function(&first, "root")?, function(&warm, "root")?);
+    assert_eq!(function(first, "root")?, function(&warm, "root")?);
     assert_eq!(
-        metrics.snapshot(),
+        &metrics.snapshot(),
         before,
         "a warm projection must execute no Cordial queries"
     );
-    let leaf_path = root.path().join("src/leaf.rs");
+    Ok(())
+}
+
+/// Changing one file advances the revision once, changes one source, reaches every function that
+/// can return the new error, and recomputes nothing about the unrelated module. The edit is
+/// virtual: the file on disk keeps its text.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+fn assert_edit_invalidates_only_dependents(
+    session: &mut SourceDatabase,
+    root: &Path,
+    first: &CrateIr,
+    initial: &SemanticSnapshot,
+    metrics: &support::semantic_metrics::QueryMetrics,
+    before: &BTreeMap<String, usize>,
+) -> Result<()> {
+    let leaf_path = root.join("src/leaf.rs");
     session
         .change_file(
             &leaf_path,
@@ -216,14 +229,11 @@ fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> 
         .into_diagnostic()?;
     assert!(
         session
-            .change_file(&root.path().join("src/absent.rs"), "fn absent() {}".into())
+            .change_file(&root.join("src/absent.rs"), "fn absent() {}".into())
             .is_err()
     );
     let revised = session
-        .project(
-            &cordial::CrateTarget::new("semantic_specimen", root.path()),
-            &paths,
-        )
+        .project(&semantic_target(root), &paths(root))
         .into_diagnostic()?;
     let revised_snapshot = revised
         .semantic_snapshot()
@@ -235,7 +245,7 @@ fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> 
         "failed changes must not advance the revision"
     );
     assert_eq!(
-        initial_snapshot
+        initial
             .sources()
             .iter()
             .zip(revised_snapshot.sources())
@@ -244,7 +254,7 @@ fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> 
         1
     );
     for label in ["fallible", "read", "middle", "root"] {
-        let old = function(&first, label)?;
+        let old = function(first, label)?;
         let new = function(&revised, label)?;
         assert_ne!(
             old.reachable_result_errors(),
@@ -271,22 +281,66 @@ fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> 
         LEAF,
         "candidate must be virtual"
     );
-    // Reject the candidate by restoring inputs as a new revision.
+    Ok(())
+}
+
+/// Rejecting the candidate means restoring the inputs as a new revision, which yields the original
+/// facts and sources again.
+#[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+fn assert_restore_returns_to_original_facts(
+    session: &mut SourceDatabase,
+    root: &Path,
+    first: &CrateIr,
+    initial: &SemanticSnapshot,
+) -> Result<()> {
     session
-        .change_file(&root.path().join("src/leaf.rs"), LEAF.to_owned())
+        .change_file(&root.join("src/leaf.rs"), LEAF.to_owned())
         .into_diagnostic()?;
     let restored = session
-        .project(
-            &cordial::CrateTarget::new("semantic_specimen", root.path()),
-            &paths,
-        )
+        .project(&semantic_target(root), &paths(root))
         .into_diagnostic()?;
-    assert_eq!(function(&first, "root")?, function(&restored, "root")?);
+    assert_eq!(function(first, "root")?, function(&restored, "root")?);
     let restored_snapshot = restored
         .semantic_snapshot()
         .into_diagnostic()?
         .ok_or_else(|| miette::miette!("missing restored snapshot"))?;
     assert_eq!(*restored_snapshot.revision(), 3);
-    assert_eq!(initial_snapshot.sources(), restored_snapshot.sources());
+    assert_eq!(initial.sources(), restored_snapshot.sources());
     Ok(())
+}
+
+#[test]
+#[tracing::instrument(level = "debug", err(level = "warn"))]
+fn shared_database_resolves_and_invalidates_cross_file_evidence() -> Result<()> {
+    cordial::init_tracing();
+    let metrics = support::semantic_metrics::QueryMetrics::default();
+    let subscriber = tracing_subscriber::registry()
+        .with(metrics.clone())
+        .with(cordial::tracing_fmt_layer());
+    let _subscriber = tracing::subscriber::set_default(subscriber);
+    let root = specimen()?;
+    let mut session = SourceDatabase::load(root.path()).into_diagnostic()?;
+    let graph = session
+        .project(&semantic_target(root.path()), &paths(root.path()))
+        .into_diagnostic()?;
+    assert_results_resolve_across_files(&graph)?;
+    let initial = initial_snapshot_of(&graph)?;
+    let first = session
+        .project(&semantic_target(root.path()), &paths(root.path()))
+        .into_diagnostic()?;
+    let before = metrics.snapshot();
+    assert!(
+        before.contains_key("direct:unrelated"),
+        "query counts: {before:?}"
+    );
+    assert_warm_projection_runs_no_queries(&mut session, root.path(), &first, &metrics, &before)?;
+    assert_edit_invalidates_only_dependents(
+        &mut session,
+        root.path(),
+        &first,
+        &initial,
+        &metrics,
+        &before,
+    )?;
+    assert_restore_returns_to_original_facts(&mut session, root.path(), &first, &initial)
 }

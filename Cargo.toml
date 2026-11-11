@@ -156,7 +156,23 @@ name = "custom_plugins"
 required-features = ["quality", "impl_coverage"]
 
 [[test]]
-name = "cli"
+name = "cli_quality"
+required-features = ["cli", "quality"]
+
+[[test]]
+name = "cli_artifacts"
+required-features = ["cli", "quality"]
+
+[[test]]
+name = "cli_exceptions"
+required-features = ["cli", "quality"]
+
+[[test]]
+name = "cli_explain"
+required-features = ["cli", "quality"]
+
+[[test]]
+name = "cli_submit"
 required-features = ["cli", "quality"]
 
 [[test]]
@@ -188,15 +204,63 @@ name = "build_stage"
 required-features = ["elicitation"]
 
 [[test]]
-name = "panics_etiquette"
+name = "panics_detection"
 required-features = ["panics"]
 
 [[test]]
-name = "tracing_etiquette"
+name = "panics_verus"
+required-features = ["panics"]
+
+[[test]]
+name = "panics_error_surface"
+required-features = ["panics"]
+
+[[test]]
+name = "panics_kani"
+required-features = ["panics"]
+
+[[test]]
+name = "tracing_detection"
 required-features = ["tracing"]
 
 [[test]]
-name = "tracing_apply"
+name = "tracing_site_rules"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing_proof_reachability"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing_gate_crates"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing_apply_selection"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing_apply_recipes"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing_apply_existing"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing_apply_placement"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing_apply_gating"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing_apply_proof_context"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing_apply_error_levels"
 required-features = ["tracing"]
 
 [[test]]
@@ -220,7 +284,19 @@ name = "panic_apply_worklist"
 required-features = ["cli", "quality"]
 
 [[test]]
-name = "tracing_subscriber"
+name = "tracing_subscriber_entry_points"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing_subscriber_installation"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing_subscriber_policy_knobs"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing_subscriber_known_helpers"
 required-features = ["tracing"]
 
 [[test]]
@@ -232,7 +308,31 @@ name = "allows_etiquette"
 required-features = ["allows"]
 
 [[test]]
-name = "modularity_etiquette"
+name = "modularity_functions"
+required-features = ["modularity"]
+
+[[test]]
+name = "modularity_types_per_file"
+required-features = ["modularity"]
+
+[[test]]
+name = "modularity_file_size"
+required-features = ["modularity"]
+
+[[test]]
+name = "modularity_module_size"
+required-features = ["modularity"]
+
+[[test]]
+name = "modularity_hierarchy"
+required-features = ["modularity"]
+
+[[test]]
+name = "modularity_hierarchy_checklist"
+required-features = ["modularity"]
+
+[[test]]
+name = "modularity_tests_tree"
 required-features = ["modularity"]
 
 [[test]]
@@ -248,11 +348,31 @@ name = "visibility_etiquette"
 required-features = ["visibility"]
 
 [[test]]
-name = "cli_layout_etiquette"
+name = "cli_layout_islands"
 required-features = ["cli_layout"]
 
 [[test]]
-name = "crate_attrs_etiquette"
+name = "cli_layout_handoff"
+required-features = ["cli_layout"]
+
+[[test]]
+name = "cli_layout_accepted"
+required-features = ["cli_layout"]
+
+[[test]]
+name = "cli_layout_session"
+required-features = ["cli_layout"]
+
+[[test]]
+name = "crate_attrs_scan"
+required-features = ["crate_attrs"]
+
+[[test]]
+name = "crate_attrs_session"
+required-features = ["crate_attrs"]
+
+[[test]]
+name = "crate_attrs_apply"
 required-features = ["crate_attrs"]
 
 [[test]]
@@ -280,7 +400,11 @@ name = "creusot_diagnostics_etiquette"
 required-features = ["creusot_diagnostics"]
 
 [[test]]
-name = "dependency_freshness_etiquette"
+name = "dependency_freshness_survey"
+required-features = ["dependency_freshness"]
+
+[[test]]
+name = "dependency_freshness_findings"
 required-features = ["dependency_freshness"]
 
 [[test]]
@@ -292,7 +416,19 @@ name = "pageantry_etiquette"
 required-features = ["pageantry"]
 
 [[test]]
-name = "derives_etiquette"
+name = "derives_constructors"
+required-features = ["derives"]
+
+[[test]]
+name = "derives_getters"
+required-features = ["derives"]
+
+[[test]]
+name = "derives_setters"
+required-features = ["derives"]
+
+[[test]]
+name = "derives_exemptions"
 required-features = ["derives"]
 
 [[test]]
@@ -308,7 +444,27 @@ name = "error_chain_etiquette"
 required-features = ["error_chain"]
 
 [[test]]
-name = "internal_error_chain_etiquette"
+name = "internal_error_chain_type_graph"
+required-features = ["internal_error_chain"]
+
+[[test]]
+name = "internal_error_chain_compliance"
+required-features = ["internal_error_chain"]
+
+[[test]]
+name = "internal_error_chain_reports"
+required-features = ["internal_error_chain"]
+
+[[test]]
+name = "internal_error_chain_wrappers"
+required-features = ["internal_error_chain"]
+
+[[test]]
+name = "internal_error_chain_kind_fields"
+required-features = ["internal_error_chain"]
+
+[[test]]
+name = "internal_error_chain_kind_fanout"
 required-features = ["internal_error_chain"]
 
 [[test]]
@@ -320,11 +476,39 @@ name = "foreign_error_attenuation_etiquette"
 required-features = ["foreign_error_attenuation"]
 
 [[test]]
-name = "antipatterns_etiquette"
+name = "antipatterns_policy"
 required-features = ["antipatterns"]
 
 [[test]]
-name = "contract_bounds"
+name = "antipatterns_error_types"
+required-features = ["antipatterns"]
+
+[[test]]
+name = "antipatterns_unused_args"
+required-features = ["antipatterns"]
+
+[[test]]
+name = "antipatterns_static_refs"
+required-features = ["antipatterns"]
+
+[[test]]
+name = "contract_bounds_shapes_kani"
+required-features = ["antipatterns"]
+
+[[test]]
+name = "contract_bounds_shapes_verus_creusot"
+required-features = ["antipatterns"]
+
+[[test]]
+name = "contract_bounds_named_calls"
+required-features = ["antipatterns"]
+
+[[test]]
+name = "contract_bounds_results"
+required-features = ["antipatterns"]
+
+[[test]]
+name = "contract_bounds_crate_walk"
 required-features = ["antipatterns"]
 
 [[test]]
@@ -336,7 +520,15 @@ name = "lint_configuration"
 required-features = ["quality"]
 
 [[test]]
-name = "exceptions"
+name = "exceptions_suppression"
+required-features = ["panics", "visibility"]
+
+[[test]]
+name = "exceptions_registry"
+required-features = ["panics", "visibility"]
+
+[[test]]
+name = "exceptions_add"
 required-features = ["panics", "visibility"]
 
 [[test]]
