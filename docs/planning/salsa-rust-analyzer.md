@@ -1754,15 +1754,18 @@ Two blocks cover almost everything:
 
 Bites, in order:
 
-- [ ] **T1 Parameter recording.** `recordable::{parameters, unrecordable, generic}`
+- [x] **T1 Parameter recording.** `recordable::{parameters, unrecordable, generic}`
   decide the `skip(..)` list from a whitelist of type names (`RECORDABLE_IDENTS`).
   Replace with the solver's `Debug` verdict per binding, in the function's own
   environment, so a derived `Debug` type, a `Vec` of one, and a `T: Debug`
-  parameter are recorded.
-- [ ] **T2 Return recording.** `return_unrecordable` and `return_borrowed` (the
+  parameter are recorded. Also found: attribute macros stacked on one function
+  (`#[instrument]` over `#[hotpath::measure]`) left 124 functions in this
+  workspace without any semantic facts; they are now expanded until a definition
+  appears.
+- [x] **T2 Return recording.** `return_unrecordable` and `return_borrowed` (the
   `ret` and `err` options) from the return type's `Debug` verdict and its
   reference-ness.
-- [ ] **T3 Role inputs.** `returns_self` and `contains_bool` for role
+- [x] **T3 Role inputs.** `returns_self` and `contains_bool` for role
   classification from the resolved return type. The role heuristics themselves
   are naming policy and stay.
 - [ ] **T4 Error-path events.** `has_error_path_event` matches macros named
