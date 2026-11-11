@@ -740,7 +740,7 @@ behavioral reference. This checkpoint does not complete the tracing cutover:
 workspace proof call-graph collection and its downstream reachability evidence
 still need native projection before retiring the shared-syn carrier.
 
-## Checkpoint: workspace proof call evidence
+## Checkpoint: workspace proof call evidence (superseded 2026-11-11)
 
 The workspace source inventory now retains required `SourceProofFunction`
 evidence beside each source snapshot: qualified identities, call keys, inherited
@@ -1692,7 +1692,46 @@ that shaped it, and a later run with the same digest never loads the workspace.
   scans still run against the empty database on a hit; they are file-level syntax
   collection.
 
-**Remaining.** Tracing's proof-only reachability still uses the old name-keyed
-registry; it should read `ContextCalls`. `enricher/source_calls.rs` and the
+## Checkpoint: tracing's proof-only reachability reads the IR (2026-11-11)
+
+The name-keyed registry (`SourceProofFunction`, `call_keys`/`calls`, the
+`call_graph/{collect,resolve}` modules and the proof-call field of the
+path-inclusion record) is deleted. Reachability reads the crate IRs the loader
+built from the one session database.
+
+**Evidence added to the IR.**
+
+- `FunctionLocation` (file and byte offset of the item start) on every function
+  node. It depends only on source, so a cached IR and a fresh projection agree;
+  `SemanticItemId` is session-local and cannot join graphs.
+- `ExternalCall` on a caller: a resolved call whose callee has no node in this
+  crate, named by location and by the cfg context that resolved it. Callees
+  outside the workspace's package roots and macro-generated functions are left out.
+- `TraitImplementation` on an impl function: the trait method it implements, by
+  location, or "foreign" when the trait is not the workspace's. A call through a
+  trait lands on the declaration in every body, so the declaration's callers are
+  the implementations' callers, and a foreign trait's implementations can have
+  callers nothing here can see.
+- `MacroIsland` on functions read from an item macro's tokens: the cfg atoms and
+  attribute names that gate them. Their call paths are resolved at the invocation
+  (`speculative_resolve`; `Type::f` and `Trait::f` resolve the qualifier first and
+  look the name up among the type's path candidates). The same syntax serves
+  macros rust-analyzer can and cannot expand.
+- Call facts see through macro calls in function bodies that rust-analyzer
+  expands (`assert!`, `macro_rules!`). Calls from an expansion take the
+  invocation's range and the function stays incomplete, so no transform edits it.
+
+**The rule** (`tracing/call_graph`). A function is a seed when it is inactive in
+the ordinary build and active only in contexts that turn on one of its crate's
+gate cfgs, or a macro-read function names a gate. Then any function whose callers
+(direct, external, and through the trait declarations it implements) are all
+excluded is excluded. No caller means no exclusion; neither does a foreign trait.
+
+**Sequencing.** A call can leave a crate, so no crate is judged before every crate
+IR is present: `load_and_probe` and the apply's IR builder project all targets,
+compute the call graph, then enrich.
+
+**Left to do against the milestone.** `enricher/source_calls.rs` and the
 `transform/` readers of `Calls` should move to the same edges. The IR decode and
-the ordinary pass are now the dominant costs.
+the ordinary pass are now the dominant costs. Rustc's own expansion (`cargo
+expand`) as a stronger tier for macros rust-analyzer cannot expand is tabled.
