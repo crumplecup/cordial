@@ -203,6 +203,7 @@ pub use semantic_context::{
 };
 pub use semantic_recording::{
     SemanticCapability, SemanticFormattingRole, SemanticParameter, SemanticResultRecording,
+    SemanticReturnRecording, SemanticReturnShape,
 };
 pub use semantic_workspace::{
     SemanticConfigurationInput, SemanticContextGap, SemanticCrateContext, SemanticFeatures,

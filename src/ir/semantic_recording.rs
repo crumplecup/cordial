@@ -1,12 +1,13 @@
 //! What a function's formatting and recording obligations are, proven by the
 //! database's solver in the function's own environment: the error's `Display` and
 //! `Debug`, each parameter's `Debug`, and whether a declaration is itself a
-//! formatting method.
+//! formatting method. The shape of the return type, which role classification
+//! reads, is kept beside them.
 
 use serde::{Deserialize, Serialize};
 
 /// A formatting obligation checked in the function's own generic environment.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum SemanticCapability {
     /// The semantic solver established the actual core formatting trait.
     Proven,
@@ -14,6 +15,7 @@ pub enum SemanticCapability {
     /// This is not proof that no implementation can exist.
     NotProven,
     /// The type or the core trait could not be resolved.
+    #[default]
     Unavailable,
 }
 
@@ -59,4 +61,45 @@ pub enum SemanticFormattingRole {
 pub struct SemanticParameter {
     name: String,
     debug: SemanticCapability,
+}
+
+/// Whether a function's whole return value can be recorded by `#[instrument(ret)]`
+/// (its type implements `Debug`), and whether any part of the type is a reference
+/// or a raw pointer, which rules out `err` on the borrowed value.
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_getters::Getters,
+    derive_new::new,
+)]
+#[new(visibility = "pub(crate)")]
+pub struct SemanticReturnRecording {
+    debug: SemanticCapability,
+    /// `None` when the return type could not be resolved.
+    borrowed: Option<bool>,
+}
+
+/// What the return type is, for classifying a function by role: whether it is the
+/// impl's own `Self` type (through references and aliases), and whether a `bool`
+/// occurs anywhere in it. `None` when the return type could not be resolved.
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_getters::Getters,
+    derive_new::new,
+)]
+#[new(visibility = "pub(crate)")]
+pub struct SemanticReturnShape {
+    is_self: Option<bool>,
+    has_bool: Option<bool>,
 }

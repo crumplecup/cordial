@@ -3,7 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::semantic_recording::{
-    SemanticFormattingRole, SemanticParameter, SemanticResultRecording,
+    SemanticFormattingRole, SemanticParameter, SemanticResultRecording, SemanticReturnRecording,
+    SemanticReturnShape,
 };
 
 /// Input identity of one semantic graph projection.
@@ -128,6 +129,16 @@ pub struct SemanticFunction {
     #[serde(default)]
     #[setters(generate)]
     formatting_role: SemanticFormattingRole,
+    /// What the return type is, for role classification.
+    #[new(default)]
+    #[serde(default)]
+    #[setters(generate)]
+    return_shape: SemanticReturnShape,
+    /// Whether the return value can be recorded, and whether it is borrowed.
+    #[new(default)]
+    #[serde(default)]
+    #[setters(generate)]
+    return_recording: SemanticReturnRecording,
     /// The bindings of the parameters, in order, with their `Debug` verdicts.
     #[new(default)]
     #[serde(default)]

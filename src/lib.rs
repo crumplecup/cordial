@@ -363,11 +363,12 @@ pub use ir::{
     SemanticContextFunction, SemanticContextGap, SemanticContextKey, SemanticContextPlan,
     SemanticCrateContext, SemanticFeatures, SemanticFormattingRole, SemanticFunction,
     SemanticItemId, SemanticPackageContext, SemanticParameter, SemanticResultRecording,
-    SemanticReturnContract, SemanticSnapshot, SemanticType, SemanticWorkspaceContext,
-    SourceAttribute, SourceAttributeArgument, SourceAttributeArguments, SourceAttributedItem,
-    SourceByteRange, SourceCallResolution, SourceCallUse, SourceCrateLints, SourceEntryContract,
-    SourceFileAttributes, SourceInstrumentSyntax, SourceModuleScope, SourcePathUse,
-    SourceResultContract, SourceUseInventory, TraitImplementation, WorkspaceIr,
+    SemanticReturnContract, SemanticReturnRecording, SemanticReturnShape, SemanticSnapshot,
+    SemanticType, SemanticWorkspaceContext, SourceAttribute, SourceAttributeArgument,
+    SourceAttributeArguments, SourceAttributedItem, SourceByteRange, SourceCallResolution,
+    SourceCallUse, SourceCrateLints, SourceEntryContract, SourceFileAttributes,
+    SourceInstrumentSyntax, SourceModuleScope, SourcePathUse, SourceResultContract,
+    SourceUseInventory, TraitImplementation, WorkspaceIr,
 };
 #[cfg(feature = "impl_coverage")]
 pub use ir::{
