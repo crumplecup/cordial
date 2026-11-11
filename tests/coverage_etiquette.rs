@@ -109,6 +109,7 @@ fn shadow_etiquette_links_mapped_items() -> miette::Result<()> {
     let session = SessionBuilder::new(&crate_root)
         .with_store_root(store.path())
         .register(&*SHADOW_ETIQUETTE)
+        .with_ir_snapshot()
         .build();
 
     let outcome = session.run(&RunAll).into_diagnostic().wrap_err("run")?;
@@ -120,12 +121,13 @@ fn shadow_etiquette_links_mapped_items() -> miette::Result<()> {
         0
     );
 
-    let cache = fs::read_to_string(store.path().join("cache").join(format!(
-        "{}.ir.json",
+    let ir = cordial::CrateIr::read_cache(&store.path().join("cache").join(format!(
+        "{}.ir.zst",
         cordial::project_slug_from_path(&crate_root)
     )))
     .into_diagnostic()
     .wrap_err("cache")?;
+    let cache = serde_json::to_string(&ir.snapshot().into_diagnostic()?).into_diagnostic()?;
     assert!(cache.contains("Mirrors"));
     Ok(())
 }

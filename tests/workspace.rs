@@ -34,6 +34,7 @@ resolver = "2"
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .register(&*PANICS_ETIQUETTE)
+        .with_ir_snapshot()
         .build();
 
     let outcome = session
@@ -47,8 +48,8 @@ resolver = "2"
         "expected one panic finding per member crate"
     );
 
-    assert!(store.path().join("cache/alpha.ir.json").is_file());
-    assert!(store.path().join("cache/beta.ir.json").is_file());
+    assert!(store.path().join("cache/alpha.ir.zst").is_file());
+    assert!(store.path().join("cache/beta.ir.zst").is_file());
     assert!(store.path().join("findings/rollup-summary.md").is_file());
     Ok(())
 }

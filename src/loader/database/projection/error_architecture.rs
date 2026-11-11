@@ -16,6 +16,7 @@ use std::{
 
 impl SourceDatabase {
     #[tracing::instrument(level = "debug", skip(self, target), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn project_error_architecture(
         &self,
         target: &CrateTarget,

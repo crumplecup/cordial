@@ -332,7 +332,7 @@ pub struct WorkspaceVersionInMemberSummary {
     crates: Vec<VersionInMemberCrateSummary>,
 }
 
-#[instrument(level = "debug", skip(findings))]
+#[instrument(level = "debug", skip(findings), err(level = "warn"))]
 pub fn build_workspace_antipatterns_summary(
     findings: &[&dyn Finding],
 ) -> CordialResult<WorkspaceAntipatternsSummary> {

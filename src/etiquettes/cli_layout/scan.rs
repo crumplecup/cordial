@@ -124,7 +124,7 @@ fn lint_act(
     Ok(())
 }
 
-#[instrument(level = "debug", skip(rule_id, file))]
+#[instrument(level = "debug", skip(rule_id, file), err(level = "warn"))]
 fn finding(
     crate_name: &str,
     rule_id: CliLayoutId,

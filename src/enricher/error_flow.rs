@@ -112,7 +112,7 @@ fn enrich_error_site(
     Ok(())
 }
 
-#[instrument(level = "debug", skip(ir, site_id))]
+#[instrument(level = "debug", skip(ir, site_id), err(level = "warn"))]
 fn scan_row_from_node(
     ir: &dyn IrMut,
     site_id: crate::ir::NodeId,

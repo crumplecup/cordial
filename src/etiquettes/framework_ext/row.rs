@@ -244,7 +244,7 @@ fn non_empty(text: String) -> Option<String> {
 /// Rebuild the coverage report for `category` from the findings the assessor
 /// emitted, with instantiation rows and notes intact. `None` when there are
 /// no findings in that category.
-#[instrument(level = "debug", skip(findings))]
+#[instrument(level = "debug", skip(findings), err(level = "warn"))]
 pub fn ext_report_from_findings(
     findings: &[&dyn Finding],
     category: &str,

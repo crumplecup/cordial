@@ -83,7 +83,7 @@ pub(super) fn site_context(module_prefix: &[String], leaf: &str) -> String {
     parts.join("::")
 }
 
-#[instrument(level = "debug", skip(file))]
+#[instrument(level = "debug", skip(file), err(level = "warn"))]
 pub(super) fn make_finding(
     context: String,
     file: &Path,

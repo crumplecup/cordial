@@ -64,12 +64,27 @@ impl ParsedSourceSession {
 
     /// Begin a run whose database holds the Cargo workspace at `root`.
     /// A root that is not a loadable crate or workspace is an error.
-    #[tracing::instrument(level = "debug", err(level = "warn"))]
-    pub(crate) fn begin_in(root: &std::path::Path) -> crate::CordialResult<Self> {
-        let database = crate::loader::SourceDatabase::load(root)?;
+    #[tracing::instrument(level = "debug", err(level = "warn"), skip(reporter, planning))]
+    pub(crate) fn begin_in(
+        root: &std::path::Path,
+        reporter: &crate::loader::Reporter,
+        planning: crate::CfgPlanning,
+    ) -> crate::CordialResult<Self> {
+        let database = crate::loader::SourceDatabase::load_reporting(
+            root,
+            &crate::loader::SemanticCargoOptions::default().with_cfg_planning(planning),
+            reporter,
+        )?;
         let session = Self::begin();
         session.token.install(database);
         Ok(session)
+    }
+
+    /// Say the database's long projection phases through `reporter` from now on.
+    #[tracing::instrument(level = "trace", skip(self, reporter))]
+    pub(crate) fn set_reporter(&self, reporter: crate::loader::Reporter) {
+        self.token
+            .with_database(|database| database.set_reporter(reporter));
     }
 
     /// Project one target's source and semantic evidence from the run database.

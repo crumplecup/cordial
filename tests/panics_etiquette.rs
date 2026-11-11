@@ -31,6 +31,7 @@ fn panics_etiquette_detects_panic_expect_and_unreachable() -> miette::Result<()>
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .register(&*PANICS_ETIQUETTE)
+        .with_ir_snapshot()
         .build();
 
     let outcome = session
@@ -66,7 +67,7 @@ fn panics_etiquette_detects_panic_expect_and_unreachable() -> miette::Result<()>
         store
             .path()
             .join("cache")
-            .join(format!("{slug}.ir.json"))
+            .join(format!("{slug}.ir.zst"))
             .is_file()
     );
     Ok(())

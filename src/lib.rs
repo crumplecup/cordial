@@ -36,6 +36,7 @@ mod loader;
 mod objects;
 mod plugin;
 mod plugins;
+mod process_memory;
 mod progress;
 #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
 mod proof_harness;
@@ -346,24 +347,26 @@ pub use hooks::{
 pub use ir::{
     ATTR_BINARY_ENTRY_PATHS, ATTR_CARGO_MANIFEST_SNAPSHOT, ATTR_CRATE_KINDS,
     ATTR_FUNCTION_CALL_FLOW, ATTR_FUNCTION_ERROR_FAMILY, ATTR_FUNCTION_SOURCE_SYNTAX,
-    ATTR_IR_ORIGIN, ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, ATTR_SOURCE_ATTRIBUTE,
-    ATTR_SOURCE_FILE_ATTRIBUTES, ATTR_SOURCE_MODULE_SCOPE, ATTR_SYN_DOC_PEER, AttrKey, AttrValue,
-    BasicQuery, CallResolutionFailure, CrateIr, CrateIrSnapshot, CrateKind, CrateView,
-    CrateViewMut, DeclaredFunctionOutput, EdgeKind, EdgeWeight, ErrorFamilyBasis, ErrorFamilyGap,
-    ErrorFamilyGapReason, ErrorFamilyMember, FileSnapshot, FunctionBoundary, FunctionCallFlow,
-    FunctionCallSyntax, FunctionErrorFamily, FunctionNestedScope, FunctionReturn,
-    FunctionReturnFlow, FunctionSourceSyntax, FunctionSuccessExit, FunctionTail,
-    FunctionUnwrapSyntax, IrIndexes, IrMut, IrView, ItemKind, NestedScopeKind, NodeId, NodeKind,
-    NodeView, NodeWeight, ORIGIN_RUSTDOC, ORIGIN_SOURCE, PanicSitesQuery, QualifiedPath, Query,
-    QueryBuilder, ResolvedFunctionCall, ReturnValue, SemanticCall, SemanticCallTarget,
-    SemanticCapability, SemanticConfigurationInput, SemanticContextGap, SemanticCrateContext,
-    SemanticFeatures, SemanticFormattingRole, SemanticFunction, SemanticItemId,
-    SemanticPackageContext, SemanticResultRecording, SemanticReturnContract, SemanticSnapshot,
-    SemanticType, SemanticWorkspaceContext, SourceAttribute, SourceAttributeArgument,
-    SourceAttributeArguments, SourceAttributedItem, SourceByteRange, SourceCallResolution,
-    SourceCallUse, SourceCrateLints, SourceEntryContract, SourceFileAttributes,
-    SourceInstrumentSyntax, SourceModuleScope, SourcePathUse, SourceResultContract,
-    SourceUseInventory, WorkspaceIr,
+    ATTR_IR_ORIGIN, ATTR_SEMANTIC_ACTIVITY, ATTR_SEMANTIC_CONTEXT_FUNCTIONS,
+    ATTR_SEMANTIC_CONTEXT_PLAN, ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT,
+    ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_FILE_ATTRIBUTES, ATTR_SOURCE_MODULE_SCOPE,
+    ATTR_SYN_DOC_PEER, AttrKey, AttrValue, BasicQuery, CallResolutionFailure, CrateIr,
+    CrateIrSnapshot, CrateKind, CrateView, CrateViewMut, DeclaredFunctionOutput, EdgeKind,
+    EdgeWeight, ErrorFamilyBasis, ErrorFamilyGap, ErrorFamilyGapReason, ErrorFamilyMember,
+    FileSnapshot, FunctionBoundary, FunctionCallFlow, FunctionCallSyntax, FunctionErrorFamily,
+    FunctionNestedScope, FunctionReturn, FunctionReturnFlow, FunctionSourceSyntax,
+    FunctionSuccessExit, FunctionTail, FunctionUnwrapSyntax, IrIndexes, IrMut, IrView, ItemKind,
+    NestedScopeKind, NodeId, NodeKind, NodeView, NodeWeight, ORIGIN_RUSTDOC, ORIGIN_SOURCE,
+    PanicSitesQuery, QualifiedPath, Query, QueryBuilder, ResolvedFunctionCall, ReturnValue,
+    SemanticCall, SemanticCallTarget, SemanticCapability, SemanticConfigurationInput,
+    SemanticContextFunction, SemanticContextGap, SemanticContextKey, SemanticContextPlan,
+    SemanticCrateContext, SemanticFeatures, SemanticFormattingRole, SemanticFunction,
+    SemanticItemId, SemanticPackageContext, SemanticResultRecording, SemanticReturnContract,
+    SemanticSnapshot, SemanticType, SemanticWorkspaceContext, SourceAttribute,
+    SourceAttributeArgument, SourceAttributeArguments, SourceAttributedItem, SourceByteRange,
+    SourceCallResolution, SourceCallUse, SourceCrateLints, SourceEntryContract,
+    SourceFileAttributes, SourceInstrumentSyntax, SourceModuleScope, SourcePathUse,
+    SourceResultContract, SourceUseInventory, WorkspaceIr,
 };
 #[cfg(feature = "impl_coverage")]
 pub use ir::{
@@ -372,13 +375,14 @@ pub use ir::{
 #[cfg(any(feature = "_quality_support", feature = "verus_ir"))]
 pub use loader::path_has_fixtures;
 pub use loader::{
-    CrateTarget, LoadView, SemanticCargoOptions, SourceDatabase, SourceFile, SourceLoadView,
-    SourceLoader, SourceSyntax, module_path_from_src_file, quality_scan_trees,
+    CfgPlanning, CrateTarget, LoadView, SemanticCargoOptions, SourceDatabase, SourceFile,
+    SourceLoadView, SourceLoader, SourceSyntax, module_path_from_src_file, quality_scan_trees,
 };
 pub use objects::{
     Artifact, Disposition, FileSpan, Finding, FindingSink, IrAnchor, MapFindingSink, Marker,
     NodeAnchor, Rule, SourceSpan, TextArtifact,
 };
+pub use process_memory::{MemorySample, sample as memory_sample};
 pub use progress::{LineProgress, ProgressSink, ProgressTask, noop_progress};
 /// The rust-analyzer syntax crate at the version cordial links, for plugins
 /// reading [`SourceSyntax`] trees.

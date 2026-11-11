@@ -7,7 +7,7 @@ use crate::error::{CordialError, CordialResult};
 
 pub(super) const MAX_NODES: usize = 256;
 
-#[instrument(level = "debug", skip(constraints))]
+#[instrument(level = "debug", skip(constraints), err(level = "warn"))]
 pub(super) fn validate(known_ids: &[&str], constraints: &[LintConstraint]) -> CordialResult<()> {
     if !table_is_valid(known_ids, constraints) {
         if known_ids.len() > MAX_NODES {

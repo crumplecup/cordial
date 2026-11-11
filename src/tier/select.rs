@@ -16,7 +16,7 @@ pub struct TierSelection {
 
 impl TierSelection {
     /// Resolve `--tier`, or the project's default, against known tier names.
-    #[instrument(level = "debug", skip(etiquettes, config))]
+    #[instrument(level = "debug", skip(etiquettes, config), err(level = "warn"))]
     pub fn resolve(
         etiquettes: &[Arc<dyn Etiquette>],
         config: &CordialConfig,

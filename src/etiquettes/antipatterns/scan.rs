@@ -34,7 +34,11 @@ pub fn scan_rust_source(
 }
 
 /// Scan one Rust source file and return records using a static-reference strategy.
-#[instrument(level = "debug", skip(source, file, static_ref_strategy))]
+#[instrument(
+    level = "debug",
+    skip(source, file, static_ref_strategy),
+    err(level = "warn")
+)]
 pub fn scan_rust_source_with_static_ref_strategy(
     source: &str,
     file: &Path,
@@ -55,7 +59,8 @@ pub fn scan_rust_source_with_static_ref_strategy(
 /// Scan one source file with general static-reference and error-field policies.
 #[instrument(
     level = "debug",
-    skip(source, file, static_ref_strategy, error_field_strategy)
+    skip(source, file, static_ref_strategy, error_field_strategy),
+    err(level = "warn")
 )]
 pub fn scan_rust_source_with_strategies(
     source: &str,
@@ -81,7 +86,8 @@ pub fn scan_rust_source_with_strategies(
 /// exempt from that rule.
 #[instrument(
     level = "debug",
-    skip(source, file, static_ref_strategy, error_field_strategy, skip_paths)
+    skip(source, file, static_ref_strategy, error_field_strategy, skip_paths),
+    err(level = "warn")
 )]
 pub fn scan_rust_source_with_skip_paths(
     source: &str,

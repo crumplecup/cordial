@@ -18,7 +18,7 @@ pub struct AntipatternWorkspaceFacts {
 }
 
 impl AntipatternWorkspaceFacts {
-    #[instrument(level = "debug")]
+    #[instrument(level = "debug", err(level = "warn"))]
     /// Load registry and workspace-version evidence shared by every member.
     pub fn load(workspace_root: &Path, store_root: &Path) -> CordialResult<Self> {
         Ok(Self {

@@ -212,7 +212,7 @@ impl WorkspaceForeignErrorAttenuationSummary {
 }
 
 /// Build workspace foreign error attenuation summary.
-#[instrument(level = "debug", skip(reports))]
+#[instrument(level = "debug", skip(reports), err(level = "warn"))]
 pub fn build_workspace_foreign_error_attenuation_summary(
     reports: &[ForeignErrorAttenuationReport],
 ) -> CordialResult<WorkspaceForeignErrorAttenuationSummary> {

@@ -84,7 +84,7 @@ const CARGO_INJECTED_NAMES: &[&str] = &["test", "feature", "docsrs"];
 /// manifest sets `[lints] workspace = true`), this crate's own
 /// `build.rs`-emitted `cargo::rustc-check-cfg=cfg(...)` lines, and
 /// `thresholds`' `extra_known_names` escape hatch.
-#[instrument(level = "debug", skip(source, thresholds))]
+#[instrument(level = "debug", skip(source, thresholds), err(level = "warn"))]
 pub fn declared_names_for_crate(
     source: &SourceLoadView,
     crate_root: &Path,
@@ -105,7 +105,8 @@ pub fn declared_names_for_crate(
 /// Resolve declaration policy from captured loader inputs only.
 #[instrument(
     level = "debug",
-    skip(manifest_source, workspace_source, build_source, thresholds)
+    skip(manifest_source, workspace_source, build_source, thresholds),
+    err(level = "warn")
 )]
 pub(crate) fn declared_names_from_inputs(
     manifest_source: Option<&str>,

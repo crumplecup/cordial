@@ -4,8 +4,9 @@
 //! transformations and records the worklist items they fix.
 
 use crate::{
-    CordialError, CordialResult, CrateIr, Etiquette, NamedRunFilter, SessionBuilder, StoreLayout,
-    SurrealGraphExport, all_plugins, default_store_home, etiquettes_from_plugins, lookup_etiquette,
+    CordialError, CordialResult, CrateIr, Etiquette, NamedRunFilter, Session, SessionBuilder,
+    StoreLayout, SurrealGraphExport, all_plugins, default_store_home, etiquettes_from_plugins,
+    lookup_etiquette,
 };
 use std::fs;
 use std::io::{self, Write};
@@ -140,6 +141,19 @@ pub(super) fn view_store_file(store: &StoreLayout, path: &Path) -> CordialResult
     Ok(())
 }
 
+/// Run the pipeline once with the IR file turned on, for an export that finds none.
+#[instrument(level = "debug", skip(store), err(level = "warn"))]
+fn regenerate_ir(store: &StoreLayout, project_root: &Path) -> CordialResult<()> {
+    let mut builder = SessionBuilder::new(project_root)
+        .with_store_root(store.root().clone())
+        .with_ir_snapshot();
+    for plugin in all_plugins() {
+        builder = builder.register_plugin(plugin);
+    }
+    builder.build().run(&NamedRunFilter::all_plugins())?;
+    Ok(())
+}
+
 #[instrument(level = "debug", skip(store), err(level = "warn"))]
 pub(super) fn export_surreal(
     store: &StoreLayout,
@@ -157,6 +171,9 @@ pub(super) fn export_surreal(
         })
         .unwrap_or_else(|| store.project_slug().clone());
     let cache_path = store.ir_cache_path(&crate_name);
+    if !cache_path.is_file() {
+        regenerate_ir(store, project_root)?;
+    }
     if !cache_path.is_file() {
         return Err(CordialError::no_cached_ir(cache_path));
     }

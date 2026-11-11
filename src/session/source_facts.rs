@@ -7,7 +7,11 @@ use crate::loader::SourceLoadView;
 use crate::session::SessionView;
 
 #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
-#[tracing::instrument(level = "debug", skip(workspace, session, enrichers, probe_ids))]
+#[tracing::instrument(
+    level = "debug",
+    skip(workspace, session, enrichers, probe_ids),
+    err(level = "warn")
+)]
 pub(crate) fn prepare_workspace_proof_harness(
     workspace: &mut WorkspaceIr,
     session: &dyn SessionView,
@@ -45,7 +49,11 @@ pub(crate) fn prepare_workspace_proof_harness(
 }
 
 #[cfg(any(feature = "derives", feature = "antipatterns"))]
-#[tracing::instrument(level = "debug", skip(workspace, source, session, enrichers))]
+#[tracing::instrument(
+    level = "debug",
+    skip(workspace, source, session, enrichers),
+    err(level = "warn")
+)]
 pub(crate) fn prepare_workspace_source_facts(
     workspace: &mut WorkspaceIr,
     source: &SourceLoadView,

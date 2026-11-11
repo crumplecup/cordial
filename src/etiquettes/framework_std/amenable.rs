@@ -165,7 +165,7 @@ pub fn amenable_row_disposition(status: AmenableStdStatus) -> Disposition {
     }
 }
 
-#[instrument(level = "debug", skip(findings))]
+#[instrument(level = "debug", skip(findings), err(level = "warn"))]
 pub fn amenable_report_from_findings(
     findings: &[&dyn Finding],
     include_nightly: bool,

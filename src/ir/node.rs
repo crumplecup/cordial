@@ -16,7 +16,7 @@ pub trait NodeView {
 }
 
 /// Opaque stable node identifier wrapping a petgraph index.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct NodeId(u32);
 
 impl NodeId {

@@ -213,7 +213,11 @@ impl QualityReportReporter {
     pub const ID: &'static str = "quality-report";
 
     /// Render a report with explicit coverage of checks that did not run.
-    #[instrument(level = "debug", skip(self, findings, config, ledger, fresh_artifacts))]
+    #[instrument(
+        level = "debug",
+        skip(self, findings, config, ledger, fresh_artifacts),
+        err(level = "warn")
+    )]
     pub(crate) fn render_run(
         &self,
         findings: &[&dyn Finding],

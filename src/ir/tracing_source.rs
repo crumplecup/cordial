@@ -2,7 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 
-mod display;
 mod native;
 mod recordable;
 

@@ -55,6 +55,24 @@ impl IrView for CrateIr {
             .collect()
     }
 
+    #[instrument(level = "trace", skip(self, id, context))]
+    fn context_parents(&self, id: NodeId, context: &crate::ir::SemanticContextKey) -> Vec<NodeId> {
+        self.neighbors(id, EdgeKind::ContextCalls, petgraph::Direction::Incoming)
+            .into_iter()
+            .filter(|(weight, _)| weight.context().as_ref() == Some(context))
+            .map(|(_, parent)| parent)
+            .collect()
+    }
+
+    #[instrument(level = "trace", skip(self, id, context))]
+    fn context_children(&self, id: NodeId, context: &crate::ir::SemanticContextKey) -> Vec<NodeId> {
+        self.neighbors(id, EdgeKind::ContextCalls, petgraph::Direction::Outgoing)
+            .into_iter()
+            .filter(|(weight, _)| weight.context().as_ref() == Some(context))
+            .map(|(_, child)| child)
+            .collect()
+    }
+
     #[instrument(level = "trace", skip(self, path))]
     fn node_by_path(&self, path: &str) -> Option<NodeId> {
         self.indexes().by_path().get(path).copied()
@@ -81,7 +99,7 @@ impl IrMut for CrateIr {
         CrateIr::insert_edge(self, from, to, kind)
     }
 
-    #[instrument(level = "trace", skip(self, node, value))]
+    #[instrument(level = "trace", skip(self, node, value), err(level = "warn"))]
     fn set_attr(&mut self, node: NodeId, key: &str, value: serde_json::Value) -> CordialResult<()> {
         CrateIr::set_attr(self, node, key, value)
     }

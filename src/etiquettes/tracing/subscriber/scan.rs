@@ -158,7 +158,7 @@ fn trusted_helper_names(sites: &[FnSite]) -> Vec<String> {
     helper_names
 }
 
-#[instrument(level = "debug", skip(rule_id, site))]
+#[instrument(level = "debug", skip(rule_id, site), err(level = "warn"))]
 fn record(
     rule_id: SubscriberRuleId,
     site: &FnSite,

@@ -24,7 +24,11 @@ pub fn scan_crate_attrs(
         return Ok(Vec::new());
     };
 
-    let parsed = crate::loader::ParsedSourceSession::begin_in(crate_root)?;
+    let parsed = crate::loader::ParsedSourceSession::begin_in(
+        crate_root,
+        &crate::loader::Reporter::default(),
+        crate::CfgPlanning::Explicit,
+    )?;
     let target = crate::discover_crate_targets(crate_root, &crate::RunAll)?
         .into_iter()
         .find(|target| target.crate_name() == crate_name)

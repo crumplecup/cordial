@@ -60,7 +60,11 @@ pub fn run_crate_attrs_apply(
         return Ok(summary);
     }
 
-    let parsed = crate::loader::ParsedSourceSession::begin_in(project_root)?;
+    let parsed = crate::loader::ParsedSourceSession::begin_in(
+        project_root,
+        &crate::loader::Reporter::default(),
+        crate::CfgPlanning::Explicit,
+    )?;
     for target in targets {
         let crate_name = target.crate_name();
         let crate_root = target.crate_root();

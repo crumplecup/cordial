@@ -8,7 +8,6 @@ use ra_ap_syntax::{
 };
 use tracing::instrument;
 
-use super::display::DisplayFacts;
 use super::{SourceTracingFunction, SourceTracingInventory, recordable};
 use crate::CordialResult;
 use crate::etiquettes::tracing::{
@@ -35,7 +34,6 @@ impl SourceTracingInventory {
         semantics: &HashMap<TextRange, SemanticFunction>,
     ) -> CordialResult<Self> {
         let mut functions = Vec::new();
-        let display = DisplayFacts::collect(file);
         for item in attributes.items() {
             let range = TextRange::new(
                 (item.range().start() as u32).into(),
@@ -55,7 +53,7 @@ impl SourceTracingInventory {
                 Some(_) => FunctionKind::InherentMethod,
                 None => FunctionKind::Free,
             };
-            let context = context(file, &function, kind, semantics.get(&range), &display)?;
+            let context = context(file, &function, kind, semantics.get(&range))?;
             functions.push(SourceTracingFunction {
                 path: item.path().clone(),
                 range: item.range().clone(),
@@ -79,7 +77,7 @@ impl SourceTracingInventory {
 
 #[instrument(
     level = "debug",
-    skip(file, function, semantics, kind, display),
+    skip(file, function, semantics, kind),
     err(level = "warn")
 )]
 fn context(
@@ -87,30 +85,20 @@ fn context(
     function: &ast::Fn,
     kind: FunctionKind,
     semantics: Option<&SemanticFunction>,
-    display: &DisplayFacts,
 ) -> CordialResult<FnContext> {
     let output = function.ret_type().and_then(|ret| ret.ty());
     let syntactic_result = output.as_ref().is_some_and(recordable::returns_result);
     let (returns_result, displayable) = match semantics.map(|facts| facts.result_recording()) {
+        // The solver is authoritative: an error is displayable only when it proved
+        // the actual core trait, never from the spelling of its name.
         Some(SemanticResultRecording::Result {
             display: capability,
             ..
-        }) => (
-            true,
-            *capability == SemanticCapability::Proven
-                || output
-                    .as_ref()
-                    .is_some_and(|ty| display.err_is_displayable(ty)),
-        ),
+        }) => (true, *capability == SemanticCapability::Proven),
         Some(SemanticResultRecording::NotResult) => (false, false),
-        // Inactive cfg branches have no semantic facts; read their text.
-        _ => (
-            syntactic_result,
-            syntactic_result
-                && output
-                    .as_ref()
-                    .is_some_and(|ty| display.err_is_displayable(ty)),
-        ),
+        // No loaded context analysed this function. The signature still says whether
+        // it returns a `Result`; with no evidence nothing can prove its error displayable.
+        _ => (syntactic_result, false),
     };
     let (peek, lines) = body(file, function);
     let receiver = function.param_list().and_then(|list| list.self_param());

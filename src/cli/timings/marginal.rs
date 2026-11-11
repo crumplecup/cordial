@@ -70,7 +70,7 @@ impl MarginalPair {
     }
 }
 
-#[instrument(level = "debug", skip(ctx), fields(id = id))]
+#[instrument(level = "debug", skip(ctx), fields(id = id), err(level = "warn"))]
 pub(super) fn measure_marginal(
     ctx: &ActCtx,
     id: &str,

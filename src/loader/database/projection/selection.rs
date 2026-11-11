@@ -58,6 +58,7 @@ impl SourceDatabase {
     /// Union policy scan roots with source modules selected by Cargo entry
     /// identities. Semantic module lookup reuses this database's canonical tree.
     #[tracing::instrument(level = "debug", skip(self, package))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn package_sources(
         &self,
         package: &crate::SemanticPackageContext,

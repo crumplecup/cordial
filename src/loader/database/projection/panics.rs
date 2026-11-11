@@ -7,6 +7,7 @@ use std::path::Path;
 
 impl SourceDatabase {
     #[tracing::instrument(level = "debug", skip(self, verus), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn project_panics(
         &self,
         root: &Path,

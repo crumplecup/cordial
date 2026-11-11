@@ -28,7 +28,7 @@ pub fn proof_pattern_records(
         .map(|groups| groups.into_iter().flatten().collect())
 }
 
-#[instrument(level = "debug", skip(function))]
+#[instrument(level = "debug", skip(function), err(level = "warn"))]
 fn function_records(
     function: &VerusFnFacts,
     crate_root: &Path,

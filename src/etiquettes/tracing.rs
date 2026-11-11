@@ -41,7 +41,6 @@ pub(crate) use call_graph::CallGraphFacts;
 pub(crate) use call_graph::workspace_call_graph;
 mod classify;
 mod delta;
-mod display_types;
 mod enricher;
 mod present;
 mod recordable;
@@ -51,7 +50,6 @@ mod print;
 mod probe;
 mod quality_area;
 mod recipe;
-pub(crate) use display_types::WELL_KNOWN_DISPLAY_TYPES;
 pub(crate) use recordable::RECORDABLE_IDENTS;
 mod reporter;
 mod scan;
@@ -268,7 +266,8 @@ pub static TRACING_ETIQUETTE: LazyLock<StaticQualityEtiquette> = LazyLock::new(|
                     ),
                 ],
             ),
-        ),
+        )
+        .with_gated_semantics(),
         Some(
             QualityAreaSpec::new(
                 "Tracing instrumentation",

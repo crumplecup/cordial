@@ -75,6 +75,11 @@ impl<T: Etiquette + ?Sized> Etiquette for &T {
     fn is_coverage(&self) -> bool {
         (**self).is_coverage()
     }
+
+    #[instrument(level = "trace", skip(self))]
+    fn needs_gated_semantics(&self) -> bool {
+        (**self).needs_gated_semantics()
+    }
 }
 
 impl IntoEtiquette for Arc<dyn Etiquette> {

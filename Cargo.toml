@@ -40,6 +40,7 @@ tracing = "0.1"
 rustdoc-types = { version = "0.61", optional = true }
 nom = { version = "8", optional = true }
 walkdir = "2"
+zstd = "0.13"
 cargo_metadata = "0.23"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 toml = "1.2"
@@ -63,9 +64,7 @@ ra_ap_proc_macro_api = "0.0.358"
 ra_ap_project_model = "0.0.358"
 ra_ap_syntax = "0.0.358"
 ra_ap_vfs = "0.0.358"
-ra_ap_vfs-notify = "0.0.358"
 ra_ap_cfg = "0.0.358"
-crossbeam-channel = "0.5"
 salsa = { version = "0.28.5", default-features = false, features = ["macros", "inventory"] }
 anyhow = "1"
 
@@ -339,6 +338,10 @@ required-features = ["panics", "visibility"]
 [[test]]
 name = "stale_exceptions"
 required-features = ["panics"]
+
+[[test]]
+name = "gated_semantics_demand"
+required-features = ["panics", "tracing"]
 
 [[test]]
 name = "quality_report"

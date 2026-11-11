@@ -13,7 +13,7 @@ use crate::store::StoreLayout;
 /// Writes `exceptions/`, `quality/patches/`, and `patches/` (coverage skip
 /// lists). The last two keep elicit_doc's registry layout so a checkout like
 /// elicitation's `.elicit_doc-exceptions/` loads without renaming.
-#[instrument(level = "debug", skip(store))]
+#[instrument(level = "debug", skip(store), err(level = "warn"))]
 pub fn backup_exception_files(store: &StoreLayout, backup_root: &Path) -> CordialResult<usize> {
     store.ensure_dirs()?;
     let backup_slug_root = backup_root.join(store.project_slug());

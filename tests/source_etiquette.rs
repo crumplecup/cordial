@@ -53,6 +53,7 @@ fn source_loader_builds_ir_and_cache() -> miette::Result<()> {
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .register(&*SOURCE_ETIQUETTE)
+        .with_ir_snapshot()
         .build();
 
     let outcome = session
@@ -84,7 +85,7 @@ fn source_loader_builds_ir_and_cache() -> miette::Result<()> {
     }
 
     let slug = "fixture";
-    let cache_path = store.path().join("cache").join(format!("{slug}.ir.json"));
+    let cache_path = store.path().join("cache").join(format!("{slug}.ir.zst"));
     assert!(
         cache_path.is_file(),
         "expected IR cache at {}",

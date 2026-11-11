@@ -39,6 +39,39 @@ pub(super) struct LoadingHooks<'a> {
     loaders: &'a [&'a dyn Loader],
     enrichers: &'a [&'a dyn IrEnricher],
     probes: &'a [&'a dyn Probe],
+    /// Whether a selected etiquette reads semantic facts of cfg-gated code.
+    gated_semantics: bool,
+}
+
+/// Load the Cargo workspace into the run's database, saying each phase through
+/// a spinner. Gated code is analysed only when a selected etiquette reads its
+/// facts, so the cost lands on the etiquettes that ask.
+#[instrument(level = "debug", skip(session, timings), err(level = "warn"))]
+#[hotpath::measure]
+fn begin_database(
+    session: &RuntimeSession,
+    gated_semantics: bool,
+    timings: &mut HookTimings,
+) -> CordialResult<ParsedSourceSession> {
+    let planning = if gated_semantics {
+        crate::CfgPlanning::Automatic
+    } else {
+        crate::CfgPlanning::Explicit
+    };
+    let load_task: std::sync::Arc<dyn crate::ProgressTask> = std::sync::Arc::from(
+        session
+            .progress()
+            .spinner("Loading the Cargo workspace".to_string()),
+    );
+    let load_report = {
+        let task = load_task.clone();
+        crate::loader::Reporter::new(move |message| task.set_message(message))
+    };
+    let database = timings.measure("pipeline", "source_database_load", || {
+        ParsedSourceSession::begin_in(session.project_root(), &load_report, planning)
+    })?;
+    load_task.finish("Loaded the Cargo workspace and semantic database".to_string());
+    Ok(database)
 }
 
 #[instrument(
@@ -55,11 +88,12 @@ pub(super) fn load_and_probe(
     hooks: LoadingHooks<'_>,
     timings: &mut HookTimings,
 ) -> CordialResult<LoadedWorkspace> {
-    let parsed_source_session = ParsedSourceSession::begin_in(session.project_root())?;
+    let parsed_source_session = begin_database(session, hooks.gated_semantics, timings)?;
     let LoadingHooks {
         loaders,
         enrichers,
         probes,
+        gated_semantics: _,
     } = hooks;
     let mut workspace = WorkspaceIr::default();
     #[cfg(feature = "dependency_freshness")]
@@ -141,10 +175,15 @@ pub(super) fn load_and_probe(
     #[cfg(not(feature = "impl_coverage"))]
     let _ = filter;
 
-    let progress = session.progress().bar(
-        "Loading, enriching, and probing crates".to_string(),
-        targets.len() as u64 * (loaders.len() + enrichers.len() + probes.len() + 1) as u64,
-    );
+    let progress: std::sync::Arc<dyn crate::ProgressTask> =
+        std::sync::Arc::from(session.progress().bar(
+            "Loading, enriching, and probing crates".to_string(),
+            targets.len() as u64 * (loaders.len() + enrichers.len() + probes.len() + 1) as u64,
+        ));
+    parsed_source_session.set_reporter({
+        let task = progress.clone();
+        crate::loader::Reporter::new(move |message| task.set_message(message))
+    });
     for target in targets {
         let crate_ir = if loaders.iter().any(|loader| loader.id() == SourceLoader::ID) {
             progress.set_message(format!("Building source IR for {}", target.crate_name()));
@@ -212,13 +251,15 @@ pub(super) fn load_and_probe(
             progress.inc(1);
         }
 
-        progress.set_message(format!("Caching IR for {}", target.crate_name()));
-        timings.measure("pipeline", "cache_ir", || {
-            let cached = workspace
-                .crate_ir(target.crate_name())
-                .ok_or_else(|| CordialError::crate_ir_must_exist())?;
-            cached.write_cache(&store.ir_cache_path(target.crate_name()))
-        })?;
+        if session.ir_snapshot() {
+            progress.set_message(format!("Writing the IR file for {}", target.crate_name()));
+            timings.measure("pipeline", "write_ir", || {
+                let ir = workspace
+                    .crate_ir(target.crate_name())
+                    .ok_or_else(|| CordialError::crate_ir_must_exist())?;
+                ir.write_cache(&store.ir_cache_path(target.crate_name()))
+            })?;
+        }
         progress.inc(1);
 
         let crate_view = CrateView::new(&workspace, target.crate_name().clone());

@@ -4,6 +4,7 @@ use crate::{CordialResult, SourceAntipatterns};
 
 impl SourceDatabase {
     #[tracing::instrument(level = "debug", skip(self, target), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn project_antipatterns(
         &self,
         target: &crate::CrateTarget,

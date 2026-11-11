@@ -35,7 +35,7 @@ pub fn is_shadow_infrastructure_name(bare_name: &str) -> bool {
 }
 
 /// Build the consolidated shadow gaps list from multiple per-pair reports.
-#[instrument(level = "debug", skip(pairs))]
+#[instrument(level = "debug", skip(pairs), err(level = "warn"))]
 pub fn build_shadow_gaps(
     pairs: &[(&str, &str, &ShadowReport)],
 ) -> CordialResult<Vec<ShadowGapEntry>> {
@@ -83,7 +83,7 @@ pub fn build_shadow_gaps(
     Ok(entries)
 }
 
-#[instrument(level = "debug", skip(row, gap_kind))]
+#[instrument(level = "debug", skip(row, gap_kind), err(level = "warn"))]
 fn gap_entry(
     target_crate: &str,
     shadow_crate: &str,

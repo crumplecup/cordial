@@ -217,7 +217,7 @@ fn open_action_items(findings: &[&dyn Finding]) -> CordialResult<usize> {
 }
 
 #[cfg(not(feature = "quality"))]
-#[instrument(level = "debug", skip(findings))]
+#[instrument(level = "debug", skip(findings), err(level = "warn"))]
 fn open_action_items(findings: &[&dyn Finding]) -> CordialResult<usize> {
     Ok(findings
         .iter()

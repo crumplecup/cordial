@@ -65,4 +65,13 @@ pub trait Etiquette: crate::TomlConfigured {
     fn is_coverage(&self) -> bool {
         false
     }
+
+    /// True when this etiquette reads semantic facts of cfg-gated code.
+    ///
+    /// Analysing code behind a cfg gate means analysing the crate again under
+    /// each gate setting, which costs time and memory. The loader does that only
+    /// when a selected etiquette asks, so every other etiquette pays nothing.
+    fn needs_gated_semantics(&self) -> bool {
+        false
+    }
 }

@@ -29,6 +29,7 @@ fn multiple_etiquettes_share_loader_and_emit_both_reports() -> miette::Result<()
         .with_store_root(store.path())
         .register(&*PANICS_ETIQUETTE)
         .register(&*TRACING_ETIQUETTE)
+        .with_ir_snapshot()
         .build();
 
     let outcome = session
@@ -53,7 +54,7 @@ fn multiple_etiquettes_share_loader_and_emit_both_reports() -> miette::Result<()
     assert!(findings_dir.join("summary.md").is_file());
 
     let slug = "fixture";
-    let cache_path = store.path().join("cache").join(format!("{slug}.ir.json"));
+    let cache_path = store.path().join("cache").join(format!("{slug}.ir.zst"));
     assert!(cache_path.is_file(), "single shared IR cache");
     Ok(())
 }

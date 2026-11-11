@@ -100,7 +100,7 @@ pub(super) fn execute_add_coverage_skip(
     print_add_outcome(add_coverage_skip(store, patch_set, entry)?)
 }
 
-#[instrument(level = "debug", skip(outcome))]
+#[instrument(level = "debug", skip(outcome), err(level = "warn"))]
 fn print_add_outcome(outcome: AddExceptionOutcome) -> CordialResult<()> {
     let verb = if outcome.inserted() {
         "added"

@@ -12,7 +12,7 @@ use tracing::instrument;
 
 pub(super) type LockfileIndex = BTreeMap<String, Vec<String>>;
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", err(level = "warn"))]
 pub(super) fn lockfile_index(project_root: &Path) -> CordialResult<LockfileIndex> {
     let lockfile_path = project_root.join("Cargo.lock");
     if !lockfile_path.is_file() {

@@ -20,7 +20,11 @@ struct SiteKey {
 }
 
 /// Merge typed foreign sites with positive/negative chain probe results.
-#[instrument(level = "debug", skip(foreign_report, chain_records))]
+#[instrument(
+    level = "debug",
+    skip(foreign_report, chain_records),
+    err(level = "warn")
+)]
 pub fn build_foreign_error_attenuation_report(
     foreign_report: &crate::etiquettes::foreign_error_types::ForeignErrorTypeReport,
     chain_records: &[ErrorChainRecord],
@@ -35,7 +39,11 @@ pub(crate) struct ErrorBridgeHint {
     constructor: String,
 }
 
-#[instrument(level = "debug", skip(foreign_report, chain_records, bridges))]
+#[instrument(
+    level = "debug",
+    skip(foreign_report, chain_records, bridges),
+    err(level = "warn")
+)]
 pub(crate) fn build_foreign_error_attenuation_report_with_bridges(
     foreign_report: &crate::etiquettes::foreign_error_types::ForeignErrorTypeReport,
     chain_records: &[ErrorChainRecord],
@@ -98,7 +106,11 @@ fn is_propagation_probe(rule_id: ErrorChainProbeId) -> bool {
     )
 }
 
-#[instrument(level = "debug", skip(foreign, preserved_by_site, bridges))]
+#[instrument(
+    level = "debug",
+    skip(foreign, preserved_by_site, bridges),
+    err(level = "warn")
+)]
 fn classify_foreign_site(
     foreign: &ForeignErrorTypeRecord,
     preserved_by_site: &HashMap<SiteKey, ErrorChainRecord>,
@@ -190,7 +202,11 @@ fn classify_foreign_site(
     )
 }
 
-#[instrument(level = "debug", skip(foreign, handling_class, resolution_id))]
+#[instrument(
+    level = "debug",
+    skip(foreign, handling_class, resolution_id),
+    err(level = "warn")
+)]
 fn record_from_foreign(
     foreign: &ForeignErrorTypeRecord,
     handling_class: ForeignErrorHandlingClass,
@@ -227,7 +243,7 @@ fn is_miette_surface_site(foreign: &ForeignErrorTypeRecord) -> bool {
         || foreign.site_snippet().contains("into_diagnostic"))
 }
 
-#[instrument(level = "debug", skip(foreign))]
+#[instrument(level = "debug", skip(foreign), err(level = "warn"))]
 fn miette_surface_record(
     foreign: &ForeignErrorTypeRecord,
 ) -> CordialResult<ForeignErrorAttenuationRecord> {
@@ -252,7 +268,7 @@ fn miette_surface_record(
 /// commonly `Display`/`Debug::fmt`, mandated to return `fmt::Result`
 /// exactly). There is no newtype to add: `?` is already the complete,
 /// correct, final handling every time.
-#[instrument(level = "debug", skip(foreign))]
+#[instrument(level = "debug", skip(foreign), err(level = "warn"))]
 fn fmt_error_exemplar_record(
     foreign: &ForeignErrorTypeRecord,
 ) -> CordialResult<ForeignErrorAttenuationRecord> {
@@ -270,7 +286,7 @@ fn fmt_error_exemplar_record(
     )
 }
 
-#[instrument(level = "debug", skip(foreign))]
+#[instrument(level = "debug", skip(foreign), err(level = "warn"))]
 fn option_ok_neutral_record(
     foreign: &ForeignErrorTypeRecord,
 ) -> CordialResult<ForeignErrorAttenuationRecord> {

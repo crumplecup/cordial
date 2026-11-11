@@ -176,7 +176,11 @@ pub fn classify_framework_std_row(
 }
 
 /// Build a framework trait coverage report from std inventory and impl-crate trait paths.
-#[instrument(level = "debug", skip(items, impl_paths, skip_map))]
+#[instrument(
+    level = "debug",
+    skip(items, impl_paths, skip_map),
+    err(level = "warn")
+)]
 pub fn build_framework_trait_report(
     source_crate: &str,
     items: &[StdInventoryItem],

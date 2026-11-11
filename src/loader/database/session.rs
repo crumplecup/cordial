@@ -5,12 +5,11 @@ mod context;
 mod inputs;
 mod packages;
 mod source;
-mod variants;
 mod workspace;
 
 use std::path::Path;
 
-use super::SourceDatabase;
+use super::{Reporter, SourceDatabase};
 use ra_ap_hir::ChangeWithProcMacros;
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
@@ -32,9 +31,16 @@ impl SourceDatabase {
             external_packages: Vec::new(),
             cargo_options: None,
             proc_macro_server: None,
+            reporter: Reporter::default(),
             #[cfg(feature = "cfg_hygiene")]
             workspace_root: None,
         }
+    }
+
+    /// Say future long phases through `reporter`.
+    #[instrument(level = "trace", skip(self, reporter))]
+    pub(crate) fn set_reporter(&mut self, reporter: Reporter) {
+        self.reporter = reporter;
     }
 
     /// Register one source input and return the database-owned text snapshot.

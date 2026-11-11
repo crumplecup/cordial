@@ -66,7 +66,7 @@ struct TimingReport {
 }
 
 /// Measure each enabled etiquette twice, keeping the same empty target for its warm pass.
-#[instrument(level = "debug", skip(ctx))]
+#[instrument(level = "debug", skip(ctx), err(level = "warn"))]
 pub(super) fn execute_timings(
     ctx: &ActCtx,
     only: Option<&str>,

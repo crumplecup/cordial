@@ -181,7 +181,8 @@ fn parse_arrow_span(line: &str) -> Option<(String, u32)> {
 
 #[instrument(
     level = "trace",
-    skip(records, seen, resolve_root, lint, file, line, message)
+    skip(records, seen, resolve_root, lint, file, line, message),
+    err(level = "warn")
 )]
 fn push_record(
     records: &mut Vec<DocWarningRecord>,
@@ -244,7 +245,7 @@ fn which_cargo() -> Option<PathBuf> {
     None
 }
 
-#[instrument(level = "info", skip(policy), fields(crate_name = crate_name))]
+#[instrument(level = "info", skip(policy), fields(crate_name = crate_name), err(level = "warn"))]
 fn run_cargo_doc(
     cargo: &Path,
     crate_root: &Path,

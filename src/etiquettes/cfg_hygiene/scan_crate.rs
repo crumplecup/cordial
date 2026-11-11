@@ -48,7 +48,7 @@ pub(crate) fn records_for_inventory(
     Ok(records)
 }
 
-#[instrument(level = "debug", skip(occurrence, rule_id))]
+#[instrument(level = "debug", skip(occurrence, rule_id), err(level = "warn"))]
 fn record_for(
     occurrence: &CfgNameOccurrence,
     rule_id: CfgHygieneRuleId,

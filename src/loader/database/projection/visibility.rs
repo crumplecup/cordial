@@ -11,6 +11,7 @@ use std::path::Path;
 
 impl SourceDatabase {
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn project_visibility(&self, root: &Path) -> CordialResult<VisibilityFacts> {
         let sema = Semantics::new(&self.db);
         SourcePolicyInventory::collect_native_visibility(root, |path| {

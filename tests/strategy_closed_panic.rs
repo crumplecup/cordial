@@ -3,9 +3,9 @@
 use cordial::{
     ATTR_BINARY_ENTRY_PATHS, ATTR_CARGO_MANIFEST_SNAPSHOT, ATTR_CRATE_KINDS,
     ATTR_FUNCTION_SOURCE_SYNTAX, ATTR_SOURCE_MODULE_SCOPE, ClosedPanicBlocker as Blocker,
-    ClosedPanicDecision as Decision, EdgeKind, ErrorDeclarationDecision, IrView, ReturnLiftBlocker,
-    ReturnLiftDecision, plan_closed_owned_panic_component, plan_owned_error_declaration,
-    plan_owned_main_return_lift,
+    ClosedPanicDecision as Decision, EdgeKind, ErrorDeclarationDecision, IrView,
+    PanicComponentBlocker, ReturnLiftBlocker, ReturnLiftDecision,
+    plan_closed_owned_panic_component, plan_owned_error_declaration, plan_owned_main_return_lift,
 };
 use miette::IntoDiagnostic;
 use std::fs;
@@ -188,9 +188,16 @@ fn undiscovered_callers_function_values_and_opaque_uses_prevent_closure() -> mie
             .ok_or_else(|| miette::miette!("missing main"))?;
         let decision = plan_closed_owned_panic_component(&ir, leaf, 0, main).into_diagnostic()?;
         assert!(
+            // Spellings the use inventory cannot follow are refused as unresolved or
+            // opaque. A call the database resolves anyway reaches the leaf as a
+            // known caller, and that caller is open: either way closure is refused.
             matches!(
                 decision,
-                Decision::Refused(Blocker::UnresolvedUse { .. } | Blocker::OpaqueSyntax { .. })
+                Decision::Refused(
+                    Blocker::UnresolvedUse { .. }
+                        | Blocker::OpaqueSyntax { .. }
+                        | Blocker::Component(PanicComponentBlocker::OpenCaller(_))
+                )
             ),
             "{extra}: {decision:?}"
         );

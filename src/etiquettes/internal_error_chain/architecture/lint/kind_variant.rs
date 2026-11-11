@@ -14,7 +14,7 @@ use super::super::catalog::{Catalog, EnumInfo, VariantInfo};
 use super::{FindingSite, SiteClassifier};
 
 impl Catalog {
-    #[instrument(level = "debug", skip(self, findings))]
+    #[instrument(level = "debug", skip(self, findings), err(level = "warn"))]
     pub(super) fn emit_kind_variant_findings(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -37,7 +37,11 @@ impl Catalog {
         Ok(())
     }
 
-    #[instrument(level = "debug", skip(self, findings, item, variant, parent_idents))]
+    #[instrument(
+        level = "debug",
+        skip(self, findings, item, variant, parent_idents),
+        err(level = "warn")
+    )]
     fn lint_variant_payloads(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -87,7 +91,8 @@ impl Catalog {
 
     #[instrument(
         level = "debug",
-        skip(self, findings, item, variant, context, payload, payload_ident)
+        skip(self, findings, item, variant, context, payload, payload_ident),
+        err(level = "warn")
     )]
     fn emit_invalid_payload_shape(
         &self,
@@ -126,7 +131,8 @@ impl Catalog {
 
     #[instrument(
         level = "debug",
-        skip(self, findings, item, variant, context, payload_ident, parent_idents)
+        skip(self, findings, item, variant, context, payload_ident, parent_idents),
+        err(level = "warn")
     )]
     fn emit_invalid_payload_identity(
         &self,
@@ -153,7 +159,11 @@ impl Catalog {
         Ok(false)
     }
 
-    #[instrument(level = "debug", skip(self, findings, item, variant, context))]
+    #[instrument(
+        level = "debug",
+        skip(self, findings, item, variant, context),
+        err(level = "warn")
+    )]
     fn emit_unregistered_payload_finding(
         &self,
         findings: &mut Vec<InternalErrorComplianceFinding>,
@@ -188,7 +198,11 @@ impl Catalog {
         Ok(())
     }
 
-    #[instrument(level = "debug", skip(self, item, variant, snippet, classifier))]
+    #[instrument(
+        level = "debug",
+        skip(self, item, variant, snippet, classifier),
+        err(level = "warn")
+    )]
     fn kind_variant_finding(
         &self,
         context: String,

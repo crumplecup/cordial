@@ -1607,40 +1607,68 @@ Open against the milestone:
 Next: wire tracing assessment to the projected semantic identities, replacing
 its handwritten resolution one rule at a time.
 
-## Design: proof-cfg crate variants in the one database (2026-11-10)
+## Design: cfg contexts as diffs on the one database (2026-11-11)
 
-**Problem.** rust-analyzer resolves only code active under the loaded cfg set.
-Proof harnesses and gated helpers (`cfg(kani)`, `cfg(creusot)`, the crate's own
-verifier gates) are inactive in the ordinary build, so they have no semantic
-facts: no call targets, no types. Tracing's proof-only reachability, and any
-other lint that must look inside cfg blocks, cannot read them from the IR. A
-name-keyed syntactic fallback is rejected: the invariant is one parse, one IR,
-and no inferior second path.
+**Problem.** rust-analyzer resolves only the code a crate's cfg set activates.
+Proof harnesses, feature-gated modules and `cfg(not(..))` alternatives are
+inactive in the ordinary build, so they have no semantic facts there. Lints that
+must look inside cfg blocks cannot read them from the IR, and a name-keyed
+syntactic fallback is rejected: one parse, one IR, no inferior second path.
 
-**Decision.** Analyse the same files under more than one cfg context inside the
-one database. `ProjectWorkspace` carries `cfg_overrides`; loading the workspace
-a second time with the project's verifier cfgs enabled yields a second
-`CrateGraphBuilder`. `CrateGraphBuilder::extend` merges it into the first and
-deduplicates crates whose data is identical, so the sysroot, dependencies and
-every `FileId` are shared. Only workspace crates (and their dependents) gain a
-proof-cfg variant. The VFS parses each file once; only definition maps and macro
-expansion differ per variant, which is exactly what cfg changes.
+**First attempt, rejected by measurement.** Merging a crate-graph variant per
+gate into the database (`CrateGraphBuilder::extend`) kept one VFS but kept every
+variant's definition maps and inference results alive. On Cordial it asked for
+43 contexts, and memory climbed past 8 GB. It also needed rust-analyzer's
+`Semantics` to analyse bodies it cannot find (it resolves a file's items in the
+first crate containing the file). It was removed.
 
-**IR shape (to settle in the first commit).** Semantic facts are keyed by
-cfg context. Each source function node keeps its ordinary-context
-`semantic_function` and gains the facts of every context in which it is active;
-`Calls` edges record the context that resolved them. A node active in no
-context stays explicit, never silently empty. Consumers ask the IR for "edges
-under any context" or "under context C".
+**Decision.** A context is a diff on the database's input. The workspace crates'
+`cfg_options` are changed, salsa recomputes what depends on them, the newly
+active code's facts are copied into the IR, and the next diff replaces them.
+Only one variant is resident at a time. The facts live in the IR, which is the
+rule: collect once, consume from `IrView`.
 
-**Steps.**
-1. Replace `load_workspace_into_db` with a Cordial loader that builds the base
-   graph and the proof-cfg variants, merges them with `extend`, and applies one
-   change. Prove with a specimen that a `cfg(kani)` caller resolves its callee.
-2. Select a variant per crate target in projection; project facts per context.
-3. Cross-crate `Calls` edges at workspace level (definitions are session ids,
-   shared by the one database).
-4. Move tracing's proof-only reachability onto those edges; delete
-   `SourceProofFunction::call_keys`/`calls` and the name registry.
-5. Re-point `enricher/source_calls.rs` consumers (`transform/`) at the same
-   edges and remove its handwritten same-module resolution.
+- **Keys.** `SemanticContextKey` holds enabled and disabled cfg atoms (`kani`,
+  `feature="x"`); the ordinary build changes none.
+- **IR.** A function node carries `semantic_activity` (the contexts it is active
+  in, cheap for every function) and `semantic_context_functions` (full facts, only
+  where a context can differ). `EdgeKind::ContextCalls` edges record the context
+  that resolved a call; `Calls` stays ordinary-only. `IrView::active_contexts`
+  returns `Some(vec![])` for code no analysed context activates, so absence is
+  explicit; the crate's `semantic_context_plan` says whether planning completed.
+- **Which functions get full facts.** Exact, per context: a gate's composed
+  predicate is evaluated under the ordinary cfg set and the context's. A function
+  needs its own facts only if it is inactive in the ordinary build, sits inside or
+  holds a flipped gate, or mentions a name a flipped gate defines.
+- **Planning.** Every `#[cfg]` in the workspace's files is read from the parsed
+  trees and composed with its enclosing nodes' cfgs. A clause no examined state
+  satisfies asks for a context on top of the current one; examining it can reach
+  nested gates, so asking repeats to a fixed point (cap: 64 contexts).
+- **Merging.** Compatible requests share a context. A merged context is entered
+  and checked: a module declaring one name twice in one namespace (exclusive
+  alternatives) splits it in halves until each half holds. Cordial's 43 requests
+  became 1 context.
+- **Pay for use.** `Etiquette::needs_gated_semantics` (tracing says yes) decides
+  whether the loader plans contexts at all. Everyone else pays nothing.
+- **Containment.** A 1 GiB growth budget over the ordinary pass ends planning
+  with an incomplete plan, and a failure in the passes degrades to the same, so
+  extra evidence never fails an unrelated run.
+- **Instrumentation.** `cordial::metrics` events carry resident and peak memory;
+  a one-second sampler runs inside the ordinary pass, the planning scan and each
+  context; the loader says each phase through a progress reporter; every
+  projection collector has a hotpath measure.
+
+**Measured on Cordial (debug build).** Workspace load 805 MiB; ordinary pass 70 s
+and 3.0 GiB; planning scan under 1 s; one merged context 3.7 s and no further
+memory.
+
+**Known gaps, explicit in the code.** Calls inside attribute-macro-generated
+functions are marked incomplete (their ranges are expansion coordinates);
+functions declared inside another function's body get facts only in the ordinary
+context; overlapping trait impls are not detected by the duplicate-name check.
+
+**Remaining.** Tracing's proof-only reachability still uses the old name-keyed
+registry; it should read `ContextCalls`. `enricher/source_calls.rs` and the
+`transform/` readers of `Calls` should move to the same edges. The IR file is
+now compact and opt-in; a keyed result cache that the pipeline reads, so a repeat
+run skips the load, is designed but not built.

@@ -158,7 +158,7 @@ impl ExceptionEntry {
     }
 }
 
-#[instrument(level = "debug")]
+#[instrument(level = "debug", err(level = "warn"))]
 fn require_nonempty(label: &str, value: &str) -> CordialResult<()> {
     if value.trim().is_empty() {
         return Err(CordialError::label_must_not_be_empty(label));

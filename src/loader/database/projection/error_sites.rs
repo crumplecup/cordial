@@ -8,6 +8,7 @@ use std::path::Path;
 
 impl SourceDatabase {
     #[tracing::instrument(level = "debug", skip(self), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn project_error_sites(&self, root: &Path) -> CordialResult<SourceErrorSites> {
         let sema = Semantics::new(&self.db);
         SourceErrorSites::collect_with(root, |path, tree| {

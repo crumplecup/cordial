@@ -25,7 +25,8 @@ use super::verification::{
 /// Build a [`ShadowReport`] by diffing `target` against `shadow`.
 #[instrument(
     level = "debug",
-    skip(target, shadow, shadow_complete, shadow_prereqs, maps)
+    skip(target, shadow, shadow_complete, shadow_prereqs, maps),
+    err(level = "warn")
 )]
 pub fn build_shadow_report(
     target: &RustdocInventory,
@@ -90,7 +91,11 @@ fn index_shadow_items(shadow: &RustdocInventory) -> ShadowItemIndex<'_> {
     }
 }
 
-#[instrument(level = "debug", skip(target, shadow, shadow_complete, shadow_prereqs))]
+#[instrument(
+    level = "debug",
+    skip(target, shadow, shadow_complete, shadow_prereqs),
+    err(level = "warn")
+)]
 fn match_target_rows(
     target: &RustdocInventory,
     shadow: &ShadowItemIndex<'_>,
@@ -141,7 +146,7 @@ fn match_target_rows(
     Ok(rows)
 }
 
-#[instrument(level = "debug", skip(target_item))]
+#[instrument(level = "debug", skip(target_item), err(level = "warn"))]
 fn missing_row(target_item: &crate::rustdoc::RustdocItem) -> CordialResult<ShadowRow> {
     ShadowRow::builder()
         .item_path(target_item.path().clone())
@@ -157,7 +162,7 @@ fn missing_row(target_item: &crate::rustdoc::RustdocItem) -> CordialResult<Shado
         .build()
 }
 
-#[instrument(level = "debug", skip(shadow, rows))]
+#[instrument(level = "debug", skip(shadow, rows), err(level = "warn"))]
 fn append_extra_shadow_rows(
     shadow: &RustdocInventory,
     rows: &mut Vec<ShadowRow>,
@@ -345,7 +350,7 @@ fn diff_type_methods(
 }
 
 /// Convenience wrapper that derives shadow complete/prereqs from the shadow inventory.
-#[instrument(level = "debug", skip(target, shadow))]
+#[instrument(level = "debug", skip(target, shadow), err(level = "warn"))]
 pub fn build_shadow_report_from_inventories(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
@@ -354,7 +359,7 @@ pub fn build_shadow_report_from_inventories(
 }
 
 /// Build shadow report from inventories with maps.
-#[instrument(level = "debug", skip(target, shadow, maps))]
+#[instrument(level = "debug", skip(target, shadow, maps), err(level = "warn"))]
 pub fn build_shadow_report_from_inventories_with_maps(
     target: &RustdocInventory,
     shadow: &RustdocInventory,
@@ -367,7 +372,8 @@ pub fn build_shadow_report_from_inventories_with_maps(
 
 #[instrument(
     level = "debug",
-    skip(target_item, shadow_item, status, shadow_complete, shadow_prereqs)
+    skip(target_item, shadow_item, status, shadow_complete, shadow_prereqs),
+    err(level = "warn")
 )]
 fn row_for_match(
     target_item: &crate::rustdoc::RustdocItem,

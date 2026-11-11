@@ -175,7 +175,11 @@ pub(crate) fn run_apply(
     if !config.etiquette_may_run("tracing") {
         return Ok(summary);
     }
-    let parsed_source_session = crate::loader::ParsedSourceSession::begin_in(project_root)?;
+    let parsed_source_session = crate::loader::ParsedSourceSession::begin_in(
+        project_root,
+        &crate::loader::Reporter::default(),
+        crate::CfgPlanning::Automatic,
+    )?;
     let source_view = SourceLoadView::for_session();
     let selected_files = checklist_path.map(|_| &by_file);
     let workspace = build_apply_ir(

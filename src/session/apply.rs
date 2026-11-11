@@ -56,7 +56,14 @@ pub(crate) fn collect(
         filter,
         &store,
         &targets,
-        load::LoadingHooks::new(&loaders, &enrichers, &probes),
+        load::LoadingHooks::new(
+            &loaders,
+            &enrichers,
+            &probes,
+            etiquettes
+                .iter()
+                .any(|etiquette| etiquette.needs_gated_semantics()),
+        ),
         &mut timings,
     )?
     .into_parts();

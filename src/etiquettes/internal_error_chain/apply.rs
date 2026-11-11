@@ -199,7 +199,11 @@ pub fn run_error_field_apply(
     if !config.etiquette_may_run("internal_error_chain") {
         return Ok(summary);
     }
-    let parsed = crate::loader::ParsedSourceSession::begin_in(project_root)?;
+    let parsed = crate::loader::ParsedSourceSession::begin_in(
+        project_root,
+        &crate::loader::Reporter::default(),
+        crate::CfgPlanning::Explicit,
+    )?;
     for target in discover_crate_targets(project_root, &RunAll)? {
         if only_crate.is_some_and(|name| name != target.crate_name()) {
             continue;

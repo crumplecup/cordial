@@ -116,6 +116,22 @@ impl IrView for CrateView<'_> {
             .unwrap_or_default()
     }
 
+    #[instrument(level = "trace", skip(self, id, context))]
+    fn context_parents(&self, id: NodeId, context: &crate::ir::SemanticContextKey) -> Vec<NodeId> {
+        self.workspace
+            .crate_ir(&self.crate_name)
+            .map(|ir| ir.context_parents(id, context))
+            .unwrap_or_default()
+    }
+
+    #[instrument(level = "trace", skip(self, id, context))]
+    fn context_children(&self, id: NodeId, context: &crate::ir::SemanticContextKey) -> Vec<NodeId> {
+        self.workspace
+            .crate_ir(&self.crate_name)
+            .map(|ir| ir.context_children(id, context))
+            .unwrap_or_default()
+    }
+
     #[instrument(level = "trace", skip(self, path))]
     fn node_by_path(&self, path: &str) -> Option<NodeId> {
         self.workspace
@@ -242,6 +258,22 @@ impl IrView for CrateViewMut<'_> {
         self.workspace
             .crate_ir(&self.crate_name)
             .map(|ir| ir.children(id, kind))
+            .unwrap_or_default()
+    }
+
+    #[instrument(level = "trace", skip(self, id, context))]
+    fn context_parents(&self, id: NodeId, context: &crate::ir::SemanticContextKey) -> Vec<NodeId> {
+        self.workspace
+            .crate_ir(&self.crate_name)
+            .map(|ir| ir.context_parents(id, context))
+            .unwrap_or_default()
+    }
+
+    #[instrument(level = "trace", skip(self, id, context))]
+    fn context_children(&self, id: NodeId, context: &crate::ir::SemanticContextKey) -> Vec<NodeId> {
+        self.workspace
+            .crate_ir(&self.crate_name)
+            .map(|ir| ir.context_children(id, context))
             .unwrap_or_default()
     }
 

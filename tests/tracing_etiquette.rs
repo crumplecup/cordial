@@ -297,6 +297,7 @@ pub fn ok() {}
     let session = SessionBuilder::new(fixture.path())
         .with_store_root(store.path())
         .register(&*TRACING_ETIQUETTE)
+        .with_ir_snapshot()
         .build();
     session
         .run(&RunAll)
@@ -304,9 +305,11 @@ pub fn ok() {}
         .wrap_err("session run")?;
 
     let slug = "fixture";
-    let cache = fs::read_to_string(store.path().join("cache").join(format!("{slug}.ir.json")))
-        .into_diagnostic()
-        .wrap_err("ir cache")?;
+    let ir =
+        cordial::CrateIr::read_cache(&store.path().join("cache").join(format!("{slug}.ir.zst")))
+            .into_diagnostic()
+            .wrap_err("ir cache")?;
+    let cache = serde_json::to_string(&ir.snapshot().into_diagnostic()?).into_diagnostic()?;
     assert!(cache.contains("Attribute"));
     assert!(cache.contains("HasAttr"));
     assert!(cache.contains("tracing::instrument"));
@@ -711,10 +714,15 @@ pub struct NotDisplayable {
     offending_path: String,
 }
 
-#[derive(Debug, Clone, derive_more::Display)]
-#[display("displayable error: {message}")]
+#[derive(Debug, Clone)]
 pub struct DisplayableError {
     message: String,
+}
+
+impl std::fmt::Display for DisplayableError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "displayable error: {}", self.message)
+    }
 }
 
 pub fn returns_non_displayable_err() -> Result<(), NotDisplayable> {
@@ -763,7 +771,7 @@ pub fn returns_displayable_err() -> Result<(), DisplayableError> {
     assert_eq!(displayable.len(), 1, "{displayable:?}");
     assert!(
         displayable[0].contains("err("),
-        "DisplayableError derives derive_more::Display -- err() is safe: {}",
+        "DisplayableError implements Display -- err() is safe: {}",
         displayable[0]
     );
     Ok(())

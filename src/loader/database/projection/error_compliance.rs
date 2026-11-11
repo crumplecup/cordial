@@ -7,6 +7,7 @@ use ra_ap_ide_db::base_db::SourceDatabase as RaSourceDatabase;
 
 impl SourceDatabase {
     #[tracing::instrument(level = "debug", skip(self, target), err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
     pub(super) fn project_error_compliance(
         &self,
         target: &crate::CrateTarget,
