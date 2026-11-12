@@ -58,13 +58,14 @@ fn collect_direct(db: &RootDatabase, function: Function) -> Option<DirectFacts> 
     let mut incomplete = types::incomplete(&output) || source.value.body().is_none() || expanded;
     let mut calls = Vec::new();
     let mut source_targets = Vec::new();
-    if let Some(body) = source.value.body().filter(|_| !expanded) {
+    if let Some(body) = source.value.body() {
         let mut walk = BodyWalk {
             sema: &sema,
             krate,
             calls: &mut calls,
             targets: &mut source_targets,
             incomplete: &mut incomplete,
+            expansion: expanded,
         };
         walk.node(body.syntax(), None);
     }
@@ -89,9 +90,31 @@ struct BodyWalk<'a, 'db> {
     calls: &'a mut Vec<SemanticCall>,
     targets: &'a mut Vec<Function>,
     incomplete: &'a mut bool,
+    /// The body is a macro's expansion, so no range in it is a file coordinate.
+    expansion: bool,
 }
 
+/// The range of a call inside a macro-generated function. It is no coordinate of
+/// any file, so it can never equal the range of a call written in the source.
+const EXPANSION_RANGE: usize = usize::MAX;
+
 impl BodyWalk<'_, '_> {
+    /// The range a call is recorded under: its own, the invocation's when it came
+    /// from a macro call's expansion, or the expansion sentinel when the whole
+    /// function was generated.
+    #[instrument(level = "trace", skip(self))]
+    fn range_of(
+        &self,
+        own: ra_ap_syntax::TextRange,
+        invocation: Option<ra_ap_syntax::TextRange>,
+    ) -> (usize, usize) {
+        if self.expansion {
+            return (EXPANSION_RANGE, EXPANSION_RANGE);
+        }
+        let range = invocation.unwrap_or(own);
+        (usize::from(range.start()), usize::from(range.end()))
+    }
+
     /// Walk `root` for calls. `invocation` is the source range of the macro call
     /// whose expansion `root` is, when it is one: ranges inside an expansion are
     /// not file coordinates, so its calls take the invocation's range.
@@ -141,15 +164,9 @@ impl BodyWalk<'_, '_> {
             );
             *self.incomplete |=
                 !matches!(target, SemanticCallTarget::Function(_)) || types::incomplete(&output);
-            let range = invocation.unwrap_or_else(|| node.text_range());
-            self.calls.push(
-                SemanticCall::new(
-                    (usize::from(range.start())..usize::from(range.end())).into(),
-                    target,
-                    output,
-                )
-                .with_callee(callee),
-            );
+            let (start, end) = self.range_of(node.text_range(), invocation);
+            self.calls
+                .push(SemanticCall::new((start..end).into(), target, output).with_callee(callee));
         }
     }
 }
