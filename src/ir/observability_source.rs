@@ -221,3 +221,38 @@ impl SourceObservability {
         }
     }
 }
+
+impl SourceObservability {
+    /// Add what the same crate showed when read in another cfg context. Files and
+    /// functions are matched by place, so the facts of one function from two
+    /// contexts join; a print is added unless this context already saw it.
+    #[tracing::instrument(level = "debug", skip(self, other))]
+    pub(crate) fn merge_context(&mut self, other: Self) {
+        for file in other.files {
+            let Some(known) = self
+                .files
+                .iter_mut()
+                .find(|known| known.relative == file.relative)
+            else {
+                self.files.push(file);
+                continue;
+            };
+            for function in file.functions {
+                match known
+                    .functions
+                    .iter_mut()
+                    .find(|known| known.range == function.range)
+                {
+                    Some(known) => known.body.merge(&function.body),
+                    None => known.functions.push(function),
+                }
+            }
+            for print in file.prints {
+                if !known.prints.contains(&print) {
+                    known.prints.push(print);
+                }
+            }
+        }
+        self.files.sort_by(|a, b| a.relative.cmp(&b.relative));
+    }
+}

@@ -186,6 +186,8 @@ impl SourceDatabase {
             let files = Files { paths, nodes };
             let finished = self.harvest(&context, index, &pairs, &budget, &files, graph)?;
             crate::process_memory::log("cfg context harvested");
+            #[cfg(feature = "tracing")]
+            self.merge_context_observability(graph)?;
             if !finished {
                 tracing::warn!(
                     target: "cordial::semantic::contexts",

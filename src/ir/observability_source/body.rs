@@ -72,4 +72,30 @@ impl ObservabilityBody {
     pub(crate) fn calls_helper(&self, helpers: &[crate::FunctionLocation]) -> bool {
         self.called.iter().any(|called| helpers.contains(called))
     }
+
+    /// Add what `other`, read in another cfg context, saw of the same function.
+    /// A fact seen in any context holds: a print or an emission that only a
+    /// feature's build reaches is still in the code.
+    #[tracing::instrument(level = "trace", skip(self, other))]
+    pub(super) fn merge(&mut self, other: &Self) {
+        self.calls_install |= other.calls_install;
+        self.calls_try_init |= other.calls_try_init;
+        self.has_once |= other.has_once;
+        self.has_try_from_default_env |= other.has_try_from_default_env;
+        self.has_rust_log_literal |= other.has_rust_log_literal;
+        self.has_fallback |= other.has_fallback;
+        self.is_fallible |= other.is_fallible;
+        self.has_err_instrument |= other.has_err_instrument;
+        self.has_error_emission |= other.has_error_emission;
+        for callee in &other.callees {
+            if !self.callees.contains(callee) {
+                self.callees.push(callee.clone());
+            }
+        }
+        for location in &other.called {
+            if !self.called.contains(location) {
+                self.called.push(location.clone());
+            }
+        }
+    }
 }

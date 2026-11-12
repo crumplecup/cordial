@@ -21,6 +21,25 @@ const LEAF_CONTEXT_LIMIT: usize = 64;
 use tracing::instrument;
 
 impl SourceDatabase {
+    /// Read the crate's observability inventory again in the cfg context the
+    /// database is in and add it to the one the ordinary build produced, so a
+    /// print or event in code only this context activates is seen.
+    #[instrument(level = "debug", skip_all, err(level = "warn"))]
+    pub(in crate::loader::database) fn merge_context_observability(
+        &self,
+        graph: &mut CrateIr,
+    ) -> CordialResult<()> {
+        use crate::IrView;
+        let mut inventory = graph.source_observability()?;
+        let seen = self.project_observability(inventory.crate_root())?;
+        inventory.merge_context(seen);
+        graph.set_attr(
+            graph.root(),
+            crate::ir::ATTR_SOURCE_OBSERVABILITY,
+            serde_json::to_value(inventory)?,
+        )
+    }
+
     /// Record, under `ATTR_LEAF_FUNCTIONS`, what each function of the crate's
     /// integration-test files calls.
     #[instrument(level = "debug", skip_all, err(level = "warn"))]
