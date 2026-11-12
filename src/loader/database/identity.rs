@@ -3,11 +3,13 @@
 //! Rules ask what a macro, a call or an attribute *is*, not what it is called;
 //! the database knows, and these functions read its answer into shared facts.
 
-use ra_ap_hir::{ItemInNs, ModPath, Name, PathKind, Semantics};
+use ra_ap_hir::{
+    AsAssocItem, AssocItemContainer, Function, ItemInNs, ModPath, Name, PathKind, Semantics,
+};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_syntax::{AstNode, WalkEvent, ast};
 
-use crate::ir::SemanticMacroCall;
+use crate::ir::{SemanticCallee, SemanticMacroCall};
 
 /// Every macro invocation in `function`'s body, outside nested functions, with
 /// the macro it resolved to. Invocations inside closures count: an error event
@@ -115,4 +117,44 @@ pub(crate) fn macro_by_path(
         "macro path"
     );
     Some(found)
+}
+
+/// What the function a call resolved to is: its own name, its crate, and the
+/// canonical path of its definition, including the trait or type it belongs to.
+#[tracing::instrument(level = "trace", skip(sema, function))]
+pub(super) fn callee(sema: &Semantics<'_, RootDatabase>, function: Function) -> SemanticCallee {
+    let db = sema.db;
+    let module = function.module(db);
+    let krate = module
+        .krate(db)
+        .display_name(db)
+        .map(|name| name.to_string());
+    let mut parts: Vec<String> = krate.iter().cloned().collect();
+    parts.extend(
+        module
+            .path_to_root(db)
+            .into_iter()
+            .rev()
+            .filter_map(|module| module.name(db))
+            .map(|name| name.as_str().to_owned()),
+    );
+    match function.as_assoc_item(db).map(|item| item.container(db)) {
+        Some(AssocItemContainer::Trait(declared)) => {
+            parts.push(declared.name(db).as_str().to_owned());
+        }
+        Some(AssocItemContainer::Impl(implementation)) => {
+            let owner = match implementation.trait_(db) {
+                Some(declared) => Some(declared.name(db).as_str().to_owned()),
+                None => implementation
+                    .self_ty(db)
+                    .as_adt()
+                    .map(|adt| adt.name(db).as_str().to_owned()),
+            };
+            parts.extend(owner);
+        }
+        None => {}
+    }
+    let name = function.name(db).as_str().to_owned();
+    parts.push(name.clone());
+    SemanticCallee::new(name, krate, parts.join("::"))
 }

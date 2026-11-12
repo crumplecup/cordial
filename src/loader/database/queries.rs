@@ -7,6 +7,7 @@ use ra_ap_ide_db::RootDatabase;
 use ra_ap_syntax::{AstNode, WalkEvent, ast};
 use tracing::instrument;
 
+use crate::ir::SemanticCallee;
 use crate::{SemanticCall, SemanticCallTarget, SemanticFunction, SemanticReturnContract};
 
 use super::{identity, recording, types};
@@ -105,10 +106,15 @@ impl BodyWalk<'_, '_> {
             let WalkEvent::Enter(node) = event else {
                 continue;
             };
-            if ast::Fn::can_cast(node.kind()) || ast::ClosureExpr::can_cast(node.kind()) {
+            if ast::Fn::can_cast(node.kind()) {
                 *self.incomplete = true;
                 walk.skip_subtree();
                 continue;
+            }
+            // A closure's calls are calls of this function, but nothing may edit
+            // them as if they ran in its own flow.
+            if ast::ClosureExpr::can_cast(node.kind()) {
+                *self.incomplete = true;
             }
             if let Some(invoked) = ast::MacroCall::cast(node.clone()) {
                 // A macro call hides code from the function's own contract, so the
@@ -127,7 +133,7 @@ impl BodyWalk<'_, '_> {
             }) else {
                 continue;
             };
-            let (target, output) = call_contract(
+            let (target, output, callee) = call_contract(
                 self.sema,
                 self.krate,
                 semantic_callable(self.sema, &call),
@@ -136,11 +142,14 @@ impl BodyWalk<'_, '_> {
             *self.incomplete |=
                 !matches!(target, SemanticCallTarget::Function(_)) || types::incomplete(&output);
             let range = invocation.unwrap_or_else(|| node.text_range());
-            self.calls.push(SemanticCall::new(
-                (usize::from(range.start())..usize::from(range.end())).into(),
-                target,
-                output,
-            ));
+            self.calls.push(
+                SemanticCall::new(
+                    (usize::from(range.start())..usize::from(range.end())).into(),
+                    target,
+                    output,
+                )
+                .with_callee(callee),
+            );
         }
     }
 }
@@ -165,23 +174,31 @@ fn call_contract(
     krate: ra_ap_hir::Crate,
     callable: Option<Callable<'_>>,
     targets: &mut Vec<Function>,
-) -> (SemanticCallTarget, SemanticReturnContract) {
+) -> (
+    SemanticCallTarget,
+    SemanticReturnContract,
+    Option<SemanticCallee>,
+) {
     let Some(callable) = callable else {
         return (
             SemanticCallTarget::Unresolved,
             SemanticReturnContract::Unavailable,
+            None,
         );
     };
     let output = types::return_contract(sema, krate, &callable.return_type());
-    let target = if let Some(function) = callable.as_function() {
+    let (target, callee) = if let Some(function) = callable.as_function() {
         if function.module(sema.db).krate(sema.db) == krate {
             targets.push(function);
         }
-        SemanticCallTarget::Function(types::identity(sema.db, function.into()))
+        (
+            SemanticCallTarget::Function(types::identity(sema.db, function.into())),
+            Some(identity::callee(sema, function)),
+        )
     } else {
-        SemanticCallTarget::OtherCallable
+        (SemanticCallTarget::OtherCallable, None)
     };
-    (target, output)
+    (target, output, callee)
 }
 
 #[salsa::tracked(returns(ref))]
