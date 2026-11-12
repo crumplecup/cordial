@@ -3,7 +3,7 @@
 //! Rules ask what a macro, a call or an attribute *is*, not what it is called;
 //! the database knows, and these functions read its answer into shared facts.
 
-use ra_ap_hir::Semantics;
+use ra_ap_hir::{ItemInNs, ModPath, Name, PathKind, Semantics};
 use ra_ap_ide_db::RootDatabase;
 use ra_ap_syntax::{AstNode, WalkEvent, ast};
 
@@ -60,4 +60,59 @@ pub(super) fn macro_calls(
         found.push(call);
     }
     found
+}
+
+/// The macro a written macro path names, resolved from the surroundings of the
+/// call. This works where resolving the call itself does not: in a function that
+/// an attribute macro replaced, the original body is not what the database
+/// lowers, but the module around it still scopes the path (imports, the prelude,
+/// `crate::` and `$crate`-style paths). A macro defined with textual scope in the
+/// same module is not found this way, so it is never mistaken for another.
+#[tracing::instrument(level = "debug", skip(sema, invocation))]
+pub(crate) fn macro_by_path(
+    sema: &Semantics<'_, RootDatabase>,
+    invocation: &ast::MacroCall,
+) -> Option<SemanticMacroCall> {
+    let path = invocation.path()?;
+    let mut kind = PathKind::Plain;
+    let mut segments = Vec::new();
+    for (index, segment) in path.segments().enumerate() {
+        match segment.kind()? {
+            ast::PathSegmentKind::Name(name) => segments.push(Name::new_root(name.text().as_ref())),
+            ast::PathSegmentKind::CrateKw => kind = PathKind::Crate,
+            ast::PathSegmentKind::SelfKw => kind = PathKind::Super(0),
+            ast::PathSegmentKind::SuperKw => {
+                kind = match kind {
+                    PathKind::Super(depth) => PathKind::Super(depth + 1),
+                    _ => PathKind::Super(1),
+                }
+            }
+            _ => return None,
+        }
+        if index == 0 && segment.coloncolon_token().is_some() {
+            kind = PathKind::Abs;
+        }
+    }
+    let definition = sema
+        .resolve_mod_path(invocation.syntax(), &ModPath::from_segments(kind, segments))?
+        .find_map(|item| match item {
+            ItemInNs::Macros(definition) => Some(definition),
+            _ => None,
+        })?;
+    let found = SemanticMacroCall::new(
+        definition.name(sema.db).as_str().to_owned(),
+        definition
+            .module(sema.db)
+            .krate(sema.db)
+            .display_name(sema.db)
+            .map(|name| name.to_string()),
+    );
+    tracing::debug!(
+        target: "cordial::semantic::identity",
+        written = %path.syntax().text(),
+        macro_name = %found.name(),
+        krate = ?found.krate(),
+        "macro path"
+    );
+    Some(found)
 }
