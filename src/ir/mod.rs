@@ -69,6 +69,7 @@ mod path_inclusion;
 #[cfg(feature = "derives")]
 pub use path_inclusion::{PathInclusionFacts, PathInclusionMember, PathInclusionSource};
 mod function_location;
+mod leaf_function;
 mod macro_island;
 mod query;
 #[cfg(feature = "rustdoc")]
@@ -133,6 +134,7 @@ pub use source_policy::{VisibilityFacts, VisibilityKind, VisibilityModule};
 mod observability_source;
 #[cfg(feature = "tracing")]
 mod tracing_source;
+pub(crate) use observability_source::ResolvedCalls;
 #[cfg(feature = "tracing")]
 pub use observability_source::{ATTR_SOURCE_OBSERVABILITY, SourceObservability};
 #[cfg(feature = "tracing")]
@@ -185,6 +187,7 @@ pub use function_source::{
 pub use graph::{CrateIr, CrateIrSnapshot};
 pub use indexes::{AttrKey, AttrValue, IrIndexes, QualifiedPath};
 pub use input_snapshot::{ATTR_CARGO_MANIFEST_SNAPSHOT, FileSnapshot};
+pub use leaf_function::{ATTR_LEAF_FUNCTIONS, LeafFunction};
 pub use macro_island::{ATTR_MACRO_ISLAND, MacroIsland};
 pub use node::{ItemKind, NodeId, NodeKind, NodeWeight};
 pub use node::{NodeRef, NodeView};

@@ -31,6 +31,15 @@ macro_rules! readers {
             )
         }
 
+        /// The functions of leaf crates (integration-test binaries), by location.
+        #[instrument(level = "trace", skip(self), err(level = "warn"))]
+        fn leaf_functions(&self) -> CordialResult<Vec<crate::ir::LeafFunction>> {
+            Ok(
+                evidence::optional(self, self.root()?, crate::ir::ATTR_LEAF_FUNCTIONS)?
+                    .unwrap_or_default(),
+            )
+        }
+
         /// Where this function item starts in source, if the loader recorded it.
         #[instrument(level = "trace", skip(self), err(level = "warn"))]
         fn function_location(
