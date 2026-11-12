@@ -10,12 +10,17 @@ use ra_ap_syntax::{
 };
 
 use tracing::instrument;
+
+/// Which macro a written attribute path names, resolved from where it is written.
+pub(crate) type AttributeIdentity<'a> =
+    &'a dyn Fn(&ast::Path, &SyntaxNode) -> Option<crate::ir::SemanticMacroCall>;
+
 impl SourceFileAttributes {
-    #[instrument(level = "debug", skip(file))]
+    #[instrument(level = "debug", skip(file, identify))]
     #[hotpath::measure(impl_type = "SourceFileAttributes")]
-    pub(crate) fn collect(file: &DatabaseSource<'_>) -> Self {
+    pub(crate) fn collect(file: &DatabaseSource<'_>, identify: AttributeIdentity<'_>) -> Self {
         let mut items = Vec::new();
-        collect_items(file, file.tree().items(), &[], &mut items);
+        collect_items(file, file.tree().items(), &[], &mut items, identify);
         let mut lints = SourceCrateLints::default();
         for attr in file.tree().attrs() {
             if attr.excl_token().is_some()
@@ -39,28 +44,29 @@ impl SourceFileAttributes {
     }
 }
 
-#[instrument(level = "debug", skip(file, items, out))]
+#[instrument(level = "debug", skip(file, items, out, identify))]
 fn collect_items(
     file: &DatabaseSource<'_>,
     items: impl Iterator<Item = ast::Item>,
     prefix: &[String],
     out: &mut Vec<SourceAttributedItem>,
+    identify: AttributeIdentity<'_>,
 ) {
     for item in items {
         match item {
             ast::Item::Fn(item) => {
                 if let Some(name) = item.name() {
-                    attach(file, &item, prefix, name.text(), out);
+                    attach(file, &item, prefix, name.text(), out, identify);
                 }
             }
             ast::Item::Struct(item) => {
                 if let Some(name) = item.name() {
-                    attach(file, &item, prefix, name.text(), out);
+                    attach(file, &item, prefix, name.text(), out, identify);
                 }
             }
             ast::Item::Enum(item) => {
                 if let Some(name) = item.name() {
-                    attach(file, &item, prefix, name.text(), out);
+                    attach(file, &item, prefix, name.text(), out, identify);
                 }
             }
             ast::Item::Module(item) => {
@@ -80,9 +86,9 @@ fn collect_items(
                 if let Some(list) = item.item_list() {
                     let mut nested = prefix.to_vec();
                     nested.push(name.text().to_string());
-                    collect_items(file, list.items(), &nested, out);
+                    collect_items(file, list.items(), &nested, out, identify);
                 } else {
-                    attach(file, &item, prefix, name.text(), out);
+                    attach(file, &item, prefix, name.text(), out, identify);
                 }
             }
             ast::Item::Impl(item) => {
@@ -111,7 +117,7 @@ fn collect_items(
                             Some(trait_name) => format!("<{self_ty} as {trait_name}>::{name}"),
                             None => format!("{self_ty}::{name}"),
                         };
-                        attach(file, &method, prefix, &local, out);
+                        attach(file, &method, prefix, &local, out, identify);
                     }
                 }
             }
@@ -120,13 +126,14 @@ fn collect_items(
     }
 }
 
-#[instrument(level = "debug", skip(file, owner, out))]
+#[instrument(level = "debug", skip(file, owner, out, identify))]
 fn attach(
     file: &DatabaseSource<'_>,
     owner: &dyn HasAttrs,
     prefix: &[String],
     local: &str,
     out: &mut Vec<SourceAttributedItem>,
+    identify: AttributeIdentity<'_>,
 ) {
     let path = if prefix.is_empty() {
         local.into()
@@ -143,7 +150,7 @@ fn attach(
                 instrument_syntax: None,
             }),
             ast::AnyAttr::Attr(attr) => attr.meta().map(|meta| {
-                let mut projected = attribute(&meta);
+                let mut projected = attribute(&meta, identify);
                 let range = attr.syntax().text_range();
                 projected.range = Some(
                     (u32::from(range.start()) as usize..u32::from(range.end()) as usize).into(),
@@ -160,8 +167,33 @@ fn attach(
     });
 }
 
-#[instrument(level = "debug", skip(meta))]
-fn attribute(meta: &ast::Meta) -> SourceAttribute {
+/// Whether the attribute `meta` is `tracing`'s `instrument`, by the macro its
+/// path resolves to: an alias, a re-export or an import all count, and a
+/// look-alike from another crate does not. Inside a lone `cfg_attr` it is the
+/// wrapped attribute's path that is resolved.
+#[instrument(level = "trace", skip(identify))]
+fn is_instrument(meta: &ast::Meta, identify: AttributeIdentity<'_>) -> bool {
+    let names_instrument = |path: ast::Path| {
+        identify(&path, meta.syntax()).is_some_and(|found| {
+            ["tracing_attributes", "tracing"]
+                .iter()
+                .any(|krate| found.is(krate, &["instrument"]))
+        })
+    };
+    match meta {
+        ast::Meta::CfgAttrMeta(cfg) => {
+            let metas: Vec<_> = cfg.metas().collect();
+            metas.first().is_some_and(|inner| {
+                (metas.len() == 1 || matches!(inner, ast::Meta::TokenTreeMeta(_)))
+                    && inner.path().is_some_and(names_instrument)
+            })
+        }
+        _ => meta.path().is_some_and(names_instrument),
+    }
+}
+
+#[instrument(level = "debug", skip(meta, identify))]
+fn attribute(meta: &ast::Meta, identify: AttributeIdentity<'_>) -> SourceAttribute {
     let path = if matches!(meta, ast::Meta::UnsafeMeta(_)) {
         "unsafe".into()
     } else {
@@ -186,19 +218,7 @@ fn attribute(meta: &ast::Meta) -> SourceAttribute {
             format!("{name}({})", super::render_tokens(body.to_vec()))
         }
     };
-    let instrument = instrument_path(&path)
-        || match meta {
-            ast::Meta::CfgAttrMeta(cfg) => {
-                let metas: Vec<_> = cfg.metas().collect();
-                metas.first().is_some_and(|inner| {
-                    (metas.len() == 1 || matches!(inner, ast::Meta::TokenTreeMeta(_)))
-                        && inner.path().is_some_and(|path| {
-                            instrument_path(&significant_tokens(path.syntax()).replace(' ', ""))
-                        })
-                })
-            }
-            _ => false,
-        };
+    let instrument = is_instrument(meta, identify);
     SourceAttribute {
         path,
         meta: rendered,
@@ -212,19 +232,19 @@ fn attribute(meta: &ast::Meta) -> SourceAttribute {
                         &super::instrument::native_tokens(metas[0].syntax()),
                         cfg.cfg_predicate()
                             .map(|predicate| token_parts(predicate.syntax()).concat()),
+                        instrument,
                     )
                 } else {
                     None
                 }
             }
-            _ => super::instrument::collect(&super::instrument::native_tokens(meta.syntax()), None),
+            _ => super::instrument::collect(
+                &super::instrument::native_tokens(meta.syntax()),
+                None,
+                instrument,
+            ),
         },
     }
-}
-
-#[instrument(level = "debug", skip(path))]
-fn instrument_path(path: &str) -> bool {
-    matches!(path, "instrument" | "tracing::instrument")
 }
 
 #[instrument(level = "debug", skip(node))]
@@ -295,9 +315,12 @@ fn apply_level(meta: &ast::Meta, presence: &mut SourceCrateLints) {
 
 #[cfg(feature = "tracing")]
 impl super::SourceInstrumentSyntax {
-    #[instrument(level = "debug", skip(attr))]
-    pub(crate) fn from_native_attribute(attr: &ast::Attr) -> Option<Self> {
+    #[instrument(level = "debug", skip(attr, identify))]
+    pub(crate) fn from_native_attribute(
+        attr: &ast::Attr,
+        identify: AttributeIdentity<'_>,
+    ) -> Option<Self> {
         attr.meta()
-            .and_then(|meta| attribute(&meta).instrument_syntax)
+            .and_then(|meta| attribute(&meta, identify).instrument_syntax)
     }
 }

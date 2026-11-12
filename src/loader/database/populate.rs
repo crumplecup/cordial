@@ -45,7 +45,9 @@ impl Projection {
             crate::ir::ATTR_SOURCE_MODULE_SCOPE,
             serde_json::to_value(crate::ir::SourceModuleScope::collect(source))?,
         );
-        let attributes = crate::ir::SourceFileAttributes::collect(source);
+        let attributes = crate::ir::SourceFileAttributes::collect(source, &|path, scope| {
+            super::identity::macro_at(sema, scope, path)
+        });
         let declaration_paths: HashMap<_, _> = attributes
             .items()
             .iter()

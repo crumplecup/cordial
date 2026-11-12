@@ -49,6 +49,7 @@ pub(super) struct LocatedGroup {
 pub(super) fn collect(
     tokens: &[LocatedToken],
     gate_predicate: Option<String>,
+    identified: bool,
 ) -> Option<SourceInstrumentSyntax> {
     let first = tokens.first()?;
     let group_at = tokens.iter().position(|token| token.group.is_some());
@@ -66,12 +67,11 @@ pub(super) fn collect(
         return collect(
             &group.tokens[comma + 1..],
             Some(compact_tokens(&group.tokens[..comma])),
+            identified,
         );
     }
-    if !matches!(
-        path.trim_start_matches("::"),
-        "instrument" | "tracing::instrument"
-    ) {
+    // Whether this is `instrument` was decided by what its path resolves to.
+    if !identified {
         return None;
     }
     let arguments = match group_at {

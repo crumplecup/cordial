@@ -141,6 +141,7 @@ pub use observability_source::{ATTR_SOURCE_OBSERVABILITY, SourceObservability};
 pub(crate) use observability_source::{
     ObservabilityBody, ObservabilityFile, ObservabilityFileKind,
 };
+pub(crate) use source_attributes::AttributeIdentity;
 pub use source_attributes::{
     ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_FILE_ATTRIBUTES, SourceAttribute, SourceAttributeArgument,
     SourceAttributeArguments, SourceAttributedItem, SourceCrateLints, SourceFileAttributes,

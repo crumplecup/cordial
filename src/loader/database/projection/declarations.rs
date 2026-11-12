@@ -124,7 +124,10 @@ impl SourceDatabase {
             let sema = Semantics::new(&self.db);
             for (path, module) in outline.modules() {
                 let (_, source) = self.declaration_source(&sema, path)?;
-                let attributes = crate::ir::SourceFileAttributes::collect(&source);
+                let attributes =
+                    crate::ir::SourceFileAttributes::collect(&source, &|path, scope| {
+                        super::super::identity::macro_at(&sema, scope, path)
+                    });
                 let mut semantics = std::collections::HashMap::new();
                 for item in attributes.items() {
                     let range = ra_ap_syntax::TextRange::new(

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 mod instrument;
 mod native;
+pub(crate) use native::AttributeIdentity;
 mod native_types;
 pub use instrument::{SourceAttributeArgument, SourceAttributeArguments, SourceInstrumentSyntax};
 #[cfg(feature = "tracing")]

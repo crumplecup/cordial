@@ -13,12 +13,13 @@ use ra_ap_syntax::{
 use std::path::Path;
 
 impl SourceObservability {
-    #[tracing::instrument(level = "debug", skip(file, identify))]
+    #[tracing::instrument(level = "debug", skip(file, identify, identify_attribute))]
     pub(crate) fn native_file(
         file: &DatabaseSource<'_>,
         tree: &Path,
         root: &Path,
         identify: &dyn Fn(&ast::MacroCall) -> Option<SemanticMacroCall>,
+        identify_attribute: crate::ir::AttributeIdentity<'_>,
     ) -> ObservabilityFile {
         let prefix = module_path_from_src_file(tree, file.path());
         let mut functions = Vec::new();
@@ -37,7 +38,10 @@ impl SourceObservability {
                 facts.has_err_instrument = function
                     .attrs()
                     .filter_map(|attr| {
-                        crate::ir::SourceInstrumentSyntax::from_native_attribute(&attr)
+                        crate::ir::SourceInstrumentSyntax::from_native_attribute(
+                            &attr,
+                            identify_attribute,
+                        )
                     })
                     .any(|syntax| has_err_instrument(&syntax));
                 functions.push(ObservabilityFunction {

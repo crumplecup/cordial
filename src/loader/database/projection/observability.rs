@@ -31,9 +31,13 @@ impl SourceDatabase {
                 ra_ap_ide_db::line_index(&self.db, file),
             );
             Ok(ra_ap_hir::attach_db(&self.db, || {
-                SourceObservability::native_file(&source, tree, root, &|call| {
-                    super::super::identity::macro_by_path(&sema, call)
-                })
+                SourceObservability::native_file(
+                    &source,
+                    tree,
+                    root,
+                    &|call| super::super::identity::macro_by_path(&sema, call),
+                    &|path, scope| super::super::identity::macro_at(&sema, scope, path),
+                )
             }))
         })
     }
