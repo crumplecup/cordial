@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use tracing::instrument;
 
 /// Bump when the IR or what the analysis records changes shape.
-const SCHEMA: u32 = 7;
+const SCHEMA: u32 = 8;
 
 /// Directory names never hashed: build output and version control.
 const SKIPPED_DIRECTORIES: &[&str] = &["target", ".git", "node_modules"];

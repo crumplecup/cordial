@@ -81,7 +81,8 @@ pub(crate) struct ObservabilityBody {
     has_error_emission: bool,
     /// Where the functions this one calls are defined, as the database resolved them.
     called: Vec<crate::FunctionLocation>,
-    called_paths: Vec<String>,
+    /// What each call of this function resolved to.
+    callees: Vec<crate::ir::SemanticCallee>,
 }
 
 impl SourceObservability {

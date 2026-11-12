@@ -128,20 +128,6 @@ fn last_name(path: &ast::Path) -> Option<String> {
         .map(|name| name.text().to_string())
 }
 
-#[tracing::instrument(level = "debug", skip(path))]
-fn joined_path(path: &ast::Path) -> String {
-    let mut names = Vec::new();
-    let mut current = Some(path.clone());
-    while let Some(path) = current {
-        if let Some(name) = last_name(&path) {
-            names.push(name);
-        }
-        current = path.qualifier();
-    }
-    names.reverse();
-    names.join("::")
-}
-
 #[tracing::instrument(level = "trace", skip(ty))]
 fn is_result(ty: &ast::Type) -> bool {
     match ty {
@@ -169,20 +155,6 @@ fn body_facts(
         if ast::Fn::cast(node.clone()).is_some_and(|function| !is_trait_member(&function)) {
             walk.skip_subtree();
             continue;
-        }
-        if let Some(call) = ast::CallExpr::cast(node.clone())
-            && let Some(ast::Expr::PathExpr(expr)) = call.expr()
-            && let Some(path) = expr.path()
-        {
-            facts.called_paths.push(joined_path(&path));
-        }
-        if let Some(path) = ast::Path::cast(node.clone())
-            && !node
-                .parent()
-                .is_some_and(|parent| ast::Path::can_cast(parent.kind()))
-            && let Some(name) = last_name(&path)
-        {
-            facts.note_path(&name);
         }
         if let Some(literal) = ast::Literal::cast(node.clone())
             && let ast::LiteralKind::String(value) = literal.kind()

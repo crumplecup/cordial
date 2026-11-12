@@ -12,16 +12,21 @@ impl ObservabilityBody {
         self.calls_try_init |= callee.is(SUBSCRIBER, &["try_init", "set_global_default"]);
         self.has_try_from_default_env |=
             callee.is(&["tracing_subscriber"], &["try_from_default_env"]);
+        self.has_once |= callee.is_std_method(
+            &["Once", "OnceLock"],
+            &[
+                "call_once",
+                "call_once_force",
+                "get_or_init",
+                "get_or_try_init",
+                "set",
+            ],
+        );
+        self.callees.push(callee.clone());
         self.has_fallback |= callee.is(
             &["core", "std"],
             &["unwrap_or", "unwrap_or_else", "unwrap_or_default"],
         );
-    }
-
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub(super) fn note_path(&mut self, name: &str) {
-        self.has_once |= matches!(name, "Once" | "OnceLock");
-        self.has_try_from_default_env |= name == "try_from_default_env";
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
@@ -34,13 +39,21 @@ impl ObservabilityBody {
         self.calls_try_init || (self.has_once && self.calls_install)
     }
 
+    /// Whether a call resolved to one of the `known` helpers. A configured path
+    /// names the helper as its crate and function; the resolved definition may
+    /// sit deeper in that crate behind a re-export, so a path with a crate
+    /// matches the definition in that crate with that name, and a bare name
+    /// matches any definition of it.
     #[tracing::instrument(level = "trace", skip(self, known))]
     pub(crate) fn calls_known_helper(&self, known: &[String]) -> bool {
-        self.called_paths.iter().any(|path| {
-            let last = path.rsplit("::").next();
-            known
-                .iter()
-                .any(|helper| helper == path || helper.rsplit("::").next() == last)
+        self.callees.iter().any(|callee| {
+            known.iter().any(|helper| {
+                let name = helper.rsplit("::").next().unwrap_or(helper);
+                let krate = helper.split_once("::").map(|(krate, _)| krate);
+                callee.path() == helper
+                    || (callee.name() == name
+                        && krate.is_none_or(|krate| callee.krate().as_deref() == Some(krate)))
+            })
         })
     }
 
