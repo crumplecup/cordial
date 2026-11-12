@@ -3,7 +3,7 @@
 use super::SourceDatabase;
 use crate::loader::database::{DatabaseSource, contexts::FunctionNodes, populate::Projection};
 use crate::loader::module_path_from_src_file;
-use crate::{CordialResult, CrateIr, FileSnapshot, NodeId};
+use crate::{CordialResult, CrateIr, FileSnapshot};
 use ra_ap_hir::Semantics;
 use ra_ap_ide_db::{RootDatabase, base_db::SourceDatabase as RaSourceDatabase};
 use sha2::{Digest, Sha256};
@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 pub(in crate::loader::database) struct Outline {
     functions: FunctionNodes,
     #[cfg(feature = "tracing")]
-    modules: Vec<(PathBuf, NodeId)>,
+    modules: Vec<(PathBuf, crate::NodeId)>,
 }
 
 impl SourceDatabase {

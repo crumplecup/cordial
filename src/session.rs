@@ -41,13 +41,16 @@ mod run;
     feature = "derives",
     feature = "antipatterns",
     feature = "impl_coverage",
-    feature = "amenable_std"
+    feature = "amenable_std",
+    feature = "tracing"
 ))]
 mod source_facts;
+#[cfg(any(feature = "derives", feature = "antipatterns", feature = "tracing"))]
+pub(crate) use source_facts::prepare_workspace_call_graph;
 #[cfg(any(feature = "impl_coverage", feature = "amenable_std"))]
 pub(crate) use source_facts::prepare_workspace_proof_harness;
 #[cfg(any(feature = "derives", feature = "antipatterns"))]
-pub(crate) use source_facts::{prepare_workspace_call_graph, prepare_workspace_source_facts};
+pub(crate) use source_facts::prepare_workspace_source_facts;
 
 /// Read-only paths and run context shared with hooks.
 ///

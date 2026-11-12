@@ -253,6 +253,7 @@ pub(super) fn load_and_probe(
             )?;
         }
     }
+    #[cfg(any(feature = "derives", feature = "antipatterns", feature = "tracing"))]
     crate::session::prepare_workspace_call_graph(&mut workspace, session, enrichers)?;
     for target in targets {
         for enricher in enrichers {

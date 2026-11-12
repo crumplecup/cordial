@@ -134,14 +134,8 @@ pub use source_policy::{VisibilityFacts, VisibilityKind, VisibilityModule};
 mod observability_source;
 #[cfg(feature = "tracing")]
 mod tracing_source;
-pub(crate) use observability_source::ResolvedCalls;
 #[cfg(feature = "tracing")]
 pub use observability_source::{ATTR_SOURCE_OBSERVABILITY, SourceObservability};
-#[cfg(feature = "tracing")]
-pub(crate) use observability_source::{
-    ObservabilityBody, ObservabilityFile, ObservabilityFileKind,
-};
-pub(crate) use source_attributes::AttributeIdentity;
 pub use source_attributes::{
     ATTR_SOURCE_ATTRIBUTE, ATTR_SOURCE_FILE_ATTRIBUTES, SourceAttribute, SourceAttributeArgument,
     SourceAttributeArguments, SourceAttributedItem, SourceCrateLints, SourceFileAttributes,
@@ -150,6 +144,13 @@ pub use source_attributes::{
 #[cfg(feature = "tracing")]
 pub use tracing_source::{
     ATTR_SOURCE_TRACING_INVENTORY, SourceTracingFunction, SourceTracingInventory,
+};
+#[cfg(feature = "tracing")]
+pub(crate) use {
+    observability_source::{
+        ObservabilityBody, ObservabilityFile, ObservabilityFileKind, ResolvedCalls,
+    },
+    source_attributes::AttributeIdentity,
 };
 #[cfg(feature = "homecoming_std")]
 mod trait_impls;

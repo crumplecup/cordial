@@ -67,6 +67,11 @@ fn locked<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 impl CacheToken {
     /// Give this run the database that already holds its Cargo workspace.
+    #[cfg(any(
+        feature = "tracing",
+        feature = "internal_error_chain",
+        feature = "crate_attrs"
+    ))]
     #[tracing::instrument(level = "trace", skip(self, database))]
     fn install(&self, database: SourceDatabase) {
         *locked(&self.slot) = Slot {
@@ -214,6 +219,11 @@ impl ParsedSourceSession {
 
     /// Begin a run whose database holds the Cargo workspace at `root`, loaded
     /// now. A root that is not a loadable crate or workspace is an error.
+    #[cfg(any(
+        feature = "tracing",
+        feature = "internal_error_chain",
+        feature = "crate_attrs"
+    ))]
     #[tracing::instrument(level = "debug", err(level = "warn"), skip(reporter, planning))]
     pub(crate) fn begin_in(
         root: &std::path::Path,
