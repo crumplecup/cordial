@@ -115,12 +115,16 @@ pub(super) fn guard(node: &ra_ap_syntax::SyntaxNode) -> CfgExpr {
 /// `current` is the context the database is in. A clause inside a file needs a
 /// new context only when no examined state in which that file is active already
 /// satisfies it, and then it is applied on top of `current`.
-#[instrument(level = "debug", skip(db, covered, current))]
+///
+/// `only` limits the scan to those files, for a caller planning for part of the
+/// workspace; `None` scans every file of every local crate.
+#[instrument(level = "debug", skip(db, covered, current, only))]
 #[hotpath::measure]
 pub(in crate::loader::database) fn asked(
     db: &RootDatabase,
     current: &SemanticContextKey,
     covered: &mut Covered,
+    only: Option<&BTreeSet<FileId>>,
 ) -> Vec<SemanticContextKey> {
     attach_db(db, || {
         let sema = Semantics::new(db);
@@ -145,6 +149,9 @@ pub(in crate::loader::database) fn asked(
         }
         let mut asked: BTreeSet<SemanticContextKey> = BTreeSet::new();
         for (file, crates) in active {
+            if only.is_some_and(|only| !only.contains(&file)) {
+                continue;
+            }
             let tree = sema.parse(sema.attach_first_edition(file));
             let hosts = tree
                 .syntax()

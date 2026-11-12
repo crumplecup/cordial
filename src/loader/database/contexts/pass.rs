@@ -144,7 +144,7 @@ impl SourceDatabase {
         wanted.add_exact(options.cfg_contexts().clone());
         if automatic {
             let _watch = crate::process_memory::Watch::start("planning scan".to_owned());
-            wanted.add(asked(&self.db, &ordinary, &mut covered));
+            wanted.add(asked(&self.db, &ordinary, &mut covered, None));
             crate::process_memory::log("planning scan done");
         }
         while let Some(pending) = wanted.queue.pop_front() {
@@ -195,7 +195,7 @@ impl SourceDatabase {
                 return Ok(false);
             }
             if automatic {
-                wanted.add(asked(&self.db, &context, &mut covered));
+                wanted.add(asked(&self.db, &context, &mut covered, None));
             }
             drop(watch);
             tracing::debug!(

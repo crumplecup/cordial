@@ -91,6 +91,7 @@ impl SourceDatabase {
         #[cfg(feature = "tracing")]
         {
             self.project_tracing_inventories(&outline, &mut graph)?;
+            self.project_leaves(&mut graph)?;
             self.project_observability_calls(&outline, &mut graph)?;
         }
         Ok(graph)
