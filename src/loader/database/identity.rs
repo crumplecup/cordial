@@ -75,7 +75,17 @@ pub(crate) fn macro_by_path(
     sema: &Semantics<'_, RootDatabase>,
     invocation: &ast::MacroCall,
 ) -> Option<SemanticMacroCall> {
-    let path = invocation.path()?;
+    macro_at(sema, invocation.syntax(), &invocation.path()?)
+}
+
+/// The macro `path` names where `scope` is written: the same lookup for an
+/// attribute, whose path is resolved from the module around the item it is on.
+#[tracing::instrument(level = "debug", skip(sema, scope, path))]
+pub(crate) fn macro_at(
+    sema: &Semantics<'_, RootDatabase>,
+    scope: &ra_ap_syntax::SyntaxNode,
+    path: &ast::Path,
+) -> Option<SemanticMacroCall> {
     let mut kind = PathKind::Plain;
     let mut segments = Vec::new();
     for (index, segment) in path.segments().enumerate() {
@@ -96,7 +106,7 @@ pub(crate) fn macro_by_path(
         }
     }
     let definition = sema
-        .resolve_mod_path(invocation.syntax(), &ModPath::from_segments(kind, segments))?
+        .resolve_mod_path(scope, &ModPath::from_segments(kind, segments))?
         .find_map(|item| match item {
             ItemInNs::Macros(definition) => Some(definition),
             _ => None,
