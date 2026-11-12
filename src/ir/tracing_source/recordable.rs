@@ -28,17 +28,3 @@ pub(super) fn parameter_names(function: &ast::Fn) -> Vec<String> {
     }
     names
 }
-
-#[instrument(level = "trace", skip(ty))]
-pub(super) fn returns_result(ty: &ast::Type) -> bool {
-    match ty {
-        ast::Type::PathType(ty) => ty
-            .path()
-            .and_then(|path| path.segment())
-            .and_then(|segment| segment.name_ref())
-            .is_some_and(|name| name.text().ends_with("Result")),
-        ast::Type::RefType(ty) => ty.ty().is_some_and(|ty| returns_result(&ty)),
-        ast::Type::ParenType(ty) => ty.ty().is_some_and(|ty| returns_result(&ty)),
-        _ => false,
-    }
-}

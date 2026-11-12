@@ -31,10 +31,6 @@ impl SourceObservability {
                 && let Some(name) = function.name()
             {
                 let mut facts = body_facts(&body, identify);
-                facts.is_fallible = function
-                    .ret_type()
-                    .and_then(|ty| ty.ty())
-                    .is_some_and(|ty| is_result(&ty));
                 facts.has_err_instrument = function
                     .attrs()
                     .filter_map(|attr| {
@@ -123,26 +119,6 @@ fn modules(node: &ra_ap_syntax::SyntaxNode) -> Vec<String> {
         .collect();
     modules.reverse();
     modules
-}
-
-#[tracing::instrument(level = "debug", skip(path))]
-fn last_name(path: &ast::Path) -> Option<String> {
-    path.segment()
-        .and_then(|seg| seg.name_ref())
-        .map(|name| name.text().to_string())
-}
-
-#[tracing::instrument(level = "trace", skip(ty))]
-fn is_result(ty: &ast::Type) -> bool {
-    match ty {
-        ast::Type::PathType(ty) => ty
-            .path()
-            .and_then(|path| last_name(&path))
-            .is_some_and(|name| name.ends_with("Result")),
-        ast::Type::RefType(ty) => ty.ty().is_some_and(|ty| is_result(&ty)),
-        ast::Type::ParenType(ty) => ty.ty().is_some_and(|ty| is_result(&ty)),
-        _ => false,
-    }
 }
 
 #[tracing::instrument(level = "debug", skip(body, identify))]

@@ -75,7 +75,11 @@ impl SourceDatabase {
                     .iter()
                     .find(|leaf| leaf.location() == &at)
                     .map_or_else(crate::ir::ResolvedCalls::default, |leaf| {
-                        crate::ir::ResolvedCalls::new(leaf.callees().clone(), leaf.called().clone())
+                        crate::ir::ResolvedCalls::new(
+                            leaf.callees().clone(),
+                            leaf.called().clone(),
+                            false,
+                        )
                     });
             };
             let mut facts = Vec::new();
@@ -93,6 +97,12 @@ impl SourceDatabase {
                 }
                 Err(error) => failure = Some(error),
             }
+            let fallible = facts.iter().any(|function| {
+                matches!(
+                    function.result_recording(),
+                    crate::SemanticResultRecording::Result { .. }
+                )
+            });
             let callees = facts
                 .iter()
                 .flat_map(|function| function.calls())
@@ -109,7 +119,7 @@ impl SourceDatabase {
                     Err(error) => failure = Some(error),
                 }
             }
-            crate::ir::ResolvedCalls::new(callees, called)
+            crate::ir::ResolvedCalls::new(callees, called, fallible)
         });
         if let Some(error) = failure {
             return Err(error);

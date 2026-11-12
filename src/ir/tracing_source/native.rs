@@ -86,9 +86,7 @@ fn context(
     kind: FunctionKind,
     semantics: Option<&SemanticFunction>,
 ) -> CordialResult<FnContext> {
-    let output = function.ret_type().and_then(|ret| ret.ty());
     let return_shape = semantics.map(|facts| facts.return_shape());
-    let syntactic_result = output.as_ref().is_some_and(recordable::returns_result);
     let (returns_result, displayable) = match semantics.map(|facts| facts.result_recording()) {
         // The solver is authoritative: an error is displayable only when it proved
         // the actual core trait, never from the spelling of its name.
@@ -97,9 +95,9 @@ fn context(
             ..
         }) => (true, *capability == SemanticCapability::Proven),
         Some(SemanticResultRecording::NotResult) => (false, false),
-        // No loaded context analysed this function. The signature still says whether
-        // it returns a `Result`; with no evidence nothing can prove its error displayable.
-        _ => (syntactic_result, false),
+        // No loaded context analysed this function, and nothing is proven without
+        // facts: not that it returns a `Result`, and so not that its error displays.
+        None | Some(SemanticResultRecording::Unavailable) => (false, false),
     };
     let (peek, lines) = body(file, function);
     let receiver = function.param_list().and_then(|list| list.self_param());
