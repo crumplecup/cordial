@@ -144,7 +144,7 @@ fn pattern_projection_warning_is_suppressed_only_when_fully_documented() -> miet
     fs::write(documented_root.join("src/lib.rs"), documented_source).into_diagnostic()?;
     fs::write(
         documented_root.join("Cargo.toml"),
-        "[package]\nname = 'documented'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+        "[package]\nname = 'documented'\nversion = '0.1.0'\nedition = '2024'\n[dependencies]\nverus_builtin_macros = '=0.0.0-2026-11-01-0251'\n[workspace]\n",
     )
     .into_diagnostic()?;
     let documented_parsed = parse_verus_compiler_output(fake_compiler_output, &documented_root)
@@ -171,7 +171,7 @@ fn pattern_projection_warning_is_suppressed_only_when_fully_documented() -> miet
     fs::write(undocumented_root.join("src/lib.rs"), undocumented_source).into_diagnostic()?;
     fs::write(
         undocumented_root.join("Cargo.toml"),
-        "[package]\nname = 'undocumented'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+        "[package]\nname = 'undocumented'\nversion = '0.1.0'\nedition = '2024'\n[dependencies]\nverus_builtin_macros = '=0.0.0-2026-11-01-0251'\n[workspace]\n",
     )
     .into_diagnostic()?;
     let undocumented_parsed = parse_verus_compiler_output(fake_compiler_output, &undocumented_root)

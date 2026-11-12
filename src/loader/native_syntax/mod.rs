@@ -45,7 +45,7 @@ mod macro_syntax;
     feature = "antipatterns"
 ))]
 pub(crate) use macro_syntax::DatabaseMacroSyntax;
-#[cfg(feature = "internal_error_chain")]
+#[cfg(any(feature = "internal_error_chain", feature = "verus_ir"))]
 mod cfg_syntax;
 #[cfg(feature = "internal_error_chain")]
 mod meta_syntax;
@@ -57,6 +57,8 @@ pub(crate) use modules::module_path;
 mod verus_syntax;
 #[cfg(all(feature = "verus_ir", feature = "visibility"))]
 pub(crate) use verus_syntax::DatabaseVerusSyntax;
+#[cfg(all(feature = "verus_ir", feature = "panics"))]
+pub(crate) use verus_syntax::written_as_verus;
 
 #[cfg(feature = "antipatterns")]
 mod antipatterns;

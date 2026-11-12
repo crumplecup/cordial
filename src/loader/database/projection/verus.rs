@@ -27,10 +27,15 @@ impl SourceDatabase {
                 sema.parse(edition),
                 ra_ap_ide_db::line_index(&self.db, file),
             );
-            Ok(VerusFile::new(
-                crate::FileSnapshot::new(path.to_path_buf(), source.source_digest()),
-                source.verus_facts(&module_path_from_src_file(tree, path).join("::")),
-            ))
+            Ok(ra_ap_hir::attach_db(&self.db, || {
+                VerusFile::new(
+                    crate::FileSnapshot::new(path.to_path_buf(), source.source_digest()),
+                    source
+                        .verus_facts(&module_path_from_src_file(tree, path).join("::"), &|call| {
+                            super::super::identity::is_verus_macro(&sema, call)
+                        }),
+                )
+            }))
         })
     }
 }

@@ -64,6 +64,34 @@ pub(super) fn macro_calls(
     found
 }
 
+/// Whether `invocation` is the Verus `verus!` macro: the macro its path resolves
+/// to is defined by `verus_builtin_macros`, however `vstd` or a rename spells it.
+#[cfg(feature = "verus_ir")]
+#[tracing::instrument(level = "trace", skip(sema, invocation))]
+pub(crate) fn is_verus_macro(
+    sema: &Semantics<'_, RootDatabase>,
+    invocation: &ast::MacroCall,
+) -> bool {
+    let resolved = macro_by_path(sema, invocation);
+    if resolved
+        .as_ref()
+        .is_some_and(|found| found.is("verus_builtin_macros", &["verus"]))
+    {
+        return true;
+    }
+    if invocation
+        .path()
+        .is_some_and(|path| path.syntax().text() == "verus")
+    {
+        tracing::warn!(
+            resolved = ?resolved,
+            "a macro named verus does not resolve to verus_builtin_macros, so its body is not read; \
+             the crate must depend on verus_builtin_macros and import the macro"
+        );
+    }
+    false
+}
+
 /// The macro a written macro path names, resolved from the surroundings of the
 /// call. This works where resolving the call itself does not: in a function that
 /// an attribute macro replaced, the original body is not what the database

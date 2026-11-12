@@ -75,7 +75,7 @@ fn write_fixture(fixture: &std::path::Path) -> miette::Result<()> {
         .wrap_err("src dir")?;
     fs::write(
         fixture.join("Cargo.toml"),
-        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[dependencies]\nverus_builtin_macros = '=0.0.0-2026-11-01-0251'\n[workspace]\n",
     )
     .into_diagnostic()?;
     fs::write(fixture.join("src/lib.rs"), FIXTURE_SOURCE)

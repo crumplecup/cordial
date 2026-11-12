@@ -17,8 +17,11 @@ impl DatabaseVerusSyntax {
 }
 
 impl DatabaseSource<'_> {
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub(crate) fn verus_visibility(&self) -> DatabaseVerusSyntax {
+    #[tracing::instrument(level = "debug", skip(self, is_verus))]
+    pub(crate) fn verus_visibility(
+        &self,
+        is_verus: &dyn Fn(&ast::MacroCall) -> bool,
+    ) -> DatabaseVerusSyntax {
         let mut syntax = DatabaseVerusSyntax::default();
         for invocation in self
             .tree()
@@ -26,7 +29,7 @@ impl DatabaseSource<'_> {
             .descendants()
             .filter_map(ast::MacroCall::cast)
         {
-            if let Some(payload) = self.verus_payload(&invocation) {
+            if let Some(payload) = self.verus_payload(&invocation, is_verus) {
                 syntax.names.insert(invocation, payload.visible_names());
             }
         }

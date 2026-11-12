@@ -34,6 +34,13 @@ impl SourceDatabase {
                 sema.parse(edition),
                 ra_ap_ide_db::line_index(&self.db, file),
             );
+            #[cfg(feature = "verus_ir")]
+            return ra_ap_hir::attach_db(&self.db, || {
+                SourcePolicyInventory::native_visibility_file(&source, &|call| {
+                    super::super::identity::is_verus_macro(&sema, call)
+                })
+            });
+            #[cfg(not(feature = "verus_ir"))]
             SourcePolicyInventory::native_visibility_file(&source)
         })
     }

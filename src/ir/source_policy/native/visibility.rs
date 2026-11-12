@@ -23,16 +23,17 @@ impl SourcePolicyInventory {
         visibility::collect(root, read)
     }
 
-    #[tracing::instrument(level = "debug", skip(file), err(level = "warn"))]
+    #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
     pub(crate) fn native_visibility_file(
         file: &DatabaseSource<'_>,
+        #[cfg(feature = "verus_ir")] is_verus: &dyn Fn(&ast::MacroCall) -> bool,
     ) -> CordialResult<(VisibilityBody, FileSnapshot)> {
         Ok((
             items(
                 file.tree().items(),
                 file,
                 #[cfg(feature = "verus_ir")]
-                &file.verus_visibility(),
+                &file.verus_visibility(is_verus),
             )?,
             FileSnapshot::new(file.path().to_path_buf(), file.source_digest()),
         ))

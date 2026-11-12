@@ -43,7 +43,8 @@ impl Scanner<'_, '_> {
                 inner.walk(source.tree().syntax(), &context)?;
                 #[cfg(feature = "verus_ir")]
                 {
-                    let verus = source.verus_facts(&context.label());
+                    let verus =
+                        source.verus_facts(&context.label(), &crate::loader::written_as_verus);
                     let records = crate::etiquettes::panics::verus_findings(&verus, self.root)?;
                     for record in records {
                         inner.records.push(

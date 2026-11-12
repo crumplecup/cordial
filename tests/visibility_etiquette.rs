@@ -22,9 +22,22 @@ fn write_crate(root: &std::path::Path, lib: &str, extra: &[(&str, &str)]) -> mie
     fs::create_dir_all(root.join("src"))
         .into_diagnostic()
         .wrap_err("src")?;
+    // A `verus!` block is read only when its macro resolves, so a source that
+    // imports it depends on the crate that defines it.
+    let dependencies = if extra
+        .iter()
+        .any(|(_, body)| body.contains("verus_builtin_macros"))
+        || lib.contains("verus_builtin_macros")
+    {
+        "[dependencies]\nverus_builtin_macros = '=0.0.0-2026-11-01-0251'\n"
+    } else {
+        ""
+    };
     fs::write(
         root.join("Cargo.toml"),
-        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+        format!(
+            "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n{dependencies}[workspace]\n"
+        ),
     )
     .into_diagnostic()?;
     fs::write(root.join("src/lib.rs"), lib)

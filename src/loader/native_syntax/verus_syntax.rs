@@ -25,8 +25,14 @@ fn dialect_facts<'db>(
 
 impl DatabaseSource<'_> {
     /// Only this snapshot can select payloads; consumers receive owned facts.
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub(crate) fn verus_facts(&self, module_path: &str) -> VerusCrateIr {
+    /// `is_verus` says which invocations are the Verus macro: the caller knows
+    /// what a path resolves to, the snapshot does not.
+    #[tracing::instrument(level = "debug", skip(self, is_verus))]
+    pub(crate) fn verus_facts(
+        &self,
+        module_path: &str,
+        is_verus: &dyn Fn(&ast::MacroCall) -> bool,
+    ) -> VerusCrateIr {
         let mut functions = Vec::new();
         let mut enums = Vec::new();
         for invocation in self
@@ -35,7 +41,7 @@ impl DatabaseSource<'_> {
             .descendants()
             .filter_map(ast::MacroCall::cast)
         {
-            let Some(payload) = self.verus_payload(&invocation) else {
+            let Some(payload) = self.verus_payload(&invocation, is_verus) else {
                 continue;
             };
             let cfg_test = invocation
@@ -44,13 +50,8 @@ impl DatabaseSource<'_> {
                 .filter_map(ast::Module::cast)
                 .any(|module| {
                     module.attrs().any(|attr| {
-                        attr.syntax()
-                            .text()
-                            .to_string()
-                            .chars()
-                            .filter(|ch| !ch.is_whitespace())
-                            .collect::<String>()
-                            == "#[cfg(test)]"
+                        self.cfg_condition(&attr)
+                            .is_some_and(|(predicate, _)| predicate == "test")
                     })
                 });
             let facts = payload
@@ -62,12 +63,13 @@ impl DatabaseSource<'_> {
         VerusCrateIr::new(functions, enums)
     }
 
-    #[tracing::instrument(level = "debug", skip(self, invocation))]
-    fn verus_payload(&self, invocation: &ast::MacroCall) -> Option<&VerusPayloadFacts> {
-        if invocation
-            .path()
-            .is_none_or(|path| path.syntax().text() != "verus")
-        {
+    #[tracing::instrument(level = "debug", skip(self, invocation, is_verus))]
+    fn verus_payload(
+        &self,
+        invocation: &ast::MacroCall,
+        is_verus: &dyn Fn(&ast::MacroCall) -> bool,
+    ) -> Option<&VerusPayloadFacts> {
+        if !is_verus(invocation) {
             return None;
         }
         let tree = invocation.token_tree()?;
@@ -80,4 +82,14 @@ impl DatabaseSource<'_> {
         );
         dialect_facts(self.database(), key).as_ref()
     }
+}
+
+#[cfg(feature = "panics")]
+/// The `verus!` macro of an embedded program, which is text inside a string
+/// literal: no crate scopes its paths, so the only evidence is how it is written.
+#[tracing::instrument(level = "trace", skip(invocation))]
+pub(crate) fn written_as_verus(invocation: &ast::MacroCall) -> bool {
+    invocation
+        .path()
+        .is_some_and(|path| path.syntax().text() == "verus")
 }

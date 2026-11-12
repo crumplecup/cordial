@@ -30,6 +30,8 @@ pub(crate) use native_syntax::DatabaseVerusSyntax;
 pub(crate) use native_syntax::token_text as database_token_text;
 #[cfg(feature = "antipatterns")]
 pub(crate) use native_syntax::token_text_excluding as database_token_text_excluding;
+#[cfg(all(feature = "verus_ir", feature = "panics"))]
+pub(crate) use native_syntax::written_as_verus;
 #[cfg(feature = "crate_attrs")]
 mod library_root;
 #[cfg(feature = "crate_attrs")]

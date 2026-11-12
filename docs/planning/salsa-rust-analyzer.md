@@ -1595,8 +1595,12 @@ Open against the milestone:
 - **Semantic facts in tracing.** `IrView` exposes `semantic_snapshot` and
   `semantic_function`, but tracing assessment and apply, and `src/transform`,
   do not read them yet; handwritten resolution remains there.
-- **Verus.** `verus_syn` is the last `syn`-family parser. Retiring it needs an
-  upstream route or a token-based design for `verus!` bodies.
+- **Verus.** `verus_syn` is the last `syn`-family parser and stays as the one
+  dialect grammar: a hand-written token reader would copy Verus's grammar and
+  drift from it. A `verus!` block is read when its macro resolves to
+  `verus_builtin_macros` (renames count, a local lookalike does not) and a crate
+  that does not depend on it is not read, with a warning. Embedded programs in
+  string literals have no crate to resolve against and keep a lexical check.
 - **Cargo context.** Selected target/features/cfg, build outputs and proc
   macros as retained context identity, with explicit unavailable evidence.
 - **Sections 3 and 4.** The cross-file panic-to-typed-error transformation
