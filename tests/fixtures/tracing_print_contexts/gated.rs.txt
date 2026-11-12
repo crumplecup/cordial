@@ -1,0 +1,3 @@
+pub fn noisy() {
+    println!("only with the extra feature");
+}

@@ -1,0 +1,4 @@
+pub fn ordinary() {}
+
+#[cfg(feature = "extra")]
+mod gated;
