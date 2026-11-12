@@ -316,3 +316,15 @@ fn boundary_error_reporting_requires_warning_severity() -> miette::Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn a_type_named_like_a_result_is_not_a_fallible_main() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = write_bin("type StepResult = ();\nfn main() -> StepResult {}\n")?;
+    let rules = scan(fixture.path(), "fixture", false)?;
+    assert!(
+        rules.is_empty(),
+        "`StepResult` is `()`, so main cannot fail: {rules:?}"
+    );
+    Ok(())
+}
