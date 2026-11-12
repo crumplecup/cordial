@@ -33,7 +33,7 @@ pub fn write_lib_bin_test(
         .wrap_err("src dir")?;
     fs::write(
         fixture.path().join("Cargo.toml"),
-        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[dependencies]\ntracing = '0.1'\ntracing-subscriber = { version = '0.3', features = ['env-filter'] }\n[workspace]\n",
     )
     .into_diagnostic()?;
     fs::write(fixture.path().join("src/lib.rs"), lib)

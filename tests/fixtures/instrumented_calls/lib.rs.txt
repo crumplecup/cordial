@@ -1,0 +1,10 @@
+pub fn target() {}
+
+#[tracing::instrument]
+pub fn instrumented() {
+    target();
+}
+
+pub fn plain() {
+    target();
+}

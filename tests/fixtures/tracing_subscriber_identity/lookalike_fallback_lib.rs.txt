@@ -1,0 +1,17 @@
+use tracing_subscriber::EnvFilter;
+
+struct Local;
+
+impl Local {
+    fn unwrap_or_else(&self) -> EnvFilter {
+        EnvFilter::new("info")
+    }
+}
+
+pub fn init_tracing() {
+    let filter = match EnvFilter::try_from_default_env() {
+        Ok(filter) => filter,
+        Err(_) => Local.unwrap_or_else(),
+    };
+    let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
+}

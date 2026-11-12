@@ -1,0 +1,13 @@
+pub fn shared() {}
+
+#[cfg(kani)]
+mod proofs {
+    pub fn harness() {
+        super::shared();
+    }
+}
+
+#[tracing::instrument(level = "debug")]
+pub fn ordinary() {
+    shared();
+}
