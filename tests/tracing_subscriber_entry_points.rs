@@ -39,7 +39,7 @@ fn test_without_helper_call_is_flagged() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = write_lib_bin_test(
         GOOD_HELPER,
-        "fn main() { init_tracing(); }\n",
+        "fn main() { fixture::init_tracing(); }\n",
         Some("#[test] fn it_works() { let _ = 1; }\n"),
     )?;
     let rules = scan(fixture.path(), "fixture", false)?;
@@ -139,8 +139,8 @@ fn good_helper_called_from_main_and_test_is_clean() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = write_lib_bin_test(
         GOOD_HELPER,
-        "fn main() { init_tracing(); }\n",
-        Some("#[test] fn it_works() { init_tracing(); }\n"),
+        "fn main() { fixture::init_tracing(); }\n",
+        Some("#[test] fn it_works() { fixture::init_tracing(); }\n"),
     )?;
     let rules = scan(fixture.path(), "fixture", false)?;
     assert!(
@@ -165,8 +165,8 @@ fn init_tracing_with_default(default_filter: &str) {
     let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
 }
 "#,
-        "fn main() { init_tracing(); }\n",
-        Some("#[test] fn it_works() { init_tracing(); }\n"),
+        "fn main() { fixture::init_tracing(); }\n",
+        Some("#[test] fn it_works() { fixture::init_tracing(); }\n"),
     )?;
     let rules = scan(fixture.path(), "fixture", false)?;
     assert!(

@@ -44,3 +44,18 @@ fn an_install_inside_a_call_once_closure_counts() -> miette::Result<()> {
     assert!(!has(&rules, SubscriberRuleId::Idempotent), "{rules:?}");
     Ok(())
 }
+
+const SAME_NAME_MAIN: &str =
+    include_str!("fixtures/tracing_subscriber_identity/same_name_main.rs.txt");
+
+#[test]
+fn a_helper_is_the_function_called_not_one_that_shares_its_name() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = write_lib_bin_test("pub fn unused() {}\n", SAME_NAME_MAIN, None)?;
+    let rules = scan(fixture.path(), "fixture", false)?;
+    assert!(
+        has(&rules, SubscriberRuleId::Main),
+        "main calls `quiet::setup`, which installs nothing, not `loud::setup`: {rules:?}"
+    );
+    Ok(())
+}

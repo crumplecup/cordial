@@ -1,0 +1,13 @@
+mod quiet {
+    pub fn setup() {}
+}
+
+mod loud {
+    pub fn setup() {
+        let _ = tracing_subscriber::fmt().try_init();
+    }
+}
+
+fn main() {
+    quiet::setup();
+}

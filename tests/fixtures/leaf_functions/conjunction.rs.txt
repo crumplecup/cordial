@@ -1,0 +1,7 @@
+#![cfg(feature = "extra")]
+
+#[cfg(not(feature = "quick"))]
+#[test]
+fn both_gates() {
+    leafy::helper();
+}
