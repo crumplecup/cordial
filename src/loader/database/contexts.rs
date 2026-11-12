@@ -9,6 +9,8 @@
 //! never recomputed, and only one variant is resident at a time.
 
 mod flips;
+#[cfg(feature = "tracing")]
+mod leaves;
 mod merge;
 mod pass;
 mod plan;
