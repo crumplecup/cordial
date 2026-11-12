@@ -6,7 +6,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-use cordial::{CrateTarget, IrView, SourceDatabase, TracingStdioPolicy};
+use cordial::{CrateTarget, IrView, SourceDatabase};
 use miette::{IntoDiagnostic, Result};
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
 
@@ -50,26 +50,15 @@ fn supplied_sources_need_neither_a_manifest_nor_a_file() -> Result<()> {
     let file = tree.join("missing.rs");
     let sites = cordial::scan_error_sites_rust_source(SOURCE, &file, &tree, fixture.path())
         .into_diagnostic()?;
-    let prints = cordial::scan_tracing_print_rust_source(
-        SOURCE,
-        &file,
-        &tree,
-        fixture.path(),
-        &TracingStdioPolicy::default(),
-    )
-    .into_diagnostic()?;
     assert_eq!(sites.len(), 1);
     assert_eq!(sites[0].context(), "missing::dormant::run");
     assert_eq!(sites[0].file(), std::path::Path::new("src/missing.rs"));
     assert_eq!(sites[0].line(), 2);
     assert_eq!(sites[0].source_snippet(), "source(…)");
-    assert_eq!(prints.len(), 1);
-    assert_eq!(prints[0].context(), "missing::dormant");
-    assert_eq!(prints[0].line(), 2);
     assert!(!file.exists());
     assert_eq!(
         access.native.load(Ordering::Relaxed),
-        2,
+        1,
         "one parse per standalone analysis"
     );
     assert_eq!(access.compatibility.load(Ordering::Relaxed), 0);

@@ -4,25 +4,20 @@ use std::path::Path;
 
 use cordial::{
     Disposition, IrView, PrintRuleId, RunAll, Session, SessionBuilder, TRACING_ETIQUETTE,
-    TracingStdioPolicy, scan_tracing_print_rust_source, tracing_print_findings,
+    TracingStdioPolicy, tracing_print_findings,
 };
 
 #[path = "support/projected_crate.rs"]
 mod projected_crate;
 
 fn scan_source_with(source: &str, policy: &TracingStdioPolicy) -> miette::Result<Vec<PrintRuleId>> {
-    let fixture = tempfile::tempdir().into_diagnostic().wrap_err("tempdir")?;
-    let file = fixture.path().join("src").join("lib.rs");
-    fs::create_dir_all(file.parent().ok_or_else(|| miette::miette!("src"))?)
+    let fixture = write_tree(&[("src/lib.rs", source)])?;
+    let inventory = projected_crate::projected_crate(fixture.path())?
+        .source_observability()
+        .into_diagnostic()?;
+    let records = tracing_print_findings(&inventory, policy)
         .into_diagnostic()
-        .wrap_err("src dir")?;
-    fs::write(&file, source)
-        .into_diagnostic()
-        .wrap_err("write")?;
-    let records =
-        scan_tracing_print_rust_source(source, &file, fixture.path(), fixture.path(), policy)
-            .into_diagnostic()
-            .wrap_err("scan")?;
+        .wrap_err("scan")?;
     Ok(records.into_iter().map(|record| record.rule_id()).collect())
 }
 
@@ -210,7 +205,11 @@ fn skip_folders_skips_that_tree() -> miette::Result<()> {
 fn main_bin_cli_and_tests_fire() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = write_tree(&[
-        ("src/lib.rs", "pub fn leftover() { println!(\"lib\"); }\n"),
+        (
+            "src/lib.rs",
+            "pub mod cli;\npub fn leftover() { println!(\"lib\"); }\n",
+        ),
+        ("src/cli.rs", "pub mod run;\n"),
         (
             "src/cli/run.rs",
             "pub fn report() { eprintln!(\"cli\"); }\n",
@@ -323,23 +322,5 @@ fn dogfood_cordial_library_src_has_no_leftover_prints() -> miette::Result<()> {
         found.is_empty(),
         "cordial src/ and tests/ should use tracing, not leftover stdio: {found:?}"
     );
-    Ok(())
-}
-
-#[test]
-#[tracing::instrument(level = "debug", err(level = "warn"))]
-fn explicit_fixture_scan_preserves_discovery_and_source_order_contract() -> miette::Result<()> {
-    cordial::init_tracing();
-    let root = Path::new("/fixture");
-    let records = scan_tracing_print_rust_source(
-        "fn sample() { println!(\"first\"); dbg!(\"second\"); }",
-        &root.join("tests/fixtures/sample.rs"),
-        &root.join("tests"),
-        root,
-        &TracingStdioPolicy::default(),
-    )
-    .into_diagnostic()?;
-    let rules: Vec<_> = records.iter().map(|record| record.rule_id()).collect();
-    assert_eq!(rules, vec![PrintRuleId::Println, PrintRuleId::Dbg]);
     Ok(())
 }

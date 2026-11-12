@@ -1,0 +1,17 @@
+macro_rules! println {
+    ($($arg:tt)*) => {};
+}
+
+pub fn lookalike() {
+    println!("a local macro, not stdout");
+}
+
+use std::println as out;
+
+pub fn aliased() {
+    out!("stdout through an alias");
+}
+
+pub fn qualified() {
+    std::println!("stdout, qualified");
+}
