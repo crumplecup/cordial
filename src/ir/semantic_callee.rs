@@ -23,6 +23,18 @@ pub struct SemanticCallee {
 }
 
 impl SemanticCallee {
+    /// Whether this is one of the standard library's `names`, a method of one of
+    /// the types `owners`.
+    #[tracing::instrument(level = "trace", skip(self, owners, names))]
+    pub fn is_std_method(&self, owners: &[&str], names: &[&str]) -> bool {
+        self.is(&["core", "std"], names)
+            && self
+                .path
+                .rsplit("::")
+                .nth(1)
+                .is_some_and(|owner| owners.contains(&owner))
+    }
+
     /// Whether this is one of `names`, defined in one of the crates `krates`.
     #[tracing::instrument(level = "trace", skip(self, krates, names))]
     pub fn is(&self, krates: &[&str], names: &[&str]) -> bool {
