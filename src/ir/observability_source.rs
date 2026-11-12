@@ -50,6 +50,8 @@ pub(crate) struct ObservabilityFunction {
     line: u32,
     #[getter(copy)]
     test: bool,
+    /// Where the function item sits in its file, to join it to semantic facts.
+    range: crate::ir::SourceByteRange,
     body: ObservabilityBody,
 }
 
@@ -179,4 +181,26 @@ fn has_err_instrument(syntax: &crate::ir::SourceInstrumentSyntax) -> bool {
         && present
             .err_level()
             .is_some_and(|level| level >= InstrumentLevel::Warn)
+}
+
+impl SourceObservability {
+    /// Fill each function's call-derived facts from the callees of its semantic
+    /// facts. `callees` is given the file and the function's range and returns what
+    /// the function calls in every context that resolved it; a function with no
+    /// facts keeps nothing, and nothing is claimed for it.
+    #[tracing::instrument(level = "debug", skip(self, callees))]
+    pub(crate) fn apply_callees(
+        &mut self,
+        mut callees: impl FnMut(&Path, std::ops::Range<usize>) -> Vec<crate::ir::SemanticCallee>,
+    ) {
+        for file in &mut self.files {
+            let path = file.snapshot.path().clone();
+            for function in &mut file.functions {
+                let range = function.range.start()..function.range.end();
+                for callee in callees(&path, range) {
+                    function.body.note_callee(&callee);
+                }
+            }
+        }
+    }
 }

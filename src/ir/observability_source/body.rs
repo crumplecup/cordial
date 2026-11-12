@@ -3,13 +3,24 @@ use super::ObservabilityBody;
 
 impl ObservabilityBody {
     #[tracing::instrument(level = "debug", skip(self))]
-    pub(super) fn note_call(&mut self, name: &str, method: bool) {
+    pub(super) fn note_call(&mut self, name: &str) {
         self.called_names.push(name.to_string());
-        self.calls_install |= matches!(name, "init" | "try_init" | "set_global_default");
-        self.calls_try_init |= matches!(name, "try_init" | "set_global_default");
-        self.has_try_from_default_env |= name == "try_from_default_env";
-        self.has_fallback |=
-            method && matches!(name, "unwrap_or" | "unwrap_or_else" | "unwrap_or_default");
+    }
+
+    /// Record what a call of this function resolved to. A subscriber is installed
+    /// by `tracing`'s own functions, not by anything that happens to be called
+    /// `init`; a fallback is the standard library's `unwrap_or` family.
+    #[tracing::instrument(level = "debug", skip(self))]
+    pub(crate) fn note_callee(&mut self, callee: &crate::ir::SemanticCallee) {
+        const SUBSCRIBER: &[&str] = &["tracing_subscriber", "tracing", "tracing_core"];
+        self.calls_install |= callee.is(SUBSCRIBER, &["init", "try_init", "set_global_default"]);
+        self.calls_try_init |= callee.is(SUBSCRIBER, &["try_init", "set_global_default"]);
+        self.has_try_from_default_env |=
+            callee.is(&["tracing_subscriber"], &["try_from_default_env"]);
+        self.has_fallback |= callee.is(
+            &["core", "std"],
+            &["unwrap_or", "unwrap_or_else", "unwrap_or_default"],
+        );
     }
 
     #[tracing::instrument(level = "debug", skip(self))]

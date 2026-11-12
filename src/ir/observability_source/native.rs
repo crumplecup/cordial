@@ -44,6 +44,7 @@ impl SourceObservability {
                     name: name.text().to_string(),
                     modules: modules(function.syntax()),
                     line: file.line(function.syntax().text_range().start()),
+                    range: std::ops::Range::<usize>::from(function.syntax().text_range()).into(),
                     test: function.attrs().any(|attr| {
                         attr.meta()
                             .and_then(|meta| meta.path())
@@ -174,13 +175,13 @@ fn body_facts(
             && let Some(path) = expr.path()
             && let Some(name) = last_name(&path)
         {
-            facts.note_call(&name, false);
+            facts.note_call(&name);
             facts.called_paths.push(joined_path(&path));
         }
         if let Some(call) = ast::MethodCallExpr::cast(node.clone())
             && let Some(name) = call.name_ref()
         {
-            facts.note_call(name.text(), true);
+            facts.note_call(name.text());
         }
         if let Some(path) = ast::Path::cast(node.clone())
             && !node

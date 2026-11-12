@@ -38,3 +38,55 @@ impl SourceDatabase {
         })
     }
 }
+
+impl SourceDatabase {
+    /// Give each function's observability facts the callees of its semantic facts,
+    /// from the ordinary build and from every cfg context that resolved it, so code
+    /// only a verifier's or a feature's build activates is read too.
+    #[tracing::instrument(level = "debug", skip_all, err(level = "warn"))]
+    #[hotpath::measure(impl_type = "SourceDatabase")]
+    pub(super) fn project_observability_calls(
+        &self,
+        outline: &super::declarations::Outline,
+        graph: &mut crate::CrateIr,
+    ) -> CordialResult<()> {
+        use crate::IrView;
+        let mut inventory = graph.source_observability()?;
+        let mut failure = None;
+        inventory.apply_callees(|path, range| {
+            let Some(node) = outline.functions().get(
+                path,
+                ra_ap_syntax::TextRange::new(
+                    (range.start as u32).into(),
+                    (range.end as u32).into(),
+                ),
+            ) else {
+                return Vec::new();
+            };
+            let mut facts = Vec::new();
+            match graph.semantic_function(node) {
+                Ok(ordinary) => facts.extend(ordinary),
+                Err(error) => failure = Some(error),
+            }
+            match graph.semantic_context_functions(node) {
+                Ok(contexts) => {
+                    facts.extend(contexts.into_iter().map(|entry| entry.function().clone()))
+                }
+                Err(error) => failure = Some(error),
+            }
+            facts
+                .iter()
+                .flat_map(|function| function.calls())
+                .filter_map(|call| call.callee().clone())
+                .collect()
+        });
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        graph.set_attr(
+            graph.root(),
+            crate::ir::ATTR_SOURCE_OBSERVABILITY,
+            serde_json::to_value(inventory)?,
+        )
+    }
+}

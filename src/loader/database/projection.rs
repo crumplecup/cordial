@@ -89,7 +89,10 @@ impl SourceDatabase {
         // needs the exclusive borrow the ordinary pass does not have.
         self.project_contexts(paths, outline.functions(), &mut graph)?;
         #[cfg(feature = "tracing")]
-        self.project_tracing_inventories(&outline, &mut graph)?;
+        {
+            self.project_tracing_inventories(&outline, &mut graph)?;
+            self.project_observability_calls(&outline, &mut graph)?;
+        }
         Ok(graph)
     }
 
