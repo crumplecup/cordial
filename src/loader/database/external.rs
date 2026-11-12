@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use ra_ap_hir::{AsAssocItem, AssocItem, AssocItemContainer, Function, HasSource, ModuleDef};
 use ra_ap_ide_db::RootDatabase;
-use ra_ap_syntax::AstNode;
+use ra_ap_syntax::{AstNode, ast};
 
 use super::types;
 use crate::{
@@ -39,12 +39,23 @@ impl Locator<'_> {
 
     #[tracing::instrument(level = "trace", skip(self, function))]
     fn location_of(&self, function: Function) -> Option<FunctionLocation> {
-        let source = ra_ap_hir::attach_db(self.db, || function.source(self.db))?;
-        if source.file_id.is_macro() {
-            return None;
-        }
-        let file = source
-            .file_id
+        let (file_id, start) = ra_ap_hir::attach_db(self.db, || {
+            let source = function.source(self.db)?;
+            let mut file_id = source.file_id;
+            let mut start = source.value.syntax().text_range().start();
+            // A function an attribute macro generated is the annotated item as far
+            // as callers are concerned: its location is where that item starts.
+            while file_id.is_macro() {
+                let call = file_id.call_node(self.db)?;
+                if !ast::Fn::can_cast(call.value.kind()) {
+                    return None;
+                }
+                start = call.value.text_range().start();
+                file_id = call.file_id;
+            }
+            Some((file_id, start))
+        })?;
+        let file = file_id
             .original_file_respecting_includes(self.db)
             .file_id(self.db);
         let path = self.vfs.file_path(file).as_path()?;
@@ -52,12 +63,7 @@ impl Locator<'_> {
         self.roots
             .iter()
             .any(|root| path.starts_with(root))
-            .then(|| {
-                FunctionLocation::new(
-                    path.to_path_buf(),
-                    u32::from(source.value.syntax().text_range().start()),
-                )
-            })
+            .then(|| FunctionLocation::new(path.to_path_buf(), u32::from(start)))
     }
 
     /// Record on `node` the trait method the function `id` implements, if it
