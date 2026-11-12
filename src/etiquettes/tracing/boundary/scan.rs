@@ -15,12 +15,12 @@ use tracing::instrument;
 
 #[derive(Debug, Clone)]
 struct FnSite {
-    name: String,
     is_main: bool,
     file: PathBuf,
     line: u32,
     facts: BoundaryBodyFacts,
     context: String,
+    location: crate::FunctionLocation,
 }
 
 /// Apply the binary error-boundary policy to the loader-projected functions.
@@ -41,12 +41,12 @@ pub fn findings_from_inventory(
         }
         for function in file.functions() {
             sites.push(FnSite {
-                name: function.name().clone(),
                 is_main: function.name() == "main" && file.kind() == FileKind::Bin,
                 file: file.relative().clone(),
                 line: function.line(),
                 facts: function.body().clone(),
                 context: function.context(crate_name),
+                location: function.location(file.snapshot()),
             });
         }
     }
@@ -62,12 +62,12 @@ fn findings_for_sites(
 ) -> CordialResult<Vec<BoundarySiteRecord>> {
     let has_bin = inventory.has_bin();
 
-    let safe_names: Vec<&str> = sites
+    let safe_names: Vec<crate::FunctionLocation> = sites
         .iter()
         .filter(|site| {
             site.facts.is_fallible() && site.facts.reports_errors(policy.known_helper_paths())
         })
-        .map(|site| site.name.as_str())
+        .map(|site| site.location.clone())
         .collect();
 
     let mut findings = Vec::new();

@@ -173,15 +173,8 @@ fn body_facts(
         if let Some(call) = ast::CallExpr::cast(node.clone())
             && let Some(ast::Expr::PathExpr(expr)) = call.expr()
             && let Some(path) = expr.path()
-            && let Some(name) = last_name(&path)
         {
-            facts.note_call(&name);
             facts.called_paths.push(joined_path(&path));
-        }
-        if let Some(call) = ast::MethodCallExpr::cast(node.clone())
-            && let Some(name) = call.name_ref()
-        {
-            facts.note_call(name.text());
         }
         if let Some(path) = ast::Path::cast(node.clone())
             && !node

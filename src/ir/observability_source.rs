@@ -79,7 +79,8 @@ pub(crate) struct ObservabilityBody {
     is_fallible: bool,
     has_err_instrument: bool,
     has_error_emission: bool,
-    called_names: Vec<String>,
+    /// Where the functions this one calls are defined, as the database resolved them.
+    called: Vec<crate::FunctionLocation>,
     called_paths: Vec<String>,
 }
 
@@ -140,6 +141,11 @@ impl ObservabilityFileKind {
 }
 
 impl ObservabilityFunction {
+    #[tracing::instrument(level = "trace", skip(self, file))]
+    pub(crate) fn location(&self, file: &FileSnapshot) -> crate::FunctionLocation {
+        crate::FunctionLocation::new(file.path().clone(), self.range.start() as u32)
+    }
+
     #[tracing::instrument(level = "trace", skip(self))]
     pub(crate) fn context(&self, crate_name: &str) -> String {
         std::iter::once(crate_name)
@@ -183,23 +189,33 @@ fn has_err_instrument(syntax: &crate::ir::SourceInstrumentSyntax) -> bool {
             .is_some_and(|level| level >= InstrumentLevel::Warn)
 }
 
+/// What the database resolved for one function: the callees of its calls, and where
+/// the workspace functions among them are defined.
+#[derive(Debug, Default, derive_getters::Getters, derive_new::new)]
+pub(crate) struct ResolvedCalls {
+    callees: Vec<crate::ir::SemanticCallee>,
+    called: Vec<crate::FunctionLocation>,
+}
+
 impl SourceObservability {
-    /// Fill each function's call-derived facts from the callees of its semantic
-    /// facts. `callees` is given the file and the function's range and returns what
-    /// the function calls in every context that resolved it; a function with no
-    /// facts keeps nothing, and nothing is claimed for it.
-    #[tracing::instrument(level = "debug", skip(self, callees))]
-    pub(crate) fn apply_callees(
+    /// Fill each function's call-derived facts from what the database resolved
+    /// for it. `resolve` is given the file and the function's range and returns
+    /// what the function calls in every context that resolved it; a function with
+    /// no facts keeps nothing, and nothing is claimed for it.
+    #[tracing::instrument(level = "debug", skip(self, resolve))]
+    pub(crate) fn apply_calls(
         &mut self,
-        mut callees: impl FnMut(&Path, std::ops::Range<usize>) -> Vec<crate::ir::SemanticCallee>,
+        mut resolve: impl FnMut(&Path, std::ops::Range<usize>) -> ResolvedCalls,
     ) {
         for file in &mut self.files {
             let path = file.snapshot.path().clone();
             for function in &mut file.functions {
                 let range = function.range.start()..function.range.end();
-                for callee in callees(&path, range) {
-                    function.body.note_callee(&callee);
+                let resolved = resolve(&path, range);
+                for callee in resolved.callees() {
+                    function.body.note_callee(callee);
                 }
+                function.body.called = resolved.called().clone();
             }
         }
     }

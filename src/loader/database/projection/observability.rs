@@ -53,7 +53,8 @@ impl SourceDatabase {
         use crate::IrView;
         let mut inventory = graph.source_observability()?;
         let mut failure = None;
-        inventory.apply_callees(|path, range| {
+        let leaves = graph.leaf_functions()?;
+        inventory.apply_calls(|path, range| {
             let Some(node) = outline.functions().get(
                 path,
                 ra_ap_syntax::TextRange::new(
@@ -61,24 +62,47 @@ impl SourceDatabase {
                     (range.end as u32).into(),
                 ),
             ) else {
-                return Vec::new();
+                // A leaf crate's function, which the graph holds no node for.
+                let at = crate::FunctionLocation::new(path.to_path_buf(), range.start as u32);
+                return leaves
+                    .iter()
+                    .find(|leaf| leaf.location() == &at)
+                    .map_or_else(crate::ir::ResolvedCalls::default, |leaf| {
+                        crate::ir::ResolvedCalls::new(leaf.callees().clone(), leaf.called().clone())
+                    });
             };
             let mut facts = Vec::new();
             match graph.semantic_function(node) {
                 Ok(ordinary) => facts.extend(ordinary),
                 Err(error) => failure = Some(error),
             }
+            let mut keys = Vec::new();
             match graph.semantic_context_functions(node) {
                 Ok(contexts) => {
-                    facts.extend(contexts.into_iter().map(|entry| entry.function().clone()))
+                    for entry in contexts {
+                        keys.push(entry.context().clone());
+                        facts.push(entry.function().clone());
+                    }
                 }
                 Err(error) => failure = Some(error),
             }
-            facts
+            let callees = facts
                 .iter()
                 .flat_map(|function| function.calls())
                 .filter_map(|call| call.callee().clone())
-                .collect()
+                .collect();
+            let mut targets = graph.children(node, crate::EdgeKind::Calls);
+            for key in keys {
+                targets.extend(graph.context_children(node, &key));
+            }
+            let mut called = Vec::new();
+            for target in targets {
+                match graph.function_location(target) {
+                    Ok(location) => called.extend(location),
+                    Err(error) => failure = Some(error),
+                }
+            }
+            crate::ir::ResolvedCalls::new(callees, called)
         });
         if let Some(error) = failure {
             return Err(error);

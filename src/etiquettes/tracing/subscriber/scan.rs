@@ -13,7 +13,6 @@ use tracing::instrument;
 
 #[derive(Debug, Clone)]
 struct FnSite {
-    name: String,
     kind: FileKind,
     is_main: bool,
     is_test: bool,
@@ -21,6 +20,7 @@ struct FnSite {
     line: u32,
     facts: InitBodyFacts,
     context: String,
+    location: crate::FunctionLocation,
 }
 
 /// Apply the subscriber-init policy to the loader-projected functions.
@@ -38,7 +38,6 @@ pub fn findings_from_inventory(
         }
         for function in file.functions() {
             sites.push(FnSite {
-                name: function.name().clone(),
                 kind: file.kind(),
                 is_test: file.kind() == FileKind::Test && function.test(),
                 is_main: function.name() == "main" && file.kind() == FileKind::Bin,
@@ -46,6 +45,7 @@ pub fn findings_from_inventory(
                 line: function.line(),
                 facts: function.body().clone(),
                 context: function.context(crate_name),
+                location: function.location(file.snapshot()),
             });
         }
     }
@@ -62,8 +62,7 @@ fn findings_for_sites(
     let has_lib = inventory.has_lib();
     let has_bin = inventory.has_bin();
 
-    let helper_names = trusted_helper_names(sites);
-    let helper_refs: Vec<&str> = helper_names.iter().map(String::as_str).collect();
+    let helper_refs = trusted_helpers(sites);
 
     let mut findings = Vec::new();
     for site in sites {
@@ -133,29 +132,30 @@ fn findings_for_sites(
     Ok(findings)
 }
 
+/// The functions that install a subscriber, and those that call one of them,
+/// found by the definitions their calls resolved to.
 #[instrument(level = "debug", skip(sites))]
-fn trusted_helper_names(sites: &[FnSite]) -> Vec<String> {
-    let mut helper_names: Vec<String> = sites
+fn trusted_helpers(sites: &[FnSite]) -> Vec<crate::FunctionLocation> {
+    let mut helpers: Vec<crate::FunctionLocation> = sites
         .iter()
         .filter(|site| site.facts.calls_install())
-        .map(|site| site.name.clone())
+        .map(|site| site.location.clone())
         .collect();
 
     loop {
-        let helper_refs: Vec<&str> = helper_names.iter().map(String::as_str).collect();
-        let discovered: Vec<String> = sites
+        let discovered: Vec<crate::FunctionLocation> = sites
             .iter()
-            .filter(|site| !helper_names.contains(&site.name))
-            .filter(|site| site.facts.calls_helper(&helper_refs))
-            .map(|site| site.name.clone())
+            .filter(|site| !helpers.contains(&site.location))
+            .filter(|site| site.facts.calls_helper(&helpers))
+            .map(|site| site.location.clone())
             .collect();
         if discovered.is_empty() {
             break;
         }
-        helper_names.extend(discovered);
+        helpers.extend(discovered);
     }
 
-    helper_names
+    helpers
 }
 
 #[instrument(level = "debug", skip(rule_id, site), err(level = "warn"))]

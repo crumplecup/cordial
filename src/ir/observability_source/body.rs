@@ -2,11 +2,6 @@
 use super::ObservabilityBody;
 
 impl ObservabilityBody {
-    #[tracing::instrument(level = "debug", skip(self))]
-    pub(super) fn note_call(&mut self, name: &str) {
-        self.called_names.push(name.to_string());
-    }
-
     /// Record what a call of this function resolved to. A subscriber is installed
     /// by `tracing`'s own functions, not by anything that happens to be called
     /// `init`; a fallback is the standard library's `unwrap_or` family.
@@ -59,10 +54,9 @@ impl ObservabilityBody {
         self.has_err_instrument || self.has_error_emission || self.calls_known_helper(known)
     }
 
+    /// Whether this function calls any of the functions defined at `helpers`.
     #[tracing::instrument(level = "trace", skip(self, helpers))]
-    pub(crate) fn calls_helper(&self, helpers: &[&str]) -> bool {
-        self.called_names
-            .iter()
-            .any(|name| helpers.contains(&name.as_str()))
+    pub(crate) fn calls_helper(&self, helpers: &[crate::FunctionLocation]) -> bool {
+        self.called.iter().any(|called| helpers.contains(called))
     }
 }
