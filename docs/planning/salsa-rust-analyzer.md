@@ -1803,9 +1803,12 @@ Bites, in order:
   an import under another name is it; an unresolved name is not. Inside a lone
   `cfg_attr` the wrapped path is resolved. Fixtures that wrote
   `#[tracing::instrument]` without depending on `tracing` now declare it.
-- [ ] **T7 Remove the fallbacks.** The `Result` guess from the spelling of the
+- [x] **T7 Remove the fallbacks.** The `Result` guess from the spelling of the
   return type (`ends_with("Result")`), `recordable.rs`, `RECORDABLE_IDENTS`, and
   the duplicate `is_result` in the observability collector.
+  Done: a function with no semantic facts (or an unavailable result type) is not
+  claimed to return a `Result`, as nothing else is proven without facts; the
+  boundary rule's fallibility comes from the solver's `result_recording`.
 
 Acceptance for each bite: the rule's existing tests pass or change only where the
 old answer was wrong; a new test shows a case the spelling got wrong; the
