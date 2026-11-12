@@ -11,6 +11,18 @@
 [hotpath]
 output_path = "hotpath.json"
 
+# Named test sets for `cordial perf tests timing <name>`: nextest filtersets.
+[perf.tests.perf]
+filter = "binary(perf_record)"
+
+# Every test: the overview run. Serialized it takes hours; --threads trades
+# exactness for time.
+[perf.tests.all]
+filter = "all()"
+
+[perf.tests.verus]
+filter = "binary(verus_ir) | binary(panics_verus) | binary(verus_identity) | binary(proof_patterns_etiquette) | binary(verus_warnings_etiquette)"
+
 [internal_error_chain]
 # Flag every literal call site that feeds one Kind variant or native source.
 kind_fanout_max_call_sites = 0

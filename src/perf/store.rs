@@ -21,6 +21,12 @@ impl PerfStore {
         }
     }
 
+    /// Where the raw event logs of test runs are kept, beside the records.
+    #[instrument(level = "trace", skip(self))]
+    pub fn raw_dir(&self) -> PathBuf {
+        self.dir.with_file_name("raw")
+    }
+
     /// Where the record named `id` is kept.
     #[instrument(level = "trace", skip(self))]
     pub fn path_of(&self, id: &str) -> PathBuf {

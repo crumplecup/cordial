@@ -159,8 +159,13 @@ here should replace the ad hoc numbers used there.
   (`list`). Landed: `src/perf/` (`RunRecord`, `PerfEnvironment` with a
   fingerprint, `PerfIdentity`, `Spread`, `PerfStore`), records at
   `{store}/perf/records/{id}.json`, format version 1, refused when unknown.
-- [ ] **P2. Test timing ranking.** `cordial perf tests timing` over a named set;
-  per-test and per-binary table from nextest output.
+- [x] **P2. Test timing ranking.** `cordial perf tests timing <set>` runs a
+  nextest filterset named under `[perf.tests.<name>]` in `cordial.toml` (or
+  `--filter`), `--repeat N` times on `--threads` (default 1), and saves a run
+  record with each test's median and spread. Nextest's raw events are kept under
+  `{store}/perf/raw/` as they arrive, and `--from FILE...` rebuilds a record from
+  them if a long run is interrupted. The output ranks binaries by total time and
+  lists the slowest tests. The `all` set is every test.
 - [ ] **P3. Workflow harness.** `cordial perf workflow`: cold, warm, incremental,
   apply, with repetition and the quiet-machine check; stage timings from the
   pipeline's existing timing boundaries.

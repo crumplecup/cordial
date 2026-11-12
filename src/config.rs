@@ -18,6 +18,7 @@ mod lint_paths;
 mod lints;
 mod modularity;
 mod pageantry;
+mod perf;
 mod tiers;
 mod tracing;
 mod visibility;
@@ -45,6 +46,7 @@ pub use self::internal_error_chain::{ErrorFieldStrategy, InternalErrorChainThres
 pub use self::lints::{LintLocation, LintPathBase, LintPathPolicy, LintPolicy};
 pub use self::modularity::ModularityThresholds;
 pub use self::pageantry::PageantryThresholds;
+pub use self::perf::PerfConfig;
 pub use self::tiers::TierConfig;
 pub use self::tracing::{
     TracingBoundaryPolicy, TracingStdioPolicy, TracingSubscriberPolicy, TracingThresholds,
@@ -62,6 +64,8 @@ pub struct CordialConfig {
     lints: std::collections::BTreeMap<String, LintPolicy>,
     #[serde(default)]
     hotpath: HotpathConfig,
+    #[serde(default)]
+    perf: PerfConfig,
     #[serde(default)]
     tiers: TierConfig,
     #[serde(default)]
