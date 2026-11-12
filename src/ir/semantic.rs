@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::semantic_callee::SemanticCallee;
 use super::semantic_macros::SemanticMacroCall;
 use super::semantic_recording::{
     SemanticFormattingRole, SemanticParameter, SemanticResultRecording, SemanticReturnRecording,
@@ -93,13 +94,27 @@ pub enum SemanticCallTarget {
 
 /// One direct call expression, including its instantiated output contract.
 #[derive(
-    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters, derive_new::new,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    derive_getters::Getters,
+    derive_new::new,
+    derive_setters::Setters,
 )]
 #[new(visibility = "pub(crate)")]
+#[setters(generate = false, prefix = "with_")]
 pub struct SemanticCall {
     range: super::SourceByteRange,
     target: SemanticCallTarget,
     output: SemanticReturnContract,
+    /// What the call resolved to, when it resolved to a function.
+    #[new(default)]
+    #[serde(default)]
+    #[setters(generate)]
+    callee: Option<SemanticCallee>,
 }
 
 /// Function facts for one immutable IR snapshot, not an authorization to write.

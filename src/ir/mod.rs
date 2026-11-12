@@ -74,6 +74,7 @@ mod query;
 #[cfg(feature = "rustdoc")]
 mod rustdoc_query;
 mod semantic;
+mod semantic_callee;
 mod semantic_context;
 mod semantic_macros;
 mod semantic_recording;
@@ -198,6 +199,7 @@ pub use semantic::{
     ATTR_SEMANTIC_FUNCTION, ATTR_SEMANTIC_SNAPSHOT, SemanticCall, SemanticCallTarget,
     SemanticFunction, SemanticItemId, SemanticReturnContract, SemanticSnapshot, SemanticType,
 };
+pub use semantic_callee::SemanticCallee;
 pub use semantic_context::{
     ATTR_SEMANTIC_ACTIVITY, ATTR_SEMANTIC_CONTEXT_FUNCTIONS, ATTR_SEMANTIC_CONTEXT_PLAN,
     SemanticContextFunction, SemanticContextKey, SemanticContextPlan,
