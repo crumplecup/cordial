@@ -6,7 +6,7 @@ use std::path::Path;
 
 use cordial::{
     CRATE_ATTRS_ETIQUETTE, CrateAttrsRuleId, CrateAttrsThresholds, RunAll, Session, SessionBuilder,
-    scan_crate_attrs,
+    run_crate_attrs_apply, scan_crate_attrs,
 };
 
 #[path = "support/crate_attrs_fixture.rs"]
