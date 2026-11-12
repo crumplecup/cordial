@@ -4,8 +4,12 @@ use cordial::{SubscriberRuleId, TracingSubscriberPolicy};
 use miette::WrapErr;
 use std::path::Path;
 
+#[path = "support/sibling_crate.rs"]
+mod sibling_crate;
 #[path = "support/tracing_subscriber_fixture.rs"]
 mod tracing_subscriber_fixture;
+
+const OTHER_CRATE: &str = "pub fn init_tracing() {}\n";
 
 use tracing_subscriber_fixture::{has, scan, subscriber_records, write_lib_bin_test};
 
@@ -40,6 +44,7 @@ fn cross_crate_helper_without_known_helper_paths_is_flagged() -> miette::Result<
         "fn main() { other_crate::init_tracing(); }\n",
         Some("#[test] fn it_works() { other_crate::init_tracing(); let _ = 1; }\n"),
     )?;
+    sibling_crate::add_other_crate(fixture.path(), OTHER_CRATE)?;
     let rules = scan(fixture.path(), "fixture", false)?;
     assert!(
         has(&rules, SubscriberRuleId::Main) && has(&rules, SubscriberRuleId::Test),
@@ -57,6 +62,7 @@ fn cross_crate_helper_named_in_known_helper_paths_is_trusted() -> miette::Result
         "fn main() { other_crate::init_tracing(); }\n",
         Some("#[test] fn it_works() { other_crate::init_tracing(); let _ = 1; }\n"),
     )?;
+    sibling_crate::add_other_crate(fixture.path(), OTHER_CRATE)?;
     let rules = scan_with_known_helpers(fixture.path(), "fixture", &["other_crate::init_tracing"])?;
     assert!(
         rules.is_empty(),
@@ -76,6 +82,7 @@ fn known_helper_paths_matches_bare_last_segment_too() -> miette::Result<()> {
         "use other_crate::init_tracing;\nfn main() { init_tracing(); }\n",
         None,
     )?;
+    sibling_crate::add_other_crate(fixture.path(), OTHER_CRATE)?;
     let rules = scan_with_known_helpers(fixture.path(), "fixture", &["other_crate::init_tracing"])?;
     assert!(
         !has(&rules, SubscriberRuleId::Main),

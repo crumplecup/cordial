@@ -59,3 +59,15 @@ fn a_helper_is_the_function_called_not_one_that_shares_its_name() -> miette::Res
     );
     Ok(())
 }
+
+const ONCE_LOOKALIKE_LIB: &str =
+    include_str!("fixtures/tracing_subscriber_identity/once_lookalike_lib.rs.txt");
+
+#[test]
+fn a_local_type_named_once_does_not_make_an_install_idempotent() -> miette::Result<()> {
+    cordial::init_tracing();
+    let fixture = write_lib_bin_test(ONCE_LOOKALIKE_LIB, "fn main() {}\n", None)?;
+    let rules = scan(fixture.path(), "fixture", false)?;
+    assert!(has(&rules, SubscriberRuleId::Idempotent), "{rules:?}");
+    Ok(())
+}

@@ -9,6 +9,8 @@ use cordial::{
 
 #[path = "support/projected_crate.rs"]
 mod projected_crate;
+#[path = "support/sibling_crate.rs"]
+mod sibling_crate;
 
 /// Boundary findings from the loader's observability inventory for `root`.
 fn boundary_records(
@@ -192,6 +194,10 @@ fn main() -> Result<(), String> {
 fn known_cross_crate_helper_is_trusted() -> miette::Result<()> {
     cordial::init_tracing();
     let fixture = write_bin("fn main() -> Result<(), String> { other_crate::run() }\n")?;
+    sibling_crate::add_other_crate(
+        fixture.path(),
+        "pub fn run() -> Result<(), String> { Ok(()) }\n",
+    )?;
     let policy = TracingBoundaryPolicy::new(true, vec!["other_crate::run".to_string()]);
     let records = boundary_records(fixture.path(), "fixture", &policy, false).wrap_err("scan")?;
     let rules: Vec<_> = records.into_iter().map(|record| record.rule_id()).collect();

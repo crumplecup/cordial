@@ -1,0 +1,14 @@
+struct Once;
+
+impl Once {
+    fn call_once(&self, run: impl FnOnce()) {
+        run();
+    }
+}
+
+pub fn init_tracing() {
+    let gate = Once;
+    gate.call_once(|| {
+        let _ = tracing_subscriber::fmt().init();
+    });
+}
