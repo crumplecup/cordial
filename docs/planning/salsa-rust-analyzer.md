@@ -1771,11 +1771,22 @@ Bites, in order:
 - [x] **T4 Error-path events.** `has_error_path_event` matches macros named
   `warn`/`error`. Resolve the macro and require that it is `tracing`'s.
 - [ ] **T5 Observability body facts.** The subscriber, print and boundary rules
-  share one collector that matches names: `init`/`try_init`/`set_global_default`,
-  `try_from_default_env`, `Once`/`OnceLock`, `println`/`eprintln`/`dbg`,
-  `warn`/`error`, and `calls_helper`, which compares callee names with function
-  names. Replace each with a resolved identity, and `calls_helper` with the
-  resolved `Calls` edges.
+  share one collector that matched names. In two parts:
+  - [x] **T5a Macros.** `println`/`eprintln`/`print`/`eprint`/`dbg` must resolve
+    to `std`'s, and `warn`/`error` events to `tracing`'s. The macro *path* is
+    resolved from the module around the call (imports, aliases, the prelude, and a
+    module's own `macro_rules!` shadowing the prelude), because resolving the call
+    itself fails in a function an attribute macro replaced. The loose-source print
+    scan is retired: with no project there is no `std` to resolve to. **Coverage
+    change:** a print in a file no crate includes, or in code no cfg set activates
+    (`#[cfg(any())]`), is not reported, since there is no scope to resolve in. Code
+    some context activates is the open question below.
+  - [ ] **T5b Calls and paths.** `init`/`try_init`/`set_global_default`,
+    `try_from_default_env`, `Once`/`OnceLock`, `unwrap_or*`, the called-path text
+    for helper detection, and `calls_helper`, which compares callee names with
+    function names: resolved identities, and the resolved `Calls` edges.
+  - [ ] **T5c Inactive code.** Resolve these identities in each cfg context that
+    activates a file, so a print in a feature-gated module is seen.
 - [ ] **T6 Attribute identity.** `#[instrument]` is recognised by path text.
   Resolve it to `tracing`'s attribute macro.
 - [ ] **T7 Remove the fallbacks.** The `Result` guess from the spelling of the
