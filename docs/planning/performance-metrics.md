@@ -40,6 +40,13 @@ Two subjects, one procedure:
   profile is run only with the maintainer's agreement.
 - **One record format, stored, diffable.** Every run writes a versioned JSON
   record; comparison reads two records. No result lives only in a terminal.
+- **The default store, not the repository.** Records, baselines and reports live
+  in cordial's default store under `perf/`, like every other cordial artifact;
+  nothing is committed and no output is redirected elsewhere. A baseline is
+  per machine, which the machine fingerprint already assumes.
+- **A `cordial perf` command.** Collection, comparison and baselines are
+  subcommands of the tool, not scripts, so they share the store, the config and
+  the record types with the rest of cordial.
 
 ## What is recorded
 
@@ -63,8 +70,8 @@ binary, its stage breakdown (from the per-test `hotpath` report), the
 
 ### Library workflows
 
-A `just perf-workflow` recipe runs the workflows on this repository with a
-fixed command sequence and a fixed starting state:
+`cordial perf workflow` runs the workflows on a target (this repository by
+default) with a fixed command sequence and a fixed starting state:
 
 - **cold:** empty store and run cache, `submit --tier build`.
 - **warm:** immediately again, unchanged tree (run-cache hit).
@@ -82,22 +89,23 @@ target so results never mix.
 
 Three layers, cheapest first:
 
-1. **Timing (unprofiled).** nextest's machine-readable per-test durations
-   (JUnit or libtest JSON) over a named test set, `-j 1`. Ranks tests and
+1. **Timing (unprofiled).** `cordial perf tests timing`: nextest's
+   machine-readable per-test durations (JUnit or libtest JSON) over a named test
+   set, `-j 1`. Ranks tests and
    binaries, flags tests whose duration is far above their assertion work.
 2. **Per-test breakdown (profiled).** With the profile feature, each test
    process writes its `hotpath` report and counters to a file named from
    `NEXTEST_BINARY_ID` and `NEXTEST_TEST_NAME`. The guard starts where every
    test already starts (`cordial::init_tracing()`), so no per-test edits are
-   needed. An aggregator merges the files into one run record and computes the
-   fixed-cost share.
+   needed. `cordial perf tests profile` merges the files into one run record
+   and computes the fixed-cost share.
 3. **Fixture accounting.** From the per-test records, group by fixture shape
    (single-file crate, workspace, with or without dependencies) to see which
    shared setup, if any, would pay for itself.
 
 ## Comparison
 
-`just perf-compare <baseline> <candidate>` reads two records and prints:
+`cordial perf compare [<baseline>] [<candidate>]` reads two records and prints:
 
 - **Counters:** exact differences, always shown; any increase in a gated
   counter fails the comparison unless the record explains it.
@@ -110,17 +118,20 @@ Three layers, cheapest first:
   `incomparable` (different machine fingerprint, toolchain or feature set; the
   comparison says which field differed and still prints the counters).
 
-Baselines are named records, kept in the store under `perf/`; the latest record
-on `main` is the default baseline. Recording a new baseline is an explicit
-step, not a side effect of a run.
+Baselines are named records in the default store under `perf/`;
+`cordial perf baseline` marks one, and the latest baseline recorded from `main`
+is the default comparison. Recording a baseline is an explicit step, not a side
+effect of a run. `cordial perf list` shows the records and baselines kept, and
+`cordial clean` treats them as regenerable only when asked with `--all`.
 
 ## Pre-merge procedure
 
 Before promoting `dev` to `main`:
 
-1. Run `just perf-workflow` and the named test set, on a quiet machine
-   (the harness checks load and refuses a noisy start).
-2. Run `just perf-compare` against the `main` baseline.
+1. Run `cordial perf workflow` and `cordial perf tests profile` on the named
+   test set, on a quiet machine (the harness checks load and refuses a noisy
+   start).
+2. Run `cordial perf compare` against the `main` baseline.
 3. Resolve each `regressed` verdict (fix it, or record why it is accepted in the
    merge notes) and keep the new records.
 4. After the merge, record the new baseline.
@@ -133,11 +144,12 @@ here should replace the ad hoc numbers used there.
 ## Checklist
 
 - [ ] **P1. Run record and storage.** Versioned JSON schema, environment
-  fingerprint, store location under `perf/`, read and write in a small module
-  with a round-trip test.
-- [ ] **P2. Test timing ranking.** `just perf-tests-timing` over a named set;
+  fingerprint, default-store location under `perf/`, read and write in a small
+  module with a round-trip test, and the `cordial perf` command skeleton
+  (`list`).
+- [ ] **P2. Test timing ranking.** `cordial perf tests timing` over a named set;
   per-test and per-binary table from nextest output.
-- [ ] **P3. Workflow harness.** `just perf-workflow`: cold, warm, incremental,
+- [ ] **P3. Workflow harness.** `cordial perf workflow`: cold, warm, incremental,
   apply, with repetition and the quiet-machine check; stage timings from the
   pipeline's existing timing boundaries.
 - [ ] **P4. Counters.** Salsa query executed/reused, contexts, files,
@@ -145,7 +157,7 @@ here should replace the ad hoc numbers used there.
   record.
 - [ ] **P5. Per-test profile.** Profile feature, per-test `hotpath` file named
   from the nextest environment, aggregator, fixed-cost share.
-- [ ] **P6. Compare.** `just perf-compare` with tolerance, spread and verdicts;
+- [ ] **P6. Compare.** `cordial perf compare` and `cordial perf baseline` with tolerance, spread and verdicts;
   tests for each verdict, including `incomparable`.
 - [ ] **P7. First baseline and findings.** Record the baseline for the current
   `dev`; write up the fixed-cost findings for the tests and the decisions they
@@ -166,7 +178,6 @@ here should replace the ad hoc numbers used there.
 ## Open questions
 
 - Which external workspaces, beyond cordial itself, are pinned for workflows.
-- Where records for the shared baseline live if more than one machine is used:
-  the per-user store only, or a file committed to the repository.
-- Whether the aggregator and comparison are `just` scripts or a `cordial perf`
-  subcommand once the format settles.
+- How a baseline is shared if more than one machine is used. Decided for now:
+  records stay in each machine's default store and are not committed, so a
+  comparison across machines reports `incomparable`.
