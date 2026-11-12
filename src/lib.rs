@@ -191,8 +191,8 @@ pub use etiquettes::tracing::{
     InstrumentGap, PrintRuleId, PrintSiteRecord, SourceObservability, SourceTracingFunction,
     SourceTracingInventory, SubscriberRuleId, SubscriberSiteRecord, TRACING_ETIQUETTE,
     VisibilityLabel, parse_tracing_instrument_checklist, parse_tracing_instrument_checklist_text,
-    run_tracing_instrument_apply, scan_tracing_print_rust_source, tracing_boundary_findings,
-    tracing_print_findings, tracing_subscriber_findings,
+    run_tracing_instrument_apply, tracing_boundary_findings, tracing_print_findings,
+    tracing_subscriber_findings,
 };
 #[cfg(feature = "verus_warnings")]
 pub use etiquettes::verus_warnings::{

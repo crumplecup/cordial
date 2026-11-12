@@ -31,5 +31,4 @@ pub use enricher::PrintInventoryEnricher;
 pub use probe::PrintSiteProbe;
 pub use reporter::{PrintChecklistReporter, PrintCsvReporter, PrintSummaryReporter};
 pub use scan::findings_from_inventory as tracing_print_findings;
-pub use scan::scan_rust_source;
 pub use types::{PrintRuleId, PrintSiteRecord};

@@ -30,7 +30,11 @@ impl SourceDatabase {
                 sema.parse(edition),
                 ra_ap_ide_db::line_index(&self.db, file),
             );
-            Ok(SourceObservability::native_file(&source, tree, root))
+            Ok(ra_ap_hir::attach_db(&self.db, || {
+                SourceObservability::native_file(&source, tree, root, &|call| {
+                    super::super::identity::macro_by_path(&sema, call)
+                })
+            }))
         })
     }
 }

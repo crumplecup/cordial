@@ -1,6 +1,6 @@
 //! Loader-owned, configuration-independent evidence for tracing policies.
 
-use crate::loader::{SourceLoadView, quality_scan_trees};
+use crate::loader::quality_scan_trees;
 use crate::{CordialResult, FileSnapshot};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -82,24 +82,6 @@ pub(crate) struct ObservabilityBody {
 }
 
 impl SourceObservability {
-    #[tracing::instrument(level = "debug", skip(source, file), err(level = "warn"))]
-    pub(crate) fn from_fixture(
-        source: &str,
-        file: &Path,
-        tree: &Path,
-        root: &Path,
-    ) -> CordialResult<Self> {
-        let file = SourceLoadView::collect_native_fixture(file, source, |file| {
-            Ok(Self::native_file(file, tree, root))
-        })?;
-        Ok(Self {
-            crate_root: root.to_path_buf(),
-            has_lib: false,
-            has_bin: false,
-            files: vec![file],
-        })
-    }
-
     #[tracing::instrument(level = "debug", skip(collect), err(level = "warn"))]
     pub(crate) fn collect_with(
         root: &Path,

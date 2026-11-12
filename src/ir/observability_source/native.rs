@@ -4,6 +4,7 @@ use super::{
     ObservabilityPrint, SourceObservability, cargo_protocol, has_err_instrument, print_rule,
 };
 use crate::FileSnapshot;
+use crate::ir::SemanticMacroCall;
 use crate::loader::{DatabaseSource, module_path_from_src_file};
 use ra_ap_syntax::{
     AstNode, WalkEvent,
@@ -12,11 +13,12 @@ use ra_ap_syntax::{
 use std::path::Path;
 
 impl SourceObservability {
-    #[tracing::instrument(level = "debug", skip(file))]
+    #[tracing::instrument(level = "debug", skip(file, identify))]
     pub(crate) fn native_file(
         file: &DatabaseSource<'_>,
         tree: &Path,
         root: &Path,
+        identify: &dyn Fn(&ast::MacroCall) -> Option<SemanticMacroCall>,
     ) -> ObservabilityFile {
         let prefix = module_path_from_src_file(tree, file.path());
         let mut functions = Vec::new();
@@ -27,7 +29,7 @@ impl SourceObservability {
                 && let Some(body) = function.body()
                 && let Some(name) = function.name()
             {
-                let mut facts = body_facts(&body);
+                let mut facts = body_facts(&body, identify);
                 facts.is_fallible = function
                     .ret_type()
                     .and_then(|ty| ty.ty())
@@ -54,7 +56,11 @@ impl SourceObservability {
             }
             if let Some(call) = ast::MacroCall::cast(node)
                 && let Some(path) = call.path()
-                && let Some(rule) = last_name(&path).and_then(|name| print_rule(&name))
+                // The macro must be the standard library's: a local `println!`
+                // is not stdout, and an import alias still is.
+                && let Some(rule) = identify(&call)
+                    .filter(|found| found.is("std", &["println", "eprintln", "print", "eprint", "dbg"]))
+                    .and_then(|found| print_rule(found.name()))
             {
                 let nested = modules(call.syntax());
                 let context = prefix
@@ -148,8 +154,11 @@ fn is_result(ty: &ast::Type) -> bool {
     }
 }
 
-#[tracing::instrument(level = "debug", skip(body))]
-fn body_facts(body: &ast::BlockExpr) -> ObservabilityBody {
+#[tracing::instrument(level = "debug", skip(body, identify))]
+fn body_facts(
+    body: &ast::BlockExpr,
+    identify: &dyn Fn(&ast::MacroCall) -> Option<SemanticMacroCall>,
+) -> ObservabilityBody {
     let mut facts = ObservabilityBody::default();
     let mut walk = body.syntax().preorder();
     while let Some(event) = walk.next() {
@@ -187,10 +196,8 @@ fn body_facts(body: &ast::BlockExpr) -> ObservabilityBody {
             facts.has_rust_log_literal |= value.value().is_ok_and(|value| value == "RUST_LOG");
         }
         if let Some(call) = ast::MacroCall::cast(node) {
-            facts.has_error_emission |= call
-                .path()
-                .and_then(|path| last_name(&path))
-                .is_some_and(|name| matches!(name.as_str(), "warn" | "error"));
+            facts.has_error_emission |=
+                identify(&call).is_some_and(|found| found.is("tracing", &["warn", "error"]));
         }
     }
     facts

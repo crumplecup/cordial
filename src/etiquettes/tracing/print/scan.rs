@@ -2,7 +2,6 @@
 use super::types::{PrintRuleId, PrintSiteRecord};
 use crate::config::TracingStdioPolicy;
 use crate::error::CordialResult;
-use std::path::Path;
 use tracing::instrument;
 
 /// Apply the stdio policy to the loader-projected print sites.
@@ -61,26 +60,6 @@ fn file_findings(
                 .snippet(site.rule().snippet().to_string())
                 .build()?,
         );
-    }
-    Ok(findings)
-}
-
-/// Scan one Rust source fixture through the canonical source database.
-#[instrument(level = "debug", skip(source, policy, file), err(level = "warn"))]
-pub fn scan_rust_source(
-    source: &str,
-    file: &Path,
-    tree_root: &Path,
-    crate_root: &Path,
-    policy: &TracingStdioPolicy,
-) -> CordialResult<Vec<PrintSiteRecord>> {
-    let inventory =
-        crate::ir::SourceObservability::from_fixture(source, file, tree_root, crate_root)?;
-    // Explicit single-file scans do not apply discovery exclusions and retain
-    // source order, matching the fixture API's existing contract.
-    let mut findings = Vec::new();
-    for file in inventory.files() {
-        findings.extend(file_findings(file, policy)?);
     }
     Ok(findings)
 }
