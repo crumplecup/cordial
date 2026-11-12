@@ -1,0 +1,28 @@
+pub mod util {
+    pub fn free() {}
+}
+
+pub struct Builder;
+
+impl Builder {
+    pub fn finish(&self) {}
+}
+
+pub trait Install {
+    fn install(&self);
+}
+
+impl Install for Builder {
+    fn install(&self) {}
+}
+
+pub fn caller(builder: &Builder) {
+    util::free();
+    builder.finish();
+    builder.install();
+}
+
+pub fn closure_caller() {
+    let later = || util::free();
+    later();
+}
