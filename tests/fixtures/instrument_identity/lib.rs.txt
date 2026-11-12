@@ -1,0 +1,13 @@
+use tracing::instrument as spanned;
+
+#[spanned]
+pub fn renamed() {}
+
+#[instrument]
+pub fn unresolved() {}
+
+#[tracing::instrument]
+pub fn written_out() {}
+
+#[inline]
+pub fn other_attribute() {}

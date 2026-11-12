@@ -32,10 +32,10 @@ pub fn write_policy_crate(
     fs::write(src_root.join("lib.rs"), source)
         .into_diagnostic()
         .wrap_err("write source")?;
-    let mut manifest =
-        format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n");
+    let mut manifest = format!(
+        "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[dependencies]\ntracing = \"0.1\"\n"
+    );
     if !deps.is_empty() {
-        manifest.push_str("\n[dependencies]\n");
         for (dep_name, dep_rel_path) in deps {
             manifest.push_str(&format!("{dep_name} = {{ path = \"{dep_rel_path}\" }}\n"));
         }

@@ -11,7 +11,7 @@ use std::path::Path;
 pub fn write_minimal_crate_manifest(root: &Path, crate_name: &str) -> miette::Result<()> {
     fs::write(
         root.join("Cargo.toml"),
-        format!("[package]\nname = \"{crate_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n"),
+        format!("[package]\nname = \"{crate_name}\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[dependencies]\ntracing = \"0.1\"\n"),
     )
     .into_diagnostic()
     .wrap_err("crate manifest")

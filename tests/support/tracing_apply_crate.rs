@@ -26,7 +26,7 @@ pub fn write_apply_fixture(source: &str, checklist: &str) -> miette::Result<Appl
         .wrap_err("write source")?;
     fs::write(
         crate_root.join("Cargo.toml"),
-        "[package]\nname = \"fixture_crate\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        "[package]\nname = \"fixture_crate\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[dependencies]\ntracing = \"0.1\"\n",
     )
     .into_diagnostic()
     .wrap_err("crate manifest")?;

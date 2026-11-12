@@ -68,7 +68,7 @@ fn tracing_etiquette_detects_missing_instrument() -> miette::Result<()> {
         .wrap_err("src dir")?;
     fs::write(
         fixture.path().join("Cargo.toml"),
-        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[dependencies]\ntracing = '0.1'\n[workspace]\n",
     )
     .into_diagnostic()?;
     fs::write(
@@ -151,7 +151,7 @@ fn tracing_etiquette_classifies_roles_and_recipes() -> miette::Result<()> {
         .wrap_err("src dir")?;
     fs::write(
         fixture.path().join("Cargo.toml"),
-        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[dependencies]\ntracing = '0.1'\n[workspace]\n",
     )
     .into_diagnostic()?;
     fs::write(
@@ -271,7 +271,7 @@ fn attribute_nodes_materialized_for_instrument() -> miette::Result<()> {
         .wrap_err("src dir")?;
     fs::write(
         fixture.path().join("Cargo.toml"),
-        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[workspace]\n",
+        "[package]\nname = 'fixture'\nversion = '0.1.0'\nedition = '2024'\n[dependencies]\ntracing = '0.1'\n[workspace]\n",
     )
     .into_diagnostic()?;
     fs::write(

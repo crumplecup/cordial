@@ -13,7 +13,7 @@ fn error_severity_is_not_boolean_presence() -> Result<()> {
     fs::create_dir(fixture.path().join("src")).into_diagnostic()?;
     fs::write(
         fixture.path().join("Cargo.toml"),
-        "[package]\nname = \"severity\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[workspace]\n",
+        "[package]\nname = \"severity\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[dependencies]\ntracing = \"0.1\"\n[workspace]\n",
     )
     .into_diagnostic()?;
     let mut source = String::new();

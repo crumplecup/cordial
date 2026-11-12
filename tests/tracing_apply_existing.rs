@@ -83,12 +83,6 @@ pub fn load_session_config(path: &str) -> Result<(), std::io::Error> { Ok(()) }
         .and_then(Path::parent)
         .ok_or_else(|| miette::miette!("fixture crate root missing"))?
         .join("Cargo.toml");
-    let package = fs::read_to_string(&manifest).into_diagnostic()?;
-    fs::write(
-        &manifest,
-        format!("{package}\n[dependencies]\ntracing = \"0.1\"\n"),
-    )
-    .into_diagnostic()?;
     let compiled = std::process::Command::new("cargo")
         .args(["check", "--offline", "--quiet", "--manifest-path"])
         .arg(&manifest)
