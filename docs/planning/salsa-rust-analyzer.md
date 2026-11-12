@@ -1770,8 +1770,8 @@ Bites, in order:
   are naming policy and stay.
 - [x] **T4 Error-path events.** `has_error_path_event` matches macros named
   `warn`/`error`. Resolve the macro and require that it is `tracing`'s.
-- [ ] **T5 Observability body facts.** The subscriber, print and boundary rules
-  share one collector that matched names. In two parts:
+- [x] **T5 Observability body facts.** The subscriber, print and boundary rules
+  share one collector that matched names. In three parts:
   - [x] **T5a Macros.** `println`/`eprintln`/`print`/`eprint`/`dbg` must resolve
     to `std`'s, and `warn`/`error` events to `tracing`'s. The macro *path* is
     resolved from the module around the call (imports, aliases, the prelude, and a
@@ -1781,14 +1781,28 @@ Bites, in order:
     change:** a print in a file no crate includes, or in code no cfg set activates
     (`#[cfg(any())]`), is not reported, since there is no scope to resolve in. Code
     some context activates is the open question below.
-  - [ ] **T5b Calls and paths.** `init`/`try_init`/`set_global_default`,
-    `try_from_default_env`, `Once`/`OnceLock`, `unwrap_or*`, the called-path text
-    for helper detection, and `calls_helper`, which compares callee names with
-    function names: resolved identities, and the resolved `Calls` edges.
-  - [ ] **T5c Inactive code.** Resolve these identities in each cfg context that
-    activates a file, so a print in a feature-gated module is seen.
-- [ ] **T6 Attribute identity.** `#[instrument]` is recognised by path text.
-  Resolve it to `tracing`'s attribute macro.
+  - [x] **T5b Calls and paths.** Install, `try_init`, `set_global_default`,
+    `try_from_default_env`, `Once`/`OnceLock` and `unwrap_or*` come from the callee
+    each call resolved to (`SemanticCallee`: crate, name, canonical path). A
+    configured helper path matches the resolved definition by crate and name, so a
+    re-export still matches; a bare name matches any definition of it. `calls_helper`
+    compares the *locations* the calls resolved to, not function names. A call that
+    does not resolve (a crate that is not a dependency) is no helper. The
+    `RUST_LOG` string literal stays: it is a value, not an identity.
+    Test binaries are **leaves**: nothing consumes them, so they get no graph node.
+    The leaf pass reads each integration-test file with the `test` cfg on, and under
+    each context the leaf files' own gates ask for, one clause at a time to a fixed
+    point (the library's planning merges clauses, which can set an atom both ways
+    for a file that needs it on). Their functions are stored by location
+    (`LeafFunction`) and matched to library definitions by location.
+  - [x] **T5c Inactive code.** After each analysed cfg context the observability
+    inventory is read again and merged by place; a fact seen in any context holds.
+    A print behind `#[cfg(feature = ...)] mod gated;` is found. **Still open:**
+    a file no crate includes under any context.
+- [x] **T6 Attribute identity.** `#[instrument]` is the macro its path resolves to:
+  an import under another name is it; an unresolved name is not. Inside a lone
+  `cfg_attr` the wrapped path is resolved. Fixtures that wrote
+  `#[tracing::instrument]` without depending on `tracing` now declare it.
 - [ ] **T7 Remove the fallbacks.** The `Result` guess from the spelling of the
   return type (`ends_with("Result")`), `recordable.rs`, `RECORDABLE_IDENTS`, and
   the duplicate `is_result` in the observability collector.
