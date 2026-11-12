@@ -10,5 +10,5 @@
 mod key;
 mod store;
 
-pub(crate) use key::{KeyRequest, gather};
+pub(crate) use key::{KeyRequest, SCHEMA as RUN_CACHE_SCHEMA, gather};
 pub(crate) use store::RunCache;

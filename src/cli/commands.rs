@@ -27,6 +27,12 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Measure cordial's own cost and compare runs.
+    Perf {
+        /// What to do with performance records.
+        #[command(subcommand)]
+        command: super::perf::PerfCommands,
+    },
     /// Show the current worklist item, building a list when needed.
     #[cfg(feature = "quality")]
     #[command(about = crate::worklist::OPEN_HELP)]
@@ -326,6 +332,7 @@ impl Commands {
                 all,
                 dry_run,
             ),
+            Self::Perf { command } => command.act(&ctx),
             #[cfg(feature = "quality")]
             command @ (Self::Open { .. }
             | Self::Peek { .. }

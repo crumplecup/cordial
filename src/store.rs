@@ -62,7 +62,15 @@ impl StoreLayout {
             self.quality_patches_dir(),
             self.patches_dir(),
             self.config_dir(),
+            self.perf_dir(),
         ]
+    }
+
+    /// Performance run records and baselines. Measurements are history, not a
+    /// cache a later run rebuilds, so cleaning leaves them in place.
+    #[instrument(level = "trace", skip(self))]
+    pub fn perf_dir(&self) -> PathBuf {
+        self.root.join("perf")
     }
 
     /// Directory for cached IR and rustdoc artifacts.

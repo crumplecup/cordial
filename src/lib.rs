@@ -34,6 +34,7 @@ mod hooks;
 mod ir;
 mod loader;
 mod objects;
+pub mod perf;
 mod plugin;
 mod plugins;
 mod process_memory;

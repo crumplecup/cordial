@@ -4,9 +4,11 @@ use miette::{IntoDiagnostic, WrapErr};
 use std::fs;
 use std::path::Path;
 
+#[cfg(not(feature = "quick"))]
+use cordial::run_crate_attrs_apply;
 use cordial::{
     CRATE_ATTRS_ETIQUETTE, CrateAttrsRuleId, CrateAttrsThresholds, RunAll, Session, SessionBuilder,
-    run_crate_attrs_apply, scan_crate_attrs,
+    scan_crate_attrs,
 };
 
 #[path = "support/crate_attrs_fixture.rs"]

@@ -13,6 +13,7 @@ mod io;
 mod lint_order;
 mod local;
 mod parse;
+mod perf;
 mod scan;
 mod scan_sources;
 mod semantic;
@@ -46,6 +47,7 @@ use local::{
     UnknownEtiquetteSource, UnreachableSource,
 };
 use parse::{ConfigSource, JsonParseSource, JsonSource};
+use perf::PerfSource;
 mod rust_parse;
 use scan::ScanError;
 use store_lock::StoreLockError;
@@ -72,6 +74,8 @@ pub enum CordialErrorKind {
     SemanticContextInput(semantic::SemanticContextInputSource),
     /// A requested clean was refused or incomplete.
     Clean(CleanSource),
+    /// A performance record could not be written, read or understood.
+    Perf(PerfSource),
     /// Filesystem I/O failed.
     Io(IoSource),
     /// JSON serialization or deserialization failed.
@@ -181,6 +185,7 @@ impl std::error::Error for CordialError {
             CordialErrorKind::SemanticLoad(source) => Some(source),
             CordialErrorKind::SemanticContextInput(source) => Some(source),
             CordialErrorKind::Clean(source) => Some(source),
+            CordialErrorKind::Perf(source) => Some(source),
             CordialErrorKind::Io(source) => Some(source),
             CordialErrorKind::Json(source) => Some(source),
             CordialErrorKind::JsonParse(source) => Some(source),
@@ -231,6 +236,7 @@ impl Display for CordialErrorKind {
             Self::SemanticLoad(source) => source.fmt(formatter),
             Self::SemanticContextInput(source) => source.fmt(formatter),
             Self::Clean(source) => source.fmt(formatter),
+            Self::Perf(source) => source.fmt(formatter),
             Self::Io(source) => source.fmt(formatter),
             Self::Json(source) => source.fmt(formatter),
             Self::JsonParse(source) => source.fmt(formatter),

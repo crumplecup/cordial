@@ -28,8 +28,13 @@ Two subjects, one procedure:
 - **Counts gate, time trends.** Wall time moves with the machine. Deterministic
   counters (Salsa queries executed and reused, cfg contexts analysed, files and
   functions projected, cargo invocations) are exact, so a change in them is a
-  regression signal on any machine. Time is compared only against a baseline
-  from a comparable machine and reported as a trend with a tolerance.
+  regression signal on any machine. Time is reported as a trend with a
+  tolerance.
+- **Any two records can be compared.** The point is often to see what a change
+  did, and a dependency or toolchain update is such a change. A comparison
+  never refuses; it lists the inputs that differ (machine, software,
+  dependency versions) beside the deltas, so a slowdown can be attributed to
+  `ra_ap_hir 0.0.358 -> 0.0.362` or flagged as measured on different hardware.
 - **Fixed cost is its own line.** Every record separates setup from work, so
   an improvement to either is visible and neither hides the other.
 - **Measurement must not distort.** Profiling overhead (the `hotpath` feature)
@@ -55,7 +60,7 @@ A **run record** holds:
 | Part | Content |
 | --- | --- |
 | Identity | git sha and dirty flag, branch, subject (`workflow:<name>` or `tests:<set>`), record schema version |
-| Environment | CPU model and core count, memory, OS, rustc and cargo versions, `ra_ap_*` version, enabled features, run-cache `SCHEMA`; a machine fingerprint derived from these decides comparability |
+| Environment | CPU model and core count, memory, OS (the **machine**); rustc and cargo versions, `ra_ap_*` version, enabled features, run-cache `SCHEMA` (the **software**); the resolved version of every dependency from `Cargo.lock` |
 | State | `cold` (empty store and run cache), `warm` (cache hit), or `incremental` (one named file edited) |
 | Stages | wall time per pipeline stage: cargo metadata and resolution, database load, IR decode, ordinary pass, cfg-context passes, leaf pass, enrichers, assessors, reporting |
 | Functions | `hotpath` report: calls, total, self and p95 per measured function |
@@ -114,15 +119,20 @@ Three layers, cheapest first:
   larger spread. Ordered by absolute time moved, so the largest effect is first.
 - **Tests:** per-test and per-binary change, the tests that moved most, and the
   change in total fixed-cost share.
-- **Verdict per subject:** `regressed`, `improved`, `unchanged`, or
-  `incomparable` (different machine fingerprint, toolchain or feature set; the
-  comparison says which field differed and still prints the counters).
+- **Changed inputs:** the environment differences, grouped as machine, software
+  and dependency, each with its before and after. Dependency and software
+  changes are context for the deltas, not a reason to withhold them. A machine
+  change adds a caution to every time delta (counters stay exact) and
+  `cordial perf compare` still prints them.
+- **Verdict per subject:** `regressed`, `improved` or `unchanged`, each with the
+  changed inputs that accompany it.
 
 Baselines are named records in the default store under `perf/`;
 `cordial perf baseline` marks one, and the latest baseline recorded from `main`
 is the default comparison. Recording a baseline is an explicit step, not a side
-effect of a run. `cordial perf list` shows the records and baselines kept, and
-`cordial clean` treats them as regenerable only when asked with `--all`.
+effect of a run. `cordial perf list` shows the records and baselines kept.
+Measurements are history, not a cache a later run rebuilds, so `cordial clean`
+leaves `perf/` in place (it is a curated path of the store).
 
 ## Pre-merge procedure
 
@@ -143,10 +153,12 @@ here should replace the ad hoc numbers used there.
 
 ## Checklist
 
-- [ ] **P1. Run record and storage.** Versioned JSON schema, environment
+- [x] **P1. Run record and storage.** Versioned JSON schema, environment
   fingerprint, default-store location under `perf/`, read and write in a small
   module with a round-trip test, and the `cordial perf` command skeleton
-  (`list`).
+  (`list`). Landed: `src/perf/` (`RunRecord`, `PerfEnvironment` with a
+  fingerprint, `PerfIdentity`, `Spread`, `PerfStore`), records at
+  `{store}/perf/records/{id}.json`, format version 1, refused when unknown.
 - [ ] **P2. Test timing ranking.** `cordial perf tests timing` over a named set;
   per-test and per-binary table from nextest output.
 - [ ] **P3. Workflow harness.** `cordial perf workflow`: cold, warm, incremental,
@@ -158,7 +170,8 @@ here should replace the ad hoc numbers used there.
 - [ ] **P5. Per-test profile.** Profile feature, per-test `hotpath` file named
   from the nextest environment, aggregator, fixed-cost share.
 - [ ] **P6. Compare.** `cordial perf compare` and `cordial perf baseline` with tolerance, spread and verdicts;
-  tests for each verdict, including `incomparable`.
+  tests for each verdict and for the changed-inputs report, including a
+  dependency update and a different machine.
 - [ ] **P7. First baseline and findings.** Record the baseline for the current
   `dev`; write up the fixed-cost findings for the tests and the decisions they
   imply (lockfile and offline fixtures, shared loaded workspaces, a loader path
@@ -180,4 +193,5 @@ here should replace the ad hoc numbers used there.
 - Which external workspaces, beyond cordial itself, are pinned for workflows.
 - How a baseline is shared if more than one machine is used. Decided for now:
   records stay in each machine's default store and are not committed, so a
-  comparison across machines reports `incomparable`.
+  comparison across machines is allowed and flags its time deltas as measured on
+  different hardware.
