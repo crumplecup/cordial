@@ -5,6 +5,7 @@ use crate::{CordialResult, NodeId};
 use serde::de::DeserializeOwned;
 
 #[tracing::instrument(level = "trace", skip(view, id), err(level = "warn"))]
+#[hotpath::measure]
 pub(super) fn optional<T: DeserializeOwned>(
     view: &(impl IrView + ?Sized),
     id: NodeId,

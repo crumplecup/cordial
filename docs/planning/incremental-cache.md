@@ -59,23 +59,29 @@ for that instead of building a second invalidation scheme.
 
 ## Order
 
-The profile of a cold run (hotpath, 2026-11-12) decides the detail; the order is:
+The cold profile (hotpath, 2026-11-12, 722 s with profiling overhead) says where
+the time is: `collect_direct` 227 s over 17,765 functions (rust-analyzer queries,
+already Salsa-memoized, but only inside one process), the whole-workspace call
+graph 218 s (cordial's own loop, nothing memoized), `load_reporting` 60 s, and
+writing the run cache 18 s. The cfg-context passes are 25 s and are not the
+problem. So the order is:
 
-1. **Cache key hygiene.** Replace the binary fingerprint with a digest of the
-   analysis sources plus the schema version; hash tokens, not bytes, so
-   comments and whitespace do not count (doc comments do); leave out files the
-   analysis does not read. Small, and removes most spurious misses today. It
-   still discards the entry when a real edit occurs.
-2. **Counters that show reuse.** Queries executed and reused per run, so every
-   later step has a number to move (P4 of the performance plan).
-3. **The persistent session.** A process that owns the session database across
-   commands, with changed files fed in as input changes. This is what makes
-   anything else visible to a user: an edit-then-`submit` loop that revalidates
-   instead of reloading.
-4. **Facts as tracked queries,** the costliest collectors first (decided by the
-   profile and the per-stage times), each with position-free output and
-   re-anchoring.
-5. **Whole-crate passes and cfg contexts as queries.**
+1. **The persistent session (C3).** A process that owns the session database
+   across commands. After the first load, an edit is an input change; the
+   rust-analyzer queries it does not touch are answered from memory, which is
+   the largest share of the cold cost. This is the step that makes `open`,
+   `done` and `submit` stop reloading, and it needs no query conversion to pay.
+2. **Reuse counters (C2).** Executed and reused queries per run, so every later
+   step has a number to move.
+3. **Facts as tracked queries (C4),** for what cordial computes itself and
+   re-runs in full: first the call graph, then the collectors the profile ranks.
+   Output is position-free, with positions attached from a fresh parse.
+4. **Whole-crate passes and cfg contexts as queries (C5).**
+5. **Key hygiene (C1), reduced.** Replace the cordial-binary fingerprint with a
+   digest of the analysis sources and the schema version, so edits to code that
+   cannot affect analysis (`perf/`, `cli/`) stop being misses. Hashing tokens
+   instead of bytes waits for position-free facts (step 3): a cached IR carries
+   line numbers, so reusing it across a comment would report the wrong lines.
 
 ## Acceptance
 
@@ -93,9 +99,9 @@ Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
 
 ## Checklist
 
-- [ ] C1. Cache key hygiene.
+- [ ] C3. Persistent session process (first).
 - [ ] C2. Reuse counters in the run record.
-- [ ] C3. Persistent session process.
 - [ ] C4. Facts as tracked queries, in order of measured cost.
 - [ ] C5. Whole-crate passes and cfg contexts as queries.
+- [ ] C1. Cache key hygiene: analysis-source digest in place of the binary fingerprint.
 - [ ] C6. Re-baseline and record the acceptance numbers.
