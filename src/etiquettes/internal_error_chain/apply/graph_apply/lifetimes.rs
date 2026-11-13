@@ -19,7 +19,7 @@ mod types;
 
 type Range = (usize, usize);
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct GraphLifetimeFacts {
     declarations: Vec<Declaration>,
     impls: Vec<ImplSite>,
@@ -28,7 +28,7 @@ pub(crate) struct GraphLifetimeFacts {
     expr_path_blockers: BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 struct Declaration {
     name: String,
     is_enum: bool,
@@ -43,7 +43,7 @@ struct Declaration {
     retained_lifetimes: BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 struct ImplSite {
     name: Option<String>,
     module_depth: usize,
@@ -55,7 +55,7 @@ struct ImplSite {
     methods: Vec<MethodSite>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 struct MethodSite {
     output_self: bool,
     all_inputs_typed: bool,
@@ -68,13 +68,13 @@ struct MethodSite {
     used_lifetimes: BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 struct FunctionSite {
     return_names: BTreeSet<String>,
     safe_returns: BTreeMap<String, BTreeSet<String>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 struct TypePathSite {
     name: String,
     range: Option<Range>,
@@ -86,14 +86,14 @@ struct TypePathSite {
     conditional_scope: Option<ConditionalScope>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 enum TypeArguments {
     None,
     OneLifetime { name: String, range: Option<Range> },
     Other,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 struct ConditionalScope {
     owner: String,
     borrowed_only: bool,

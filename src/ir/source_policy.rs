@@ -24,6 +24,8 @@ pub use derive_facts::{
 #[cfg(feature = "derives")]
 pub use native::fixtures::scan_derives_source;
 #[cfg(feature = "visibility")]
+pub(crate) use visibility::VisibilityBody;
+#[cfg(feature = "visibility")]
 pub use visibility::{VisibilityFacts, VisibilityKind, VisibilityModule};
 
 #[cfg(feature = "allows")]

@@ -8,7 +8,7 @@ mod native;
 /// Decline a rewrite if a name it relies on can mean something else locally.
 /// This does not replace Rust name resolution; it keeps the narrow supported
 /// forms from silently accepting a visible shadow or constructor alias.
-#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Eq, PartialEq, Debug, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct NameAudit {
     ambiguous: bool,
     aliased_types: BTreeSet<String>,

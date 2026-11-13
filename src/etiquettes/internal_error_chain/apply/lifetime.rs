@@ -32,7 +32,7 @@ pub(super) struct LifetimePlanFacts {
 
 /// Syntax evidence collected into the crate index before conversion units are
 /// assembled. Closure and type-use checks are made against the IR unit later.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub(super) struct LifetimeSiteFacts {
     field_name: String,
     strategy: ErrorFieldStrategy,
@@ -40,7 +40,7 @@ pub(super) struct LifetimeSiteFacts {
     allowed_type_uses: BTreeSet<(usize, usize)>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct LifetimeFileFacts {
     sites: Vec<LifetimeSiteFacts>,
 }

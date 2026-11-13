@@ -16,7 +16,7 @@ mod tokens;
 
 pub(crate) type LocatedName = (String, usize, usize);
 
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub(crate) struct ApplyUses {
     source_identifiers: BTreeSet<String>,
     identifiers: BTreeSet<LocatedName>,

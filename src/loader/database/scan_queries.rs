@@ -13,7 +13,8 @@ use std::path::PathBuf;
     feature = "error_chain",
     feature = "internal_error_chain",
     feature = "tracing",
-    feature = "verus_ir"
+    feature = "verus_ir",
+    feature = "visibility"
 ))]
 use ra_ap_hir::Semantics;
 #[cfg(any(
@@ -21,7 +22,8 @@ use ra_ap_hir::Semantics;
     feature = "error_chain",
     feature = "internal_error_chain",
     feature = "tracing",
-    feature = "verus_ir"
+    feature = "verus_ir",
+    feature = "visibility"
 ))]
 use ra_ap_ide_db::RootDatabase;
 #[cfg(any(
@@ -29,7 +31,8 @@ use ra_ap_ide_db::RootDatabase;
     feature = "error_chain",
     feature = "internal_error_chain",
     feature = "tracing",
-    feature = "verus_ir"
+    feature = "verus_ir",
+    feature = "visibility"
 ))]
 use tracing::instrument;
 
@@ -38,7 +41,8 @@ use tracing::instrument;
     feature = "error_chain",
     feature = "internal_error_chain",
     feature = "tracing",
-    feature = "verus_ir"
+    feature = "verus_ir",
+    feature = "visibility"
 ))]
 use super::DatabaseSource;
 #[cfg(any(
@@ -46,7 +50,8 @@ use super::DatabaseSource;
     feature = "error_chain",
     feature = "internal_error_chain",
     feature = "tracing",
-    feature = "verus_ir"
+    feature = "verus_ir",
+    feature = "visibility"
 ))]
 use super::queries::SemanticDatabase;
 
@@ -75,7 +80,8 @@ pub(super) struct ScanKey<'db> {
     feature = "error_chain",
     feature = "internal_error_chain",
     feature = "tracing",
-    feature = "verus_ir"
+    feature = "verus_ir",
+    feature = "visibility"
 ))]
 /// Build the file's carrier and run `collect` on it, or `None` when the file
 /// does not parse or the collector refuses it. The caller falls back to the
@@ -217,6 +223,53 @@ pub(super) fn verus_file<'db>(
                     ),
                 )
             }))
+        },
+    )
+}
+
+#[cfg(feature = "internal_error_chain")]
+#[salsa::tracked(returns(ref))]
+#[instrument(level = "debug", skip(db, key))]
+#[hotpath::measure]
+pub(super) fn error_apply_file<'db>(
+    db: &'db dyn SemanticDatabase,
+    key: ScanKey<'db>,
+) -> Option<crate::ir::ErrorApplyFile> {
+    scanned(
+        db.root_database(),
+        (key.file(db), key.path(db)),
+        "error_apply_file",
+        |source, _| Ok(crate::ir::SourceErrorApply::native_file(source)),
+    )
+}
+
+#[cfg(feature = "visibility")]
+#[salsa::tracked(returns(ref))]
+#[instrument(level = "debug", skip(db, key))]
+#[hotpath::measure]
+pub(super) fn visibility_file<'db>(
+    db: &'db dyn SemanticDatabase,
+    key: ScanKey<'db>,
+) -> Option<(crate::ir::VisibilityBody, crate::FileSnapshot)> {
+    let root_db = db.root_database();
+    scanned(
+        root_db,
+        (key.file(db), key.path(db)),
+        "visibility_file",
+        |source, sema| {
+            #[cfg(feature = "verus_ir")]
+            {
+                ra_ap_hir::attach_db(root_db, || {
+                    crate::ir::SourcePolicyInventory::native_visibility_file(source, &|call| {
+                        super::identity::is_verus_macro(sema, call)
+                    })
+                })
+            }
+            #[cfg(not(feature = "verus_ir"))]
+            {
+                let _ = (root_db, sema);
+                crate::ir::SourcePolicyInventory::native_visibility_file(source)
+            }
         },
     )
 }

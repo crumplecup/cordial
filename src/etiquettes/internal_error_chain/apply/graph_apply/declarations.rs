@@ -12,12 +12,12 @@ mod resolution;
 
 type Range = (usize, usize);
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct GraphDeclarationFacts {
     declarations: Vec<GraphDeclaration>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub(in crate::etiquettes::internal_error_chain::apply) struct GraphDeclaration {
     name: String,
     #[getter(skip)]
@@ -61,14 +61,14 @@ enum Visibility {
     Public,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub(in crate::etiquettes::internal_error_chain::apply) enum GraphFields {
     Named(Vec<GraphField>),
     Unnamed(Vec<GraphField>),
     Unit,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub(super) struct GraphVariant {
     name: String,
     #[getter(skip)]
@@ -76,7 +76,7 @@ pub(super) struct GraphVariant {
     fields: GraphFields,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub(in crate::etiquettes::internal_error_chain::apply) struct GraphField {
     #[getter(skip)]
     name: Option<String>,

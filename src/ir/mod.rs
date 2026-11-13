@@ -95,6 +95,8 @@ mod source_calls;
     feature = "cli_layout"
 ))]
 mod source_policy;
+#[cfg(feature = "visibility")]
+pub(crate) use source_policy::VisibilityBody;
 #[cfg(feature = "allows")]
 pub use source_policy::scan_allows_source;
 #[cfg(feature = "cfg_hygiene")]

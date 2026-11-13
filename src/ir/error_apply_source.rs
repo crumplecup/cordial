@@ -27,7 +27,7 @@ pub struct SourceErrorApply {
 }
 
 /// Original field, variant, lifetime, edge and edit-range facts for one file.
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, derive_getters::Getters)]
 pub struct ErrorApplyFile {
     snapshot: FileSnapshot,
     #[getter(skip)]

@@ -280,12 +280,12 @@ impl<'a> GraphExprPlanner<'a> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub(crate) struct GraphExprFacts {
     events: Vec<GraphExprEvent>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub(super) enum GraphExprEvent {
     Struct {
         name: String,
@@ -327,7 +327,7 @@ pub(super) enum GraphExprEvent {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub(super) enum SourceArgument {
     BorrowedReference {
         field: Option<Range>,
@@ -339,7 +339,7 @@ pub(super) enum SourceArgument {
     Unsupported,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub(super) struct GraphValueFact {
     #[getter(copy)]
     range: Option<Range>,

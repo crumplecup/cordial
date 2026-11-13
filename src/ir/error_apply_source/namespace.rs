@@ -4,21 +4,21 @@ use crate::loader::DatabaseSource;
 use ra_ap_syntax::ast::{self, HasAttrs, HasModuleItem, HasName};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub(crate) struct ApplyNamespace {
     modules: Vec<ApplyModule>,
     imports: Vec<ApplyImport>,
     aliases: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub(crate) struct ApplyModule {
     name: String,
     #[getter(copy)]
     unconditional: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize, derive_getters::Getters)]
 pub(crate) struct ApplyImport {
     bindings: Vec<(String, Vec<String>)>,
     #[getter(copy)]

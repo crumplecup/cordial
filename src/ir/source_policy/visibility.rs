@@ -73,19 +73,20 @@ impl VisibilityKind {
 }
 
 // Transient loader assembly inputs; consumers only receive the resolved tree above.
-#[derive(Default, derive_new::new)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, derive_new::new)]
 pub(crate) struct VisibilityBody {
     leaf_pub: usize,
     leaf_crate: usize,
     children: Vec<VisibilityChild>,
 }
-#[derive(derive_new::new)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_new::new)]
 pub(crate) struct VisibilityChild {
     name: String,
     line: u32,
     visibility: VisibilityKind,
     body: VisibilityChildBody,
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum VisibilityChildBody {
     Inline(VisibilityBody),
     External(Option<String>),
