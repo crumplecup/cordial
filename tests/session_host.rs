@@ -77,7 +77,7 @@ fn a_server_answers_like_a_local_run_and_stops_when_asked() -> Result<()> {
     let socket = socket_path(scratch.path());
     let server = {
         let socket = socket.clone();
-        std::thread::spawn(move || serve(&socket))
+        std::thread::spawn(move || serve(&socket, None))
     };
     let mut waited = 0;
     while UnixStream::connect(&socket).is_err() {
@@ -126,7 +126,7 @@ fn a_server_answers_like_a_local_run_and_stops_when_asked() -> Result<()> {
     assert!(matches!(refused.last(), Some(Frame::Refused(reason)) if reason.contains("RUSTFLAGS")));
 
     // A second server on a live socket is an error; the first one is untouched.
-    assert!(serve(&socket).is_err());
+    assert!(serve(&socket, None).is_err());
     assert!(stop(&socket).into_diagnostic()?);
     server
         .join()

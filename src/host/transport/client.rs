@@ -62,7 +62,12 @@ fn starts_a_session(command: &crate::Commands) -> bool {
 /// The server keeps the process session of whoever starts it, which is how it
 /// knows when the terminal that wanted it has gone. Returns its process id.
 #[instrument(level = "debug", err(level = "warn"))]
-pub fn start_session(project: &Path, store_home: &Path, store_root: &Path) -> std::io::Result<u32> {
+pub fn start_session(
+    project: &Path,
+    store_home: &Path,
+    store_root: &Path,
+    owner: Option<u32>,
+) -> std::io::Result<u32> {
     use std::os::unix::process::CommandExt;
     std::fs::create_dir_all(store_root)?;
     let socket = socket_path(store_root);
@@ -72,6 +77,11 @@ pub fn start_session(project: &Path, store_home: &Path, store_root: &Path) -> st
         .arg("--store-home")
         .arg(store_home)
         .args(["session", "serve"])
+        .args(
+            owner
+                .iter()
+                .flat_map(|owner| ["--owner".to_owned(), owner.to_string()]),
+        )
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::fs::File::create(store_root.join("session.log"))?)
@@ -126,8 +136,15 @@ pub fn forward(args: &[OsString]) -> Option<i32> {
         Ok(stream) => stream,
         // `open` is where work begins: with no session running it starts one, so
         // the commands after it find the database already loaded.
-        Err(_) if starts_a_session(&cli.command) => {
-            start_session(&project, &store_home, &store_root).ok()?;
+        // Without a terminal to end it with, a session would be left behind.
+        Err(_) if starts_a_session(&cli.command) && super::terminal::terminal_owner().is_some() => {
+            start_session(
+                &project,
+                &store_home,
+                &store_root,
+                super::terminal::terminal_owner(),
+            )
+            .ok()?;
             let _ = writeln!(
                 std::io::stderr(),
                 "Started a session; it ends when this terminal does (cordial session stop ends it sooner)."

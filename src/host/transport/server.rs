@@ -32,7 +32,7 @@ impl FrameSink for Connection {
 /// A socket left by a server that is gone is replaced; one that still answers
 /// is an error, since two sessions would each hold half the state.
 #[instrument(level = "debug", err(level = "warn"))]
-pub fn serve(socket: &Path) -> CordialResult<()> {
+pub fn serve(socket: &Path, owner: Option<u32>) -> CordialResult<()> {
     if UnixStream::connect(socket).is_ok() {
         return Err(CordialError::perf(
             socket.to_path_buf(),
@@ -48,7 +48,9 @@ pub fn serve(socket: &Path) -> CordialResult<()> {
     }
     let listener = UnixListener::bind(socket)?;
     keep_between_runs();
-    watch_owner(socket.to_path_buf());
+    if let Some(owner) = owner {
+        watch_owner(socket.to_path_buf(), owner);
+    }
     tracing::info!(socket = %socket.display(), "session serving");
     for connection in listener.incoming() {
         match connection {
@@ -66,40 +68,14 @@ pub fn serve(socket: &Path) -> CordialResult<()> {
     Ok(())
 }
 
-/// The process session this process belongs to, which is the terminal's (or the
-/// tool's) that started it. `None` where `/proc` does not say.
-#[instrument(level = "debug")]
-fn own_session() -> Option<u32> {
-    session_of("self")
-}
-
-/// The session id in `/proc/<pid>/stat`: the fourth field after the command name.
-#[instrument(level = "trace")]
-fn session_of(pid: &str) -> Option<u32> {
-    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-    let after_command = stat.rsplit_once(')')?.1;
-    after_command.split_whitespace().nth(3)?.parse().ok()
-}
-
-/// Whether the leader of session `id` (the shell a terminal started) still runs.
-/// A session id is its leader's process id, so a leader that is gone, or a number
-/// reused by a process in another session, means the terminal has ended.
-#[instrument(level = "trace")]
-fn leader_alive(id: u32) -> bool {
-    session_of(&id.to_string()) == Some(id)
-}
-
 /// Exit when the terminal that started this session ends, removing the socket.
 /// A server is somebody's working state, not a daemon to leave behind.
 #[instrument(level = "debug")]
-fn watch_owner(socket: std::path::PathBuf) {
-    let Some(owner) = own_session() else {
-        return;
-    };
+fn watch_owner(socket: std::path::PathBuf, owner: u32) {
     let spawned = std::thread::Builder::new()
         .name("cordial-session-owner".to_owned())
         .spawn(move || {
-            while leader_alive(owner) {
+            while super::terminal::leader_alive(owner) {
                 std::thread::sleep(std::time::Duration::from_secs(2));
             }
             tracing::info!(

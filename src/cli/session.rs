@@ -20,7 +20,12 @@ pub enum SessionCommands {
     /// Say whether this project has a session running.
     Status,
     /// Run the session in this process (what `start` launches).
-    Serve,
+    Serve {
+        /// The shell whose exit ends the session: the leader of the terminal it
+        /// was started from. Without it the session lives until stopped.
+        #[arg(long)]
+        owner: Option<u32>,
+    },
 }
 
 impl SessionCommands {
@@ -28,7 +33,7 @@ impl SessionCommands {
     pub(super) fn act(self, ctx: &ActCtx) -> CordialResult<()> {
         let socket = socket_path(ctx.store().root());
         match self {
-            Self::Serve => host::serve(&socket),
+            Self::Serve { owner } => host::serve(&socket, owner),
             Self::Start => start(ctx, &socket),
             Self::Stop => stop(&socket),
             Self::Status => status(&socket),
@@ -46,11 +51,14 @@ fn start(ctx: &ActCtx, socket: &std::path::Path) -> CordialResult<()> {
         .store_home()
         .clone()
         .unwrap_or_else(crate::default_store_home);
-    let pid = host::start_session(ctx.project_root(), &store_home, ctx.store().root())?;
-    writeln!(
-        host::stdout(),
-        "Session started (pid {pid}); it ends when this terminal does."
-    )?;
+    let owner = host::terminal_owner();
+    let pid = host::start_session(ctx.project_root(), &store_home, ctx.store().root(), owner)?;
+    let ends = if owner.is_some() {
+        "it ends when this terminal does"
+    } else {
+        "there is no terminal to end it, so it runs until `cordial session stop`"
+    };
+    writeln!(host::stdout(), "Session started (pid {pid}); {ends}.")?;
     Ok(())
 }
 

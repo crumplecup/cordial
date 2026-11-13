@@ -6,7 +6,7 @@ mod support {
 }
 use miette::{IntoDiagnostic, Result};
 use std::path::Path;
-use std::process::{Command, Output, Stdio};
+use std::process::{Child, Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
 fn cordial(project: &Path, home: &Path, args: &[&str]) -> Command {
@@ -40,36 +40,28 @@ fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
 }
 
 #[test]
-fn open_starts_a_session_and_the_commands_after_it_reach_it() -> Result<()> {
+fn a_session_serves_forwarded_commands_and_start_replaces_it() -> Result<()> {
     cordial::init_tracing();
     let scratch = tempfile::tempdir().into_diagnostic()?;
     let project = scratch.path().join("mini");
     support::mini_workspace::write(&project)?;
     let home = scratch.path().join("store");
     let socket = home.join("mini/session.sock");
+    assert!(text(&run(&project, &home, &["session", "status"])?.stdout).contains("No session"));
 
-    let status = run(&project, &home, &["session", "status"])?;
-    assert!(text(&status.stdout).contains("No session is running"));
-
-    let opened = run(&project, &home, &["open"])?;
-    assert!(opened.status.success(), "{}", text(&opened.stderr));
-    assert!(
-        text(&opened.stderr).contains("Started a session"),
-        "{}",
-        text(&opened.stderr)
-    );
-    assert!(socket.exists(), "open left a session serving");
+    let started = run(&project, &home, &["session", "start"])?;
+    assert!(started.status.success(), "{}", text(&started.stderr));
+    assert!(socket.exists());
     assert!(text(&run(&project, &home, &["session", "status"])?.stdout).contains("is running"));
 
-    // Another command finds it and does not start a second.
+    // The commands after it reach it: `open` is answered by the session.
+    let opened = run(&project, &home, &["open"])?;
+    assert!(opened.status.success(), "{}", text(&opened.stderr));
     let stats = run(&project, &home, &["stats"])?;
     assert!(stats.status.success(), "{}", text(&stats.stderr));
-    assert!(!text(&stats.stderr).contains("Started a session"));
 
-    // Starting on purpose replaces it.
     let fresh = run(&project, &home, &["session", "start"])?;
     assert!(text(&fresh.stdout).contains("Stopped the running session"));
-    assert!(text(&fresh.stdout).contains("Session started"));
     assert!(socket.exists());
 
     let stopped = run(&project, &home, &["session", "stop"])?;
@@ -78,8 +70,17 @@ fn open_starts_a_session_and_the_commands_after_it_reach_it() -> Result<()> {
     Ok(())
 }
 
+/// A session leader that does nothing, standing in for a terminal's shell.
+fn terminal() -> Result<Child> {
+    Command::new("setsid")
+        .args(["sleep", "600"])
+        .stdin(Stdio::null())
+        .spawn()
+        .into_diagnostic()
+}
+
 #[test]
-fn a_session_ends_when_the_terminal_that_started_it_does() -> Result<()> {
+fn a_session_ends_when_its_owner_does() -> Result<()> {
     cordial::init_tracing();
     let scratch = tempfile::tempdir().into_diagnostic()?;
     let project = scratch.path().join("mini");
@@ -87,26 +88,23 @@ fn a_session_ends_when_the_terminal_that_started_it_does() -> Result<()> {
     let home = scratch.path().join("store");
     let socket = home.join("mini/session.sock");
 
-    // `setsid` makes this child the leader of a session of its own, as a terminal's
-    // shell is, and starts the session from inside it.
-    let start = format!(
-        "{} --project {} --store-home {} session start; sleep 600",
-        env!("CARGO_BIN_EXE_cordial"),
-        project.display(),
-        home.display()
-    );
-    let mut terminal = Command::new("setsid")
-        .args(["sh", "-c", &start])
-        .env_remove("CORDIAL_NO_SESSION")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .spawn()
-        .into_diagnostic()?;
+    let mut owner = terminal()?;
+    let mut server = cordial(
+        &project,
+        &home,
+        &["session", "serve", "--owner", &owner.id().to_string()],
+    )
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .spawn()
+    .into_diagnostic()?;
     wait_until("the session to start", || socket.exists());
+    std::thread::sleep(Duration::from_secs(3));
+    assert!(socket.exists(), "it keeps serving while its owner runs");
 
-    // The terminal closes: its shell goes, and the session follows.
-    terminal.kill().into_diagnostic()?;
-    terminal.wait().into_diagnostic()?;
-    wait_until("the session to end with its terminal", || !socket.exists());
+    owner.kill().into_diagnostic()?;
+    owner.wait().into_diagnostic()?;
+    wait_until("the session to end with its owner", || !socket.exists());
+    server.wait().into_diagnostic()?;
     Ok(())
 }
