@@ -118,6 +118,14 @@ Measured by `cordial perf workflow` against the baselines recorded 2026-11-12
   snapshot and context plan once per function (functions x project size), not work worth
   caching. Decoding the plan once per crate: 202 s -> 0.14 s on cordial (cold, no cache).
   The run-cache copy of the graph (C4a) now saves 0.14 s and is a candidate to remove.
+- [x] C4c. Cold `source_ir` on cordial, 329-337 s -> 207.8 s (whole cold stage wall 213 s):
+  per-function evidence is evaluated on worker threads over clones of the database before
+  the projection reads it (`loader/database/prime.rs`), once for the workspace and once
+  inside each leaf cfg context, because a changed cfg input makes every result stale.
+  Evidence decodes from the stored value, not a clone of it. Each priming pass records how
+  many functions it evaluated (`function evidence (workspace): 14056 evaluated for 14056
+  function(s)`; later leaf contexts: 1255, 1, 101, 142, 76), which is the reuse counter
+  C2 asked for, for this one query.
 - [x] C4a. The call graph is reused from the run cache when the tree and the tracing
   policy are unchanged (`call graph: reused from the run cache`). Measured on cordial:
   call graph 194.7 s -> 0.004 s, wall 546.7 s -> 14.8 s on an unchanged tree. Any edit
